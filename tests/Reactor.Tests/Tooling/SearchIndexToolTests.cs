@@ -551,8 +551,18 @@ public sealed class SearchIndexCliTests
         var stray = Path.Join(g.Root, "not-a-kit");
         Directory.CreateDirectory(stray);
         Assert.Equal(2, SearchIndexCli.Run(new[] { $"--agent-kit={stray}", g.GalleryDir, ed, outPath }, strayLog));
-        Assert.Contains("does not look like an agent kit", strayLog.ToString());
+        Assert.Contains("contains no markdown to scan", strayLog.ToString());
         Assert.Contains("--no-agent-kit", strayLog.ToString());
+        Assert.False(File.Exists(outPath), "a rejected run must not write an index");
+
+        // ...and a directory that has the right SHAPE but no content is the same failure
+        // wearing a disguise, which is why the check asserts the outcome instead.
+        using var emptyLog = new StringWriter();
+        var shaped = Path.Join(g.Root, "shaped-kit");
+        Directory.CreateDirectory(Path.Join(shaped, "skills"));
+        Directory.CreateDirectory(Path.Join(shaped, "plugins"));
+        Assert.Equal(2, SearchIndexCli.Run(new[] { $"--agent-kit={shaped}", g.GalleryDir, ed, outPath }, emptyLog));
+        Assert.Contains("contains no markdown to scan", emptyLog.ToString());
         Assert.False(File.Exists(outPath), "a rejected run must not write an index");
 
         // Positive control: the same invocation against a real directory succeeds, so the

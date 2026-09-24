@@ -71,9 +71,9 @@ public static class SearchIndexCli
                     return Usage(log, $"--agent-kit must be a directory, not a file: {agentKitArg}");
                 if (!Directory.Exists(agentKitArg))
                     return Usage(log, $"--agent-kit directory does not exist: {agentKitArg}");
-                if (!LooksLikeAgentKit(agentKitArg))
+                if (!AgentKitHasMarkdown(agentKitArg))
                     return Usage(log,
-                        $"--agent-kit does not look like an agent kit (no SKILL.md, plugins/ or skills/): {agentKitArg}" +
+                        $"--agent-kit contains no markdown to scan (SKILL.md, plugins/**.md, skills/**.md): {agentKitArg}" +
                         " — use --no-agent-kit to skip marker extraction deliberately");
             }
 
@@ -141,14 +141,20 @@ public static class SearchIndexCli
     }
 
     /// <summary>
-    /// The three inputs <see cref="SearchIndexGenerator"/> scans for markers. Requiring at least
-    /// one keeps an existing-but-unrelated directory from passing validation and then silently
-    /// producing an index with no <c>details</c> at all.
+    /// True when the directory actually yields markdown for the generator to scan. Checking the
+    /// OUTCOME rather than the shape is what makes this airtight: an empty <c>plugins/</c> or
+    /// <c>skills/</c> directory looks like a kit but contributes nothing, and would still produce
+    /// a details-free index reporting success.
     /// </summary>
-    static bool LooksLikeAgentKit(string dir) =>
-        File.Exists(Path.Join(dir, "SKILL.md"))
-        || Directory.Exists(Path.Join(dir, "plugins"))
-        || Directory.Exists(Path.Join(dir, "skills"));
+    static bool AgentKitHasMarkdown(string dir)
+    {
+        if (File.Exists(Path.Join(dir, "SKILL.md"))) return true;
+
+        return new[] { "plugins", "skills" }
+            .Select(sub => Path.Join(dir, sub))
+            .Where(Directory.Exists)
+            .Any(sub => Directory.EnumerateFiles(sub, "*.md", SearchOption.AllDirectories).Any());
+    }
 
     static string FindRepoRoot() =>
         TryFindRepoRootFrom(AppContext.BaseDirectory)
