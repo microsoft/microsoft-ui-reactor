@@ -315,6 +315,29 @@ class AlphaPage
         Assert.Contains("docs", ex.Message);
     }
 
+    /// <summary>
+    /// A hand-edited editorial file can contain `"docs": [null]`. That must surface as the
+    /// documented generation error, not as an unhandled NullReferenceException — the CLI only
+    /// catches the former, so an NRE would crash the tool instead of reporting a bad sidecar.
+    /// </summary>
+    [Fact]
+    public void DocLink_NullEntry_FailsGenerationWithoutDereferencing()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        var ed = g.WriteEditorial(
+            @"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""], ""docs"": [ null ] }, " + BetaKeywords + " }");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => SearchIndexGenerator.Generate(g.GalleryDir, ed));
+        Assert.Contains("alpha", ex.Message);
+        Assert.Contains("docs", ex.Message);
+
+        // The CLI's catch list covers InvalidOperationException but not NullReferenceException,
+        // so the exception TYPE is the contract here, not just the message.
+        using var log = new StringWriter();
+        Assert.Equal(2, SearchIndexCli.Run(new[] { g.GalleryDir, ed, Path.Join(g.Root, "out.json") }, log));
+        Assert.Contains("[search-index] ERROR:", log.ToString());
+    }
+
     [Fact]
     public void MarkedBlock_BecomesDetails_AndOtherControlsGetNone()
     {
@@ -335,6 +358,7 @@ class AlphaPage
     [InlineData("<!-- index:alpha -->\n<!-- index:beta -->\nnested\n<!-- /index:beta -->\n<!-- /index:alpha -->", "cannot nest")]
     [InlineData("<!-- /index:alpha -->\n", "never opened")]
     [InlineData("<!-- index:alpha -->\nmismatched\n<!-- /index:beta -->", "closes the wrong block")]
+    [InlineData("<!-- index:alpha -->\n\n   \n<!-- /index:alpha -->", "wraps no prose")]
     public void MalformedMarker_FailsGeneration(string markdown, string expected)
     {
         using var g = new MiniGallery(betaRouted: true);
@@ -343,6 +367,9 @@ class AlphaPage
 
         var ex = Assert.Throws<InvalidOperationException>(() => SearchIndexGenerator.Generate(g.GalleryDir, ed, kit));
         Assert.Contains(expected, ex.Message);
+        // Diagnostics must name the file and line, not just the file name — the scanner walks
+        // two whole trees and "SKILL.md" is not unique within them.
+        Assert.Contains("skills/topic.md(", ex.Message);
     }
 
     [Fact]

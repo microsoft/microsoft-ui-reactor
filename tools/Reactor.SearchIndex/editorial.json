@@ -88,6 +88,7 @@
     "keywords": ["ambient state", "usecontext", "provide", "provider", "prop drilling", "tree scoped", "shared state", "default value"],
     "curatedKeywords": ["context", "share state without passing props", "pass state down the tree", "usecontext hook"],
     "relatedControls": ["UseState", "UseReducer"],
+    "usings": ["Microsoft.UI.Reactor.Core"],
     "docs": [
       { "title": "Context guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/context.md" },
       { "title": "reactor-getting-started skill", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-getting-started/SKILL.md" }
@@ -193,7 +194,7 @@
     "keywords": ["onkeydown", "onkeyup", "virtualkey", "key down", "key press", "oncharacterreceived", "enter key", "escape key", "onpreviewkeydown", "oem key"],
     "curatedKeywords": ["keyboard input", "key down event handler", "handle a key press", "enter submits the form", "keyboard shortcut", "virtualkey member names"],
     "relatedControls": ["Commands", "Element refs", "Pointer and gestures"],
-    "usings": ["Windows.System"],
+    "usings": ["Microsoft.UI.Reactor.Core", "Windows.System"],
     "docs": [
       { "title": "Input and gestures guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/input-and-gestures.md" },
       { "title": "reactor-input skill", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-input/SKILL.md" },
@@ -268,7 +269,7 @@
     "keywords": ["onpointerentered", "onpointerexited", "ontapped", "ondoubletap", "onrighttapped", "onpan", "onpinch", "onlongpress", "hover", "hit testing"],
     "curatedKeywords": ["pointer input", "mouse events", "hover effect", "tap handler", "drag with a gesture", "pinch to zoom", "press and hold"],
     "relatedControls": ["Keyboard input", "Element refs"],
-    "usings": ["Microsoft.UI.Xaml"],
+  "usings": ["Microsoft.UI.Reactor.Hooks", "Microsoft.UI.Xaml", "Windows.System"],
     "docs": [
       { "title": "Input and gestures guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/input-and-gestures.md" },
       { "title": "reactor-input skill", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-input/SKILL.md" }

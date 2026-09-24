@@ -77,7 +77,7 @@ TextBox(query, setQuery, placeholderText: ""Type to change the dependency"")
 "),
 
             SampleCard("Dependencies must be stable across renders",
-                Caption("A freshly allocated object, array, or lambda is never equal to the previous one, so the effect never reaches its stable path. A tuple expression is value-equal at runtime but is still rejected by REACTOR_HOOKS_004.")
+                Caption("A freshly allocated array or lambda is compared with Equals, so it is never equal to the previous one and the effect never reaches its stable path. A tuple expression is value-equal at runtime but is still rejected by REACTOR_HOOKS_004.")
                     .Foreground(Theme.SecondaryText),
                 sourceCode: @"
 var (width, setWidth) = UseState(0.0);

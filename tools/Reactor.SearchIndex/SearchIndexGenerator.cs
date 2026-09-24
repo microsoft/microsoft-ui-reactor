@@ -592,7 +592,15 @@ public static partial class SearchIndexGenerator
                 throw new InvalidOperationException(
                     $"{where}({line}): `<!-- /index:{id} -->` closes the wrong block — `{openId}` (opened at line {LineAt(markdown, openAt)}) is open.");
 
-            results.Add((id, markdown[bodyStart..m.Index].Trim()));
+            // An empty block would emit `"details": ""` — present in the JSON, indistinguishable
+            // from real prose to anything downstream, and carrying nothing. That is precisely the
+            // silent drop this scanner exists to prevent, so it is an error like the rest.
+            var body = markdown[bodyStart..m.Index].Trim();
+            if (body.Length == 0)
+                throw new InvalidOperationException(
+                    $"{where}({LineAt(markdown, openAt)}): `<!-- index:{id} -->` wraps no prose — remove the marker or fill it in.");
+
+            results.Add((id, body));
             openId = null;
         }
 

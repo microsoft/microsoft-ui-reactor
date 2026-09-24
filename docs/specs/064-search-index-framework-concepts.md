@@ -116,9 +116,13 @@ trees in ordinal path order.
   unclosed marker, a nested or mismatched marker, a marker that closes nothing,
   and a marker id naming no control.
 
-`--agent-kit=<dir>` overrides the scan root. It defaults to the repo root only
-when no positional paths were given, so a run against a synthetic gallery opts
-out by default.
+`--agent-kit=<dir>` overrides the scan root and `--no-agent-kit` disables it. By
+default the root is the nearest ancestor of **`galleryDir`** containing
+`Reactor.slnx`, so passing the real paths explicitly produces byte-identical
+output to passing none. A synthetic gallery in a temp directory has no
+`Reactor.slnx` above it and therefore contributes no `details` — the
+marker ids would name none of its controls — so the tests opt out without
+needing a flag.
 
 ### 3.4 The parity gate
 

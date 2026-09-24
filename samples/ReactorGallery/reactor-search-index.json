@@ -716,6 +716,9 @@
       ],
       "apiNamespace": "Microsoft.UI.Reactor",
       "nugetPackage": "Microsoft.UI.Reactor",
+      "usings": [
+        "Microsoft.UI.Reactor.Core"
+      ],
       "galleryRoute": "context",
       "docs": [
         {
@@ -1488,6 +1491,7 @@
       "apiNamespace": "Microsoft.UI.Reactor",
       "nugetPackage": "Microsoft.UI.Reactor",
       "usings": [
+        "Microsoft.UI.Reactor.Core",
         "Windows.System"
       ],
       "galleryRoute": "keyboard-input",
@@ -1992,7 +1996,9 @@
       "apiNamespace": "Microsoft.UI.Reactor",
       "nugetPackage": "Microsoft.UI.Reactor",
       "usings": [
-        "Microsoft.UI.Xaml"
+        "Microsoft.UI.Reactor.Hooks",
+        "Microsoft.UI.Xaml",
+        "Windows.System"
       ],
       "galleryRoute": "pointer-input",
       "docs": [
@@ -3292,7 +3298,7 @@
       "name": "UseEffect",
       "category": "Fundamentals",
       "description": "Side effects and lifecycle — run after render, clean up on unmount.",
-      "details": "`UseEffect(action, deps)` runs *after* the render commits. Return an `Action`\nto register cleanup — it runs before the next execution of the effect and once\nmore on unmount, which is what makes timers, subscriptions, and event handlers\nsafe to own from a component.\n\n```csharp\nvar (ticks, bumpTicks) = UseReducer(0);\n\nUseEffect(() =>\n{\n    var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };\n    timer.Tick += (_, _) => bumpTicks(t => t + 1);\n    timer.Start();\n    return () => timer.Stop();     // cleanup on dep change and on unmount\n}, Array.Empty<object>());\n```\n\nDependency rules:\n\n- No deps argument → the effect runs after **every** render.\n- `Array.Empty<object>()` → runs **once**, on mount.\n- One or more deps → runs whenever any of them changes.\n- **Never pass a freshly allocated object, array, or lambda as a dep.** Deps are\n  compared with `EqualityComparer<T>.Default`, which for a reference type is\n  `Equals` — so a new instance each render is never equal to the last and the\n  effect never reaches its stable path. Use a string key such as `$\"{x}|{y}\"`,\n  or pass the values as separate deps: `UseEffect(fn, x, y)`.\n- **Tuple deps are rejected by the analyzer, not by the runtime.** A\n  `ValueTuple` of value types does compare by value, so `(x, y)` would work —\n  but `REACTOR_HOOKS_004` classifies every tuple expression as an unstable dep\n  and fails the build. Use a string key or separate deps here too.",
+      "details": "`UseEffect(action, deps)` runs *after* the render commits. Return an `Action`\nto register cleanup — it runs before the next execution of the effect and once\nmore on unmount, which is what makes timers, subscriptions, and event handlers\nsafe to own from a component.\n\n```csharp\nvar (ticks, bumpTicks) = UseReducer(0);\n\nUseEffect(() =>\n{\n    var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };\n    timer.Tick += (_, _) => bumpTicks(t => t + 1);\n    timer.Start();\n    return () => timer.Stop();     // cleanup on dep change and on unmount\n}, Array.Empty<object>());\n```\n\nDependency rules:\n\n- No deps argument → the effect runs after **every** render.\n- `Array.Empty<object>()` → runs **once**, on mount.\n- One or more deps → runs whenever any of them changes.\n- **Never pass a freshly allocated object, array, or lambda as a dep.** Deps go\n  through `EqualityComparer<T>.Default`, which for a reference type means\n  `Equals` — so a new `new[] { … }` or lambda each render is never equal to the\n  last and the effect never reaches its stable path. (A type with value-based\n  `Equals`, such as a `record`, is the exception: two fresh instances carrying\n  the same values do compare equal.) Use a string key such as `$\"{x}|{y}\"`, or\n  pass the values as separate deps: `UseEffect(fn, x, y)`.\n- **Tuple deps are rejected by the analyzer, not by the runtime.** A\n  `ValueTuple` of value types does compare by value, so `(x, y)` would work —\n  but `REACTOR_HOOKS_004` classifies every tuple expression as an unstable dep\n  and fails the build. Use a string key or separate deps here too.",
       "keywords": [
         "side effect",
         "on mount",
@@ -3366,7 +3372,7 @@
       "name": "UseMemo",
       "category": "Fundamentals",
       "description": "Memoized computations and stable callbacks, via UseMemo and UseCallback.",
-      "details": "`UseMemo<T>(factory, deps)` caches the result of an expensive computation and\nrecomputes it only when a dependency changes. `UseCallback(action, deps)` does\nthe same for a delegate, so a child that compares handlers by reference is not\nre-rendered by a freshly allocated lambda.\n\n```csharp\nvar sorted = UseMemo(() => items.OrderBy(i => i.Name).ToList(), items);\nvar onReset = UseCallback(() => setQuery(\"\"), Array.Empty<object>());\n```\n\nBoth obey the same dependency rule as `UseEffect`: a **reference type** allocated\nduring render is never equal to the previous one and defeats the cache entirely,\nand a tuple expression — though value-equal at runtime — is rejected outright by\n`REACTOR_HOOKS_004`. Memoize the computation, not the render — `UseMemo` is for\nwork that is measurably expensive, not for every projection.",
+      "details": "`UseMemo<T>(factory, deps)` caches the result of an expensive computation and\nrecomputes it only when a dependency changes. `UseCallback(action, deps)` does\nthe same for a delegate, so a child that compares handlers by reference is not\nre-rendered by a freshly allocated lambda.\n\n```csharp\nvar sorted = UseMemo(() => items.OrderBy(i => i.Name).ToList(), items);\nvar onReset = UseCallback(() => setQuery(\"\"), Array.Empty<object>());\n```\n\nBoth obey the same dependency rule as `UseEffect`: a **reference type** allocated\nduring render is compared with `Equals`, so a fresh array or lambda is never equal\nto the previous one and defeats the cache entirely (a `record` or other value-based\n`Equals` is the exception). A tuple expression — though value-equal at runtime — is\nrejected outright by `REACTOR_HOOKS_004`. Memoize the computation, not the render —\n`UseMemo` is for work that is measurably expensive, not for every projection.",
       "keywords": [
         "usecallback",
         "memoize",

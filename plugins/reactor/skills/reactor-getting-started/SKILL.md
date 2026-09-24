@@ -235,11 +235,13 @@ Dependency rules:
 - No deps argument → the effect runs after **every** render.
 - `Array.Empty<object>()` → runs **once**, on mount.
 - One or more deps → runs whenever any of them changes.
-- **Never pass a freshly allocated object, array, or lambda as a dep.** Deps are
-  compared with `EqualityComparer<T>.Default`, which for a reference type is
-  `Equals` — so a new instance each render is never equal to the last and the
-  effect never reaches its stable path. Use a string key such as `$"{x}|{y}"`,
-  or pass the values as separate deps: `UseEffect(fn, x, y)`.
+- **Never pass a freshly allocated object, array, or lambda as a dep.** Deps go
+  through `EqualityComparer<T>.Default`, which for a reference type means
+  `Equals` — so a new `new[] { … }` or lambda each render is never equal to the
+  last and the effect never reaches its stable path. (A type with value-based
+  `Equals`, such as a `record`, is the exception: two fresh instances carrying
+  the same values do compare equal.) Use a string key such as `$"{x}|{y}"`, or
+  pass the values as separate deps: `UseEffect(fn, x, y)`.
 - **Tuple deps are rejected by the analyzer, not by the runtime.** A
   `ValueTuple` of value types does compare by value, so `(x, y)` would work —
   but `REACTOR_HOOKS_004` classifies every tuple expression as an unstable dep
@@ -260,10 +262,11 @@ var onReset = UseCallback(() => setQuery(""), Array.Empty<object>());
 ```
 
 Both obey the same dependency rule as `UseEffect`: a **reference type** allocated
-during render is never equal to the previous one and defeats the cache entirely,
-and a tuple expression — though value-equal at runtime — is rejected outright by
-`REACTOR_HOOKS_004`. Memoize the computation, not the render — `UseMemo` is for
-work that is measurably expensive, not for every projection.
+during render is compared with `Equals`, so a fresh array or lambda is never equal
+to the previous one and defeats the cache entirely (a `record` or other value-based
+`Equals` is the exception). A tuple expression — though value-equal at runtime — is
+rejected outright by `REACTOR_HOOKS_004`. Memoize the computation, not the render —
+`UseMemo` is for work that is measurably expensive, not for every projection.
 <!-- /index:use-memo -->
 
 ### UseRef
