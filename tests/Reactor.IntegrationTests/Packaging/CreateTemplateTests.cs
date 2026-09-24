@@ -247,7 +247,16 @@ public sealed class CreateTemplateTests : IDisposable
 
 public sealed class TemplatePackageTestFixture : IDisposable
 {
-    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"reactor-template-packages-{Guid.NewGuid():N}");
+    // Deliberately terse names. These directories become the consumer's
+    // globalPackagesFolder, so every resolved reference path is rooted here — and the
+    // WinUI XAML compiler is not long-path aware, failing with
+    // "WMC1006: Cannot resolve Assembly or Windows Metadata file" once a reference
+    // crosses MAX_PATH. Measured on CI, the longest reference
+    // (microsoft.windowsappsdk.foundation's projection DLL under a net6.0-windows...
+    // lib folder) landed at exactly 260 characters with the previous
+    // "reactor-template-packages-{guid}/nuget-global-packages" naming. Do not lengthen
+    // these back for readability; the headroom is load-bearing.
+    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"rtp-{Guid.NewGuid():N}");
 
     public TemplatePackageTestFixture()
     {
@@ -257,7 +266,7 @@ public sealed class TemplatePackageTestFixture : IDisposable
         var packageSuffix = Guid.NewGuid().ToString("N")[..12];
         PackageVersion = $"0.0.0-template-smoke-{packageSuffix}";
         PackageSourceDir = CreateDirectory("packages");
-        NugetPackagesDir = CreateDirectory("nuget-global-packages");
+        NugetPackagesDir = CreateDirectory("gp");
         var nugetHttpCacheDir = CreateDirectory("nuget-http-cache");
         var dotnetCliHomeDir = CreateDirectory("dotnet-home");
         TemplateHiveDir = CreateDirectory("template-hive");
