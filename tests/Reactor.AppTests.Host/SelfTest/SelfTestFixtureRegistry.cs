@@ -815,6 +815,7 @@ internal static class SelfTestFixtureRegistry
         "ValCov_Issue1262_RuleRetractsOnUnmount",
         "ValCov_Issue1262_ChildRuleRetracts",
         "ValCov_Issue1262_DisplacedRootBinding",
+        "ValCov_Issue1262_AsyncOnlyCachedField",
         // Controls coverage — MaskEngine, InputFormatter, AutoSuggest
         "ControlsCov_MaskEngineBasic",
         "ControlsCov_MaskEngineNavigation",
@@ -2724,6 +2725,7 @@ internal static class SelfTestFixtureRegistry
         "ValCov_Issue1262_RuleRetractsOnUnmount" => new ValidationCoverageFixtures.Issue1262_RuleRetractsOnUnmount(harness),
         "ValCov_Issue1262_ChildRuleRetracts" => new ValidationCoverageFixtures.Issue1262_RuleRetractsFromChildComponent(harness),
         "ValCov_Issue1262_DisplacedRootBinding" => new ValidationCoverageFixtures.Issue1262_DisplacedRootBindingCleared(harness),
+        "ValCov_Issue1262_AsyncOnlyCachedField" => new ValidationCoverageFixtures.Issue1262_AsyncOnlyFieldOnCachedElement(harness),
         // Controls coverage
         "ControlsCov_MaskEngineBasic" => new ControlsCoverageFixtures.MaskEngineBasic(harness),
         "ControlsCov_MaskEngineNavigation" => new ControlsCoverageFixtures.MaskEngineNavigation(harness),

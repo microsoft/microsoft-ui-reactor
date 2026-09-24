@@ -1060,4 +1060,49 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — an async-only field on a cached element.
+    //
+    //  .ValidateAsync(field, value, …) registers the field through the render
+    //  scope, which a cached element never passes through. FormField gated its
+    //  registration on sync validators being present, so an async-only field
+    //  existed nowhere and MarkAllTouched()/IsValid() skipped it entirely.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_AsyncOnlyFieldOnCachedElement(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var ctx = new ValidationContext();
+            var host = H.CreateHost();
+
+            // Built here, outside any render pass — the case the render scope misses.
+            var cached = FormField(
+                TextBox("").ValidateAsync("email", "",
+                    Validate.MustAsync<string>(_ => Task.FromResult(true), "Already registered")),
+                label: "Email",
+                showWhen: ShowWhen.Always);
+
+            H.Check("Issue1262_AsyncOnly_UnregisteredBeforeMount", !ctx.RegisteredFields.Contains("email"));
+
+            host.Mount(c => VStack(12, cached).Provide(ValidationContexts.Current, ctx));
+            await Harness.Render();
+
+            H.Check("Issue1262_AsyncOnly_RegisteredOnMount", ctx.RegisteredFields.Contains("email"),
+                $"registered={string.Join("|", ctx.RegisteredFields)}");
+
+            ctx.MarkAllTouched();
+            H.Check("Issue1262_AsyncOnly_CoveredByMarkAllTouched", ctx.IsTouched("email"));
+
+            // And the update path keeps it registered after a reset.
+            ctx.ResetAll();
+            await Harness.Render();
+            H.Check("Issue1262_AsyncOnly_StillRegisteredAfterUpdate", ctx.RegisteredFields.Contains("email"));
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 async-only field done"));
+            await Harness.Render();
+        }
+    }
 }

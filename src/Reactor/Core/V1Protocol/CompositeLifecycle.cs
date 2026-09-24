@@ -63,10 +63,7 @@ internal static class CompositeLifecycle
         // Auto-validate: if Content has attached validators with a Value, run them now
         var attached = ff.Content.GetAttached<ValidationAttached>();
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
-        if (valCtx is not null && attached is not null && attached.Validators.Length > 0)
-        {
-            ValidationReconciler.ValidateAttached(valCtx, attached, attached.Value);
-        }
+        ApplyAttachedValidation(valCtx, attached);
 
         // [0] Label — always present, collapsed when empty
         var displayLabel = FormFieldHelpers.GetDisplayLabel(ff.Label, ff.Required);
@@ -103,6 +100,32 @@ internal static class CompositeLifecycle
         return panel;
     }
 
+    /// <summary>
+    /// Runs a content element's attached synchronous validators against the context a
+    /// <c>FormField</c> resolved, and makes sure the field exists either way.
+    /// <para>
+    /// Registration cannot be left to the sync path alone. An element assembled outside
+    /// a render pass — cached in a field, built in an event handler, produced by a memo
+    /// — never reaches <c>.Validate()</c>'s render scope, so an async-only field would
+    /// exist nowhere: <c>MarkAllTouched()</c> and the validity summary would silently
+    /// skip it. Async validators still are not run here; nothing runs them automatically
+    /// (see <c>ValidateExtensions.ValidateAsync</c>).
+    /// </para>
+    /// </summary>
+    private static void ApplyAttachedValidation(ValidationContext? valCtx, ValidationAttached? attached)
+    {
+        if (valCtx is null || attached is null) return;
+
+        if (attached.Validators.Length > 0)
+        {
+            ValidationReconciler.ValidateAttached(valCtx, attached, attached.Value);
+            return;
+        }
+
+        if (attached.AsyncValidators.Length > 0 && !string.IsNullOrEmpty(attached.FieldName))
+            valCtx.RegisterField(attached.FieldName);
+    }
+
     internal static UIElement? UpdateFormField(
         Reconciler reconciler, FormFieldElement oldFf, FormFieldElement newFf,
         WinUI.StackPanel panel, Action requestRerender)
@@ -116,10 +139,7 @@ internal static class CompositeLifecycle
         // Auto-validate
         var attached = newFf.Content.GetAttached<ValidationAttached>();
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
-        if (valCtx is not null && attached is not null && attached.Validators.Length > 0)
-        {
-            ValidationReconciler.ValidateAttached(valCtx, attached, attached.Value);
-        }
+        ApplyAttachedValidation(valCtx, attached);
 
         // [0] Update label
         if (panel.Children[0] is TextBlock labelTb)

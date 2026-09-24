@@ -104,6 +104,11 @@ public static class ValidateExtensions
     /// <see cref="ValidationReconciler.ValidateFieldAsync"/>, which carries the
     /// generation guard that discards a result superseded by a newer value.
     /// </para>
+    /// <para>
+    /// Registration happens here for an element built during a render, and again when
+    /// <c>FormField</c> mounts or updates it, which is the only chance an element
+    /// assembled outside a render pass gets.
+    /// </para>
     /// </summary>
     public static T ValidateAsync<T>(this T el, string fieldName, object? value, params IAsyncValidator[] asyncValidators) where T : Element
     {

@@ -108,6 +108,11 @@ Conventions for contributors:
 - A `FormField` that lost its context and swapped its content control in the same
   update left the displaced editor's blur binding live, so the pooled control kept
   marking the old field and kept its `ValidationContext` alive (issue #1262).
+- A field carrying only `.ValidateAsync(field, value, …)` on an element built
+  outside a render pass — cached, memoized, or assembled in an event handler — was
+  never registered, so `MarkAllTouched()` and the validity summary skipped it.
+  `FormField` now registers the field when it mounts or updates such an element
+  (issue #1262).
 - `ValidationContext.MarkAllTouched` bumped `Version` even when every registered
   field was already touched, and re-running validators over an unchanged value
   bumped it twice per pass; both are now silent when nothing changed (issue #1262).
