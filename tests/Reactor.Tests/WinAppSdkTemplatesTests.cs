@@ -530,6 +530,8 @@ public sealed class WinAppSdkTemplatesTests
     sealed class StubHandler : global::System.Net.Http.HttpMessageHandler
     {
         readonly global::System.Collections.Generic.Queue<global::System.Net.Http.HttpResponseMessage> _responses;
+        readonly global::System.Net.Http.HttpResponseMessage _exhausted =
+            new(global::System.Net.HttpStatusCode.NotFound);
 
         public global::System.Collections.Generic.List<string> Requested { get; } = new();
 
@@ -542,9 +544,17 @@ public sealed class WinAppSdkTemplatesTests
         {
             Requested.Add(request.RequestUri!.AbsoluteUri);
             return global::System.Threading.Tasks.Task.FromResult(
-                _responses.Count > 0
-                    ? _responses.Dequeue()
-                    : new global::System.Net.Http.HttpResponseMessage(global::System.Net.HttpStatusCode.NotFound));
+                _responses.Count > 0 ? _responses.Dequeue() : _exhausted);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _exhausted.Dispose();
+                while (_responses.Count > 0) _responses.Dequeue().Dispose();
+            }
+            base.Dispose(disposing);
         }
     }
 
