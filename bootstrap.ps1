@@ -944,12 +944,21 @@ Write-Host ''
 Write-Host 'Bootstrap complete.' -ForegroundColor Green
 Write-Host ''
 Write-Host 'Next:'
-Write-Host '    dotnet new reactor -n MyApp'
-Write-Host '    cd MyApp'
-Write-Host '    dotnet run'
-Write-Host ''
-Write-Host 'Other Reactor templates: reactor-mvu, reactor-navview, reactor-tabview'
-Write-Host '    dotnet new list reactor'
+if ($SkipTemplates) {
+    # Advertising `dotnet new reactor` here would be a false promise: this run
+    # deliberately did not install the pack, so the command may not resolve.
+    Write-Host '    Template install was skipped (-SkipTemplates).'
+    Write-Host '    To scaffold an app, install the pack first:'
+    Write-Host '        mur templates install'
+    Write-Host '        dotnet new reactor -n MyApp'
+} else {
+    Write-Host '    dotnet new reactor -n MyApp'
+    Write-Host '    cd MyApp'
+    Write-Host '    dotnet run'
+    Write-Host ''
+    Write-Host 'Other Reactor templates: reactor-mvu, reactor-navview, reactor-tabview'
+    Write-Host '    dotnet new list reactor'
+}
 Write-Host ''
 Write-Host 'Other useful commands:'
 Write-Host '    mur doctor     verify your install'

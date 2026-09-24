@@ -569,6 +569,19 @@ public static class WinAppSdkTemplates
         var baseAddress = ParsePackageBaseAddress(indexJson);
         if (baseAddress is null) return null;
 
+        // The index is fetched from a validated URL, but what it *advertises* is
+        // not covered by that check: a compromised or misconfigured index can point
+        // PackageBaseAddress at plaintext HTTP, or at a URL carrying credentials.
+        // Re-apply the policy before following it.
+        if (!IsAllowedFeedUrl(baseAddress))
+        {
+            Console.Error.WriteLine(
+                $"  warning: ignoring the package base address advertised by '{RedactSource(serviceIndexUrl)}' " +
+                $"— it must be an HTTPS URL (or loopback HTTP) with no credentials in its user-info, " +
+                $"query string or fragment.");
+            return null;
+        }
+
         // Flat-container paths are lowercase.
         return TryGetVersions(http, $"{baseAddress}{PackageId.ToLowerInvariant()}/index.json");
     }

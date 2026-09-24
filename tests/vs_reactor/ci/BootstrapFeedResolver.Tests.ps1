@@ -211,6 +211,66 @@ try {
     Assert-Throws { Resolve-ReactorNuGetFeed -ExplicitConfig (Join-Path $tmp 'missing.config') } `
         'missing explicit NuGet config is rejected'
 
+    # Get-ReactorFeedSourceFromConfig — an explicit -NuGetConfig reaches restore as
+    # `--configfile` and yields no bare source URL, so the template version lookup
+    # has to read one out of the config. Exercise the parsing for real: a source-text
+    # assertion that the function exists would survive any XPath or filtering bug,
+    # and the failure mode is silent (version lookup falls back to nuget.org, which
+    # a mirror-only machine cannot reach).
+    $mirrorConfig = Join-Path $tmp 'mirror.config'
+    Set-Content $mirrorConfig @'
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <add key="local" value="C:\repo\local-nupkgs" />
+    <add key="mirror" value="https://packagefeedproxy.microsoft.io/nuget/v3/index.json/" />
+    <add key="other" value="https://other.example.test/nuget/v3/index.json" />
+  </packageSources>
+</configuration>
+'@
+    Assert-Equal 'https://packagefeedproxy.microsoft.io/nuget/v3/index.json' `
+        (Get-ReactorFeedSourceFromConfig -ConfigPath $mirrorConfig) `
+        'explicit config prefers the proxy mirror, skips local folders, and trims the trailing slash'
+
+    $disabledConfig = Join-Path $tmp 'disabled.config'
+    Set-Content $disabledConfig @'
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <add key="mirror" value="https://packagefeedproxy.microsoft.io/nuget/v3/index.json" />
+    <add key="other" value="https://other.example.test/nuget/v3/index.json" />
+  </packageSources>
+  <disabledPackageSources>
+    <add key="mirror" value="true" />
+  </disabledPackageSources>
+</configuration>
+'@
+    Assert-Equal 'https://other.example.test/nuget/v3/index.json' `
+        (Get-ReactorFeedSourceFromConfig -ConfigPath $disabledConfig) `
+        'a disabled source is skipped even when it is the preferred mirror'
+
+    $localOnlyConfig = Join-Path $tmp 'local-only.config'
+    Set-Content $localOnlyConfig @'
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <add key="local" value="C:\repo\local-nupkgs" />
+    <add key="insecure" value="http://contoso.example.test/nuget/v3/index.json" />
+    <add key="credentialed" value="https://user:pat@contoso.example.test/nuget/v3/index.json" />
+  </packageSources>
+</configuration>
+'@
+    Assert-Equal $null (Get-ReactorFeedSourceFromConfig -ConfigPath $localOnlyConfig) `
+        'a config with no policy-passing feed URL yields no version feed'
+
+    $malformedConfig = Join-Path $tmp 'malformed.config'
+    Set-Content $malformedConfig '<configuration><packageSources>'
+    Assert-Equal $null (Get-ReactorFeedSourceFromConfig -ConfigPath $malformedConfig) `
+        'malformed XML yields no version feed instead of throwing'
+
+    Assert-Equal $null (Get-ReactorFeedSourceFromConfig -ConfigPath (Join-Path $tmp 'nope.config')) `
+        'a missing config yields no version feed'
+
     $restoreArgs = Get-ReactorRestoreArguments `
         -NuGetSource 'https://packagefeedproxy.microsoft.io/nuget/v3/index.json' `
         -NpmRegistry 'https://packagefeedproxy.microsoft.io/npm'

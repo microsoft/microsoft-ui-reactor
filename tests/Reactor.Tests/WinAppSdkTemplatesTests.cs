@@ -457,6 +457,38 @@ public sealed class WinAppSdkTemplatesTests
             $"'{resolverPath}' must define Get-ReactorFeedSourceFromConfig.");
     }
 
+    [Theory]
+    // A validated service index can still *advertise* an unsafe base address, and
+    // following it would fetch version metadata — the thing that selects the
+    // package — over plaintext, or send URL credentials to that endpoint.
+    [InlineData("http://evil.example.com/flat2/", false)]
+    [InlineData("https://user:pat@feed.example.com/flat2/", false)]
+    [InlineData("https://feed.example.com/flat2/", true)]
+    public void IsAllowedFeedUrl_also_gates_an_advertised_base_address(string advertised, bool allowed)
+    {
+        var serviceIndex = $$"""
+            {"version":"3.0.0","resources":[{"@id":"{{advertised}}","@type":"PackageBaseAddress/3.0.0"}]}
+            """;
+
+        // Parsing is deliberately permissive — the policy check is what stops it.
+        var parsed = WinAppSdkTemplates.ParsePackageBaseAddress(serviceIndex);
+        Assert.NotNull(parsed);
+        Assert.Equal(allowed, WinAppSdkTemplates.IsAllowedFeedUrl(parsed));
+    }
+
+    [Fact]
+    public void Bootstrap_does_not_advertise_dotnet_new_reactor_when_templates_are_skipped()
+    {
+        // -SkipTemplates deliberately leaves the pack uninstalled, so printing the
+        // scaffold command unconditionally promises something that may not resolve.
+        var (path, text) = ReadRepoFile("bootstrap.ps1");
+        var normalized = text.Replace("\r\n", "\n");
+        var next = normalized[normalized.LastIndexOf("Write-Host 'Next:'", StringComparison.Ordinal)..];
+        Assert.True(
+            next.Contains("if ($SkipTemplates)", StringComparison.Ordinal),
+            $"'{path}' must gate the `dotnet new reactor` next-step guidance on -SkipTemplates.");
+    }
+
     // ── False-PASS guard: "pack installed" != "templates usable" ───────────
     //
     // Observed live during the de-stale merge: the machine had
