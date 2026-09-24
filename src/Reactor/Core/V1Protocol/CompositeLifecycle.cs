@@ -427,6 +427,7 @@ internal static class CompositeLifecycle
         ValidationRuleElement rule, ValidationContext valCtx, RuleBinding binding,
         global::System.Threading.CancellationTokenSource cts)
     {
+        using var owned = cts;
         try
         {
             await rule.EvaluateAsync(valCtx, binding.Producer, cts.Token);
@@ -436,6 +437,8 @@ internal static class CompositeLifecycle
             // Superseded by a newer pass, or the rule left the tree.
         }
         catch (global::System.Exception ex)
+            when (ex is not global::System.OutOfMemoryException
+                  and not global::System.StackOverflowException)
         {
             // An app predicate threw. Surfacing it as an unobserved task exception would
             // tear the process down later and far from the cause, so report it where the
@@ -444,11 +447,8 @@ internal static class CompositeLifecycle
             Diagnostics.DiagnosticLog.SwallowedError(
                 Diagnostics.LogCategory.Reactor, "ValidationRuleAsync.Evaluate", ex);
         }
-        finally
-        {
-            if (ReferenceEquals(binding.Pending, cts)) binding.Pending = null;
-            cts.Dispose();
-        }
+
+        if (ReferenceEquals(binding.Pending, cts)) binding.Pending = null;
     }
 
     private static void CancelPendingRule(RuleBinding binding)
@@ -457,8 +457,17 @@ internal static class CompositeLifecycle
         if (pending is null) return;
 
         binding.Pending = null;
-        try { pending.Cancel(); }
-        catch (global::System.ObjectDisposedException) { }
+        try
+        {
+            pending.Cancel();
+        }
+        catch (global::System.ObjectDisposedException ex)
+        {
+            // The pass finished and disposed its source between the read above and this
+            // call. There is nothing left to cancel, but record it rather than swallow.
+            Diagnostics.DiagnosticLog.SwallowedError(
+                Diagnostics.LogCategory.Reactor, "ValidationRuleAsync.Cancel", ex);
+        }
     }
 
     private static long s_ruleProducerSeed;
