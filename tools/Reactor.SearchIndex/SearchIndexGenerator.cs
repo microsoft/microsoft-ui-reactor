@@ -548,10 +548,11 @@ public static partial class SearchIndexGenerator
         var rootSkill = Path.Join(agentKitRoot, "SKILL.md");
         if (File.Exists(rootSkill)) files.Add(rootSkill);
 
-        foreach (var full in new[] { "plugins", "skills" }.Select(dir => Path.Join(agentKitRoot, dir)))
+        foreach (var full in new[] { "plugins", "skills" }
+            .Select(dir => Path.Join(agentKitRoot, dir))
+            .Where(Directory.Exists))
         {
-            if (Directory.Exists(full))
-                files.AddRange(Directory.EnumerateFiles(full, "*.md", SearchOption.AllDirectories));
+            files.AddRange(Directory.EnumerateFiles(full, "*.md", SearchOption.AllDirectories));
         }
 
         files.Sort((a, b) => string.CompareOrdinal(Normalize(a), Normalize(b)));
