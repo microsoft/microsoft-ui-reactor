@@ -47,6 +47,16 @@ Conventions for contributors:
     default `ShowWhen.WhenTouched` reveals errors on blur as the guide describes.
     Nothing in the framework called `MarkTouched` before, leaving that default
     unreachable unless the app marked fields by hand (spec 011 §1E.1).
+
+- **Framework mechanics are searchable in the ReactorGallery index (spec 064,
+  issue #1275).** `find-ui --source reactor` answered "what is control X" but not
+  "how does mechanism Y work": `UseState hook` and `key down event handler`
+  returned nothing, and `state management` returned CheckBox. Nine
+  **Fundamentals** gallery pages — hooks, element refs, keyboard and pointer
+  input — are now indexed alongside the controls, and the index emits the
+  contract's `curatedKeywords`, `docs` and `details` fields. `details` is lifted
+  verbatim from the shipped agent-kit skills, so the two cannot drift.
+
 - `Publish docs` now verifies the live site after deploying. The `publish` job stamps the
   Pages artifact with the run that built it, and a new `verify` job polls
   <https://microsoft.github.io/microsoft-ui-reactor/> until it is serving *that* run —
@@ -67,6 +77,11 @@ Conventions for contributors:
   `.Provide(ValidationContexts.Current, ctx)`; an explicit provide still takes
   precedence. The validator-only `.Validate(fieldName, validators…)` overload is
   unchanged and still attach-only. (spec 011 §1A.5, issue #1262)
+
+- **The search index emits every clean `SampleCard` on a page, not just the first
+  (spec 064 §3.2, issue #1275).** Regenerate after changing *any* card on a
+  gallery page, not only the opening one.
+
 - A push to `main` and the release tag's own run both deploy the docs, as before. Standing
   one of them down was tried and removed: every version of that check has to predict that
   the other run will deploy, and each way the prediction fails (an evicted pending run, a
@@ -145,6 +160,16 @@ Conventions for contributors:
     which does not exist, and said `Validate.MustAsync` runs automatically. The
     async section now states the real contract — attach-only, driven from an
     effect through `ValidationReconciler.ValidateFieldAsync`.
+
+- **Wrong code and guidance in the shipped agent-kit skills (spec 064 §4, issue
+  #1275).** Three gesture snippets in `reactor-input` used WinUI's nested
+  `ManipulationDelta` shape rather than Reactor's flat gesture structs, and the
+  60Hz pan pattern bound a `UseRef` box into `.Ref(...)`, which takes an
+  `ElementRef` — all four shipped as copy-ready code that would not compile. The
+  hook-dependency gotcha in `reactor-getting-started` also misattributed the
+  tuple and array rules to the runtime rather than to `REACTOR_HOOKS_004`, which
+  is what actually rejects them. Found by requiring a compiled gallery card for
+  every API the skills demonstrate.
 
 ### Security
 

@@ -15,7 +15,6 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TF_BUILD)' != 'true'">
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Microsoft.VisualStudio.SDK" />
     <PackageReference Include="Microsoft.VisualStudio.Sdk.TestFramework.Xunit.v3" />
     <PackageReference Include="System.Reflection.DispatchProxy" />
