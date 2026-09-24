@@ -199,7 +199,14 @@ class AsyncValidationDemo : Component
                     [Validate.MustAsync<string>(IsEmailFree, "Email is taken")],
                     cts.Token);
             }
-            return () => cts.Cancel();
+            // Cancel on cleanup so a check for a value the user has already replaced
+            // stops waiting, and dispose the source with it — the effect allocates a
+            // fresh one per run.
+            return () =>
+            {
+                try { cts.Cancel(); }
+                finally { cts.Dispose(); }
+            };
         }, email);
 
         return VStack(12,
