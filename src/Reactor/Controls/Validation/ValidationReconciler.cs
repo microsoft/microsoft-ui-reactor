@@ -103,8 +103,8 @@ public static class ValidationReconciler
         ValidationContext ctx,
         params ValidationRuleElement[] rules)
     {
-        foreach (var rule in rules)
-            rule.Evaluate(ctx);
+        for (var i = 0; i < rules.Length; i++)
+            rules[i].Evaluate(ctx, ValidationRuleDsl.DirectProducerKey(rules[i], i));
     }
 
     /// <summary>
@@ -157,8 +157,8 @@ public static class ValidationReconciler
         ValidationContext ctx,
         params ValidationRuleElement[] rules)
     {
-        foreach (var rule in rules)
-            await rule.EvaluateAsync(ctx);
+        for (var i = 0; i < rules.Length; i++)
+            await rules[i].EvaluateAsync(ctx, ValidationRuleDsl.DirectProducerKey(rules[i], i));
     }
 
     /// <summary>

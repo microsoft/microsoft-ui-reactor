@@ -139,6 +139,13 @@ Conventions for contributors:
   `EvaluateRules(...)` — recorded a passing verdict without ever running its
   predicate, reporting an invalid field as valid. Those paths now throw, and
   `EvaluateRulesAsync` is the batch path that runs them (issue #1262).
+- A mounted async `ValidationRule` whose predicate never completed was never released:
+  the predicate takes no cancellation token, so cancelling on update or unmount left a
+  suspended task holding the rule binding and its `ValidationContext`, with another
+  added on every re-render. The await is now cancellation-aware (issue #1262).
+- Two directly-evaluated rules sharing a predicate method on one field collapsed into
+  a single slot and retracted each other. A rule's identity now includes its position
+  in the call (issue #1262).
 - An async `ValidationRule` placed in the element tree never ran its predicate.
   `ValidationRuleAsync` builds an element whose synchronous predicate is a
   constant `true`, and the mount/update lifecycle evaluated that, so the rule

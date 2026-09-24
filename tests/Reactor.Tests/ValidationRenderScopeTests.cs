@@ -1594,6 +1594,67 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public void Two_Rules_Sharing_A_Predicate_Keep_Separate_Slots()
+    {
+        var ctx = new ValidationContext();
+
+        // Both rules use the *same* predicate method, so a method-only identity would
+        // collapse them into one slot and let one retract the other.
+        static bool RangeValid() => false;
+
+        ValidationReconciler.EvaluateRules(
+            ctx,
+            ValidationRule(RangeValid, "Range is closed", "dates"),
+            ValidationRule(RangeValid, "Range is too long", "dates"));
+
+        Assert.Equal(2, ctx.GetMessages("dates").Count);
+
+        var texts = ctx.GetMessages("dates").Select(m => m.Text).ToList();
+        Assert.Contains("Range is closed", texts);
+        Assert.Contains("Range is too long", texts);
+    }
+
+    [Fact]
+    public async Task A_Hung_Async_Rule_Releases_Its_Evaluation_When_Cancelled()
+    {
+        var ctx = new ValidationContext();
+        var never = new TaskCompletionSource<bool>();
+        using var cts = new global::System.Threading.CancellationTokenSource();
+
+        var rule = ValidationRuleAsync(() => never.Task, "Never resolves", "name");
+        var running = rule.EvaluateAsync(ctx, "rule#9", cts.Token);
+
+        // The predicate takes no token, so only an explicitly cancellation-aware await
+        // can release the evaluation — and with it the context it would otherwise hold.
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<global::System.OperationCanceledException>(() => running);
+        Assert.False(never.Task.IsCompleted);
+        Assert.Empty(ctx.GetMessages("name"));
+    }
+
+    [Fact]
+    public void External_Errors_Survive_Revalidating_The_Same_Value()
+    {
+        var ctx = new ValidationContext();
+
+        ValidationReconciler.ValidateField(ctx, "email", "user@example.com", Validate.Required());
+        ctx.AddExternal("email", "Email already registered");
+
+        // Re-running the same validators over an unchanged value says nothing new about
+        // the server's verdict, so it must not wipe it.
+        ValidationReconciler.ValidateField(ctx, "email", "user@example.com", Validate.Required());
+
+        var texts = ctx.GetMessages("email").Select(m => m.Text).ToList();
+        Assert.Single(texts);
+        Assert.Contains("Email already registered", texts);
+
+        // A real value change does clear it.
+        ValidationReconciler.ValidateField(ctx, "email", "other@example.com", Validate.Required());
+        Assert.Empty(ctx.GetMessages("email"));
+    }
+
+    [Fact]
     public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
     {
         var ctx = new ValidationContext();

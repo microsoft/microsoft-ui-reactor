@@ -131,8 +131,11 @@ public static class ValidationRuleDsl
         ctx.RegisterField(rule.Field);
         var generation = ctx.BeginAsyncProducer(rule.Field, producer);
 
-        var result = await rule.AsyncPredicate();
-        cancellationToken.ThrowIfCancellationRequested();
+        // WaitAsync, not a plain await: the predicate takes no token, so awaiting it
+        // directly means a hung check keeps this state machine — and through it the rule
+        // binding and the ValidationContext — alive forever, with a fresh one added on
+        // every re-render. Cancelling now releases us immediately (issue #1262 review).
+        var result = await rule.AsyncPredicate().WaitAsync(cancellationToken);
 
         ctx.ApplyAsyncOwned(rule.Field, producer, generation, BuildMessages(rule, result));
     }
@@ -155,35 +158,48 @@ public static class ValidationRuleDsl
     {
         if (rule.AsyncPredicate is null) return BuildMessages(rule, rule.Predicate());
 
-        var result = await rule.AsyncPredicate();
-        cancellationToken.ThrowIfCancellationRequested();
+        // WaitAsync, not a plain await: the predicate takes no token, so awaiting it
+        // directly means a hung check keeps this state machine — and through it the rule
+        // binding and the ValidationContext — alive forever, with a fresh one added on
+        // every re-render. Cancelling now releases us immediately (issue #1262 review).
+        var result = await rule.AsyncPredicate().WaitAsync(cancellationToken);
         return BuildMessages(rule, result);
     }
 
     /// <summary>
-    /// Identity of last resort for a rule evaluated outside the reconciler, where there
-    /// is no mounted instance to key on.
+    /// The identity a single directly-evaluated rule gets, equivalent to position 0 of a
+    /// one-rule call. See <see cref="DirectProducerKey"/> for the derivation and its
+    /// limits.
+    /// </summary>
+    internal static string FallbackProducerKey(ValidationRuleElement rule) => DirectProducerKey(rule, 0);
+
+    /// <summary>
+    /// Identity for a rule evaluated outside the reconciler, where there is no mounted
+    /// instance to key on: the field, the predicate's method — for a lambda, the
+    /// compiler-generated method for that call site — and the rule's position in the
+    /// call.
     /// <para>
-    /// Derived from the field plus the predicate's *method* — for a lambda, the
-    /// compiler-generated method for that call site — so the same line of code owns the
-    /// same slot on every evaluation. Keying on the message instead (as this once did)
-    /// orphaned the previous verdict whenever the text moved, which an interpolated
-    /// message such as <c>$"Must be after {start}"</c> does on every change: errors
-    /// accumulated and a now-passing rule could not retract the one it replaced.
+    /// Keying on the message instead (as this once did) orphaned the previous verdict
+    /// whenever the text moved, which an interpolated message such as
+    /// <c>$"Must be after {start}"</c> does on every change: errors accumulated and a
+    /// now-passing rule could not retract the one it replaced.
     /// </para>
     /// <para>
-    /// Two rules built at the same call site for the same field still share a slot and
-    /// overwrite each other. Mounting them through the element tree gives each a real
-    /// per-instance identity; prefer that over calling <c>Evaluate</c> in a loop.
+    /// The position disambiguates rules that share a predicate — two
+    /// <c>ValidationRule(IsRangeValid, …)</c> on one field would otherwise collapse into
+    /// one slot and retract each other. Two rules built at the same call site *and*
+    /// passed in the same position across calls still share a slot; mounting them in the
+    /// element tree gives each a real per-instance identity, which is what to reach for
+    /// when rules are generated in a loop.
     /// </para>
     /// </summary>
-    internal static string FallbackProducerKey(ValidationRuleElement rule)
+    internal static string DirectProducerKey(ValidationRuleElement rule, int position)
     {
         // An async rule's synchronous Predicate is the shared `() => true` created inside
         // ValidationRuleAsync, identical for every such rule — so key off the predicate
         // that actually belongs to this call site.
         var method = rule.AsyncPredicate?.Method ?? rule.Predicate.Method;
-        return $"rule:{rule.Field}:{method.DeclaringType?.FullName}.{method.Name}";
+        return $"rule:{rule.Field}:{method.DeclaringType?.FullName}.{method.Name}#{position.ToString(global::System.Globalization.CultureInfo.InvariantCulture)}";
     }
 
     private static List<ValidationMessage> BuildMessages(ValidationRuleElement rule, bool passed) =>
