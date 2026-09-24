@@ -49,6 +49,11 @@ public static class SearchIndexCli
                     var value = arg[AgentKitOption.Length..];
                     if (value.Length == 0) return Usage(log, "--agent-kit= requires a directory");
                     agentKitArg = Path.GetFullPath(value);
+                    // An INFERRED root is allowed to be absent — that is how a synthetic gallery
+                    // opts out. An EXPLICIT one that does not exist is a typo, and Generate would
+                    // quietly treat it as "no markers" and write a details-free index.
+                    if (!Directory.Exists(agentKitArg))
+                        return Usage(log, $"--agent-kit directory does not exist: {agentKitArg}");
                 }
                 else if (arg.StartsWith("--", StringComparison.Ordinal)) return Usage(log, $"unknown option '{arg}'");
                 else positional.Add(arg);

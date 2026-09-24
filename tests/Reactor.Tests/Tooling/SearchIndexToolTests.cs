@@ -519,6 +519,31 @@ public sealed class SearchIndexCliTests
         Assert.Contains("mutually exclusive", log.ToString());
     }
 
+    /// <summary>
+    /// A mistyped explicit override must fail loudly. An INFERRED root is allowed to be absent —
+    /// that is how a synthetic gallery opts out — but if a typo were treated the same way the
+    /// tool would happily write a details-free index and report success.
+    /// </summary>
+    [Fact]
+    public void Run_MistypedAgentKitDirectory_ReturnsUsageError()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        var ed = g.WriteEditorial(ValidEditorial);
+        var outPath = Path.Join(g.Root, "out.json");
+        var missing = Path.Join(g.Root, "no-such-kit");
+        using var log = new StringWriter();
+
+        Assert.Equal(2, SearchIndexCli.Run(new[] { $"--agent-kit={missing}", g.GalleryDir, ed, outPath }, log));
+        Assert.Contains("does not exist", log.ToString());
+        Assert.False(File.Exists(outPath), "a rejected run must not write an index");
+
+        // Positive control: the same invocation against a real directory succeeds, so the
+        // assertion above is about the missing path and not about the argument shape.
+        var kit = g.WriteAgentKit("<!-- index:alpha -->\nAlpha prose.\n<!-- /index:alpha -->");
+        Assert.Equal(0, SearchIndexCli.Run(new[] { $"--agent-kit={kit}", g.GalleryDir, ed, outPath }, log));
+        Assert.Contains("\"details\":", File.ReadAllText(outPath), StringComparison.Ordinal);
+    }
+
     static string RepoRoot()
     {
         var dir = AppContext.BaseDirectory;
