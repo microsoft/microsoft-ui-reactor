@@ -2297,4 +2297,35 @@ public class ValidationRenderScopeTests
         Assert.Single(remaining);
         Assert.Equal("incoming", remaining[0].Text);
     }
+    [Fact]
+    public void ReBaseliningDuringRenderStillNotifies()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("f", "a");
+        ctx.NotifyValueChanged("f", "b");
+        Assert.True(ctx.IsDirty("f"));
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Establish a delivered snapshot; net-zero suppression only compares against
+        // one that exists.
+        using (ValidationRenderScope.BeginReconcile())
+        {
+            ctx.AddExternal("f", "seed");
+        }
+        var afterSeed = notifications;
+
+        // Re-baselining an edited field flips IsDirty without touching messages,
+        // touched flags or the current value — the only thing that moves is the
+        // baseline itself, so a snapshot that omits it reports "nothing changed" and
+        // the notification is dropped.
+        using (ValidationRenderScope.BeginReconcile())
+        {
+            ctx.SetInitialValue("f", "b");
+        }
+
+        Assert.False(ctx.IsDirty("f"));
+        Assert.True(notifications > afterSeed, $"afterSeed={afterSeed} now={notifications}");
+    }
 }

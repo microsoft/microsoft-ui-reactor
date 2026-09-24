@@ -122,6 +122,7 @@ public sealed class ValidationContext
         {
             _lastNotifiedMessages = null;
             _lastNotifiedValues = null;
+            _lastNotifiedInitials = null;
             _lastNotifiedTouched = null;
         }
         _changed?.Invoke();
@@ -250,6 +251,7 @@ public sealed class ValidationContext
 
     private string? _lastNotifiedMessages;
     private Dictionary<string, object?>? _lastNotifiedValues;
+    private Dictionary<string, object?>? _lastNotifiedInitials;
     private HashSet<string>? _lastNotifiedTouched;
     private int _lastNotifiedRegistered;
     private bool _frameTouchedNonMessageState;
@@ -269,9 +271,11 @@ public sealed class ValidationContext
     /// </summary>
     private bool NonMessageStateUnchangedLocked()
     {
-        if (_lastNotifiedValues is null || _lastNotifiedTouched is null) return false;
+        if (_lastNotifiedValues is null || _lastNotifiedInitials is null || _lastNotifiedTouched is null)
+            return false;
         if (_lastNotifiedRegistered != _registeredFields.Count) return false;
         if (_lastNotifiedValues.Count != _currentValues.Count) return false;
+        if (_lastNotifiedInitials.Count != _initialValues.Count) return false;
         if (!_lastNotifiedTouched.SetEquals(_touchedFields)) return false;
 
         foreach (var (field, value) in _currentValues)
@@ -279,12 +283,22 @@ public sealed class ValidationContext
             if (!_lastNotifiedValues.TryGetValue(field, out var previous)) return false;
             if (!Equals(previous, value)) return false;
         }
+
+        // Baselines, not just current values: re-baselining an edited field with
+        // SetInitialValue flips IsDirty without touching _currentValues, and a
+        // subscriber rendering dirty state has to hear about that (issue #1262 review).
+        foreach (var (field, initial) in _initialValues)
+        {
+            if (!_lastNotifiedInitials.TryGetValue(field, out var previous)) return false;
+            if (!Equals(previous, initial)) return false;
+        }
         return true;
     }
 
     private void CaptureNonMessageStateLocked()
     {
         _lastNotifiedValues = new Dictionary<string, object?>(_currentValues);
+        _lastNotifiedInitials = new Dictionary<string, object?>(_initialValues);
         _lastNotifiedTouched = new HashSet<string>(_touchedFields, StringComparer.Ordinal);
         _lastNotifiedRegistered = _registeredFields.Count;
     }

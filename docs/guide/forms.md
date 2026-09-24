@@ -349,7 +349,7 @@ Key pieces:
 
 ### How validation runs
 
-Three behaviours make the example above work without any extra wiring. They are
+Four behaviours make the example above work without any extra wiring. They are
 worth knowing because they explain *when* a result becomes visible.
 
 **Validators run during render, not after it.** The value-carrying
@@ -779,11 +779,67 @@ surface.
 ### Validating async (uniqueness checks)
 
 `Validate.MustAsync<T>(...)` runs a predicate that returns
-`Task<bool>`. The `ValidationContext` tracks the in-flight async work
-and reports `IsValidating` per field, so the Submit button can disable
-while async validation runs. Pair with `.IsDisabledFocusable()` so the
-button stays in tab order while validating — same accessibility
-concern as [Keeping Submit Reachable](#keeping-submit-reachable).
+`Task<bool>`. Unlike the synchronous validators, an async attachment is
+**never run for you**: `.ValidateAsync(field, value, …)` attaches the
+validators and registers the field, and nothing else. A render pass is
+synchronous, so there is nowhere for it to await them.
+
+Run them yourself from an effect, through
+`ValidationReconciler.ValidateFieldAsync`, which carries the generation
+guard that discards a result the user has already typed past:
+
+```csharp
+class AsyncValidationDemo : Component
+{
+    static async Task<bool> IsEmailFree(string value)
+    {
+        await Task.Delay(300);
+        return value != "taken@example.com";
+    }
+
+    public override Element Render()
+    {
+        var ctx = this.UseValidationContext();
+        var (email, setEmail) = UseState("");
+
+        // Async validators are never run for you: a render pass is synchronous, so
+        // there is nowhere for it to await them. Drive them from an effect, through
+        // ValidateFieldAsync, whose generation guard discards a result the user has
+        // already typed past.
+        UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            if (email.Length > 0)
+            {
+                _ = ValidationReconciler.ValidateFieldAsync(
+                    ctx, "email", email,
+                    [Validate.MustAsync<string>(IsEmailFree, "Email is taken")],
+                    cts.Token);
+            }
+            return () => cts.Cancel();
+        }, email);
+
+        return VStack(12,
+            SubHeading("Async Validation"),
+            TextBox(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); },
+                placeholderText: "user@example.com", header: "Email"),
+            When(ctx.HasError("email"), () =>
+                TextBlock(ctx.GetMessages("email").First().Text)
+                    .Foreground(Theme.SystemCritical).FontSize(12))
+        ).Padding(24);
+    }
+}
+```
+
+Track the in-flight state with your own `UseState` flag if the Submit
+button should disable while the check runs — the context does not expose
+one. Pair that with `.IsDisabledFocusable()` so the button stays in tab
+order while validating — same accessibility concern as
+[Keeping Submit Reachable](#keeping-submit-reachable).
+
+For a cross-field async check, `ValidationRuleAsync` *is* run for you
+when it is placed in the element tree, with cancellation on update and
+unmount.
 
 ## Common Mistakes
 

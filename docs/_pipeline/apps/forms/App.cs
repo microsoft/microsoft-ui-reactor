@@ -1,6 +1,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Controls.Validation;
+using System.Threading;
 using static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;
 using Microsoft.UI.Reactor.Controls;
 using static Microsoft.UI.Reactor.Factories;
@@ -169,6 +170,49 @@ class ValidationContextDemo : Component
     }
 }
 // </snippet:validation-context>
+
+// <snippet:async-validation>
+class AsyncValidationDemo : Component
+{
+    static async Task<bool> IsEmailFree(string value)
+    {
+        await Task.Delay(300);
+        return value != "taken@example.com";
+    }
+
+    public override Element Render()
+    {
+        var ctx = this.UseValidationContext();
+        var (email, setEmail) = UseState("");
+
+        // Async validators are never run for you: a render pass is synchronous, so
+        // there is nowhere for it to await them. Drive them from an effect, through
+        // ValidateFieldAsync, whose generation guard discards a result the user has
+        // already typed past.
+        UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            if (email.Length > 0)
+            {
+                _ = ValidationReconciler.ValidateFieldAsync(
+                    ctx, "email", email,
+                    [Validate.MustAsync<string>(IsEmailFree, "Email is taken")],
+                    cts.Token);
+            }
+            return () => cts.Cancel();
+        }, email);
+
+        return VStack(12,
+            SubHeading("Async Validation"),
+            TextBox(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); },
+                placeholderText: "user@example.com", header: "Email"),
+            When(ctx.HasError("email"), () =>
+                TextBlock(ctx.GetMessages("email").First().Text)
+                    .Foreground(Theme.SystemCritical).FontSize(12))
+        ).Padding(24);
+    }
+}
+// </snippet:async-validation>
 
 // <snippet:form-field>
 class FormFieldDemo : Component
@@ -422,6 +466,7 @@ class FormsApp : Component
                 Component<ValidationDemo>(),
                 Component<KeepSubmitReachableDemo>(),
                 Component<ValidationContextDemo>(),
+                Component<AsyncValidationDemo>(),
                 Component<FormFieldDemo>(),
                 Component<MaskedInputDemo>(),
                 Component<InputFormattersDemo>(),

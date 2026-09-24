@@ -217,6 +217,24 @@ Conventions for contributors:
   mounted rule gets a fresh `rule#N` identity, so a long-lived context that saw
   rules mount and unmount grew one entry per mount without bound. A stamp now
   exists exactly while its producer owns messages (issue #1262).
+- A chain ending on an async link left its synchronous verdict with no lifetime
+  owner, so `.Validate(f, v, …).ValidateAsync(f, …)` on a bare control kept the
+  sync message after the control was unmounted. The async overloads now re-run
+  the merged synchronous validators when the chain already carries a value; the
+  async validators themselves are still attach-only (issue #1262).
+- A root render that wrote a verdict and then threw never reached
+  reconciliation, so nothing withdrew what it had installed and the field stayed
+  in error for the life of the context. Claims left over when the next render
+  pass opens are now withdrawn rather than discarded (issue #1262).
+- Re-baselining an edited field with `SetInitialValue` during a render was
+  silently suppressed: it flips `IsDirty` without touching messages, touched
+  flags or the current value, and the net-zero comparison did not look at
+  baselines. A subscriber rendering dirty state kept the stale one (issue #1262).
+- The forms guide documented `ValidationContext.IsValidating`, which does not
+  exist, and said `Validate.MustAsync` runs automatically. The async section now
+  describes the real contract — attach-only, run it yourself through
+  `ValidationReconciler.ValidateFieldAsync` — and points at `ValidationRuleAsync`
+  for the cross-field case that *is* run for you (issue #1262).
 
 ### Security
 
