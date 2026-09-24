@@ -676,10 +676,12 @@ public static partial class SearchIndexGenerator
     }
 
     // Permissive DETECTION, strict VALIDATION. Matching only well-formed ids would make
-    // `<!-- index:UseState -->` or `<!-- index:use_state -->` invisible rather than wrong —
-    // the entry would quietly lose its prose, which is the failure mode this scanner exists
-    // to make impossible. So match anything marker-shaped and reject a bad id by name.
-    [GeneratedRegex(@"<!--\s*(/?)index:([^\s>]*)\s*-->")]
+    // `<!-- index:UseState -->`, `<!-- index:use_state -->` or `<!-- index:use state -->`
+    // invisible rather than wrong — the entry would quietly lose its prose, which is the
+    // failure mode this scanner exists to make impossible. So capture the whole payload up to
+    // the first `-->` (lazily, and `.` excludes newlines so a marker cannot span lines) and
+    // reject a bad id by name.
+    [GeneratedRegex(@"<!--\s*(/?)index:(.*?)\s*-->")]
     private static partial Regex IndexMarkerRegex();
 
     [GeneratedRegex(@"^[a-z0-9][a-z0-9-]*$")]

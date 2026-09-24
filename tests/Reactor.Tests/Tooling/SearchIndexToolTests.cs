@@ -364,6 +364,7 @@ class AlphaPage
     [InlineData("<!-- index:Alpha -->\nwrong case\n<!-- /index:Alpha -->", "invalid id")]
     [InlineData("<!-- index:use_state -->\nunderscore\n<!-- /index:use_state -->", "invalid id")]
     [InlineData("<!-- index: -->\nempty\n<!-- /index: -->", "invalid id")]
+    [InlineData("<!-- index:use state -->\nembedded space\n<!-- /index:use state -->", "invalid id")]
     public void MalformedMarker_FailsGeneration(string markdown, string expected)
     {
         using var g = new MiniGallery(betaRouted: true);
