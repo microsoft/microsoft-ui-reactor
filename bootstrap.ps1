@@ -740,7 +740,24 @@ if ($SkipTemplates) {
             "    - To skip this step entirely: ./bootstrap.ps1 -SkipTemplates"
         ) -join [Environment]::NewLine)
     }
-    Write-Ok '`dotnet new reactor` templates registered'
+    # `mur templates install` reports success for KeptExisting too — i.e. it kept
+    # an already-installed pack because nothing newer could be resolved. That pack
+    # can predate the Reactor templates (0.0.6-alpha shipped without them), so
+    # confirm the short name actually resolves before claiming success.
+    $templatesVerified = $false
+    $listing = & dotnet new list reactor 2>&1 | Out-String
+    if ($listing -notmatch 'No templates found' -and $listing -match '\breactor\b') {
+        $templatesVerified = $true
+    }
+
+    if ($templatesVerified) {
+        Write-Ok '`dotnet new reactor` templates registered'
+    } else {
+        Write-Host ''
+        Write-Host "    [warn] $wasdkTemplatePackageId is installed but does not provide ``dotnet new reactor``." -ForegroundColor Yellow
+        Write-Host "           That version predates the Reactor templates. Re-run with network access, or pin a newer one:"
+        Write-Host "               mur templates install --version <version>"
+    }
 }
 
 # ---------------------------------------------------------------------------

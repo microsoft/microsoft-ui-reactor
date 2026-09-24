@@ -33,8 +33,10 @@ Conventions for contributors:
 ### Deprecated
 
 - **`Microsoft.UI.Reactor.ProjectTemplates` is deprecated on NuGet.org.** Published versions
-  remain restorable but are marked deprecated with a pointer to `dotnet new reactor`. Use
-  `dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates` instead.
+  remain restorable but are marked deprecated with a pointer to `dotnet new reactor`. Install the
+  replacement with `mur templates install`, or pin the pack explicitly —
+  `dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::0.0.7-alpha` — since it is
+  prerelease-only and a bare `dotnet new install` resolves stable versions.
 
 ### Removed
 

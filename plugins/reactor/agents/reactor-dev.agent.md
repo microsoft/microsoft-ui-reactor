@@ -21,7 +21,7 @@ user-invocable: true
 > If the templates aren't installed yet, install the pack before scaffolding:
 >
 > ```
-> dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
+> dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::0.0.7-alpha
 > ```
 
 You build Reactor apps in this rhythm: scaffold → understand requirements → draft component tree → write files in a batch → `mur check`.

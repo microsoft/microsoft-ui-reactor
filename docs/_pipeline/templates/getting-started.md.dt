@@ -50,7 +50,7 @@ If you just want to build an app, install the template pack and go — you do no
 need to clone this repo:
 
 ```powershell
-dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
+dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::0.0.7-alpha
 dotnet new reactor -n MyApp
 cd MyApp
 dotnet run
@@ -220,7 +220,7 @@ dotnet run --project src/Reactor.Cli/Reactor.Cli.csproj `
 App SDK template pack on NuGet.org, not from this checkout:
 
 ```powershell
-dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
+dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::0.0.7-alpha
 ```
 
 `mur templates install` does the same thing but resolves the newest published
@@ -276,7 +276,7 @@ the install must happen from a shell that isn't already running `mur`).
 The Reactor templates ship in the Windows App SDK `dotnet new` pack
 (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`), so `dotnet new reactor`
 needs no source checkout. If it's missing, run
-`dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates` — or
+`dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::0.0.7-alpha` — or
 `mur templates install`, which additionally resolves prerelease versions that a
 bare `dotnet new install` cannot reach.
 <!-- /ai:caveat -->

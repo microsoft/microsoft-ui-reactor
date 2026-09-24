@@ -72,7 +72,9 @@ Many of the experiments in this repo — the charting stack, accessibility valid
 Reactor ships the public preview package [`Microsoft.UI.Reactor`](https://www.nuget.org/packages/Microsoft.UI.Reactor) on NuGet.org; see the [NuGet page](https://www.nuget.org/packages/Microsoft.UI.Reactor) or [GitHub Releases](https://github.com/microsoft/microsoft-ui-reactor/releases) for the current version. The project templates ship in the official Windows App SDK `dotnet new` pack, so building an app needs no source checkout:
 
 ```powershell
-dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
+# The template pack is prerelease-only today, and `dotnet new install` resolves
+# stable versions unless you pin one explicitly.
+dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::0.0.7-alpha
 dotnet new reactor -n MyApp
 cd MyApp
 dotnet run
@@ -110,7 +112,7 @@ dotnet run -p:Platform=x64
 
 `bootstrap.ps1` packs `mur` as a `dotnet tool` global install (cross-shell PATH, no per-arch `$env:Path` edits), packs local framework snapshots into `local-nupkgs/`, installs the Windows App SDK `dotnet new` template pack (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`, which provides `dotnet new reactor`), and installs the Reactor agent plugin under `~/.claude/plugins/reactor`. Apps created by the template reference the public `Microsoft.UI.Reactor` package from NuGet.org by default; pass `--reactor-version 0.0.0-local` when you intentionally want a scaffolded app to consume the local source-built package instead. To test an unpublished build of the template pack, run `./bootstrap.ps1 -WinAppSdkTemplatesSource <folder-with-the-nupkg>`. The optional `Microsoft.UI.Reactor.Advanced` and `Microsoft.UI.Reactor.Devtools` sibling packages are version-matched to the framework package when published. Re-run `bootstrap.ps1` (or `mur upgrade` for a lighter refresh) after `git pull` when you want updated CLI/plugin bits. Verify a working developer install with `mur doctor`.
 
-> **Scaffolding.** Reactor's `dotnet new` templates ship in the official Windows App SDK template pack — `dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`, then `dotnet new reactor`. The in-repo `Microsoft.UI.Reactor.ProjectTemplates` package that used to provide `dotnet new reactorapp` has been removed; its published versions are deprecated on NuGet.org.
+> **Scaffolding.** Reactor's `dotnet new` templates ship in the official Windows App SDK template pack — `dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::0.0.7-alpha`, then `dotnet new reactor`. The in-repo `Microsoft.UI.Reactor.ProjectTemplates` package that used to provide `dotnet new reactorapp` has been removed; its published versions are deprecated on NuGet.org.
 
 On networks where the public npm or NuGet registries are unreachable, bootstrap detects a recognised package mirror already configured in the user's `~/.npmrc` and NuGet.Config, verifies unauthenticated package access, and uses it only for the bootstrap process — including the optional Visual Studio extension build. Contributors on an unrestricted network keep the public defaults, unchanged. Any mirror can be selected explicitly with `-NpmRegistry <url>` and `-NuGetConfig <path>`; credentials remain in user configuration and are never written to the repository. Package feed URLs must use HTTPS (except loopback development feeds) and cannot embed credentials, query strings, or fragments. The npm mirror must permit direct package downloads because the Copilot SDK's MSBuild download task cannot forward npm credentials.
 

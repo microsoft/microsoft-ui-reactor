@@ -133,7 +133,7 @@ locally packed one. After the tag is published and the framework package is live
 confirm a scaffold picks it up:
 
 ```powershell
-dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
+dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::0.0.7-alpha
 
 $scratch = Join-Path $env:TEMP "reactor-template-smoke"
 Remove-Item $scratch -Recurse -Force -ErrorAction SilentlyContinue

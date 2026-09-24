@@ -264,18 +264,41 @@ public static class WinAppSdkTemplates
     {
         var hasSource = !string.IsNullOrWhiteSpace(source);
         var pinned = !string.IsNullOrWhiteSpace(version);
+        var urlSourceUnverifiable = false;
 
         // A template pack generates code, so refuse to fetch one over plaintext
         // http:// — a MITM could swap the scaffold. Local folders and https are fine.
         if (hasSource &&
             Uri.TryCreate(source, UriKind.Absolute, out var sourceUri) &&
-            !sourceUri.IsFile &&
-            !string.Equals(sourceUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            !sourceUri.IsFile)
         {
-            Console.Error.WriteLine(
-                $"  error: refusing to install a template package from an insecure source " +
-                $"('{sourceUri.Scheme}'). Use https:// or a local folder.");
-            return InstallOutcome.Failed;
+            if (!string.Equals(sourceUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine(
+                    $"  error: refusing to install a template package from an insecure source " +
+                    $"('{sourceUri.Scheme}'). Use https:// or a local folder.");
+                return InstallOutcome.Failed;
+            }
+
+            // Redacting the echo is not enough: the source becomes a child-process
+            // argument, and on Windows any process can read another's command line.
+            // A PAT in user-info or the query string would be readable there, so
+            // refuse it outright and point at the supported ways to authenticate.
+            if (!string.IsNullOrEmpty(sourceUri.UserInfo) || !string.IsNullOrEmpty(sourceUri.Query))
+            {
+                Console.Error.WriteLine(
+                    "  error: refusing a --source URL that carries credentials in its user-info or query " +
+                    "string — it would be visible in this process's command line to any other process. " +
+                    "Configure the feed in NuGet.config (credential provider) and pass a local folder of " +
+                    "nupkgs instead.");
+                return InstallOutcome.Failed;
+            }
+
+            // The version listing below only reads local folders and the public
+            // index, so a pin cannot be confirmed against this feed. Treat it as
+            // unverified rather than letting a publicly-existing version authorize
+            // the destructive --force path against a feed that may not have it.
+            urlSourceUnverifiable = true;
         }
 
         // A URL source cannot be enumerated here (only folders and the public index
@@ -297,10 +320,21 @@ public static class WinAppSdkTemplates
         {
             target = version!.Trim();
             // Confirm the pin before considering --force. Null means "couldn't tell",
-            // which is treated as unverified — never destructive on a maybe.
-            var available = ResolveAvailableVersions(source);
-            targetExists = available is not null &&
-                           available.Any(v => string.Equals(v, target, StringComparison.OrdinalIgnoreCase));
+            // which is treated as unverified — never destructive on a maybe. A URL
+            // source is never confirmable here: the listing below reads only local
+            // folders and the public index, so a version that exists publicly but is
+            // absent from the user's feed would otherwise authorize a --force that
+            // uninstalls first and then fails to download.
+            if (urlSourceUnverifiable)
+            {
+                targetExists = false;
+            }
+            else
+            {
+                var available = ResolveAvailableVersions(source);
+                targetExists = available is not null &&
+                               available.Any(v => string.Equals(v, target, StringComparison.OrdinalIgnoreCase));
+            }
         }
         else
         {
@@ -468,7 +502,10 @@ public static class WinAppSdkTemplates
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"  failed to run `dotnet {string.Join(' ', arguments)}`: {ex.Message}");
+            // Redact here too — this path formats the same argument list that the
+            // normal echo redacts, and `--add-source` may carry a feed URL.
+            Console.Error.WriteLine(
+                $"  failed to run `dotnet {string.Join(' ', arguments.Select(RedactSource))}`: {ex.Message}");
             return 1;
         }
     }
