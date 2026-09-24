@@ -203,22 +203,19 @@
     conditional block (the two settings never co-exist, though reading the raw csproj
     can suggest they do).
 
-    NOT version-gated, so do not wait for an SDK bump to delete this. A first-party fix
-    already exists — MSIX.Pri.targets' AddProjectPriToResolvedFileToPublish /
-    AddXbfFilesToResolvedFileToPublish (the XBF half is new in build tools
-    1.7.260903100; the .pri half predates it) — but both are reachable only via
+    NOT removed by an SDK upgrade alone. WindowsAppSDK#6394 is CLOSED, fixed in MSIX
+    build tools 1.7.260903100 by Pri.targets' AddProjectPriToResolvedFileToPublish /
+    AddXbfFilesToResolvedFileToPublish. That fix is real but reachable only via
     EnableMsixTooling -> MsixPackageSupport -> ShouldImportMsixCommonTargets ->
-    Packaging.targets -> Pri.targets. With the flag off the build takes the MrtCore
-    branch, which has no publish step. Measured on 1.7.260903100 with a -v:detailed
-    publish: without the flag each fix target runs 0 times and no app .pri is
-    published; with EnableMsixTooling=true each runs twice and the .pri appears — the
-    second cell being the control that proves the probe can match. MsixPackageSupport
-    is also assigned in exactly one place, conditioned solely on EnableMsixTooling,
-    and no Microsoft.WindowsAppSDK* package sets it. The stock template on the newest
-    stable SDK (2.5.1 / WinUI 2.3.9 / Foundation 2.3.12) still publishes without its
-    .pri and still crashes 0xC000027B when this target is disabled. Delete this only
-    once that fix runs WITHOUT EnableMsixTooling; the opt-out control in
-    PriPackagingTests starts failing when that happens.
+    Packaging.targets -> Pri.targets; with the flag off the build takes the MrtCore
+    branch, which has no publish step. The official WinUI templates set
+    EnableMsixTooling=true, so the mainstream app IS fixed by upgrading - Reactor's
+    template is the case outside it, shipping WindowsPackageType=None without the flag.
+    Measured on 1.7.260903100 with a -v:detailed publish: without the flag each fix
+    target runs 0 times and no app .pri is published; with it, each runs twice and the
+    .pri appears (that second cell being the control proving the probe can match).
+    Delete this once those targets run WITHOUT EnableMsixTooling, or if the template
+    adopts the flag; the opt-out control in PriPackagingTests fails when that happens.
 
     Note the Exclude: $(PublishDir) is nested INSIDE $(OutputPath) by default
     (bin\<cfg>\<tfm>\<rid>\publish\), so globbing $(OutputPath)**\*.xbf without it would

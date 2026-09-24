@@ -216,6 +216,7 @@ public sealed class PriPackagingTests : IDisposable
             // references without adding coverage — the target under test is in the core package.
             WriteConsumerProject(dir, coreOnly: true);
             WriteConsumerProgram(dir);
+            WriteConsumerXaml(dir);
             CreateNuGetConfig(dir);
         }
 
@@ -232,19 +233,28 @@ public sealed class PriPackagingTests : IDisposable
             "start with an empty resource dictionary and crash in native XAML (WindowsAppSDK#6394). " +
             "Reactor's _ReactorCopyWinUIResourcesToPublish target is supposed to copy it.");
 
+        // The CONSUMER's own compiled XAML, not Reactor's. ReactorApplication.xbf would be a
+        // vacuous check here: the package delivers it through a <None CopyToPublishDirectory>
+        // item, so it lands in publish whether or not this target's $(OutputPath)**\*.xbf glob
+        // runs. Only an .xbf the consumer compiles itself exercises that glob.
         Assert.True(
-            File.Exists(Path.Join(publishDir, "Reactor", "Hosting", "ReactorApplication.xbf")),
-            "ReactorApplication.xbf is missing from the publish output, and its relative " +
-            "Reactor/Hosting/ path must be preserved for ms-appx:/// to resolve it.");
+            File.Exists(Path.Join(publishDir, "Themes", "ConsumerStyles.xbf")),
+            "The consumer's own compiled XAML (Themes/ConsumerStyles.xbf) is missing from the " +
+            "publish output, and its relative folder must be preserved for ms-appx:/// to resolve it.");
 
-        // Control: with the target disabled the file must disappear again. If it does not,
-        // something else is supplying it and the assertions above prove nothing about the target.
+        // Control: with the target disabled both files must disappear again. If they do not,
+        // something else is supplying them and the assertions above prove nothing about the target.
         var optOutDir = Path.Join(offDir, "pub");
         RunHelpers.RunDotnet(
             $"publish -c Release -a {_fixture.RunArchitecture} -o \"{optOutDir}\" -p:ReactorCopyWinUIResourcesToPublish=false",
             offDir,
             _fixture.CommandEnvironment,
             timeoutMs: 600_000);
+
+        Assert.False(
+            File.Exists(Path.Join(optOutDir, "Themes", "ConsumerStyles.xbf")),
+            "Opting out of _ReactorCopyWinUIResourcesToPublish still produced the consumer's own " +
+            ".xbf, so the passing assertion above does not attribute the copy to Reactor's target.");
 
         Assert.False(
             File.Exists(Path.Join(optOutDir, "Consumer.pri")),
@@ -309,6 +319,27 @@ public sealed class PriPackagingTests : IDisposable
 
             System.Console.WriteLine(TextBlock("hello") is not null);
 
+            """);
+    }
+
+    /// <summary>
+    /// A consumer-owned XAML file, so the publish test can assert on an <c>.xbf</c> that the
+    /// consumer compiles rather than one the package already delivers by another route.
+    /// A keyless <c>ResourceDictionary</c> is the smallest thing the XAML compiler will emit an
+    /// <c>.xbf</c> for; it lives in a subfolder so the copy's <c>RecursiveDir</c> handling is
+    /// covered too.
+    /// </summary>
+    private static void WriteConsumerXaml(string appDir)
+    {
+        var themes = Path.Join(appDir, "Themes");
+        Directory.CreateDirectory(themes);
+
+        File.WriteAllText(Path.Join(themes, "ConsumerStyles.xaml"), """
+            <ResourceDictionary
+                xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                <x:Double x:Key="ConsumerProbeValue">42</x:Double>
+            </ResourceDictionary>
             """);
     }
 
