@@ -440,6 +440,75 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public void A_Shrinking_Rule_Set_Withdraws_The_Rules_That_Disappeared()
+    {
+        var ctx = new ValidationContext();
+
+        ValidationReconciler.EvaluateRules(ctx,
+            ValidationRule(() => false, "First rule failed", "form"),
+            ValidationRule(() => false, "Second rule failed", "form"));
+        Assert.Equal(2, ctx.GetMessages("form").Count);
+
+        // The second rule is gone this time. Its message would otherwise keep the form
+        // invalid forever, because nothing re-evaluates a rule that no longer exists.
+        ValidationReconciler.EvaluateRules(ctx,
+            ValidationRule(() => false, "First rule failed", "form"));
+
+        var texts = ctx.GetMessages("form").Select(m => m.Text).ToList();
+        Assert.Single(texts);
+        Assert.Contains("First rule failed", texts);
+    }
+
+    [Fact]
+    public void An_Emptied_Rule_Set_Leaves_The_Context_Valid()
+    {
+        var ctx = new ValidationContext();
+
+        ValidationReconciler.EvaluateRules(ctx,
+            ValidationRule(() => false, "Rule failed", "form"));
+        Assert.False(ctx.IsValid());
+
+        ValidationReconciler.EvaluateRules(ctx);
+
+        Assert.True(ctx.IsValid());
+        Assert.Empty(ctx.GetMessages("form"));
+    }
+
+    [Fact]
+    public void A_Rule_That_Moves_Field_Withdraws_From_The_Old_One()
+    {
+        var ctx = new ValidationContext();
+
+        ValidationReconciler.EvaluateRules(ctx,
+            ValidationRule(() => false, "Rule failed", "start"));
+        Assert.Single(ctx.GetMessages("start"));
+
+        ValidationReconciler.EvaluateRules(ctx,
+            ValidationRule(() => false, "Rule failed", "end"));
+
+        Assert.Empty(ctx.GetMessages("start"));
+        Assert.Single(ctx.GetMessages("end"));
+    }
+
+    [Fact]
+    public void Rule_Sets_Do_Not_Disturb_Field_Level_Errors()
+    {
+        var ctx = new ValidationContext();
+        ValidationReconciler.ValidateField(ctx, "form", "", Validate.Required("Field is required"));
+
+        ValidationReconciler.EvaluateRules(ctx,
+            ValidationRule(() => false, "Rule failed", "form"));
+        Assert.Equal(2, ctx.GetMessages("form").Count);
+
+        // Withdrawing the whole rule set must not take the sync verdict with it.
+        ValidationReconciler.EvaluateRules(ctx);
+
+        var texts = ctx.GetMessages("form").Select(m => m.Text).ToList();
+        Assert.Single(texts);
+        Assert.Contains("Field is required", texts);
+    }
+
+    [Fact]
     public void A_Cross_Field_Rule_Does_Not_Erase_Field_Level_Errors()
     {
         var ctx = new ValidationContext();

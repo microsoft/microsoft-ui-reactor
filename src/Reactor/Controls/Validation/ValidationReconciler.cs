@@ -79,20 +79,47 @@ public static class ValidationReconciler
     }
 
     /// <summary>
-    /// Evaluates all ValidationRuleElements in a list and pushes results to the context.
+    /// Evaluates a complete set of ValidationRuleElements and pushes results to the
+    /// context.
     /// <para>
-    /// Each rule is keyed by its position in the list, so re-running the same set
-    /// replaces each rule's previous verdict rather than accumulating — and two rules on
-    /// one field stay independent even if they carry the same message.
+    /// Each rule is keyed by its position, so re-running the same set replaces each
+    /// rule's previous verdict rather than accumulating, and two rules on one field stay
+    /// independent even if they carry the same message.
+    /// </para>
+    /// <para>
+    /// The call owns the whole set for that context: any producer from the previous call
+    /// that is absent this time — because the list shrank, or a rule moved to another
+    /// field — has its contribution withdrawn. Without that, a removed rule's message
+    /// would keep the form invalid forever. Mount rules into the element tree instead if
+    /// you need several independent rule sets against one context.
     /// </para>
     /// </summary>
     public static void EvaluateRules(
         ValidationContext ctx,
         params ValidationRuleElement[] rules)
     {
+        var applied = new List<(string Field, string Producer)>(rules.Length);
         for (var i = 0; i < rules.Length; i++)
         {
-            rules[i].Evaluate(ctx, "rules[" + i.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "]");
+            var producer = "rules[" + i.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "]";
+            rules[i].Evaluate(ctx, producer);
+            applied.Add((rules[i].Field, producer));
         }
+
+        if (_ruleSets.TryGetValue(ctx, out var previous))
+        {
+            foreach (var entry in previous)
+            {
+                if (!applied.Contains(entry))
+                    ctx.ApplyOwned(entry.Field, entry.Producer, []);
+            }
+            _ruleSets.Remove(ctx);
+        }
+
+        _ruleSets.Add(ctx, applied);
     }
+
+    // The rule set most recently evaluated against each context, so the next call can
+    // withdraw whatever disappeared. Weak on the context so it holds nothing alive.
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<ValidationContext, List<(string Field, string Producer)>> _ruleSets = new();
 }

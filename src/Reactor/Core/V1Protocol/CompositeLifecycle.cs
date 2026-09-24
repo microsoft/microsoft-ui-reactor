@@ -292,11 +292,15 @@ internal static class CompositeLifecycle
         // would break for an interpolated one and would conflate two rules that happen to
         // share text (issue #1262 review).
         var placeholder = new WinUI.StackPanel { Visibility = Visibility.Collapsed };
-        var producer = RuleProducerKey(placeholder);
+        var binding = GetOrCreateRuleBinding(placeholder);
 
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
         if (valCtx is not null)
-            rule.Evaluate(valCtx, producer);
+        {
+            rule.Evaluate(valCtx, binding.Producer);
+            binding.Context = valCtx;
+            binding.Field = rule.Field;
+        }
 
         Reconciler.SetElementTag(placeholder, rule);
         return placeholder;
@@ -304,24 +308,68 @@ internal static class CompositeLifecycle
 
     internal static UIElement? UpdateValidationRule(Reconciler reconciler, ValidationRuleElement rule, UIElement control)
     {
+        var binding = GetOrCreateRuleBinding(control);
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
+
+        // A rule can move: to a different field, or into a different provider's context.
+        // Its old contribution has to be withdrawn from where it used to live, or that
+        // context stays invalid forever with a message nothing owns any more.
+        if (binding.Context is { } previousCtx && binding.Field is { } previousField
+            && (!ReferenceEquals(previousCtx, valCtx)
+                || !string.Equals(previousField, rule.Field, StringComparison.Ordinal)))
+        {
+            previousCtx.ApplyOwned(previousField, binding.Producer, []);
+            binding.Context = null;
+            binding.Field = null;
+        }
+
         if (valCtx is not null)
-            rule.Evaluate(valCtx, RuleProducerKey(control));
+        {
+            rule.Evaluate(valCtx, binding.Producer);
+            binding.Context = valCtx;
+            binding.Field = rule.Field;
+        }
+
         return null; // keep existing collapsed placeholder
     }
 
-    private static long s_ruleProducerSeed;
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, string> _ruleProducers = new();
-
-    private static string RuleProducerKey(UIElement placeholder)
+    /// <summary>
+    /// Withdraws a mounted rule's contribution when it leaves the tree — a conditionally
+    /// rendered rule disappearing must not leave the form permanently invalid.
+    /// </summary>
+    internal static void RetractValidationRule(UIElement placeholder)
     {
-        if (_ruleProducers.TryGetValue(placeholder, out var existing)) return existing;
+        if (!_ruleBindings.TryGetValue(placeholder, out var binding)) return;
 
-        var key = "rule#" + global::System.Threading.Interlocked
-            .Increment(ref s_ruleProducerSeed)
-            .ToString(global::System.Globalization.CultureInfo.InvariantCulture);
-        _ruleProducers.Add(placeholder, key);
-        return key;
+        if (binding.Context is { } ctx && binding.Field is { } field)
+            ctx.ApplyOwned(field, binding.Producer, []);
+
+        binding.Context = null;
+        binding.Field = null;
+    }
+
+    private sealed class RuleBinding
+    {
+        internal string Producer = "";
+        internal ValidationContext? Context;
+        internal string? Field;
+    }
+
+    private static long s_ruleProducerSeed;
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, RuleBinding> _ruleBindings = new();
+
+    private static RuleBinding GetOrCreateRuleBinding(UIElement placeholder)
+    {
+        if (_ruleBindings.TryGetValue(placeholder, out var existing)) return existing;
+
+        var binding = new RuleBinding
+        {
+            Producer = "rule#" + global::System.Threading.Interlocked
+                .Increment(ref s_ruleProducerSeed)
+                .ToString(global::System.Globalization.CultureInfo.InvariantCulture),
+        };
+        _ruleBindings.Add(placeholder, binding);
+        return binding;
     }
 
     /// <summary>

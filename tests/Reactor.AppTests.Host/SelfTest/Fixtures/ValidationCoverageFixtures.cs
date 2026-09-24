@@ -764,6 +764,52 @@ internal static class ValidationCoverageFixtures
     //  must stop reporting to the old context/field.
     // ════════════════════════════════════════════════════════════════════════
 
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — a mounted rule must withdraw its verdict when it
+    //  leaves the tree, or a conditionally rendered rule keeps the form invalid
+    //  forever after it disappears.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_RuleRetractsOnUnmount(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var ctx = new ValidationContext();
+            var host = H.CreateHost();
+            Action<bool>? setShowRule = null;
+
+            host.Mount(c =>
+            {
+                var (showRule, setShow) = c.UseState(true);
+                setShowRule = setShow;
+
+                return VStack(12,
+                    When(showRule, () => ValidationRule(() => false, "Rule failed", "form")),
+                    TextBlock("body"))
+                    .Provide(ValidationContexts.Current, ctx);
+            });
+
+            await Harness.Render();
+            H.Check("Issue1262_RuleUnmount_AppliedWhileMounted", !ctx.IsValid());
+            H.Check("Issue1262_RuleUnmount_MessageRecorded", ctx.GetMessages("form").Count == 1);
+
+            // Re-render with the rule still present: the verdict must not accumulate.
+            await Harness.Render();
+            H.Check("Issue1262_RuleUnmount_NoAccumulation", ctx.GetMessages("form").Count == 1);
+
+            setShowRule!(false);
+            await Harness.Render();
+
+            H.Check("Issue1262_RuleUnmount_WithdrawnOnUnmount", ctx.GetMessages("form").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("form").Select(m => m.Text))}");
+            H.Check("Issue1262_RuleUnmount_ValidAfterUnmount", ctx.IsValid());
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 rule unmount done"));
+            await Harness.Render();
+        }
+    }
+
     internal class Issue1262_TouchBindingClearedWhenContextGoes(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()

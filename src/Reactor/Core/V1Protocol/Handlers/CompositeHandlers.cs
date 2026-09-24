@@ -78,5 +78,10 @@ internal sealed class ValidationRuleHandler : IDecoratorElementHandler<Validatio
         => CompositeLifecycle.UpdateValidationRule(ctx.Reconciler, newEl, control) ?? control;
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, ValidationRuleElement? element, UIElement control)
-        => V1UnmountDisposition.ContinueDefaultTraversal;
+    {
+        // Issue #1262: a conditionally rendered rule leaving the tree must withdraw its
+        // message, or the context stays invalid with a verdict nothing owns.
+        CompositeLifecycle.RetractValidationRule(control);
+        return V1UnmountDisposition.ContinueDefaultTraversal;
+    }
 }
