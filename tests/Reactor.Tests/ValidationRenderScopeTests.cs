@@ -509,6 +509,69 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public async Task A_Sync_Value_Change_Retires_An_In_Flight_Async_Pass()
+    {
+        var ctx = new ValidationContext();
+        var gate = new global::System.Threading.Tasks.TaskCompletionSource<bool>();
+        var validators = new[]
+        {
+            Validate.MustAsync<string>(async _ => await gate.Task, "stale async verdict"),
+        };
+
+        // An async check opens for the old value...
+        var pending = ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "old", validators, TestContext.Current.CancellationToken);
+
+        // ...then the user types, and the synchronous pass records the new value.
+        ValidationReconciler.ValidateField(ctx, "username", "new", Validate.Required());
+
+        gate.SetResult(false);
+        await pending;
+
+        // The verdict belongs to a value that is no longer on screen.
+        Assert.True(ctx.IsValid());
+        Assert.Empty(ctx.GetMessages("username"));
+    }
+
+    [Fact]
+    public async Task A_Sync_Value_Change_Withdraws_An_Installed_Async_Verdict()
+    {
+        var ctx = new ValidationContext();
+        var validators = new[]
+        {
+            Validate.MustAsync<string>(_ => global::System.Threading.Tasks.Task.FromResult(false), "Reserved"),
+        };
+
+        ValidationReconciler.ValidateField(ctx, "username", "admin", Validate.Required());
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "admin", validators, TestContext.Current.CancellationToken);
+        Assert.Single(ctx.GetMessages("username"));
+
+        // Typing a new value must drop the async error computed for the old one.
+        ValidationReconciler.ValidateField(ctx, "username", "someone-else", Validate.Required());
+
+        Assert.True(ctx.IsValid());
+        Assert.Empty(ctx.GetMessages("username"));
+    }
+
+    [Fact]
+    public void Re_Validating_The_Same_Value_Keeps_The_Async_Verdict()
+    {
+        var ctx = new ValidationContext();
+        ValidationReconciler.ValidateField(ctx, "username", "admin", Validate.Required());
+        ctx.ApplyOwned("username", ValidationContext.AsyncProducer,
+            [new ValidationMessage("username", "Reserved")]);
+        Assert.Single(ctx.GetMessages("username"));
+
+        // A re-render that revalidates the *same* value is not a value change, so the
+        // async verdict still applies and must survive.
+        ValidationReconciler.ValidateField(ctx, "username", "admin", Validate.Required());
+
+        Assert.Single(ctx.GetMessages("username"));
+        Assert.Equal("Reserved", ctx.GetMessages("username")[0].Text);
+    }
+
+    [Fact]
     public void A_Cross_Field_Rule_Does_Not_Erase_Field_Level_Errors()
     {
         var ctx = new ValidationContext();

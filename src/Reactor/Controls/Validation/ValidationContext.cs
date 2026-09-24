@@ -408,16 +408,25 @@ public sealed class ValidationContext
 
             var known = _currentValues.TryGetValue(field, out var previous);
             var valueChanged = !known || !Equals(previous, value);
+            var messagesChanged = false;
+
             if (valueChanged)
             {
                 _currentValues[field] = value;
                 // A server verdict about the old value says nothing about the new one.
                 _externalMessages.Remove(field);
+
+                // Neither does an async verdict. Retire the in-flight pass so its result
+                // is discarded on arrival, and withdraw whatever the last one installed —
+                // otherwise an error computed for a value the user has already replaced
+                // stays on screen indefinitely.
+                _asyncGeneration.Remove(field);
+                if (ApplyOwnedLocked(field, AsyncProducer, [])) messagesChanged = true;
             }
 
             // Owned rather than wholesale: a cross-field ValidationRule may also be
             // writing this field, and it must survive the sync pass.
-            var messagesChanged = ApplyOwnedLocked(field, SyncProducer, messages);
+            if (ApplyOwnedLocked(field, SyncProducer, messages)) messagesChanged = true;
 
             changed = valueChanged || messagesChanged;
             if (changed) _version++;

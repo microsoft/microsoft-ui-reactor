@@ -94,7 +94,16 @@ public static class ValidateExtensions
     }
 
     /// <summary>
-    /// Attaches async validators with the current field value for automatic validation.
+    /// Attaches async validators to this element along with the current field value, and
+    /// registers the field so <c>MarkAllTouched()</c> covers it.
+    /// <para>
+    /// This overload is <b>attach-only</b>: it does not run the validators. Nothing
+    /// consumes <see cref="ValidationAttached.AsyncValidators"/> automatically — not the
+    /// render scope, which must stay synchronous, and not <c>FormField</c>. Run them
+    /// yourself from an effect via
+    /// <see cref="ValidationReconciler.ValidateFieldAsync"/>, which carries the
+    /// generation guard that discards a result superseded by a newer value.
+    /// </para>
     /// </summary>
     public static T ValidateAsync<T>(this T el, string fieldName, object? value, params IAsyncValidator[] asyncValidators) where T : Element
     {
