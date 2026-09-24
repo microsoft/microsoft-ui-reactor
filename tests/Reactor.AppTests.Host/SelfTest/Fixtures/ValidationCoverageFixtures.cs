@@ -1500,7 +1500,15 @@ internal static class ValidationCoverageFixtures
     //  UseState setter rather than threadSafe: threadSafe would invoke the
     //  re-render callback on whatever thread raised Changed, and an async
     //  validator raises it from a worker — entering the reconciler off the UI
-    //  thread. This fixture is what makes that choice falsifiable.
+    //  thread.
+    //
+    //  What this fixture does and does not establish. It does establish that a
+    //  worker-thread mutation neither throws nor renders on the worker, and
+    //  that the repaint it causes arrives on the UI thread. It does NOT make
+    //  the threadSafe choice falsifiable: flipping that setter leaves every
+    //  check here green, so the marshalling that saves us lives somewhere
+    //  below the setter and this fixture cannot attribute it. An earlier
+    //  version of this comment claimed otherwise.
     // ════════════════════════════════════════════════════════════════════════
 
     internal sealed record OffThreadProps(Action<ValidationContext> OnContext, Action<int> OnRender);
