@@ -1005,7 +1005,8 @@ public sealed class ValidationContext
         string setId,
         int generation,
         List<(string Field, string Producer, List<ValidationMessage> Messages)> verdicts,
-        List<(string Field, string Producer, int Token)>? asyncTokens)
+        List<(string Field, string Producer, int Token)>? asyncTokens,
+        List<(string Field, string Producer)>? clearAsync = null)
     {
         var changed = false;
         lock (_lock)
@@ -1021,6 +1022,15 @@ public sealed class ValidationContext
                         || current != token)
                         return;
                 }
+            }
+
+            // Retiring a producer's async token destroys state a *newer* call may own, so
+            // it happens here, past the ownership check, rather than before the predicates
+            // run (issue #1262 review).
+            if (clearAsync is not null)
+            {
+                foreach (var (field, producer) in clearAsync)
+                    ClearAsyncGenerationLocked(field, producer);
             }
 
             var applied = new List<(string Field, string Producer)>(verdicts.Count);
@@ -1067,12 +1077,14 @@ public sealed class ValidationContext
     /// </summary>
     internal void ClearAsyncGeneration(string field, string producer)
     {
-        lock (_lock)
-        {
-            if (!_asyncGeneration.TryGetValue(field, out var byProducer)) return;
-            byProducer.Remove(producer);
-            if (byProducer.Count == 0) _asyncGeneration.Remove(field);
-        }
+        lock (_lock) ClearAsyncGenerationLocked(field, producer);
+    }
+
+    private void ClearAsyncGenerationLocked(string field, string producer)
+    {
+        if (!_asyncGeneration.TryGetValue(field, out var byProducer)) return;
+        byProducer.Remove(producer);
+        if (byProducer.Count == 0) _asyncGeneration.Remove(field);
     }
 
     /// <summary>

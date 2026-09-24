@@ -137,20 +137,20 @@ public static class ValidationReconciler
 
         // Compute every verdict before installing any: a mid-set notification could
         // otherwise re-enter and take ownership of the set out from under this call.
+        // The set may also have been asynchronous last time, and a leftover generation
+        // would classify these synchronous verdicts as async — but retiring those tokens
+        // happens inside the commit, past the ownership check, so a call that has been
+        // overtaken cannot destroy state the newer one owns.
         var verdicts = new List<(string Field, string Producer, List<ValidationMessage> Messages)>(rules.Length);
+        var clearAsync = new List<(string Field, string Producer)>(rules.Length);
         for (var i = 0; i < rules.Length; i++)
         {
             var producer = RuleProducer(setId, i);
-
-            // The set may have been asynchronous last time. A leftover generation would
-            // classify this synchronous verdict as async, and the next value change would
-            // retract an error that is current.
-            ctx.ClearAsyncGeneration(rules[i].Field, producer);
-
+            clearAsync.Add((rules[i].Field, producer));
             verdicts.Add((rules[i].Field, producer, rules[i].ComputeSync()));
         }
 
-        ctx.CommitRuleSet(setId, generation, verdicts, asyncTokens: null);
+        ctx.CommitRuleSet(setId, generation, verdicts, asyncTokens: null, clearAsync);
     }
 
     /// <summary>
@@ -222,8 +222,10 @@ public static class ValidationReconciler
         // value is recognised as stale when the set tries to commit. A synchronous rule
         // in the set is computed at call time and cannot go stale that way, so it gets
         // no token — and any token it carries from a previous async incarnation is
-        // cleared, or the next value change would retract a verdict that is current.
+        // retired inside the commit, past the ownership check, so an overtaken call
+        // cannot destroy state the newer one owns.
         var tokens = new List<(string Field, string Producer, int Token)>(rules.Length);
+        var clearAsync = new List<(string Field, string Producer)>(rules.Length);
         var producers = new string[rules.Length];
         for (var i = 0; i < rules.Length; i++)
         {
@@ -231,7 +233,7 @@ public static class ValidationReconciler
             ctx.RegisterField(rules[i].Field);
 
             if (rules[i].AsyncPredicate is null)
-                ctx.ClearAsyncGeneration(rules[i].Field, producer);
+                clearAsync.Add((rules[i].Field, producer));
             else
                 tokens.Add((rules[i].Field, producer, ctx.BeginAsyncProducer(rules[i].Field, producer)));
         }
@@ -240,7 +242,7 @@ public static class ValidationReconciler
         for (var i = 0; i < rules.Length; i++)
             verdicts.Add((rules[i].Field, producers[i], await rules[i].ComputeAsync(cancellationToken)));
 
-        ctx.CommitRuleSet(setId, generation, verdicts, tokens);
+        ctx.CommitRuleSet(setId, generation, verdicts, tokens, clearAsync);
     }
 
     private static string RuleProducer(string setId, int index) =>

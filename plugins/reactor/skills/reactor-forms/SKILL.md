@@ -130,8 +130,9 @@ Passing the current value (the second arg) runs the validators right there,
 during the render, so a `When(validation.HasError("email"), ...)` placed *after*
 the field reads the result in the same pass rather than one render late. The
 validator-only overload `.Validate(fieldName, ...)` has no value to check, so it
-only attaches and registers the field — nothing runs it, including `FormField`,
-which would otherwise be checking `null` against a control that has a value.
+only records the validators: nothing runs them, and on a bare control nothing
+registers the field either. Inside a `FormField` the field is registered on
+mount, so `MarkAllTouched()` covers it.
 
 You do not need `.Provide(ValidationContexts.Current, validation)`: a
 component-local context is published to the rendered subtree automatically, so
