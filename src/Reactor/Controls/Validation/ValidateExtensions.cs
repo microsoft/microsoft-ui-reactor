@@ -56,9 +56,11 @@ public static class ValidateExtensions
     /// sees the current verdict instead of the previous pass's.
     /// </para>
     /// <para>
-    /// The validators are still attached, so <c>FormField</c> and the visualizers keep
-    /// working for elements built outside a render pass. Re-running them is harmless:
-    /// results are applied with a structural diff.
+    /// The validators are still attached, so <c>FormField</c> keeps working for
+    /// elements built outside a render pass. Re-running them is harmless: results are
+    /// applied with a structural diff. The visualizers only *display* what a context
+    /// already holds — they never run attached validators — so an element that reaches
+    /// neither a render pass nor a <c>FormField</c> contributes no verdict.
     /// </para>
     /// </summary>
     public static T Validate<T>(this T el, string fieldName, object? value, params IValidator[] validators) where T : Element

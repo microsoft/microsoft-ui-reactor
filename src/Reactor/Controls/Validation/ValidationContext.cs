@@ -152,7 +152,14 @@ public sealed class ValidationContext
                 && string.Equals(_lastNotifiedMessages, snapshot, StringComparison.Ordinal))
             {
                 _frameTouchedNonMessageState = false;
+                _frameVersionPending = false;
                 return;
+            }
+
+            if (_frameVersionPending)
+            {
+                _version++;
+                _frameVersionPending = false;
             }
 
             _lastNotifiedMessages = snapshot;
@@ -171,8 +178,10 @@ public sealed class ValidationContext
 
     /// <summary>
     /// A deterministic rendering of every message the context currently holds, used to
-    /// tell a net-zero render pass from a real one. Ordered so two equal message sets
-    /// always produce the same text regardless of dictionary iteration order.
+    /// tell a net-zero render pass from a real one. Field names are sorted so dictionary
+    /// iteration order cannot matter, but each field's list keeps its own order:
+    /// <see cref="GetMessages"/> exposes that order and callers read the first message,
+    /// so a reordering is a real change subscribers have to hear about.
     /// </summary>
     private string MessageSnapshotLocked()
     {
@@ -186,19 +195,19 @@ public sealed class ValidationContext
         var sb = new global::System.Text.StringBuilder();
         foreach (var field in fields)
         {
-            var rendered = new List<string>();
+            sb.Append(field).Append('\u0002');
             if (_messages.TryGetValue(field, out var owned))
             {
-                foreach (var m in owned) rendered.Add($"i\u0001{m.Severity}\u0001{m.Code}\u0001{m.Text}");
+                foreach (var m in owned)
+                    sb.Append('i').Append('\u0001').Append(m.Severity).Append('\u0001')
+                      .Append(m.Code).Append('\u0001').Append(m.Text).Append('\u0003');
             }
             if (_externalMessages.TryGetValue(field, out var external))
             {
-                foreach (var m in external) rendered.Add($"e\u0001{m.Severity}\u0001{m.Code}\u0001{m.Text}");
+                foreach (var m in external)
+                    sb.Append('e').Append('\u0001').Append(m.Severity).Append('\u0001')
+                      .Append(m.Code).Append('\u0001').Append(m.Text).Append('\u0003');
             }
-            rendered.Sort(StringComparer.Ordinal);
-
-            sb.Append(field).Append('\u0002');
-            foreach (var entry in rendered) sb.Append(entry).Append('\u0003');
             sb.Append('\u0004');
         }
         return sb.ToString();
@@ -206,6 +215,27 @@ public sealed class ValidationContext
 
     private string? _lastNotifiedMessages;
     private bool _frameTouchedNonMessageState;
+    private bool _frameVersionPending;
+
+    /// <summary>
+    /// Bumps <see cref="Version"/>, except for a message-only change made while a render
+    /// is in flight: those are held until the frame closes and bumped once, and only if
+    /// the frame ended with different messages than it started with.
+    /// <para>
+    /// Bumping eagerly made a net-zero pass — the chained value overloads above —
+    /// increment <c>Version</c> on every render forever, so a <c>UseMemo</c> or
+    /// <c>UseEffect</c> keyed on it re-ran for a context that had not actually moved.
+    /// </para>
+    /// </summary>
+    private void BumpVersionLocked(bool messagesOnly)
+    {
+        if (messagesOnly && ValidationRenderScope.InRender)
+        {
+            _frameVersionPending = true;
+            return;
+        }
+        _version++;
+    }
 
     // ════════════════════════════════════════════════════════════════
     //  Field registration
@@ -256,7 +286,7 @@ public sealed class ValidationContext
                 _messages[message.Field] = list;
             }
             list.Add(message);
-            _version++;
+            BumpVersionLocked(messagesOnly: true);
         }
         RaiseChanged(messagesOnly: true);
     }
@@ -283,7 +313,7 @@ public sealed class ValidationContext
                 _externalMessages[message.Field] = list;
             }
             list.Add(message);
-            _version++;
+            BumpVersionLocked(messagesOnly: true);
         }
         RaiseChanged(messagesOnly: true);
     }
@@ -307,7 +337,7 @@ public sealed class ValidationContext
             // An async pass still in flight would otherwise repopulate what this just
             // cleared: dropping the token makes its result stale on arrival.
             _asyncGeneration.Remove(field);
-            if (changed) _version++;
+            if (changed) BumpVersionLocked(messagesOnly: true);
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -325,7 +355,7 @@ public sealed class ValidationContext
             _owned.Remove(field);
             // As in Clear: a pending async pass must not repopulate what this dropped.
             _asyncGeneration.Remove(field);
-            if (changed) _version++;
+            if (changed) BumpVersionLocked(messagesOnly: true);
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -357,7 +387,7 @@ public sealed class ValidationContext
         lock (_lock)
         {
             changed = ApplyOwnedLocked(field, producer, messages);
-            if (changed) _version++;
+            if (changed) BumpVersionLocked(messagesOnly: true);
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -473,7 +503,7 @@ public sealed class ValidationContext
                 return;
 
             changed = ApplyOwnedLocked(field, producer, messages);
-            if (changed) _version++;
+            if (changed) BumpVersionLocked(messagesOnly: true);
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -566,7 +596,7 @@ public sealed class ValidationContext
 
             changed = valueChanged || messagesChanged;
             valueChangedForNotify = valueChanged || newField;
-            if (changed) _version++;
+            if (changed) BumpVersionLocked(messagesOnly: !valueChangedForNotify);
         }
         if (changed) RaiseChanged(messagesOnly: !valueChangedForNotify);
     }
@@ -580,7 +610,7 @@ public sealed class ValidationContext
         lock (_lock)
         {
             changed = _externalMessages.Remove(field);
-            if (changed) _version++;
+            if (changed) BumpVersionLocked(messagesOnly: true);
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }
@@ -598,7 +628,7 @@ public sealed class ValidationContext
             _externalMessages.Clear();
             _owned.Clear();
             _asyncGeneration.Clear();
-            if (changed) _version++;
+            if (changed) BumpVersionLocked(messagesOnly: true);
         }
         if (changed) RaiseChanged(messagesOnly: true);
     }

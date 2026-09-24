@@ -1245,6 +1245,74 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public void A_Net_Zero_Pass_Leaves_Version_Alone()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            _ = TextBox("abc")
+                .Validate("email", "abc", Validate.Email())
+                .Validate("email", "abc", Validate.MinLength(10));
+        }
+
+        var settled = ctx.Version;
+
+        // Version is documented for change detection in hooks and memos, so a pass that
+        // churns and lands where it started must not read as a change.
+        for (var pass = 0; pass < 4; pass++)
+        {
+            using (ValidationRenderScope.Begin(ctx))
+            {
+                _ = TextBox("abc")
+                    .Validate("email", "abc", Validate.Email())
+                    .Validate("email", "abc", Validate.MinLength(10));
+            }
+        }
+
+        Assert.Equal(settled, ctx.Version);
+    }
+
+    [Fact]
+    public void A_Real_Change_During_A_Render_Still_Moves_Version()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "", Validate.Required());
+        var settled = ctx.Version;
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("a@b.co").Validate("email", "a@b.co", Validate.Required());
+
+        Assert.Empty(ctx.GetMessages("email"));
+        Assert.True(ctx.Version > settled, $"settled={settled} now={ctx.Version}");
+    }
+
+    [Fact]
+    public void Reordering_A_Field_Messages_Is_Announced()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("abc")
+                .Validate("email", "abc", Validate.Email("A"), Validate.MinLength(10, "B"));
+        Assert.Equal(1, notifications);
+        Assert.Equal("A", ctx.GetMessages("email")[0].Text);
+
+        // Same set, different order. GetMessages exposes order and callers read the
+        // first message, so this is a real change.
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("abc")
+                .Validate("email", "abc", Validate.MinLength(10, "B"), Validate.Email("A"));
+
+        Assert.Equal("B", ctx.GetMessages("email")[0].Text);
+        Assert.Equal(2, notifications);
+    }
+
+    [Fact]
     public void A_Chained_Chain_Still_Announces_A_Real_Change()
     {
         var ctx = new ValidationContext();

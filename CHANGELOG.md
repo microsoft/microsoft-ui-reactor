@@ -115,6 +115,7 @@ Conventions for contributors:
   the net state never moved, but each write announced a change that scheduled
   another identical pass. A render that ends with the same messages it started
   with is now silent (issue #1262).
+- A field carrying only `.ValidateAsync(field, value, …)` on an element built
   outside a render pass — cached, memoized, or assembled in an event handler — was
   never registered, so `MarkAllTouched()` and the validity summary skipped it.
   `FormField` now registers the field when it mounts or updates such an element

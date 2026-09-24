@@ -830,7 +830,7 @@ internal static class ValidationCoverageFixtures
 
                 var tree = VStack(12,
                     FormField(
-                        TextBox("").Validate("name", "", Validate.Required("Name is required")),
+                        TextBox("binding-probe").Validate("name", "binding-probe", Validate.MinLength(50)),
                         label: "Full Name",
                         showWhen: ShowWhen.Always),
                     Button("Elsewhere", () => { }));
@@ -839,7 +839,9 @@ internal static class ValidationCoverageFixtures
             });
 
             await Harness.Render();
-            var box = H.FindControl<TextBox>(_ => true);
+            // Matched by text: other fixtures leave TextBoxes in the search root, so
+            // "the first TextBox" is not reliably this one.
+            var box = H.FindControl<TextBox>(tb => tb.Text == "binding-probe");
             var elsewhere = H.FindButton("Elsewhere");
             H.Check("Issue1262_Binding_ControlsFound", box is not null && elsewhere is not null);
             if (box is null || elsewhere is null) return;
@@ -853,11 +855,11 @@ internal static class ValidationCoverageFixtures
 
             // Drop the provider. The same control is patched in place, so the binding
             // has to be cleared rather than left pointing at the old context.
-            var stillSameControl = ReferenceEquals(box, H.FindControl<TextBox>(_ => true));
+            var stillSameControl = ReferenceEquals(box, H.FindControl<TextBox>(tb => tb.Text == "binding-probe"));
             setProvide!(false);
             await Harness.Render();
             H.Check("Issue1262_Binding_ControlPreserved",
-                stillSameControl && ReferenceEquals(box, H.FindControl<TextBox>(_ => true)));
+                stillSameControl && ReferenceEquals(box, H.FindControl<TextBox>(tb => tb.Text == "binding-probe")));
 
             var touchedBefore = ctx.IsTouched("name");
 
@@ -990,7 +992,7 @@ internal static class ValidationCoverageFixtures
                 {
                     return VStack(12,
                         FormField(
-                            TextBox("").Validate("name", "", Validate.Required("Name is required")),
+                            TextBox("displaced-probe").Validate("name", "displaced-probe", Validate.MinLength(50)),
                             label: "Full Name",
                             showWhen: ShowWhen.Always),
                         Button("Away", () => { }))
@@ -1010,12 +1012,15 @@ internal static class ValidationCoverageFixtures
 
                 // The displaced editor is rented back for a plain, non-FormField use.
                 return VStack(12,
-                    TextBox(""),
+                    TextBox("plain-probe"),
                     Button("Away", () => { }));
             });
 
             await Harness.Render();
-            var original = H.FindControl<TextBox>(_ => true);
+            // Matched by text, not by type: other fixtures in the same run leave
+            // TextBoxes in the search root, so "the first TextBox" is not reliably this
+            // one — which made the fixture order-dependent.
+            var original = H.FindControl<TextBox>(tb => tb.Text == "displaced-probe");
             var away = H.FindButton("Away");
             H.Check("Issue1262_Displaced_ControlsFound", original is not null && away is not null);
             if (original is null || away is null) return;
@@ -1043,7 +1048,7 @@ internal static class ValidationCoverageFixtures
             setMode!(2);
             await Harness.Render();
 
-            var rented = H.FindControl<TextBox>(_ => true);
+            var rented = H.FindControl<TextBox>(tb => tb.Text == "plain-probe");
             if (rented is null) { H.Check("Issue1262_Displaced_PlainBoxRendered", false); return; }
 
             // Whether or not the pool handed back the same instance, nothing in the
