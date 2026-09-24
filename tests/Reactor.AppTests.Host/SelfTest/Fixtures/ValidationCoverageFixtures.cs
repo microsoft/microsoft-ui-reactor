@@ -1699,24 +1699,42 @@ internal static class ValidationCoverageFixtures
         }
     }
 
+
     // ════════════════════════════════════════════════════════════════════════
-    //  Issue #1262 review — a validated control leaving the tree.
+    //  Issue #1262 review — a validated control leaving the tree, and chained
+    //  links that move.
     //
     //  `.Validate(field, value, …)` installs its verdict while the owning
-    //  component renders. Nothing watched what became of that verdict: a
-    //  control behind a condition installed an error on the pass that showed
-    //  it and then simply stopped being rendered, leaving the context invalid
-    //  over a field with no control — forever, and with no way to clear it
-    //  short of ClearAll(). The same held for a whole FormField, whose unmount
-    //  cleared only the blur binding.
+    //  component renders, and nothing watched what became of it: a control
+    //  behind a condition installed an error on the pass that showed it and
+    //  then simply stopped being rendered, leaving the context invalid over a
+    //  field with no control. The same held for a whole FormField, and for a
+    //  removed child, which leaves through the pooling traversal rather than
+    //  the ordinary unmount.
     //
-    //  The third case is the guard: replacing a FormField's content installs
-    //  the incoming control's verdict *before* the outgoing one is unmounted,
-    //  so an unconditional retraction on the way out would erase the verdict
-    //  that had just replaced it and report the form valid.
+    //  Two guards ride along. Replacing a control installs the incoming
+    //  verdict *before* the outgoing control is unmounted, so an unconditional
+    //  retraction on the way out would erase the verdict that replaced it. And
+    //  every link of a chain evaluates eagerly, so a link that moves the
+    //  attachment to another field has to take the earlier link's verdict with
+    //  it — while a link that only changes the value must not turn a net-zero
+    //  pass into a repaint.
     // ════════════════════════════════════════════════════════════════════════
 
-    internal sealed record BareValidateProps(bool Show, Action<ValidationContext> OnContext);
+    internal enum BareValidateShape
+    {
+        /// <summary>Validated control present.</summary>
+        Present,
+        /// <summary>Replaced by an unvalidated element of another type.</summary>
+        Hidden,
+        /// <summary>Removed from the children entirely — the pooling teardown path.</summary>
+        Removed,
+        /// <summary>Same field, different control type: the replacement guard.</summary>
+        Replaced,
+    }
+
+    internal sealed record BareValidateProps(
+        BareValidateShape Shape, int Nudge, Action<ValidationContext> OnContext);
 
     internal sealed class BareValidateOwner : Component<BareValidateProps>
     {
@@ -1727,12 +1745,53 @@ internal static class ValidationCoverageFixtures
             props.OnContext(ctx);
 
             // No FormField anywhere: the verdict exists only because `.Validate()`
-            // ran inside this component's render scope.
-            return VStack(8,
-                props.Show
-                    ? TextBox("").Validate("email", "", Validate.Required("Email is required"))
-                    : TextBlock("hidden"),
-                TextBlock("bare-tail"));
+            // ran inside this component's render scope. Built inside the branch that
+            // uses it — hoisting it would re-publish the verdict on the very passes
+            // that are supposed to have stopped producing one.
+            //
+            // The validated control is the LAST child so that dropping it shortens the
+            // collection: the child reconciler then *removes* it, which tears down
+            // through the pooling traversal rather than the ordinary unmount.
+            return props.Shape switch
+            {
+                BareValidateShape.Present => VStack(8,
+                    TextBlock("bare-head"),
+                    TextBox("").Validate("email", "", Validate.Required("Email is required"))),
+                BareValidateShape.Hidden => VStack(8, TextBlock("bare-head"), TextBlock("hidden")),
+                BareValidateShape.Removed => VStack(8, TextBlock("bare-head")),
+                _ => VStack(8,
+                    TextBlock("bare-head"),
+                    PasswordBox("").Validate("email", "", Validate.Required("Email is required"))),
+            };
+        }
+    }
+
+    internal sealed record ChainProps(bool Moved, Action<ValidationContext> OnContext, Action OnRender);
+
+    internal sealed class ChainOwner : Component<ChainProps>
+    {
+        public override Element Render()
+        {
+            var props = Props;
+            var ctx = this.UseValidationContext();
+            props.OnContext(ctx);
+            props.OnRender();
+
+            // Both links evaluate eagerly. The second decides which field the
+            // attachment ends up naming, so the first link's write has to follow it.
+            var el = props.Moved
+                ? TextBox("")
+                    .Validate("first", "", Validate.Required("first is required"))
+                    .Validate("second", "", Validate.Required("second is required"))
+                // Same field, different values on each link: a net-zero churn that
+                // must not announce a change, or the repaint never settles. The two
+                // values disagree on the verdict, so the final messages say which
+                // link's value the field settled on.
+                : TextBox("")
+                    .Validate("first", "", Validate.Required("first is required"))
+                    .Validate("first", "bb", Validate.MinLength(3, "first is too short"));
+
+            return VStack(8, el, TextBlock("chain-tail"));
         }
     }
 
@@ -1740,52 +1799,117 @@ internal static class ValidationCoverageFixtures
     {
         public override async Task RunAsync()
         {
-            await BareControlAsync();
+            await BareAsync(BareValidateShape.Hidden, "Hidden", nudge: false);
+            await BareAsync(BareValidateShape.Removed, "Removed", nudge: false);
+            await BareAsync(BareValidateShape.Hidden, "Skipped", nudge: true);
+            await BareReplacedAsync();
             await WholeFormFieldAsync();
-            await ContentReplacedAsync();
+            await ChainMovesFieldAsync();
+            await ChainValueChurnSettlesAsync();
 
             var done = H.CreateHost();
             done.Mount(c => TextBlock("Issue1262 unmount withdraw done"));
             await Harness.Render();
         }
 
-        // A bare `.Validate()` — no FormField anywhere — behind a condition.
-        private async Task BareControlAsync()
+        // A bare `.Validate()` — no FormField anywhere — that stops being rendered,
+        // either replaced by another element or removed from the children outright.
+        // The two leave through different teardown paths.
+        //
+        // `nudge` adds a re-render that changes nothing about the validated element.
+        // Its verdict is republished under a fresh claim, but the element is
+        // structurally identical, so the update is shallow-skipped — and a control
+        // whose binding still names the previous pass's write can no longer withdraw.
+        private async Task BareAsync(BareValidateShape gone, string label, bool nudge)
         {
             var host = H.CreateHost();
-            Action<bool>? setShow = null;
+            Action<BareValidateShape>? setShape = null;
+            Action<int>? setNudge = null;
             ValidationContext? ctx = null;
 
             host.Mount(c =>
             {
-                var (show, set) = c.UseState(true);
-                setShow = set;
+                var (shape, set) = c.UseState(BareValidateShape.Present);
+                var (nudgeCount, setN) = c.UseState(0);
+                setShape = set;
+                setNudge = setN;
 
                 return VStack(12,
                     Component<BareValidateOwner, BareValidateProps>(
-                        new BareValidateProps(show, found => ctx = found)),
+                        new BareValidateProps(shape, nudgeCount, found => ctx = found)),
                     TextBlock("host"));
             });
 
             await Harness.Render();
-            H.Check("Issue1262_Unmount_BareContextResolved", ctx is not null);
+            H.Check($"Issue1262_Unmount_Bare{label}Resolved", ctx is not null);
             if (ctx is null) return;
 
-            H.Check("Issue1262_Unmount_BareInitialError", ctx.GetMessages("email").Count == 1,
+            H.Check($"Issue1262_Unmount_Bare{label}InitialError", ctx.GetMessages("email").Count == 1,
                 $"email={ctx.GetMessages("email").Count}");
 
-            setShow!(false);
+            if (nudge)
+            {
+                setNudge!(1);
+                await Harness.Render();
+                await Harness.Render();
+                H.Check($"Issue1262_Unmount_Bare{label}StillInvalid", ctx.GetMessages("email").Count == 1,
+                    $"email={ctx.GetMessages("email").Count}");
+            }
+
+            setShape!(gone);
             await Harness.Render();
             await Harness.Render();
 
-            H.Check("Issue1262_Unmount_BareWithdrawn", ctx.GetMessages("email").Count == 0,
+            // A removal can be deferred behind an exit transition, so the teardown that
+            // withdraws runs on a later turn — and on a timer, not on a render — than
+            // the pass that requested it.
+            for (var i = 0; i < 20 && ctx.GetMessages("email").Count > 0; i++)
+            {
+                await global::System.Threading.Tasks.Task.Delay(25);
+                await Harness.Render();
+            }
+
+            H.Check($"Issue1262_Unmount_Bare{label}Withdrawn", ctx.GetMessages("email").Count == 0,
                 $"remaining={string.Join("|", ctx.GetMessages("email").Select(m => m.Text))}");
-            H.Check("Issue1262_Unmount_BareContextValid", ctx.IsValid(),
-                $"valid={ctx.IsValid()}");
+            H.Check($"Issue1262_Unmount_Bare{label}Valid", ctx.IsValid(), $"valid={ctx.IsValid()}");
         }
 
-        // The whole FormField behind a condition: its own unmount has to
-        // withdraw, not just its content's.
+        // Guard: the outgoing control must not take the incoming one's verdict with
+        // it. Both write the same field under the same producer, and the incoming
+        // verdict is installed first.
+        private async Task BareReplacedAsync()
+        {
+            var host = H.CreateHost();
+            Action<BareValidateShape>? setShape = null;
+            ValidationContext? ctx = null;
+
+            host.Mount(c =>
+            {
+                var (shape, set) = c.UseState(BareValidateShape.Present);
+                setShape = set;
+
+                return VStack(12,
+                    Component<BareValidateOwner, BareValidateProps>(
+                        new BareValidateProps(shape, 0, found => ctx = found)),
+                    TextBlock("host"));
+            });
+
+            await Harness.Render();
+            if (ctx is null) { H.Check("Issue1262_Unmount_ReplaceContextResolved", false); return; }
+
+            H.Check("Issue1262_Unmount_ReplaceInitialError", ctx.GetMessages("email").Count == 1,
+                $"email={ctx.GetMessages("email").Count}");
+
+            setShape!(BareValidateShape.Replaced);
+            await Harness.Render();
+            await Harness.Render();
+
+            H.Check("Issue1262_Unmount_ReplaceKeepsVerdict", ctx.GetMessages("email").Count == 1,
+                $"email={ctx.GetMessages("email").Count}");
+        }
+
+        // The whole FormField behind a condition: its own unmount has to withdraw,
+        // not just its content's.
         private async Task WholeFormFieldAsync()
         {
             var ctx = new ValidationContext();
@@ -1819,39 +1943,63 @@ internal static class ValidationCoverageFixtures
                 $"remaining={string.Join("|", ctx.GetMessages("email").Select(m => m.Text))}");
         }
 
-        // Guard: the outgoing control must not take the incoming one's verdict
-        // with it. Swapping the content element type forces a replace-then-
-        // unmount rather than an in-place update.
-        private async Task ContentReplacedAsync()
+        // A later link moves the attachment to another field. The attachment keeps
+        // only the final name, so the earlier link's verdict would otherwise be owned
+        // by a field nothing revisits.
+        private async Task ChainMovesFieldAsync()
         {
-            var ctx = new ValidationContext();
             var host = H.CreateHost();
-            Action<bool>? setAlt = null;
+            ValidationContext? ctx = null;
+            var renders = 0;
 
-            host.Mount(c =>
-            {
-                var (alt, set) = c.UseState(false);
-                setAlt = set;
-
-                Element content = alt
-                    ? PasswordBox("").Validate("email", "", Validate.Required("Email is required"))
-                    : TextBox("").Validate("email", "", Validate.Required("Email is required"));
-
-                return VStack(12,
-                    FormField(content, label: "Email", showWhen: ShowWhen.Always))
-                    .Provide(ValidationContexts.Current, ctx);
-            });
+            host.Mount(c => VStack(12,
+                Component<ChainOwner, ChainProps>(
+                    new ChainProps(true, found => ctx = found, () => renders++)),
+                TextBlock("host")));
 
             await Harness.Render();
-            H.Check("Issue1262_Unmount_ReplaceInitialError", ctx.GetMessages("email").Count == 1,
-                $"email={ctx.GetMessages("email").Count}");
+            if (ctx is null) { H.Check("Issue1262_Chain_ContextResolved", false); return; }
 
-            setAlt!(true);
-            await Harness.Render();
-            await Harness.Render();
+            // Chaining merges validators, so the final link runs both against its own
+            // field — the point is that "first" keeps nothing, not that "second" has
+            // exactly one message.
+            H.Check("Issue1262_Chain_FinalFieldValidated", ctx.GetMessages("second").Count == 2,
+                $"second={ctx.GetMessages("second").Count}");
+            H.Check("Issue1262_Chain_EarlierLinkWithdrawn", ctx.GetMessages("first").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("first").Select(m => m.Text))}");
+        }
 
-            H.Check("Issue1262_Unmount_ReplaceKeepsVerdict", ctx.GetMessages("email").Count == 1,
-                $"email={ctx.GetMessages("email").Count}");
+        // Two links on one field carrying different values churn `_currentValues`
+        // every pass and land exactly where they started. The pass is net-zero, so it
+        // must not announce a change — announcing one repaints, which churns again.
+        private async Task ChainValueChurnSettlesAsync()
+        {
+            var host = H.CreateHost();
+            ValidationContext? ctx = null;
+            var renders = 0;
+
+            host.Mount(c => VStack(12,
+                Component<ChainOwner, ChainProps>(
+                    new ChainProps(false, found => ctx = found, () => renders++)),
+                TextBlock("host")));
+
+            await Harness.Render();
+            if (ctx is null) { H.Check("Issue1262_Churn_ContextResolved", false); return; }
+
+            var settled = renders;
+            for (var i = 0; i < 6; i++) await Harness.Render();
+
+            // A self-sustaining notification loop shows up as renders that keep
+            // arriving with no input; a settled pass adds none of its own.
+            H.Check("Issue1262_Churn_Settles", renders - settled <= 2,
+                $"settled={settled} now={renders}");
+            // "bb" is the final link's value: it passes Required and fails MinLength,
+            // so exactly one message survives. Had the first link's "" won, Required
+            // would have failed too and there would be two.
+            var texts = ctx.GetMessages("first").Select(m => m.Text).ToList();
+            H.Check("Issue1262_Churn_FinalValueWins",
+                texts.Count == 1 && texts[0] == "first is too short",
+                $"messages={string.Join("|", texts)}");
         }
     }
 }

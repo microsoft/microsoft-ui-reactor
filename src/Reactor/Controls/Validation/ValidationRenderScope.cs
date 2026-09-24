@@ -34,6 +34,57 @@ internal static class ValidationRenderScope
     [ThreadStatic] private static ValidationContext? t_pendingProvide;
     [ThreadStatic] private static int t_depth;
     [ThreadStatic] private static List<ValidationContext>? t_deferred;
+    [ThreadStatic] private static Dictionary<ValidationAttached, Ownership>? t_owned;
+
+    /// <summary>
+    /// What an eager <c>.Validate()</c> write claimed: the context it actually reached
+    /// and the stamp its own write was issued.
+    /// </summary>
+    internal readonly record struct Ownership(ValidationContext Context, long Stamp);
+
+    private sealed class ByReference : IEqualityComparer<ValidationAttached>
+    {
+        internal static readonly ByReference Instance = new();
+        public bool Equals(ValidationAttached? a, ValidationAttached? b) => ReferenceEquals(a, b);
+        public int GetHashCode(ValidationAttached obj)
+            => global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+    }
+
+    /// <summary>
+    /// Records which context an attachment's eager verdict went to, and the stamp it was
+    /// issued, so the mounted control can inherit that exact claim.
+    /// <para>
+    /// Resolving it again at mount time instead would be guesswork: the reconciler's
+    /// context at that point is not necessarily the one the render scope reached — an
+    /// explicit <c>.Provide(...)</c> inside a component that owns a local context
+    /// separates them — and re-reading the field's current stamp would hand one control
+    /// a sibling's claim, letting either retract the other's verdict.
+    /// </para>
+    /// <para>
+    /// Keyed by reference. <see cref="ValidationAttached"/> is a record, so two links of
+    /// a chain that happen to carry equal values are the same key by value and different
+    /// keys by identity — and identity is what "the write I made" means here.
+    /// </para>
+    /// </summary>
+    internal static void RecordOwnership(ValidationAttached attached, ValidationContext context, long stamp)
+    {
+        if (t_depth == 0) return;
+        (t_owned ??= new Dictionary<ValidationAttached, Ownership>(ByReference.Instance))[attached] =
+            new Ownership(context, stamp);
+    }
+
+    /// <summary>
+    /// Claims an attachment's recorded ownership, removing it. Returns false when the
+    /// attachment never wrote anything in this pass — an element assembled outside a
+    /// render, or one whose validators were only ever attached.
+    /// </summary>
+    internal static bool TryTakeOwnership(ValidationAttached attached, out Ownership ownership)
+    {
+        var owned = t_owned;
+        if (owned is not null && owned.Remove(attached, out ownership)) return true;
+        ownership = default;
+        return false;
+    }
 
     /// <summary>
     /// The context <c>.Validate()</c> should push results into, or <c>null</c> when no
@@ -85,6 +136,14 @@ internal static class ValidationRenderScope
     /// </summary>
     internal static Frame Begin(ValidationContext? inherited)
     {
+        // Claims from the previous pass are dropped as the next one opens, not as the
+        // last one closed: the mount that consumes a claim does not always run inside a
+        // frame — a host's first render is not wrapped in one — so clearing on close
+        // discarded the claim before the control that inherits it existed. Anything
+        // unclaimed belongs to a superseded chain link or an element that was never
+        // mounted, and at most one pass' worth is ever held.
+        if (t_depth == 0) t_owned = null;
+
         var frame = new Frame(t_context, t_pendingProvide);
         t_context = inherited;
         t_pendingProvide = null;
@@ -164,7 +223,10 @@ internal static class ValidationRenderScope
             t_context = _previousContext;
             t_pendingProvide = _previousPendingProvide;
             if (t_depth > 0) t_depth--;
-            if (t_depth == 0) FlushDeferredNotifications();
+            if (t_depth == 0)
+            {
+                FlushDeferredNotifications();
+            }
         }
     }
 }

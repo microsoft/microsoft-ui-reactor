@@ -141,6 +141,17 @@ internal static class CompositeLifecycle
             Field = field;
             Stamp = ctx.GetProducerStamp(field, ValidationContext.SyncProducer);
         }
+
+        /// <summary>
+        /// Takes over a claim made elsewhere — the render-time write, whose context and
+        /// stamp are the only accurate description of what it installed.
+        /// </summary>
+        internal void Adopt(ValidationContext ctx, string field, long stamp)
+        {
+            Context = ctx;
+            Field = field;
+            Stamp = stamp;
+        }
     }
 
     private static AttachedValidationBinding? TryGetAttachedBinding(UIElement control)
@@ -192,20 +203,23 @@ internal static class CompositeLifecycle
     /// contribution nobody made matches no live write.
     /// </para>
     /// </summary>
-    internal static void TrackElementValidation(
-        Reconciler reconciler, FrameworkElement fe, ValidationAttached? attached)
+    internal static void TrackElementValidation(FrameworkElement fe, ValidationAttached? attached)
     {
-        var produces = Produces(attached);
+        var claimed = false;
+        ValidationRenderScope.Ownership owned = default;
+        if (attached is not null)
+            claimed = ValidationRenderScope.TryTakeOwnership(attached, out owned);
 
         // Never materialize state for an element that has nothing to withdraw and nothing
         // to record — every element in the tree reaches this, not just validated ones.
-        var binding = produces ? GetOrCreateAttachedBinding(fe) : TryGetAttachedBinding(fe);
+        var binding = claimed ? GetOrCreateAttachedBinding(fe) : TryGetAttachedBinding(fe);
         if (binding is null) return;
 
-        var valCtx = produces ? reconciler.ReadContext(ValidationContexts.Current) : null;
-        binding.WithdrawIfMoved(valCtx, produces ? attached!.FieldName : null);
+        binding.WithdrawIfMoved(
+            claimed ? owned.Context : null,
+            claimed ? attached!.FieldName : null);
 
-        if (produces && valCtx is not null) binding.Record(valCtx, attached!.FieldName);
+        if (claimed) binding.Adopt(owned.Context, attached!.FieldName, owned.Stamp);
     }
 
     /// <summary>

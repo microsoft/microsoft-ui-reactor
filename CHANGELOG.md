@@ -194,6 +194,27 @@ Conventions for contributors:
   `FormField`'s content — which installs the incoming verdict before unmounting the
   outgoing control — no longer lets the departing control erase the verdict that
   replaced it (issue #1262).
+- A chain whose later link moved the attachment to another field orphaned the
+  earlier link's verdict. Every link evaluates eagerly, because a chain that ran
+  only at its end would drop the earlier links' validators for a bare control, but
+  the attachment that survives carries only the final `FieldName` — so
+  `.Validate("a", x, …).Validate("b", y, …)` left field `a` permanently invalid
+  with no control associated with it. A link that moves the field now withdraws
+  what the earlier link installed (issue #1262).
+- Two links on one field carrying different values repainted forever. Each link
+  recorded its own value, so the current-value map flipped to the first link's and
+  back to the second's every pass; both writes were real value changes, so the
+  frame announced one every time, which repainted, which churned again. Net-zero
+  suppression now covers values, touched flags and the registered set as well as
+  messages, so a pass that ends where it started is silent whatever it churned
+  (issue #1262).
+- A validated control removed from a parent's children kept its verdict: removal
+  tears down through the pooling traversal, not the ordinary unmount, and only the
+  latter withdrew. Both paths now go through one helper (issue #1262).
+- `ValidationContext` accumulated an ownership stamp per retired producer. Every
+  mounted rule gets a fresh `rule#N` identity, so a long-lived context that saw
+  rules mount and unmount grew one entry per mount without bound. A stamp now
+  exists exactly while its producer owns messages (issue #1262).
 
 ### Security
 

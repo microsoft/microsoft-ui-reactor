@@ -2235,4 +2235,66 @@ public class ValidationRenderScopeTests
 
         Assert.Equal(2, ctx.GetMessages("dates").Count);
     }
+    // ════════════════════════════════════════════════════════════════
+    //  Producer ownership stamps (issue #1262 review)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void RetiredProducersDoNotAccumulateStamps()
+    {
+        var ctx = new ValidationContext();
+
+        // Every mounted rule gets a fresh identity, so a long-lived context sees an
+        // unbounded number of producers come and go over its lifetime.
+        for (var i = 0; i < 200; i++)
+        {
+            var producer = $"rule#{i}";
+            ctx.ApplyOwned("form", producer,
+                [new ValidationMessage("form", $"failed {i}")]);
+            Assert.Equal(1, ctx.ProducerStampEntryCount);
+
+            ctx.RetireProducer("form", producer);
+            Assert.Equal(0, ctx.ProducerStampEntryCount);
+        }
+
+        Assert.Empty(ctx.GetMessages("form"));
+    }
+
+    [Fact]
+    public void ProducerStampSurvivesAnUnchangedRepublish()
+    {
+        var ctx = new ValidationContext();
+        ValidationMessage Message() => new("form", "failed");
+
+        ctx.ApplyOwned("form", "a", [Message()]);
+        var first = ctx.GetProducerStamp("form", "a");
+
+        // A pass that reproduces the same verdict still makes its writer the current
+        // owner, so the stamp moves even though the messages did not.
+        ctx.ApplyOwned("form", "a", [Message()]);
+        var second = ctx.GetProducerStamp("form", "a");
+
+        Assert.NotEqual(0, first);
+        Assert.True(second > first, $"first={first} second={second}");
+        Assert.Equal(1, ctx.ProducerStampEntryCount);
+    }
+
+    [Fact]
+    public void StampedRetireIsIgnoredOnceAnotherWriterOwnsTheSlot()
+    {
+        var ctx = new ValidationContext();
+
+        ctx.ApplyOwned("form", "sync", [new ValidationMessage("form", "outgoing")]);
+        var outgoing = ctx.GetProducerStamp("form", "sync");
+
+        // The incoming control installs its verdict before the outgoing one is torn
+        // down, and both write the same slot.
+        ctx.ApplyOwned("form", "sync", [new ValidationMessage("form", "incoming")]);
+
+        ctx.RetireProducer("form", "sync", outgoing);
+
+        var remaining = ctx.GetMessages("form");
+        Assert.Single(remaining);
+        Assert.Equal("incoming", remaining[0].Text);
+    }
 }

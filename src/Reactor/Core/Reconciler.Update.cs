@@ -128,6 +128,11 @@ public sealed partial class Reconciler
             if ((HasGestureOrDragSlots(modifiers) || HasGestureOrDragSlots(oldModifiers))
                 && control is FrameworkElement gestFeSE)
                 RefreshGestureDragStateOnSkip(gestFeSE, oldModifiers, modifiers);
+            // No validation refresh here, deliberately (issue #1262). A `.Validate()`
+            // verdict is republished only by a component that re-rendered, and that
+            // component's output is on the dirty ancestor path, which this arm declines
+            // — so an element whose claim moved never reaches the skip. Instrumenting
+            // this arm across the whole selftest corpus produced zero validated hits.
             // No _ambientRequestedTheme restore here: the field is written only on the
             // non-skip path inside the try below, never on this early-return arm (which
             // reads the LOCAL effectiveTheme at line ~109), so it cannot leak.
@@ -264,7 +269,7 @@ public sealed partial class Reconciler
         if ((newEl.Attached is not null || oldEl.Attached is not null)
             && target is FrameworkElement valFe)
             V1Protocol.CompositeLifecycle.TrackElementValidation(
-                this, valFe, newEl.GetAttached<ValidationAttached>());
+                valFe, newEl.GetAttached<ValidationAttached>());
 
         // Re-apply the TitleBar's caption-derived height after modifiers so
         // removing an explicit .Height(...) from a still-tall TitleBar falls

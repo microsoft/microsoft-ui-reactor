@@ -61,6 +61,7 @@ public static class ValidateExtensions
         // happens at each link, so `.Validate(f, v, Required()).Validate(f, MinLength(3))`
         // would otherwise install only the Required verdict and silently drop the second
         // validator for a bare control (issue #1262 review).
+        SupersedeEarlierLink(existing, fieldName);
         if (merged.HasValue) RunDuringRender(merged, merged.Value);
 
         return (T)el.SetAttached(merged);
@@ -97,6 +98,7 @@ public static class ValidateExtensions
             }
             : new ValidationAttached(fieldName, validators, []) { Value = value, HasValue = true };
 
+        SupersedeEarlierLink(existing, fieldName);
         RunDuringRender(merged, value);
         return (T)el.SetAttached(merged);
     }
@@ -114,6 +116,7 @@ public static class ValidateExtensions
                 AsyncValidators = [.. existing.AsyncValidators, .. asyncValidators]
             }
             : new ValidationAttached(fieldName, [], asyncValidators);
+        SupersedeEarlierLink(existing, fieldName);
         return (T)el.SetAttached(merged);
     }
 
@@ -149,6 +152,7 @@ public static class ValidateExtensions
 
         // Async validators cannot resolve inside a synchronous render, but the field
         // still has to be registered or MarkAllTouched() would skip it.
+        SupersedeEarlierLink(existing, fieldName);
         ValidationRenderScope.Current?.RegisterField(fieldName);
         return (T)el.SetAttached(merged);
     }
@@ -165,6 +169,30 @@ public static class ValidateExtensions
         var ctx = ValidationRenderScope.Current;
         if (ctx is null) return;
         ValidationReconciler.ValidateAttached(ctx, attached, value);
+        ValidationRenderScope.RecordOwnership(
+            attached, ctx, ctx.GetProducerStamp(attached.FieldName, ValidationContext.SyncProducer));
+    }
+
+    /// <summary>
+    /// Withdraws the verdict an earlier link of the same chain already wrote, when this
+    /// link moves the attachment to a different field.
+    /// <para>
+    /// Every link evaluates eagerly, because a chain that only ran at its end would drop
+    /// the earlier links' validators for a bare control. The attachment that survives
+    /// carries only the final <c>FieldName</c> though, so
+    /// <c>.Validate("a", x, …).Validate("b", y, …)</c> left field <c>a</c> holding a
+    /// verdict nothing would ever revisit — permanently invalid, and invisible, since no
+    /// control is associated with it. The earlier link's own claim is what identifies
+    /// that write, so only what this chain actually installed is withdrawn.
+    /// </para>
+    /// </summary>
+    private static void SupersedeEarlierLink(ValidationAttached? existing, string nextField)
+    {
+        if (existing is null) return;
+        if (!ValidationRenderScope.TryTakeOwnership(existing, out var owned)) return;
+        if (string.Equals(existing.FieldName, nextField, StringComparison.Ordinal)) return;
+
+        owned.Context.RetireProducer(existing.FieldName, ValidationContext.SyncProducer, owned.Stamp);
     }
 
     /// <summary>

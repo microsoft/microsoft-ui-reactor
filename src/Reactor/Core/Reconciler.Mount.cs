@@ -156,7 +156,7 @@ public sealed partial class Reconciler
         // lifetime so it is withdrawn when the control leaves the tree.
         if (element.Attached is not null && control is FrameworkElement valFe)
             V1Protocol.CompositeLifecycle.TrackElementValidation(
-                this, valFe, element.GetAttached<ValidationAttached>());
+                valFe, element.GetAttached<ValidationAttached>());
 
         // Re-apply the TitleBar's caption-derived height after modifiers so a
         // .Tall() without an explicit .Height(...) still sizes the control.

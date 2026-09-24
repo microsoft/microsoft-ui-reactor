@@ -852,6 +852,31 @@ public sealed partial class Reconciler : IDisposable
         void Reset();
     }
 
+    /// <summary>
+    /// Issue #1262 — withdraws the validation verdict a control carried, on its way out
+    /// of the tree.
+    /// <para>
+    /// Teardown runs down two parallel paths: <see cref="UnmountRecursive"/> for an
+    /// ordinary unmount and <c>UnmountAndCollect</c> for the pooling traversal that
+    /// child removal uses. Only the second one runs for a conditionally removed poolable
+    /// control, so this lives in one helper both call rather than in either of them.
+    /// </para>
+    /// <para>
+    /// The binding retracts only while it still owns the slot, so an incoming control
+    /// that already replaced the verdict is not disturbed by the outgoing one; and
+    /// <c>Reset</c> drops the context reference, so a pooled control does not keep a
+    /// <c>ValidationContext</c> alive for its next renter.
+    /// </para>
+    /// </summary>
+    private static void WithdrawAttachedValidation(UIElement control)
+    {
+        if (control is FrameworkElement fe
+            && fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+        {
+            (state.ValidationAttachedBinding as IValidationBindingReset)?.Reset();
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     //  Lazy event wiring for poolable types
     // ════════════════════════════════════════════════════════════════════
@@ -2220,11 +2245,7 @@ public sealed partial class Reconciler : IDisposable
         // tree otherwise left the context invalid over a field that no longer exists.
         // The binding retracts only while it still owns the slot, so an incoming control
         // that already replaced the verdict is not disturbed by the outgoing one.
-        if (control is FrameworkElement valFe
-            && valFe.GetValue(ReactorAttached.StateProperty) is ReactorState valState)
-        {
-            (valState.ValidationAttachedBinding as IValidationBindingReset)?.Reset();
-        }
+        WithdrawAttachedValidation(control);
 
         // OnUnmountAction (.OnUnmount) — imperative teardown half of .OnMount.
         if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
@@ -2592,6 +2613,8 @@ public sealed partial class Reconciler : IDisposable
 
         if (control is FrameworkElement refFe)
             CleanupReferenceStateForUnmount(refFe, GetElementTag(refFe));
+
+        WithdrawAttachedValidation(control);
 
         // OnUnmountAction (.OnUnmount) — imperative teardown half of .OnMount.
         if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))

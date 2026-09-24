@@ -114,7 +114,12 @@ public sealed class ValidationContext
 
         // Outside a render the snapshot can no longer be trusted as "what subscribers
         // were last told", so stop suppressing against it.
-        lock (_lock) _lastNotifiedMessages = null;
+        lock (_lock)
+        {
+            _lastNotifiedMessages = null;
+            _lastNotifiedValues = null;
+            _lastNotifiedTouched = null;
+        }
         _changed?.Invoke();
     }
 
@@ -153,7 +158,7 @@ public sealed class ValidationContext
             // churns again — an endless loop from a net-zero pass. Announce only when the
             // messages actually ended up different from what subscribers were last told.
             var snapshot = MessageSnapshotLocked();
-            if (!_frameTouchedNonMessageState
+            if ((!_frameTouchedNonMessageState || NonMessageStateUnchangedLocked())
                 && _lastNotifiedMessages is not null
                 && string.Equals(_lastNotifiedMessages, snapshot, StringComparison.Ordinal))
             {
@@ -169,6 +174,7 @@ public sealed class ValidationContext
             }
 
             _lastNotifiedMessages = snapshot;
+            CaptureNonMessageStateLocked();
             _frameTouchedNonMessageState = false;
 
             handler = _changed;
@@ -239,8 +245,45 @@ public sealed class ValidationContext
     }
 
     private string? _lastNotifiedMessages;
+    private Dictionary<string, object?>? _lastNotifiedValues;
+    private HashSet<string>? _lastNotifiedTouched;
+    private int _lastNotifiedRegistered;
     private bool _frameTouchedNonMessageState;
     private bool _frameVersionPending;
+
+    /// <summary>
+    /// Whether the state a message snapshot cannot see — field values, touched flags,
+    /// the registered set — ended the frame where it started.
+    /// <para>
+    /// A flag alone is not enough, because a render can churn that state and land back
+    /// where it began. Chaining two value overloads on one field is the case that bites:
+    /// each link records its own value, so <c>_currentValues</c> flips to the first
+    /// link's value and back to the second's on every pass. Both writes are real value
+    /// changes, so the frame announced one every time, which repainted, which churned
+    /// again. Only the net result is a change subscribers need to hear about.
+    /// </para>
+    /// </summary>
+    private bool NonMessageStateUnchangedLocked()
+    {
+        if (_lastNotifiedValues is null || _lastNotifiedTouched is null) return false;
+        if (_lastNotifiedRegistered != _registeredFields.Count) return false;
+        if (_lastNotifiedValues.Count != _currentValues.Count) return false;
+        if (!_lastNotifiedTouched.SetEquals(_touchedFields)) return false;
+
+        foreach (var (field, value) in _currentValues)
+        {
+            if (!_lastNotifiedValues.TryGetValue(field, out var previous)) return false;
+            if (!Equals(previous, value)) return false;
+        }
+        return true;
+    }
+
+    private void CaptureNonMessageStateLocked()
+    {
+        _lastNotifiedValues = new Dictionary<string, object?>(_currentValues);
+        _lastNotifiedTouched = new HashSet<string>(_touchedFields, StringComparer.Ordinal);
+        _lastNotifiedRegistered = _registeredFields.Count;
+    }
 
     /// <summary>
     /// Bumps <see cref="Version"/>, except for a message-only change made while a render
@@ -485,21 +528,47 @@ public sealed class ValidationContext
             if (byProducer.Count == 0) _owned.Remove(field);
         }
 
-        // Stamped on every write, not only the ones that changed something: the stamp
-        // answers "who wrote this slot last", and a writer that happened to reproduce the
-        // previous verdict is still the current owner.
-        StampProducerLocked(field, producer);
+        // A stamp exists exactly while the producer owns something. Writing one while
+        // dropping the ownership would leave an entry behind on every retraction, and
+        // every mounted rule gets a fresh `rule#N` identity — so a long-lived context
+        // that sees rules mount and unmount would accumulate them without bound.
+        if (messages.Count == 0) RemoveProducerStampLocked(field, producer);
+        else StampProducerLocked(field, producer);
 
         return changed;
     }
 
-    private long StampProducerLocked(string field, string producer)
+    private void StampProducerLocked(string field, string producer)
     {
         var token = unchecked(++_producerTicket);
         if (!_producerStamp.TryGetValue(field, out var byProducer))
             _producerStamp[field] = byProducer = new Dictionary<string, long>(StringComparer.Ordinal);
         byProducer[producer] = token;
-        return token;
+    }
+
+    private void RemoveProducerStampLocked(string field, string producer)
+    {
+        if (!_producerStamp.TryGetValue(field, out var byProducer)) return;
+        byProducer.Remove(producer);
+        if (byProducer.Count == 0) _producerStamp.Remove(field);
+    }
+
+    /// <summary>
+    /// The number of producer slots currently carrying an ownership stamp. Exposed for
+    /// tests: a stamp must exist exactly while its producer owns messages, so a context
+    /// that has seen producers come and go must not accumulate them.
+    /// </summary>
+    internal int ProducerStampEntryCount
+    {
+        get
+        {
+            lock (_lock)
+            {
+                var total = 0;
+                foreach (var byProducer in _producerStamp.Values) total += byProducer.Count;
+                return total;
+            }
+        }
     }
 
     /// <summary>
