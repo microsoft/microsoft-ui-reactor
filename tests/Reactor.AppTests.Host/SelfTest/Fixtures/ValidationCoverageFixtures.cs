@@ -1037,7 +1037,15 @@ internal static class ValidationCoverageFixtures
             H.Check("Issue1262_Displaced_ResetClearedTouched", !ctx.IsTouched("name"));
 
             setMode!(1);
-            await Harness.Render();
+            // Wait for the swap to be observable rather than assuming one render is
+            // enough — under load a single pass may not have applied the state change,
+            // and asserting then reads the *old* tree.
+            for (var i = 0; i < 8 && H.FindControl<TextBox>(tb => tb.Text == "displaced-probe") is not null; i++)
+                await Harness.Render();
+
+            H.Check("Issue1262_Displaced_EditorLeftTree",
+                H.FindControl<TextBox>(tb => tb.Text == "displaced-probe") is null,
+                "the content swap never took effect, so the check below would be vacuous");
 
             // The editor is out of the tree and on its way to the pool. Its binding
             // must be neutralized, or a later non-FormField use of the same control
@@ -1048,7 +1056,8 @@ internal static class ValidationCoverageFixtures
                 "the displaced editor still carries a live blur binding");
 
             setMode!(2);
-            await Harness.Render();
+            for (var i = 0; i < 8 && H.FindControl<TextBox>(tb => tb.Text == "plain-probe") is null; i++)
+                await Harness.Render();
 
             var rented = H.FindControl<TextBox>(tb => tb.Text == "plain-probe");
             if (rented is null) { H.Check("Issue1262_Displaced_PlainBoxRendered", false); return; }
@@ -1232,6 +1241,56 @@ internal static class ValidationCoverageFixtures
 
             var done = H.CreateHost();
             done.Mount(c => TextBlock("Issue1262 async rule done"));
+            await Harness.Render();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — an async rule whose provider disappears mid-flight.
+    //
+    //  Update withdraws the rule's contribution from the old context, but a
+    //  pass already running would resolve afterwards and reinstall the error
+    //  into a context the rule no longer belongs to.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_AsyncRuleProviderRemovedMidFlight(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var ctx = new ValidationContext();
+            var gate = new TaskCompletionSource<bool>();
+            var host = H.CreateHost();
+            Action<bool>? setProvide = null;
+
+            host.Mount(c =>
+            {
+                var (provided, set) = c.UseState(true);
+                setProvide = set;
+
+                var tree = VStack(12,
+                    ValidationRuleAsync(() => gate.Task, "Name is already taken", "name"),
+                    TextBlock("body"));
+
+                return provided ? tree.Provide(ValidationContexts.Current, ctx) : tree;
+            });
+
+            await Harness.Render();
+            H.Check("Issue1262_AsyncProvider_QuietWhilePending", ctx.GetMessages("name").Count == 0);
+
+            // The provider goes away while the check is still out.
+            setProvide!(false);
+            await Harness.Render();
+
+            gate.SetResult(false);
+            await Harness.Render();
+            await Harness.Render();
+
+            H.Check("Issue1262_AsyncProvider_NoVerdictAfterRemoval", ctx.GetMessages("name").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("name").Select(m => m.Text))}");
+            H.Check("Issue1262_AsyncProvider_ContextStillValid", ctx.IsValid());
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 async provider done"));
             await Harness.Render();
         }
     }

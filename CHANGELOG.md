@@ -28,6 +28,10 @@ Conventions for contributors:
 
 ### Added
 
+- `ValidationReconciler.EvaluateRulesAsync(...)` — the asynchronous counterpart to
+  `EvaluateRules`, for rule sets containing rules built with `ValidationRuleAsync`.
+  Rules run in order, so the resulting message order matches the order given
+  (issue #1262).
 - `ValidationContext.Changed` — raised when the context's observable state
   changes (a message appearing or disappearing, a field becoming touched, a
   reset). `UseValidationContext()` subscribes to it, so mutating the context
@@ -107,7 +111,10 @@ Conventions for contributors:
   invalidated the shared context (issue #1262).
 - A `FormField` that lost its context and swapped its content control in the same
   update left the displaced editor's blur binding live, so the pooled control kept
-  marking the old field and kept its `ValidationContext` alive (issue #1262).
+  marking the old field and kept its `ValidationContext` alive (issue #1262). The
+  displaced editor is now neutralized directly rather than through the root
+  mapping, which a remount can replace — leaving the mapping naming a control that
+  is no longer the one that left.
 - Chaining two value overloads on one element —
   `.Validate(f, v, Email()).Validate(f, v, MinLength(10))` — repainted forever.
   Each call eagerly applied its own intermediate validator set under the same
@@ -115,12 +122,22 @@ Conventions for contributors:
   the net state never moved, but each write announced a change that scheduled
   another identical pass. A render that ends with the same messages it started
   with is now silent (issue #1262).
+- An async `ValidationRule` evaluated synchronously — `.Evaluate(ctx)` or
+  `EvaluateRules(...)` — recorded a passing verdict without ever running its
+  predicate, reporting an invalid field as valid. Those paths now throw, and
+  `EvaluateRulesAsync` is the batch path that runs them (issue #1262).
 - An async `ValidationRule` placed in the element tree never ran its predicate.
   `ValidationRuleAsync` builds an element whose synchronous predicate is a
   constant `true`, and the mount/update lifecycle evaluated that, so the rule
   silently recorded a passing verdict. Mounted async rules now run through the
   generation-guarded async path, with the in-flight pass cancelled on update and
   on unmount (issue #1262).
+- A mounted rule that left the tree, or moved to another context, had its messages
+  withdrawn but not its async generation entry, so a pass already running could
+  reinstall the verdict into a context the rule no longer belonged to — and a
+  long-lived context accumulated a stale entry per mount, since every mounted rule
+  gets a fresh identity. Both paths now retire the producer: generation and
+  messages together (issue #1262).
 - A rule evaluated directly with `.Evaluate(ctx)` was identified by its message
   text, so an interpolated message such as `$"Must be after {start}"` orphaned
   the previous verdict on every change: errors accumulated and a now-passing

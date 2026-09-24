@@ -109,7 +109,44 @@ public static class ValidationReconciler
         if (_ruleSets.TryGetValue(ctx, out var previous))
         {
             foreach (var entry in previous.Where(entry => !applied.Contains(entry)))
-                ctx.ApplyOwned(entry.Field, entry.Producer, []);
+                ctx.RetireProducer(entry.Field, entry.Producer);
+            _ruleSets.Remove(ctx);
+        }
+
+        _ruleSets.Add(ctx, applied);
+    }
+
+    /// <summary>
+    /// The asynchronous counterpart to <see cref="EvaluateRules"/>, for rule sets that
+    /// contain rules built by <c>ValidationRuleAsync</c>. Synchronous rules in the set
+    /// are evaluated normally.
+    /// <para>
+    /// Rules run in order rather than concurrently, so the resulting message order for a
+    /// field is the order the rules were given in — <c>GetMessages</c> exposes that order
+    /// and callers read the first message.
+    /// </para>
+    /// <para>
+    /// Ownership works exactly as in the synchronous overload: each rule is keyed by its
+    /// position, and a producer from the previous call that is absent this time has its
+    /// contribution withdrawn.
+    /// </para>
+    /// </summary>
+    public static async Task EvaluateRulesAsync(
+        ValidationContext ctx,
+        params ValidationRuleElement[] rules)
+    {
+        var applied = new List<(string Field, string Producer)>(rules.Length);
+        for (var i = 0; i < rules.Length; i++)
+        {
+            var producer = "rules[" + i.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "]";
+            await rules[i].EvaluateAsync(ctx, producer);
+            applied.Add((rules[i].Field, producer));
+        }
+
+        if (_ruleSets.TryGetValue(ctx, out var previous))
+        {
+            foreach (var entry in previous.Where(entry => !applied.Contains(entry)))
+                ctx.RetireProducer(entry.Field, entry.Producer);
             _ruleSets.Remove(ctx);
         }
 

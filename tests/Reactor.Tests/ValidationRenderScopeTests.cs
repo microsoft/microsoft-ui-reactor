@@ -1230,6 +1230,80 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public void Evaluating_An_Async_Rule_Synchronously_Throws_Instead_Of_Passing_It()
+    {
+        var ctx = new ValidationContext();
+        var rule = ValidationRuleAsync(() => Task.FromResult(false), "Name is taken", "name");
+
+        var ex = Assert.Throws<global::System.InvalidOperationException>(() => rule.Evaluate(ctx));
+
+        Assert.Contains("name", ex.Message, StringComparison.Ordinal);
+        // The silent failure mode was recording a passing verdict for a field that
+        // was never checked.
+        Assert.Empty(ctx.GetMessages("name"));
+    }
+
+    [Fact]
+    public void The_Batch_Rule_Path_Rejects_An_Async_Rule_Too()
+    {
+        var ctx = new ValidationContext();
+
+        Assert.Throws<global::System.InvalidOperationException>(() =>
+            ValidationReconciler.EvaluateRules(
+                ctx,
+                ValidationRule(() => false, "Sync rule", "a"),
+                ValidationRuleAsync(() => Task.FromResult(false), "Async rule", "b")));
+    }
+
+    [Fact]
+    public async Task The_Async_Batch_Path_Runs_Both_Kinds_Of_Rule()
+    {
+        var ctx = new ValidationContext();
+
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx,
+            ValidationRule(() => false, "Sync rule", "a"),
+            ValidationRuleAsync(() => Task.FromResult(false), "Async rule", "b"));
+
+        Assert.Single(ctx.GetMessages("a"));
+        Assert.Single(ctx.GetMessages("b"));
+        Assert.Equal("Async rule", ctx.GetMessages("b")[0].Text);
+    }
+
+    [Fact]
+    public async Task Retiring_A_Producer_Stops_Its_In_Flight_Pass_From_Installing()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        var rule = ValidationRuleAsync(() => pending.Task, "Name is taken", "name");
+        var running = rule.EvaluateAsync(ctx, "rule#7", TestContext.Current.CancellationToken);
+
+        // The rule leaves the tree while its check is still out.
+        ctx.RetireProducer("name", "rule#7");
+
+        pending.SetResult(false);
+        await running;
+
+        Assert.Empty(ctx.GetMessages("name"));
+    }
+
+    [Fact]
+    public async Task Retiring_A_Producer_Withdraws_What_It_Already_Installed()
+    {
+        var ctx = new ValidationContext();
+
+        var rule = ValidationRuleAsync(() => Task.FromResult(false), "Name is taken", "name");
+        await rule.EvaluateAsync(ctx, "rule#7", TestContext.Current.CancellationToken);
+        Assert.Single(ctx.GetMessages("name"));
+
+        ctx.RetireProducer("name", "rule#7");
+
+        Assert.Empty(ctx.GetMessages("name"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
     public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
     {
         var ctx = new ValidationContext();

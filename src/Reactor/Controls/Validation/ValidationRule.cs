@@ -80,9 +80,23 @@ public static class ValidationRuleDsl
     /// Evaluates the rule as a named producer on its field. The reconciler passes an
     /// identity tied to the rule's mounted placeholder, which survives re-renders and
     /// distinguishes two rules that happen to share a message.
+    /// <para>
+    /// Throws for a rule built by <c>ValidationRuleAsync</c>. Its synchronous predicate
+    /// is a constant <c>true</c> placeholder, so evaluating it here would record a
+    /// passing verdict without ever running the real check — an invalid field reported
+    /// as valid, silently (issue #1262 review).
+    /// </para>
     /// </summary>
     internal static void Evaluate(this ValidationRuleElement rule, ValidationContext ctx, string producer)
     {
+        if (rule.AsyncPredicate is not null)
+        {
+            throw new InvalidOperationException(
+                $"The validation rule for field '{rule.Field}' has an async predicate and cannot be " +
+                "evaluated synchronously. Use EvaluateAsync or ValidationReconciler.EvaluateRulesAsync, " +
+                "or mount the rule in the element tree, which dispatches it asynchronously.");
+        }
+
         ctx.ApplyOwned(rule.Field, producer, BuildMessages(rule, rule.Predicate()));
     }
 

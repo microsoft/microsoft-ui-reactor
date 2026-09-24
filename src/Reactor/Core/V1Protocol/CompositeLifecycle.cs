@@ -151,6 +151,7 @@ internal static class CompositeLifecycle
 
         // [1] Patch content in-place (preserves caret position and focus)
         var existingContent = panel.Children[1];
+        var outgoingContent = existingContent;
         if (reconciler.CanUpdate(oldFf.Content, newFf.Content))
         {
             var replacement = reconciler.Update(oldFf.Content, newFf.Content, existingContent, requestRerender);
@@ -174,6 +175,14 @@ internal static class CompositeLifecycle
             panel.Children.Insert(1, newContent);
             existingContent = newContent;
         }
+
+        // An editor that has just been displaced is on its way to the element pool, and
+        // its LostFocus handler is attached once for the control's lifetime and reads a
+        // mutable binding. Neutralize it here rather than through the root mapping: the
+        // root can itself be replaced by a remount, in which case the mapping no longer
+        // names the control that actually left (issue #1262 review).
+        if (!ReferenceEquals(outgoingContent, existingContent))
+            ClearTouchBinding(outgoingContent);
 
         ApplyFormFieldAutomation(existingContent, newFf.Label);
         ApplyFormFieldErrorStyling(existingContent, valCtx, fieldName, newFf.ShowWhen);
@@ -338,7 +347,10 @@ internal static class CompositeLifecycle
             && (!ReferenceEquals(previousCtx, valCtx)
                 || !string.Equals(previousField, rule.Field, StringComparison.Ordinal)))
         {
-            previousCtx.ApplyOwned(previousField, binding.Producer, []);
+            // Cancel first: a pass still running against the old context would otherwise
+            // reinstall the error just withdrawn, for a rule that has moved away.
+            CancelPendingRule(binding);
+            previousCtx.RetireProducer(previousField, binding.Producer);
             binding.Context = null;
             binding.Field = null;
         }
@@ -366,7 +378,7 @@ internal static class CompositeLifecycle
         CancelPendingRule(binding);
 
         if (binding.Context is { } ctx && binding.Field is { } field)
-            ctx.ApplyOwned(field, binding.Producer, []);
+            ctx.RetireProducer(field, binding.Producer);
 
         binding.Context = null;
         binding.Field = null;

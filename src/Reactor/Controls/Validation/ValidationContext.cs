@@ -873,6 +873,34 @@ public sealed class ValidationContext
     }
 
     /// <summary>
+    /// Withdraws a producer's contribution to a field *and* retires any async pass it has
+    /// open, in one step.
+    /// <para>
+    /// Withdrawing the messages alone leaves the producer's generation entry behind.
+    /// Every mounted rule gets a fresh <c>rule#N</c> identity, so a long-lived context
+    /// that sees rules mount and unmount would accumulate stale entries without bound —
+    /// and an already-running pass could still install a verdict for a producer that no
+    /// longer exists.
+    /// </para>
+    /// </summary>
+    internal void RetireProducer(string field, string producer)
+    {
+        bool changed;
+        lock (_lock)
+        {
+            if (_asyncGeneration.TryGetValue(field, out var byProducer))
+            {
+                byProducer.Remove(producer);
+                if (byProducer.Count == 0) _asyncGeneration.Remove(field);
+            }
+
+            changed = ApplyOwnedLocked(field, producer, []);
+            if (changed) BumpVersionLocked(messagesOnly: true);
+        }
+        if (changed) RaiseChanged(messagesOnly: true);
+    }
+
+    /// <summary>
     /// Withdraws every async contribution to a field and retires its in-flight passes.
     /// <para>
     /// Producer-aware rather than just <see cref="AsyncProducer"/>: an async
