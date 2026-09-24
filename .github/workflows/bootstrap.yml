@@ -222,14 +222,23 @@ jobs:
           # Inside the repo so the root nuget.config (which maps local-nupkgs/)
           # is picked up by NuGet's parent-dir walk.
           New-Item -ItemType Directory -Path TestProjects | Out-Null
-          # The scaffolded TestApp lives under the repo, so NuGet's parent-dir
-          # walk would otherwise inherit the repo-root Directory.Packages.props
-          # and flip the app into Central Package Management — conflicting with
-          # the template's inline PackageReference versions (NU1008). Drop a
-          # nearer Directory.Packages.props that shadows the root one and turns
-          # CPM off, faithfully mimicking a real end-user scaffold (which has no
-          # central package props above it).
+          # The scaffolded TestApp lives under the repo, so MSBuild's and NuGet's
+          # parent-dir walks would otherwise apply the repo's own build rules to
+          # what is meant to be an end-user scaffold. Both walks stop at the first
+          # file they find, so shadowing them here isolates the app — which is
+          # what a real scaffold outside the repo gets.
+          #
+          #   Directory.Packages.props — the root one flips the app into Central
+          #     Package Management, conflicting with the template's inline
+          #     PackageReference versions (NU1008).
+          #   Directory.Build.props/.targets — the root pair sets
+          #     IsAotCompatible=true and promotes IL trim warnings to hard errors.
+          #     A packaged Release build runs ILLink, and CsWinRT's generated ABI
+          #     code emits IL2081 by design, so the app fails to build with 36
+          #     errors and NETSDK1144. Outside the repo those stay warnings.
           Set-Content -Path TestProjects/Directory.Packages.props -Value '<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>'
+          Set-Content -Path TestProjects/Directory.Build.props -Value '<Project />'
+          Set-Content -Path TestProjects/Directory.Build.targets -Value '<Project />'
           Push-Location TestProjects
           try {
               # Bootstrap validates the local 0.0.0-local feed produced by
