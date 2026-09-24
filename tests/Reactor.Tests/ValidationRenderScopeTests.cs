@@ -592,11 +592,19 @@ public class ValidationRenderScopeTests
     {
         var ctx = new ValidationContext();
         ValidationReconciler.ValidateField(ctx, "confirm", "", Validate.Required("Confirmation is required"));
-        ValidationRule(() => false, "Passwords must match", "confirm").Evaluate(ctx);
+
+        // One rule, re-evaluated from one call site — a rule's identity is its code
+        // location, not its message text.
+        var matches = false;
+        void RunRule() => ValidationRule(() => matches, "Passwords must match", "confirm").Evaluate(ctx);
+
+        RunRule();
+        Assert.Equal(2, ctx.GetMessages("confirm").Count);
 
         // Whole-field replacement made a passing rule wipe the required error and report
         // the form valid.
-        ValidationRule(() => true, "Passwords must match", "confirm").Evaluate(ctx);
+        matches = true;
+        RunRule();
 
         var texts = ctx.GetMessages("confirm").Select(m => m.Text).ToList();
         Assert.Single(texts);
@@ -1158,6 +1166,67 @@ public class ValidationRenderScopeTests
         await running;
 
         Assert.Empty(ctx.GetMessages("dates"));
+    }
+
+    [Fact]
+    public void A_Directly_Evaluated_Rule_Replaces_Its_Own_Message_When_The_Text_Changes()
+    {
+        var ctx = new ValidationContext();
+
+        // The message is interpolated, so it moves on every evaluation — the case that
+        // used to orphan the previous verdict under a message-derived producer key.
+        for (var start = 1; start <= 4; start++)
+        {
+            var rule = ValidationRule(() => false, $"Must be after day {start}", "end");
+            rule.Evaluate(ctx);
+        }
+
+        Assert.Single(ctx.GetMessages("end"));
+        Assert.Equal("Must be after day 4", ctx.GetMessages("end")[0].Text);
+    }
+
+    [Fact]
+    public void A_Directly_Evaluated_Rule_Retracts_Once_It_Passes()
+    {
+        var ctx = new ValidationContext();
+
+        var ordered = false;
+        void RunRule() => ValidationRule(() => ordered, "Must be after start", "end").Evaluate(ctx);
+
+        RunRule();
+        Assert.Single(ctx.GetMessages("end"));
+
+        // Same call site, now passing — it has to withdraw what it installed.
+        ordered = true;
+        RunRule();
+
+        Assert.Empty(ctx.GetMessages("end"));
+    }
+
+    [Fact]
+    public void Two_Distinct_Rules_On_One_Field_Keep_Separate_Slots()
+    {
+        var ctx = new ValidationContext();
+
+        ValidationRule(() => false, "Range is closed", "dates").Evaluate(ctx);
+        ValidationRule(() => false, "Range is too long", "dates").Evaluate(ctx);
+
+        Assert.Equal(2, ctx.GetMessages("dates").Count);
+    }
+
+    [Fact]
+    public void A_Directly_Evaluated_Rule_Leaves_Sync_Field_Messages_Alone()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("end", "", Validate.Required());
+        Assert.Single(ctx.GetMessages("end"));
+
+        ValidationRule(() => false, "Must be after start", "end").Evaluate(ctx);
+
+        // The old whole-field clear took the sync verdict with it.
+        Assert.Equal(2, ctx.GetMessages("end").Count);
     }
 
     [Fact]

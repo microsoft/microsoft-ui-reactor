@@ -115,6 +115,17 @@ Conventions for contributors:
   the net state never moved, but each write announced a change that scheduled
   another identical pass. A render that ends with the same messages it started
   with is now silent (issue #1262).
+- An async `ValidationRule` placed in the element tree never ran its predicate.
+  `ValidationRuleAsync` builds an element whose synchronous predicate is a
+  constant `true`, and the mount/update lifecycle evaluated that, so the rule
+  silently recorded a passing verdict. Mounted async rules now run through the
+  generation-guarded async path, with the in-flight pass cancelled on update and
+  on unmount (issue #1262).
+- A rule evaluated directly with `.Evaluate(ctx)` was identified by its message
+  text, so an interpolated message such as `$"Must be after {start}"` orphaned
+  the previous verdict on every change: errors accumulated and a now-passing
+  rule could not retract the one it had installed. Identity is now the field plus
+  the predicate's call site (issue #1262).
 - A field carrying only `.ValidateAsync(field, value, …)` on an element built
   outside a render pass — cached, memoized, or assembled in an event handler — was
   never registered, so `MarkAllTouched()` and the validity summary skipped it.

@@ -126,17 +126,27 @@ public static class ValidationRuleDsl
     /// Identity of last resort for a rule evaluated outside the reconciler, where there
     /// is no mounted instance to key on.
     /// <para>
-    /// It is derived from the message and severity, which is stable for the overwhelmingly
-    /// common case of a fixed message, but not for an interpolated one
-    /// (<c>$"Must be after {start}"</c>) — a changed message reads as a different
-    /// producer, orphaning the previous one. Rules mounted through the element tree get
-    /// a real per-instance identity instead and are unaffected;
-    /// <see cref="ValidationReconciler.EvaluateRules"/> keys by position. Prefer either
-    /// over calling <c>Evaluate</c> directly in a render loop.
+    /// Derived from the field plus the predicate's *method* — for a lambda, the
+    /// compiler-generated method for that call site — so the same line of code owns the
+    /// same slot on every evaluation. Keying on the message instead (as this once did)
+    /// orphaned the previous verdict whenever the text moved, which an interpolated
+    /// message such as <c>$"Must be after {start}"</c> does on every change: errors
+    /// accumulated and a now-passing rule could not retract the one it replaced.
+    /// </para>
+    /// <para>
+    /// Two rules built at the same call site for the same field still share a slot and
+    /// overwrite each other. Mounting them through the element tree gives each a real
+    /// per-instance identity; prefer that over calling <c>Evaluate</c> in a loop.
     /// </para>
     /// </summary>
-    internal static string FallbackProducerKey(ValidationRuleElement rule) =>
-        $"rule:{(int)rule.Severity}:{rule.Message}";
+    internal static string FallbackProducerKey(ValidationRuleElement rule)
+    {
+        // An async rule's synchronous Predicate is the shared `() => true` created inside
+        // ValidationRuleAsync, identical for every such rule — so key off the predicate
+        // that actually belongs to this call site.
+        var method = rule.AsyncPredicate?.Method ?? rule.Predicate.Method;
+        return $"rule:{rule.Field}:{method.DeclaringType?.FullName}.{method.Name}";
+    }
 
     private static List<ValidationMessage> BuildMessages(ValidationRuleElement rule, bool passed) =>
         passed ? [] : [new ValidationMessage(rule.Field, rule.Message, rule.Severity)];

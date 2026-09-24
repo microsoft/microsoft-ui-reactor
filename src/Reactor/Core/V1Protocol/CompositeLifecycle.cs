@@ -317,7 +317,7 @@ internal static class CompositeLifecycle
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
         if (valCtx is not null)
         {
-            rule.Evaluate(valCtx, binding.Producer);
+            EvaluateRuleForBinding(rule, valCtx, binding);
             binding.Context = valCtx;
             binding.Field = rule.Field;
         }
@@ -345,7 +345,7 @@ internal static class CompositeLifecycle
 
         if (valCtx is not null)
         {
-            rule.Evaluate(valCtx, binding.Producer);
+            EvaluateRuleForBinding(rule, valCtx, binding);
             binding.Context = valCtx;
             binding.Field = rule.Field;
         }
@@ -361,6 +361,10 @@ internal static class CompositeLifecycle
     {
         if (!_ruleBindings.TryGetValue(placeholder, out var binding)) return;
 
+        // A pass still running would otherwise install a verdict for a rule that has
+        // already left the tree.
+        CancelPendingRule(binding);
+
         if (binding.Context is { } ctx && binding.Field is { } field)
             ctx.ApplyOwned(field, binding.Producer, []);
 
@@ -373,6 +377,76 @@ internal static class CompositeLifecycle
         internal string Producer = "";
         internal ValidationContext? Context;
         internal string? Field;
+        internal global::System.Threading.CancellationTokenSource? Pending;
+    }
+
+    /// <summary>
+    /// Runs a mounted rule against its context, dispatching an async rule through the
+    /// generation-guarded async path instead of its synchronous stand-in.
+    /// <para>
+    /// <c>ValidationRuleAsync</c> builds an element whose synchronous predicate is a
+    /// constant <c>true</c>, so evaluating it synchronously recorded a passing verdict
+    /// for every async rule placed in the tree — the predicate never ran at all
+    /// (issue #1262 review).
+    /// </para>
+    /// <para>
+    /// Each pass supersedes the previous one: the old token is cancelled, and the
+    /// context's per-producer generation discards whatever an already-resolved older
+    /// pass tries to install. Unmount cancels the outstanding pass as well, so a rule
+    /// that left the tree cannot write to the context afterwards.
+    /// </para>
+    /// </summary>
+    private static void EvaluateRuleForBinding(ValidationRuleElement rule, ValidationContext valCtx, RuleBinding binding)
+    {
+        if (rule.AsyncPredicate is null)
+        {
+            CancelPendingRule(binding);
+            rule.Evaluate(valCtx, binding.Producer);
+            return;
+        }
+
+        CancelPendingRule(binding);
+        var cts = new global::System.Threading.CancellationTokenSource();
+        binding.Pending = cts;
+        _ = RunAsyncRuleAsync(rule, valCtx, binding, cts);
+    }
+
+    private static async Task RunAsyncRuleAsync(
+        ValidationRuleElement rule, ValidationContext valCtx, RuleBinding binding,
+        global::System.Threading.CancellationTokenSource cts)
+    {
+        try
+        {
+            await rule.EvaluateAsync(valCtx, binding.Producer, cts.Token);
+        }
+        catch (global::System.OperationCanceledException)
+        {
+            // Superseded by a newer pass, or the rule left the tree.
+        }
+        catch (global::System.Exception ex)
+        {
+            // An app predicate threw. Surfacing it as an unobserved task exception would
+            // tear the process down later and far from the cause, so report it where the
+            // rest of the framework reports background faults and leave the previous
+            // verdict in place.
+            Diagnostics.DiagnosticLog.SwallowedError(
+                Diagnostics.LogCategory.Reactor, "ValidationRuleAsync.Evaluate", ex);
+        }
+        finally
+        {
+            if (ReferenceEquals(binding.Pending, cts)) binding.Pending = null;
+            cts.Dispose();
+        }
+    }
+
+    private static void CancelPendingRule(RuleBinding binding)
+    {
+        var pending = binding.Pending;
+        if (pending is null) return;
+
+        binding.Pending = null;
+        try { pending.Cancel(); }
+        catch (global::System.ObjectDisposedException) { }
     }
 
     private static long s_ruleProducerSeed;

@@ -354,31 +354,33 @@ internal static class ValidationCoverageFixtures
         {
             var ctx = new ValidationContext();
 
-            // Sync rule — fails
-            var rule = ValidationRule(() => false, "Must be valid", "field1");
-            rule.Evaluate(ctx);
+            // Sync rule — fails, then the *same rule* (same call site) passes and
+            // retracts its own message. A rule's identity is its code location, not its
+            // message text, so re-running one call site is what models "this rule again"
+            // (issue #1262 review).
+            var field1Ok = false;
+            void RunSyncRule() => ValidationRule(() => field1Ok, "Must be valid", "field1").Evaluate(ctx);
+
+            RunSyncRule();
             H.Check("ValRule_SyncFail", ctx.HasError("field1"));
 
-            // Sync rule — passes (clears previous)
-            var rule2 = ValidationRule(() => true, "Must be valid", "field1");
-            rule2.Evaluate(ctx);
+            field1Ok = true;
+            RunSyncRule();
             H.Check("ValRule_SyncPass", !ctx.HasError("field1"));
 
-            // Async rule — fails
-            var asyncRule = ValidationRuleAsync(
-                async () => { await Task.Delay(1); return false; },
-                "Async fail", "field2");
-            await asyncRule.EvaluateAsync(ctx);
+            // Async rule — fails, then the same call site passes and retracts. Using a
+            // *different* call site here would assert the old whole-field-replace
+            // behaviour, where any passing rule erased every other producer's errors.
+            var field2Ok = false;
+            async Task RunAsyncRule() => await ValidationRuleAsync(
+                async () => { await Task.Delay(1); return field2Ok; },
+                "Async fail", "field2").EvaluateAsync(ctx);
+
+            await RunAsyncRule();
             H.Check("ValRule_AsyncFail", ctx.HasError("field2"));
 
-            // Async rule — the same rule (same message, so the same producer) now
-            // passes and retracts its own message. Using a *different* rule here would
-            // assert the old whole-field-replace behaviour, where any passing rule
-            // erased every other producer's errors on the field (issue #1262 review).
-            var asyncRule2 = ValidationRuleAsync(
-                async () => { await Task.Delay(1); return true; },
-                "Async fail", "field2");
-            await asyncRule2.EvaluateAsync(ctx);
+            field2Ok = true;
+            await RunAsyncRule();
             H.Check("ValRule_AsyncPass", !ctx.HasError("field2"));
 
             // A different passing rule must leave another producer's error alone.
@@ -1166,6 +1168,70 @@ internal static class ValidationCoverageFixtures
 
             var done = H.CreateHost();
             done.Mount(c => TextBlock("Issue1262 chained validate done"));
+            await Harness.Render();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — a mounted async rule must actually run.
+    //
+    //  ValidationRuleAsync builds an element whose synchronous predicate is a
+    //  constant true, and both lifecycle paths called Evaluate — so placing an
+    //  async rule in the tree recorded a passing verdict and never invoked the
+    //  predicate at all.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_MountedAsyncRuleRuns(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var ctx = new ValidationContext();
+            var host = H.CreateHost();
+            var invocations = 0;
+            Action<bool>? setShowRule = null;
+
+            host.Mount(c =>
+            {
+                var (showRule, setShow) = c.UseState(true);
+                setShowRule = setShow;
+
+                return VStack(12,
+                    When(showRule, () => ValidationRuleAsync(
+                        () =>
+                        {
+                            invocations++;
+                            return Task.FromResult(false);
+                        },
+                        "Name is already taken",
+                        "name")),
+                    TextBlock("body"))
+                    .Provide(ValidationContexts.Current, ctx);
+            });
+
+            await Harness.Render();
+            for (var i = 0; i < 4 && ctx.GetMessages("name").Count == 0; i++)
+                await Harness.Render();
+
+            H.Check("Issue1262_AsyncRule_PredicateInvoked", invocations > 0, $"invocations={invocations}");
+            H.Check("Issue1262_AsyncRule_VerdictInstalled", ctx.GetMessages("name").Count == 1,
+                $"messages={ctx.GetMessages("name").Count}");
+            H.Check("Issue1262_AsyncRule_Invalid", !ctx.IsValid());
+
+            // Re-rendering must not accumulate: the producer slot is replaced, not appended.
+            await Harness.Render();
+            await Harness.Render();
+            H.Check("Issue1262_AsyncRule_NoAccumulation", ctx.GetMessages("name").Count == 1,
+                $"messages={ctx.GetMessages("name").Count}");
+
+            // And removal retracts it, cancelling any pass still in flight.
+            setShowRule!(false);
+            await Harness.Render();
+            await Harness.Render();
+            H.Check("Issue1262_AsyncRule_RetractedOnRemoval", ctx.GetMessages("name").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("name").Select(m => m.Text))}");
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 async rule done"));
             await Harness.Render();
         }
     }
