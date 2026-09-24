@@ -136,6 +136,29 @@ public static class ValidationRuleDsl
         ctx.ApplyAsyncOwned(rule.Field, producer, generation, BuildMessages(rule, result));
     }
 
+    internal static List<ValidationMessage> ComputeSync(this ValidationRuleElement rule)
+    {
+        if (rule.AsyncPredicate is not null)
+        {
+            throw new InvalidOperationException(
+                $"The validation rule for field '{rule.Field}' has an async predicate and cannot be " +
+                "evaluated synchronously. Use EvaluateAsync or ValidationReconciler.EvaluateRulesAsync, " +
+                "or mount the rule in the element tree, which dispatches it asynchronously.");
+        }
+
+        return BuildMessages(rule, rule.Predicate());
+    }
+
+    internal static async Task<List<ValidationMessage>> ComputeAsync(
+        this ValidationRuleElement rule, CancellationToken cancellationToken = default)
+    {
+        if (rule.AsyncPredicate is null) return BuildMessages(rule, rule.Predicate());
+
+        var result = await rule.AsyncPredicate();
+        cancellationToken.ThrowIfCancellationRequested();
+        return BuildMessages(rule, result);
+    }
+
     /// <summary>
     /// Identity of last resort for a rule evaluated outside the reconciler, where there
     /// is no mounted instance to key on.

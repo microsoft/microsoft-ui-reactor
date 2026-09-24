@@ -326,6 +326,7 @@ internal static class CompositeLifecycle
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
         if (valCtx is not null)
         {
+            valCtx.RegisterField(rule.Field);
             EvaluateRuleForBinding(rule, valCtx, binding);
             binding.Context = valCtx;
             binding.Field = rule.Field;
@@ -357,6 +358,7 @@ internal static class CompositeLifecycle
 
         if (valCtx is not null)
         {
+            valCtx.RegisterField(rule.Field);
             EvaluateRuleForBinding(rule, valCtx, binding);
             binding.Context = valCtx;
             binding.Field = rule.Field;

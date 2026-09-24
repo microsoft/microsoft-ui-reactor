@@ -1388,6 +1388,93 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public void Two_Producers_With_Identical_Messages_Stay_Independent()
+    {
+        var ctx = new ValidationContext();
+
+        var firstPasses = false;
+        void RunFirst() => ValidationRule(() => firstPasses, "Range is invalid", "dates").Evaluate(ctx);
+        void RunSecond() => ValidationRule(() => false, "Range is invalid", "dates").Evaluate(ctx);
+
+        RunFirst();
+        RunSecond();
+        Assert.Equal(2, ctx.GetMessages("dates").Count);
+
+        // The first rule now passes. The second still fails, and its verdict happens to
+        // be word-for-word identical — retracting one must not take the other with it.
+        firstPasses = true;
+        RunFirst();
+
+        Assert.Single(ctx.GetMessages("dates"));
+        Assert.Equal("Range is invalid", ctx.GetMessages("dates")[0].Text);
+        Assert.False(ctx.IsValid());
+
+        // And the survivor is still owned, so it retracts when *it* passes.
+        RunSecond();
+        Assert.Single(ctx.GetMessages("dates"));
+    }
+
+    [Fact]
+    public async Task A_Sync_Batch_Overtakes_A_Running_Async_Batch()
+    {
+        var ctx = new ValidationContext();
+        var slow = new TaskCompletionSource<bool>();
+
+        var older = ValidationReconciler.EvaluateRulesAsync(
+            ctx, ValidationRuleAsync(() => slow.Task, "Stale verdict", "a"));
+
+        // A synchronous batch requested while the async one is still out. It advances
+        // the same generation counter, so the async batch must stand down.
+        ValidationReconciler.EvaluateRules(
+            ctx, ValidationRule(() => false, "Current verdict", "b"));
+
+        slow.SetResult(false);
+        await older;
+
+        Assert.Empty(ctx.GetMessages("a"));
+        Assert.Single(ctx.GetMessages("b"));
+        Assert.Equal("Current verdict", ctx.GetMessages("b")[0].Text);
+    }
+
+    [Fact]
+    public async Task A_Never_Completing_Rule_Does_Not_Block_Later_Batches()
+    {
+        var ctx = new ValidationContext();
+        var never = new TaskCompletionSource<bool>();
+
+        // Deliberately never completed: a caller's predicate can hang.
+        var stuck = ValidationReconciler.EvaluateRulesAsync(
+            ctx, ValidationRuleAsync(() => never.Task, "Never resolves", "a"));
+
+        // A later batch has to make progress regardless.
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, ValidationRuleAsync(() => Task.FromResult(false), "Current verdict", "b"));
+
+        Assert.Single(ctx.GetMessages("b"));
+        Assert.False(stuck.IsCompleted);
+    }
+
+    [Fact]
+    public async Task A_Batch_Producer_That_Turns_Synchronous_Keeps_Its_Verdict()
+    {
+        var ctx = new ValidationContext();
+
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, ValidationRuleAsync(() => Task.FromResult(false), "Rule failed", "name"));
+        Assert.Single(ctx.GetMessages("name"));
+
+        // Same position, now a synchronous rule — so the same producer key.
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, ValidationRule(() => false, "Rule failed", "name"));
+        Assert.Single(ctx.GetMessages("name"));
+
+        // A value change retires async producers; this one is no longer async.
+        ctx.NotifyValueChanged("name", "anything");
+
+        Assert.Single(ctx.GetMessages("name"));
+    }
+
+    [Fact]
     public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
     {
         var ctx = new ValidationContext();

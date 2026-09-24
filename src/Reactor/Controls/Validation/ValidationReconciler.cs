@@ -103,23 +103,17 @@ public static class ValidationReconciler
         ValidationContext ctx,
         params ValidationRuleElement[] rules)
     {
+        var generation = NextRuleSetGeneration(ctx);
+
         var applied = new List<(string Field, string Producer)>(rules.Length);
         for (var i = 0; i < rules.Length; i++)
         {
-            var producer = "rules[" + i.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "]";
-            ctx.RegisterField(rules[i].Field);
-            rules[i].Evaluate(ctx, producer);
+            var producer = RuleProducer(i);
             applied.Add((rules[i].Field, producer));
+            CommitRuleVerdict(ctx, rules[i].Field, producer, rules[i].ComputeSync());
         }
 
-        if (_ruleSets.TryGetValue(ctx, out var previous))
-        {
-            foreach (var entry in previous.Where(entry => !applied.Contains(entry)))
-                ctx.RetireProducer(entry.Field, entry.Producer);
-            _ruleSets.Remove(ctx);
-        }
-
-        _ruleSets.Add(ctx, applied);
+        CommitRuleSet(ctx, generation, applied);
     }
 
     /// <summary>
@@ -137,58 +131,85 @@ public static class ValidationReconciler
     /// contribution withdrawn.
     /// </para>
     /// <para>
-    /// Batches against one context are serialized, and a batch that finds a newer one
-    /// already requested stands down without writing. Overlapping batches would
-    /// otherwise interleave: an older call's <c>rules[0]</c> on field A and a newer
-    /// call's <c>rules[0]</c> on field B are tracked under different fields, so the
-    /// per-producer generation cannot order them, and whichever finished last would own
-    /// the bookkeeping for both.
+    /// Every verdict is computed before any of them is installed, and nothing is
+    /// installed if another batch — synchronous or asynchronous — has been requested
+    /// against this context in the meantime. Both APIs advance one generation counter, so
+    /// an overtaken batch stands down with nothing to unwind. No lock is held across a
+    /// caller's predicate, so a predicate that never completes cannot block later batches.
     /// </para>
     /// </summary>
     public static async Task EvaluateRulesAsync(
         ValidationContext ctx,
         params ValidationRuleElement[] rules)
     {
-        var ticket = _ruleSetTickets.GetValue(ctx, static _ => new global::System.Runtime.CompilerServices.StrongBox<int>(0));
-        var generation = global::System.Threading.Interlocked.Increment(ref ticket.Value);
+        var generation = NextRuleSetGeneration(ctx);
 
-        var gate = _ruleSetGates.GetValue(ctx, static _ => new global::System.Threading.SemaphoreSlim(1, 1));
-        await gate.WaitAsync().ConfigureAwait(true);
-        try
+        var verdicts = new List<(string Field, string Producer, List<ValidationMessage> Messages)>(rules.Length);
+        for (var i = 0; i < rules.Length; i++)
+            verdicts.Add((rules[i].Field, RuleProducer(i), await rules[i].ComputeAsync()));
+
+        if (!IsNewestRuleSet(ctx, generation)) return;
+
+        var applied = new List<(string Field, string Producer)>(verdicts.Count);
+        foreach (var verdict in verdicts)
         {
-            // A newer batch was requested while this one waited; it supersedes this set
-            // wholesale, so writing anything here would be stale by definition.
-            if (global::System.Threading.Volatile.Read(ref ticket.Value) != generation) return;
-
-            var applied = new List<(string Field, string Producer)>(rules.Length);
-            for (var i = 0; i < rules.Length; i++)
-            {
-                var producer = "rules[" + i.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "]";
-                ctx.RegisterField(rules[i].Field);
-                await rules[i].EvaluateAsync(ctx, producer);
-                applied.Add((rules[i].Field, producer));
-            }
-
-            if (_ruleSets.TryGetValue(ctx, out var previous))
-            {
-                foreach (var entry in previous.Where(entry => !applied.Contains(entry)))
-                    ctx.RetireProducer(entry.Field, entry.Producer);
-                _ruleSets.Remove(ctx);
-            }
-
-            _ruleSets.Add(ctx, applied);
+            applied.Add((verdict.Field, verdict.Producer));
+            CommitRuleVerdict(ctx, verdict.Field, verdict.Producer, verdict.Messages);
         }
-        finally
-        {
-            gate.Release();
-        }
+
+        CommitRuleSet(ctx, generation, applied);
     }
 
-    // Per-context batch ordering: the ticket names the most recently requested batch, the
-    // gate keeps two from running at once. Weak on the context so neither holds it alive.
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<ValidationContext, global::System.Runtime.CompilerServices.StrongBox<int>> _ruleSetTickets = new();
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<ValidationContext, global::System.Threading.SemaphoreSlim> _ruleSetGates = new();
+    private static string RuleProducer(int index) =>
+        "rules[" + index.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "]";
 
+    /// <summary>
+    /// Installs one rule's verdict.
+    /// <para>
+    /// No per-producer async generation is involved: a batch computes every verdict
+    /// before installing any of them and orders itself by its own generation, so
+    /// <c>ComputeAsync</c> deliberately never opens one. That is what keeps a batch
+    /// producer that switches from asynchronous to synchronous from leaving a stale
+    /// token behind for the next value change to act on.
+    /// </para>
+    /// </summary>
+    private static void CommitRuleVerdict(
+        ValidationContext ctx, string field, string producer, List<ValidationMessage> messages)
+    {
+        ctx.RegisterField(field);
+        ctx.ApplyOwned(field, producer, messages);
+    }
+
+    private static void CommitRuleSet(
+        ValidationContext ctx, int generation, List<(string Field, string Producer)> applied)
+    {
+        if (!IsNewestRuleSet(ctx, generation)) return;
+
+        if (_ruleSets.TryGetValue(ctx, out var previous))
+        {
+            foreach (var entry in previous.Where(entry => !applied.Contains(entry)))
+                ctx.RetireProducer(entry.Field, entry.Producer);
+            _ruleSets.Remove(ctx);
+        }
+
+        _ruleSets.Add(ctx, applied);
+    }
+
+    private static int NextRuleSetGeneration(ValidationContext ctx)
+    {
+        var ticket = _ruleSetTickets.GetValue(ctx, static _ => new global::System.Runtime.CompilerServices.StrongBox<int>(0));
+        return global::System.Threading.Interlocked.Increment(ref ticket.Value);
+    }
+
+    private static bool IsNewestRuleSet(ValidationContext ctx, int generation)
+    {
+        var ticket = _ruleSetTickets.GetValue(ctx, static _ => new global::System.Runtime.CompilerServices.StrongBox<int>(0));
+        return global::System.Threading.Volatile.Read(ref ticket.Value) == generation;
+    }
+
+    // Names the most recently requested rule set for a context, so an overtaken batch can
+    // stand down. Weak on the context so it holds nothing alive.
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<ValidationContext, global::System.Runtime.CompilerServices.StrongBox<int>> _ruleSetTickets = new();
     // The rule set most recently evaluated against each context, so the next call can
     // withdraw whatever disappeared. Weak on the context so it holds nothing alive.
     private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<ValidationContext, List<(string Field, string Producer)>> _ruleSets = new();
