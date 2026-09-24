@@ -139,8 +139,23 @@ public static class WinAppSdkTemplates
         // App SDK one when both happen to be installed.
         var output = RunCapture("new", "uninstall");
         if (output is null) return null;
-        return output.Contains(PackageId, StringComparison.OrdinalIgnoreCase);
+        return InterpretPackageInstalledOutput(output);
     }
+
+    /// <summary>
+    /// Whether this pack's id appears as a listed package in `dotnet new uninstall`
+    /// output. Split out (and internal) so the matching rule is testable.
+    /// </summary>
+    /// <remarks>
+    /// Matches the id line exactly rather than searching the transcript: a
+    /// substring hit also fires on a longer id that merely contains ours, and on
+    /// the uninstall hint lines that echo the id. Either would report an old pack
+    /// as installed and send the caller to the wrong remediation.
+    /// </remarks>
+    internal static bool InterpretPackageInstalledOutput(string output) =>
+        output
+            .Split('\n')
+            .Any(line => string.Equals(line.Trim(), PackageId, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// True when `dotnet new reactor` will actually resolve — i.e. the blank
@@ -417,8 +432,14 @@ public static class WinAppSdkTemplates
     {
         var hasSource = !string.IsNullOrWhiteSpace(source);
         var pinned = !string.IsNullOrWhiteSpace(version);
-        // Only a policy-passing feed may be handed to `dotnet new install`.
-        var installFeed = !string.IsNullOrWhiteSpace(feed) && IsAllowedFeedUrl(feed) ? feed : null;
+        // Only a policy-passing feed may be handed to `dotnet new install`, and
+        // only when there is no local `--source`. Adding the mirror alongside a
+        // folder would reintroduce the collision this command exists to prevent:
+        // NuGet treats identical id+version candidates across sources as
+        // interchangeable, so an unpublished local 0.0.7-alpha could be served by
+        // the published 0.0.7-alpha instead. With a folder source the mirror is
+        // unused for resolution too — the folder listing is authoritative.
+        var installFeed = !hasSource && !string.IsNullOrWhiteSpace(feed) && IsAllowedFeedUrl(feed) ? feed : null;
         // `--source` must be a local folder of nupkgs.
         //
         // `dotnet new install` has no feed-isolation switch: `--add-source` only
@@ -513,14 +534,15 @@ public static class WinAppSdkTemplates
     /// testable without launching a process.
     /// </summary>
     /// <remarks>
-    /// Both sources are <c>--add-source</c>, but they mean different things.
-    /// <paramref name="source"/> is a local folder the caller said to install
-    /// *from*; <paramref name="feed"/> is the mirror this clone is configured
-    /// against, and it has to be here as well as in version resolution —
-    /// `dotnet new install` runs its own restore and ignores the MSBuild
-    /// <c>RestoreSources</c>/<c>RestoreConfigFile</c> that
-    /// <c>Invoke-ReactorWithRestoreEnvironment</c> sets, so a mirror-only machine
-    /// would resolve a version and then fail to download it.
+    /// Both sources are <c>--add-source</c>, but they are mutually exclusive by
+    /// construction. <paramref name="source"/> is a local folder the caller said
+    /// to install *from*, and adding a mirror beside it would let NuGet serve the
+    /// published package under the same version string instead. <paramref
+    /// name="feed"/> is only used when there is no folder: it has to be here as
+    /// well as in version resolution, because `dotnet new install` runs its own
+    /// restore and ignores the MSBuild <c>RestoreSources</c>/<c>RestoreConfigFile</c>
+    /// that <c>Invoke-ReactorWithRestoreEnvironment</c> sets, so a mirror-only
+    /// machine would resolve a version and then fail to download it.
     /// </remarks>
     internal static IReadOnlyList<string> BuildInstallArgs(string? target, string? source, string? feed, bool force)
     {

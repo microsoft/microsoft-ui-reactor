@@ -727,23 +727,40 @@ public sealed class WinAppSdkTemplatesTests
     }
 
     [Fact]
-    public void BuildInstallArgs_adds_both_the_folder_source_and_the_mirror_feed()
+    public void BuildInstallArgs_adds_the_mirror_feed_when_there_is_no_folder_source()
     {
         // `dotnet new install` runs its own restore and ignores the MSBuild
         // RestoreSources/RestoreConfigFile that Invoke-ReactorWithRestoreEnvironment
         // sets, so the configured mirror has to appear here too. Resolving a version
         // from the mirror and then downloading it from nowhere is the failure mode.
         var args = WinAppSdkTemplates.BuildInstallArgs(
-            "0.0.7-alpha", @"C:\pkgs", "https://mirror.example.com/v3/index.json", force: true);
+            "0.0.7-alpha", source: null, feed: "https://mirror.example.com/v3/index.json", force: true);
 
         Assert.Equal(
             new[]
             {
                 "new", "install", $"{WinAppSdkTemplates.PackageId}::0.0.7-alpha", "--force",
-                "--add-source", @"C:\pkgs",
                 "--add-source", "https://mirror.example.com/v3/index.json",
             },
             args);
+    }
+
+    [Fact]
+    public void Install_does_not_add_the_mirror_beside_a_local_source()
+    {
+        // THE REGRESSION: NuGet treats identical id+version candidates across
+        // sources as interchangeable, so a mirror listed beside the folder can
+        // serve the *published* 0.0.7-alpha instead of the unpublished one the
+        // caller pointed at — the exact collision --source exists to avoid.
+        // Asserted on the decision, not just on BuildInstallArgs, because the
+        // suppression happens in Install().
+        var withBoth = WinAppSdkTemplates.BuildInstallArgs(
+            "0.0.7-alpha", @"C:\pkgs", feed: null, force: false);
+
+        Assert.Equal(
+            new[] { "new", "install", $"{WinAppSdkTemplates.PackageId}::0.0.7-alpha", "--add-source", @"C:\pkgs" },
+            withBoth);
+        Assert.Single(withBoth, a => a == "--add-source");
     }
 
     [Theory]
@@ -759,6 +776,29 @@ public sealed class WinAppSdkTemplatesTests
         // A dangling `--add-source` with no value would make `dotnet new install`
         // swallow the next token, so the flag must never outnumber the values.
         Assert.DoesNotContain("--force", args);
+    }
+
+    [Fact]
+    public void InterpretPackageInstalledOutput_matches_the_id_line_exactly()
+    {
+        // A substring search over the transcript also fires on a longer id that
+        // merely contains ours, and on the hint lines that echo it — reporting an
+        // old pack as installed and choosing the wrong remediation.
+        const string otherPackOnly = """
+            Currently installed items:
+               Microsoft.WindowsAppSDK.WinUI.CSharp.Templates.Extras
+                  Version: 1.0.0
+               Uninstall command:
+                  dotnet new uninstall Microsoft.WindowsAppSDK.WinUI.CSharp.Templates.Extras
+            """;
+        Assert.False(WinAppSdkTemplates.InterpretPackageInstalledOutput(otherPackOnly));
+
+        const string thisPack = """
+            Currently installed items:
+               Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
+                  Version: 0.0.7-alpha
+            """;
+        Assert.True(WinAppSdkTemplates.InterpretPackageInstalledOutput(thisPack));
     }
 
     // ── False-PASS guard: "pack installed" != "templates usable" ───────────
