@@ -203,19 +203,25 @@
     conditional block (the two settings never co-exist, though reading the raw csproj
     can suggest they do).
 
-    NOT removed by an SDK upgrade alone. WindowsAppSDK#6394 is CLOSED, fixed in MSIX
-    build tools 1.7.260903100 by Pri.targets' AddProjectPriToResolvedFileToPublish /
-    AddXbfFilesToResolvedFileToPublish. That fix is real but reachable only via
-    EnableMsixTooling -> MsixPackageSupport -> ShouldImportMsixCommonTargets ->
-    Packaging.targets -> Pri.targets; with the flag off the build takes the MrtCore
-    branch, which has no publish step. The official WinUI templates set
-    EnableMsixTooling=true, so the mainstream app IS fixed by upgrading - Reactor's
-    template is the case outside it, shipping WindowsPackageType=None without the flag.
-    Measured on 1.7.260903100 with a -v:detailed publish: without the flag each fix
-    target runs 0 times and no app .pri is published; with it, each runs twice and the
-    .pri appears (that second cell being the control proving the probe can match).
-    Delete this once those targets run WITHOUT EnableMsixTooling, or if the template
-    adopts the flag; the opt-out control in PriPackagingTests fails when that happens.
+    NOT removed by an SDK upgrade alone, and not by EnableMsixTooling alone either.
+    WindowsAppSDK#6394 is CLOSED, fixed in MSIX build tools 1.7.260903100 by
+    Pri.targets' AddProjectPriToResolvedFileToPublish / AddXbfFilesToResolvedFileToPublish.
+    Two things keep that out of reach for a Reactor app today:
+
+      1. Those targets are imported only via EnableMsixTooling -> MsixPackageSupport ->
+         ShouldImportMsixCommonTargets -> Packaging.targets -> Pri.targets. With the flag
+         off the build takes the MrtCore branch, which has no publish step. The official
+         WinUI templates DO set the flag, which is why upstream considers it fixed;
+         Reactor's template ships WindowsPackageType=None without it.
+      2. The .xbf half landed only in 1.7.260903100, and no Microsoft.WindowsAppSDK
+         release pulls that yet - 2.5.1 resolves 1.7.251221100. Measured: an unpackaged
+         consumer with EnableMsixTooling=true on the version the SDK actually resolves
+         publishes its app .pri but NOT its own compiled .xbf.
+
+    So enabling the flag today would fix half the gap and add the whole single-project
+    MSIX pipeline. Delete this target once an SDK release pulls build tools >=
+    1.7.260903100 AND either those targets leave the gate or the template adopts the
+    flag; the opt-out control in PriPackagingTests fails when that happens.
 
     Note the Exclude: $(PublishDir) is nested INSIDE $(OutputPath) by default
     (bin\<cfg>\<tfm>\<rid>\publish\), so globbing $(OutputPath)**\*.xbf without it would
