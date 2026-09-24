@@ -186,10 +186,7 @@ public sealed class ValidationContext
     private string MessageSnapshotLocked()
     {
         var fields = new List<string>(_messages.Keys);
-        foreach (var field in _externalMessages.Keys)
-        {
-            if (!_messages.ContainsKey(field)) fields.Add(field);
-        }
+        fields.AddRange(_externalMessages.Keys.Where(field => !_messages.ContainsKey(field)));
         fields.Sort(StringComparer.Ordinal);
 
         var sb = new global::System.Text.StringBuilder();
