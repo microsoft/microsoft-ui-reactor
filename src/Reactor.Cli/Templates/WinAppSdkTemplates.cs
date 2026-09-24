@@ -760,12 +760,16 @@ public static class WinAppSdkTemplates
         {
             using var proc = Process.Start(psi);
             if (proc is null) return null;
-            var stdout = proc.StandardOutput.ReadToEnd();
-            var stderr = proc.StandardError.ReadToEnd();
+            // Drain both pipes concurrently. Reading stdout to the end first lets
+            // `dotnet new` fill the unread stderr pipe and block before it exits —
+            // a deadlock, not a slow path. CheckCommand documents the same hazard.
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+            global::System.Threading.Tasks.Task.WaitAll(stdoutTask, stderrTask);
             proc.WaitForExit();
             // `dotnet new uninstall` exits non-zero when nothing is installed
             // while still printing a usable listing, so don't gate on ExitCode.
-            return stdout + stderr;
+            return stdoutTask.Result + stderrTask.Result;
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
