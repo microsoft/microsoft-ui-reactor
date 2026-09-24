@@ -235,9 +235,10 @@ public static class ValidationReconciler
         List<(string Field, string Producer, List<ValidationMessage> Messages)> verdicts)
     {
         // The generation check, the recorded-set swap and the context transaction are one
-        // critical section: checking and then acting let a concurrent commit slip between
-        // them. Nothing inside runs caller code, so this cannot be blocked by a predicate.
-        lock (_ruleSetCommitLocks.GetValue(ctx, static _ => new object()))
+        // critical section, and generation advancement takes the same lock — so no
+        // concurrent call can overtake this one between its check and its apply. Nothing
+        // inside runs caller code, so this cannot be blocked by a predicate.
+        lock (RuleSetLock(ctx))
         {
             if (!IsNewestRuleSet(ctx, setId, generation)) return;
 
@@ -258,24 +259,31 @@ public static class ValidationReconciler
 
     private static int NextRuleSetGeneration(ValidationContext ctx, string setId)
     {
-        var tickets = _ruleSetTickets.GetValue(ctx, static _ => new Dictionary<string, global::System.Runtime.CompilerServices.StrongBox<int>>(StringComparer.Ordinal));
-        lock (tickets)
+        // Advancing the generation takes the same lock as the commit, so a concurrent
+        // call cannot slip an increment between another call's check and its apply —
+        // which would let that call commit a verdict it had already been overtaken on.
+        // Monitor is reentrant, so a commit-triggered notification that re-enters here
+        // on the same thread is fine.
+        lock (RuleSetLock(ctx))
         {
+            var tickets = _ruleSetTickets.GetValue(ctx, static _ => new Dictionary<string, global::System.Runtime.CompilerServices.StrongBox<int>>(StringComparer.Ordinal));
             if (!tickets.TryGetValue(setId, out var box))
                 tickets[setId] = box = new global::System.Runtime.CompilerServices.StrongBox<int>(0);
-            return global::System.Threading.Interlocked.Increment(ref box.Value);
+            return ++box.Value;
         }
     }
 
     private static bool IsNewestRuleSet(ValidationContext ctx, string setId, int generation)
     {
-        var tickets = _ruleSetTickets.GetValue(ctx, static _ => new Dictionary<string, global::System.Runtime.CompilerServices.StrongBox<int>>(StringComparer.Ordinal));
-        lock (tickets)
+        lock (RuleSetLock(ctx))
         {
-            return tickets.TryGetValue(setId, out var box)
-                && global::System.Threading.Volatile.Read(ref box.Value) == generation;
+            var tickets = _ruleSetTickets.GetValue(ctx, static _ => new Dictionary<string, global::System.Runtime.CompilerServices.StrongBox<int>>(StringComparer.Ordinal));
+            return tickets.TryGetValue(setId, out var box) && box.Value == generation;
         }
     }
+
+    private static object RuleSetLock(ValidationContext ctx) =>
+        _ruleSetCommitLocks.GetValue(ctx, static _ => new object());
 
     // Per-context, per-set bookkeeping: the last recorded membership of each named set,
     // the generation naming its most recent call, and the lock that makes a commit
