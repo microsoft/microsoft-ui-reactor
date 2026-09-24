@@ -548,9 +548,8 @@ public static partial class SearchIndexGenerator
         var rootSkill = Path.Join(agentKitRoot, "SKILL.md");
         if (File.Exists(rootSkill)) files.Add(rootSkill);
 
-        foreach (var dir in new[] { "plugins", "skills" })
+        foreach (var full in new[] { "plugins", "skills" }.Select(dir => Path.Join(agentKitRoot, dir)))
         {
-            var full = Path.Join(agentKitRoot, dir);
             if (Directory.Exists(full))
                 files.AddRange(Directory.EnumerateFiles(full, "*.md", SearchOption.AllDirectories));
         }
@@ -636,6 +635,15 @@ public static partial class SearchIndexGenerator
             var pathPart = hash >= 0 ? target[..hash] : target;
             var anchor = hash >= 0 ? target[hash..] : "";
             if (pathPart.Length == 0) return m.Value;
+
+            // Reject a rooted target explicitly rather than letting Path.Combine silently drop
+            // fileDir and resolve somewhere else entirely. This covers both a filesystem path
+            // ("C:\x") and a site-absolute markdown link ("/docs/guide/x.md"), neither of which
+            // this rewriter can meaningfully resolve — and says so, instead of surfacing the
+            // downstream "escapes the repo" error for what is really a different mistake.
+            if (Path.IsPathRooted(pathPart))
+                throw new InvalidOperationException(
+                    $"{where}: index-marked link '{target}' is rooted — use a path relative to the file, or an absolute https:// URL.");
 
             var resolved = Path.GetFullPath(Path.Combine(fileDir, pathPart));
 

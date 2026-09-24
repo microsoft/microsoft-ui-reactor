@@ -410,6 +410,19 @@ class AlphaPage
     }
 
     [Fact]
+    public void RootedLinkInMarkedProse_FailsGeneration()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        var ed = g.WriteEditorial(@"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""] }, " + BetaKeywords + " }");
+        // Site-absolute markdown links are the common form of this mistake; without an explicit
+        // guard Path.Combine drops the file's directory and resolves against the drive root.
+        var kit = g.WriteAgentKit("<!-- index:alpha -->\nSee [site absolute](/docs/guide/hooks.md).\n<!-- /index:alpha -->");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => SearchIndexGenerator.Generate(g.GalleryDir, ed, kit));
+        Assert.Contains("is rooted", ex.Message);
+    }
+
+    [Fact]
     public void AbsoluteAndAnchorLinks_AreLeftAlone()
     {
         using var g = new MiniGallery(betaRouted: true);
