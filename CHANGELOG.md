@@ -108,7 +108,13 @@ Conventions for contributors:
 - A `FormField` that lost its context and swapped its content control in the same
   update left the displaced editor's blur binding live, so the pooled control kept
   marking the old field and kept its `ValidationContext` alive (issue #1262).
-- A field carrying only `.ValidateAsync(field, value, …)` on an element built
+- Chaining two value overloads on one element —
+  `.Validate(f, v, Email()).Validate(f, v, MinLength(10))` — repainted forever.
+  Each call eagerly applied its own intermediate validator set under the same
+  producer, so every pass stripped the later message and put it straight back;
+  the net state never moved, but each write announced a change that scheduled
+  another identical pass. A render that ends with the same messages it started
+  with is now silent (issue #1262).
   outside a render pass — cached, memoized, or assembled in an event handler — was
   never registered, so `MarkAllTouched()` and the validity summary skipped it.
   `FormField` now registers the field when it mounts or updates such an element

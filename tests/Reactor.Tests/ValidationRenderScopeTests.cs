@@ -1220,6 +1220,81 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public void Chained_Value_Overloads_Settle_Instead_Of_Repainting_Forever()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Each call in the chain eagerly applies its own intermediate validator set
+        // under the same producer, so every pass removes the later message and puts it
+        // straight back. The net state never moves, and announcing that churn would
+        // schedule another render that churns identically — forever.
+        for (var pass = 0; pass < 5; pass++)
+        {
+            using (ValidationRenderScope.Begin(ctx))
+            {
+                _ = TextBox("abc")
+                    .Validate("email", "abc", Validate.Email())
+                    .Validate("email", "abc", Validate.MinLength(10));
+            }
+        }
+
+        Assert.Equal(2, ctx.GetMessages("email").Count);
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
+    public void A_Chained_Chain_Still_Announces_A_Real_Change()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            _ = TextBox("abc")
+                .Validate("email", "abc", Validate.Email())
+                .Validate("email", "abc", Validate.MinLength(10));
+        }
+        Assert.Equal(1, notifications);
+
+        // The user fixes the value: the suppression must not swallow this.
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            _ = TextBox("someone@example.com")
+                .Validate("email", "someone@example.com", Validate.Email())
+                .Validate("email", "someone@example.com", Validate.MinLength(10));
+        }
+
+        Assert.Empty(ctx.GetMessages("email"));
+        Assert.Equal(2, notifications);
+    }
+
+    [Fact]
+    public void Suppression_Does_Not_Swallow_A_Touch_Made_During_A_Net_Zero_Pass()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "", Validate.Required());
+        Assert.Equal(1, notifications);
+
+        // Same messages as last time, but a field also became touched — non-message
+        // state, so the pass is not net-zero.
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            _ = TextBox("").Validate("email", "", Validate.Required());
+            ctx.MarkTouched("email");
+        }
+
+        Assert.True(ctx.IsTouched("email"));
+        Assert.Equal(2, notifications);
+    }
+
+    [Fact]
     public async Task Async_Producers_On_One_Field_Do_Not_Cancel_Each_Other()
     {
         var ctx = new ValidationContext();

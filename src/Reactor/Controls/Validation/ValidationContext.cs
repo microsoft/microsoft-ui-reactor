@@ -94,13 +94,21 @@ public sealed class ValidationContext
     /// state stale.
     /// </para>
     /// </summary>
-    private void RaiseChanged()
+    private void RaiseChanged(bool messagesOnly = false)
     {
         if (ValidationRenderScope.InRender)
         {
+            if (!messagesOnly)
+            {
+                lock (_lock) _frameTouchedNonMessageState = true;
+            }
             ValidationRenderScope.DeferNotification(this);
             return;
         }
+
+        // Outside a render the snapshot can no longer be trusted as "what subscribers
+        // were last told", so stop suppressing against it.
+        lock (_lock) _lastNotifiedMessages = null;
         _changed?.Invoke();
     }
 
@@ -132,6 +140,24 @@ public sealed class ValidationContext
         Action? handler;
         lock (_lock)
         {
+            // A render can churn a field's messages and land exactly where it started:
+            // chaining two value overloads applies the first call's partial verdict and
+            // then the second call's full one, both under the sync producer. Each write
+            // is a real change, so the frame defers a notification, which repaints, which
+            // churns again — an endless loop from a net-zero pass. Announce only when the
+            // messages actually ended up different from what subscribers were last told.
+            var snapshot = MessageSnapshotLocked();
+            if (!_frameTouchedNonMessageState
+                && _lastNotifiedMessages is not null
+                && string.Equals(_lastNotifiedMessages, snapshot, StringComparison.Ordinal))
+            {
+                _frameTouchedNonMessageState = false;
+                return;
+            }
+
+            _lastNotifiedMessages = snapshot;
+            _frameTouchedNonMessageState = false;
+
             handler = _changed;
             if (handler is null)
             {
@@ -142,6 +168,44 @@ public sealed class ValidationContext
         }
         handler.Invoke();
     }
+
+    /// <summary>
+    /// A deterministic rendering of every message the context currently holds, used to
+    /// tell a net-zero render pass from a real one. Ordered so two equal message sets
+    /// always produce the same text regardless of dictionary iteration order.
+    /// </summary>
+    private string MessageSnapshotLocked()
+    {
+        var fields = new List<string>(_messages.Keys);
+        foreach (var field in _externalMessages.Keys)
+        {
+            if (!_messages.ContainsKey(field)) fields.Add(field);
+        }
+        fields.Sort(StringComparer.Ordinal);
+
+        var sb = new global::System.Text.StringBuilder();
+        foreach (var field in fields)
+        {
+            var rendered = new List<string>();
+            if (_messages.TryGetValue(field, out var owned))
+            {
+                foreach (var m in owned) rendered.Add($"i\u0001{m.Severity}\u0001{m.Code}\u0001{m.Text}");
+            }
+            if (_externalMessages.TryGetValue(field, out var external))
+            {
+                foreach (var m in external) rendered.Add($"e\u0001{m.Severity}\u0001{m.Code}\u0001{m.Text}");
+            }
+            rendered.Sort(StringComparer.Ordinal);
+
+            sb.Append(field).Append('\u0002');
+            foreach (var entry in rendered) sb.Append(entry).Append('\u0003');
+            sb.Append('\u0004');
+        }
+        return sb.ToString();
+    }
+
+    private string? _lastNotifiedMessages;
+    private bool _frameTouchedNonMessageState;
 
     // ════════════════════════════════════════════════════════════════
     //  Field registration
@@ -194,7 +258,7 @@ public sealed class ValidationContext
             list.Add(message);
             _version++;
         }
-        RaiseChanged();
+        RaiseChanged(messagesOnly: true);
     }
 
     /// <summary>
@@ -221,7 +285,7 @@ public sealed class ValidationContext
             list.Add(message);
             _version++;
         }
-        RaiseChanged();
+        RaiseChanged(messagesOnly: true);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -245,7 +309,7 @@ public sealed class ValidationContext
             _asyncGeneration.Remove(field);
             if (changed) _version++;
         }
-        if (changed) RaiseChanged();
+        if (changed) RaiseChanged(messagesOnly: true);
     }
 
     /// <summary>
@@ -263,7 +327,7 @@ public sealed class ValidationContext
             _asyncGeneration.Remove(field);
             if (changed) _version++;
         }
-        if (changed) RaiseChanged();
+        if (changed) RaiseChanged(messagesOnly: true);
     }
 
 
@@ -295,7 +359,7 @@ public sealed class ValidationContext
             changed = ApplyOwnedLocked(field, producer, messages);
             if (changed) _version++;
         }
-        if (changed) RaiseChanged();
+        if (changed) RaiseChanged(messagesOnly: true);
     }
 
     private bool ApplyOwnedLocked(string field, string producer, List<ValidationMessage> messages)
@@ -411,7 +475,7 @@ public sealed class ValidationContext
             changed = ApplyOwnedLocked(field, producer, messages);
             if (changed) _version++;
         }
-        if (changed) RaiseChanged();
+        if (changed) RaiseChanged(messagesOnly: true);
     }
 
     /// <summary>
@@ -473,9 +537,10 @@ public sealed class ValidationContext
     internal void ApplyValidation(string field, object? value, List<ValidationMessage> messages)
     {
         bool changed;
+        bool valueChangedForNotify;
         lock (_lock)
         {
-            _registeredFields.Add(field);
+            var newField = _registeredFields.Add(field);
 
             var known = _currentValues.TryGetValue(field, out var previous);
             var valueChanged = !known || !Equals(previous, value);
@@ -500,9 +565,10 @@ public sealed class ValidationContext
             if (ApplyOwnedLocked(field, SyncProducer, messages)) messagesChanged = true;
 
             changed = valueChanged || messagesChanged;
+            valueChangedForNotify = valueChanged || newField;
             if (changed) _version++;
         }
-        if (changed) RaiseChanged();
+        if (changed) RaiseChanged(messagesOnly: !valueChangedForNotify);
     }
 
     /// <summary>
@@ -516,7 +582,7 @@ public sealed class ValidationContext
             changed = _externalMessages.Remove(field);
             if (changed) _version++;
         }
-        if (changed) RaiseChanged();
+        if (changed) RaiseChanged(messagesOnly: true);
     }
 
     /// <summary>
@@ -534,7 +600,7 @@ public sealed class ValidationContext
             _asyncGeneration.Clear();
             if (changed) _version++;
         }
-        if (changed) RaiseChanged();
+        if (changed) RaiseChanged(messagesOnly: true);
     }
 
     // ════════════════════════════════════════════════════════════════

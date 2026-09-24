@@ -507,8 +507,10 @@ internal static class ValidationCoverageFixtures
 
             // Validators ran during Render(), so the verdict exists before any click.
             H.Check("Issue1262_ValidatorsRanOnMount", captured is not null && !captured.IsValid());
+            if (captured is null) return;
+
             H.Check("Issue1262_FieldsRegistered",
-                captured!.RegisteredFields.Contains("email") && captured.RegisteredFields.Contains("password"));
+                captured.RegisteredFields.Contains("email") && captured.RegisteredFields.Contains("password"));
 
             // ...but stays hidden until the field is touched.
             H.Check("Issue1262_ErrorsHiddenBeforeTouch", H.FindText("Email is required") is null);
@@ -660,7 +662,9 @@ internal static class ValidationCoverageFixtures
             // Invalid from the first pass, but untouched — so the description shows.
             H.Check("Issue1262_Blur_InvalidButQuiet",
                 captured is not null && !captured.IsValid());
-            H.Check("Issue1262_Blur_NotTouchedInitially", !captured!.IsTouched("name"));
+            if (captured is null) return;
+
+            H.Check("Issue1262_Blur_NotTouchedInitially", !captured.IsTouched("name"));
             H.Check("Issue1262_Blur_DescriptionShown", H.FindText("As it appears on your ID") is not null);
             H.Check("Issue1262_Blur_NoErrorBeforeBlur", H.FindText("Name is required") is null);
 
@@ -1100,8 +1104,63 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
             H.Check("Issue1262_AsyncOnly_StillRegisteredAfterUpdate", ctx.RegisteredFields.Contains("email"));
 
+    var done = H.CreateHost();
+    done.Mount(c => TextBlock("Issue1262 async-only field done"));
+    await Harness.Render();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — two value overloads chained on one element.
+    //
+    //  Each call eagerly applies its own intermediate validator set under the
+    //  same producer, so every pass strips the later message and puts it back.
+    //  The net state never moves, but each write was a real change, so the
+    //  frame announced one — repainting a component that churns identically.
+    //  In a child component that re-renders inline, that is an endless loop.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal sealed record ChainedValidateProps(Action OnRender);
+
+    internal sealed class ChainedValidateOwner : Component<ChainedValidateProps>
+    {
+        public override Element Render()
+        {
+            Props.OnRender();
+            var ctx = this.UseValidationContext();
+
+            return VStack(8,
+                TextBox("abc")
+                    .Validate("email", "abc", Validate.Email("Not an email"))
+                    .Validate("email", "abc", Validate.MinLength(10, "Too short")),
+                TextBlock(ctx.HasError("email") ? "invalid" : "valid"));
+        }
+    }
+
+    internal class Issue1262_ChainedValueOverloadsDoNotLoop(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            var renders = 0;
+
+            host.Mount(c => VStack(12,
+                Component<ChainedValidateOwner, ChainedValidateProps>(
+                    new ChainedValidateProps(() => renders++)),
+                TextBlock("host")));
+
+            await Harness.Render();
+            var afterFirst = renders;
+
+            // Let any scheduled repaints drain. A churning chain never stops asking.
+            for (var i = 0; i < 6; i++) await Harness.Render();
+
+            H.Check("Issue1262_Chain_BothValidatorsApplied", afterFirst > 0);
+            H.Check("Issue1262_Chain_RendersSettle", renders - afterFirst <= 8,
+                $"extraRenders={renders - afterFirst}");
+
             var done = H.CreateHost();
-            done.Mount(c => TextBlock("Issue1262 async-only field done"));
+            done.Mount(c => TextBlock("Issue1262 chained validate done"));
             await Harness.Render();
         }
     }
