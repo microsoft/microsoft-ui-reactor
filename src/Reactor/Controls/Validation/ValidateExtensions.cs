@@ -54,6 +54,14 @@ public static class ValidateExtensions
                 Validators = [.. existing.Validators, .. validators]
             }
             : new ValidationAttached(fieldName, validators, []);
+
+        // Attach-only on its own — there is no value to check. But appended to a chain
+        // that already carries one, the merged set has to be re-run: eager validation
+        // happens at each link, so `.Validate(f, v, Required()).Validate(f, MinLength(3))`
+        // would otherwise install only the Required verdict and silently drop the second
+        // validator for a bare control (issue #1262 review).
+        if (merged.HasValue) RunDuringRender(merged, merged.Value);
+
         return (T)el.SetAttached(merged);
     }
 

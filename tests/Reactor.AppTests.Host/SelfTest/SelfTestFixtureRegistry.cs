@@ -822,6 +822,7 @@ internal static class SelfTestFixtureRegistry
         "ValCov_Issue1262_AsyncRuleBecomesSync",
         "ValCov_Issue1262_ValidatorOnlyInFormField",
         "ValCov_Issue1262_DetachClearsBindings",
+        "ValCov_Issue1262_DetachRetiresRuleVerdict",
         // Controls coverage — MaskEngine, InputFormatter, AutoSuggest
         "ControlsCov_MaskEngineBasic",
         "ControlsCov_MaskEngineNavigation",
@@ -2738,6 +2739,7 @@ internal static class SelfTestFixtureRegistry
         "ValCov_Issue1262_AsyncRuleBecomesSync" => new ValidationCoverageFixtures.Issue1262_AsyncRuleBecomesSync(harness),
         "ValCov_Issue1262_ValidatorOnlyInFormField" => new ValidationCoverageFixtures.Issue1262_ValidatorOnlyAttachmentInFormField(harness),
         "ValCov_Issue1262_DetachClearsBindings" => new ValidationCoverageFixtures.Issue1262_DetachClearsValidationBindings(harness),
+        "ValCov_Issue1262_DetachRetiresRuleVerdict" => new ValidationCoverageFixtures.Issue1262_DetachRetiresRuleVerdict(harness),
         // Controls coverage
         "ControlsCov_MaskEngineBasic" => new ControlsCoverageFixtures.MaskEngineBasic(harness),
         "ControlsCov_MaskEngineNavigation" => new ControlsCoverageFixtures.MaskEngineNavigation(harness),

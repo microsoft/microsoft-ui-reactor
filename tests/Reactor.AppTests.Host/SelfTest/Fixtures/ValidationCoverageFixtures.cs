@@ -1450,4 +1450,46 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — a mounted rule's placeholder retired outside unmount.
+    //
+    //  Detach has to withdraw the rule's verdict as well as cancel its pass, or
+    //  the error outlives the control that produced it and nothing will ever
+    //  re-evaluate it away.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_DetachRetiresRuleVerdict(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var ctx = new ValidationContext();
+            var host = H.CreateHost();
+
+            host.Mount(c => VStack(12,
+                ValidationRule(() => false, "Rule failed", "form"),
+                TextBlock("body"))
+                .Provide(ValidationContexts.Current, ctx));
+
+            await Harness.Render();
+            H.Check("Issue1262_DetachRule_VerdictInstalled", ctx.GetMessages("form").Count == 1,
+                $"messages={ctx.GetMessages("form").Count}");
+
+            // The rule's collapsed placeholder is the first child of the panel.
+            var placeholder = H.FindControl<Microsoft.UI.Xaml.Controls.StackPanel>(
+                p => p.Visibility == Microsoft.UI.Xaml.Visibility.Collapsed);
+            H.Check("Issue1262_DetachRule_PlaceholderFound", placeholder is not null);
+            if (placeholder is null) return;
+
+            global::Microsoft.UI.Reactor.Core.Reconciler.DetachReactorState(placeholder);
+
+            H.Check("Issue1262_DetachRule_VerdictWithdrawn", ctx.GetMessages("form").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("form").Select(m => m.Text))}");
+            H.Check("Issue1262_DetachRule_ValidAfterDetach", ctx.IsValid());
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 detach rule done"));
+            await Harness.Render();
+        }
+    }
 }

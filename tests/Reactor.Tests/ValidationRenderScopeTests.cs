@@ -1806,6 +1806,36 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public void A_Validator_Only_Call_Appended_To_A_Value_Chain_Still_Runs()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            _ = TextBox("ab")
+                .Validate("code", "ab", Validate.Required())
+                .Validate("code", Validate.MinLength(3, "Too short"));
+        }
+
+        // Without re-running the merged set, only the Required verdict would exist and
+        // MinLength would be silently dropped for a bare control.
+        var texts = ctx.GetMessages("code").Select(m => m.Text).ToList();
+        Assert.Single(texts);
+        Assert.Contains("Too short", texts);
+    }
+
+    [Fact]
+    public void A_Standalone_Validator_Only_Call_Stays_Attach_Only()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("code", Validate.Required());
+
+        Assert.Empty(ctx.GetAllMessages());
+    }
+
+    [Fact]
     public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
     {
         var ctx = new ValidationContext();

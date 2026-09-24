@@ -403,11 +403,14 @@ internal static class CompositeLifecycle
         internal global::System.Threading.CancellationTokenSource? Pending;
 
         // Called by DetachReactorState when a control is retired outside the normal
-        // unmount path: cancel any pass still out, and drop the context so a result
-        // that resolves anyway cannot write to it.
+        // unmount path: cancel any pass still out, withdraw whatever this producer
+        // installed — otherwise the error outlives the control forever — and drop the
+        // context so a result that resolves anyway cannot write to it.
         public void Reset()
         {
             CancelPendingRule(this);
+            if (Context is { } ctx && Field is { } field)
+                ctx.RetireProducer(field, Producer);
             Context = null;
             Field = null;
         }
