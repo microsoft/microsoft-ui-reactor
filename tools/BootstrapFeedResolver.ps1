@@ -161,6 +161,56 @@ function Resolve-ReactorNuGetFeed {
 #
 # Returns $null when nothing is configured, which is the public-contributor
 # path: no restore override, repo nuget.config stays in effect.
+function Get-ReactorFeedSourceFromConfig {
+    <#
+    .SYNOPSIS
+        First usable package-feed URL declared by a NuGet.config.
+
+    .DESCRIPTION
+        An explicitly selected config is passed to restore as `--configfile`, so
+        its sources never surface as a bare URL. Version *lookup* for the Windows
+        App SDK template pack needs one, though: without it the resolver only
+        knows nuget.org, and a machine that reaches the configured mirror but not
+        nuget.org resolves nothing.
+
+        Prefers packagefeedproxy.microsoft.io when the config lists it, matching
+        Resolve-ReactorNuGetFeed's detection order; otherwise takes the first
+        enabled source that passes the feed-URL policy. Returns $null when the
+        config declares none (an all-local-folder config, say).
+    #>
+    param(
+        [Parameter(Mandatory)][string]$ConfigPath
+    )
+
+    if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) { return $null }
+
+    try {
+        [xml]$xml = Get-Content -LiteralPath $ConfigPath -Raw
+    } catch {
+        return $null
+    }
+
+    $disabled = @{}
+    foreach ($entry in @($xml.SelectNodes('//disabledPackageSources/add'))) {
+        if ([string]$entry.value -eq 'true') { $disabled[[string]$entry.key] = $true }
+    }
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+    foreach ($source in @($xml.SelectNodes('//packageSources/add'))) {
+        if ($disabled.ContainsKey([string]$source.key)) { continue }
+        $value = [string]$source.value
+        if (-not (Test-ReactorPackageFeedUrl $value)) { continue }
+        $candidates.Add($value.Trim().TrimEnd('/'))
+    }
+
+    if ($candidates.Count -eq 0) { return $null }
+
+    foreach ($candidate in $candidates) {
+        if (([Uri]$candidate).Host -eq 'packagefeedproxy.microsoft.io') { return $candidate }
+    }
+    return $candidates[0]
+}
+
 function Resolve-ReactorNuGetFeedOverride {
     param(
         [string]$NuGetConfig,

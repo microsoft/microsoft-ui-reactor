@@ -18,9 +18,17 @@ INPC walker).
 | Publish shape | Key properties | Runtime identifier | What you get |
 |---|---|---|---|
 | Unpackaged | `WindowsPackageType=None`, `WindowsAppSDKSelfContained=true` | `win-x64` / `win-arm64` | A folder with `MyApp.exe` and the WinUI 3 runtime alongside it. Run from anywhere; ship as a zip. |
-| MSIX (template default) | `WindowsPackageType=MSIX`, `GenerateAppxPackageOnBuild=true`, signed via `PackageCertificateThumbprint` or `PackageCertificateKeyFile` | `win-x64` / `win-arm64` | A signed `.msix`. Required for Microsoft Store; the cleanest sideload story for enterprise. |
+| MSIX | `WindowsPackageType=MSIX`, `GenerateAppxPackageOnBuild=true`, signed via `PackageCertificateThumbprint` or `PackageCertificateKeyFile` | `win-x64` / `win-arm64` | A signed `.msix`. Required for Microsoft Store; the cleanest sideload story for enterprise. |
 | Single-file | `PublishSingleFile=true`, `IncludeNativeLibrariesForSelfExtract=true` | `win-x64` / `win-arm64` (must be set) | One `.exe` that self-extracts the WinUI runtime to `%TEMP%/.net/` on first launch. |
 | Native AOT | `PublishAot=true`, `InvariantGlobalization=true` (recommended) | `win-x64` / `win-arm64` (required) | A native binary with no JIT, no `Assembly.GetTypes()`, no `Reflection.Emit`. Fastest cold start; trim-only. |
+
+A scaffolded app starts out **packaged**: `dotnet new reactor` emits a
+`Package.appxmanifest` and sets `EnableMsixTooling`, so `dotnet run`
+registers a loose-layout package and the app has identity from the
+first launch. The properties in the MSIX row above are the *publish*
+knobs for producing and signing a redistributable `.msix` — a separate
+concern the scaffold deliberately leaves off, since a fresh clone
+should build without a developer certificate.
 
 The four shapes are not mutually exclusive — MSIX wraps any of the
 three publish outputs, and AOT layers on top of either an unpackaged

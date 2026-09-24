@@ -481,6 +481,35 @@ public static class WinAppSdkTemplates
     }
 
     /// <summary>
+    /// Whether a NuGet service-index URL is safe to query: HTTPS (or loopback
+    /// HTTP), with no credentials in the user-info, query string, or fragment.
+    /// </summary>
+    /// <remarks>
+    /// Mirrors <c>Test-ReactorPackageFeedUrl</c> in tools/BootstrapFeedResolver.ps1,
+    /// which applies the same policy to <c>-NuGetSource</c>. Version metadata is
+    /// what picks the package to install, so fetching it over plaintext lets a
+    /// network attacker choose the version; and a credential in the URL would be
+    /// sent to whatever endpoint the URL names.
+    /// </remarks>
+    internal static bool IsAllowedFeedUrl(string? feed)
+    {
+        if (string.IsNullOrWhiteSpace(feed)) return false;
+        if (!Uri.TryCreate(feed, UriKind.Absolute, out var uri)) return false;
+
+        if (!string.IsNullOrEmpty(uri.UserInfo) ||
+            !string.IsNullOrEmpty(uri.Query) ||
+            !string.IsNullOrEmpty(uri.Fragment))
+            return false;
+
+        if (string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Plaintext only where it cannot leave the machine.
+        return string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+               uri.IsLoopback;
+    }
+
+    /// <summary>
     /// Every version the configured source offers, or null when the listing could
     /// not be obtained (offline, unreachable feed). Null means "couldn't tell" and
     /// must never be read as "the version is absent".
@@ -503,11 +532,20 @@ public static class WinAppSdkTemplates
 
         if (!string.IsNullOrWhiteSpace(feed))
         {
-            var versions = TryEnumerateFromFeed(http, feed!);
-            if (versions is not null) return versions;
-            Console.Error.WriteLine(
-                $"  warning: could not enumerate {PackageId} from '{RedactSource(feed!)}'; " +
-                $"falling back to nuget.org.");
+            if (!IsAllowedFeedUrl(feed))
+            {
+                Console.Error.WriteLine(
+                    $"  warning: ignoring --feed '{RedactSource(feed!)}' — a version feed must be an HTTPS URL " +
+                    $"(or loopback HTTP) with no credentials in its user-info, query string or fragment.");
+            }
+            else
+            {
+                var versions = TryEnumerateFromFeed(http, feed!);
+                if (versions is not null) return versions;
+                Console.Error.WriteLine(
+                    $"  warning: could not enumerate {PackageId} from '{RedactSource(feed!)}'; " +
+                    $"falling back to nuget.org.");
+            }
         }
 
         return TryGetVersions(http, FlatContainerIndexUrl);

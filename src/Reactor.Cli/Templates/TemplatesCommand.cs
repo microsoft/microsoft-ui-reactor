@@ -96,10 +96,28 @@ public static class TemplatesCommand
         Console.WriteLine();
         Console.WriteLine(DescribeOutcome(outcome));
 
-        Console.WriteLine("Scaffold an app with:");
-        foreach (var name in WinAppSdkTemplates.ShortNames)
-            Console.WriteLine($"    dotnet new {name} -n MyApp");
-        return 0;
+        // "Installed" is not "usable". KeptExisting in particular means version
+        // resolution failed and an older pack was left alone — and 0.0.6-alpha
+        // shipped without the Reactor templates, so printing scaffold commands
+        // here would hand the user four lines that immediately fail. Print them
+        // only once the short name actually resolves.
+        var available = WinAppSdkTemplates.AreTemplatesAvailable();
+        if (available == true)
+        {
+            Console.WriteLine("Scaffold an app with:");
+            foreach (var name in WinAppSdkTemplates.ShortNames)
+                Console.WriteLine($"    dotnet new {name} -n MyApp");
+            return 0;
+        }
+
+        Console.Error.WriteLine();
+        Console.Error.WriteLine(available is null
+            ? $"mur templates install: could not enumerate `dotnet new` templates, so `dotnet new " +
+              $"{WinAppSdkTemplates.BlankShortName}` is unverified. Check with `mur templates status`."
+            : $"mur templates install: {WinAppSdkTemplates.PackageId} is installed but does not provide " +
+              $"`dotnet new {WinAppSdkTemplates.BlankShortName}` — that version predates the Reactor " +
+              $"templates. Pin a newer one with `mur templates install --version <version>`.");
+        return 1;
     }
 
     static int Status()

@@ -409,10 +409,52 @@ public sealed class WinAppSdkTemplatesTests
         // back to a bare package id, which cannot reach a prerelease-only pack —
         // failing the step with a usable feed sitting right there.
         var (path, text) = ReadRepoFile("bootstrap.ps1");
+        var normalized = text.Replace("\r\n", "\n");
+        Assert.True(
+            global::System.Text.RegularExpressions.Regex.IsMatch(normalized, @"\$templateFeed\s*=\s*\$effectiveNuGetSource"),
+            $"'{path}' must seed the template version feed from the resolved NuGet source.");
+        Assert.True(
+            global::System.Text.RegularExpressions.Regex.IsMatch(normalized, @"'--feed',\s*\$templateFeed"),
+            $"'{path}' must pass that feed to `mur templates install --feed`.");
+    }
+
+    [Theory]
+    // Version metadata is what picks the package to install, so plaintext lets a
+    // network attacker choose the version; credentials in the URL would be sent to
+    // whatever endpoint the URL names.
+    [InlineData("https://pkgs.example.com/v3/index.json", true)]
+    [InlineData("http://localhost:5000/v3/index.json", true)]
+    [InlineData("http://127.0.0.1:5000/v3/index.json", true)]
+    [InlineData("http://pkgs.example.com/v3/index.json", false)]
+    [InlineData("https://user:pat@pkgs.example.com/v3/index.json", false)]
+    [InlineData("https://pkgs.example.com/v3/index.json?api-key=SECRET", false)]
+    [InlineData("https://pkgs.example.com/v3/index.json#SECRET", false)]
+    [InlineData("ftp://pkgs.example.com/v3/index.json", false)]
+    [InlineData("not a url", false)]
+    [InlineData("", false)]
+    public void IsAllowedFeedUrl_matches_the_bootstrap_feed_policy(string feed, bool allowed)
+    {
+        Assert.Equal(allowed, WinAppSdkTemplates.IsAllowedFeedUrl(feed));
+    }
+
+    [Fact]
+    public void Bootstrap_derives_a_version_feed_from_an_explicit_nuget_config()
+    {
+        // An explicit -NuGetConfig reaches restore as `--configfile`, so it never
+        // produces a bare source URL. Without this the explicit-mirror path falls
+        // back to nuget.org for version lookup and resolves nothing on a machine
+        // that can only reach the mirror.
+        var (path, text) = ReadRepoFile("bootstrap.ps1");
         Assert.True(
             global::System.Text.RegularExpressions.Regex.IsMatch(
-                text.Replace("\r\n", "\n"), @"'--feed',\s*\$effectiveNuGetSource"),
-            $"'{path}' must pass the resolved NuGet source to `mur templates install --feed`.");
+                text.Replace("\r\n", "\n"),
+                @"Get-ReactorFeedSourceFromConfig\s+-ConfigPath\s+\$effectiveNuGetConfig"),
+            $"'{path}' must read a version feed out of an explicitly selected NuGet config.");
+
+        var (resolverPath, resolver) = ReadRepoFile(global::System.IO.Path.Join("tools", "BootstrapFeedResolver.ps1"));
+        Assert.True(
+            resolver.Contains("function Get-ReactorFeedSourceFromConfig", StringComparison.Ordinal),
+            $"'{resolverPath}' must define Get-ReactorFeedSourceFromConfig.");
     }
 
     // ── False-PASS guard: "pack installed" != "templates usable" ───────────

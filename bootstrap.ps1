@@ -714,9 +714,17 @@ if ($SkipTemplates) {
     # reaches the mirror but not nuget.org it resolves nothing and falls back to a
     # bare package id — which cannot reach a prerelease-only pack, failing the step
     # even though a usable feed was right there.
-    if ($effectiveNuGetSource) {
-        Write-Dbg "Template version feed: $effectiveNuGetSource"
-        $murTemplateArgs += @('--feed', $effectiveNuGetSource)
+    #
+    # An explicitly selected -NuGetConfig reaches restore as `--configfile`, so it
+    # never produces a bare source URL; read one out of the config so the explicit
+    # path gets the same treatment as a detected one.
+    $templateFeed = $effectiveNuGetSource
+    if (-not $templateFeed -and $effectiveNuGetConfig) {
+        $templateFeed = Get-ReactorFeedSourceFromConfig -ConfigPath $effectiveNuGetConfig
+    }
+    if ($templateFeed) {
+        Write-Dbg "Template version feed: $templateFeed"
+        $murTemplateArgs += @('--feed', $templateFeed)
     }
 
     $templatesExit = 0
