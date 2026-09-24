@@ -36,74 +36,43 @@ Conventions for contributors:
 
 ### Fixed
 
-- The E2E suite's `winapp ui yield` capability probe measures something again. It asked
-  `winapp ui yield --help` and read the exit code, but an unrecognized verb is not rejected:
-  measured against winapp 0.6.3-prerelease.92, `ui bogusverbxyz --help` exits `0` and prints
-  output byte-identical to `ui --help`, never naming the token it did not understand. The probe
-  therefore answered "present" for every verb, invented ones included. Nothing misbehaved — the
-  published builds lacking the verb are old enough to still reject unmatched tokens, so the right
-  answer came back for the wrong reason — but `REACTOR_E2E_REQUIRE_UI_YIELD` is meant to turn a
-  missing verb into a failure, and a gate built on an oracle that cannot say "no" cannot fail.
-  The probe now reads the command set from `winapp ui --cli-schema`, whose `subcommands` keys
-  answer the question exactly, and falls back to parsing `winapp ui --help` for builds that
-  predate that flag. Grepping the help text for the verb name would not have fixed it: the parent
-  listing carries every verb's description, so the word is present either way (PR #1272,
-  winappCli#767).
-- The help fallback no longer mistakes a wrapped description for a command. Renderers wrap long
-  descriptions onto continuation lines indented to the description column, and a parser that
-  classified one line at a time took the first word of one as a verb — so a description wrapping
-  before the word "yield" would have reported the verb as present. Command entries are now read as
-  the lines at the section's shallowest indent (PR #1272).
-- The capability probe's timeout works. It read stdout to EOF *before* its bounded wait, so a
-  winapp that stopped producing output hung the probe for the whole job rather than for its
-  10-second budget; `ui yield` had the mirror-image defect, leaving both redirected streams
-  undrained so a child could block on a full stderr pipe and be killed as a phantom timeout. Both
-  now drain stdout and stderr asynchronously ahead of the timed wait, as the harness's other
-  process runner already did (PR #1272).
-- The probe cannot exceed the budget it advertises. The schema attempt and the help fallback
-  share one 10-second deadline instead of each getting their own, and a schema attempt that
-  *times out* now stops the probe rather than falling through — a binary that hangs has not
-  reported that `--cli-schema` is unsupported, so a second spawn would spend the remaining budget
-  to learn nothing. The worst case is now one 10-second wait plus a single 5-second kill grace,
-  where it was previously two of each (PR #1272).
-- A capability probe that cannot read winapp's command set no longer reports the verb as absent.
-  The result is a tri-state, and `Unreadable` fails under `REACTOR_E2E_REQUIRE_UI_YIELD` rather
-  than passing as a skip — "the probe broke" is not "the feature is missing". A command set with
-  none of the long-standing verbs in it counts as unreadable too, so a future reformat of winapp's
-  help surfaces as a failure to parse instead of reading as "yield was removed" on every run
-  forever (PR #1272).
+- The E2E suite's `winapp ui yield` capability probe measures something again, and the strict
+  gate built on it can now fail. The probe ran `winapp ui yield --help` and read the exit code,
+  but an unrecognized verb is not rejected: measured against winapp 0.6.3-prerelease.92,
+  `ui bogusverbxyz --help` also exits `0` and prints output byte-identical to `ui --help`, so the
+  probe answered "present" for every verb, invented ones included. Nothing misbehaved — builds
+  lacking the verb are old enough to still reject unmatched tokens, so the right answer came back
+  for the wrong reason — but `REACTOR_E2E_REQUIRE_UI_YIELD` exists to turn a missing verb into a
+  failure, and a gate whose oracle cannot say "no" cannot fail. The probe now reads the command
+  set from `winapp ui --cli-schema`, falling back to parsing `winapp ui --help` (by command-entry
+  indentation, so a wrapped description is not mistaken for a verb) on builds predating that flag.
+  Searching the help *text* would have been equally vacuous: the parent listing carries every
+  verb's description, so the word appears either way. The result is a tri-state — `Unreadable` is
+  not folded into `Absent`, because "the probe broke" is not "the feature is missing", and a
+  command set containing none of the long-standing verbs counts as unreadable so a future help
+  reformat cannot read as "yield was removed" forever (PR #1272, winappCli#767).
+- Bounded the probe's subprocesses. It read stdout to EOF *before* its timed wait while leaving
+  stderr undrained, so a winapp that stopped producing output hung the probe for the whole job
+  rather than its 10-second budget; `ui yield` had the mirror-image defect and could be killed as
+  a phantom timeout. Both now drain stdout and stderr asynchronously ahead of the timed wait, as
+  the harness's other process runner already did, and share a single budget across the schema and
+  help attempts instead of each taking its own (PR #1272).
 - CI's winapp capability step and the E2E suite now provably inspect the same binary, and it is
-  the one this job installed. They disagreed inside a single job — the step reported the verb
-  present while the suite reported it absent — because the step ran whatever `winapp` PATH
-  resolved while `WinAppUi.ResolveWinAppExe()` prefers `$REACTOR_WINAPP_EXE`, then
-  `%LOCALAPPDATA%\Microsoft\WindowsApps`, and only then PATH. The step now resolves PATH *ahead*
-  of that alias — `setup-WinAppCli` installs into a tool directory it prepends to PATH and never
-  touches LocalAppData, so mirroring the harness's order would have meant a runner carrying the
-  alias silently tests a stale sideloaded build instead of the installed one — and exports the
-  winner as `REACTOR_WINAPP_EXE`, the harness's own first candidate, so the two still agree. The
-  suite logs the path it resolved beside the capability, and the strict-mode failure names it
+  the one the job installed. They disagreed inside a single job because the step ran whatever
+  `winapp` PATH resolved while `WinAppUi.ResolveWinAppExe()` prefers `$REACTOR_WINAPP_EXE`, then
+  `%LOCALAPPDATA%\Microsoft\WindowsApps`, and only then PATH. The step now resolves PATH ahead of
+  that alias — `setup-WinAppCli` installs to a tool directory it prepends to PATH and never
+  touches LocalAppData, so mirroring the harness's order would silently test a stale sideloaded
+  build — and exports the winner as `REACTOR_WINAPP_EXE`. It also carries its own
+  `timeout-minutes`, since `continue-on-error` forgives a step that fails but not one that hangs
   (PR #1272).
-- CI now proves the strict `ui yield` gate can actually fire. The suite's normal run leaves
-  `REACTOR_E2E_REQUIRE_UI_YIELD` unset, so that gate was only ever observed taking its skip arm —
-  a check seen exclusively in its passing state, which is the same unfalsifiable shape this entry
-  set out to remove. A new E2E step re-runs the two gated tests with the variable set and asserts
-  the outcome *agrees with the probe*: `Present` must pass, `Absent`/`Unreadable` must fail with
-  the gate's own message. It is a differential rather than a hardcoded expectation because
-  `setup-WinAppCli` installs `latest`, so the runner's winapp moves on its own — which it did
-  mid-PR: winapp v0.7.0 (2026-09-24) is the first release carrying winappCli#767, and CI went from
-  `0.6.0`/`Absent` to `0.7.0`/`Present` between two runs. A hardcoded expectation would have
-  failed the build at that moment for the wrong reason (PR #1272).
-- The E2E continuity differential is now actually measured in CI rather than skipped. With winapp
-  v0.7.0 carrying `ui yield`, `ReleaseUiTurn_IsAcceptedBecauseTheWorkflowIdReachesWinApp` and its
-  negative control `WinAppRejectsAYieldWithNoWorkflowId` execute and pass instead of reporting
-  `Assert.Inconclusive` — which Microsoft.Testing.Platform had been reporting as *passed with zero
-  skipped*, indistinguishable from a real measurement (PR #1272).
-- CI's winapp capability step cannot hang the E2E job. It shells out to `winapp --version` and
-  `winapp ui --cli-schema` for diagnostics, and `continue-on-error` only forgives a step that
-  *fails* — a wedged winapp would have sat there consuming the job's 45-minute budget before any
-  test ran. The step now carries its own short `timeout-minutes` ceiling (PR #1272).
-- CI's recorded winapp version is a version again rather than the first line of an ASCII-art
-  banner, which is what `winapp --version` leads with on the runner (PR #1272).
+- The E2E continuity differential is enforced in CI rather than skipped. winapp v0.7.0
+  (2026-09-24) is the first release carrying winappCli#767, so the E2E job now sets
+  `REACTOR_E2E_REQUIRE_UI_YIELD=1`: an unconfirmed verb fails the job instead of reporting
+  `Assert.Inconclusive`, which Microsoft.Testing.Platform prints as "passed, zero skipped" and is
+  indistinguishable from a real measurement. A companion step proves that gate can actually fire
+  by pointing the resolver at a non-winapp binary and requiring the run to fail with the gate's
+  own message (PR #1272).
 
 ### Security
 

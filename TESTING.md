@@ -913,17 +913,17 @@ nothing — and two independently bounded waits would let an unresponsive winapp
 advertised probe time. The worst case is one 10-second wait plus a single 5-second kill grace
 (`TryKill` waits that long for the child to actually go), so 15 seconds rather than 10.
 
-**CI proves the strict gate can fire.** A normal run leaves `REACTOR_E2E_REQUIRE_UI_YIELD` unset,
-so the gate is only ever seen taking its skip arm — and a check observed exclusively in its
-passing state establishes nothing. The `Prove the strict ui yield gate tracks the probe` step
-re-runs the two gated tests with the variable set and asserts the result **agrees with the
-probe**: `Present` must pass, `Absent`/`Unreadable` must fail *and* carry the gate's own message
-(a bare non-zero exit would also match an invalid command line or a zero-test run). It is
-deliberately a differential rather than "expect failure", because `setup-WinAppCli` installs
-`latest` and the runner's winapp therefore moves without anyone editing the workflow. That is not
-hypothetical: **v0.7.0 published 2026-09-24** — the first release carrying #767 — and CI went from
-`0.6.0`/`Absent` to `0.7.0`/`Present` between two runs of the PR that added this step. A hardcoded
-expectation would have reddened the build at that moment for the wrong reason.
+**CI enforces the verb, and proves the gate can fire.** Since winapp v0.7.0 (2026-09-24) ships
+#767, the E2E job runs the suite with `REACTOR_E2E_REQUIRE_UI_YIELD=1`, so an unconfirmed verb
+fails the job instead of skipping. The CLI is deliberately left unpinned (`setup-WinAppCli`
+defaults to `latest`): releases only move forward, so `latest` carries the verb, and a future
+release that dropped it *should* redden the job rather than be hidden by a pin.
+
+That covers the passing arm, but a gate only ever observed passing establishes nothing. The
+`Prove the strict ui yield gate can fail` step therefore points `REACTOR_WINAPP_EXE` at a binary
+that is not winapp and requires the run to fail **and** carry the gate's own message — a bare
+non-zero exit would equally match an invalid command line (5) or a zero-test run (8). Pointing at
+a non-winapp keeps that deterministic no matter which version `latest` resolves to.
 
 An ambient `WINAPP_UI_WORKFLOW_ID` wins, so an agent harness can group a whole test run with its
 own surrounding `winapp ui` calls into one workflow. Only a *usable* value is inherited: winapp
@@ -941,8 +941,7 @@ suite rather than merely lose continuity, and the harness synthesizes an id inst
 > the path it resolved beside the capability for the same reason. This was not hypothetical: the
 > step and the suite once reported opposite answers for the verb inside a single job. Note that
 > CI pins the *setup action* by SHA but not the CLI version it installs (the action's `version`
-> input defaults to `latest`), so pinning a winapp build is a separate step — and the one to take
-> alongside setting `REACTOR_E2E_REQUIRE_UI_YIELD=1`.
+> input defaults to `latest`), which is deliberate — see the strict-gate note above.
 
 > **This does not stop a non-winapp window stealing the foreground.** Turn arbitration only
 > coordinates winapp callers. On a busy desktop, clicks still fail with

@@ -294,12 +294,11 @@ jobs:
       # WinAppDriver/Appium). The action downloads it and adds it to PATH.
       #
       # The pin here is the *action* revision, by commit SHA. The CLI payload it installs is not
-      # pinned: the action's `version` input defaults to 'latest', so the winapp build under test
-      # tracks upstream releases. That is load-bearing rather than incidental — v0.7.0 (2026-09-24)
-      # is the first release carrying winappCli#767, and CI picked it up within hours with no
-      # change here, flipping the capability from Absent to Present between two runs of this very
-      # PR. Pinning `with: version:` is what would make REACTOR_E2E_REQUIRE_UI_YIELD a stable gate
-      # rather than a bet on whatever 'latest' resolved to, so the two belong in the same change.
+      # pinned: the action's `version` input defaults to 'latest'. That is deliberate. Releases
+      # only move forward and v0.7.0 (2026-09-24) is the first carrying winappCli#767, so `latest`
+      # carries the verb the E2E job now requires — and a future release that dropped it *should*
+      # redden this job rather than be papered over by a pin. Staying on `latest` also keeps the
+      # suite testing the winapp contributors actually have.
       #
       # PATH alone does not decide what the tests use. WinAppUi.ResolveWinAppExe() prefers, in
       # order: $REACTOR_WINAPP_EXE, then %LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe, and only
@@ -312,15 +311,9 @@ jobs:
         uses: microsoft/setup-WinAppCli@b93bbddc1f7abc061ca0d3a8119e3a0c7dd71495 # v0.2
 
       # Records which winapp this job actually resolved, and whether it carries the
-      # cooperative-UI-turn verb (winappCli#767). The E2E suite's continuity tests skip when
-      # `ui yield` is absent, and Microsoft.Testing.Platform reports a skip as *passed with
-      # zero skipped* — so without this step a run against a winapp that predates #767 looks
-      # identical to one where the continuity was measured. Never gates the job by itself; the
-      # step below turns the recorded verdict into an assertion. Since v0.7.0 (2026-09-24) the
-      # runner's `latest` does carry the verb, so the continuity tests now execute rather than
-      # skip; setting REACTOR_E2E_REQUIRE_UI_YIELD=1 here (together with pinning that version
-      # above) is what would additionally make a regression *back* to a verb-less winapp a
-      # failure rather than a silent return to skipping.
+      # cooperative-UI-turn verb (winappCli#767). Diagnostics only — the Test step's
+      # REACTOR_E2E_REQUIRE_UI_YIELD=1 is what actually enforces the verb. This line is still
+      # worth keeping because it names the binary and version, which a failing suite cannot.
       #
       # `ui yield` is a sound sentinel for the whole mechanism rather than one verb of it: #767 is
       # what added UiYieldCommand, alongside the desktop lock, scheduler and participant registry
@@ -412,7 +405,6 @@ jobs:
           Write-Host "winapp path: $exe"
           Write-Host "winapp version: $version"
           Write-Host "winapp 'ui yield' support: $state"
-          "REACTOR_WINAPP_YIELD_SUPPORT=$state" >> $env:GITHUB_ENV
           "winapp path: ``$exe``" >> $env:GITHUB_STEP_SUMMARY
           "winapp version: ``$version``" >> $env:GITHUB_STEP_SUMMARY
           "winapp ``ui yield`` support (winappCli#767): **$state**" >> $env:GITHUB_STEP_SUMMARY
@@ -433,6 +425,14 @@ jobs:
         # --report-trx is the Microsoft.Testing.Platform equivalent of the old
         # `--logger "trx;LogFileName=..."`; it needs Microsoft.Testing.Extensions.TrxReport,
         # which Reactor.AppTests references.
+        env:
+          # Turns an unconfirmed `ui yield` verb from a skip into a failure. Safe to require now
+          # that winapp v0.7.0 (2026-09-24) ships winappCli#767, and left unpinned deliberately:
+          # releases only move forward, so `latest` carries the verb, and a future release that
+          # dropped it *should* redden this job rather than quietly return to skipping. Without
+          # this the continuity tests report Assert.Inconclusive, which MTP prints as "passed,
+          # zero skipped" — indistinguishable from having actually measured the differential.
+          REACTOR_E2E_REQUIRE_UI_YIELD: '1'
         run: dotnet test tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64 --no-build --report-trx --report-trx-filename app-tests.trx --results-directory TestResults
 
       - name: Fail on skipped input-injection E2Es
@@ -457,58 +457,29 @@ jobs:
             throw "Input-injection E2Es were Inconclusive instead of executed: $($blocked -join ', ')"
           }
 
-      # Proves the strict `ui yield` gate can actually fire. Nothing else does: the suite's normal
-      # run leaves REACTOR_E2E_REQUIRE_UI_YIELD unset, so that gate is only ever observed taking
-      # its skip arm — and a check seen exclusively in its passing state is the same unfalsifiable
-      # oracle this change set exists to remove. The unit tests cover the decision rule; what they
-      # cannot cover is the plumbing around it, because reading the variable, parsing it, and
-      # turning the verdict into a failing run only happens in a real test process.
+      # Proves the strict gate can actually FAIL. The Test step above covers the passing arm for
+      # real — it runs the whole suite with REACTOR_E2E_REQUIRE_UI_YIELD=1 against the installed
+      # winapp — but a gate only ever observed passing is the same unfalsifiable oracle this
+      # change set exists to remove. The unit tests cover the decision rule; only a real test
+      # process covers the plumbing that turns an unconfirmed verb into a non-zero exit.
       #
-      # Deliberately a DIFFERENTIAL rather than "expect failure". `setup-WinAppCli` installs
-      # `latest`, so the runner's winapp moves without anyone editing this file — and it did
-      # exactly that mid-PR: v0.7.0 published 2026-09-24 and CI went from 0.6.0/Absent to
-      # 0.7.0/Present between two runs. A hardcoded "this must fail" would have reddened the
-      # build at that moment for entirely the wrong reason. Asserting that the gate AGREES WITH
-      # THE PROBE holds under both worlds and needed no edit when the dependency moved.
-      #
-      # Both arms were verified locally before this step was written: against a winapp carrying
-      # the verb the same two tests exit 0, and against a resolved binary that is not winapp at
-      # all they exit 2 with the strict-mode message. The outcome is therefore known to be a
-      # measurement rather than a constant.
-      - name: Prove the strict `ui yield` gate tracks the probe
+      # Deterministic rather than dependent on which winapp is installed: point the resolver at a
+      # binary that is not winapp, so the probe cannot confirm the verb no matter what upstream
+      # ships. That keeps this meaningful after `latest` moves.
+      - name: Prove the strict `ui yield` gate can fail
         shell: pwsh
         env:
           REACTOR_E2E_REQUIRE_UI_YIELD: '1'
+          REACTOR_WINAPP_EXE: C:\Windows\System32\cmd.exe
         run: |
-          $support = $env:REACTOR_WINAPP_YIELD_SUPPORT
-
-          # The capability step reads only `ui --cli-schema`; the harness additionally falls back
-          # to `ui --help`. On a winapp predating the schema flag this step has no verdict to
-          # compare against, and asserting from one it never took is the exact error the tri-state
-          # exists to prevent.
-          if (-not $support -or $support -eq '<schema-unavailable>') {
-            Write-Host "No schema verdict to compare against (support: '$support'); skipping."
-            exit 0
-          }
-
-          # Only the two gated tests. The suite has already run in full above, so this is seconds.
-          # MSTest accepts `--filter` and rejects `--filter-method` with exit 5.
+          # Only the two gated tests. MSTest accepts `--filter` and rejects `--filter-method`.
           $output = dotnet test tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64 --no-build `
             --filter "FullyQualifiedName~ReleaseUiTurn_IsAcceptedBecauseTheWorkflowIdReachesWinApp|FullyQualifiedName~WinAppRejectsAYieldWithNoWorkflowId" 2>&1 | Out-String
           $exit = $LASTEXITCODE
           Write-Host $output
 
-          if ($support -eq 'Present') {
-            if ($exit -ne 0) {
-              throw "winapp reports ``ui yield`` as Present, but the gated tests failed under REACTOR_E2E_REQUIRE_UI_YIELD (exit $exit). Strict mode is rejecting a winapp that does carry winappCli#767."
-            }
-            Write-Host 'Gate agrees with the probe: verb Present, strict run passed.'
-            exit 0
-          }
-
-          # Absent or Unreadable: strict mode must refuse.
           if ($exit -eq 0) {
-            throw "winapp reports ``ui yield`` as $support, yet the gated tests passed under REACTOR_E2E_REQUIRE_UI_YIELD. Strict mode cannot fail, which is the defect this gate exists to prevent."
+            throw "The gated tests passed against a binary that is not winapp, under REACTOR_E2E_REQUIRE_UI_YIELD. Strict mode cannot fail, which is the defect this gate exists to prevent."
           }
 
           # A non-zero exit alone proves nothing: 5 is an invalid command line and 8 is zero tests
@@ -518,12 +489,12 @@ jobs:
             throw "The gated tests failed (exit $exit), but not via the strict-mode gate -- its message is absent from the output, so this run does not demonstrate the gate fired."
           }
 
-          Write-Host "Gate agrees with the probe: verb $support, strict run failed as required."
+          Write-Host 'Strict mode refused an unconfirmed verb, as required.'
 
           # Explicit, and load-bearing. A deliberately-failing `dotnet test` leaves $LASTEXITCODE
           # at 2, and GitHub's pwsh wrapper propagates whatever it finds there — so without this
-          # the step reports the exact failure it was written to assert did NOT matter. Measured:
-          # the step printed its success line and still exited 2.
+          # the step reports the exact failure it was written to assert. Measured: the step
+          # printed its success line and still exited 2.
           exit 0
 
   build-solution:
