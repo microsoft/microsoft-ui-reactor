@@ -78,9 +78,8 @@ public static class WinAppSdkTemplates
                 resources.ValueKind != JsonValueKind.Array)
                 return null;
 
-            foreach (var resource in resources.EnumerateArray())
+            foreach (var resource in resources.EnumerateArray().Where(r => r.ValueKind == JsonValueKind.Object))
             {
-                if (resource.ValueKind != JsonValueKind.Object) continue;
                 if (!resource.TryGetProperty("@type", out var type) ||
                     type.ValueKind != JsonValueKind.String) continue;
                 // The version suffix has moved across service-index revisions
