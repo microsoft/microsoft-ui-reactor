@@ -256,7 +256,7 @@ public sealed class TemplatePackageTestFixture : IDisposable
     // lib folder) landed at exactly 260 characters with the previous
     // "reactor-template-packages-{guid}/nuget-global-packages" naming. Do not lengthen
     // these back for readability; the headroom is load-bearing.
-    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"rtp-{Guid.NewGuid():N}");
+    private readonly string _tempRoot = Path.Join(Path.GetTempPath(), $"rtp-{Guid.NewGuid():N}");
 
     public TemplatePackageTestFixture()
     {
