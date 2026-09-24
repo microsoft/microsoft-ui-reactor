@@ -359,6 +359,34 @@ public sealed class WinAppSdkTemplatesTests
         Assert.True(WinAppSdkTemplates.InterpretTemplateListOutput(withBlank));
     }
 
+    [Theory]
+    // The property under test is simply "the secret never reaches the console".
+    // Which branch enforces it varies, and not obviously: `Uri` rejects user-info
+    // on the file scheme outright, so that row is the one that lands in
+    // RedactSource's TryCreate-failure path — the path that used to echo its input
+    // verbatim, and the path that runs on every *rejected* --source, i.e. exactly
+    // the values a user is most likely to have typed a PAT into. (Mutation-checked:
+    // removing the unparsable-URL masking reddens that row and only that row.)
+    [InlineData("file://user:pat@host/share/pkgs", "pat")]
+    [InlineData("https://user:SECRET@pkgs.example.com/v3/index.json[", "SECRET")]
+    [InlineData("https://pkgs.example.com/v3/index.json[?api-key=SECRET", "SECRET")]
+    [InlineData("https://pkgs.example.com/v3/index.json[#SECRET", "SECRET")]
+    public void RedactSource_masks_url_like_values_carrying_secrets(string source, string secret)
+    {
+        Assert.DoesNotContain(secret, WinAppSdkTemplates.RedactSource(source), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    // Local paths have nothing to mask, and mangling them would make the error
+    // messages that quote them useless.
+    [InlineData(@"C:\repo\local-nupkgs")]
+    [InlineData(@"\\server\share\pkgs")]
+    [InlineData("./pkgs")]
+    public void RedactSource_leaves_path_like_values_alone(string source)
+    {
+        Assert.Equal(source, WinAppSdkTemplates.RedactSource(source));
+    }
+
     [Fact]
     public void RedactSource_strips_a_query_from_a_file_uri()
     {

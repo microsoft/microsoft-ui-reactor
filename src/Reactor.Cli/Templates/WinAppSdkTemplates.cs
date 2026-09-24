@@ -317,7 +317,17 @@ public static class WinAppSdkTemplates
     internal static string RedactSource(string source)
     {
         if (string.IsNullOrWhiteSpace(source)) return source;
-        if (!Uri.TryCreate(source, UriKind.Absolute, out var uri)) return source; // plain local path
+        if (!Uri.TryCreate(source, UriKind.Absolute, out var uri))
+        {
+            // Unparsable. A plain local path has nothing to hide, but a malformed
+            // URL-ish value can still carry a PAT — and `Uri` is stricter than it
+            // looks: `file://user:pat@host/share` throws outright, so the
+            // credential-bearing cases land *here* rather than in the branches
+            // below. Mask conservatively when it looks like a URL.
+            return source.Contains("://", StringComparison.Ordinal)
+                ? RedactUnparsableUrl(source)
+                : source;
+        }
 
         // A local *path* has nothing secret in it, but `file://user:pat@host/share`
         // is also IsFile — returning it unchanged would print the credential. Only
@@ -336,6 +346,36 @@ public static class WinAppSdkTemplates
             Fragment = string.IsNullOrEmpty(uri.Fragment) ? string.Empty : "***",
         };
         return builder.Uri.ToString();
+    }
+
+    /// <summary>
+    /// Best-effort masking for a URL-looking value that <see cref="Uri"/> refused to
+    /// parse: drops anything from the first <c>?</c> or <c>#</c>, and replaces the
+    /// authority's user-info with <c>***</c>.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately string-based. The input is by definition not a valid URI, so
+    /// there is no parser to lean on — and the alternative (echoing it verbatim)
+    /// is what leaks the token.
+    /// </remarks>
+    static string RedactUnparsableUrl(string source)
+    {
+        var cut = source.IndexOfAny(new[] { '?', '#' });
+        var head = cut >= 0 ? source[..cut] + "***" : source;
+
+        var schemeEnd = head.IndexOf("://", StringComparison.Ordinal);
+        if (schemeEnd < 0) return head;
+
+        var authorityStart = schemeEnd + 3;
+        var authorityEnd = head.IndexOf('/', authorityStart);
+        var authority = authorityEnd < 0 ? head[authorityStart..] : head[authorityStart..authorityEnd];
+
+        // Last '@' wins: a password may itself contain one.
+        var at = authority.LastIndexOf('@');
+        if (at < 0) return head;
+
+        var tail = authorityEnd < 0 ? string.Empty : head[authorityEnd..];
+        return head[..authorityStart] + "***" + authority[at..] + tail;
     }
 
     /// <summary>
