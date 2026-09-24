@@ -61,7 +61,7 @@ public static class TemplatesCommand
 
         // Reject anything we don't understand rather than silently ignoring it —
         // a typo like `--sorce ./pkgs` would otherwise install from the wrong place.
-        if (!TryParseInstallArgs(args, out var source, out var version, out var error))
+        if (!TryParseInstallArgs(args, out var source, out var version, out var feed, out var error))
         {
             Console.Error.WriteLine($"mur templates install: {error}");
             Console.Error.WriteLine();
@@ -76,7 +76,7 @@ public static class TemplatesCommand
         if (!string.IsNullOrWhiteSpace(source) && Directory.Exists(source))
             source = Path.GetFullPath(source!);
 
-        var outcome = WinAppSdkTemplates.Install(Directory.GetCurrentDirectory(), source, version);
+        var outcome = WinAppSdkTemplates.Install(Directory.GetCurrentDirectory(), source, version, feed);
         if (outcome == WinAppSdkTemplates.InstallOutcome.Failed)
         {
             Console.Error.WriteLine();
@@ -165,16 +165,21 @@ public static class TemplatesCommand
 
     static void ShowInstallHelp()
     {
-        Console.WriteLine("Usage: mur templates install [--source <path>] [--version <version>]");
+        Console.WriteLine("Usage: mur templates install [--source <folder>] [--version <version>] [--feed <url>]");
         Console.WriteLine();
         Console.WriteLine($"Installs {WinAppSdkTemplates.PackageId}. With no options it resolves the");
         Console.WriteLine("newest published version (newest stable, else newest prerelease).");
         Console.WriteLine();
         Console.WriteLine("Options:");
-        Console.WriteLine("  --source <path>       Folder of .nupkg files, to install an unpublished build.");
-        Console.WriteLine("                        A feed URL also works but cannot be enumerated, so it");
-        Console.WriteLine("                        requires --version.");
+        Console.WriteLine("  --source <folder>     Folder of .nupkg files, to install an unpublished build.");
+        Console.WriteLine("                        Must be a local folder — feed URLs are rejected, because");
+        Console.WriteLine("                        `dotnet new install` cannot be restricted to one feed and");
+        Console.WriteLine("                        would silently accept the package from another. Restore");
+        Console.WriteLine("                        the package first, then point at the cache folder.");
         Console.WriteLine("  --version <version>   Pin an explicit version instead of resolving.");
+        Console.WriteLine("  --feed <url>          NuGet v3 service index to resolve the version from, for");
+        Console.WriteLine("                        machines that reach a mirror but not nuget.org. Used only");
+        Console.WriteLine("                        for version lookup; falls back to nuget.org.");
         Console.WriteLine("  --help, -h            Show this help.");
     }
 
@@ -183,10 +188,11 @@ public static class TemplatesCommand
     /// arguments, and flags with a missing value, so a typo cannot silently change
     /// what gets installed.
     /// </summary>
-    static bool TryParseInstallArgs(string[] args, out string? source, out string? version, out string? error)
+    static bool TryParseInstallArgs(string[] args, out string? source, out string? version, out string? feed, out string? error)
     {
         source = null;
         version = null;
+        feed = null;
         error = null;
 
         for (var i = 0; i < args.Length; i++)
@@ -196,12 +202,14 @@ public static class TemplatesCommand
             {
                 case "--source":
                 case "--version":
+                case "--feed":
                     if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
                     {
                         error = $"'{arg}' requires a value.";
                         return false;
                     }
                     if (arg == "--source") source = args[++i];
+                    else if (arg == "--feed") feed = args[++i];
                     else version = args[++i];
                     break;
                 default:

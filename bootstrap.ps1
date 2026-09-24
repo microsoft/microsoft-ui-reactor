@@ -64,11 +64,17 @@
     in effect.
 
 .PARAMETER WinAppSdkTemplatesSource
-    Extra NuGet source (local folder or feed URL) to resolve the Windows App
-    SDK `dotnet new` template pack from. Use this to test an unpublished build
-    of `Microsoft.WindowsAppSDK.WinUI.CSharp.Templates` — point it at the
+    Local folder of .nupkg files to install the Windows App SDK `dotnet new`
+    template pack from. Use this to test an unpublished build of
+    `Microsoft.WindowsAppSDK.WinUI.CSharp.Templates` — point it at the
     `dotnet pack` output of a WindowsAppSDK checkout. Layered on top of the
     configured sources via `dotnet new install --add-source`.
+
+    Must be a local folder: `dotnet new install` has no feed-isolation switch
+    (`--add-source` only adds to the configured sources), so a feed URL can be
+    silently satisfied from somewhere else — often under the very same version
+    string. To install from an authenticated feed, `dotnet restore` the package
+    first and pass the cache folder here.
 
 .PARAMETER WinAppSdkTemplatesVersion
     Pin the Windows App SDK template pack to an explicit version. By default
@@ -702,6 +708,15 @@ if ($SkipTemplates) {
     if ($WinAppSdkTemplatesVersion) {
         Write-Dbg "Template version pin: $WinAppSdkTemplatesVersion"
         $murTemplateArgs += @('--version', $WinAppSdkTemplatesVersion)
+    }
+    # Resolve the version through the feed this clone is actually configured
+    # against. Without it the resolver only knows nuget.org, so on a machine that
+    # reaches the mirror but not nuget.org it resolves nothing and falls back to a
+    # bare package id — which cannot reach a prerelease-only pack, failing the step
+    # even though a usable feed was right there.
+    if ($effectiveNuGetSource) {
+        Write-Dbg "Template version feed: $effectiveNuGetSource"
+        $murTemplateArgs += @('--feed', $effectiveNuGetSource)
     }
 
     $templatesExit = 0

@@ -179,6 +179,14 @@ jobs:
           # template is present. Join + match to do a whole-output substring
           # check instead.
           $joined = $listing -join "`n"
+          # The "not found" message repeats the search term and prints a
+          # `dotnet new search reactor` hint, both of which contain `reactor` as
+          # a whole token — so the token match below reports success precisely
+          # when the template is absent. Check the negative marker first, exactly
+          # as InterpretTemplateListOutput does.
+          if ($joined -match 'No templates found') {
+              throw "``dotnet new list reactor`` found no templates"
+          }
           # Match each short name as a whole token. A plain substring check (or a
           # \b regex) also matches `reactor-mvu` and `winui-reactor`, because '-'
           # is a word boundary — so a pack carrying only the richer shells would

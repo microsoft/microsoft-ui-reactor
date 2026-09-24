@@ -52,13 +52,22 @@ public static class UpgradeCommand
         //    install-if-missing, not a reinstall. Best-effort: a developer who
         //    scaffolds by hand shouldn't have `mur upgrade` fail on a NuGet hiccup.
         Console.WriteLine();
-        var templateSource = ParseFlag(args, "--templates-source");
-        var templateVersion = ParseFlag(args, "--templates-version");
+        var templateSource = ParseFlag(args, "--templates-source", out var sourceMissingValue);
+        var templateVersion = ParseFlag(args, "--templates-version", out var versionMissingValue);
+        var templateFeed = ParseFlag(args, "--templates-feed", out var feedMissingValue);
+        if (sourceMissingValue || versionMissingValue || feedMissingValue)
+        {
+            var flag = sourceMissingValue ? "--templates-source"
+                     : versionMissingValue ? "--templates-version"
+                     : "--templates-feed";
+            Console.Error.WriteLine($"mur upgrade: '{flag}' requires a value.");
+            return 1;
+        }
         Console.WriteLine($"==> Checking `dotnet new {WinAppSdkTemplates.BlankShortName}` templates ({WinAppSdkTemplates.PackageId})");
         // Install() is a no-op when the resolved version is already installed, and
         // deliberately leaves an existing install alone when it can't resolve a
         // newer one — so this is safe to run on every upgrade.
-        var templateOutcome = WinAppSdkTemplates.Install(repoRoot, templateSource, templateVersion);
+        var templateOutcome = WinAppSdkTemplates.Install(repoRoot, templateSource, templateVersion, templateFeed);
         if (templateOutcome == WinAppSdkTemplates.InstallOutcome.Failed)
         {
             // Best-effort when it's the routine refresh — a NuGet hiccup shouldn't fail
@@ -286,12 +295,25 @@ public static class UpgradeCommand
         return null;
     }
 
-    static string? ParseFlag(string[] args, string name)
+    /// <summary>
+    /// Value of <paramref name="name"/> in <paramref name="args"/>, or null when
+    /// absent. Sets <paramref name="missingValue"/> when the flag is present as
+    /// the final argument: scanning to <c>args.Length - 1</c> would otherwise
+    /// silently ignore it and run the unpinned path, reporting success for work
+    /// the caller did not ask for.
+    /// </summary>
+    static string? ParseFlag(string[] args, string name, out bool missingValue)
     {
-        for (var i = 0; i < args.Length - 1; i++)
+        missingValue = false;
+        for (var i = 0; i < args.Length; i++)
         {
-            if (string.Equals(args[i], name, StringComparison.Ordinal))
-                return args[i + 1];
+            if (!string.Equals(args[i], name, StringComparison.Ordinal)) continue;
+            if (i + 1 >= args.Length)
+            {
+                missingValue = true;
+                return null;
+            }
+            return args[i + 1];
         }
         return null;
     }

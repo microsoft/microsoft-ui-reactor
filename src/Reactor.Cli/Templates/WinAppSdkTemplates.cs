@@ -5,8 +5,9 @@
 // (`dotnet new reactorapp`, unpackaged). The Windows App SDK template pack now
 // carries first-class Reactor templates alongside the WinUI 3 XAML ones, so
 // that's what `bootstrap.ps1` installs and what `mur doctor` looks for. The
-// legacy pack is still built by `mur pack-local` and published from the release
-// workflow, but nothing installs it automatically any more.
+// legacy pack's source has been deleted from this repo and it is no longer
+// built or published — the versions already on NuGet.org are all that remain,
+// and they are deprecated.
 //
 // Two user-visible differences from the legacy `reactorapp` template:
 //   • the short name is `reactor` (plus `reactor-mvu` / `reactor-navview` /
@@ -57,6 +58,49 @@ public static class WinAppSdkTemplates
     // Lists every published version (including prereleases) as a JSON string array.
     const string FlatContainerIndexUrl =
         "https://api.nuget.org/v3-flatcontainer/microsoft.windowsappsdk.winui.csharp.templates/index.json";
+
+    /// <summary>
+    /// The `PackageBaseAddress/3.0.0` resource (the flat container) advertised by a
+    /// NuGet v3 service index, or null when the document doesn't declare one.
+    /// </summary>
+    /// <remarks>
+    /// A service index host generally has no `/flatcontainer/` path of its own, so
+    /// guessing one returns 404 for every package — including ones that certainly
+    /// exist. The base address has to be read out of the index.
+    /// </remarks>
+    internal static string? ParsePackageBaseAddress(string serviceIndexJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(serviceIndexJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object ||
+                !doc.RootElement.TryGetProperty("resources", out var resources) ||
+                resources.ValueKind != JsonValueKind.Array)
+                return null;
+
+            foreach (var resource in resources.EnumerateArray())
+            {
+                if (resource.ValueKind != JsonValueKind.Object) continue;
+                if (!resource.TryGetProperty("@type", out var type) ||
+                    type.ValueKind != JsonValueKind.String) continue;
+                // The version suffix has moved across service-index revisions
+                // (3.0.0, 3.0.0-beta), so match the family rather than one literal.
+                if (!(type.GetString() ?? string.Empty)
+                        .StartsWith("PackageBaseAddress", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!resource.TryGetProperty("@id", out var id) ||
+                    id.ValueKind != JsonValueKind.String) continue;
+
+                var value = id.GetString();
+                if (string.IsNullOrWhiteSpace(value)) continue;
+                return value!.EndsWith('/') ? value : value + "/";
+            }
+        }
+        catch (JsonException)
+        {
+            // Not a service index — fall back to the public flat container.
+        }
+        return null;
+    }
 
     /// <summary>
     /// True when the template *package* is registered with the `dotnet new`
@@ -286,17 +330,23 @@ public static class WinAppSdkTemplates
     /// </summary>
     /// <param name="workingDirectory">Working directory for the `dotnet` process.</param>
     /// <param name="source">
-    /// Extra NuGet source. A local folder holding the nupkg is fully supported. A feed
-    /// URL is passed to `dotnet new install --add-source`, but version *resolution* only
-    /// reads local folders, so a URL source requires an explicit <paramref name="version"/>.
+    /// A local folder holding the nupkg, passed to `dotnet new install --add-source`.
+    /// Feed URLs are rejected: `dotnet new install` has no feed-isolation switch
+    /// (`--add-source` only adds to the configured sources), so a URL source can be
+    /// silently satisfied from another feed — often under the very same version string.
     /// </param>
     /// <param name="version">Explicit version to pin. When omitted the newest published version is resolved.</param>
+    /// <param name="feed">
+    /// NuGet v3 service-index URL used for version *resolution* only (never passed
+    /// to `dotnet new install`). bootstrap supplies the clone's configured feed so
+    /// a machine that cannot reach nuget.org still resolves a version.
+    /// </param>
     /// <remarks>
     /// Returns what actually happened rather than a bare exit code: "kept the
     /// existing install because nothing could be resolved" is a success for
     /// exit-code purposes but must not be reported to the user as "installed".
     /// </remarks>
-    public static InstallOutcome Install(string workingDirectory, string? source = null, string? version = null)
+    public static InstallOutcome Install(string workingDirectory, string? source = null, string? version = null, string? feed = null)
     {
         var hasSource = !string.IsNullOrWhiteSpace(source);
         var pinned = !string.IsNullOrWhiteSpace(version);
@@ -341,13 +391,13 @@ public static class WinAppSdkTemplates
             // which is treated as unverified — never destructive on a maybe. With a
             // source, the source is a local folder (URL sources are rejected above),
             // so its listing is authoritative: absent really means absent.
-            var available = ResolveAvailableVersions(source);
+            var available = ResolveAvailableVersions(source, feed);
             targetExists = available is not null &&
                            available.Any(v => string.Equals(v, target, StringComparison.OrdinalIgnoreCase));
         }
         else
         {
-            target = ResolveLatestVersion(source);
+            target = ResolveLatestVersion(source, feed);
             // A resolved target came out of the feed listing, so it exists by construction.
             targetExists = target is not null;
         }
@@ -435,20 +485,65 @@ public static class WinAppSdkTemplates
     /// not be obtained (offline, unreachable feed). Null means "couldn't tell" and
     /// must never be read as "the version is absent".
     /// </summary>
-    internal static IReadOnlyList<string>? ResolveAvailableVersions(string? source = null)
+    /// <param name="source">Local folder of nupkgs, read instead of any feed.</param>
+    /// <param name="feed">
+    /// NuGet v3 service-index URL to enumerate from. Supplied by bootstrap when the
+    /// clone is configured against a mirror, so a machine that cannot reach
+    /// nuget.org still resolves a version instead of falling back to a bare package
+    /// id that cannot reach this prerelease-only pack.
+    /// </param>
+    internal static IReadOnlyList<string>? ResolveAvailableVersions(string? source = null, string? feed = null)
     {
         // A local folder source is the unpublished-build test path: read the
         // versions straight off the nupkg filenames rather than hitting NuGet.
         if (!string.IsNullOrWhiteSpace(source) && Directory.Exists(source))
             return EnumerateLocalVersions(source!);
 
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+
+        if (!string.IsNullOrWhiteSpace(feed))
+        {
+            var versions = TryEnumerateFromFeed(http, feed!);
+            if (versions is not null) return versions;
+            Console.Error.WriteLine(
+                $"  warning: could not enumerate {PackageId} from '{RedactSource(feed!)}'; " +
+                $"falling back to nuget.org.");
+        }
+
+        return TryGetVersions(http, FlatContainerIndexUrl);
+    }
+
+    /// <summary>
+    /// Resolves a service index to its flat container and lists the pack's versions
+    /// there. Null on any failure, so the caller can fall back.
+    /// </summary>
+    static IReadOnlyList<string>? TryEnumerateFromFeed(HttpClient http, string serviceIndexUrl)
+    {
+        string? indexJson;
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-            var json = http.GetStringAsync(FlatContainerIndexUrl).GetAwaiter().GetResult();
+            indexJson = http.GetStringAsync(serviceIndexUrl).GetAwaiter().GetResult();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or UriFormatException or InvalidOperationException)
+        {
+            return null;
+        }
+
+        var baseAddress = ParsePackageBaseAddress(indexJson);
+        if (baseAddress is null) return null;
+
+        // Flat-container paths are lowercase.
+        return TryGetVersions(http, $"{baseAddress}{PackageId.ToLowerInvariant()}/index.json");
+    }
+
+    static IReadOnlyList<string>? TryGetVersions(HttpClient http, string flatContainerIndexUrl)
+    {
+        try
+        {
+            var json = http.GetStringAsync(flatContainerIndexUrl).GetAwaiter().GetResult();
             return PackLocalCommand.ParseFlatContainerVersions(json);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or UriFormatException or InvalidOperationException)
         {
             Console.Error.WriteLine(
                 $"  warning: could not query NuGet for {PackageId} versions " +
@@ -462,9 +557,9 @@ public static class WinAppSdkTemplates
     /// otherwise the newest prerelease. Returns null when nothing could be
     /// resolved (offline, unreachable feed, empty folder).
     /// </summary>
-    public static string? ResolveLatestVersion(string? source = null)
+    public static string? ResolveLatestVersion(string? source = null, string? feed = null)
     {
-        var versions = ResolveAvailableVersions(source);
+        var versions = ResolveAvailableVersions(source, feed);
         return versions is null ? null : SelectPreferStable(versions);
     }
 

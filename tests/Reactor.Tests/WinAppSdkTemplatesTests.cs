@@ -367,6 +367,54 @@ public sealed class WinAppSdkTemplatesTests
         Assert.DoesNotContain("PAT", redacted, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ParsePackageBaseAddress_reads_the_flat_container_from_a_service_index()
+    {
+        // The service-index host generally has no /flatcontainer/ path of its own,
+        // so guessing one 404s for every package — including ones that exist. The
+        // base address has to come out of the index.
+        const string serviceIndex = """
+            {
+              "version": "3.0.0",
+              "resources": [
+                { "@id": "https://example.com/query", "@type": "SearchQueryService/3.0.0" },
+                { "@id": "https://ms-feed-25.example.com/_packaging/x/nuget/v3/flat2", "@type": "PackageBaseAddress/3.0.0" }
+              ]
+            }
+            """;
+
+        Assert.Equal(
+            "https://ms-feed-25.example.com/_packaging/x/nuget/v3/flat2/",
+            WinAppSdkTemplates.ParsePackageBaseAddress(serviceIndex));
+    }
+
+    [Fact]
+    public void ParsePackageBaseAddress_returns_null_when_no_flat_container_is_declared()
+    {
+        // Must be null, not a guessed URL: the caller falls back to nuget.org, and
+        // a fabricated address would instead 404 and read as "version absent".
+        const string serviceIndex = """
+            {"version":"3.0.0","resources":[{"@id":"https://example.com/query","@type":"SearchQueryService/3.0.0"}]}
+            """;
+
+        Assert.Null(WinAppSdkTemplates.ParsePackageBaseAddress(serviceIndex));
+        Assert.Null(WinAppSdkTemplates.ParsePackageBaseAddress("not json at all"));
+    }
+
+    [Fact]
+    public void Bootstrap_passes_its_configured_feed_to_the_version_resolver()
+    {
+        // The resolver otherwise only knows nuget.org. On a machine that reaches
+        // the configured mirror but not nuget.org it would resolve nothing and fall
+        // back to a bare package id, which cannot reach a prerelease-only pack —
+        // failing the step with a usable feed sitting right there.
+        var (path, text) = ReadRepoFile("bootstrap.ps1");
+        Assert.True(
+            global::System.Text.RegularExpressions.Regex.IsMatch(
+                text.Replace("\r\n", "\n"), @"'--feed',\s*\$effectiveNuGetSource"),
+            $"'{path}' must pass the resolved NuGet source to `mur templates install --feed`.");
+    }
+
     // ── False-PASS guard: "pack installed" != "templates usable" ───────────
     //
     // Observed live during the de-stale merge: the machine had
