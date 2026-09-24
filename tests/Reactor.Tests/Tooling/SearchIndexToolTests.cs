@@ -37,6 +37,22 @@ sealed class MiniGallery : IDisposable
         return path;
     }
 
+    /// <summary>
+    /// Writes a throwaway agent kit (<c>skills/topic.md</c>) and returns the root to pass as
+    /// <c>agentKitRoot</c>, so the <c>&lt;!-- index:id --&gt;</c> scanner can be driven without
+    /// touching the real <c>plugins/</c> tree.
+    /// </summary>
+    public string WriteAgentKit(string markdown, string fileName = "topic.md")
+    {
+        var skills = Path.Join(Root, "kit", "skills");
+        Directory.CreateDirectory(skills);
+        File.WriteAllText(Path.Join(skills, fileName), markdown);
+        return Path.Join(Root, "kit");
+    }
+
+    /// <summary>Replaces AlphaPage so a test can control how many SampleCards it declares.</summary>
+    public void OverwriteAlphaPage(string cs) => File.WriteAllText(Path.Join(GalleryDir, "ControlPages", "AlphaPage.cs"), cs);
+
     public void OverwriteRegistry(string cs) => File.WriteAllText(Path.Join(GalleryDir, "ControlRegistry.cs"), cs);
 
     public void Dispose()
@@ -217,6 +233,218 @@ public static class ControlRegistry
         var ex = Assert.Throws<InvalidOperationException>(() => SearchIndexGenerator.Generate(g.GalleryDir, ed));
         Assert.Contains("editorial.json is invalid", ex.Message);
     }
+
+    // ══ Issue #1275 — multi-sample emission, curated keywords, docs, prose markers ══
+
+    const string AlphaThreeCards = @"namespace WinUIGalleryReactor;
+class AlphaPage
+{
+    object Render() => VStack(
+        SampleCard(""Alpha basic"", null, ""Alpha();""),
+        SampleCard(""Alpha elided"", null, ""Alpha(a, ...);""),
+        SampleCard(""Alpha advanced"", null, ""Alpha().Tuned();""),
+        SampleCard(""Alpha basic"", null, ""AlphaDuplicateHeader();""));
+}";
+
+    [Fact]
+    public void EveryCleanCard_IsEmitted_PlaceholdersAndDuplicateHeadersAreNot()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        g.OverwriteAlphaPage(AlphaThreeCards);
+        var ed = g.WriteEditorial(@"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""] }, " + BetaKeywords + " }");
+
+        var alpha = Find(Parse(SearchIndexGenerator.Generate(g.GalleryDir, ed).Json), "alpha");
+
+        // Both clean cards travel; the elided one and the header-duplicate do not.
+        Assert.Equal(new[] { "Alpha basic", "Alpha advanced" }, alpha.Samples.Select(s => s.Header).ToArray());
+        Assert.DoesNotContain(alpha.Samples, s => s.Code.Contains("...", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SampleOverride_DefinesTheFirstSample_AndLaterCardsStillFollow()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        g.OverwriteAlphaPage(AlphaThreeCards);
+        var ed = g.WriteEditorial(
+            @"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""], ""sampleOverride"": { ""header"": ""Curated first"" } }, " + BetaKeywords + " }");
+
+        var alpha = Find(Parse(SearchIndexGenerator.Generate(g.GalleryDir, ed).Json), "alpha");
+
+        Assert.Equal("Curated first", alpha.Samples[0].Header);
+        Assert.Equal("Alpha();", alpha.Samples[0].Code); // override was header-only
+        Assert.Equal("Alpha advanced", alpha.Samples[1].Header);
+    }
+
+    [Fact]
+    public void SampleOverride_HeaderCollidingWithALaterCard_DropsTheDuplicate()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        g.OverwriteAlphaPage(AlphaThreeCards);
+        // Differs from the later card's "Alpha advanced" only by case — the page-level dedupe is
+        // case-insensitive, so this guard must be too or the override reintroduces the duplicate.
+        var ed = g.WriteEditorial(
+            @"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""], ""sampleOverride"": { ""header"": ""alpha ADVANCED"" } }, " + BetaKeywords + " }");
+
+        var alpha = Find(Parse(SearchIndexGenerator.Generate(g.GalleryDir, ed).Json), "alpha");
+
+        Assert.Equal("alpha ADVANCED", alpha.Samples[0].Header);
+        Assert.Single(alpha.Samples);
+    }
+
+    [Fact]
+    public void CuratedKeywords_AreCanonicalizedLikeKeywords()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        var ed = g.WriteEditorial(
+            @"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""], ""curatedKeywords"": ["" State   Management "", ""STATE MANAGEMENT"", null] }, " + BetaKeywords + " }");
+
+        var alpha = Find(Parse(SearchIndexGenerator.Generate(g.GalleryDir, ed).Json), "alpha");
+        Assert.Equal(new[] { "state management" }, alpha.CuratedKeywords!.ToArray());
+        Assert.Null(Find(Parse(SearchIndexGenerator.Generate(g.GalleryDir, ed).Json), "beta").CuratedKeywords);
+    }
+
+    [Fact]
+    public void DocLink_MissingTitleOrUri_FailsGeneration()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        var ed = g.WriteEditorial(
+            @"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""], ""docs"": [ { ""title"": ""No uri"" } ] }, " + BetaKeywords + " }");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => SearchIndexGenerator.Generate(g.GalleryDir, ed));
+        Assert.Contains("alpha", ex.Message);
+        Assert.Contains("docs", ex.Message);
+    }
+
+    /// <summary>
+    /// A hand-edited editorial file can contain `"docs": [null]`. That must surface as the
+    /// documented generation error, not as an unhandled NullReferenceException — the CLI only
+    /// catches the former, so an NRE would crash the tool instead of reporting a bad sidecar.
+    /// </summary>
+    [Fact]
+    public void DocLink_NullEntry_FailsGenerationWithoutDereferencing()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        var ed = g.WriteEditorial(
+            @"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""], ""docs"": [ null ] }, " + BetaKeywords + " }");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => SearchIndexGenerator.Generate(g.GalleryDir, ed));
+        Assert.Contains("alpha", ex.Message);
+        Assert.Contains("docs", ex.Message);
+
+        // The CLI's catch list covers InvalidOperationException but not NullReferenceException,
+        // so the exception TYPE is the contract here, not just the message.
+        using var log = new StringWriter();
+        Assert.Equal(2, SearchIndexCli.Run(new[] { g.GalleryDir, ed, Path.Join(g.Root, "out.json") }, log));
+        Assert.Contains("[search-index] ERROR:", log.ToString());
+    }
+
+    [Fact]
+    public void MarkedBlock_BecomesDetails_AndOtherControlsGetNone()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        var ed = g.WriteEditorial(@"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""] }, " + BetaKeywords + " }");
+        var kit = g.WriteAgentKit("# Topic\n\n<!-- index:alpha -->\nAlpha is the first letter.\n<!-- /index:alpha -->\n");
+
+        var root = Parse(SearchIndexGenerator.Generate(g.GalleryDir, ed, kit).Json);
+        Assert.Equal("Alpha is the first letter.", Find(root, "alpha").Details);
+        Assert.Null(Find(root, "beta").Details);
+
+        // Omitting the agent-kit root is the documented "no markers" mode, not an error.
+        Assert.Null(Find(Parse(SearchIndexGenerator.Generate(g.GalleryDir, ed).Json), "alpha").Details);
+    }
+
+    [Theory]
+    [InlineData("<!-- index:alpha -->\nunclosed\n", "never closed")]
+    [InlineData("<!-- index:alpha -->\n<!-- index:beta -->\nnested\n<!-- /index:beta -->\n<!-- /index:alpha -->", "cannot nest")]
+    [InlineData("<!-- /index:alpha -->\n", "never opened")]
+    [InlineData("<!-- index:alpha -->\nmismatched\n<!-- /index:beta -->", "closes the wrong block")]
+    [InlineData("<!-- index:alpha -->\n\n   \n<!-- /index:alpha -->", "wraps no prose")]
+    // A marker id that is not lower-kebab must be REJECTED, not skipped. Matching only
+    // well-formed ids would make each of these invisible, silently costing the entry its prose.
+    [InlineData("<!-- index:Alpha -->\nwrong case\n<!-- /index:Alpha -->", "invalid id")]
+    [InlineData("<!-- index:use_state -->\nunderscore\n<!-- /index:use_state -->", "invalid id")]
+    [InlineData("<!-- index: -->\nempty\n<!-- /index: -->", "invalid id")]
+    [InlineData("<!-- index:use state -->\nembedded space\n<!-- /index:use state -->", "invalid id")]
+    public void MalformedMarker_FailsGeneration(string markdown, string expected)
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        var ed = g.WriteEditorial(@"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""] }, " + BetaKeywords + " }");
+        var kit = g.WriteAgentKit(markdown);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => SearchIndexGenerator.Generate(g.GalleryDir, ed, kit));
+        Assert.Contains(expected, ex.Message);
+        // Diagnostics must name the file and line, not just the file name — the scanner walks
+        // two whole trees and "SKILL.md" is not unique within them.
+        Assert.Contains("skills/topic.md(", ex.Message);
+    }
+
+    [Fact]
+    public void MarkerNamingNoControl_FailsGeneration()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        var ed = g.WriteEditorial(@"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""] }, " + BetaKeywords + " }");
+        var kit = g.WriteAgentKit("<!-- index:gamma -->\nProse for a control that does not exist.\n<!-- /index:gamma -->");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => SearchIndexGenerator.Generate(g.GalleryDir, ed, kit));
+        Assert.Contains("gamma", ex.Message);
+        Assert.Contains("match no control id", ex.Message);
+    }
+
+    [Fact]
+    public void RelativeLinksInMarkedProse_AreRewrittenAbsolute()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        var ed = g.WriteEditorial(@"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""] }, " + BetaKeywords + " }");
+        var kit = g.WriteAgentKit("<!-- index:alpha -->\nSee [the sibling](sibling.md) and [an anchor](sibling.md#part).\n<!-- /index:alpha -->");
+        File.WriteAllText(Path.Join(kit, "skills", "sibling.md"), "# Sibling\n");
+
+        var details = Find(Parse(SearchIndexGenerator.Generate(g.GalleryDir, ed, kit).Json), "alpha").Details!;
+
+        Assert.Contains("(https://github.com/microsoft/microsoft-ui-reactor/blob/main/skills/sibling.md)", details);
+        Assert.Contains("(https://github.com/microsoft/microsoft-ui-reactor/blob/main/skills/sibling.md#part)", details);
+
+        // Guards the capture-group semantics of MarkdownLinkRegex: if the rewriter ever read the
+        // `]` group instead of the target, it would resolve a file literally named "]" and throw
+        // "points at nothing" rather than producing these URLs. The file name in the assertions
+        // above is what makes that distinguishable.
+        Assert.DoesNotContain("blob/main/skills/]", details);
+    }
+
+    [Fact]
+    public void RelativeLinkToNothing_FailsGeneration()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        var ed = g.WriteEditorial(@"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""] }, " + BetaKeywords + " }");
+        var kit = g.WriteAgentKit("<!-- index:alpha -->\nSee [the missing one](nope.md).\n<!-- /index:alpha -->");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => SearchIndexGenerator.Generate(g.GalleryDir, ed, kit));
+        Assert.Contains("points at nothing", ex.Message);
+    }
+
+    [Fact]
+    public void RootedLinkInMarkedProse_FailsGeneration()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        var ed = g.WriteEditorial(@"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""] }, " + BetaKeywords + " }");
+        // Site-absolute markdown links are the common form of this mistake; without an explicit
+        // guard Path.Combine drops the file's directory and resolves against the drive root.
+        var kit = g.WriteAgentKit("<!-- index:alpha -->\nSee [site absolute](/docs/guide/hooks.md).\n<!-- /index:alpha -->");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => SearchIndexGenerator.Generate(g.GalleryDir, ed, kit));
+        Assert.Contains("is rooted", ex.Message);
+    }
+
+    [Fact]
+    public void AbsoluteAndAnchorLinks_AreLeftAlone()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        var ed = g.WriteEditorial(@"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""] }, " + BetaKeywords + " }");
+        var kit = g.WriteAgentKit("<!-- index:alpha -->\n[ext](https://example.com/x) and [local](#heading).\n<!-- /index:alpha -->");
+
+        var details = Find(Parse(SearchIndexGenerator.Generate(g.GalleryDir, ed, kit).Json), "alpha").Details!;
+        Assert.Contains("(https://example.com/x)", details);
+        Assert.Contains("(#heading)", details);
+    }
 }
 
 /// <summary>
@@ -253,6 +481,110 @@ public sealed class SearchIndexCliTests
         using var log = new StringWriter();
         Assert.Equal(2, SearchIndexCli.Run(new[] { "--chek" }, log));
         Assert.Contains("unknown option", log.ToString());
+    }
+
+    /// <summary>
+    /// The agent-kit root is inferred from the GALLERY, not from the argument count, so passing
+    /// the real paths explicitly must produce byte-identical output to passing none. Before this
+    /// was keyed on `positional.Count == 0`, which silently wrote a details-free index whenever a
+    /// contributor spelled the paths out.
+    /// </summary>
+    [Fact]
+    public void Run_ExplicitRealPaths_MatchTheDefaultInvocationByte4Byte()
+    {
+        var repoRoot = RepoRoot();
+        var galleryDir = Path.Join(repoRoot, "samples", "ReactorGallery");
+        var editorial = Path.Join(repoRoot, "tools", "Reactor.SearchIndex", "editorial.json");
+        var committed = Path.Join(galleryDir, "reactor-search-index.json");
+        var outPath = Path.Join(Path.GetTempPath(), $"reactor-si-cli-{Guid.NewGuid():N}.json");
+        using var log = new StringWriter();
+
+        try
+        {
+            Assert.Equal(0, SearchIndexCli.Run(new[] { galleryDir, editorial, outPath }, log));
+            Assert.Equal(File.ReadAllBytes(committed), File.ReadAllBytes(outPath));
+
+            // Positive control: the comparison above is only meaningful if details are present.
+            Assert.Contains("\"details\":", File.ReadAllText(outPath), StringComparison.Ordinal);
+
+            // ...and --no-agent-kit is the explicit opt-out, which must differ.
+            Assert.Equal(0, SearchIndexCli.Run(new[] { "--no-agent-kit", galleryDir, editorial, outPath }, log));
+            Assert.DoesNotContain("\"details\":", File.ReadAllText(outPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(outPath)) File.Delete(outPath);
+        }
+    }
+
+    [Fact]
+    public void Run_NoAgentKitCombinedWithAgentKit_ReturnsUsageError()
+    {
+        using var log = new StringWriter();
+        Assert.Equal(2, SearchIndexCli.Run(new[] { "--no-agent-kit", "--agent-kit=." }, log));
+        Assert.Contains("mutually exclusive", log.ToString());
+    }
+
+    /// <summary>
+    /// A mistyped explicit override must fail loudly. An INFERRED root is allowed to be absent —
+    /// that is how a synthetic gallery opts out — but if a typo were treated the same way the
+    /// tool would happily write a details-free index and report success.
+    /// </summary>
+    [Fact]
+    public void Run_MistypedAgentKitDirectory_ReturnsUsageError()
+    {
+        using var g = new MiniGallery(betaRouted: true);
+        var ed = g.WriteEditorial(ValidEditorial);
+        var outPath = Path.Join(g.Root, "out.json");
+        var missing = Path.Join(g.Root, "no-such-kit");
+        using var log = new StringWriter();
+
+        Assert.Equal(2, SearchIndexCli.Run(new[] { $"--agent-kit={missing}", g.GalleryDir, ed, outPath }, log));
+        Assert.Contains("does not exist", log.ToString());
+        Assert.False(File.Exists(outPath), "a rejected run must not write an index");
+
+        // A path that exists but is a FILE is the other half of the same mistake, and gets its
+        // own message rather than the misleading "does not exist".
+        using var fileLog = new StringWriter();
+        Assert.Equal(2, SearchIndexCli.Run(new[] { $"--agent-kit={ed}", g.GalleryDir, ed, outPath }, fileLog));
+        Assert.Contains("must be a directory, not a file", fileLog.ToString());
+        Assert.False(File.Exists(outPath), "a rejected run must not write an index");
+
+        // An existing directory that contributes nothing is the subtlest form. It can be
+        // unrelated, correctly shaped but empty, or full of markdown that simply carries no
+        // markers — all three end the same way, so the check is on the OUTCOME, not the shape.
+        foreach (var (name, build) in new (string, Action<string>)[]
+        {
+            ("not-a-kit", static d => Directory.CreateDirectory(d)),
+            ("shaped-kit", static d => { Directory.CreateDirectory(Path.Join(d, "skills")); Directory.CreateDirectory(Path.Join(d, "plugins")); }),
+            ("markdown-no-markers", static d => { Directory.CreateDirectory(Path.Join(d, "skills")); File.WriteAllText(Path.Join(d, "skills", "readme.md"), "# Just prose, no markers\n"); }),
+        })
+        {
+            using var strayLog = new StringWriter();
+            var dir = Path.Join(g.Root, name);
+            build(dir);
+            Assert.Equal(2, SearchIndexCli.Run(new[] { $"--agent-kit={dir}", g.GalleryDir, ed, outPath }, strayLog));
+            Assert.Contains("produced no `details`", strayLog.ToString());
+            Assert.Contains("--no-agent-kit", strayLog.ToString());
+            Assert.False(File.Exists(outPath), $"a rejected run must not write an index ({name})");
+        }
+
+        // Positive control: the same invocation against a real directory succeeds, so the
+        // assertion above is about the missing path and not about the argument shape.
+        var kit = g.WriteAgentKit("<!-- index:alpha -->\nAlpha prose.\n<!-- /index:alpha -->");
+        Assert.Equal(0, SearchIndexCli.Run(new[] { $"--agent-kit={kit}", g.GalleryDir, ed, outPath }, log));
+        Assert.Contains("\"details\":", File.ReadAllText(outPath), StringComparison.Ordinal);
+    }
+
+    static string RepoRoot()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Join(dir, "Reactor.slnx"))) return dir;
+            dir = Path.GetDirectoryName(dir);
+        }
+        throw new DirectoryNotFoundException("Could not locate repo root from " + AppContext.BaseDirectory);
     }
 
     [Fact]

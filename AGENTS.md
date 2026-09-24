@@ -326,10 +326,19 @@ point of return: stop and ship.
 - The **ReactorGallery search index** (`samples/ReactorGallery/reactor-search-index.json`,
   consumed by the external `winui-search` CLI) is generated from the gallery source +
   `tools/Reactor.SearchIndex/editorial.json`. After adding/renaming a gallery control or
-  changing its first sample snippet, regenerate via
-  `dotnet run --project tools/Reactor.SearchIndex` (a `Reactor.Tests` gate byte-compares it,
-  so a stale index fails CI). Curate keywords/usings/overrides in `editorial.json`, never the
-  generated JSON.
+  changing **any** of its sample snippets (every clean `SampleCard` is emitted, not just the
+  first), regenerate via `dotnet run --project tools/Reactor.SearchIndex` (a `Reactor.Tests`
+  gate byte-compares it, so a stale index fails CI). Curate keywords/usings/overrides in
+  `editorial.json`, never the generated JSON.
+  - **Never bump `SearchIndexGenerator.SchemaVersion`.** The consumer pins it at `1` and treats
+    any other value as "nothing I understand" — it returns zero scenarios *without an error*, so
+    a bump silently blanks the whole Reactor corpus in `winapp find-ui`. New fields are additive
+    and schema-legal; that is why there has never been a reason to bump it. `SchemaVersion_StaysAtOne`
+    is the gate.
+  - An entry's `details` prose is **lifted verbatim** out of the shipped agent kit by an
+    `<!-- index:<control-id> -->` marker in a SKILL.md, so index and skills cannot drift. Edit the
+    marked block, not the JSON; an unclosed/nested marker or an id naming no control fails
+    generation. Spec 064.
 - A new common-element modifier touches every seam: the `ElementModifiers` field, skip
   equality, `Merge`, `ApplyModifiers`, and the fluent extension. Pair a `.HasValue` write
   with `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling.
