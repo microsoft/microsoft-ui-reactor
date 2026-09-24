@@ -43,9 +43,13 @@ public sealed class ValidationContext
     /// Two rules keep this from driving a render loop. First, re-running the same
     /// validators over an unchanged value is silent: results are applied with a
     /// structural diff, so an idempotent re-validation raises nothing. Second,
-    /// mutations made while a render is in flight are not announced — the rendering
-    /// component reads the new state later in the same pass, and notifying would
-    /// re-enter the reconciler's re-render path from inside <c>Render()</c>.
+    /// mutations made while a render is in flight are not announced <i>inline</i> —
+    /// the rendering component reads the new state later in the same pass, and
+    /// notifying there would re-enter the reconciler's re-render path from inside
+    /// <c>Render()</c>. They are held and delivered once the pass finishes, so other
+    /// subscribers — a parent rendering <c>IsValid()</c>, say — still hear about them;
+    /// a pass that ends with the state it started with is dropped rather than
+    /// delivered, since there is nothing to announce.
     /// </para>
     /// </summary>
     public event Action? Changed
@@ -1240,16 +1244,21 @@ public sealed class ValidationContext
         bool changed;
         lock (_lock)
         {
-            if (_asyncGeneration.TryGetValue(field, out var byProducer))
-            {
-                byProducer.Remove(producer);
-                if (byProducer.Count == 0) _asyncGeneration.Remove(field);
-            }
-
-            changed = ApplyOwnedLocked(field, producer, []);
+            changed = RetireProducerLocked(field, producer);
             if (changed) BumpVersionLocked(messagesOnly: true);
         }
         if (changed) RaiseChanged(messagesOnly: true);
+    }
+
+    private bool RetireProducerLocked(string field, string producer)
+    {
+        if (_asyncGeneration.TryGetValue(field, out var byProducer))
+        {
+            byProducer.Remove(producer);
+            if (byProducer.Count == 0) _asyncGeneration.Remove(field);
+        }
+
+        return ApplyOwnedLocked(field, producer, []);
     }
 
     /// <summary>
@@ -1265,16 +1274,25 @@ public sealed class ValidationContext
     /// what I installed" exact without comparing message instances, which
     /// <see cref="ApplyOwnedLocked"/> deliberately keeps stable across an unchanged pass.
     /// </para>
+    /// <para>
+    /// The comparison and the withdrawal share one lock acquisition. Split across two, a
+    /// writer that installed a newer verdict in the window between them would have it
+    /// deleted by the very check meant to protect it (issue #1262 review).
+    /// </para>
     /// </summary>
     internal void RetireProducer(string field, string producer, long expectedStamp)
     {
+        bool changed;
         lock (_lock)
         {
             var current = _producerStamp.TryGetValue(field, out var stamps)
                 && stamps.TryGetValue(producer, out var stamp) ? stamp : 0;
             if (current != expectedStamp) return;
+
+            changed = RetireProducerLocked(field, producer);
+            if (changed) BumpVersionLocked(messagesOnly: true);
         }
-        RetireProducer(field, producer);
+        if (changed) RaiseChanged(messagesOnly: true);
     }
 
     /// <summary>

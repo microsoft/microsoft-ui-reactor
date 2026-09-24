@@ -57,10 +57,12 @@ Conventions for contributors:
 ### Changed
 
 - `.Validate(fieldName, value, validators…)` now runs its validators during the
-  render that calls it, instead of only when a `FormField` or visualizer mounts
-  the element. Results are therefore readable by the same `Render()` that
-  produced them. The validator-only `.Validate(fieldName, validators…)` overload
-  is unchanged and still attach-only (spec 011 §1A.5, issue #1262).
+  render that calls it, instead of only when a `FormField` mounts the element —
+  the only consumer that ever ran them. (The visualizers are display-only: they
+  render what a context already holds.) Results are therefore readable by the
+  same `Render()` that produced them. The validator-only
+  `.Validate(fieldName, validators…)` overload is unchanged and still attach-only
+  (spec 011 §1A.5, issue #1262).
 - `UseValidationContext()` publishes a component-local context to the rendered
   subtree automatically, so `FormField`, `ValidationVisualizer`, and nested
   components no longer require an explicit

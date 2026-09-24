@@ -134,17 +134,21 @@ internal static class ValidationRenderScope
     /// scope, so a child component whose ancestor provided a context gets eager
     /// validation without having to call <c>UseValidationContext()</c> itself.
     /// </summary>
-    internal static Frame Begin(ValidationContext? inherited)
-    {
-        // Claims from the previous pass are dropped as the next one opens, not as the
-        // last one closed: the mount that consumes a claim does not always run inside a
-        // frame — a host's first render is not wrapped in one — so clearing on close
-        // discarded the claim before the control that inherits it existed. Anything
-        // unclaimed belongs to a superseded chain link or an element that was never
-        // mounted, and at most one pass' worth is ever held.
-        if (t_depth == 0) t_owned = null;
+    internal static Frame Begin(ValidationContext? inherited) => BeginCore(inherited, isReconcile: false);
 
-        var frame = new Frame(t_context, t_pendingProvide);
+    private static Frame BeginCore(ValidationContext? inherited, bool isReconcile)
+    {
+        // A render frame opening at depth 0 starts a new pass, so the previous pass's
+        // claims are dropped here rather than when the last frame closed: the mount that
+        // consumes a claim does not always run inside the frame that made it.
+        //
+        // A reconcile frame must NOT clear. It is the *consumer* — a host's root render
+        // closes its own frame before Reconcile opens this one, so clearing here would
+        // discard every root-level `.Validate()` claim before the controls that inherit
+        // them exist (issue #1262 review).
+        if (t_depth == 0 && !isReconcile) t_owned = null;
+
+        var frame = new Frame(t_context, t_pendingProvide, isReconcile);
         t_context = inherited;
         t_pendingProvide = null;
         t_depth++;
@@ -167,7 +171,30 @@ internal static class ValidationRenderScope
     /// reached from reconcile code stays attach-only exactly as before.
     /// </para>
     /// </summary>
-    internal static Frame BeginReconcile() => Begin(null);
+    internal static Frame BeginReconcile() => BeginCore(null, isReconcile: true);
+
+    /// <summary>
+    /// Withdraws every claim the pass made that no control took over.
+    /// <para>
+    /// A claim is created by the eager write and taken by the control that gets mounted
+    /// or updated with it. One left behind belongs to an element that was validated and
+    /// then never mounted — built inside a render, then dropped — whose verdict would
+    /// otherwise sit in the context owned by nothing. The withdrawal is stamped, so it
+    /// cannot disturb a slot something else has written since.
+    /// </para>
+    /// </summary>
+    private static void RetireUnconsumedClaims()
+    {
+        var owned = t_owned;
+        t_owned = null;
+        if (owned is null || owned.Count == 0) return;
+
+        foreach (var (attached, claim) in owned)
+        {
+            claim.Context.RetireProducer(
+                attached.FieldName, ValidationContext.SyncProducer, claim.Stamp);
+        }
+    }
 
     /// <summary>
     /// Called by <c>UseValidationContext()</c> with the context it resolved.
@@ -211,17 +238,27 @@ internal static class ValidationRenderScope
     {
         private readonly ValidationContext? _previousContext;
         private readonly ValidationContext? _previousPendingProvide;
+        private readonly bool _isReconcile;
 
-        internal Frame(ValidationContext? previousContext, ValidationContext? previousPendingProvide)
+        internal Frame(
+            ValidationContext? previousContext,
+            ValidationContext? previousPendingProvide,
+            bool isReconcile)
         {
             _previousContext = previousContext;
             _previousPendingProvide = previousPendingProvide;
+            _isReconcile = isReconcile;
         }
 
         public void Dispose()
         {
             t_context = _previousContext;
             t_pendingProvide = _previousPendingProvide;
+
+            // Before the depth drops, so the retractions defer into this pass's batch
+            // rather than announcing one at a time on the way out.
+            if (_isReconcile && t_depth == 1) RetireUnconsumedClaims();
+
             if (t_depth > 0) t_depth--;
             if (t_depth == 0)
             {

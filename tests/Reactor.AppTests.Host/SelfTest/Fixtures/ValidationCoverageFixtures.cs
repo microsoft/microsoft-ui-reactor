@@ -1731,6 +1731,8 @@ internal static class ValidationCoverageFixtures
         Removed,
         /// <summary>Same field, different control type: the replacement guard.</summary>
         Replaced,
+        /// <summary>Validated element built and then dropped without being rendered.</summary>
+        Discarded,
     }
 
     internal sealed record BareValidateProps(
@@ -1759,10 +1761,22 @@ internal static class ValidationCoverageFixtures
                     TextBox("").Validate("email", "", Validate.Required("Email is required"))),
                 BareValidateShape.Hidden => VStack(8, TextBlock("bare-head"), TextBlock("hidden")),
                 BareValidateShape.Removed => VStack(8, TextBlock("bare-head")),
+                BareValidateShape.Discarded => DiscardedTree(),
                 _ => VStack(8,
                     TextBlock("bare-head"),
                     PasswordBox("").Validate("email", "", Validate.Required("Email is required"))),
             };
+        }
+
+        /// <summary>
+        /// Builds a validated element and then drops it. `.Validate()` has already
+        /// written its verdict by the time the element is discarded, so nothing will
+        /// ever be mounted to own it.
+        /// </summary>
+        private static Element DiscardedTree()
+        {
+            _ = TextBox("").Validate("ghost", "", Validate.Required("ghost is required"));
+            return VStack(8, TextBlock("bare-head"));
         }
     }
 
@@ -1802,6 +1816,8 @@ internal static class ValidationCoverageFixtures
             await BareAsync(BareValidateShape.Hidden, "Hidden", nudge: false);
             await BareAsync(BareValidateShape.Removed, "Removed", nudge: false);
             await BareAsync(BareValidateShape.Hidden, "Skipped", nudge: true);
+            await RootHostAsync();
+            await DiscardedElementAsync();
             await BareReplacedAsync();
             await WholeFormFieldAsync();
             await ChainMovesFieldAsync();
@@ -1810,6 +1826,49 @@ internal static class ValidationCoverageFixtures
             var done = H.CreateHost();
             done.Mount(c => TextBlock("Issue1262 unmount withdraw done"));
             await Harness.Render();
+        }
+
+        // The host's own root render, with no child component in between. Its render
+        // frame closes before the reconcile frame opens, so the claim has to survive
+        // the gap between them to reach the control that inherits it.
+        private async Task RootHostAsync()
+        {
+            var host = H.CreateHost();
+            Action<bool>? setShow = null;
+            ValidationContext? ctx = null;
+
+            host.Mount(c =>
+            {
+                var (show, set) = c.UseState(true);
+                setShow = set;
+                ctx = c.UseValidationContext();
+
+                return VStack(12,
+                    TextBlock("root-head"),
+                    show
+                        ? TextBox("").Validate("email", "", Validate.Required("Email is required"))
+                        : TextBlock("hidden"));
+            });
+
+            await Harness.Render();
+            H.Check("Issue1262_Unmount_RootResolved", ctx is not null);
+            if (ctx is null) return;
+
+            H.Check("Issue1262_Unmount_RootInitialError", ctx.GetMessages("email").Count == 1,
+                $"email={ctx.GetMessages("email").Count}");
+
+            setShow!(false);
+            await Harness.Render();
+            await Harness.Render();
+            for (var i = 0; i < 20 && ctx.GetMessages("email").Count > 0; i++)
+            {
+                await global::System.Threading.Tasks.Task.Delay(25);
+                await Harness.Render();
+            }
+
+            H.Check("Issue1262_Unmount_RootWithdrawn", ctx.GetMessages("email").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("email").Select(m => m.Text))}");
+            H.Check("Issue1262_Unmount_RootValid", ctx.IsValid(), $"valid={ctx.IsValid()}");
         }
 
         // A bare `.Validate()` — no FormField anywhere — that stops being rendered,
@@ -1872,6 +1931,30 @@ internal static class ValidationCoverageFixtures
             H.Check($"Issue1262_Unmount_Bare{label}Withdrawn", ctx.GetMessages("email").Count == 0,
                 $"remaining={string.Join("|", ctx.GetMessages("email").Select(m => m.Text))}");
             H.Check($"Issue1262_Unmount_Bare{label}Valid", ctx.IsValid(), $"valid={ctx.IsValid()}");
+        }
+
+        // A validated element that is built and then dropped writes its verdict and
+        // leaves nothing behind to own it. The claim it made is the only record that
+        // the write happened, so the pass retires whatever it did not hand to a
+        // control.
+        private async Task DiscardedElementAsync()
+        {
+            var host = H.CreateHost();
+            ValidationContext? ctx = null;
+
+            host.Mount(c => VStack(12,
+                Component<BareValidateOwner, BareValidateProps>(
+                    new BareValidateProps(BareValidateShape.Discarded, 0, found => ctx = found)),
+                TextBlock("host")));
+
+            await Harness.Render();
+            await Harness.Render();
+            H.Check("Issue1262_Unmount_DiscardedResolved", ctx is not null);
+            if (ctx is null) return;
+
+            H.Check("Issue1262_Unmount_DiscardedWithdrawn", ctx.GetMessages("ghost").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("ghost").Select(m => m.Text))}");
+            H.Check("Issue1262_Unmount_DiscardedValid", ctx.IsValid(), $"valid={ctx.IsValid()}");
         }
 
         // Guard: the outgoing control must not take the incoming one's verdict with
