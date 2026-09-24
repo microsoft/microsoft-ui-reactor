@@ -99,17 +99,17 @@ public sealed class WinAppSdkTemplatesTests
         // The `-WinAppSdkTemplatesSource <folder>` path used to test an
         // unpublished build of the pack: resolution reads the folder rather
         // than querying NuGet.
-        var dir = global::System.IO.Path.Combine(
+        var dir = global::System.IO.Path.Join(
             global::System.IO.Path.GetTempPath(),
             $"wasdk-templates-{Guid.NewGuid():N}");
         global::System.IO.Directory.CreateDirectory(dir);
         try
         {
             var id = WinAppSdkTemplates.PackageId;
-            global::System.IO.File.WriteAllText(global::System.IO.Path.Combine(dir, $"{id}.0.0.6-alpha.nupkg"), "");
-            global::System.IO.File.WriteAllText(global::System.IO.Path.Combine(dir, $"{id}.0.0.7-alpha.nupkg"), "");
+            global::System.IO.File.WriteAllText(global::System.IO.Path.Join(dir, $"{id}.0.0.6-alpha.nupkg"), "");
+            global::System.IO.File.WriteAllText(global::System.IO.Path.Join(dir, $"{id}.0.0.7-alpha.nupkg"), "");
             // An unrelated package in the same folder must not be picked up.
-            global::System.IO.File.WriteAllText(global::System.IO.Path.Combine(dir, "Microsoft.UI.Reactor.9.9.9.nupkg"), "");
+            global::System.IO.File.WriteAllText(global::System.IO.Path.Join(dir, "Microsoft.UI.Reactor.9.9.9.nupkg"), "");
 
             var versions = WinAppSdkTemplates.EnumerateLocalVersions(dir);
 
@@ -129,7 +129,7 @@ public sealed class WinAppSdkTemplatesTests
     [Fact]
     public void EnumerateLocalVersions_returns_empty_for_a_missing_folder()
     {
-        var missing = global::System.IO.Path.Combine(
+        var missing = global::System.IO.Path.Join(
             global::System.IO.Path.GetTempPath(),
             $"wasdk-templates-missing-{Guid.NewGuid():N}");
 
@@ -153,7 +153,7 @@ public sealed class WinAppSdkTemplatesTests
         // This is the input that produced the destructive case: nothing resolvable.
         // Returning null is what lets Install() choose the non-destructive branch,
         // so a null here is load-bearing, not an edge case.
-        var dir = global::System.IO.Path.Combine(
+        var dir = global::System.IO.Path.Join(
             global::System.IO.Path.GetTempPath(),
             $"wasdk-templates-empty-{Guid.NewGuid():N}");
         global::System.IO.Directory.CreateDirectory(dir);
@@ -469,7 +469,7 @@ public sealed class WinAppSdkTemplatesTests
         // Source-level guard on the call site. The whole point of the fix is
         // that DoctorCommand asks "can the user scaffold?" — if it reverts to
         // the package-id probe for its PASS branch, the false PASS returns.
-        var (path, text) = ReadRepoFile(global::System.IO.Path.Combine(
+        var (path, text) = ReadRepoFile(global::System.IO.Path.Join(
             "src", "Reactor.Cli", "Doctor", "DoctorCommand.cs"));
         Assert.Contains("AreTemplatesAvailable()", text, StringComparison.Ordinal);
     }
@@ -563,17 +563,17 @@ public sealed class WinAppSdkTemplatesTests
         var root = FindRoot();
         foreach (var relative in new[]
                  {
-                     global::System.IO.Path.Combine("tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj"),
-                     global::System.IO.Path.Combine("tools", "Templates", "templates", "WinUIApp-CSharp", ".template.config", "template.json"),
+                     global::System.IO.Path.Join("tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj"),
+                     global::System.IO.Path.Join("tools", "Templates", "templates", "WinUIApp-CSharp", ".template.config", "template.json"),
                  })
         {
             Assert.False(
-                global::System.IO.File.Exists(global::System.IO.Path.Combine(root, relative)),
+                global::System.IO.File.Exists(global::System.IO.Path.Join(root, relative)),
                 $"'{relative}' is back. The in-repo Microsoft.UI.Reactor.ProjectTemplates package was removed " +
                 "in favour of the Windows App SDK `dotnet new reactor` templates.");
         }
 
-        var (relPath, release) = ReadRepoFile(global::System.IO.Path.Combine(".github", "workflows", "release.yml"));
+        var (relPath, release) = ReadRepoFile(global::System.IO.Path.Join(".github", "workflows", "release.yml"));
         Assert.False(
             release.Contains("Microsoft.UI.Reactor.Templates.csproj", StringComparison.Ordinal),
             $"'{relPath}' packs the removed template project again.");
@@ -581,7 +581,7 @@ public sealed class WinAppSdkTemplatesTests
 
     static (string path, string text) ReadRepoFile(string repoRelativePath)
     {
-        var path = global::System.IO.Path.Combine(FindRoot(), repoRelativePath);
+        var path = global::System.IO.Path.Join(FindRoot(), repoRelativePath);
         Assert.True(global::System.IO.File.Exists(path), $"Expected '{path}' to exist; file moved or removed?");
         return (path, global::System.IO.File.ReadAllText(path));
     }
@@ -589,7 +589,7 @@ public sealed class WinAppSdkTemplatesTests
     static string FindRoot()
     {
         var dir = AppContext.BaseDirectory;
-        while (dir != null && !global::System.IO.File.Exists(global::System.IO.Path.Combine(dir, "Reactor.slnx")))
+        while (dir != null && !global::System.IO.File.Exists(global::System.IO.Path.Join(dir, "Reactor.slnx")))
             dir = global::System.IO.Path.GetDirectoryName(dir);
         Assert.NotNull(dir);
         return dir!;

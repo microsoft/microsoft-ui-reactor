@@ -15,7 +15,7 @@ namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
 
 public sealed class LocalPackageFeedFixture : IDisposable
 {
-    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"reactor-local-feed-{Guid.NewGuid():N}");
+    private readonly string _tempRoot = Path.Join(Path.GetTempPath(), $"reactor-local-feed-{Guid.NewGuid():N}");
 
     public LocalPackageFeedFixture()
     {
@@ -32,7 +32,7 @@ public sealed class LocalPackageFeedFixture : IDisposable
         CommandEnvironment = CreateCommandEnvironment(dotnetCliHomeDir, nugetHttpCacheDir);
 
         RunHelpers.RunDotnet(
-            $"pack \"{Path.Combine(RepoRoot, "src", "Reactor", "Reactor.csproj")}\" --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
+            $"pack \"{Path.Join(RepoRoot, "src", "Reactor", "Reactor.csproj")}\" --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
             RepoRoot,
             CommandEnvironment,
             timeoutMs: 300_000);
@@ -40,12 +40,12 @@ public sealed class LocalPackageFeedFixture : IDisposable
         // transitively, so pack all three at the same version to keep a restore
         // from falling through to NuGet.org and hitting an NU1605 downgrade.
         RunHelpers.RunDotnet(
-            $"pack \"{Path.Combine(RepoRoot, "src", "Reactor.Devtools", "Reactor.Devtools.csproj")}\" --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
+            $"pack \"{Path.Join(RepoRoot, "src", "Reactor.Devtools", "Reactor.Devtools.csproj")}\" --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
             RepoRoot,
             CommandEnvironment,
             timeoutMs: 300_000);
         RunHelpers.RunDotnet(
-            $"pack \"{Path.Combine(RepoRoot, "src", "Reactor.Advanced", "Reactor.Advanced.csproj")}\" --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
+            $"pack \"{Path.Join(RepoRoot, "src", "Reactor.Advanced", "Reactor.Advanced.csproj")}\" --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
             RepoRoot,
             CommandEnvironment,
             timeoutMs: 300_000);
@@ -57,7 +57,7 @@ public sealed class LocalPackageFeedFixture : IDisposable
 
     private static string FindPackage(string packageSourceDir, string packageId, string version)
     {
-        var packagePath = Path.Combine(packageSourceDir, $"{packageId}.{version}.nupkg");
+        var packagePath = Path.Join(packageSourceDir, $"{packageId}.{version}.nupkg");
         Assert.True(File.Exists(packagePath), $"Expected package '{packagePath}' to exist.");
         return packagePath;
     }
@@ -104,7 +104,7 @@ public sealed class LocalPackageFeedFixture : IDisposable
 
     private string CreateDirectory(string name)
     {
-        var path = Path.Combine(_tempRoot, name);
+        var path = Path.Join(_tempRoot, name);
         Directory.CreateDirectory(path);
         return path;
     }
@@ -112,7 +112,7 @@ public sealed class LocalPackageFeedFixture : IDisposable
     private static string FindRepoRoot()
     {
         var dir = AppContext.BaseDirectory;
-        while (dir != null && !File.Exists(Path.Combine(dir, "Reactor.slnx")))
+        while (dir != null && !File.Exists(Path.Join(dir, "Reactor.slnx")))
         {
             dir = Path.GetDirectoryName(dir);
         }
