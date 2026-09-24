@@ -395,12 +395,22 @@ internal static class CompositeLifecycle
         binding.Field = null;
     }
 
-    private sealed class RuleBinding
+    private sealed class RuleBinding : Reconciler.IValidationBindingReset
     {
         internal string Producer = "";
         internal ValidationContext? Context;
         internal string? Field;
         internal global::System.Threading.CancellationTokenSource? Pending;
+
+        // Called by DetachReactorState when a control is retired outside the normal
+        // unmount path: cancel any pass still out, and drop the context so a result
+        // that resolves anyway cannot write to it.
+        public void Reset()
+        {
+            CancelPendingRule(this);
+            Context = null;
+            Field = null;
+        }
     }
 
     /// <summary>
@@ -649,10 +659,19 @@ internal static class CompositeLifecycle
         && binding.Context is not null
         && !string.IsNullOrEmpty(binding.FieldName);
 
-    private sealed class TouchBinding
+    private sealed class TouchBinding : Reconciler.IValidationBindingReset
     {
         internal ValidationContext? Context;
         internal string? FieldName;
+
+        // The LostFocus handler is attached once for the control's lifetime and reads
+        // this at invocation time, so neutralizing is what makes a retired control
+        // stop marking the field it used to host.
+        public void Reset()
+        {
+            Context = null;
+            FieldName = null;
+        }
     }
 
     private static TouchBinding? ReadRootBinding(UIElement formFieldRoot) =>

@@ -823,6 +823,27 @@ public sealed partial class Reconciler : IDisposable
         state.EchoSuppressScopeDepth = 0;
         state.PendingEchoMatch = null;
         state.PendingLabeledBy = null;
+        // Issue #1262 — a retired control must not keep a ValidationContext (or a
+        // pending async rule) alive through a binding the normal FormField /
+        // ValidationRule unmount path never got to clear. Neutralize before dropping
+        // the slot: the binding object is captured by a once-per-lifetime LostFocus
+        // handler that outlives detach, and a pending async rule reads its context
+        // when it resolves.
+        (state.ValidationTouchBinding as IValidationBindingReset)?.Reset();
+        (state.ValidationRootBinding as IValidationBindingReset)?.Reset();
+        (state.ValidationRuleBinding as IValidationBindingReset)?.Reset();
+        state.ValidationTouchBinding = null;
+        state.ValidationRootBinding = null;
+        state.ValidationRuleBinding = null;
+    }
+
+    /// <summary>
+    /// Lets <see cref="DetachReactorState"/> neutralize a validation binding without
+    /// Core depending on the V1 composite lifecycle's private binding types.
+    /// </summary>
+    internal interface IValidationBindingReset
+    {
+        void Reset();
     }
 
     // ════════════════════════════════════════════════════════════════════

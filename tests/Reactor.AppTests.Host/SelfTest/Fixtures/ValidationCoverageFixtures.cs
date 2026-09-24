@@ -1389,4 +1389,65 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — a control retired outside the normal unmount path.
+    //
+    //  DetachReactorState is reached when a control is discarded without the
+    //  FormField/ValidationRule unmount callback running. The blur binding is
+    //  captured by a once-per-lifetime LostFocus handler that survives detach, so
+    //  a binding left live would keep marking the old field — and keep its
+    //  ValidationContext alive.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_DetachClearsValidationBindings(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var ctx = new ValidationContext();
+            var host = H.CreateHost();
+
+            host.Mount(c => VStack(12,
+                FormField(
+                    TextBox("detach-probe").Validate("name", "detach-probe", Validate.MinLength(50)),
+                    label: "Full Name",
+                    showWhen: ShowWhen.Always),
+                Button("Away", () => { }))
+                .Provide(ValidationContexts.Current, ctx));
+
+            await Harness.Render();
+            var box = H.FindControl<TextBox>(tb => tb.Text == "detach-probe");
+            var away = H.FindButton("Away");
+            H.Check("Issue1262_Detach_ControlsFound", box is not null && away is not null);
+            if (box is null || away is null) return;
+
+            box.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            away.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            H.Check("Issue1262_Detach_MarksWhileBound", ctx.IsTouched("name"));
+
+            ctx.Reset("name");
+            H.Check("Issue1262_Detach_ResetClearedTouched", !ctx.IsTouched("name"));
+
+            // Retire the control directly, bypassing the FormField unmount path.
+            global::Microsoft.UI.Reactor.Core.Reconciler.DetachReactorState(box);
+
+            H.Check("Issue1262_Detach_BindingNeutralized",
+                !global::Microsoft.UI.Reactor.Core.V1Protocol.CompositeLifecycle
+                    .HasLiveTouchBindingForTests(box),
+                "the retired editor still carries a live blur binding");
+
+            // And the once-per-lifetime handler is now inert.
+            box.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            away.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            H.Check("Issue1262_Detach_SilentAfterDetach", !ctx.IsTouched("name"));
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 detach done"));
+            await Harness.Render();
+        }
+    }
 }
