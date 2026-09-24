@@ -411,6 +411,7 @@ jobs:
           Write-Host "winapp path: $exe"
           Write-Host "winapp version: $version"
           Write-Host "winapp 'ui yield' support: $state"
+          "REACTOR_WINAPP_YIELD_SUPPORT=$state" >> $env:GITHUB_ENV
           "winapp path: ``$exe``" >> $env:GITHUB_STEP_SUMMARY
           "winapp version: ``$version``" >> $env:GITHUB_STEP_SUMMARY
           "winapp ``ui yield`` support (winappCli#767): **$state**" >> $env:GITHUB_STEP_SUMMARY
@@ -454,6 +455,75 @@ jobs:
           if ($blocked.Count -gt 0) {
             throw "Input-injection E2Es were Inconclusive instead of executed: $($blocked -join ', ')"
           }
+
+      # Proves the strict `ui yield` gate can actually fire. Nothing else does: the suite's normal
+      # run leaves REACTOR_E2E_REQUIRE_UI_YIELD unset, so that gate is only ever observed taking
+      # its skip arm — and a check seen exclusively in its passing state is the same unfalsifiable
+      # oracle this change set exists to remove. The unit tests cover the decision rule; what they
+      # cannot cover is the plumbing around it, because reading the variable, parsing it, and
+      # turning the verdict into a failing run only happens in a real test process.
+      #
+      # Deliberately a DIFFERENTIAL rather than "expect failure". `setup-WinAppCli` installs
+      # `latest`, so the runner's winapp moves without anyone editing this file — 0.6.0 today,
+      # which has no `ui yield`. Hardcoding "this must fail" would turn the day winappCli#767
+      # ships into a red build for entirely the wrong reason, and hardcoding "this must pass" is
+      # unsatisfiable until then. Asserting that the gate AGREES WITH THE PROBE holds under both
+      # worlds and needs no edit when the dependency moves.
+      #
+      # Both arms were verified locally before this step was written: against a winapp carrying
+      # the verb the same two tests exit 0, and against a resolved binary that is not winapp at
+      # all they exit 2 with the strict-mode message. The outcome is therefore known to be a
+      # measurement rather than a constant.
+      - name: Prove the strict `ui yield` gate tracks the probe
+        shell: pwsh
+        env:
+          REACTOR_E2E_REQUIRE_UI_YIELD: '1'
+        run: |
+          $support = $env:REACTOR_WINAPP_YIELD_SUPPORT
+
+          # The capability step reads only `ui --cli-schema`; the harness additionally falls back
+          # to `ui --help`. On a winapp predating the schema flag this step has no verdict to
+          # compare against, and asserting from one it never took is the exact error the tri-state
+          # exists to prevent.
+          if (-not $support -or $support -eq '<schema-unavailable>') {
+            Write-Host "No schema verdict to compare against (support: '$support'); skipping."
+            exit 0
+          }
+
+          # Only the two gated tests. The suite has already run in full above, so this is seconds.
+          # MSTest accepts `--filter` and rejects `--filter-method` with exit 5.
+          $output = dotnet test tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64 --no-build `
+            --filter "FullyQualifiedName~ReleaseUiTurn_IsAcceptedBecauseTheWorkflowIdReachesWinApp|FullyQualifiedName~WinAppRejectsAYieldWithNoWorkflowId" 2>&1 | Out-String
+          $exit = $LASTEXITCODE
+          Write-Host $output
+
+          if ($support -eq 'Present') {
+            if ($exit -ne 0) {
+              throw "winapp reports ``ui yield`` as Present, but the gated tests failed under REACTOR_E2E_REQUIRE_UI_YIELD (exit $exit). Strict mode is rejecting a winapp that does carry winappCli#767."
+            }
+            Write-Host 'Gate agrees with the probe: verb Present, strict run passed.'
+            exit 0
+          }
+
+          # Absent or Unreadable: strict mode must refuse.
+          if ($exit -eq 0) {
+            throw "winapp reports ``ui yield`` as $support, yet the gated tests passed under REACTOR_E2E_REQUIRE_UI_YIELD. Strict mode cannot fail, which is the defect this gate exists to prevent."
+          }
+
+          # A non-zero exit alone proves nothing: 5 is an invalid command line and 8 is zero tests
+          # ran, and either would masquerade as the gate firing. Require the gate's own message so
+          # the failure is attributable to the rule under test rather than to the runner.
+          if ($output -notmatch 'REACTOR_E2E_REQUIRE_UI_YIELD is set') {
+            throw "The gated tests failed (exit $exit), but not via the strict-mode gate -- its message is absent from the output, so this run does not demonstrate the gate fired."
+          }
+
+          Write-Host "Gate agrees with the probe: verb $support, strict run failed as required."
+
+          # Explicit, and load-bearing. A deliberately-failing `dotnet test` leaves $LASTEXITCODE
+          # at 2, and GitHub's pwsh wrapper propagates whatever it finds there — so without this
+          # the step reports the exact failure it was written to assert did NOT matter. Measured:
+          # the step printed its success line and still exited 2.
+          exit 0
 
   build-solution:
     name: Build solution

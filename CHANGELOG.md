@@ -83,6 +83,14 @@ Conventions for contributors:
   winner as `REACTOR_WINAPP_EXE`, the harness's own first candidate, so the two still agree. The
   suite logs the path it resolved beside the capability, and the strict-mode failure names it
   (PR #1272).
+- CI now proves the strict `ui yield` gate can actually fire. The suite's normal run leaves
+  `REACTOR_E2E_REQUIRE_UI_YIELD` unset, so that gate was only ever observed taking its skip arm —
+  a check seen exclusively in its passing state, which is the same unfalsifiable shape this entry
+  set out to remove. A new E2E step re-runs the two gated tests with the variable set and asserts
+  the outcome *agrees with the probe*: `Present` must pass, `Absent`/`Unreadable` must fail with
+  the gate's own message. It is a differential rather than a hardcoded expectation because
+  `setup-WinAppCli` installs `latest`, so the runner's winapp moves on its own — today it is
+  0.6.0, which has no `ui yield` (PR #1272).
 - CI's winapp capability step cannot hang the E2E job. It shells out to `winapp --version` and
   `winapp ui --cli-schema` for diagnostics, and `continue-on-error` only forgives a step that
   *fails* — a wedged winapp would have sat there consuming the job's 45-minute budget before any

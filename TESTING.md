@@ -913,6 +913,17 @@ nothing — and two independently bounded waits would let an unresponsive winapp
 advertised probe time. The worst case is one 10-second wait plus a single 5-second kill grace
 (`TryKill` waits that long for the child to actually go), so 15 seconds rather than 10.
 
+**CI proves the strict gate can fire.** A normal run leaves `REACTOR_E2E_REQUIRE_UI_YIELD` unset,
+so the gate is only ever seen taking its skip arm — and a check observed exclusively in its
+passing state establishes nothing. The `Prove the strict ui yield gate tracks the probe` step
+re-runs the two gated tests with the variable set and asserts the result **agrees with the
+probe**: `Present` must pass, `Absent`/`Unreadable` must fail *and* carry the gate's own message
+(a bare non-zero exit would also match an invalid command line or a zero-test run). It is
+deliberately a differential rather than "expect failure", because `setup-WinAppCli` installs
+`latest` and the runner's winapp therefore moves without anyone editing the workflow — 0.6.0
+today, which has no `ui yield`. Hardcoding either outcome would redden the build for the wrong
+reason the day winappCli#767 ships.
+
 An ambient `WINAPP_UI_WORKFLOW_ID` wins, so an agent harness can group a whole test run with its
 own surrounding `winapp ui` calls into one workflow. Only a *usable* value is inherited: winapp
 rejects an empty or over-long id on every single command, so one of those would fail the entire
