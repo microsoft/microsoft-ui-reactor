@@ -28,8 +28,10 @@
 // then failed with "the package does not exist".) We therefore only pass
 // `--force` when replacing an install with a version we already know exists.
 
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Net.Http;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.UI.Reactor.Cli.Pack;
 
@@ -446,7 +448,7 @@ public static class WinAppSdkTemplates
             var json = http.GetStringAsync(FlatContainerIndexUrl).GetAwaiter().GetResult();
             return PackLocalCommand.ParseFlatContainerVersions(json);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {
             Console.Error.WriteLine(
                 $"  warning: could not query NuGet for {PackageId} versions " +
@@ -486,14 +488,14 @@ public static class WinAppSdkTemplates
         var versions = new List<string>();
         try
         {
-            foreach (var file in Directory.EnumerateFiles(folder, $"{PackageId}.*.nupkg"))
-            {
-                var name = Path.GetFileNameWithoutExtension(file);
-                if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    versions.Add(name[prefix.Length..]);
-            }
+            versions.AddRange(Directory
+                .EnumerateFiles(folder, $"{PackageId}.*.nupkg")
+                .Select(Path.GetFileNameWithoutExtension)
+                .Where(name => name is not null &&
+                               name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Select(name => name![prefix.Length..]));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
             Console.Error.WriteLine($"  warning: could not enumerate '{folder}' ({ex.GetType().Name}: {ex.Message}).");
         }
@@ -516,7 +518,7 @@ public static class WinAppSdkTemplates
             proc.WaitForExit();
             return proc.ExitCode;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
             // Redact here too — this path formats the same argument list that the
             // normal echo redacts, and `--add-source` may carry a feed URL.
@@ -547,7 +549,7 @@ public static class WinAppSdkTemplates
             // while still printing a usable listing, so don't gate on ExitCode.
             return stdout + stderr;
         }
-        catch
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
             return null;
         }

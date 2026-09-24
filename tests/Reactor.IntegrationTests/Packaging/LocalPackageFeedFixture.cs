@@ -96,7 +96,7 @@ public sealed class LocalPackageFeedFixture : IDisposable
                 Directory.Delete(_tempRoot, recursive: true);
             }
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Best-effort cleanup for shared package-setup artifacts.
         }

@@ -136,7 +136,7 @@ public static class UpgradeCommand
         Console.WriteLine();
         Console.WriteLine("Upgrade complete.");
         Console.WriteLine();
-        var feed = Path.Combine(repoRoot, "local-nupkgs");
+        var feed = Path.Join(repoRoot, "local-nupkgs");
         Console.WriteLine("  To bump `mur` itself (which can't update its own running process), run:");
         Console.WriteLine($"    dotnet tool update -g --add-source \"{feed}\" Microsoft.UI.Reactor.Cli");
         Console.WriteLine("  Or just re-run ./bootstrap.ps1 from the repo root.");

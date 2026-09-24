@@ -121,7 +121,8 @@ public sealed class WinAppSdkTemplatesTests
         }
         finally
         {
-            try { global::System.IO.Directory.Delete(dir, recursive: true); } catch { /* best-effort */ }
+            try { global::System.IO.Directory.Delete(dir, recursive: true); }
+            catch (Exception ex) when (ex is global::System.IO.IOException or UnauthorizedAccessException) { /* best-effort */ }
         }
     }
 
@@ -162,7 +163,8 @@ public sealed class WinAppSdkTemplatesTests
         }
         finally
         {
-            try { global::System.IO.Directory.Delete(dir, recursive: true); } catch { /* best-effort */ }
+            try { global::System.IO.Directory.Delete(dir, recursive: true); }
+            catch (Exception ex) when (ex is global::System.IO.IOException or UnauthorizedAccessException) { /* best-effort */ }
         }
     }
 
@@ -244,7 +246,7 @@ public sealed class WinAppSdkTemplatesTests
             if (action == WinAppSdkTemplates.InstallAction.ForcedReplace)
             {
                 Assert.True(exists, $"PlanInstall forced a replace for an unconfirmed target " +
-                                    $"(installed={installed ?? "null"}, target={target ?? "null"}, hasSource={hasSource}).");
+                                    $"(installed={installed}, target={target ?? "null"}, hasSource={hasSource}).");
                 Assert.NotNull(installed);
             }
         }
