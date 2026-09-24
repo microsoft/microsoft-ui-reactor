@@ -28,7 +28,40 @@ Conventions for contributors:
 
 ### Added
 
+- **Framework mechanics are searchable in the ReactorGallery index (spec 064,
+  issue #1275).** `find-ui --source reactor` answered "what is control X" but not
+  "how does mechanism Y work": `UseState hook` and `key down event handler`
+  returned nothing, and `state management` returned CheckBox. Nine
+  **Fundamentals** gallery pages — hooks, element refs, keyboard and pointer
+  input — are now indexed alongside the controls, and the index emits the
+  contract's `curatedKeywords`, `docs` and `details` fields. `details` is lifted
+  verbatim from the shipped agent-kit skills, so the two cannot drift.
+
+- `Publish docs` now verifies the live site after deploying. The `publish` job stamps the
+  Pages artifact with the run that built it, and a new `verify` job polls
+  <https://microsoft.github.io/microsoft-ui-reactor/> until it is serving *that* run —
+  failing the workflow otherwise. Every probe carries a unique query key so a pass cannot
+  come from cached content, and an already-published version fetched with the same request
+  shape acts as a positive control, so a broken probe is reported as unverified rather than
+  blamed on the deployment. (issue #1268)
+
 ### Changed
+
+- **The search index emits every clean `SampleCard` on a page, not just the first
+  (spec 064 §3.2, issue #1275).** Regenerate after changing *any* card on a
+  gallery page, not only the opening one.
+
+- A push to `main` and the release tag's own run both deploy the docs, as before. Standing
+  one of them down was tried and removed: every version of that check has to predict that
+  the other run will deploy, and each way the prediction fails (an evicted pending run, a
+  stale or deleted local tag, an unreachable `origin`, or the two runs entering the
+  concurrency group out of event order) skips the deployment *and* its verification, which
+  is worse than a duplicate the new `verify` job catches. (issue #1268)
+- The `Publish docs` concurrency group now sets `queue: max`. The Actions default keeps at
+  most one *pending* run per group and cancels the previous one when a new run queues, so a
+  docs push landing while a release tag's run waited behind `main` would evict the tag run
+  before it started — leaving the release unpublished. Runs now wait in FIFO order.
+  (issue #1268)
 
 ### Deprecated
 
@@ -36,6 +69,15 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Wrong code and guidance in the shipped agent-kit skills (spec 064 §4, issue
+  #1275).** Three gesture snippets in `reactor-input` used WinUI's nested
+  `ManipulationDelta` shape rather than Reactor's flat gesture structs, and the
+  60Hz pan pattern bound a `UseRef` box into `.Ref(...)`, which takes an
+  `ElementRef` — all four shipped as copy-ready code that would not compile. The
+  hook-dependency gotcha in `reactor-getting-started` also misattributed the
+  tuple and array rules to the runtime rather than to `REACTOR_HOOKS_004`, which
+  is what actually rejects them. Found by requiring a compiled gallery card for
+  every API the skills demonstrate.
 - The E2E suite's `winapp ui yield` capability probe measures something again, and the strict
   gate built on it can now fail. The probe ran `winapp ui yield --help` and read the exit code,
   but an unrecognized verb is not rejected: measured against winapp 0.6.3-prerelease.92,

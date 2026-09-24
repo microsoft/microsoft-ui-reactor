@@ -18,9 +18,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <!-- DocsDeployWiringTests parses .github/workflows/docs.yml structurally.
+         Referenced explicitly rather than leaned on transitively through
+         Reactor.Cli, so dropping it there cannot silently break this suite. -->
+    <PackageReference Include="YamlDotNet" />
     <PackageReference Include="coverlet.collector">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>

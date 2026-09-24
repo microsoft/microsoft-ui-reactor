@@ -179,7 +179,9 @@ After pushing the tag:
 
 1. Confirm the GitHub `Package` workflow runs for the tag and creates a GitHub Release.
 2. Confirm the OneBranch official pipeline starts for the tag.
-3. Confirm the `Publish docs` workflow runs for the tag and that the new version is selectable at <https://microsoft.github.io/microsoft-ui-reactor/> (see [Versioned documentation site](#versioned-documentation-site)). Check **both** of its jobs: a green `publish` beside a red `deploy` means the environment refused the tag ref, and the site stays stale even though `gh-pages` is already correct — see [Which refs may deploy](#which-refs-may-deploy).
+3. Confirm the `Publish docs` workflow runs for the tag and that the new version is selectable at <https://microsoft.github.io/microsoft-ui-reactor/> (see [Versioned documentation site](#versioned-documentation-site)). Check **all three** of its jobs:
+   - a green `publish` beside a red `deploy` means the environment refused the tag ref, and the site stays stale even though `gh-pages` is already correct — see [Which refs may deploy](#which-refs-may-deploy);
+   - a green `deploy` beside a red `verify` means the deployment reported success but the live site did not confirm it. Read the annotation before concluding anything: `…is not serving the artifact this run published` means the deployment was stranded, while `Could not read … at all` means no probe reached known-good content and the run says nothing either way. The two call for different responses — see [Why a release commit deploys twice](#why-a-release-commit-deploys-twice).
 4. Approve the `Production_PublishNuGet` stage when ready to publish to NuGet.org.
 5. Verify the packages appear on NuGet.org.
 6. Install the released template package or a locally packed template and create a smoke app that restores against NuGet.org.
@@ -200,6 +202,9 @@ Nothing about this is manual on the happy path. `.github/workflows/docs.yml` han
 | --- | --- |
 | Push to `main` touching the docs | Republishes the `main (development)` version |
 | Push of a `v*` tag | Publishes `<version>`, moves the `latest` alias to it, and repoints the site root |
+
+A release commit triggers both, and both deploy — see
+[Why a release commit deploys twice](#why-a-release-commit-deploys-twice).
 
 The site root redirects to whichever version holds the `latest` alias, so readers landing
 on the bare URL always get the newest release rather than unreleased `main`. Every version
@@ -248,6 +253,84 @@ why the live site keeps showing the previous release while the branch is already
 Once the policy admits the ref, dispatch `Publish docs` on `main` to serve the stranded
 release: the artifact is the whole `gh-pages` branch, so a deploy from any allowed ref
 publishes every version already committed to it.
+
+### Why a release commit deploys twice
+
+A release PR always edits `docs/guide/**` — the `{{reactorVersion}}` substitutions — so the
+push that merges it matches the workflow's path filter, and the release tag then points at
+that same merge commit. Left alone, that produces **two** `Publish docs` runs with an
+identical `github.sha`.
+
+That is a problem because `actions/deploy-pages` sends `pages_build_version = github.sha`
+and exposes no input to override it, so both runs create a Pages deployment under one
+identity. One wins and the other is silently stranded: every job green, the deployment
+reporting `success`, `gh-pages` byte-correct — and the live site still showing the previous
+release. That is exactly what happened cutting 0.1.0-preview.16, and it went unnoticed for
+2h25m (issue #1268).
+
+What prevents it now:
+
+- The `verify` job polls the live site after every deployment and asserts that the artifact
+  being served is the one **that run** produced. This is the part that carries correctness,
+  and it is the only thing in the pipeline that looks at the live site at all.
+
+**The duplicate deployment is tolerated, not avoided.** Standing one of the two runs down
+sounds obvious, and it was tried; every form of it requires *predicting* that the other run
+will deploy, and each way that prediction can fail is silent in the direction that matters:
+
+- a still-pending tag run can be cancelled by a later docs push, so the run deferred to
+  never happens;
+- a tag deleted or re-cut on `origin` after checkout leaves a stale local tag that still
+  points at the commit;
+- an unreachable `origin` makes the check answer "no tag here" from stale data;
+- the two runs are not guaranteed to enter the concurrency group in the order their events
+  fired, so the tag run can deploy an artifact that predates the branch run's `main`.
+
+Each of those skips the deployment **and** its verification together, leaving the site stale
+with every job green — strictly worse than a duplicate deployment that `verify` catches and
+reports. So both runs deploy, and a stranded one turns red.
+
+**The concurrency queue still matters.** The workflow's concurrency block sets `queue: max`.
+Under the Actions default (`queue: single`) only one run may be *pending* per group, and a
+newly queued run cancels the previous pending one. During a release that is reachable: the
+merge's `main` run holds the group, the tag run waits behind it, and any further docs push
+to `main` evicts the tag run before it ever starts — so the release version never reaches
+`gh-pages` at all, with nothing failing. `queue: max` makes runs wait in FIFO order instead.
+Removing it silently re-arms that failure, which is why `DocsDeployWiringTests` asserts it.
+
+`verify` distinguishes two failures, and they call for different responses:
+
+| Annotation | Meaning | What to do |
+| --- | --- | --- |
+| `…is not serving the artifact this run published` | The deployment was stranded. It names the run id the live site *is* serving. | Dispatch `Publish docs` on `main` (below). |
+| `Could not read … at all, so the deployment is unverified` | Not one probe reached known-good content, so the run says nothing about the deployment. | Treat it as a broken check: confirm the site is up, then re-run the job. |
+
+Every probe uses a unique `?nc=` query key, so a pass cannot come from a cached response,
+and an already-published version is fetched with the identical request shape as a positive
+control — a no-match is not a measurement until the same probe is shown able to match.
+
+What `verify` actually asserts, beyond the stamp: that the live `versions.json` contains
+every version the artifact declared and puts `latest` where this run put it; that each
+version **this run published** serves its own `index.html` (not just the `latest` holder,
+which a backported tag deliberately does not move and a `main` push never touches); and
+that the site root — the URL readers land on, written only by `mike set-default` — responds
+and still forwards to the expected default. The list of versions a run published is
+recorded by the publishing steps and cross-checked against mike's own `versions.json`
+before the artifact is uploaded, so the two cannot drift apart unnoticed.
+
+**The remedy, verified.** Dispatch `Publish docs` on `main`. The `publish` job assembles the
+artifact from the whole `gh-pages` branch, so any allowed ref re-serves every published
+version. With no `backfill_tags` the release step is skipped, and `mike set-default` runs
+only `if ! mike list latest` — `latest` already exists — so it **cannot drag `latest`
+backwards**. This is what restored preview.16.
+
+The gate's own oracle is `deploy-stamp.json` at the site root: `publish` writes it into the
+artifact with the run id that built it, and `verify` asserts the live copy matches. It is
+refreshed from the workflow on every deploy rather than committed to `gh-pages`, for the
+same reason `404.html` is — it describes a deployment, not a published version. Comparing
+`versions.json` alone would not do: `mike deploy main` republishes an existing version, so
+on a `main` push the version set is unchanged and the comparison would pass whether or not
+the deployment ever landed.
 
 ### Legacy unversioned links
 
