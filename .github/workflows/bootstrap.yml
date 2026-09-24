@@ -179,8 +179,17 @@ jobs:
           # template is present. Join + match to do a whole-output substring
           # check instead.
           $joined = $listing -join "`n"
+          # Match each short name as a whole token. A plain substring check (or a
+          # \b regex) also matches `reactor-mvu` and `winui-reactor`, because '-'
+          # is a word boundary — so a pack carrying only the richer shells would
+          # pass the `reactor` probe. Short names are comma-separated inside a
+          # whitespace-delimited column, so require one of those on each side.
+          # Case-sensitive on purpose: the Template Name column carries the
+          # capitalised prose word ("Reactor MVU App"), which is a standalone
+          # token and would satisfy a case-insensitive match on its own.
           foreach ($shortName in @('reactor', 'reactor-mvu', 'reactor-navview', 'reactor-tabview')) {
-              if ($joined -notmatch [regex]::Escape($shortName)) {
+              $token = '(?<![^\s,])' + [regex]::Escape($shortName) + '(?![^\s,])'
+              if (-not [regex]::IsMatch($joined, $token)) {
                   throw "$shortName template not found in ``dotnet new list reactor`` output"
               }
               Write-Host "  [ok] $shortName"

@@ -14,8 +14,11 @@
 //   status    Report whether the pack is registered.
 //
 // Flags (install):
-//   --source <path|url>  Extra NuGet source. Point at a folder of nupkgs to
-//                        test an unpublished build of the pack.
+//   --source <folder>    Folder of .nupkg files, to test an unpublished build of
+//                        the pack. Must be a local folder, not a feed URL:
+//                        `dotnet new install` cannot be restricted to one feed
+//                        (--add-source only adds one), so a URL source can be
+//                        silently satisfied from nuget.org instead.
 //   --version <v>        Pin an explicit version instead of resolving.
 
 namespace Microsoft.UI.Reactor.Cli.Templates;

@@ -191,11 +191,42 @@ public sealed class WinAppSdkTemplatesTests
     [InlineData("0.0.6-alpha", "0.0.9-nope", false, false, "RefuseUnverifiedPin")]
     // An explicit source means "install from here", so an equal version still installs.
     [InlineData("0.0.7-alpha", "0.0.7-alpha", true, true, "ForcedReplace")]
+    // With a source, a version that isn't in it must be refused even with nothing
+    // installed: --add-source only ADDS a feed, so `<id>::<version>` would be
+    // satisfied from nuget.org instead — a different package, same version string.
+    [InlineData(null, "0.0.7-alpha", false, true, "RefuseUnverifiedPin")]
+    [InlineData("0.0.6-alpha", "0.0.7-alpha", false, true, "RefuseUnverifiedPin")]
+    // Same hazard with no version resolvable at all (an empty --source folder):
+    // a bare package id resolves from the configured feeds, not from the folder.
+    [InlineData(null, null, false, true, "RefuseUnverifiedPin")]
+    [InlineData("0.0.6-alpha", null, false, true, "RefuseUnverifiedPin")]
     public void PlanInstall_only_forces_for_a_confirmed_target(
         string? installed, string? target, bool targetExists, bool hasSource, string expected)
     {
         var actual = WinAppSdkTemplates.PlanInstall(installed, target, targetExists, hasSource);
         Assert.Equal(expected, actual.ToString());
+    }
+
+    [Fact]
+    public void PlanInstall_never_installs_from_an_unconfirmed_source()
+    {
+        // Property form: whenever an explicit --source was given, no action that
+        // shells out to `dotnet new install` may be chosen unless the target was
+        // confirmed to exist in that source. Otherwise `--add-source` silently
+        // resolves the package from a different feed.
+        foreach (var installed in new[] { null, "0.0.6-alpha" })
+        foreach (var target in new[] { null, "0.0.7-alpha" })
+        foreach (var exists in new[] { true, false })
+        {
+            var action = WinAppSdkTemplates.PlanInstall(installed, target, exists, hasSource: true);
+            if (action is WinAppSdkTemplates.InstallAction.PlainInstall
+                       or WinAppSdkTemplates.InstallAction.ForcedReplace)
+            {
+                Assert.True(exists && target is not null,
+                    $"PlanInstall chose {action} against an unconfirmed --source " +
+                    $"(installed={installed ?? "null"}, target={target ?? "null"}, targetExists={exists}).");
+            }
+        }
     }
 
     [Fact]

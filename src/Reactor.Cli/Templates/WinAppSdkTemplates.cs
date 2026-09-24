@@ -227,6 +227,19 @@ public static class WinAppSdkTemplates
     /// <param name="hasSource">True when an extra NuGet source was supplied.</param>
     internal static InstallAction PlanInstall(string? installed, string? target, bool targetExists, bool hasSource)
     {
+        // An explicit source says "install the build that is *here*". But
+        // `dotnet new install` has no feed-isolation switch — `--add-source` only
+        // *adds* to the configured feeds — so anything we cannot confirm in that
+        // source gets resolved from nuget.org instead. That is a different package,
+        // frequently under the very same version string (a locally packed
+        // 0.0.7-alpha vs the published 0.0.7-alpha), so neither the id nor the pin
+        // would reveal the substitution. Sources are local folders by the time we
+        // get here (URL sources are rejected up front), so the listing is
+        // authoritative and absence is definitive: refuse rather than install
+        // something the caller did not point at.
+        if (hasSource && (target is null || !targetExists))
+            return InstallAction.RefuseUnverifiedPin;
+
         if (target is null)
             return installed is not null ? InstallAction.KeepExisting : InstallAction.PlainInstall;
 
@@ -285,54 +298,33 @@ public static class WinAppSdkTemplates
     {
         var hasSource = !string.IsNullOrWhiteSpace(source);
         var pinned = !string.IsNullOrWhiteSpace(version);
-        var urlSourceUnverifiable = false;
-
-        // A template pack generates code, so refuse to fetch one over plaintext
-        // http:// — a MITM could swap the scaffold. Local folders and https are fine.
-        if (hasSource &&
-            Uri.TryCreate(source, UriKind.Absolute, out var sourceUri) &&
-            !sourceUri.IsFile)
+        // `--source` must be a local folder of nupkgs.
+        //
+        // `dotnet new install` has no feed-isolation switch: `--add-source` only
+        // *augments* the configured sources. So `<id>::<version>` passed alongside
+        // a feed URL can be satisfied from nuget.org instead, silently installing a
+        // different package than the one asked for. That is not theoretical — an
+        // unpublished build and the published pack routinely carry the *same*
+        // version string (a local `0.0.7-alpha` vs the published `0.0.7-alpha`), so
+        // the version pin cannot disambiguate them either.
+        //
+        // A folder has neither problem: it is enumerable, so a pin is confirmable,
+        // and `--add-source <folder>` plus an exact version resolves to the file
+        // that is actually there. `dotnet new install` also ignores the NuGet
+        // credential provider, so an authenticated feed URL fails anyway with a
+        // misleading "the package does not exist". Restore first, then point at the
+        // cache folder.
+        if (hasSource && !Directory.Exists(source))
         {
-            if (!string.Equals(sourceUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-            {
-                Console.Error.WriteLine(
-                    $"  error: refusing to install a template package from an insecure source " +
-                    $"('{sourceUri.Scheme}'). Use https:// or a local folder.");
-                return InstallOutcome.Failed;
-            }
-
-            // Redacting the echo is not enough: the source becomes a child-process
-            // argument, and on Windows any process can read another's command line.
-            // A PAT in user-info, the query string or the fragment would be readable
-            // there, so refuse it outright and point at the supported ways to
-            // authenticate.
-            if (!string.IsNullOrEmpty(sourceUri.UserInfo) ||
-                !string.IsNullOrEmpty(sourceUri.Query) ||
-                !string.IsNullOrEmpty(sourceUri.Fragment))
-            {
-                Console.Error.WriteLine(
-                    "  error: refusing a --source URL that carries credentials in its user-info, query " +
-                    "string or fragment — it would be visible in this process's command line to any other " +
-                    "process. Configure the feed in NuGet.config (credential provider) and pass a local " +
-                    "folder of nupkgs instead.");
-                return InstallOutcome.Failed;
-            }
-
-            // The version listing below only reads local folders and the public
-            // index, so a pin cannot be confirmed against this feed. Treat it as
-            // unverified rather than letting a publicly-existing version authorize
-            // the destructive --force path against a feed that may not have it.
-            urlSourceUnverifiable = true;
-        }
-
-        // A URL source cannot be enumerated here (only folders and the public index
-        // are), so without a pin we would silently resolve a version from nuget.org
-        // and then install it from the user's feed — a different package than asked for.
-        if (hasSource && !pinned && !Directory.Exists(source))
-        {
+            // Redact before echoing: a feed URL can carry a PAT, and this line lands
+            // in console output and CI logs.
             Console.Error.WriteLine(
-                $"  error: --source '{RedactSource(source!)}' is not a local folder, and versions cannot be " +
-                $"enumerated from a feed URL here. Pass an explicit --version to install from it.");
+                $"  error: --source '{RedactSource(source!)}' is not a local folder. `dotnet new install` " +
+                "cannot be restricted to a single feed (--add-source only adds one), so a feed URL can " +
+                "silently resolve the package from somewhere else. Restore the package first, then pass " +
+                "the folder holding the .nupkg:");
+            Console.Error.WriteLine(
+                $"    mur templates install --source %USERPROFILE%\\.nuget\\packages\\{PackageId.ToLowerInvariant()}\\<version>");
             return InstallOutcome.Failed;
         }
 
@@ -344,21 +336,12 @@ public static class WinAppSdkTemplates
         {
             target = version!.Trim();
             // Confirm the pin before considering --force. Null means "couldn't tell",
-            // which is treated as unverified — never destructive on a maybe. A URL
-            // source is never confirmable here: the listing below reads only local
-            // folders and the public index, so a version that exists publicly but is
-            // absent from the user's feed would otherwise authorize a --force that
-            // uninstalls first and then fails to download.
-            if (urlSourceUnverifiable)
-            {
-                targetExists = false;
-            }
-            else
-            {
-                var available = ResolveAvailableVersions(source);
-                targetExists = available is not null &&
-                               available.Any(v => string.Equals(v, target, StringComparison.OrdinalIgnoreCase));
-            }
+            // which is treated as unverified — never destructive on a maybe. With a
+            // source, the source is a local folder (URL sources are rejected above),
+            // so its listing is authoritative: absent really means absent.
+            var available = ResolveAvailableVersions(source);
+            targetExists = available is not null &&
+                           available.Any(v => string.Equals(v, target, StringComparison.OrdinalIgnoreCase));
         }
         else
         {
@@ -380,11 +363,20 @@ public static class WinAppSdkTemplates
                 return InstallOutcome.AlreadyCurrent;
 
             case InstallAction.RefuseUnverifiedPin:
-                Console.Error.WriteLine(
-                    $"  error: {PackageId} {target} could not be found in the configured sources, and " +
-                    $"replacing an install requires `--force`, which uninstalls the current {installed} " +
-                    $"before downloading. Refusing, so your working install survives. " +
-                    $"Check the version, or pass --source with the folder that has it.");
+                Console.Error.WriteLine(hasSource
+                    ? (target is null
+                        ? $"  error: no {PackageId} .nupkg found in --source '{RedactSource(source!)}'. " +
+                          $"Installing anyway would resolve the package from another configured feed, " +
+                          $"because `--add-source` only adds to the configured sources. Point --source at " +
+                          $"a folder that has it."
+                        : $"  error: {PackageId} {target} is not in --source '{RedactSource(source!)}'. " +
+                          $"Installing anyway would let `--add-source` resolve that version from another " +
+                          $"configured feed — a different package under the same version string. Check the " +
+                          $"version, or point --source at the folder that has it.")
+                    : $"  error: {PackageId} {target} could not be found in the configured sources, and " +
+                      $"replacing an install requires `--force`, which uninstalls the current {installed} " +
+                      $"before downloading. Refusing, so your working install survives. " +
+                      $"Check the version, or pass --source with the folder that has it.");
                 return InstallOutcome.Failed;
 
             case InstallAction.PlainInstall:
