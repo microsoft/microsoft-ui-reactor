@@ -134,9 +134,9 @@ navigation keys (`Enter`, `Space`, `Back`, `Escape`, `Tab`, `Delete`,
 
 **Ctrl/Alt chords do not belong on `.OnKeyDown`.** A handler on a `TextBox`
 only fires while that field has focus, so an app-wide shortcut written that way
-silently does nothing elsewhere. Use a `Command` with an `Accelerator` — it
-registers with WinUI's accelerator infrastructure and fires regardless of focus.
-The `REACTOR_INPUT_001` analyzer flags the mistake.
+silently does nothing elsewhere. Use a `Command` with an `Accelerator`, which
+registers with WinUI's accelerator infrastructure. The `REACTOR_INPUT_001`
+analyzer flags the mistake.
 
 ```csharp
 new Command
@@ -146,6 +146,13 @@ new Command
     Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),
 }
 ```
+
+Mind the **scope**, though: an accelerator fires when the surface carrying it is
+in the focused element's ancestor chain, so `Button(save)` on its own covers the
+button, not the window. `CommandHost([save], subtree)` widens it to a whole
+subtree, and a `MenuBar` or `CommandBar` at the window root is what makes a chord
+genuinely window-wide — those attach to the window's `KeyboardAccelerators`
+collection. See [commanding](../../../../docs/guide/commanding.md).
 <!-- /index:keyboard-input -->
 
 ## 4. Continuous gestures (Pan, Pinch, Rotate)

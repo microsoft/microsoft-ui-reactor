@@ -95,10 +95,14 @@ TextBox(placeholderText: ""Type . or = here"")
 
             SampleCard("App-wide chords belong on a Command",
                 VStack(8,
-                    Button(save),
-                    TextBlock($"Saved {saves} time(s) — press Ctrl+S anywhere in the window.")
-                        .Foreground(Theme.SecondaryText),
+                    CommandHost([save],
+                        VStack(8,
+                            Button(save),
+                            TextBlock($"Saved {saves} time(s) — press Ctrl+S with focus anywhere in this card.")
+                                .Foreground(Theme.SecondaryText))),
                     Caption("A .OnKeyDown handler only fires while its element has focus, so a Ctrl/Alt chord written that way silently does nothing elsewhere. REACTOR_INPUT_001 flags it and points here.")
+                        .Foreground(Theme.SecondaryText),
+                    Caption("Accelerators follow WinUI's scoping rule: they fire when the surface carrying them is in the focused element's ancestor chain. CommandHost widens that to a whole subtree. For a truly window-wide chord, render the command from a MenuBar or CommandBar at the window root.")
                         .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
 var save = new Command
@@ -108,7 +112,13 @@ var save = new Command
     Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),
 };
 
-Button(save)   // the chord routes through WinUI regardless of focus
+// Button(save) alone scopes the chord to the button's ancestor chain.
+// CommandHost widens it to this subtree; MenuBar/CommandBar at the window
+// root is what makes an accelerator genuinely window-wide.
+CommandHost([save],
+    VStack(8,
+        Button(save),
+        TextBlock($""Saved {saves} time(s)"")))
 ")
         ).Margin(36, 24, 36, 36));
     }
