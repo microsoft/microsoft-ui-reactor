@@ -895,6 +895,46 @@ public sealed class ValidationContext
     }
 
     /// <summary>
+    /// Installs a whole rule set — every producer's verdict plus the retirement of
+    /// producers that have disappeared — as one transaction: one lock, one version bump,
+    /// and at most one <see cref="Changed"/> notification raised only after everything is
+    /// in place.
+    /// <para>
+    /// Committing producer by producer was observable mid-set: the first verdict's
+    /// notification could drive a subscriber straight back into a new evaluation, and the
+    /// outer call would carry on installing the rest of a set it no longer owned, leaving
+    /// orphaned messages that nothing would ever retract (issue #1262 review).
+    /// </para>
+    /// </summary>
+    internal void ApplyRuleSet(
+        List<(string Field, string Producer, List<ValidationMessage> Messages)> verdicts,
+        List<(string Field, string Producer)> retired)
+    {
+        var changed = false;
+        lock (_lock)
+        {
+            foreach (var (field, producer) in retired)
+            {
+                if (_asyncGeneration.TryGetValue(field, out var byProducer))
+                {
+                    byProducer.Remove(producer);
+                    if (byProducer.Count == 0) _asyncGeneration.Remove(field);
+                }
+                if (ApplyOwnedLocked(field, producer, [])) changed = true;
+            }
+
+            foreach (var (field, producer, messages) in verdicts)
+            {
+                _registeredFields.Add(field);
+                if (ApplyOwnedLocked(field, producer, messages)) changed = true;
+            }
+
+            if (changed) BumpVersionLocked(messagesOnly: true);
+        }
+        if (changed) RaiseChanged(messagesOnly: true);
+    }
+
+    /// <summary>
     /// Drops a producer's async generation entry without touching its messages, for a
     /// producer that has stopped being asynchronous.
     /// <para>

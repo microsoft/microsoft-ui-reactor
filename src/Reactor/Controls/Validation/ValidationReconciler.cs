@@ -61,10 +61,12 @@ public static class ValidationReconciler
         IAsyncValidator[] asyncValidators,
         CancellationToken cancellationToken = default)
     {
-        // The synchronous path registers through ApplyValidation; this one has to do it
-        // explicitly, or MarkAllTouched() and the validity summary would skip a field
-        // that only ever had async validators (issue #1262 review).
+        // Mirror the synchronous path: record the value, which also clears an external
+        // verdict about the old one and retires any async pass still out for it. The
+        // helper is self-contained, so a caller that re-invokes it on a new value does
+        // not have to remember a separate NotifyValueChanged (issue #1262 review).
         ctx.RegisterField(fieldName);
+        ctx.NotifyValueChanged(fieldName, value);
 
         var generation = ctx.BeginAsyncValidation(fieldName);
 
@@ -105,15 +107,13 @@ public static class ValidationReconciler
     {
         var generation = NextRuleSetGeneration(ctx);
 
-        var applied = new List<(string Field, string Producer)>(rules.Length);
+        // Compute every verdict before installing any: a mid-set notification could
+        // otherwise re-enter and take ownership of the set out from under this call.
+        var verdicts = new List<(string Field, string Producer, List<ValidationMessage> Messages)>(rules.Length);
         for (var i = 0; i < rules.Length; i++)
-        {
-            var producer = RuleProducer(i);
-            applied.Add((rules[i].Field, producer));
-            CommitRuleVerdict(ctx, rules[i].Field, producer, rules[i].ComputeSync());
-        }
+            verdicts.Add((rules[i].Field, RuleProducer(i), rules[i].ComputeSync()));
 
-        CommitRuleSet(ctx, generation, applied);
+        CommitRuleSet(ctx, generation, verdicts);
     }
 
     /// <summary>
@@ -148,23 +148,25 @@ public static class ValidationReconciler
         for (var i = 0; i < rules.Length; i++)
             verdicts.Add((rules[i].Field, RuleProducer(i), await rules[i].ComputeAsync()));
 
-        if (!IsNewestRuleSet(ctx, generation)) return;
-
-        var applied = new List<(string Field, string Producer)>(verdicts.Count);
-        foreach (var verdict in verdicts)
-        {
-            applied.Add((verdict.Field, verdict.Producer));
-            CommitRuleVerdict(ctx, verdict.Field, verdict.Producer, verdict.Messages);
-        }
-
-        CommitRuleSet(ctx, generation, applied);
+        CommitRuleSet(ctx, generation, verdicts);
     }
 
     private static string RuleProducer(int index) =>
         "rules[" + index.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "]";
 
     /// <summary>
-    /// Installs one rule's verdict.
+    /// Installs a computed rule set, if this call still owns it.
+    /// <para>
+    /// The generation check, every producer replacement, and the retirement of producers
+    /// that have disappeared are one transaction against the context, emitting a single
+    /// notification. Installing producer by producer was observable mid-set: a subscriber
+    /// woken by the first verdict could start a new evaluation, and this call would carry
+    /// on installing the rest of a set it no longer owned.
+    /// </para>
+    /// <para>
+    /// The recorded set is updated before the transaction, so a re-entrant evaluation
+    /// triggered by its notification sees consistent bookkeeping.
+    /// </para>
     /// <para>
     /// No per-producer async generation is involved: a batch computes every verdict
     /// before installing any of them and orders itself by its own generation, so
@@ -173,26 +175,25 @@ public static class ValidationReconciler
     /// token behind for the next value change to act on.
     /// </para>
     /// </summary>
-    private static void CommitRuleVerdict(
-        ValidationContext ctx, string field, string producer, List<ValidationMessage> messages)
-    {
-        ctx.RegisterField(field);
-        ctx.ApplyOwned(field, producer, messages);
-    }
-
     private static void CommitRuleSet(
-        ValidationContext ctx, int generation, List<(string Field, string Producer)> applied)
+        ValidationContext ctx, int generation,
+        List<(string Field, string Producer, List<ValidationMessage> Messages)> verdicts)
     {
         if (!IsNewestRuleSet(ctx, generation)) return;
 
+        var applied = new List<(string Field, string Producer)>(verdicts.Count);
+        foreach (var verdict in verdicts)
+            applied.Add((verdict.Field, verdict.Producer));
+
+        var retired = new List<(string Field, string Producer)>();
         if (_ruleSets.TryGetValue(ctx, out var previous))
         {
-            foreach (var entry in previous.Where(entry => !applied.Contains(entry)))
-                ctx.RetireProducer(entry.Field, entry.Producer);
+            retired.AddRange(previous.Where(entry => !applied.Contains(entry)));
             _ruleSets.Remove(ctx);
         }
-
         _ruleSets.Add(ctx, applied);
+
+        ctx.ApplyRuleSet(verdicts, retired);
     }
 
     private static int NextRuleSetGeneration(ValidationContext ctx)

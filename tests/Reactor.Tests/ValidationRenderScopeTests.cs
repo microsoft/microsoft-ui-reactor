@@ -317,9 +317,11 @@ public class ValidationRenderScopeTests
             ctx, "username", "admin", validators, TestContext.Current.CancellationToken);
 
         // Adding each result as it resolved exposed a partial verdict and repainted
-        // between messages.
-        Assert.Single(seen);
-        Assert.Equal(2, seen[0]);
+        // between messages. Recording the value is a separate, legitimate notification
+        // (it moves dirty tracking), so the assertion is about the verdict: it must
+        // never be observed half-installed, and it must land exactly once.
+        Assert.DoesNotContain(1, seen);
+        Assert.Single(seen, count => count == 2);
         Assert.Equal(2, ctx.GetMessages("username").Count);
     }
 
@@ -1472,6 +1474,79 @@ public class ValidationRenderScopeTests
         ctx.NotifyValueChanged("name", "anything");
 
         Assert.Single(ctx.GetMessages("name"));
+    }
+
+    [Fact]
+    public void A_Rule_Set_Commits_Atomically_Against_A_Reentrant_Evaluation()
+    {
+        var ctx = new ValidationContext();
+        var reentered = false;
+
+        ctx.Changed += () =>
+        {
+            if (reentered) return;
+            reentered = true;
+
+            // A subscriber woken mid-commit starts its own evaluation. The outer call
+            // must not go on installing producers it no longer owns.
+            ValidationReconciler.EvaluateRules(
+                ctx, ValidationRule(() => true, "Inner rule", "a"));
+        };
+
+        ValidationReconciler.EvaluateRules(
+            ctx,
+            ValidationRule(() => false, "Outer first", "a"),
+            ValidationRule(() => false, "Outer second", "b"));
+
+        Assert.True(reentered);
+
+        // The inner set is the newest, and it owns the whole context: nothing from the
+        // outer set may be left orphaned.
+        Assert.Empty(ctx.GetMessages("a"));
+        Assert.Empty(ctx.GetMessages("b"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public async Task The_Async_Field_Helper_Records_The_Value_It_Validated()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("email", "");
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "email", "someone@example.com",
+            [Validate.MustAsync<string>(_ => Task.FromResult(true), "Already registered")],
+            TestContext.Current.CancellationToken);
+
+        // Recording the value is what makes dirty tracking work without a separate
+        // NotifyValueChanged call.
+        Assert.True(ctx.IsDirty("email"));
+    }
+
+    [Fact]
+    public async Task The_Async_Field_Helper_Retires_The_Verdict_For_The_Previous_Value()
+    {
+        var ctx = new ValidationContext();
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "email", "taken@example.com",
+            [Validate.MustAsync<string>(_ => Task.FromResult(false), "Already registered")],
+            TestContext.Current.CancellationToken);
+        Assert.Single(ctx.GetMessages("email"));
+
+        // Re-invoked on a new value with a check that never resolves: the error about
+        // the old value must not stay on screen while it is pending.
+        var pending = new TaskCompletionSource<bool>();
+        var running = ValidationReconciler.ValidateFieldAsync(
+            ctx, "email", "free@example.com",
+            [Validate.MustAsync<string>(_ => pending.Task, "Already registered")],
+            TestContext.Current.CancellationToken);
+
+        Assert.Empty(ctx.GetMessages("email"));
+
+        pending.SetResult(true);
+        await running;
+        Assert.Empty(ctx.GetMessages("email"));
     }
 
     [Fact]
