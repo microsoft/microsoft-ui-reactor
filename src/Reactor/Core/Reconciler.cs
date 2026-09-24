@@ -425,6 +425,10 @@ public sealed partial class Reconciler : IDisposable
         public object? ValidationRuleBinding;
         public object? ValidationTouchBinding;
         public object? ValidationRootBinding;
+        // The (context, field) a FormField's attached validators last produced a
+        // synchronous verdict for, so the contribution can be withdrawn when it moves
+        // field, moves context, or stops being produced at all (issue #1262).
+        public object? ValidationAttachedBinding;
         // Issue #986 — the AutomationId a deferred LabeledBy resolution is still
         // waiting to bind. ApplyAccessibilityModifiers can only resolve LabeledBy
         // once the element is in the visual tree, so an unresolved request parks a
@@ -832,9 +836,11 @@ public sealed partial class Reconciler : IDisposable
         (state.ValidationTouchBinding as IValidationBindingReset)?.Reset();
         (state.ValidationRootBinding as IValidationBindingReset)?.Reset();
         (state.ValidationRuleBinding as IValidationBindingReset)?.Reset();
+        (state.ValidationAttachedBinding as IValidationBindingReset)?.Reset();
         state.ValidationTouchBinding = null;
         state.ValidationRootBinding = null;
         state.ValidationRuleBinding = null;
+        state.ValidationAttachedBinding = null;
     }
 
     /// <summary>

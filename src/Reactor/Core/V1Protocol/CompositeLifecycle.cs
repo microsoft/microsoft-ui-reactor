@@ -63,7 +63,7 @@ internal static class CompositeLifecycle
         // Auto-validate: if Content has attached validators with a Value, run them now
         var attached = ff.Content.GetAttached<ValidationAttached>();
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
-        ApplyAttachedValidation(valCtx, attached);
+        ApplyAttachedValidation(panel, valCtx, attached);
 
         // [0] Label — always present, collapsed when empty
         var displayLabel = FormFieldHelpers.GetDisplayLabel(ff.Label, ff.Required);
@@ -101,6 +101,36 @@ internal static class CompositeLifecycle
     }
 
     /// <summary>
+    /// Tracks the (context, field) a <c>FormField</c>'s attached validators last produced
+    /// a synchronous verdict for, so the contribution can be withdrawn when it moves.
+    /// </summary>
+    private sealed class AttachedValidationBinding : Reconciler.IValidationBindingReset
+    {
+        internal ValidationContext? Context;
+        internal string? Field;
+
+        public void Reset()
+        {
+            if (Context is { } ctx && Field is { } field)
+                ctx.RetireProducer(field, ValidationContext.SyncProducer);
+            Context = null;
+            Field = null;
+        }
+    }
+
+    private static AttachedValidationBinding GetOrCreateAttachedBinding(UIElement formFieldRoot)
+    {
+        if (formFieldRoot is not FrameworkElement fe) return new AttachedValidationBinding();
+
+        var state = Reconciler.GetOrCreateReactorState(fe);
+        if (state.ValidationAttachedBinding is AttachedValidationBinding existing) return existing;
+
+        var binding = new AttachedValidationBinding();
+        state.ValidationAttachedBinding = binding;
+        return binding;
+    }
+
+    /// <summary>
     /// Runs a content element's attached synchronous validators against the context a
     /// <c>FormField</c> resolved, and makes sure the field exists either way.
     /// <para>
@@ -112,6 +142,13 @@ internal static class CompositeLifecycle
     /// outside a <c>FormField</c>.
     /// </para>
     /// <para>
+    /// The verdict is installed under the field's own sync producer, so the previous
+    /// contribution has to be withdrawn whenever it moves — to a different field, to a
+    /// different context, or away entirely because the validators or the value are gone.
+    /// Otherwise its messages stay owned by something nothing validates any more, keeping
+    /// the form invalid or showing an error against a control that has moved on.
+    /// </para>
+    /// <para>
     /// Registration cannot be left to the validated path alone. An element assembled
     /// outside a render pass — cached in a field, built in an event handler, produced by
     /// a memo — never reaches <c>.Validate()</c>'s render scope, so its field would exist
@@ -120,14 +157,34 @@ internal static class CompositeLifecycle
     /// <c>ValidateExtensions.ValidateAsync</c>).
     /// </para>
     /// </summary>
-    private static void ApplyAttachedValidation(ValidationContext? valCtx, ValidationAttached? attached)
+    private static void ApplyAttachedValidation(
+        UIElement formFieldRoot, ValidationContext? valCtx, ValidationAttached? attached)
     {
-        if (valCtx is null || attached is null) return;
-        if (string.IsNullOrEmpty(attached.FieldName)) return;
+        var binding = GetOrCreateAttachedBinding(formFieldRoot);
 
-        if (attached.HasValue && attached.Validators.Length > 0)
+        var produces = valCtx is not null
+            && attached is not null
+            && !string.IsNullOrEmpty(attached.FieldName)
+            && attached.HasValue
+            && attached.Validators.Length > 0;
+        var nextField = produces ? attached!.FieldName : null;
+
+        if (binding.Context is { } previousCtx && binding.Field is { } previousField
+            && (!ReferenceEquals(previousCtx, valCtx)
+                || !string.Equals(previousField, nextField, StringComparison.Ordinal)))
+        {
+            previousCtx.RetireProducer(previousField, ValidationContext.SyncProducer);
+            binding.Context = null;
+            binding.Field = null;
+        }
+
+        if (valCtx is null || attached is null || string.IsNullOrEmpty(attached.FieldName)) return;
+
+        if (produces)
         {
             ValidationReconciler.ValidateAttached(valCtx, attached, attached.Value);
+            binding.Context = valCtx;
+            binding.Field = attached.FieldName;
             return;
         }
 
@@ -149,20 +206,8 @@ internal static class CompositeLifecycle
         var attached = newFf.Content.GetAttached<ValidationAttached>();
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
 
-        // A conditional field name can move between passes. The verdict is installed
-        // under the field's own sync producer, so without withdrawing the old one its
-        // messages stay owned by a field nothing validates any more — keeping the form
-        // invalid, or showing an error against a control that moved on (issue #1262
-        // review).
-        var previousField = FormFieldHelpers.ResolveFieldName(oldFf.FieldName, oldFf.Content);
-        if (valCtx is not null
-            && !string.IsNullOrEmpty(previousField)
-            && !string.Equals(previousField, fieldName, StringComparison.Ordinal))
-        {
-            valCtx.RetireProducer(previousField, ValidationContext.SyncProducer);
-        }
+        ApplyAttachedValidation(panel, valCtx, attached);
 
-        ApplyAttachedValidation(valCtx, attached);
 
         // [0] Update label
         if (panel.Children[0] is TextBlock labelTb)

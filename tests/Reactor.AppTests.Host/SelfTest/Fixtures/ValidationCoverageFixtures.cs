@@ -1637,4 +1637,65 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — validators or provider disappearing with the field
+    //  name unchanged.
+    //
+    //  A moving field name is only one of the ways the sync contribution can
+    //  stop applying: the validators can go away, or the provider can change,
+    //  and either leaves the old verdict owned by nothing.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_AttachedValidationWithdrawnWhenItStops(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var ctx = new ValidationContext();
+            var other = new ValidationContext();
+            var host = H.CreateHost();
+            Action<int>? setMode = null;
+
+            host.Mount(c =>
+            {
+                var (mode, set) = c.UseState(0);
+                setMode = set;
+
+                // mode 0: validated. mode 1: same field, validators gone.
+                // mode 2: validated again, but under a different provider.
+                var content = mode == 1
+                    ? TextBox("")
+                    : TextBox("").Validate("email", "", Validate.Required("Email is required"));
+
+                var tree = VStack(12,
+                    FormField(content, label: "Email", showWhen: ShowWhen.Always));
+
+                return tree.Provide(ValidationContexts.Current, mode == 2 ? other : ctx);
+            });
+
+            await Harness.Render();
+            H.Check("Issue1262_Stops_InitialError", ctx.GetMessages("email").Count == 1,
+                $"email={ctx.GetMessages("email").Count}");
+
+            // The validators disappear while the field name stays the same.
+            setMode!(1);
+            await Harness.Render();
+            await Harness.Render();
+            H.Check("Issue1262_Stops_WithdrawnWhenValidatorsGo", ctx.GetMessages("email").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("email").Select(m => m.Text))}");
+
+            // Validated again, but against a different context.
+            setMode!(2);
+            await Harness.Render();
+            await Harness.Render();
+            H.Check("Issue1262_Stops_NewContextValidated", other.GetMessages("email").Count == 1,
+                $"other={other.GetMessages("email").Count}");
+            H.Check("Issue1262_Stops_OldContextStillEmpty", ctx.GetMessages("email").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("email").Select(m => m.Text))}");
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 attached stop done"));
+            await Harness.Render();
+        }
+    }
 }
