@@ -530,26 +530,55 @@ public static class WinAppSdkTemplates
     }
 
     /// <summary>
+    /// Path to <paramref name="version"/>'s nupkg inside <paramref name="folder"/>,
+    /// or null when it isn't there.
+    /// </summary>
+    /// <remarks>
+    /// Installing this path is what actually makes <c>--source</c> authoritative.
+    /// `dotnet new install id::version --add-source folder` leaves every configured
+    /// feed active and NuGet queries them in parallel, so a local unpublished nupkg
+    /// that reuses a published id+version can be silently replaced by the public
+    /// one — enumerating the folder confirms the version exists, not which bytes
+    /// get selected. A file path has no such ambiguity.
+    /// </remarks>
+    internal static string? FindLocalPackage(string folder, string version)
+    {
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return null;
+        var expected = $"{PackageId}.{version}.nupkg";
+        return Directory
+            .EnumerateFiles(folder, $"{PackageId}.*.nupkg")
+            .FirstOrDefault(f => string.Equals(Path.GetFileName(f), expected, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// Argument list for `dotnet new install`. Pure, so the source wiring is
     /// testable without launching a process.
     /// </summary>
     /// <remarks>
-    /// Both sources are <c>--add-source</c>, but they are mutually exclusive by
-    /// construction. <paramref name="source"/> is a local folder the caller said
-    /// to install *from*, and adding a mirror beside it would let NuGet serve the
-    /// published package under the same version string instead. <paramref
-    /// name="feed"/> is only used when there is no folder: it has to be here as
-    /// well as in version resolution, because `dotnet new install` runs its own
-    /// restore and ignores the MSBuild <c>RestoreSources</c>/<c>RestoreConfigFile</c>
-    /// that <c>Invoke-ReactorWithRestoreEnvironment</c> sets, so a mirror-only
-    /// machine would resolve a version and then fail to download it.
+    /// Prefers <paramref name="localPackagePath"/>: installing the file itself is
+    /// the only way a local <c>--source</c> is genuinely authoritative (see
+    /// <see cref="FindLocalPackage"/>). Otherwise the spec is
+    /// <c>&lt;id&gt;::&lt;version&gt;</c> — `dotnet new install` has no
+    /// <c>--prerelease</c> switch, and a bare id resolves stable-only.
+    /// <paramref name="feed"/> is the configured mirror, and only ever set when
+    /// there is no local source: `dotnet new install` runs its own restore and
+    /// ignores the MSBuild restore environment, so a mirror-only machine would
+    /// otherwise resolve a version and then fail to download it.
     /// </remarks>
-    internal static IReadOnlyList<string> BuildInstallArgs(string? target, string? source, string? feed, bool force)
+    internal static IReadOnlyList<string> BuildInstallArgs(
+        string? target, string? source, string? feed, bool force, string? localPackagePath = null)
     {
-        // `<id>::<version>` is `dotnet new install`'s explicit-version syntax and
-        // the only way to reach a prerelease — a bare id resolves stable-only.
-        var spec = target is null ? PackageId : $"{PackageId}::{target}";
-        var args = new List<string> { "new", "install", spec };
+        var args = new List<string> { "new", "install" };
+
+        if (!string.IsNullOrWhiteSpace(localPackagePath))
+        {
+            args.Add(localPackagePath!);
+            if (force) args.Add("--force");
+            // No --add-source: the file is the package.
+            return args;
+        }
+
+        args.Add(target is null ? PackageId : $"{PackageId}::{target}");
         if (force) args.Add("--force");
         if (!string.IsNullOrWhiteSpace(source))
         {
@@ -570,7 +599,13 @@ public static class WinAppSdkTemplates
             ? $"  Installing {PackageId} {target ?? "(latest stable)"}"
             : $"  Updating {PackageId} {installed} → {target}");
 
-        var args = BuildInstallArgs(target, source, feed, force).ToList();
+        // With a local folder and a known version, install the file itself so the
+        // configured feeds cannot substitute a same-versioned public package.
+        var localPackagePath = source is not null && target is not null
+            ? FindLocalPackage(source, target)
+            : null;
+
+        var args = BuildInstallArgs(target, source, feed, force, localPackagePath).ToList();
 
         // Echo with every source redacted — redact by *position* (the value after
         // each --add-source) rather than by comparing against one variable, so a

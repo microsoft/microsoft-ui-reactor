@@ -727,6 +727,41 @@ public sealed class WinAppSdkTemplatesTests
     }
 
     [Fact]
+    public void Install_from_a_local_folder_installs_the_nupkg_itself()
+    {
+        // THE POINT OF --source: `id::version --add-source <folder>` leaves every
+        // configured feed active and NuGet queries them in parallel, so a local
+        // unpublished nupkg reusing a published id+version can be silently
+        // replaced by the public one. Enumerating the folder confirms the version,
+        // not which bytes get selected. Installing the file removes the ambiguity.
+        var dir = global::System.IO.Path.Join(
+            global::System.IO.Path.GetTempPath(), $"wasdk-templates-file-{Guid.NewGuid():N}");
+        global::System.IO.Directory.CreateDirectory(dir);
+        try
+        {
+            var nupkg = global::System.IO.Path.Join(dir, $"{WinAppSdkTemplates.PackageId}.0.0.7-alpha.nupkg");
+            global::System.IO.File.WriteAllText(nupkg, "");
+
+            var found = WinAppSdkTemplates.FindLocalPackage(dir, "0.0.7-alpha");
+            Assert.Equal(nupkg, found);
+            Assert.Null(WinAppSdkTemplates.FindLocalPackage(dir, "0.0.9-absent"));
+
+            var args = WinAppSdkTemplates.BuildInstallArgs(
+                "0.0.7-alpha", dir, feed: null, force: true, localPackagePath: found);
+
+            Assert.Equal(new[] { "new", "install", nupkg, "--force" }, args);
+            // No --add-source at all: the file *is* the package, so there is no
+            // second candidate for NuGet to choose between.
+            Assert.DoesNotContain("--add-source", args);
+        }
+        finally
+        {
+            try { global::System.IO.Directory.Delete(dir, recursive: true); }
+            catch (Exception ex) when (ex is global::System.IO.IOException or UnauthorizedAccessException) { /* best-effort */ }
+        }
+    }
+
+    [Fact]
     public void BuildInstallArgs_adds_the_mirror_feed_when_there_is_no_folder_source()
     {
         // `dotnet new install` runs its own restore and ignores the MSBuild
