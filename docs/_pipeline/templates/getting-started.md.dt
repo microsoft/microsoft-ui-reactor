@@ -46,19 +46,35 @@ state and Reactor keeps the screen in sync.
 
 ## Setup
 
-If you just want to build an app, install the template pack and go — you do not
-need to clone this repo:
+If you just want to build an app, scaffold one and go — you do not need to
+clone this repo:
 
 ```powershell
-dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::0.0.7-alpha
-dotnet new reactor -n MyApp
+winget install Microsoft.WinAppCli
+winapp new -t reactor -n MyApp
 cd MyApp
 dotnet run
 ```
 
+`winapp` is the Windows App SDK CLI. `winapp new` installs the template pack on
+demand (and offers to update a stale one), so there is no separate install step
+and no version to pin.
+
 That gives you four starting points — `reactor` (blank), `reactor-mvu`
 (Model-View-Update via `UseReducer`), `reactor-navview` (`NavigationView` shell)
-and `reactor-tabview` (`TabView` shell).
+and `reactor-tabview` (`TabView` shell). `winapp new --list` prints them all, and
+omitting `-t` picks one interactively.
+
+Prefer plain .NET tooling? Install the pack yourself, then scaffold with
+`dotnet new`:
+
+```powershell
+dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>
+dotnet new reactor -n MyApp
+```
+
+The pack is prerelease-only today, and `dotnet new install` resolves stable
+versions unless you pin one explicitly — which is the step `winapp new` removes.
 
 Scaffolded apps are **packaged** (single-project MSIX), so `dotnet run`
 registers a loose-layout package and launches the app with full package
@@ -79,7 +95,7 @@ cd microsoft-ui-reactor
 `bootstrap.ps1` packs and installs `mur` as a `dotnet tool` global
 install (so it's on PATH cross-shell with no manual `$env:Path` edits), runs
 `mur pack-local` to produce local source-built framework snapshots, installs the
-Windows App SDK template pack via `mur templates install`,
+Windows App SDK template pack,
 and drops the Reactor agent plugin under `~/.claude/plugins/reactor`
 (symlink when allowed, copy otherwise).
 
@@ -220,12 +236,12 @@ dotnet run --project src/Reactor.Cli/Reactor.Cli.csproj `
 App SDK template pack on NuGet.org, not from this checkout:
 
 ```powershell
-dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::0.0.7-alpha
+dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>
 ```
 
-`mur templates install` does the same thing but resolves the newest published
-version first — including prereleases, which a bare `dotnet new install` cannot
-reach. `mur templates status` reports whether `dotnet new reactor` is available.
+The pack is prerelease-only today, so pin a version explicitly — a bare
+`dotnet new install` resolves stable versions only. `winapp new -t reactor`
+collapses both steps: it installs the newest pack on demand, then scaffolds.
 
 **7. (Optional) Install the Reactor agent plugin.** If you use Claude Code
 or another agent and want it to author Reactor code with the right
@@ -275,10 +291,10 @@ the install must happen from a shell that isn't already running `mur`).
 <!-- ai:caveat -->
 The Reactor templates ship in the Windows App SDK `dotnet new` pack
 (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`), so `dotnet new reactor`
-needs no source checkout. If it's missing, run
-`dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::0.0.7-alpha` — or
-`mur templates install`, which additionally resolves prerelease versions that a
-bare `dotnet new install` cannot reach.
+needs no source checkout. If it's missing, `winapp new -t reactor` installs the
+pack on demand and scaffolds in one step. To install it without scaffolding, run
+`dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>` —
+the pack is prerelease-only today, so the explicit version pin is required.
 <!-- /ai:caveat -->
 
 ## Creating a Project

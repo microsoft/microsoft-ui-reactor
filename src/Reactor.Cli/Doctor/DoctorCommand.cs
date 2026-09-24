@@ -151,12 +151,12 @@ public static class DoctorCommand
             var ver = WinAppSdkTemplates.GetInstalledVersion() ?? "(unknown)";
             Fail("dotnet new template",
                 $"{WinAppSdkTemplates.PackageId} {ver} is installed but does not provide `dotnet new {WinAppSdkTemplates.BlankShortName}`. " +
-                $"Update to a version that ships the Reactor templates: `mur templates install`.");
+                $"Update to a version that ships the Reactor templates: `winapp new --list --template-version latest`.");
             failures++;
         }
         else
         {
-            Fail("dotnet new template", $"{WinAppSdkTemplates.PackageId} not registered, so `dotnet new {WinAppSdkTemplates.BlankShortName}` is unavailable. Run `./bootstrap.ps1`, `mur upgrade`, or `mur templates install`.");
+            Fail("dotnet new template", $"{WinAppSdkTemplates.PackageId} not registered, so `dotnet new {WinAppSdkTemplates.BlankShortName}` is unavailable. Run `./bootstrap.ps1`, or install the pack with `winapp new --list`.");
             failures++;
         }
 

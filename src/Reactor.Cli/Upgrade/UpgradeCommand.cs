@@ -46,58 +46,30 @@ public static class UpgradeCommand
             return rc;
         }
 
-        // 2. Make sure the `dotnet new reactor` templates are available. They ship
-        //    in the Windows App SDK template pack rather than being built from this
-        //    checkout, so `git pull` never invalidates them — this is a self-healing
-        //    install-if-missing, not a reinstall. Best-effort: a developer who
-        //    scaffolds by hand shouldn't have `mur upgrade` fail on a NuGet hiccup.
+        // 2. Report on the `dotnet new reactor` templates. They ship in the Windows
+        //    App SDK template pack rather than being built from this checkout, so
+        //    `git pull` never invalidates them and there is nothing to refresh here.
+        //    Installing them is `winapp`'s job, so this only probes and points.
         Console.WriteLine();
-        var templateSource = ParseFlag(args, "--templates-source", out var sourceMissingValue);
-        var templateVersion = ParseFlag(args, "--templates-version", out var versionMissingValue);
-        var templateFeed = ParseFlag(args, "--templates-feed", out var feedMissingValue);
-        if (sourceMissingValue || versionMissingValue || feedMissingValue)
-        {
-            var flag = sourceMissingValue ? "--templates-source"
-                     : versionMissingValue ? "--templates-version"
-                     : "--templates-feed";
-            Console.Error.WriteLine($"mur upgrade: '{flag}' requires a value.");
-            return 1;
-        }
         Console.WriteLine($"==> Checking `dotnet new {WinAppSdkTemplates.BlankShortName}` templates ({WinAppSdkTemplates.PackageId})");
-        // Resolve a relative folder against the caller's CWD before handing it on.
-        // Install() runs `dotnet new install --add-source` with repoRoot as the
-        // working directory, so an unqualified path would be resolved there
-        // instead — pointing at a different folder, or none. TemplatesCommand and
-        // bootstrap.ps1 already normalize for the same reason.
-        if (!string.IsNullOrWhiteSpace(templateSource) && Directory.Exists(templateSource))
-            templateSource = Path.GetFullPath(templateSource!);
-        // Install() is a no-op when the resolved version is already installed, and
-        // deliberately leaves an existing install alone when it can't resolve a
-        // newer one — so this is safe to run on every upgrade.
-        var templateOutcome = WinAppSdkTemplates.Install(repoRoot, templateSource, templateVersion, templateFeed);
-        if (templateOutcome == WinAppSdkTemplates.InstallOutcome.Failed)
+        switch (WinAppSdkTemplates.AreTemplatesAvailable())
         {
-            // Best-effort when it's the routine refresh — a NuGet hiccup shouldn't fail
-            // the whole upgrade. But if the user explicitly asked for a specific source
-            // or version, silently returning 0 would report success for work not done.
-            if (templateSource is not null || templateVersion is not null || templateFeed is not null)
-            {
-                Console.Error.WriteLine($"mur upgrade: could not install {WinAppSdkTemplates.PackageId} as requested.");
-                return 1;
-            }
-            Console.Error.WriteLine($"  Could not install {WinAppSdkTemplates.PackageId}; the rest of the upgrade completed.");
-        }
-        else if (WinAppSdkTemplates.AreTemplatesAvailable() == false)
-        {
-            // A successful install is not a usable one: an older pack (0.0.6-alpha
-            // shipped before the Reactor templates existed) installs cleanly and
-            // still leaves `dotnet new reactor` unresolvable. Reporting "upgrade
-            // complete" there hands the user a scaffold command that fails.
-            Console.Error.WriteLine(
-                $"  {WinAppSdkTemplates.PackageId} is installed but does not provide " +
-                $"`dotnet new {WinAppSdkTemplates.BlankShortName}` — that version predates the Reactor " +
-                $"templates. Pin a newer one with `mur templates install --version <version>`.");
-            if (templateSource is not null || templateVersion is not null || templateFeed is not null) return 1;
+            case true:
+                Console.WriteLine(
+                    $"  `dotnet new {WinAppSdkTemplates.BlankShortName}` is available " +
+                    $"({WinAppSdkTemplates.PackageId} {WinAppSdkTemplates.GetInstalledVersion() ?? "(unknown)"}).");
+                break;
+            case false:
+                // Best-effort: a developer who scaffolds by hand shouldn't have
+                // `mur upgrade` fail over a template pack it no longer manages.
+                Console.Error.WriteLine(
+                    $"  `dotnet new {WinAppSdkTemplates.BlankShortName}` is not available. Install the pack with " +
+                    $"`winapp new --list`, or scaffold directly with " +
+                    $"`winapp new -t {WinAppSdkTemplates.BlankShortName} -n MyApp`.");
+                break;
+            default:
+                Console.Error.WriteLine("  Could not enumerate `dotnet new` templates; skipping the check.");
+                break;
         }
 
         // 3. Refresh Claude plugin (best-effort; not every user has Claude Code).
@@ -314,28 +286,6 @@ public static class UpgradeCommand
         return null;
     }
 
-    /// <summary>
-    /// Value of <paramref name="name"/> in <paramref name="args"/>, or null when
-    /// absent. Sets <paramref name="missingValue"/> when the flag is present as
-    /// the final argument: scanning to <c>args.Length - 1</c> would otherwise
-    /// silently ignore it and run the unpinned path, reporting success for work
-    /// the caller did not ask for.
-    /// </summary>
-    static string? ParseFlag(string[] args, string name, out bool missingValue)
-    {
-        missingValue = false;
-        for (var i = 0; i < args.Length; i++)
-        {
-            if (!string.Equals(args[i], name, StringComparison.Ordinal)) continue;
-            if (i + 1 >= args.Length)
-            {
-                missingValue = true;
-                return null;
-            }
-            return args[i + 1];
-        }
-        return null;
-    }
 
     static void CopyDirectory(string src, string dst)
     {

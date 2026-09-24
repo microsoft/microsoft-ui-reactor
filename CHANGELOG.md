@@ -33,9 +33,10 @@ Conventions for contributors:
 ### Deprecated
 
 - **`Microsoft.UI.Reactor.ProjectTemplates` is deprecated on NuGet.org.** Published versions
-  remain restorable but are marked deprecated with a pointer to `dotnet new reactor`. Install the
-  replacement with `mur templates install`, or pin the pack explicitly —
-  `dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::0.0.7-alpha` — since it is
+  remain restorable but are marked deprecated with a pointer to `dotnet new reactor`. Scaffold the
+  replacement with `winapp new -t reactor -n MyApp`, which installs the Windows App SDK template
+  pack on demand. To install the pack without scaffolding, pin it explicitly —
+  `dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>` — since it is
   prerelease-only and a bare `dotnet new install` resolves stable versions.
 
 ### Removed
@@ -54,6 +55,22 @@ Conventions for contributors:
 
   `mur pack-local` no longer produces a templates nupkg and its `--framework-version` flag is
   gone; the release workflow no longer packs or publishes the package.
+
+- **Removed `mur templates install`.** Installing the Windows App SDK template pack is the
+  Windows App SDK CLI's job: `winapp new -t reactor -n MyApp` installs the pack on demand and
+  scaffolds in one step, and `winapp new --list` installs it without scaffolding. `bootstrap.ps1`
+  now drives that command, and `mur upgrade` reports on the templates instead of installing them.
+  `mur templates status` is unchanged and still backs `mur doctor` and bootstrap's verification.
+
+  Reactor carried its own installer because `dotnet new install` has no `--prerelease` switch and
+  resolves stable-only, which fails outright while the pack is prerelease-only; working around
+  that meant resolving versions off the NuGet flat container and tiptoeing around
+  `dotnet new install --force`, which uninstalls the existing pack *before* downloading the
+  replacement. `winapp` handles all of it, so roughly 700 lines of that machinery are gone.
+
+  The `-WinAppSdkTemplatesSource` bootstrap parameter is removed with it — `winapp` has no
+  local-folder equivalent. `-WinAppSdkTemplatesVersion` still works and now maps to
+  `winapp new --template-version`.
 
 ### Fixed
 

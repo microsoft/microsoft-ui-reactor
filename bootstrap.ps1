@@ -63,24 +63,12 @@
     NuGet.Config if it is reachable; otherwise the repo's public config remains
     in effect.
 
-.PARAMETER WinAppSdkTemplatesSource
-    Local folder of .nupkg files to install the Windows App SDK `dotnet new`
-    template pack from. Use this to test an unpublished build of
-    `Microsoft.WindowsAppSDK.WinUI.CSharp.Templates` — point it at the
-    `dotnet pack` output of a WindowsAppSDK checkout. Layered on top of the
-    configured sources via `dotnet new install --add-source`.
-
-    Must be a local folder: `dotnet new install` has no feed-isolation switch
-    (`--add-source` only adds to the configured sources), so a feed URL can be
-    silently satisfied from somewhere else — often under the very same version
-    string. To install from an authenticated feed, `dotnet restore` the package
-    first and pass the cache folder here.
-
 .PARAMETER WinAppSdkTemplatesVersion
-    Pin the Windows App SDK template pack to an explicit version. By default
-    bootstrap resolves the newest published version — the newest stable when one
-    exists, otherwise the newest prerelease — so this is only needed to hold the
-    templates at a known-good version.
+    Pin the Windows App SDK template pack to an explicit version, passed through
+    to `winapp new --template-version`. By default bootstrap installs the pack
+    only when it is missing and otherwise keeps what is already installed, so
+    this is only needed to hold the templates at a known-good version or to force
+    an update (`latest`).
 
 .PARAMETER SkipTemplates
     Skip installing the Windows App SDK `dotnet new` template pack. The rest of
@@ -114,10 +102,9 @@
     for debugging install failures or unexpected branch behavior.
 
 .EXAMPLE
-    ./bootstrap.ps1 -WinAppSdkTemplatesSource ..\WindowsAppSDK\localpackages
-    Resolve the `dotnet new reactor` template pack from a local folder
-    instead of NuGet.org — the flow for testing an unpublished
-    Microsoft.WindowsAppSDK.WinUI.CSharp.Templates build.
+    ./bootstrap.ps1 -WinAppSdkTemplatesVersion 0.0.7-alpha
+    Hold the `dotnet new reactor` template pack at a known-good version
+    instead of taking whatever `winapp new` installs by default.
 #>
 [CmdletBinding()]
 param(
@@ -130,7 +117,6 @@ param(
     [switch]$SkipWinAppCli,
     [string]$NpmRegistry,
     [string]$NuGetConfig,
-    [string]$WinAppSdkTemplatesSource,
     [string]$WinAppSdkTemplatesVersion,
     [switch]$SkipTemplates
 )
@@ -693,89 +679,57 @@ if ($SkipTemplates) {
 
     $wasdkTemplatePackageId = 'Microsoft.WindowsAppSDK.WinUI.CSharp.Templates'
 
-    # Route through `mur templates install` so bootstrap, `mur upgrade`, and
-    # `mur doctor` all share one implementation of "which version, from where".
-    # It resolves the newest published version (newest stable, else newest
-    # prerelease) and installs an explicit `<id>::<version>` — `dotnet new
-    # install` has no --prerelease switch, so a bare package id resolves
-    # stable-only and fails outright while the pack is prerelease-only.
-    $murTemplateArgs = @('templates', 'install')
-    if ($WinAppSdkTemplatesSource) {
-        # Resolve a local folder to an absolute path so it survives the
-        # working-directory change inside `dotnet new install`.
-        $resolvedTemplateSource = $WinAppSdkTemplatesSource
-        if (Test-Path -LiteralPath $resolvedTemplateSource) {
-            $resolvedTemplateSource = (Resolve-Path -LiteralPath $resolvedTemplateSource).Path
-        }
-        Write-Dbg "Template source: $resolvedTemplateSource"
-        $murTemplateArgs += @('--source', $resolvedTemplateSource)
-    }
+    # Delegate to the Windows App SDK CLI, which owns this pack.
+    #
+    # `winapp new --list` installs the pack on demand and prints the templates;
+    # with --use-defaults it never prompts and keeps an already-installed pack,
+    # which is exactly bootstrap's "self-healing install-if-missing, not a
+    # reinstall" semantics. Reactor used to carry its own installer for this
+    # because `dotnet new install` has no --prerelease switch and resolves
+    # stable-only (so it fails outright while the pack is prerelease-only), and
+    # working around that meant version-resolving off the NuGet flat container
+    # and tiptoeing around `dotnet new install --force`, which uninstalls before
+    # it downloads. winapp handles all of it.
+    $winAppNewArgs = @('new', '--list', '--use-defaults')
     if ($WinAppSdkTemplatesVersion) {
         Write-Dbg "Template version pin: $WinAppSdkTemplatesVersion"
-        $murTemplateArgs += @('--version', $WinAppSdkTemplatesVersion)
-    }
-    # Resolve the version through the feed this clone is actually configured
-    # against. Without it the resolver only knows nuget.org, so on a machine that
-    # reaches the mirror but not nuget.org it resolves nothing and falls back to a
-    # bare package id — which cannot reach a prerelease-only pack, failing the step
-    # even though a usable feed was right there.
-    #
-    # An explicitly selected -NuGetConfig reaches restore as `--configfile`, so it
-    # never produces a bare source URL; read one out of the config so the explicit
-    # path gets the same treatment as a detected one.
-    $templateFeed = $effectiveNuGetSource
-    if (-not $templateFeed -and $effectiveNuGetConfig) {
-        $templateFeed = Get-ReactorFeedSourceFromConfig -ConfigPath $effectiveNuGetConfig
-    }
-    if ($templateFeed) {
-        Write-Dbg "Template version feed: $templateFeed"
-        $murTemplateArgs += @('--feed', $templateFeed)
+        $winAppNewArgs += @('--template-version', $WinAppSdkTemplatesVersion)
     }
 
     $templatesExit = 0
-    Invoke-ReactorWithRestoreEnvironment `
-        -NuGetConfig $effectiveNuGetConfig `
-        -NuGetSource $effectiveNuGetSource `
-        -ExitCode ([ref]$templatesExit) `
-        -Action {
-        $murResolved = Get-Command mur -ErrorAction SilentlyContinue
-        if ($murResolved) {
-            Write-Dbg "Using installed mur at $($murResolved.Source)"
-            & mur @murTemplateArgs
-        } else {
-            Write-Dbg "mur not on PATH; falling back to 'dotnet run' against Reactor.Cli source"
-            $murRestoreArgs = Get-ReactorRestoreArguments `
-                -NuGetConfig $effectiveNuGetConfig `
-                -NuGetSource $effectiveNuGetSource `
-                -NpmRegistry $(if ($npmSelection) { $npmSelection.Registry } else { $null })
-            & dotnet run `
-                --project (Join-Path $repoRoot 'src\Reactor.Cli\Reactor.Cli.csproj') `
-                -c $Configuration `
-                "-p:Platform=$hostArch" `
-                --nologo `
-                @murRestoreArgs `
-                -- @murTemplateArgs
-        }
+    if (-not (Test-WinAppCli)) {
+        # winapp is installed in step 4; it can legitimately be absent when that
+        # step was skipped or winget is unavailable. Don't fail the whole
+        # bootstrap over it — say what to run and let the verification below
+        # report the real state.
+        Write-Host '    [warn] winapp CLI not available, so the template pack cannot be installed here.' -ForegroundColor Yellow
+        Write-Host '           Install it and re-run, or install the pack directly:'
+        Write-Host '               winget install Microsoft.WinAppCli'
+        Write-Host '               winapp new --list'
+        $templatesExit = 2
+    } else {
+        Write-Dbg "winapp $($winAppNewArgs -join ' ')"
+        & winapp @winAppNewArgs | Out-Null
+        $templatesExit = $LASTEXITCODE
     }
-    # Exit 2 is "the pack is installed but `dotnet new reactor` does not resolve"
-    # (see TemplatesCommand.TemplatesUnavailableExit). That is not an install
-    # failure: the verification below reports it, and the closing guidance adapts.
-    # Collapsing it into this Fail would make both of those unreachable.
+    # Exit 2 is bootstrap's own "winapp unavailable" marker above. Treat it the
+    # same way as an installed-but-unusable pack: not an install failure, because
+    # the verification below reports the real state and the closing guidance
+    # adapts. Collapsing it into this Fail would make both of those unreachable.
     if ($templatesExit -ne 0 -and $templatesExit -ne 2) {
         Fail (@(
             "Installing $wasdkTemplatePackageId failed.",
-            "    The Reactor templates ship in the Windows App SDK template pack.",
-            "    - To install an unpublished build, re-run with:",
-            "        ./bootstrap.ps1 -WinAppSdkTemplatesSource <folder-with-the-nupkg>",
-            "    - To pin a specific version:",
+            "    The Reactor templates ship in the Windows App SDK template pack,",
+            "    installed here via the Windows App SDK CLI (``winapp new --list``).",
+            "    - To pin a specific pack version:",
             "        ./bootstrap.ps1 -WinAppSdkTemplatesVersion <version>",
             "    - To skip this step entirely: ./bootstrap.ps1 -SkipTemplates"
         ) -join [Environment]::NewLine)
     }
-    # `mur templates install` reports success for KeptExisting too — i.e. it kept
-    # an already-installed pack because nothing newer could be resolved. That pack
-    # can predate the Reactor templates (0.0.6-alpha shipped without them), so
-    # confirm the short name actually resolves before claiming success.
+    # `winapp new --list --use-defaults` deliberately keeps an already-installed
+    # pack rather than updating it, and that pack can predate the Reactor
+    # templates (0.0.6-alpha shipped without them), so confirm the short name
+    # actually resolves before claiming success.
     #
     # Reuse the CLI probe rather than grepping the listing here: `mur templates
     # status` matches the short name as a whole token, which a naive regex does
@@ -810,13 +764,13 @@ if ($SkipTemplates) {
         switch ($statusExit) {
             2 {
                 Write-Host "    [warn] $wasdkTemplatePackageId is installed but does not provide ``dotnet new reactor``." -ForegroundColor Yellow
-                Write-Host "           That version predates the Reactor templates. Re-run with network access, or pin a newer one:"
-                Write-Host "               mur templates install --version <version>"
+                Write-Host "           That version predates the Reactor templates. Update the pack:"
+                Write-Host "               winapp new --list --template-version latest"
             }
             3 {
                 Write-Host "    [warn] $wasdkTemplatePackageId is not installed, so ``dotnet new reactor`` is unavailable." -ForegroundColor Yellow
-                Write-Host "           Re-run with network access, or install from a local folder of nupkgs:"
-                Write-Host "               mur templates install --source <folder-with-the-nupkg>"
+                Write-Host "           Re-run with network access, or install the pack directly:"
+                Write-Host "               winapp new --list"
             }
             default {
                 Write-Host "    [warn] Could not enumerate ``dotnet new`` templates, so ``dotnet new reactor`` is unverified." -ForegroundColor Yellow
@@ -975,16 +929,15 @@ if ($SkipTemplates) {
     # Advertising `dotnet new reactor` here would be a false promise: this run
     # deliberately did not install the pack, so the command may not resolve.
     Write-Host '    Template install was skipped (-SkipTemplates).'
-    Write-Host '    To scaffold an app, install the pack first:'
-    Write-Host '        mur templates install'
-    Write-Host '        dotnet new reactor -n MyApp'
+    Write-Host '    To scaffold an app, let the Windows App SDK CLI install the pack:'
+    Write-Host '        winapp new -t reactor -n MyApp'
 } elseif (-not $templatesVerified) {
     # Same false promise, for the harder case: the pack is installed but step 5
     # proved `dotnet new reactor` does not resolve from it (an older pack such as
     # 0.0.6-alpha predates the Reactor templates).
     Write-Host '    `dotnet new reactor` is not available — see the warning above.'
     Write-Host '    Install a version that provides it, then scaffold:'
-    Write-Host '        mur templates install --version <version>'
+    Write-Host '        winapp new --list --template-version latest'
     Write-Host '        dotnet new reactor -n MyApp'
 } else {
     Write-Host '    dotnet new reactor -n MyApp'

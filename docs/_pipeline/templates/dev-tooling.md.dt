@@ -164,7 +164,13 @@ subcommands map one-to-one to the workflows below.
 | `mur upgrade` | Re-pack the framework and refresh templates + plugin after a `git pull` | `mur upgrade` |
 | `mur figma watch` | Poll a Figma file for design changes | `mur figma watch` |
 | `mur pack-local` / `mur clean-local` | Package / clean the local NuGet feed for source-built framework smoke tests; scaffolded apps default to the public Reactor preview unless `--reactor-version` is supplied | `mur pack-local` |
-| `mur templates install` / `mur templates status` | Install or check the Windows App SDK `dotnet new` pack that provides `dotnet new reactor` (resolves prereleases that a bare `dotnet new install` can't reach) | `mur templates install` |
+| `mur templates status` | Report whether `dotnet new reactor` resolves (exit `0` available, `1` probe failed, `2` pack too old, `3` pack missing) | `mur templates status` |
+
+To *install* the template pack, use the Windows App SDK CLI rather than `mur`:
+`winapp new -t reactor -n MyApp` installs it on demand and scaffolds in one
+step, and `winapp new --list` installs it without scaffolding. `bootstrap.ps1`
+drives that same command, so a bootstrapped checkout can go straight to
+`dotnet new reactor`.
 
 Beyond the subcommands there are four top-level options worth knowing:
 `mur --create <Name>` scaffolds a new Reactor project, `mur --skill`

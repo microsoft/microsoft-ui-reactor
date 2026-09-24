@@ -167,7 +167,7 @@ jobs:
         shell: pwsh
         run: |
           # Reactor's app templates ship in the Windows App SDK `dotnet new`
-          # pack, which bootstrap.ps1 §5 installs via `mur templates install`.
+          # pack, which bootstrap.ps1 §5 installs via `winapp new --list`.
           $listing = dotnet new list reactor 2>&1
           $rc = $LASTEXITCODE
           Write-Host $listing

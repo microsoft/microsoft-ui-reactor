@@ -50,230 +50,17 @@ public sealed class WinAppSdkTemplatesTests
         Assert.Contains(WinAppSdkTemplates.BlankShortName, WinAppSdkTemplates.ShortNames);
     }
 
-    [Fact]
-    public void SelectPreferStable_prefers_a_stable_over_a_higher_prerelease()
-    {
-        // A plain "highest SemVer" pick returns 1.1.0-alpha.1 here because its
-        // core triple is higher. For a developer bootstrap we want the shipped
-        // stable instead.
-        var published = new[] { "1.0.0", "1.1.0-alpha.1", "0.9.0" };
 
-        Assert.Equal("1.0.0", WinAppSdkTemplates.SelectPreferStable(published));
-    }
 
-    [Fact]
-    public void SelectPreferStable_falls_back_to_newest_prerelease_when_no_stable_exists()
-    {
-        // The state the pack was actually in when this migration landed: only
-        // prereleases published. Returning null here would make bootstrap fall
-        // back to a bare package id, which `dotnet new install` then fails to
-        // resolve (stable-only) — the exact breakage this logic prevents.
-        var published = new[] { "0.0.4-alpha", "0.0.6-alpha", "0.0.5-alpha" };
 
-        Assert.Equal("0.0.6-alpha", WinAppSdkTemplates.SelectPreferStable(published));
-    }
 
-    [Fact]
-    public void SelectPreferStable_orders_prereleases_numerically_not_lexically()
-    {
-        // A string sort ranks "alpha.9" above "alpha.10". Pinning the older
-        // template pack is a silent downgrade, not a hard failure, so assert it.
-        var published = new[] { "0.0.6-alpha.9", "0.0.6-alpha.10", "0.0.6-alpha.2" };
 
-        var latest = WinAppSdkTemplates.SelectPreferStable(published);
 
-        Assert.Equal("0.0.6-alpha.10", latest);
-        Assert.NotEqual("0.0.6-alpha.9", latest);
-    }
 
-    [Fact]
-    public void SelectPreferStable_returns_null_for_no_versions()
-    {
-        // Empty feed / unreachable index. Callers treat null as "couldn't
-        // resolve" and fall back to the bare package id rather than installing
-        // a bogus "id::" spec.
-        Assert.Null(WinAppSdkTemplates.SelectPreferStable(Array.Empty<string>()));
-    }
 
-    [Fact]
-    public void EnumerateLocalVersions_reads_versions_off_nupkg_filenames()
-    {
-        // The `-WinAppSdkTemplatesSource <folder>` path used to test an
-        // unpublished build of the pack: resolution reads the folder rather
-        // than querying NuGet.
-        var dir = global::System.IO.Path.Join(
-            global::System.IO.Path.GetTempPath(),
-            $"wasdk-templates-{Guid.NewGuid():N}");
-        global::System.IO.Directory.CreateDirectory(dir);
-        try
-        {
-            var id = WinAppSdkTemplates.PackageId;
-            global::System.IO.File.WriteAllText(global::System.IO.Path.Join(dir, $"{id}.0.0.6-alpha.nupkg"), "");
-            global::System.IO.File.WriteAllText(global::System.IO.Path.Join(dir, $"{id}.0.0.7-alpha.nupkg"), "");
-            // An unrelated package in the same folder must not be picked up.
-            global::System.IO.File.WriteAllText(global::System.IO.Path.Join(dir, "Microsoft.UI.Reactor.9.9.9.nupkg"), "");
 
-            var versions = WinAppSdkTemplates.EnumerateLocalVersions(dir);
 
-            Assert.Equal(2, versions.Count);
-            Assert.Contains("0.0.6-alpha", versions);
-            Assert.Contains("0.0.7-alpha", versions);
-            Assert.DoesNotContain("9.9.9", versions);
-            Assert.Equal("0.0.7-alpha", WinAppSdkTemplates.SelectPreferStable(versions));
-        }
-        finally
-        {
-            try { global::System.IO.Directory.Delete(dir, recursive: true); }
-            catch (Exception ex) when (ex is global::System.IO.IOException or UnauthorizedAccessException) { /* best-effort */ }
-        }
-    }
 
-    [Fact]
-    public void EnumerateLocalVersions_returns_empty_for_a_missing_folder()
-    {
-        var missing = global::System.IO.Path.Join(
-            global::System.IO.Path.GetTempPath(),
-            $"wasdk-templates-missing-{Guid.NewGuid():N}");
-
-        Assert.Empty(WinAppSdkTemplates.EnumerateLocalVersions(missing));
-    }
-
-    // ── Destructive-install guard ──────────────────────────────────────────
-    //
-    // Observed for real during this migration: `dotnet new install <id> --force`
-    // uninstalls the existing package *before* downloading the replacement. With
-    // a bare package id (no version) and only prereleases published, NuGet then
-    // reported "the package does not exist" — and the machine was left with **no**
-    // templates installed at all. Exit code 103, working install destroyed.
-    //
-    // The install path therefore must never combine `--force` with a spec it
-    // hasn't confirmed exists. These tests pin the two properties that prevent it.
-
-    [Fact]
-    public void ResolveLatestVersion_returns_null_for_an_empty_local_source()
-    {
-        // This is the input that produced the destructive case: nothing resolvable.
-        // Returning null is what lets Install() choose the non-destructive branch,
-        // so a null here is load-bearing, not an edge case.
-        var dir = global::System.IO.Path.Join(
-            global::System.IO.Path.GetTempPath(),
-            $"wasdk-templates-empty-{Guid.NewGuid():N}");
-        global::System.IO.Directory.CreateDirectory(dir);
-        try
-        {
-            Assert.Null(WinAppSdkTemplates.ResolveLatestVersion(dir));
-        }
-        finally
-        {
-            try { global::System.IO.Directory.Delete(dir, recursive: true); }
-            catch (Exception ex) when (ex is global::System.IO.IOException or UnauthorizedAccessException) { /* best-effort */ }
-        }
-    }
-
-    // ── Destructive-install decision table ─────────────────────────────────
-    //
-    // `dotnet new install --force` uninstalls the existing package BEFORE
-    // downloading the replacement, so a failed install leaves the machine with no
-    // templates at all. Observed for real: `--force` with a spec that did not
-    // resolve uninstalled a working prerelease and then failed with exit 103.
-    //
-    // `PlanInstall` is the pure decision that governs when `--force` is used, so
-    // these drive the real behaviour rather than grepping the source for a string.
-
-    [Theory]
-    // No target resolved: keep whatever is installed; never force.
-    [InlineData("0.0.6-alpha", null, false, false, "KeepExisting")]
-    // Nothing installed and nothing resolved: a plain install can't destroy anything.
-    [InlineData(null, null, false, false, "PlainInstall")]
-    // Nothing installed: plain install even for a confirmed target (no --force needed).
-    [InlineData(null, "0.0.7-alpha", true, false, "PlainInstall")]
-    // Same version already installed, no source: no-op.
-    [InlineData("0.0.7-alpha", "0.0.7-alpha", true, false, "AlreadyCurrent")]
-    // Replacing an install with a CONFIRMED version is the only forced path.
-    [InlineData("0.0.6-alpha", "0.0.7-alpha", true, false, "ForcedReplace")]
-    // THE REGRESSION: a pin that could not be confirmed must NOT force.
-    [InlineData("0.0.6-alpha", "0.0.9-nope", false, false, "RefuseUnverifiedPin")]
-    // An explicit source means "install from here", so an equal version still installs.
-    [InlineData("0.0.7-alpha", "0.0.7-alpha", true, true, "ForcedReplace")]
-    // With a source, a version that isn't in it must be refused even with nothing
-    // installed: --add-source only ADDS a feed, so `<id>::<version>` would be
-    // satisfied from nuget.org instead — a different package, same version string.
-    [InlineData(null, "0.0.7-alpha", false, true, "RefuseUnverifiedPin")]
-    [InlineData("0.0.6-alpha", "0.0.7-alpha", false, true, "RefuseUnverifiedPin")]
-    // Same hazard with no version resolvable at all (an empty --source folder):
-    // a bare package id resolves from the configured feeds, not from the folder.
-    [InlineData(null, null, false, true, "RefuseUnverifiedPin")]
-    [InlineData("0.0.6-alpha", null, false, true, "RefuseUnverifiedPin")]
-    public void PlanInstall_only_forces_for_a_confirmed_target(
-        string? installed, string? target, bool targetExists, bool hasSource, string expected)
-    {
-        var actual = WinAppSdkTemplates.PlanInstall(installed, target, targetExists, hasSource);
-        Assert.Equal(expected, actual.ToString());
-    }
-
-    [Fact]
-    public void PlanInstall_never_installs_from_an_unconfirmed_source()
-    {
-        // Property form: whenever an explicit --source was given, no action that
-        // shells out to `dotnet new install` may be chosen unless the target was
-        // confirmed to exist in that source. Otherwise `--add-source` silently
-        // resolves the package from a different feed.
-        foreach (var installed in new[] { null, "0.0.6-alpha" })
-        foreach (var target in new[] { null, "0.0.7-alpha" })
-        foreach (var exists in new[] { true, false })
-        {
-            var action = WinAppSdkTemplates.PlanInstall(installed, target, exists, hasSource: true);
-            if (action is WinAppSdkTemplates.InstallAction.PlainInstall
-                       or WinAppSdkTemplates.InstallAction.ForcedReplace)
-            {
-                Assert.True(exists && target is not null,
-                    $"PlanInstall chose {action} against an unconfirmed --source " +
-                    $"(installed={installed ?? "null"}, target={target ?? "null"}, targetExists={exists}).");
-            }
-        }
-    }
-
-    [Fact]
-    public void PlanInstall_never_forces_an_unconfirmed_target()
-    {
-        // Property form of the row above: across every combination, ForcedReplace
-        // must imply targetExists. This is the invariant that keeps a bad pin from
-        // uninstalling a working pack.
-        foreach (var installed in new[] { null, "0.0.6-alpha" })
-        foreach (var target in new[] { null, "0.0.7-alpha" })
-        foreach (var exists in new[] { true, false })
-        foreach (var hasSource in new[] { true, false })
-        {
-            var action = WinAppSdkTemplates.PlanInstall(installed, target, exists, hasSource);
-            if (action == WinAppSdkTemplates.InstallAction.ForcedReplace)
-            {
-                Assert.True(exists, $"PlanInstall forced a replace for an unconfirmed target " +
-                                    $"(installed={installed}, target={target ?? "null"}, hasSource={hasSource}).");
-                Assert.NotNull(installed);
-            }
-        }
-    }
-
-    // ── Credential redaction in the echoed command line ────────────────────
-
-    [Theory]
-    [InlineData("https://user:pat@pkgs.example.com/v3/index.json", "pat")]
-    [InlineData("https://pkgs.example.com/v3/index.json?api-key=SECRET", "SECRET")]
-    public void RedactSource_strips_credentials_from_feed_urls(string url, string secret)
-    {
-        // The install command line is echoed to the console and into CI logs.
-        var redacted = WinAppSdkTemplates.RedactSource(url);
-        Assert.DoesNotContain(secret, redacted, StringComparison.Ordinal);
-        Assert.Contains("pkgs.example.com", redacted, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void RedactSource_leaves_local_folder_paths_alone()
-    {
-        // A folder path carries nothing secret and must stay readable in the echo.
-        const string folder = @"C:\src\WindowsAppSDK\localpackages";
-        Assert.Equal(folder, WinAppSdkTemplates.RedactSource(folder));
-    }
 
     // ── Installed-version parsing ──────────────────────────────────────────
 
@@ -365,164 +152,15 @@ public sealed class WinAppSdkTemplatesTests
         Assert.True(WinAppSdkTemplates.InterpretTemplateListOutput(withBlank));
     }
 
-    [Theory]
-    // The property under test is simply "the secret never reaches the console".
-    // Which branch enforces it varies, and not obviously: `Uri` rejects user-info
-    // on the file scheme outright, so that row is the one that lands in
-    // RedactSource's TryCreate-failure path — the path that used to echo its input
-    // verbatim, and the path that runs on every *rejected* --source, i.e. exactly
-    // the values a user is most likely to have typed a PAT into. (Mutation-checked:
-    // removing the unparsable-URL masking reddens that row and only that row.)
-    [InlineData("file://user:pat@host/share/pkgs", "pat")]
-    [InlineData("https://user:SECRET@pkgs.example.com/v3/index.json[", "SECRET")]
-    [InlineData("https://pkgs.example.com/v3/index.json[?api-key=SECRET", "SECRET")]
-    [InlineData("https://pkgs.example.com/v3/index.json[#SECRET", "SECRET")]
-    public void RedactSource_masks_url_like_values_carrying_secrets(string source, string secret)
-    {
-        Assert.DoesNotContain(secret, WinAppSdkTemplates.RedactSource(source), StringComparison.Ordinal);
-    }
 
-    [Theory]
-    // Local paths have nothing to mask, and mangling them would make the error
-    // messages that quote them useless.
-    [InlineData(@"C:\repo\local-nupkgs")]
-    [InlineData(@"\\server\share\pkgs")]
-    [InlineData("./pkgs")]
-    public void RedactSource_leaves_path_like_values_alone(string source)
-    {
-        Assert.Equal(source, WinAppSdkTemplates.RedactSource(source));
-    }
 
-    [Fact]
-    public void RedactSource_strips_a_query_from_a_file_uri()
-    {
-        // A file URI is IsFile, so a blanket "local path, nothing to hide" early
-        // return skipped masking entirely. User-info is not constructible on the
-        // file scheme (Uri rejects it), but a query or fragment is — and either can
-        // carry a token.
-        var redacted = WinAppSdkTemplates.RedactSource("file://host/share/pkgs?token=SECRET");
-        Assert.DoesNotContain("SECRET", redacted, StringComparison.Ordinal);
 
-        // A plain local path still passes through untouched.
-        Assert.Equal(@"C:\repo\local-nupkgs", WinAppSdkTemplates.RedactSource(@"C:\repo\local-nupkgs"));
-    }
 
-    [Fact]
-    public void RedactSource_strips_a_credential_bearing_fragment()
-    {
-        // UriBuilder preserves the fragment, so it has to be masked explicitly.
-        var redacted = WinAppSdkTemplates.RedactSource("https://feed.example.com/v3/index.json#PAT");
-        Assert.DoesNotContain("PAT", redacted, StringComparison.Ordinal);
-    }
 
-    [Fact]
-    public void ParsePackageBaseAddress_reads_the_flat_container_from_a_service_index()
-    {
-        // The service-index host generally has no /flatcontainer/ path of its own,
-        // so guessing one 404s for every package — including ones that exist. The
-        // base address has to come out of the index.
-        const string serviceIndex = """
-            {
-              "version": "3.0.0",
-              "resources": [
-                { "@id": "https://example.com/query", "@type": "SearchQueryService/3.0.0" },
-                { "@id": "https://ms-feed-25.example.com/_packaging/x/nuget/v3/flat2", "@type": "PackageBaseAddress/3.0.0" }
-              ]
-            }
-            """;
 
-        Assert.Equal(
-            "https://ms-feed-25.example.com/_packaging/x/nuget/v3/flat2/",
-            WinAppSdkTemplates.ParsePackageBaseAddress(serviceIndex));
-    }
 
-    [Fact]
-    public void ParsePackageBaseAddress_returns_null_when_no_flat_container_is_declared()
-    {
-        // Must be null, not a guessed URL: the caller falls back to nuget.org, and
-        // a fabricated address would instead 404 and read as "version absent".
-        const string serviceIndex = """
-            {"version":"3.0.0","resources":[{"@id":"https://example.com/query","@type":"SearchQueryService/3.0.0"}]}
-            """;
 
-        Assert.Null(WinAppSdkTemplates.ParsePackageBaseAddress(serviceIndex));
-        Assert.Null(WinAppSdkTemplates.ParsePackageBaseAddress("not json at all"));
-    }
 
-    [Fact]
-    public void Bootstrap_passes_its_configured_feed_to_the_version_resolver()
-    {
-        // The resolver otherwise only knows nuget.org. On a machine that reaches
-        // the configured mirror but not nuget.org it would resolve nothing and fall
-        // back to a bare package id, which cannot reach a prerelease-only pack —
-        // failing the step with a usable feed sitting right there.
-        var (path, text) = ReadRepoFile("bootstrap.ps1");
-        var normalized = text.Replace("\r\n", "\n");
-        Assert.True(
-            global::System.Text.RegularExpressions.Regex.IsMatch(normalized, @"\$templateFeed\s*=\s*\$effectiveNuGetSource"),
-            $"'{path}' must seed the template version feed from the resolved NuGet source.");
-        Assert.True(
-            global::System.Text.RegularExpressions.Regex.IsMatch(normalized, @"'--feed',\s*\$templateFeed"),
-            $"'{path}' must pass that feed to `mur templates install --feed`.");
-    }
-
-    [Theory]
-    // Version metadata is what picks the package to install, so plaintext lets a
-    // network attacker choose the version; credentials in the URL would be sent to
-    // whatever endpoint the URL names.
-    [InlineData("https://pkgs.example.com/v3/index.json", true)]
-    [InlineData("http://localhost:5000/v3/index.json", true)]
-    [InlineData("http://127.0.0.1:5000/v3/index.json", true)]
-    [InlineData("http://pkgs.example.com/v3/index.json", false)]
-    [InlineData("https://user:pat@pkgs.example.com/v3/index.json", false)]
-    [InlineData("https://pkgs.example.com/v3/index.json?api-key=SECRET", false)]
-    [InlineData("https://pkgs.example.com/v3/index.json#SECRET", false)]
-    [InlineData("ftp://pkgs.example.com/v3/index.json", false)]
-    [InlineData("not a url", false)]
-    [InlineData("", false)]
-    public void IsAllowedFeedUrl_matches_the_bootstrap_feed_policy(string feed, bool allowed)
-    {
-        Assert.Equal(allowed, WinAppSdkTemplates.IsAllowedFeedUrl(feed));
-    }
-
-    [Fact]
-    public void Bootstrap_derives_a_version_feed_from_an_explicit_nuget_config()
-    {
-        // An explicit -NuGetConfig reaches restore as `--configfile`, so it never
-        // produces a bare source URL. Without this the explicit-mirror path falls
-        // back to nuget.org for version lookup and resolves nothing on a machine
-        // that can only reach the mirror.
-        var (path, text) = ReadRepoFile("bootstrap.ps1");
-        Assert.True(
-            global::System.Text.RegularExpressions.Regex.IsMatch(
-                text.Replace("\r\n", "\n"),
-                @"Get-ReactorFeedSourceFromConfig\s+-ConfigPath\s+\$effectiveNuGetConfig"),
-            $"'{path}' must read a version feed out of an explicitly selected NuGet config.");
-
-        var (resolverPath, resolver) = ReadRepoFile(global::System.IO.Path.Join("tools", "BootstrapFeedResolver.ps1"));
-        Assert.True(
-            resolver.Contains("function Get-ReactorFeedSourceFromConfig", StringComparison.Ordinal),
-            $"'{resolverPath}' must define Get-ReactorFeedSourceFromConfig.");
-    }
-
-    [Theory]
-    // A validated service index can still *advertise* an unsafe base address, and
-    // following it would fetch version metadata — the thing that selects the
-    // package — over plaintext, or send URL credentials to that endpoint.
-    [InlineData("http://evil.example.com/flat2/", false)]
-    [InlineData("https://user:pat@feed.example.com/flat2/", false)]
-    [InlineData("https://feed.example.com/flat2/", true)]
-    public void IsAllowedFeedUrl_also_gates_an_advertised_base_address(string advertised, bool allowed)
-    {
-        var serviceIndex = $$"""
-            {"version":"3.0.0","resources":[{"@id":"{{advertised}}","@type":"PackageBaseAddress/3.0.0"}]}
-            """;
-
-        // Parsing is deliberately permissive — the policy check is what stops it.
-        var parsed = WinAppSdkTemplates.ParsePackageBaseAddress(serviceIndex);
-        Assert.NotNull(parsed);
-        Assert.Equal(allowed, WinAppSdkTemplates.IsAllowedFeedUrl(parsed));
-    }
 
     [Fact]
     public void Bootstrap_does_not_advertise_dotnet_new_reactor_when_templates_are_skipped()
@@ -543,153 +181,34 @@ public sealed class WinAppSdkTemplatesTests
     }
 
     [Fact]
-    public void Upgrade_verifies_template_availability_after_installing()
+    public void Upgrade_reports_template_availability_without_installing()
     {
-        // `mur upgrade` reporting success on an installed-but-unusable pack is the
-        // same false PASS bootstrap and `mur templates install` already guard.
+        // `mur upgrade` no longer installs the pack — `winapp` owns that — so the
+        // guard is that it still *probes* and points somewhere useful, rather than
+        // silently dropping the check or claiming to have refreshed anything.
         var (path, text) = ReadRepoFile(global::System.IO.Path.Join("src", "Reactor.Cli", "Upgrade", "UpgradeCommand.cs"));
         Assert.True(
-            text.Contains("AreTemplatesAvailable() == false", StringComparison.Ordinal),
-            $"'{path}' must check template availability after Install, not just the install outcome.");
-
-        // Install() runs `dotnet new install --add-source` with repoRoot as the
-        // working directory, so a relative --templates-source resolved there would
-        // name a different folder than the one the caller typed.
+            text.Contains("AreTemplatesAvailable()", StringComparison.Ordinal),
+            $"'{path}' must still probe template availability during upgrade.");
         Assert.True(
-            global::System.Text.RegularExpressions.Regex.IsMatch(
-                text.Replace("\r\n", "\n"),
-                @"templateSource\s*=\s*Path\.GetFullPath\(templateSource!\)"),
-            $"'{path}' must resolve a relative --templates-source against the caller's CWD.");
-    }
-
-    // ── Redirect policy on the version-metadata fetch ─────────────────────
-    //
-    // HttpClient follows redirects by default, which would defeat
-    // IsAllowedFeedUrl entirely: a validated HTTPS service index can 302 to
-    // plaintext HTTP and the body would be accepted without the policy ever
-    // seeing that address. The version list is what selects the package to
-    // install, so that is a real downgrade vector.
-
-    sealed class StubHandler : global::System.Net.Http.HttpMessageHandler
-    {
-        readonly global::System.Collections.Generic.Queue<global::System.Net.Http.HttpResponseMessage> _responses;
-        readonly global::System.Net.Http.HttpResponseMessage _exhausted =
-            new(global::System.Net.HttpStatusCode.NotFound);
-
-        public global::System.Collections.Generic.List<string> Requested { get; } = new();
-
-        public StubHandler(params global::System.Net.Http.HttpResponseMessage[] responses) =>
-            _responses = new global::System.Collections.Generic.Queue<global::System.Net.Http.HttpResponseMessage>(responses);
-
-        protected override global::System.Threading.Tasks.Task<global::System.Net.Http.HttpResponseMessage> SendAsync(
-            global::System.Net.Http.HttpRequestMessage request,
-            global::System.Threading.CancellationToken cancellationToken)
-        {
-            Requested.Add(request.RequestUri!.AbsoluteUri);
-            return global::System.Threading.Tasks.Task.FromResult(
-                _responses.Count > 0 ? _responses.Dequeue() : _exhausted);
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _exhausted.Dispose();
-                while (_responses.Count > 0) _responses.Dequeue().Dispose();
-            }
-            base.Dispose(disposing);
-        }
-    }
-
-    static global::System.Net.Http.HttpResponseMessage Redirect(string location)
-    {
-        var response = new global::System.Net.Http.HttpResponseMessage(global::System.Net.HttpStatusCode.Found);
-        response.Headers.Location = new Uri(location);
-        return response;
-    }
-
-    [Fact]
-    public void GetStringPolicyChecked_refuses_a_redirect_that_downgrades_to_plaintext()
-    {
-        var handler = new StubHandler(Redirect("http://evil.example.com/flat2/index.json"));
-        using var http = new global::System.Net.Http.HttpClient(handler);
-
-        var body = WinAppSdkTemplates.GetStringPolicyChecked(http, "https://feed.example.com/v3/index.json");
-
-        Assert.Null(body);
-        // The load-bearing half: the plaintext hop must never be requested at all.
-        Assert.Equal(new[] { "https://feed.example.com/v3/index.json" }, handler.Requested);
-    }
-
-    [Fact]
-    public void GetStringPolicyChecked_refuses_a_redirect_that_carries_credentials()
-    {
-        var handler = new StubHandler(Redirect("https://user:pat@feed.example.com/flat2/index.json"));
-        using var http = new global::System.Net.Http.HttpClient(handler);
-
-        Assert.Null(WinAppSdkTemplates.GetStringPolicyChecked(http, "https://feed.example.com/v3/index.json"));
-        Assert.Single(handler.Requested);
-    }
-
-    [Fact]
-    public void GetStringPolicyChecked_follows_a_compliant_redirect()
-    {
-        // The negative cases above prove nothing unless redirects otherwise work:
-        // a method that always returned null would pass them.
-        var ok = new global::System.Net.Http.HttpResponseMessage(global::System.Net.HttpStatusCode.OK)
-        {
-            Content = new global::System.Net.Http.StringContent("{\"versions\":[\"1.0.0\"]}"),
-        };
-        var handler = new StubHandler(Redirect("https://cdn.example.com/flat2/index.json"), ok);
-        using var http = new global::System.Net.Http.HttpClient(handler);
-
-        var body = WinAppSdkTemplates.GetStringPolicyChecked(http, "https://feed.example.com/v3/index.json");
-
-        Assert.Equal("{\"versions\":[\"1.0.0\"]}", body);
-        Assert.Equal(
-            new[] { "https://feed.example.com/v3/index.json", "https://cdn.example.com/flat2/index.json" },
-            handler.Requested);
-    }
-
-    [Fact]
-    public void GetStringPolicyChecked_stops_a_redirect_loop()
-    {
-        var handler = new StubHandler(
-            Redirect("https://a.example.com/1"), Redirect("https://a.example.com/2"),
-            Redirect("https://a.example.com/3"), Redirect("https://a.example.com/4"),
-            Redirect("https://a.example.com/5"), Redirect("https://a.example.com/6"));
-        using var http = new global::System.Net.Http.HttpClient(handler);
-
-        Assert.Null(WinAppSdkTemplates.GetStringPolicyChecked(http, "https://a.example.com/0"));
-        Assert.Equal(5, handler.Requested.Count);
-    }
-
-    [Theory]
-    // The contract bootstrap.ps1 depends on: 0 = usable, 2 = installed but the
-    // short name does not resolve, which bootstrap must NOT treat as a fatal
-    // install failure (it has its own warning path and adapted next-step
-    // guidance). "Could not enumerate" is also 2 — unverified is not usable.
-    [InlineData(true, 0)]
-    [InlineData(false, 2)]
-    [InlineData(null, 2)]
-    public void Install_exit_code_distinguishes_unusable_from_failed(bool? available, int expected)
-    {
-        Assert.Equal(expected, TemplatesCommand.ExitCodeForAvailability(available));
-        Assert.NotEqual(1, TemplatesCommand.ExitCodeForAvailability(available));
+            text.Contains("winapp new", StringComparison.Ordinal),
+            $"'{path}' must point at `winapp new` when the templates are missing.");
+        // The installer is gone; nothing here may call it back into existence.
+        Assert.DoesNotContain("WinAppSdkTemplates.Install", text, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Bootstrap_does_not_treat_an_unusable_pack_as_an_install_failure()
     {
-        // Regression: `mur templates install` returning non-zero for an installed
-        // but unusable pack made bootstrap Fail before it ever reached the
-        // verification and the gated guidance below it.
+        // Regression: a non-zero result for an installed-but-unusable pack (or an
+        // absent winapp) made bootstrap Fail before it ever reached the
+        // verification and the gated guidance below it. Exit 2 must fall through.
         var (path, text) = ReadRepoFile("bootstrap.ps1");
         Assert.True(
             global::System.Text.RegularExpressions.Regex.IsMatch(
                 text.Replace("\r\n", "\n"),
-                @"\$templatesExit -ne 0 -and \$templatesExit -ne " + TemplatesCommand.TemplatesUnavailableExit),
-            $"'{path}' must let exit {TemplatesCommand.TemplatesUnavailableExit} through to the verification step.");
+                @"\$templatesExit -ne 0 -and \$templatesExit -ne 2"),
+            $"'{path}' must let exit 2 through to the verification step.");
     }
 
     [Theory]
@@ -726,92 +245,9 @@ public sealed class WinAppSdkTemplatesTests
         Assert.Contains("Could not enumerate", block, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void Install_from_a_local_folder_installs_the_nupkg_itself()
-    {
-        // THE POINT OF --source: `id::version --add-source <folder>` leaves every
-        // configured feed active and NuGet queries them in parallel, so a local
-        // unpublished nupkg reusing a published id+version can be silently
-        // replaced by the public one. Enumerating the folder confirms the version,
-        // not which bytes get selected. Installing the file removes the ambiguity.
-        var dir = global::System.IO.Path.Join(
-            global::System.IO.Path.GetTempPath(), $"wasdk-templates-file-{Guid.NewGuid():N}");
-        global::System.IO.Directory.CreateDirectory(dir);
-        try
-        {
-            var nupkg = global::System.IO.Path.Join(dir, $"{WinAppSdkTemplates.PackageId}.0.0.7-alpha.nupkg");
-            global::System.IO.File.WriteAllText(nupkg, "");
 
-            var found = WinAppSdkTemplates.FindLocalPackage(dir, "0.0.7-alpha");
-            Assert.Equal(nupkg, found);
-            Assert.Null(WinAppSdkTemplates.FindLocalPackage(dir, "0.0.9-absent"));
 
-            var args = WinAppSdkTemplates.BuildInstallArgs(
-                "0.0.7-alpha", dir, feed: null, force: true, localPackagePath: found);
 
-            Assert.Equal(new[] { "new", "install", nupkg, "--force" }, args);
-            // No --add-source at all: the file *is* the package, so there is no
-            // second candidate for NuGet to choose between.
-            Assert.DoesNotContain("--add-source", args);
-        }
-        finally
-        {
-            try { global::System.IO.Directory.Delete(dir, recursive: true); }
-            catch (Exception ex) when (ex is global::System.IO.IOException or UnauthorizedAccessException) { /* best-effort */ }
-        }
-    }
-
-    [Fact]
-    public void BuildInstallArgs_adds_the_mirror_feed_when_there_is_no_folder_source()
-    {
-        // `dotnet new install` runs its own restore and ignores the MSBuild
-        // RestoreSources/RestoreConfigFile that Invoke-ReactorWithRestoreEnvironment
-        // sets, so the configured mirror has to appear here too. Resolving a version
-        // from the mirror and then downloading it from nowhere is the failure mode.
-        var args = WinAppSdkTemplates.BuildInstallArgs(
-            "0.0.7-alpha", source: null, feed: "https://mirror.example.com/v3/index.json", force: true);
-
-        Assert.Equal(
-            new[]
-            {
-                "new", "install", $"{WinAppSdkTemplates.PackageId}::0.0.7-alpha", "--force",
-                "--add-source", "https://mirror.example.com/v3/index.json",
-            },
-            args);
-    }
-
-    [Fact]
-    public void Install_does_not_add_the_mirror_beside_a_local_source()
-    {
-        // THE REGRESSION: NuGet treats identical id+version candidates across
-        // sources as interchangeable, so a mirror listed beside the folder can
-        // serve the *published* 0.0.7-alpha instead of the unpublished one the
-        // caller pointed at — the exact collision --source exists to avoid.
-        // Asserted on the decision, not just on BuildInstallArgs, because the
-        // suppression happens in Install().
-        var withBoth = WinAppSdkTemplates.BuildInstallArgs(
-            "0.0.7-alpha", @"C:\pkgs", feed: null, force: false);
-
-        Assert.Equal(
-            new[] { "new", "install", $"{WinAppSdkTemplates.PackageId}::0.0.7-alpha", "--add-source", @"C:\pkgs" },
-            withBoth);
-        Assert.Single(withBoth, a => a == "--add-source");
-    }
-
-    [Theory]
-    [InlineData(null, null)]
-    [InlineData(@"C:\pkgs", null)]
-    [InlineData(null, "https://mirror.example.com/v3/index.json")]
-    public void BuildInstallArgs_emits_a_source_flag_only_when_it_has_a_value(string? source, string? feed)
-    {
-        var args = WinAppSdkTemplates.BuildInstallArgs("1.0.0", source, feed, force: false);
-
-        var expected = new[] { source, feed }.Count(v => !string.IsNullOrWhiteSpace(v));
-        Assert.Equal(expected, args.Count(a => a == "--add-source"));
-        // A dangling `--add-source` with no value would make `dotnet new install`
-        // swallow the next token, so the flag must never outnumber the values.
-        Assert.DoesNotContain("--force", args);
-    }
 
     [Fact]
     public void InterpretPackageInstalledOutput_matches_the_id_line_exactly()
@@ -895,38 +331,6 @@ public sealed class WinAppSdkTemplatesTests
         Assert.Contains("AreTemplatesAvailable()", text, StringComparison.Ordinal);
     }
 
-    // ── Outcome-reporting guard ────────────────────────────────────────────
-    //
-    // Found by running `mur templates install` against the real published pack
-    // with NuGet unreachable: the guard correctly kept the installed pack and
-    // uninstalled nothing, but the command still printed "Installed." — telling
-    // the user an install had happened when none had. A bare exit code cannot
-    // express the difference, so Install returns an outcome instead.
-
-    [Fact]
-    public void DescribeOutcome_never_claims_an_install_that_did_not_happen()
-    {
-        // Behavioural form of the reporting bug: `mur templates install` printed
-        // "Installed." while deliberately keeping an existing pack (nothing
-        // resolvable). Only the two outcomes that actually changed the machine may
-        // be described as an install/update.
-        Assert.Equal("Installed.", TemplatesCommand.DescribeOutcome(WinAppSdkTemplates.InstallOutcome.Installed));
-        Assert.Equal("Updated.", TemplatesCommand.DescribeOutcome(WinAppSdkTemplates.InstallOutcome.Updated));
-
-        foreach (var unchanged in new[]
-                 {
-                     WinAppSdkTemplates.InstallOutcome.KeptExisting,
-                     WinAppSdkTemplates.InstallOutcome.AlreadyCurrent,
-                     WinAppSdkTemplates.InstallOutcome.Failed,
-                 })
-        {
-            var message = TemplatesCommand.DescribeOutcome(unchanged);
-            Assert.False(
-                message.Contains("Installed.", StringComparison.Ordinal) ||
-                message.Contains("Updated.", StringComparison.Ordinal),
-                $"{unchanged} did not change the machine but is reported as \"{message}\".");
-        }
-    }
 
     // ── Bootstrap wiring guards ────────────────────────────────────────────
     //
@@ -942,14 +346,22 @@ public sealed class WinAppSdkTemplatesTests
     public void Bootstrap_installs_the_windows_app_sdk_template_pack()
     {
         var (path, text) = ReadRepoFile("bootstrap.ps1");
+        var normalized = text.Replace("\r\n", "\n");
         Assert.Contains("Microsoft.WindowsAppSDK.WinUI.CSharp.Templates", text, StringComparison.Ordinal);
+        // `winapp new --list` installs the pack on demand; --use-defaults keeps an
+        // already-installed one and never prompts, which is bootstrap's
+        // install-if-missing (not reinstall) semantics on a non-interactive run.
         Assert.True(
             global::System.Text.RegularExpressions.Regex.IsMatch(
-                text.Replace("\r\n", "\n"), @"templates',\s*'install'"),
-            $"'{path}' must install the Reactor templates via `mur templates install`, which resolves the " +
-            "newest published version of the Windows App SDK template pack. `dotnet new install` has no " +
-            "--prerelease switch and resolves stable-only, so installing the bare package id fails while " +
-            "the pack is prerelease-only.");
+                normalized, @"'new',\s*'--list',\s*'--use-defaults'"),
+            $"'{path}' must install the Reactor templates via `winapp new --list --use-defaults`, which " +
+            "installs the Windows App SDK template pack on demand. `dotnet new install` has no --prerelease " +
+            "switch and resolves stable-only, so installing the bare package id fails while the pack is " +
+            "prerelease-only — that is the whole reason this does not shell out to `dotnet new install`.");
+        // The in-repo installer is gone; bootstrap may not call it back.
+        Assert.False(
+            global::System.Text.RegularExpressions.Regex.IsMatch(normalized, @"templates',\s*'install'"),
+            $"'{path}' must not call the removed `mur templates install`.");
     }
 
     [Fact]
@@ -1049,40 +461,7 @@ public sealed class TemplatesCommandArgvTests
         }
     }
 
-    [Fact]
-    public void Install_help_succeeds_without_installing_anything()
-    {
-        // `mur templates install --help` used to fall straight through to a real
-        // install, so this asserts the help text *and* the absence of the install
-        // banner rather than just the exit code.
-        var (exitCode, stdout, _) = Run("install", "--help");
 
-        Assert.Equal(0, exitCode);
-        Assert.Contains("Usage: mur templates install", stdout, StringComparison.Ordinal);
-        Assert.DoesNotContain("Installing " + WinAppSdkTemplates.PackageId, stdout, StringComparison.Ordinal);
-    }
-
-    [Theory]
-    // A typo must fail loudly, not install from somewhere else.
-    [InlineData(new[] { "install", "--sorce", "./pkgs" }, "unknown option")]
-    [InlineData(new[] { "install", "-x" }, "unknown option")]
-    // A bare positional is never meaningful here.
-    [InlineData(new[] { "install", "0.0.7-alpha" }, "unexpected argument")]
-    // A flag with no value would otherwise silently install the resolved latest.
-    [InlineData(new[] { "install", "--source" }, "requires a value")]
-    [InlineData(new[] { "install", "--version" }, "requires a value")]
-    [InlineData(new[] { "install", "--feed" }, "requires a value")]
-    // A following flag is not a value.
-    [InlineData(new[] { "install", "--source", "--version", "1.0.0" }, "requires a value")]
-    public void Install_rejects_bad_argv(string[] args, string expected)
-    {
-        var (exitCode, stdout, stderr) = Run(args);
-
-        Assert.Equal(1, exitCode);
-        Assert.Contains(expected, stderr, StringComparison.Ordinal);
-        // Nothing may have been installed on the way to the error.
-        Assert.DoesNotContain("Installing " + WinAppSdkTemplates.PackageId, stdout, StringComparison.Ordinal);
-    }
 
     [Fact]
     public void Unknown_subcommand_and_no_subcommand_both_show_help()
@@ -1094,5 +473,34 @@ public sealed class TemplatesCommandArgvTests
         var (unknown, _, unknownErr) = Run("instal");
         Assert.Equal(1, unknown);
         Assert.Contains("instal", unknownErr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Removed_install_subcommand_names_its_replacement()
+    {
+        // `install` is handled explicitly rather than falling into "unknown
+        // subcommand": it existed, bootstrap and the docs called it, and anyone
+        // with it in muscle memory or a script needs to be sent to `winapp new`
+        // — not left hunting for a typo.
+        var (exitCode, _, stderr) = Run("install");
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("has been removed", stderr, StringComparison.Ordinal);
+        Assert.Contains("winapp new", stderr, StringComparison.Ordinal);
+        // A bare "unknown subcommand 'install'" would be the unhelpful outcome.
+        Assert.DoesNotContain("unknown subcommand", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Help_documents_the_status_exit_codes()
+    {
+        // bootstrap.ps1 branches on these, so they are contract, not cosmetics.
+        var (exitCode, stdout, _) = Run("--help");
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Exit codes:", stdout, StringComparison.Ordinal);
+        Assert.Contains("winapp new", stdout, StringComparison.Ordinal);
+        // The removed installer must not be advertised as an option any more.
+        Assert.DoesNotContain("mur templates install", stdout, StringComparison.Ordinal);
     }
 }
