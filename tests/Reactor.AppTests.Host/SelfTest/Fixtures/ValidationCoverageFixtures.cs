@@ -1351,4 +1351,42 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — a validator-only attachment inside a FormField.
+    //
+    //  .Validate(field, validators…) supplies no value, and null is a legitimate
+    //  value, so FormField validated null and reported "required" for a control
+    //  that plainly had text in it.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_ValidatorOnlyAttachmentInFormField(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var ctx = new ValidationContext();
+            var host = H.CreateHost();
+
+            host.Mount(c => VStack(12,
+                FormField(
+                    TextBox("Alice").Validate("name", Validate.Required("Name is required")),
+                    label: "Full Name",
+                    showWhen: ShowWhen.Always))
+                .Provide(ValidationContexts.Current, ctx));
+
+            await Harness.Render();
+
+            H.Check("Issue1262_ValidatorOnly_NoSpuriousError", ctx.GetMessages("name").Count == 0,
+                $"messages={string.Join("|", ctx.GetMessages("name").Select(m => m.Text))}");
+            H.Check("Issue1262_ValidatorOnly_NoErrorRendered", H.FindText("Name is required") is null);
+
+            // Still registered, so a submit-time MarkAllTouched() covers the field.
+            H.Check("Issue1262_ValidatorOnly_FieldRegistered", ctx.RegisteredFields.Contains("name"),
+                $"registered={string.Join("|", ctx.RegisteredFields)}");
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 validator-only done"));
+            await Harness.Render();
+        }
+    }
 }

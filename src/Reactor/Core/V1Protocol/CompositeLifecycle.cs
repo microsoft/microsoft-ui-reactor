@@ -104,25 +104,34 @@ internal static class CompositeLifecycle
     /// Runs a content element's attached synchronous validators against the context a
     /// <c>FormField</c> resolved, and makes sure the field exists either way.
     /// <para>
-    /// Registration cannot be left to the sync path alone. An element assembled outside
-    /// a render pass — cached in a field, built in an event handler, produced by a memo
-    /// — never reaches <c>.Validate()</c>'s render scope, so an async-only field would
-    /// exist nowhere: <c>MarkAllTouched()</c> and the validity summary would silently
-    /// skip it. Async validators still are not run here; nothing runs them automatically
-    /// (see <c>ValidateExtensions.ValidateAsync</c>).
+    /// Only a value-carrying attachment is validated. The validator-only overload never
+    /// supplies one, and <c>null</c> is a legitimate value, so running it here made
+    /// <c>FormField(TextBox("Alice").Validate("name", Validate.Required()))</c> report a
+    /// required-field error against <c>null</c> for a control that plainly had text
+    /// (issue #1262 review). Such an attachment stays declarative, exactly as it is
+    /// outside a <c>FormField</c>.
+    /// </para>
+    /// <para>
+    /// Registration cannot be left to the validated path alone. An element assembled
+    /// outside a render pass — cached in a field, built in an event handler, produced by
+    /// a memo — never reaches <c>.Validate()</c>'s render scope, so its field would exist
+    /// nowhere: <c>MarkAllTouched()</c> and the validity summary would silently skip it.
+    /// Async validators still are not run here; nothing runs them automatically (see
+    /// <c>ValidateExtensions.ValidateAsync</c>).
     /// </para>
     /// </summary>
     private static void ApplyAttachedValidation(ValidationContext? valCtx, ValidationAttached? attached)
     {
         if (valCtx is null || attached is null) return;
+        if (string.IsNullOrEmpty(attached.FieldName)) return;
 
-        if (attached.Validators.Length > 0)
+        if (attached.HasValue && attached.Validators.Length > 0)
         {
             ValidationReconciler.ValidateAttached(valCtx, attached, attached.Value);
             return;
         }
 
-        if (attached.AsyncValidators.Length > 0 && !string.IsNullOrEmpty(attached.FieldName))
+        if (attached.Validators.Length > 0 || attached.AsyncValidators.Length > 0)
             valCtx.RegisterField(attached.FieldName);
     }
 

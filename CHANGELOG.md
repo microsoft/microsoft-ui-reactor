@@ -139,6 +139,12 @@ Conventions for contributors:
   `EvaluateRules(...)` — recorded a passing verdict without ever running its
   predicate, reporting an invalid field as valid. Those paths now throw, and
   `EvaluateRulesAsync` is the batch path that runs them (issue #1262).
+- A validator-only attachment inside a `FormField` —
+  `FormField(TextBox("Alice").Validate("name", Validate.Required()))` — was validated
+  against `null` and reported a required-field error for a control that plainly had
+  text. That overload supplies no value, and `null` is a legitimate one, so
+  `ValidationAttached` now records whether a value was attached and `FormField`
+  validates only when one was. The field is still registered (issue #1262).
 - A mounted async `ValidationRule` whose predicate never completed was never released:
   the predicate takes no cancellation token, so cancelling on update or unmount left a
   suspended task holding the rule binding and its `ValidationContext`, with another

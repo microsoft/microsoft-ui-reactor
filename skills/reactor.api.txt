@@ -6087,6 +6087,7 @@ ValidationAttached.RunValidators(object value) → IReadOnlyList<ValidationMessa
 new(string FieldName, IValidator[] Validators, IAsyncValidator[] AsyncValidators)
 IAsyncValidator[] AsyncValidators { get; init; }
 IValidator[] Validators { get; init; }
+bool HasValue { get; init; }
 object Value { get; init; }
 string FieldName { get; init; }
 Deconstruct(ref string FieldName, ref IValidator[] Validators, ref IAsyncValidator[] AsyncValidators) → void

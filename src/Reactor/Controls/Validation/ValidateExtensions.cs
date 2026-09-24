@@ -17,6 +17,18 @@ public sealed record ValidationAttached(
     /// </summary>
     public object? Value { get; init; }
 
+    /// <summary>
+    /// True when a value overload of <c>.Validate()</c>/<c>.ValidateAsync()</c> supplied
+    /// <see cref="Value"/>.
+    /// <para>
+    /// <c>null</c> is a legitimate value, so the property alone cannot distinguish "the
+    /// field is empty" from "no value was ever attached". Without that distinction
+    /// <c>FormField</c> validated <c>null</c> for the validator-only overload and
+    /// reported a required-field error for a control that plainly had text in it.
+    /// </para>
+    /// </summary>
+    public bool HasValue { get; init; }
+
     public static readonly ValidationAttached Empty = new("", [], []);
 }
 
@@ -71,9 +83,10 @@ public static class ValidateExtensions
             {
                 FieldName = fieldName,
                 Value = value,
+                HasValue = true,
                 Validators = [.. existing.Validators, .. validators]
             }
-            : new ValidationAttached(fieldName, validators, []) { Value = value };
+            : new ValidationAttached(fieldName, validators, []) { Value = value, HasValue = true };
 
         RunDuringRender(merged, value);
         return (T)el.SetAttached(merged);
@@ -120,9 +133,10 @@ public static class ValidateExtensions
             {
                 FieldName = fieldName,
                 Value = value,
+                HasValue = true,
                 AsyncValidators = [.. existing.AsyncValidators, .. asyncValidators]
             }
-            : new ValidationAttached(fieldName, [], asyncValidators) { Value = value };
+            : new ValidationAttached(fieldName, [], asyncValidators) { Value = value, HasValue = true };
 
         // Async validators cannot resolve inside a synchronous render, but the field
         // still has to be registered or MarkAllTouched() would skip it.

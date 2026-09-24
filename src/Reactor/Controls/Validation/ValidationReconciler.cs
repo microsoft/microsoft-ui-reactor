@@ -139,7 +139,16 @@ public static class ValidationReconciler
         // otherwise re-enter and take ownership of the set out from under this call.
         var verdicts = new List<(string Field, string Producer, List<ValidationMessage> Messages)>(rules.Length);
         for (var i = 0; i < rules.Length; i++)
-            verdicts.Add((rules[i].Field, RuleProducer(setId, i), rules[i].ComputeSync()));
+        {
+            var producer = RuleProducer(setId, i);
+
+            // The set may have been asynchronous last time. A leftover generation would
+            // classify this synchronous verdict as async, and the next value change would
+            // retract an error that is current.
+            ctx.ClearAsyncGeneration(rules[i].Field, producer);
+
+            verdicts.Add((rules[i].Field, producer, rules[i].ComputeSync()));
+        }
 
         ctx.CommitRuleSet(setId, generation, verdicts, asyncTokens: null);
     }

@@ -1765,6 +1765,47 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
+    public void A_Validator_Only_Attachment_Is_Not_Validated_Against_Null()
+    {
+        var ctx = new ValidationContext();
+
+        // The validator-only overload never supplies a value, so running it would
+        // validate null and report "required" for a control that has text.
+        var attached = TextBox("Alice").Validate("name", Validate.Required()).GetValidation();
+        Assert.NotNull(attached);
+        Assert.False(attached.HasValue);
+
+        // The value overloads do supply one, including a legitimately null value.
+        var withValue = TextBox("").Validate("name", "", Validate.Required()).GetValidation();
+        Assert.NotNull(withValue);
+        Assert.True(withValue.HasValue);
+
+        var withNull = TextBox("").Validate("name", (object?)null, Validate.Required()).GetValidation();
+        Assert.NotNull(withNull);
+        Assert.True(withNull.HasValue);
+    }
+
+    [Fact]
+    public async Task A_Set_That_Turns_Synchronous_Keeps_Its_Verdict_Across_A_Value_Change()
+    {
+        var ctx = new ValidationContext();
+
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "name-rules", ValidationRuleAsync(() => Task.FromResult(false), "Rule failed", "name"));
+        Assert.Single(ctx.GetMessages("name"));
+
+        // Same set, same position, now evaluated through the synchronous overload.
+        ValidationReconciler.EvaluateRules(
+            ctx, "name-rules", ValidationRule(() => false, "Rule failed", "name"));
+        Assert.Single(ctx.GetMessages("name"));
+
+        // A value change retires async producers; this one is no longer async.
+        ctx.NotifyValueChanged("name", "anything");
+
+        Assert.Single(ctx.GetMessages("name"));
+    }
+
+    [Fact]
     public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
     {
         var ctx = new ValidationContext();
