@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Controls.Validation;
 
@@ -115,9 +116,10 @@ public static class ValidationReconciler
         // reported failure, which is exactly the state a caller cannot reason about
         // (issue #1262 review). Each rule's own Evaluate still rejects an async
         // predicate; this makes the batch atomic rather than the individual rule safe.
-        foreach (var rule in rules)
+        foreach (var asyncRule in rules.Where(rule => rule.AsyncPredicate is not null))
         {
-            if (rule.AsyncPredicate is not null) rule.ComputeSync();
+            // Throws, naming the offending field.
+            asyncRule.ComputeSync();
         }
 
         for (var i = 0; i < rules.Length; i++)
