@@ -182,18 +182,31 @@ shipping `Reactor.pri` from a `sidecar/` folder with a plain
 
 **The upstream long-path fix does not retire this.** The `MAX_PATH` defect itself is
 [microsoft/WindowsAppSDK#6795](https://github.com/microsoft/WindowsAppSDK/issues/6795)
-(`WinAppSdkExpandPriContent` passes a non-extended-length path to `makepri.exe`), verified
-fixed in `Microsoft.Windows.SDK.BuildTools.MSIX` **1.7.260925103**. Consumers do not get
-that version yet: build tools reach an app only through `Microsoft.WindowsAppSDK.Base`,
-the sole package in the graph that references them, and the newest Base (2.0.4, pulled by
-Windows App SDK 2.5.1) pins `1.7.251221100`. Checked 2026-09-25 — `1.7.260925103` was not
-yet on nuget.org.
+(`WinAppSdkExpandPriContent` passes a non-extended-length path to `makepri.exe`), still
+open. A fix exists and was verified by A/B in `Microsoft.Windows.SDK.BuildTools.MSIX`
+**1.7.260925103** — but that is a private drop, not a feed package: checked against
+nuget.org on 2026-09-25 it returns 404, while 1.7.251221100 and 1.7.260903100 return 200
+and a nonsense version returns 404 (i.e. the probe can tell absent from broken).
 
-Once it does flow, this section stops being a build-*failure* fix, but the layout stays
-correct on its own terms: the `.Advanced` and `.Devtools` indexes are **entirely empty**,
-and shipping them costs every consumer six wasted `makepri.exe Dump` invocations per
-build. Re-evaluate then; do not assume the upstream fix alone makes a `.pri` in `lib/`
-harmless.
+**No published version fixes it.** The newest published build tools, 1.7.260903100, were
+A/B'd at a failing depth and still fail — 6 `PRI` and 4 `APPX` errors — which matches the
+structure: that version's `MrtCore.PriExpansion.targets` still passes a bare
+`IntermediateDirectory="$(IntermediateOutputPath)"`, and its task assembly contains no
+`\\?\` handling at all.
+
+Consumers also do not choose this package directly. Build tools reach an app only through
+`Microsoft.WindowsAppSDK.Base`, the sole package in the graph that references them, and
+every Base — including the newest experimental, 2.0.5-experimental2 — pins
+`1.7.251221100`. So the version is transitive: an app cannot opt into a fixed build-tools
+release by upgrading Windows App SDK, and pinning the newest published one would not help
+either.
+
+That last point is why this section outlives the upstream fix. Even once 1.7.260925103 (or
+its successor) ships and flows, the `.pri` removal keeps the trigger away from every
+consumer still resolving an older build-tools version — which, being transitive, is not
+something they control. And the layout is right on its own terms regardless: the
+`.Advanced` and `.Devtools` indexes are **entirely empty**, and shipping them costs every
+consumer six wasted `makepri.exe Dump` invocations per build.
 
 Each of the three csproj files therefore narrows the allow-list that decides what may sit
 in the build-output folder:
