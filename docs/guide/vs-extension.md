@@ -28,8 +28,8 @@ The component picker is a ComboBox in the tool window chrome. By default it auto
 
 ## Packaged (MSIX) projects
 
-Packaged projects work with no project changes. The Reactor templates generate a packaged
-app by default, and the preview launches it with package identity for you.
+Packaged projects work with no project changes. The preview launches them with package
+identity for you.
 
 To preview the app unpackaged instead, set `<WindowsPackageType>None</WindowsPackageType>`.
 
