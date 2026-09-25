@@ -28,8 +28,10 @@ The component picker is a ComboBox in the tool window chrome. By default it auto
 
 ## Packaged (MSIX) projects
 
-Packaged projects work with no project changes. The preview launches them with package
-identity for you.
+Packaged projects preview as-is when the project uses the Windows App SDK run support
+(`Microsoft.Windows.SDK.BuildTools.WinApp`) — the preview supplies the execution-alias
+setting that run support needs in order to inherit stdout. A project converted to MSIX by
+hand needs that package added before the preview can attach.
 
 To preview the app unpackaged instead, set `<WindowsPackageType>None</WindowsPackageType>`.
 

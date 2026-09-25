@@ -75,8 +75,8 @@ Conventions for contributors:
   to keep it there. The VSIX's advertised minimum host moves to Visual Studio 17.14 to
   match that baseline. (PR #1282)
 
-- **Packaged (MSIX) apps now work in the Visual Studio preview.** Previewing a packaged
-  project previously failed; it now works with no project changes. (PR #1282)
+- **The Visual Studio preview now supports packaged (MSIX) apps.** Previewing a packaged
+  project previously failed. (PR #1282)
 
 - **Wrong code and guidance in the shipped agent-kit skills (spec 064 §4, issue
   #1275).** Three gesture snippets in `reactor-input` used WinUI's nested
