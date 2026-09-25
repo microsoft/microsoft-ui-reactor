@@ -2384,6 +2384,14 @@ internal static class ValidationCoverageFixtures
                 H.Check("Issue1262_Cancel_ForeignCancellationReported", seen > 0,
                     $"reported={seen} names={names}");
             }
+            else
+            {
+                // The harness requires every fixture to emit a check or a skip, and it
+                // is right to: a fixture that silently emits nothing is indistinguishable
+                // from one that was never reached.
+                H.Skip("Issue1262_Cancel_ForeignCancellationReported",
+                    "EventListener callbacks do not flow under NativeAOT publish");
+            }
 
             // Positive control: the same subscription, same operation name, must stay
             // silent for the lifecycle cancellation it is supposed to ignore. A sink
@@ -2421,6 +2429,11 @@ internal static class ValidationCoverageFixtures
             {
                 H.Check("Issue1262_Cancel_LifecycleCancellationSilent", quietCount == 0,
                     $"reported={quietCount} names={quietNames}");
+            }
+            else
+            {
+                H.Skip("Issue1262_Cancel_LifecycleCancellationSilent",
+                    "EventListener callbacks do not flow under NativeAOT publish");
             }
 
             var done = H.CreateHost();
