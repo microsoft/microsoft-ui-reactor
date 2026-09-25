@@ -343,16 +343,27 @@ jobs:
               # element; this is the packaged equivalent. The blank template renders
               # `TitleBar("$projectname$")`, so a TitleBar named TestApp is present
               # exactly when the scaffold rendered.
+              # Resolve winapp the same way bootstrap's Get-WinAppCliPath does:
+              # winget's MSIX install drops an app-execution alias that exists on
+              # disk without always being resolvable through this process's PATH,
+              # so a bare `winapp` can fail on exactly that installation state.
+              $winApp = (Get-Command winapp -ErrorAction SilentlyContinue).Source
+              if (-not $winApp) {
+                  $alias = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winapp.exe'
+                  if (Test-Path $alias) { $winApp = $alias }
+              }
+              if (-not $winApp) { throw 'winapp CLI not found, so the rendered-UI assertion cannot run.' }
+
               $rendered = $false
               for ($i = 0; $i -lt 20; $i++) {
-                  $hit = winapp ui search 'TestApp' --window $proc.MainWindowHandle --json 2>&1 | Out-String
+                  $hit = & $winApp ui search 'TestApp' --window $proc.MainWindowHandle --json 2>&1 | Out-String
                   if ($LASTEXITCODE -eq 0 -and $hit -match 'TestApp') { $rendered = $true; break }
                   Start-Sleep -Seconds 3
                   $proc.Refresh()
               }
               if (-not $rendered) {
                   Write-Host '--- UI tree ---'
-                  winapp ui inspect --app TestApp 2>&1 | Write-Host
+                  & $winApp ui inspect --app TestApp 2>&1 | Write-Host
                   throw 'TestApp activated but its Reactor UI did not render (no element named TestApp in the tree).'
               }
               Write-Host '  [ok] Reactor UI rendered (TitleBar present)'
