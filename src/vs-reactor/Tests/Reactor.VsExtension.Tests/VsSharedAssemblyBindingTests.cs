@@ -60,13 +60,41 @@ namespace Reactor.VsExtension.Tests
         /// nothing otherwise ties to this pin.
         /// </summary>
         /// <remarks>
-        /// Microsoft.VisualStudio.SDK baselines System.Text.Json per VS version: 17.8 -> 7.0.3,
-        /// 17.9 -> 8.0.0, 17.14 -> 9.0.0. Referencing 9.0.0.0 while advertising 17.8 support
-        /// would leave the extension dead on every host below 17.14 in exactly the way this
-        /// PR fixes for VS 18, so the manifest minimum must not fall below the SDK whose
-        /// baseline we pin to.
+        /// Derived from the central <c>Microsoft.VisualStudio.SDK</c> version rather than
+        /// written down again here. The extension cannot support a host older than the SDK it
+        /// compiles against, and that SDK is what fixes the System.Text.Json baseline: the SDK
+        /// baselines it per VS version (17.8 -> 7.0.3, 17.9 -> 8.0.0, 17.14 -> 9.0.0). A second
+        /// hard-coded literal would let an SDK bump update the pin and the ceiling while
+        /// silently leaving the host minimum behind, keeping every test green while the VSIX
+        /// advertised hosts the new pin cannot load on. One source of truth means that bump
+        /// fails this gate until the manifest is raised deliberately.
         /// </remarks>
-        private static readonly Version MinimumSupportedVsHost = new Version(17, 14);
+        private static Version MinimumSupportedVsHost => VisualStudioSdkVersion();
+
+        private static Version VisualStudioSdkVersion()
+        {
+            var props = FindRepoFile("Directory.Packages.props");
+
+            var raw = XDocument.Load(props)
+                .Descendants()
+                .Where(e => e.Name.LocalName == "PackageVersion")
+                .Where(e => string.Equals(
+                    (string?)e.Attribute("Include"),
+                    "Microsoft.VisualStudio.SDK",
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(e => (string?)e.Attribute("Version"))
+                .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+
+            if (raw == null || !Version.TryParse(raw, out var version))
+            {
+                throw new InvalidOperationException(
+                    "Could not read the Microsoft.VisualStudio.SDK PackageVersion from "
+                    + $"'{props}'. The host-minimum gate has no source of truth without it — fix "
+                    + "the lookup rather than reintroducing a hard-coded version.");
+            }
+
+            return new Version(version.Major, version.Minor);
+        }
 
         [Fact]
         public void VsixManifest_DoesNotAdvertiseHostsOlderThanThePinnedBaseline()
@@ -107,9 +135,11 @@ namespace Reactor.VsExtension.Tests
             Assert.True(
                 tooOld.Count == 0,
                 $"source.extension.vsixmanifest advertises Visual Studio hosts older than {MinimumSupportedVsHost}, "
-                + "which redirect System.Text.Json below the version the extension is pinned to, so the extension "
-                + "would fail to load there with FileNotFoundException. Raise the manifest minimum, or lower the "
-                + "pin and this constant together. Offending declarations: " + string.Join("; ", tooOld));
+                + "the Microsoft.VisualStudio.SDK version the extension compiles against. Those hosts redirect "
+                + "System.Text.Json below the version the extension is pinned to, so the extension would fail to "
+                + "load there with FileNotFoundException. Raise the manifest minimum to match the SDK, or move the "
+                + "SDK, the System.Text.Json pin and the manifest together. Offending declarations: "
+                + string.Join("; ", tooOld));
         }
 
         /// <summary>
