@@ -13,7 +13,7 @@ namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
 /// Sharing one fixture also means the ~2-minute pack happens once instead of per class.</para>
 /// </summary>
 [CollectionDefinition(Name, DisableParallelization = true)]
-public sealed class LocalPackageFeedCollection : ICollectionFixture<TemplatePackageTestFixture>
+public sealed class LocalPackageFeedCollection : ICollectionFixture<LocalPackageFeedFixture>
 {
     public const string Name = "LocalPackageFeed";
 }

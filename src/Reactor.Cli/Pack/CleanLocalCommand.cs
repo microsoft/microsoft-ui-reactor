@@ -12,7 +12,11 @@ namespace Microsoft.UI.Reactor.Cli.Pack;
 public static class CleanLocalCommand
 {
     // Package IDs that `pack-local` produces — lowercase to match the NuGet
-    // global-packages folder convention.
+    // global-packages folder convention. `projecttemplates` is retained even
+    // though the package was removed from this repo: dev machines bootstrapped
+    // before the removal still have a stale nupkg in local-nupkgs/ and an
+    // extracted copy in the global cache, and cleaning those up is exactly what
+    // this command is for.
     internal static readonly string[] PackageIds =
     [
         "microsoft.ui.reactor",
@@ -21,7 +25,9 @@ public static class CleanLocalCommand
         "microsoft.ui.reactor.projecttemplates",
     ];
 
-    // Template package ID used by `dotnet new install`.
+    // Legacy `dotnet new` template package, removed from this repo in favour of
+    // the Windows App SDK pack (`dotnet new reactor`). Kept here so the command
+    // can still unregister a stale install left behind on a dev machine.
     internal const string TemplatePackageId = "Microsoft.UI.Reactor.ProjectTemplates";
 
     public static int Run(string[] args)
@@ -93,7 +99,8 @@ public static class CleanLocalCommand
         // 3. Clear the NuGet HTTP cache so stale metadata doesn't linger.
         RunDotnet(repoRoot, "nuget", "locals", "http-cache", "--clear");
 
-        // 4. Uninstall project templates (non-fatal).
+        // 4. Unregister the legacy `dotnet new reactorapp` template if a stale
+        //    install is still present from before it was removed (non-fatal).
         UninstallTemplates(repoRoot);
 
         Console.WriteLine();

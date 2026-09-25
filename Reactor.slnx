@@ -494,9 +494,6 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
-  <Folder Name="/tools/Templates/">
-    <Project Path="tools/Templates/Microsoft.UI.Reactor.Templates.csproj" />
-  </Folder>
   <Project Path="src/Reactor.Analyzers/Reactor.Analyzers.csproj" />
   <Project Path="src/Reactor.Analyzers.Internal/Reactor.Analyzers.Internal.csproj" />
   <Project Path="src/Reactor.Compile.Analyzer/Reactor.Compile.Analyzer.csproj" />

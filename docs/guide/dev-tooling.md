@@ -179,10 +179,17 @@ subcommands map one-to-one to the workflows below.
 | `mur loc` | Run the localization pipeline (`extract`, `translate`, `validate`, `status`, `prune`) | `mur loc extract` |
 | `mur devtools` | Launch the project with `--devtools run`, supervise reloads, and host the MCP endpoint | `mur devtools` |
 | `mur check` | Repo-health checks (cref validity, namespace policy, "did you mean" suggestions) | `mur check` |
-| `mur doctor` | Verify the install — SDK, `mur`, local feed, template, plugin | `mur doctor` |
-| `mur upgrade` | Re-pack framework + templates and refresh the plugin after a `git pull` | `mur upgrade` |
+| `mur doctor` | Verify the install — SDK, `mur`, local feed, templates, plugin | `mur doctor` |
+| `mur upgrade` | Re-pack the framework and refresh the plugin after a `git pull`; checks template availability but does not install the pack (that's `winapp new`) | `mur upgrade` |
 | `mur figma watch` | Poll a Figma file for design changes | `mur figma watch` |
-| `mur pack-local` / `mur clean-local` | Package / clean the local NuGet feed for source-built framework smoke tests; the app template defaults to the public Reactor preview unless `--MSUIReactorVersion` is supplied | `mur pack-local` |
+| `mur pack-local` / `mur clean-local` | Package / clean the local NuGet feed for source-built framework smoke tests; scaffolded apps default to the public Reactor preview unless `--reactor-version` is supplied | `mur pack-local` |
+| `mur templates status` | Report whether `dotnet new reactor` resolves (exit `0` available, `1` probe failed, `2` pack too old, `3` pack missing) | `mur templates status` |
+
+To *install* the template pack, use the Windows App SDK CLI rather than `mur`:
+`winapp new -t reactor -n MyApp` installs it on demand and scaffolds in one
+step, and `winapp new --list` installs it without scaffolding. `bootstrap.ps1`
+drives that same command, so a bootstrapped checkout can go straight to
+`dotnet new reactor`.
 
 Beyond the subcommands there are four top-level options worth knowing:
 `mur --create <Name>` scaffolds a new Reactor project, `mur --skill`

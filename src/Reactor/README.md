@@ -107,7 +107,6 @@ From here, the same model scales to real apps. The [getting started guide](https
 
 - [`Microsoft.UI.Reactor.Advanced`](https://www.nuget.org/packages/Microsoft.UI.Reactor.Advanced) — optional components with heavier native/graphics dependencies (Win2D canvas, charts).
 - [`Microsoft.UI.Reactor.Devtools`](https://www.nuget.org/packages/Microsoft.UI.Reactor.Devtools) — optional developer-loop devtools host (live tree inspection, hot reload, preview).
-- [`Microsoft.UI.Reactor.ProjectTemplates`](https://www.nuget.org/packages/Microsoft.UI.Reactor.ProjectTemplates) — `dotnet new` templates for scaffolding Reactor apps.
 
 ## Feedback & Contributing
 

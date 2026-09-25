@@ -187,7 +187,7 @@ uniform Summary / Parameters / Returns / Discussion / Examples / See Also page.
 
 ## Minimal Project Setup
 
-The fastest path is [`dotnet new reactorapp`](getting-started.md), which
+The fastest path is [`dotnet new reactor`](getting-started.md), which
 scaffolds all of this for you. To wire it up by hand instead, create a console
 project and edit the `.csproj`:
 
