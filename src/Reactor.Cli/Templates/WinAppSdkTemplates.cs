@@ -57,6 +57,7 @@ public static class WinAppSdkTemplates
         "reactor-tabview",
     ];
 
+    /// <summary>
     /// True when the template *package* is registered with the `dotnet new`
     /// engine. Returns null when the installed-package list could not be
     /// enumerated at all (no `dotnet` on PATH, engine error) so callers can

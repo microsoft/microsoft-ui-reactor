@@ -18,11 +18,14 @@ user-invocable: true
 >
 > Richer starting points: `reactor-mvu` (Model-View-Update via `UseReducer`), `reactor-navview` (`NavigationView` shell), `reactor-tabview` (`TabView` shell).
 >
-> If the templates aren't installed yet, install the pack before scaffolding:
+> If the templates aren't installed yet, scaffold with the Windows App SDK CLI
+> instead — it installs the pack on demand, so there is no version to pin:
 >
 > ```
-> dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::0.0.7-alpha
+> winapp new -t reactor -n <AppName>
 > ```
+>
+> To install the pack without scaffolding, run `winapp new --list`.
 
 You build Reactor apps in this rhythm: scaffold → understand requirements → draft component tree → write files in a batch → `mur check`.
 

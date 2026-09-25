@@ -28,6 +28,13 @@ Conventions for contributors:
 
 ### Added
 
+- **`mur templates status`** reports whether `dotnet new reactor` actually resolves, rather than
+  merely whether the template pack id is registered — an installed-but-too-old pack (`0.0.6-alpha`
+  shipped before the Reactor templates existed) is a PASS on the package check and a failure on the
+  next scaffold. Exit codes are load-bearing: `0` available, `1` probe failed, `2` pack installed
+  but too old, `3` pack not installed. It backs `mur doctor` and `bootstrap.ps1`'s verification
+  step, which give different remediation for each.
+
 ### Changed
 
 ### Deprecated
@@ -60,7 +67,7 @@ Conventions for contributors:
   Windows App SDK CLI's job: `winapp new -t reactor -n MyApp` installs the pack on demand and
   scaffolds in one step, and `winapp new --list` installs it without scaffolding. `bootstrap.ps1`
   now drives that command, and `mur upgrade` reports on the templates instead of installing them.
-  `mur templates status` is unchanged and still backs `mur doctor` and bootstrap's verification.
+  `mur templates status` (see Added) still backs `mur doctor` and bootstrap's verification.
 
   Reactor carried its own installer because `dotnet new install` has no `--prerelease` switch and
   resolves stable-only, which fails outright while the pack is prerelease-only; working around

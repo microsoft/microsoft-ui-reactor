@@ -268,6 +268,70 @@ jobs:
               --nologo -v:m
           if ($LASTEXITCODE -ne 0) { throw "TestApp build exited $LASTEXITCODE" }
 
+      # A packaged app can build cleanly and still fail to register or activate,
+      # and "scaffolded apps are now packaged" is the central behaviour change in
+      # this migration — so building is not end-to-end coverage. The integration
+      # test this PR deleted did scaffold→`dotnet run`→UIA against the *unpackaged*
+      # `reactorapp` template; this is its packaged replacement, asserting the two
+      # things the build cannot: the loose layout registers, and the app activates.
+      #
+      # Registering an unsigned loose MSIX layout requires Developer Mode. GitHub's
+      # windows runners are administrators, so the AppModelUnlock switch is settable
+      # directly — same approach as the Packaged Selftests job in ci.yml.
+      - name: Enable Developer Mode
+        shell: pwsh
+        run: |
+          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock'
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name AllowDevelopmentWithoutDevLicense `
+            -PropertyType DWord -Value 1 -Force | Out-Null
+          $v = (Get-ItemProperty -Path $key -Name AllowDevelopmentWithoutDevLicense).AllowDevelopmentWithoutDevLicense
+          if ($v -ne 1) { throw "Developer Mode is not enabled (AllowDevelopmentWithoutDevLicense=$v)." }
+
+      - name: Launch TestApp (packaged registration + activation)
+        shell: pwsh
+        run: |
+          $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
+          Push-Location TestProjects/TestApp
+          try {
+              # `dotnet run` on a single-project MSIX registers a loose-layout
+              # package and activates it. It does not return while the app is up,
+              # so run it as a job and poll.
+              $job = Start-Job -ScriptBlock {
+                  param($dir, $arch)
+                  Set-Location $dir
+                  dotnet run -c Release "-p:Platform=$arch" --nologo 2>&1
+              } -ArgumentList (Get-Location).Path, $arch
+
+              $proc = $null
+              for ($i = 0; $i -lt 90; $i++) {
+                  Start-Sleep -Seconds 2
+                  $proc = Get-Process -Name 'TestApp' -ErrorAction SilentlyContinue | Select-Object -First 1
+                  if ($proc) { break }
+                  if ($job.State -eq 'Completed' -or $job.State -eq 'Failed') { break }
+              }
+
+              $pkg = Get-AppxPackage -Name 'TestApp' -ErrorAction SilentlyContinue
+
+              if (-not $proc) {
+                  Write-Host '--- dotnet run output ---'
+                  Receive-Job $job 2>&1 | Write-Host
+                  Stop-Job $job -ErrorAction SilentlyContinue
+                  Remove-Job $job -Force -ErrorAction SilentlyContinue
+                  throw 'TestApp never started — the packaged app built but did not register/activate.'
+              }
+
+              Write-Host "  [ok] TestApp activated (pid $($proc.Id))"
+              if ($pkg) { Write-Host "  [ok] registered package $($pkg.PackageFullName)" }
+              else { throw 'TestApp is running but no loose-layout package is registered.' }
+
+              Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+              Stop-Job $job -ErrorAction SilentlyContinue
+              Remove-Job $job -Force -ErrorAction SilentlyContinue
+          } finally {
+              Pop-Location
+          }
+
       - name: Verify mur upgrade is idempotent
         shell: pwsh
         run: |
