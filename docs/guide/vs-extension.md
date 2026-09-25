@@ -3,7 +3,7 @@
 
 > ⚠️ **Very rough / experimental.** This is the roughest surface in an already experimental Reactor repository. It is meant for early feedback on the embedded-preview direction, not for reliable day-to-day development yet. Expect install friction, solution-load races, HWND/DPI edge cases, blank-window bugs, and breaking changes while this area is hardened.
 
-The Visual Studio Embedded Preview hosts a live Microsoft.UI.Reactor (Reactor) component inside a Visual Studio tool window — Visual Studio 2022 (17.8+) or Visual Studio 2026 (18.x), with the **Visual Studio extension development** workload. Unlike the VS Code preview, which streams screenshots, the Visual Studio extension embeds the real WinUI surface so mouse, keyboard, focus, popups, and accessibility tree inspection work against the running app.
+The Visual Studio Embedded Preview hosts a live Microsoft.UI.Reactor (Reactor) component inside a Visual Studio tool window — Visual Studio 2022 (17.14+) or Visual Studio 2026 (18.x), with the **Visual Studio extension development** workload. Unlike the VS Code preview, which streams screenshots, the Visual Studio extension embeds the real WinUI surface so mouse, keyboard, focus, popups, and accessibility tree inspection work against the running app.
 
 ## When to use it
 

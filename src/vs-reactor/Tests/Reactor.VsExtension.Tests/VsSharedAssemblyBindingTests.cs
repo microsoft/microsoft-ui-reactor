@@ -2,8 +2,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Microsoft.UI.Reactor.VsExtension.Embed;
 using Xunit;
 
@@ -49,6 +51,71 @@ namespace Reactor.VsExtension.Tests
         private static AssemblyName[] ExtensionReferences()
         {
             return typeof(EmbedClient).Assembly.GetReferencedAssemblies();
+        }
+
+        /// <summary>
+        /// The ceiling above is only half the contract. A shared-assembly reference also has
+        /// to be covered by the <em>oldest</em> Visual Studio the VSIX claims to install into,
+        /// and that claim lives in source.extension.vsixmanifest — a different file that
+        /// nothing otherwise ties to this pin.
+        /// </summary>
+        /// <remarks>
+        /// Microsoft.VisualStudio.SDK baselines System.Text.Json per VS version: 17.8 -> 7.0.3,
+        /// 17.9 -> 8.0.0, 17.14 -> 9.0.0. Referencing 9.0.0.0 while advertising 17.8 support
+        /// would leave the extension dead on every host below 17.14 in exactly the way this
+        /// PR fixes for VS 18, so the manifest minimum must not fall below the SDK whose
+        /// baseline we pin to.
+        /// </remarks>
+        private static readonly Version MinimumSupportedVsHost = new Version(17, 14);
+
+        [Fact]
+        public void VsixManifest_DoesNotAdvertiseHostsOlderThanThePinnedBaseline()
+        {
+            var manifest = FindRepoFile(Path.Combine(
+                "src", "vs-reactor", "Reactor.VsExtension", "source.extension.vsixmanifest"));
+
+            var text = File.ReadAllText(manifest);
+            var ranges = Regex.Matches(text, @"Version=""\[(?<min>\d+\.\d+)\s*,")
+                .Cast<Match>()
+                .Select(m => m.Groups["min"].Value)
+                .ToArray();
+
+            // Positive control: a manifest we failed to parse must not read as "no violations".
+            Assert.NotEmpty(ranges);
+
+            var tooOld = ranges
+                .Select(v => new Version(v))
+                .Where(v => v < MinimumSupportedVsHost)
+                .Select(v => v.ToString())
+                .Distinct()
+                .ToArray();
+
+            Assert.True(
+                tooOld.Length == 0,
+                $"source.extension.vsixmanifest advertises Visual Studio {string.Join(", ", tooOld)}, "
+                + $"older than the {MinimumSupportedVsHost} baseline the extension's System.Text.Json pin "
+                + "requires. Those hosts redirect System.Text.Json below the pinned version, so the "
+                + "extension would fail to load there with FileNotFoundException. Raise the manifest "
+                + "minimum, or lower the pin and this constant together.");
+        }
+
+        private static string FindRepoFile(string relativePath)
+        {
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir != null)
+            {
+                var candidate = Path.Combine(dir.FullName, relativePath);
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+
+                dir = dir.Parent;
+            }
+
+            throw new FileNotFoundException(
+                $"Could not locate '{relativePath}' walking up from {AppContext.BaseDirectory}. "
+                + "The test cannot pass vacuously — fix the lookup rather than deleting the assertion.");
         }
 
         /// <summary>
