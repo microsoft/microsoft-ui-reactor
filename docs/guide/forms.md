@@ -818,10 +818,12 @@ class AsyncValidationDemo : Component
             var cts = new CancellationTokenSource();
             if (email.Length > 0)
             {
-                _ = ValidationReconciler.ValidateFieldAsync(
-                    ctx, "email", email,
-                    [Validate.MustAsync<string>(IsEmailFree, "Email is taken")],
-                    cts.Token);
+                // Observed, not discarded. `_ = SomeTask()` drops the returned task on
+                // the floor, so a uniqueness check that fails for a real reason — the
+                // network is down, the service 500s — vanishes silently and the field
+                // just never gets a verdict. Await it inside a local async helper and
+                // handle the two outcomes separately.
+                _ = RunCheckAsync(cts.Token);
             }
             // Cancel on cleanup so the superseded check cannot install its verdict, and
             // dispose the source with it — the effect allocates a fresh one per run.
@@ -834,6 +836,28 @@ class AsyncValidationDemo : Component
                 try { cts.Cancel(); }
                 finally { cts.Dispose(); }
             };
+
+            async Task RunCheckAsync(CancellationToken token)
+            {
+                try
+                {
+                    await ValidationReconciler.ValidateFieldAsync(
+                        ctx, "email", email,
+                        [Validate.MustAsync<string>(IsEmailFree, "Email is taken")],
+                        token);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected: the user typed again and this check was superseded.
+                }
+                catch (Exception ex)
+                {
+                    // Anything else is a real failure. Surface it however your app
+                    // reports background faults — here, as a message on the field so
+                    // it cannot pass silently.
+                    ctx.AddExternal("email", $"Could not check availability: {ex.Message}");
+                }
+            }
         }, email);
 
         return VStack(12,

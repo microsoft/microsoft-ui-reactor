@@ -11,7 +11,15 @@ public sealed class ValidationContext
     private readonly Dictionary<string, List<ValidationMessage>> _externalMessages = new();
     // field -> producer -> the exact instances that producer last contributed, so each
     // producer can retract its own messages without disturbing the others on that field.
-    private readonly Dictionary<string, Dictionary<string, List<ValidationMessage>>> _owned = new();
+    // field -> the owner of each entry in _messages[field], same length and order.
+    // A null entry was added directly via Add(...) and belongs to no producer.
+    //
+    // Positional rather than by instance: ValidationMessage is immutable, so a validator
+    // may legitimately cache and return one instance, and Add(...) is public — the same
+    // instance can therefore appear twice under two different owners. Matching by
+    // reference could not tell those apart, so retiring one producer removed the other's
+    // message too and the field went spuriously valid (issue #1262 review).
+    private readonly Dictionary<string, List<string?>> _messageOwners = new();
     // field -> newest async pass token; older passes that resolve late are discarded.
     private readonly Dictionary<string, Dictionary<string, int>> _asyncGeneration = new();
     // field -> producer -> the token issued the last time anything wrote that slot.
@@ -408,6 +416,11 @@ public sealed class ValidationContext
                 _messages[message.Field] = list;
             }
             list.Add(message);
+            // Owned by no producer, so it is never substituted or retracted by one.
+            if (!_messageOwners.TryGetValue(message.Field, out var owners))
+                _messageOwners[message.Field] = owners = new List<string?>(list.Count);
+            while (owners.Count < list.Count - 1) owners.Add(null);
+            owners.Add(null);
             BumpVersionLocked();
         }
         RaiseChanged(messagesOnly: true);
@@ -457,7 +470,7 @@ public sealed class ValidationContext
     /// </summary>
     private void DropFieldProducerStateLocked(string field)
     {
-        _owned.Remove(field);
+        _messageOwners.Remove(field);
         _producerStamp.Remove(field);
         // An async pass still in flight would otherwise repopulate what the caller just
         // cleared: dropping the token makes its result stale on arrival.
@@ -533,32 +546,41 @@ public sealed class ValidationContext
     private bool ApplyOwnedLocked(string field, string producer, List<ValidationMessage> messages)
     {
         _messages.TryGetValue(field, out var current);
-        _owned.TryGetValue(field, out var byProducer);
+        _messageOwners.TryGetValue(field, out var owners);
 
-        List<ValidationMessage>? previous = null;
-        if (byProducer is not null)
-            byProducer.TryGetValue(producer, out previous);
-
-        var next = new List<ValidationMessage>(
-            (current?.Count ?? 0) + messages.Count);
+        var capacity = (current?.Count ?? 0) + messages.Count;
+        var next = new List<ValidationMessage>(capacity);
+        var nextOwners = new List<string?>(capacity);
         var taken = 0;
 
         if (current is not null)
         {
-            foreach (var message in current)
+            for (var i = 0; i < current.Count; i++)
             {
-                if (previous is not null && ContainsReference(previous, message))
+                // Positional, not by instance: two entries can be the same immutable
+                // ValidationMessage under different owners, and only the index tells
+                // them apart.
+                var owner = owners is not null && i < owners.Count ? owners[i] : null;
+                if (string.Equals(owner, producer, StringComparison.Ordinal))
                 {
                     // Substitute this producer's next message at the same position.
-                    if (taken < messages.Count) next.Add(messages[taken++]);
+                    if (taken < messages.Count)
+                    {
+                        next.Add(messages[taken++]);
+                        nextOwners.Add(producer);
+                    }
                     continue;
                 }
-                next.Add(message);
+                next.Add(current[i]);
+                nextOwners.Add(owner);
             }
         }
 
         for (; taken < messages.Count; taken++)
+        {
             next.Add(messages[taken]);
+            nextOwners.Add(producer);
+        }
 
         var changed = !SameMessages(current, next);
         if (changed)
@@ -569,32 +591,15 @@ public sealed class ValidationContext
                 _messages[field] = next;
         }
 
-        // Ownership must name instances that are actually installed. When the diff came
-        // back unchanged the stored list is still in _messages, so keeping it is not a
-        // micro-optimisation: overwriting it with the freshly allocated (equal but
-        // distinct) instances would leave nothing to retract next time, and the pass
-        // after that would append a duplicate.
-        if (changed)
-        {
-            if (messages.Count == 0)
-            {
-                if (byProducer is not null)
-                {
-                    byProducer.Remove(producer);
-                    if (byProducer.Count == 0) _owned.Remove(field);
-                }
-            }
-            else
-            {
-                byProducer ??= _owned[field] = new Dictionary<string, List<ValidationMessage>>(StringComparer.Ordinal);
-                byProducer[producer] = messages;
-            }
-        }
-        else if (messages.Count == 0 && byProducer is not null)
-        {
-            byProducer.Remove(producer);
-            if (byProducer.Count == 0) _owned.Remove(field);
-        }
+        // Ownership is rewritten whether or not the values changed. It is positional and
+        // was built alongside `next`, which is same-length and same-order as whatever is
+        // installed, so it describes the live list either way. (The old instance-keyed
+        // map had to skip this case to avoid naming freshly allocated equal-but-distinct
+        // instances that were never installed; positions have no such hazard.)
+        if (next.Count == 0)
+            _messageOwners.Remove(field);
+        else
+            _messageOwners[field] = nextOwners;
 
         // A stamp exists exactly while the producer owns something. Writing one while
         // dropping the ownership would leave an entry behind on every retraction, and
@@ -778,15 +783,6 @@ public sealed class ValidationContext
     internal const string SyncProducer = "sync";
     internal const string AsyncProducer = "async";
 
-    private static bool ContainsReference(List<ValidationMessage> list, ValidationMessage message)
-    {
-        foreach (var candidate in list)
-        {
-            if (ReferenceEquals(candidate, message)) return true;
-        }
-        return false;
-    }
-
     /// <summary>
     /// Registers a field, records its value, and installs its validator results as one
     /// atomic step — a single lock, a single version bump, and at most one
@@ -864,7 +860,7 @@ public sealed class ValidationContext
             changed = _messages.Count > 0 || _externalMessages.Count > 0;
             _messages.Clear();
             _externalMessages.Clear();
-            _owned.Clear();
+            _messageOwners.Clear();
             _producerStamp.Clear();
             _asyncGeneration.Clear();
             InvalidateRuleSetsLocked(null);
@@ -1514,7 +1510,7 @@ public sealed class ValidationContext
             _submitAttempted = false;
             _messages.Clear();
             _externalMessages.Clear();
-            _owned.Clear();
+            _messageOwners.Clear();
             _producerStamp.Clear();
             _asyncGeneration.Clear();
             InvalidateRuleSetsLocked(null);

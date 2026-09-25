@@ -147,8 +147,11 @@ Conventions for contributors:
   - **Wrong verdicts.** A validator-only attachment inside a `FormField` was
     validated against `null`, reporting a required-field error for a control that
     plainly had text; `NotifyValueChanged` discarded `AddExternal` messages on
-    every call rather than only when the value actually moved; and a rule batch
-    containing an async rule installed part of itself before throwing.
+    every call rather than only when the value actually moved; a rule batch
+    containing an async rule installed part of itself before throwing; and
+    retiring one producer removed another's message whenever both held the same
+    immutable `ValidationMessage` instance, which a caching validator or a direct
+    `Add(...)` makes reachable — leaving the field spuriously valid.
   - **Missed repaints.** A change raised while a render was in flight was
     announced inline, in the middle of the pass that caused it; deferring it
     then dropped it when no subscriber existed yet, because a host flushes root

@@ -2056,9 +2056,9 @@ internal static class ValidationCoverageFixtures
         }
 
         // A root render that writes a verdict and then throws never reaches
-        // reconciliation, so nothing consumes or retires the claim it made. The next
-        // pass has to settle it rather than discard it, or the field stays in error
-        // for the lifetime of the context.
+        // reconciliation, so nothing consumes or retires the claim it made. The host's
+        // error path settles it immediately — waiting for a later render is not enough,
+        // because a terminal error fallback means there may not be one.
         private async Task AbortedRootRenderAsync()
         {
             var host = H.CreateHost();
@@ -2083,10 +2083,15 @@ internal static class ValidationCoverageFixtures
             H.Check("Issue1262_Aborted_Resolved", ctx is not null, $"threw={threw}");
             if (ctx is null) return;
 
-            H.Check("Issue1262_Aborted_VerdictWritten", ctx.GetMessages("aborted").Count == 1,
-                $"aborted={ctx.GetMessages("aborted").Count}");
+            // Settled by the abort itself, with no further render. This used to assert
+            // the verdict was still present here and only cleaned up by the *next*
+            // render — which left it stranded whenever no next render came
+            // (issue #1262 review).
+            H.Check("Issue1262_Aborted_SettledAtAbort", ctx.GetMessages("aborted").Count == 0,
+                $"remaining={string.Join("|", ctx.GetMessages("aborted").Select(m => m.Text))}");
+            H.Check("Issue1262_Aborted_ValidAtAbort", ctx.IsValid(), $"valid={ctx.IsValid()}");
 
-            // The recovered tree no longer renders the field at all.
+            // And it stays settled once the host recovers into a tree without the field.
             abort = false;
             var recovered = H.CreateHost();
             recovered.Mount(c => TextBlock("after abort"));

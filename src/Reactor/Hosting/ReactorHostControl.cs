@@ -365,6 +365,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // additional reset steps, throttling) only need editing here.
         void RecoverFromHookOrder(HookOrderException ex, RenderContext ctx, string mode)
         {
+            // This path returns without reconciling, so nothing downstream will consume
+            // or retire what the aborted render claimed (issue #1262).
+            Controls.Validation.ValidationRenderScope.AbandonPendingClaims();
             _logger?.LogWarning(ex,
                 "Hot reload: hook order/type changed — resetting {Mode} state and re-rendering",
                 mode);
@@ -631,6 +634,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
     private void ShowErrorFallback(Exception ex)
     {
+        // The render that failed never reaches Reconcile, so its validation claims have
+        // no consumer. Withdraw them here rather than waiting for a next render that may
+        // never come (issue #1262).
+        Controls.Validation.ValidationRenderScope.AbandonPendingClaims();
         var errorPanel = Microsoft.UI.Reactor.Core.ErrorFallback.BuildPanel(ex);
         if (_overlayWiring is not null && _overlayWiring.TryShowErrorInWrapper(errorPanel))
         {

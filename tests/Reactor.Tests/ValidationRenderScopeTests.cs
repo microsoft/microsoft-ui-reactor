@@ -2681,4 +2681,64 @@ public class ValidationRenderScopeTests
         ctx.Reset("r");
         Assert.Equal(0, ctx.ProducerStampEntryCount);
     }
+    [Fact]
+    public void RetiringAProducerKeepsAnIdenticalMessageInstanceOwnedByAnother()
+    {
+        var ctx = new ValidationContext();
+
+        // A validator may legally cache and return one immutable message instance, and
+        // Add(ValidationMessage) is public — so the same instance can legitimately be in
+        // a field twice, contributed by two different owners.
+        var shared = new ValidationMessage("f", "must not be empty");
+
+        ctx.ApplyOwned("f", "sync", [shared]);
+        ctx.Add(shared);
+        Assert.Equal(2, ctx.GetMessages("f").Count);
+
+        // Retiring one owner must take exactly its own contribution.
+        ctx.RetireProducer("f", "sync");
+
+        var remaining = ctx.GetMessages("f");
+        Assert.Single(remaining);
+        Assert.Same(shared, remaining[0]);
+        Assert.False(ctx.IsValid());
+    }
+    [Fact]
+    public void AbandonedClaimsAreRetiredWithoutWaitingForAnotherRender()
+    {
+        var ctx = new ValidationContext();
+
+        // A render that validates and then throws: the host installs its error fallback
+        // and returns without reconciling, so nothing downstream ever consumes the
+        // claim. Relying on the *next* render to clean up is not enough — for a
+        // terminal fallback there is no next render.
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            _ = TextBox("").Validate("ghost", "", Validate.Required("ghost is required"));
+        }
+
+        Assert.Single(ctx.GetMessages("ghost"));
+
+        // What the host's error path now calls.
+        ValidationRenderScope.AbandonPendingClaims();
+
+        Assert.Empty(ctx.GetMessages("ghost"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public void AbandoningClaimsDoesNotDisturbAnAdoptedSlot()
+    {
+        var ctx = new ValidationContext();
+
+        // Guard: abandoning must not retract a verdict a mounted control already owns.
+        // The stamped withdrawal is what makes this safe on any abort path, including
+        // one taken after reconciliation had already started.
+        ctx.ApplyOwned("live", ValidationContext.SyncProducer,
+            [new ValidationMessage("live", "still required")]);
+
+        ValidationRenderScope.AbandonPendingClaims();
+
+        Assert.Single(ctx.GetMessages("live"));
+    }
 }

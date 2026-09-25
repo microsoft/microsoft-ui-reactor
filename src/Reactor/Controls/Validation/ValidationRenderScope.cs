@@ -229,6 +229,24 @@ internal static class ValidationRenderScope
     internal static Frame BeginReconcile() => BeginCore(null, isReconcile: true);
 
     /// <summary>
+    /// Withdraws the claims of a render that will never reach reconciliation.
+    /// <para>
+    /// A root render that throws installs an error fallback and returns without calling
+    /// <c>Reconcile</c>, so no reconcile frame ever opens to consume or retire what it
+    /// claimed. Leaving that to the *next* render is not good enough: if none follows —
+    /// the fallback is terminal for that host — the verdict sits in the context owned by
+    /// nothing and the thread-static map keeps the abandoned attachment alive
+    /// (issue #1262 review).
+    /// </para>
+    /// <para>
+    /// Safe on any abort path, including one taken after reconciliation started: a claim
+    /// a control already adopted is no longer in the map, and every withdrawal is stamped
+    /// so it cannot disturb a slot another writer owns.
+    /// </para>
+    /// </summary>
+    internal static void AbandonPendingClaims() => RetireUnconsumedClaims();
+
+    /// <summary>
     /// Withdraws every claim the pass made that no control took over.
     /// <para>
     /// A claim is created by the eager write and taken by the control that gets mounted
