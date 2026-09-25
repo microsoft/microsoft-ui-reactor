@@ -114,6 +114,16 @@ Conventions for contributors:
 
 ### Fixed
 
+- **The Visual Studio preview failed to start every session.** The extension was built
+  against a newer `System.Text.Json` than Visual Studio binds extensions to, so it failed
+  to load at runtime. It now tracks the `Microsoft.VisualStudio.SDK` baseline, with a test
+  to keep it there. The VSIX's advertised minimum host moves to Visual Studio 17.14 to
+  match that baseline. (PR #1282)
+
+- **The Visual Studio preview now supports packaged (MSIX) apps.** `dotnet new reactor`
+  generates a packaged app, and previewing one previously failed. It now works with no
+  project changes. (PR #1282)
+
 - **Wrong code and guidance in the shipped agent-kit skills (spec 064 §4, issue
   #1275).** Three gesture snippets in `reactor-input` used WinUI's nested
   `ManipulationDelta` shape rather than Reactor's flat gesture structs, and the

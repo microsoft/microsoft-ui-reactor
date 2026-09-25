@@ -12,7 +12,7 @@ tier: stub
 
 > ⚠️ **Very rough / experimental.** This is the roughest surface in an already experimental Reactor repository. It is meant for early feedback on the embedded-preview direction, not for reliable day-to-day development yet. Expect install friction, solution-load races, HWND/DPI edge cases, blank-window bugs, and breaking changes while this area is hardened.
 
-The Visual Studio Embedded Preview hosts a live Microsoft.UI.Reactor (Reactor) component inside a Visual Studio tool window — Visual Studio 2022 (17.8+) or Visual Studio 2026 (18.x), with the **Visual Studio extension development** workload. Unlike the VS Code preview, which streams screenshots, the Visual Studio extension embeds the real WinUI surface so mouse, keyboard, focus, popups, and accessibility tree inspection work against the running app.
+The Visual Studio Embedded Preview hosts a live Microsoft.UI.Reactor (Reactor) component inside a Visual Studio tool window — Visual Studio 2022 (17.14+) or Visual Studio 2026 (18.x), with the **Visual Studio extension development** workload. Unlike the VS Code preview, which streams screenshots, the Visual Studio extension embeds the real WinUI surface so mouse, keyboard, focus, popups, and accessibility tree inspection work against the running app.
 
 ## When to use it
 
@@ -34,6 +34,15 @@ The component picker is a ComboBox in the tool window chrome. By default it auto
 
 - **L1 hot reload** — edits inside a `Render` body usually apply in place. The embedded UI refreshes without recreating the placeholder HWND.
 - **L2 respawn** — rude edits such as record/type shape changes cause `dotnet watch` to rebuild and restart the child. The extension detects the new port/token pair and re-embeds the new child into the same placeholder, normally within about 10 seconds.
+
+## Packaged (MSIX) projects
+
+Packaged projects work with no project changes: `dotnet new reactor` generates a packaged
+app that carries the Windows App SDK run support, and the preview supplies the rest. A
+project converted to MSIX by hand needs that run support
+(`Microsoft.Windows.SDK.BuildTools.WinApp`) added before the preview can attach.
+
+To preview the app unpackaged instead, set `<WindowsPackageType>None</WindowsPackageType>`.
 
 ## Known limitations
 
