@@ -21,15 +21,22 @@ namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 /// them.
 /// </para>
 /// <para>
-/// <b>The value that actually rots.</b> Two of the header's values are already safe — the Reactor
-/// version is the <c>{{reactorVersion}}</c> token the doc compiler substitutes, and the
-/// <c>Microsoft.WindowsAppSDK</c> pin is swept by
-/// <c>WinAppSDKReferenceGuardTests</c>, which scans <c>.md</c> and <c>.dt</c> for exactly this
-/// <c>#:package</c> shape. The target framework is the one left over, and it is the worst of the
-/// three to get wrong: a reader who copies a stale Windows version compiles against nothing and
+/// <b>The values that actually rot.</b> The Reactor version is the <c>{{reactorVersion}}</c>
+/// token the doc compiler substitutes, so it cannot go stale. Every other directive is asserted
+/// here, because nothing else looks at them: the target framework against the framework project,
+/// and the rest for presence — plus, for <c>WindowsPackageType</c>, placement, since which block
+/// carries it is what makes one example packaged and the other not. The target framework is the
+/// worst to get wrong: a reader who copies a stale Windows version compiles against nothing and
 /// gets <c>CS0234: the type or namespace name 'Reactor' does not exist</c>, which reads like a
 /// missing package rather than a wrong TFM. Measured, not assumed — that is the exact error
 /// <c>net10.0-windows10.0.19041.0</c> produces against this package.
+/// </para>
+/// <para>
+/// The <c>Microsoft.Windows.SDK.BuildTools.WinApp</c> pin in the packaged example is deliberately
+/// <em>not</em> version-guarded. <c>WinAppSDKReferenceGuardTests</c> does sweep <c>#:package</c>
+/// headers, but only for <c>Microsoft.WindowsAppSDK…</c>, and this repo has no central pin for
+/// the build-tools package to check a doc against — it is a consumer-side tool rather than a
+/// framework dependency. Its presence is asserted below; its version is not.
 /// </para>
 /// </remarks>
 public class SingleFileGuideHeaderTests
@@ -104,39 +111,66 @@ public class SingleFileGuideHeaderTests
             "The second #: header block is the packaged example and must NOT declare "
             + "'#:property WindowsPackageType=None' — dropping that directive is precisely what "
             + "opts the app into package identity.");
-
-        // The packaged block earns its name only if something supplies the manifest.
-        Assert.True(
-            blocks[1].Contains("Microsoft.Windows.SDK.BuildTools.WinApp", StringComparison.Ordinal),
-            "The packaged example must reference Microsoft.Windows.SDK.BuildTools.WinApp, whose "
-            + "targets synthesize the appxmanifest and intercept 'dotnet run'.");
     }
 
     /// <summary>
-    /// Both examples must declare <c>OutputType=WinExe</c>.
+    /// Every directive the guide's table calls load-bearing must appear in both header blocks.
     /// </summary>
     /// <remarks>
-    /// This one does not fail the build, which is why it is easy to drop: the app still runs.
-    /// It links for the wrong subsystem instead. Measured on this tree — the PE subsystem byte
-    /// reads 3 (console) without the directive and 2 (Windows GUI) with it — so omitting it
-    /// leaves a console window sitting behind the app's UI for its whole lifetime.
+    /// These are asserted together because they share a failure mode: the block is exempt from
+    /// compilation, so dropping any one of them leaves the whole suite green while a reader's
+    /// <c>dotnet run</c> fails. Each row of the table is a claim, and each claim is checked.
+    /// <list type="bullet">
+    /// <item><c>OutputType=WinExe</c> — does not fail the build at all; it links the app for the
+    /// console subsystem instead. Measured on this tree: the PE subsystem byte reads 3 (console)
+    /// without it and 2 (Windows GUI) with it, so a console window sits behind the UI.</item>
+    /// <item><c>UseWinUI=true</c> — brings in the WinUI 3 targets.</item>
+    /// <item><c>RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)</c> — supplies the
+    /// architecture the Windows App SDK requires, and resolves it from the SDK so the file stays
+    /// portable across x64 and ARM64. Without it the build fails with "WindowsAppSDKSelfContained
+    /// requires a supported Windows architecture".</item>
+    /// </list>
+    /// <c>WindowsPackageType</c> is deliberately absent from this list — it is the one directive
+    /// that must differ between the two blocks, so it is checked separately for placement.
     /// </remarks>
-    [Fact]
-    public void BothExamples_DeclareWindowsSubsystemOutputType()
+    [Theory]
+    [InlineData("#:property OutputType=WinExe")]
+    [InlineData("#:property UseWinUI=true")]
+    [InlineData("#:property RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)")]
+    public void BothExamples_DeclareTheLoadBearingDirectives(string directive)
     {
         var guide = File.ReadAllText(Path.Join(RepoRoot(), GuideTemplate));
         var blocks = HeaderBlocks(guide);
 
         Assert.Equal(2, blocks.Count);
 
-        foreach (var block in blocks)
+        for (var i = 0; i < blocks.Count; i++)
         {
             Assert.True(
-                block.Contains("#:property OutputType=WinExe", StringComparison.Ordinal),
-                "Every single-file header must declare '#:property OutputType=WinExe'. Without it "
-                + "the build succeeds but links for the console subsystem, so a console window "
-                + "opens alongside the app's UI.");
+                blocks[i].Contains(directive, StringComparison.Ordinal),
+                $"Header block {i + 1} of {GuideTemplate} is missing '{directive}'. The guide's "
+                + "directive table documents it as required, and this block is exempt from "
+                + "compilation, so nothing else would catch its removal.");
         }
+    }
+
+    /// <summary>
+    /// The packaged example must reference the package that supplies its manifest.
+    /// </summary>
+    /// <remarks>
+    /// Presence only. See the class remarks for why the version is not pinned here.
+    /// </remarks>
+    [Fact]
+    public void PackagedExample_ReferencesTheBuildToolsPackage()
+    {
+        var guide = File.ReadAllText(Path.Join(RepoRoot(), GuideTemplate));
+        var blocks = HeaderBlocks(guide);
+
+        Assert.Equal(2, blocks.Count);
+        Assert.True(
+            blocks[1].Contains("Microsoft.Windows.SDK.BuildTools.WinApp", StringComparison.Ordinal),
+            "The packaged example must reference Microsoft.Windows.SDK.BuildTools.WinApp, whose "
+            + "targets synthesize the appxmanifest and intercept 'dotnet run'.");
     }
 
     /// <summary>
