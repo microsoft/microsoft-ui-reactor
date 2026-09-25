@@ -151,18 +151,25 @@ namespace Microsoft.UI.Reactor.VsExtension.Embed
         }
 
         /// <summary>
-        /// Makes the preview work on packaged (MSIX) projects without any project edit.
+        /// Lets a packaged (MSIX) project complete the devtools handshake, for projects that
+        /// use the Windows App SDK run support.
         /// </summary>
         /// <remarks>
         /// <para>
         /// A packaged project launched by <c>dotnet watch run</c> goes through the launcher
-        /// that <c>Microsoft.Windows.SDK.BuildTools.WinApp</c> installs (the Reactor project
-        /// templates reference it by default). That launcher activates the app by AUMID,
-        /// which is brokered and therefore has <em>no stdout at all</em> — and stdout is how
-        /// the child reports <c>CAPTURE_PORT</c> / <c>CAPTURE_TOKEN</c>. The app would start
-        /// and render while the preview silently waited out its handshake timeout, with no
-        /// error anywhere to explain it. Setting this property switches the launcher to an
-        /// execution alias, which inherits stdout.
+        /// that <c>Microsoft.Windows.SDK.BuildTools.WinApp</c> installs. That launcher
+        /// activates the app by AUMID, which is brokered and therefore has <em>no stdout at
+        /// all</em> — and stdout is how the child reports <c>CAPTURE_PORT</c> /
+        /// <c>CAPTURE_TOKEN</c>. The app would start and render while the preview silently
+        /// waited out its handshake timeout, with no error anywhere to explain it. Setting
+        /// this property switches the launcher to an execution alias, which inherits stdout.
+        /// </para>
+        /// <para>
+        /// This does not make every packaged project previewable on its own: a project that
+        /// does not reference that package has nothing to consume the property and must add
+        /// it first. Notably the in-repo Reactor template is unpackaged
+        /// (<c>WindowsPackageType=None</c>) and does not carry the package. See the VS
+        /// extension guide.
         /// </para>
         /// <para>
         /// Set unconditionally rather than behind a packaged/unpackaged probe: the WinApp
