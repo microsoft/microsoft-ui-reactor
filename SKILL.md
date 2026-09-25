@@ -541,11 +541,11 @@ For lightweight demos, skip the `.csproj` entirely. Add a file-level header:
 
 ```csharp
 #:package Microsoft.UI.Reactor@0.0.0-local
-#:package Microsoft.WindowsAppSDK@2.2.0
 #:property OutputType=WinExe
 #:property TargetFramework=net10.0-windows10.0.22621.0
 #:property UseWinUI=true
 #:property WindowsPackageType=None
+#:property RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)
 
 using Microsoft.UI.Reactor;
 using static Microsoft.UI.Reactor.Factories;
@@ -557,10 +557,16 @@ ReactorApp.Run("Hello", ctx =>
 });
 ```
 
-Run with `dotnet run MyApp.cs -p:Platform=ARM64` (or `x64`). In selfhost
-the version is `0.0.0-local` — run `mur pack-local` first if the package
-isn't found. Outside the clone, replace the version with the published
-release you depend on.
+Run with `dotnet run MyApp.cs`. The `RuntimeIdentifier` line resolves the
+architecture from the SDK, so the same file works on x64 and ARM64 without
+`-p:Platform` on every invocation; without it the build fails with
+*"WindowsAppSDKSelfContained requires a supported Windows architecture."*
+In selfhost the version is `0.0.0-local` — run `mur pack-local` first if the
+package isn't found. Outside the clone, replace the version with the published
+release you depend on. See
+[Getting Started](https://microsoft.github.io/microsoft-ui-reactor/getting-started/#one-file-no-project)
+for the packaged variant, which drops `WindowsPackageType=None` and adds
+`Microsoft.Windows.SDK.BuildTools.WinApp` to launch with package identity.
 
 > **Always capture `dotnet run` output.** Build errors exit with code 1.
 > Read compiler output, fix, retry. Don't assume success without checking.

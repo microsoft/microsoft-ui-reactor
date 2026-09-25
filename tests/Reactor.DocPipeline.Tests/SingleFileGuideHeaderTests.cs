@@ -48,7 +48,7 @@ public class SingleFileGuideHeaderTests
         var root = RepoRoot();
         var expected = FrameworkTfm(root);
 
-        var guide = File.ReadAllText(Path.Combine(root, GuideTemplate));
+        var guide = File.ReadAllText(Path.Join(root, GuideTemplate));
         var documented = Regex.Matches(guide, @"^#:property\s+TargetFramework=(?<tfm>\S+)\s*$", RegexOptions.Multiline)
             .Select(m => m.Groups["tfm"].Value)
             .ToArray();
@@ -85,7 +85,7 @@ public class SingleFileGuideHeaderTests
     [Fact]
     public void PackageTypeDirective_SitsInTheUnpackagedExampleOnly()
     {
-        var guide = File.ReadAllText(Path.Combine(RepoRoot(), GuideTemplate));
+        var guide = File.ReadAllText(Path.Join(RepoRoot(), GuideTemplate));
         var blocks = HeaderBlocks(guide);
 
         // Two header blocks: the unpackaged example, then the packaged delta. If the section is
@@ -124,7 +124,7 @@ public class SingleFileGuideHeaderTests
     [Fact]
     public void BothExamples_DeclareWindowsSubsystemOutputType()
     {
-        var guide = File.ReadAllText(Path.Combine(RepoRoot(), GuideTemplate));
+        var guide = File.ReadAllText(Path.Join(RepoRoot(), GuideTemplate));
         var blocks = HeaderBlocks(guide);
 
         Assert.Equal(2, blocks.Count);
@@ -168,7 +168,7 @@ public class SingleFileGuideHeaderTests
 
     private static string FrameworkTfm(string root)
     {
-        var csproj = File.ReadAllText(Path.Combine(root, FrameworkProject));
+        var csproj = File.ReadAllText(Path.Join(root, FrameworkProject));
         var match = Regex.Match(csproj, @"<TargetFramework>(?<tfm>[^<]+)</TargetFramework>");
 
         Assert.True(match.Success, $"No <TargetFramework> found in {FrameworkProject}.");
@@ -182,8 +182,8 @@ public class SingleFileGuideHeaderTests
         // InlineSnippetLedgerTests.
         var dir = AppContext.BaseDirectory;
         while (dir is not null
-               && !File.Exists(Path.Combine(dir, "Reactor.slnx"))
-               && !Directory.Exists(Path.Combine(dir, ".git")))
+               && !File.Exists(Path.Join(dir, "Reactor.slnx"))
+               && !Directory.Exists(Path.Join(dir, ".git")))
         {
             dir = Path.GetDirectoryName(dir);
         }
