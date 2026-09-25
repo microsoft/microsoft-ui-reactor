@@ -24,7 +24,7 @@
     "@react-native/typescript-config": "0.87.1",
     "@types/react": "^19.3.0",
     "eslint": "^8.19.0",
-    "prettier": "3.9.6",
+    "prettier": "3.9.8",
     "react-native-windows": "1.0.0",
     "typescript": "^5.8.3"
   },
