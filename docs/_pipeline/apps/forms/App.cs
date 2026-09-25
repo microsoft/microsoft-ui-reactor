@@ -1,6 +1,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Controls.Validation;
+using System.Threading;
 using static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;
 using Microsoft.UI.Reactor.Controls;
 using static Microsoft.UI.Reactor.Factories;
@@ -169,6 +170,91 @@ class ValidationContextDemo : Component
     }
 }
 // </snippet:validation-context>
+
+// <snippet:async-validation>
+class AsyncValidationDemo : Component
+{
+    static async Task<bool> IsEmailFree(string value)
+    {
+        await Task.Delay(300);
+        return value != "taken@example.com";
+    }
+
+    public override Element Render()
+    {
+        var ctx = this.UseValidationContext();
+        var (email, setEmail) = UseState("");
+
+        // Async validators are never run for you: a render pass is synchronous, so
+        // there is nowhere for it to await them. Drive them from an effect, through
+        // ValidateFieldAsync, whose generation guard discards a result the user has
+        // already typed past.
+        UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            if (email.Length > 0)
+            {
+                // Observed, not discarded. `_ = SomeTask()` drops the returned task on
+                // the floor, so a uniqueness check that fails for a real reason — the
+                // network is down, the service 500s — vanishes silently and the field
+                // just never gets a verdict. Await it inside a local async helper and
+                // handle the two outcomes separately.
+                _ = RunCheckAsync(cts.Token);
+            }
+            // Cancel on cleanup so the superseded check cannot install its verdict, and
+            // dispose the source with it — the effect allocates a fresh one per run.
+            // Note this does not interrupt work already in flight: `Validate.MustAsync`
+            // awaits your predicate without a token and only observes cancellation once
+            // it returns. Take a `CancellationToken` in the predicate itself if you need
+            // the request abandoned rather than its result discarded.
+            return () =>
+            {
+                try { cts.Cancel(); }
+                finally { cts.Dispose(); }
+            };
+
+            async Task RunCheckAsync(CancellationToken token)
+            {
+                try
+                {
+                    await ValidationReconciler.ValidateFieldAsync(
+                        ctx, "email", email,
+                        [Validate.MustAsync<string>(IsEmailFree, "Email is taken")],
+                        token);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected: the user typed again and this check was superseded.
+                }
+                catch (Exception ex)
+                    when (ex is not OutOfMemoryException and not StackOverflowException)
+                {
+                    // Anything else is a real failure — the network is down, the service
+                    // erroring. Surface it however your app reports background faults;
+                    // here, as a message on the field so it cannot pass silently.
+                    //
+                    // Deliberately broad rather than a list of expected exception types:
+                    // the predicate is yours, so the framework cannot know what it can
+                    // throw, and enumerating types means the one you forgot disappears.
+                    // The filter excludes only the two that must never be caught. This
+                    // is the same shape the framework itself uses for app callbacks
+                    // (see CompositeLifecycle.RunAsyncRuleAsync).
+                    ctx.AddExternal("email", $"Could not check availability: {ex.Message}");
+                }
+            }
+        }, email);
+
+        return VStack(12,
+            SubHeading("Async Validation"),
+            TextBox(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); },
+                placeholderText: "user@example.com", header: "Email"),
+            When(ctx.HasError("email"), () =>
+                TextBlock(ctx.GetMessages("email").First().Text)
+                    .Foreground(Theme.SystemCritical).FontSize(12))
+        ).Padding(24);
+    }
+}
+// </snippet:async-validation>
 
 // <snippet:form-field>
 class FormFieldDemo : Component
@@ -422,6 +508,7 @@ class FormsApp : Component
                 Component<ValidationDemo>(),
                 Component<KeepSubmitReachableDemo>(),
                 Component<ValidationContextDemo>(),
+                Component<AsyncValidationDemo>(),
                 Component<FormFieldDemo>(),
                 Component<MaskedInputDemo>(),
                 Component<InputFormattersDemo>(),

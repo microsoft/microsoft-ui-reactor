@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Microsoft.UI.Reactor.Animation;
+using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Hosting;
@@ -412,6 +413,22 @@ public sealed partial class Reconciler : IDisposable
         // (pool return / ClearCurrentEventHandlers / DetachReactorState) so a
         // stale arm can't suppress the first real event of a later lifecycle.
         public Func<object?, bool>? PendingEchoMatch;
+        // Issue #1262 — per-native-element validation lifecycle bindings: a mounted
+        // ValidationRule's producer identity, a FormField editor's blur binding, and
+        // the FormField root's pointer at its current editor's binding. Stored here
+        // rather than in a ConditionalWeakTable keyed by UIElement for the same reason
+        // as EchoSuppressCount: WinRT can project two managed RCWs over one native
+        // DependencyObject, and an update that saw a different wrapper would create a
+        // fresh producer while the old one could never be retired — leaving a stale
+        // validation message behind. Typed as object so Core does not depend on the
+        // V1 composite lifecycle's private binding types.
+        public object? ValidationRuleBinding;
+        public object? ValidationTouchBinding;
+        public object? ValidationRootBinding;
+        // The (context, field) a FormField's attached validators last produced a
+        // synchronous verdict for, so the contribution can be withdrawn when it moves
+        // field, moves context, or stops being produced at all (issue #1262).
+        public object? ValidationAttachedBinding;
         // Issue #986 — the AutomationId a deferred LabeledBy resolution is still
         // waiting to bind. ApplyAccessibilityModifiers can only resolve LabeledBy
         // once the element is in the visual tree, so an unresolved request parks a
@@ -810,6 +827,54 @@ public sealed partial class Reconciler : IDisposable
         state.EchoSuppressScopeDepth = 0;
         state.PendingEchoMatch = null;
         state.PendingLabeledBy = null;
+        // Issue #1262 — a retired control must not keep a ValidationContext (or a
+        // pending async rule) alive through a binding the normal FormField /
+        // ValidationRule unmount path never got to clear. Neutralize before dropping
+        // the slot: the binding object is captured by a once-per-lifetime LostFocus
+        // handler that outlives detach, and a pending async rule reads its context
+        // when it resolves.
+        (state.ValidationTouchBinding as IValidationBindingReset)?.Reset();
+        (state.ValidationRootBinding as IValidationBindingReset)?.Reset();
+        (state.ValidationRuleBinding as IValidationBindingReset)?.Reset();
+        (state.ValidationAttachedBinding as IValidationBindingReset)?.Reset();
+        state.ValidationTouchBinding = null;
+        state.ValidationRootBinding = null;
+        state.ValidationRuleBinding = null;
+        state.ValidationAttachedBinding = null;
+    }
+
+    /// <summary>
+    /// Lets <see cref="DetachReactorState"/> neutralize a validation binding without
+    /// Core depending on the V1 composite lifecycle's private binding types.
+    /// </summary>
+    internal interface IValidationBindingReset
+    {
+        void Reset();
+    }
+
+    /// <summary>
+    /// Issue #1262 — withdraws the validation verdict a control carried, on its way out
+    /// of the tree.
+    /// <para>
+    /// Teardown runs down two parallel paths: <see cref="UnmountRecursive"/> for an
+    /// ordinary unmount and <c>UnmountAndCollect</c> for the pooling traversal that
+    /// child removal uses. Only the second one runs for a conditionally removed poolable
+    /// control, so this lives in one helper both call rather than in either of them.
+    /// </para>
+    /// <para>
+    /// The binding retracts only while it still owns the slot, so an incoming control
+    /// that already replaced the verdict is not disturbed by the outgoing one; and
+    /// <c>Reset</c> drops the context reference, so a pooled control does not keep a
+    /// <c>ValidationContext</c> alive for its next renter.
+    /// </para>
+    /// </summary>
+    private static void WithdrawAttachedValidation(UIElement control)
+    {
+        if (control is FrameworkElement fe
+            && fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+        {
+            (state.ValidationAttachedBinding as IValidationBindingReset)?.Reset();
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -1478,6 +1543,9 @@ public sealed partial class Reconciler : IDisposable
         UIElement? existingControl,
         Action requestRerender)
     {
+        // Declared first so it is disposed last: validation changes raised by mount,
+        // update, or unmount are announced only once the whole pass has finished.
+        using var validationScope = Controls.Validation.ValidationRenderScope.BeginReconcile();
         ReferenceDirtySet.BeginCommit();
         try
         {
@@ -1850,19 +1918,28 @@ public sealed partial class Reconciler : IDisposable
                     }
 
                     node.Component.Context.BeginRender(componentRerender, _contextScope);
-                    newChildElement = node.Component.Render();
+                    using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
+                    {
+                        newChildElement = ValidationRenderScope.ApplyProvide(node.Component.Render());
+                    }
                     FlushEffectsTraced(node.Component.Context, componentName);
                 }
                 else if (node.Context is not null && newEl is FuncElement func)
                 {
                     node.Context.BeginRender(componentRerender, _contextScope);
-                    newChildElement = func.RenderFunc(node.Context);
+                    using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
+                    {
+                        newChildElement = ValidationRenderScope.ApplyProvide(func.RenderFunc(node.Context));
+                    }
                     FlushEffectsTraced(node.Context, componentName);
                 }
                 else if (node.Context is not null && newEl is MemoElement memo)
                 {
                     node.Context.BeginRender(componentRerender, _contextScope);
-                    newChildElement = memo.RenderFunc(node.Context);
+                    using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
+                    {
+                        newChildElement = ValidationRenderScope.ApplyProvide(memo.RenderFunc(node.Context));
+                    }
                     FlushEffectsTraced(node.Context, componentName);
                 }
                 else
@@ -2161,6 +2238,14 @@ public sealed partial class Reconciler : IDisposable
         // cleaned up (CR-001 / CR-002).
         if (control is FrameworkElement refFe)
             CleanupReferenceStateForUnmount(refFe, GetElementTag(refFe));
+
+        // Issue #1262 — a control that carried an attached verdict takes it with it.
+        // Nothing else does this: DetachReactorState runs only on a full detach, so a
+        // conditionally rendered validated control (or a whole FormField) leaving the
+        // tree otherwise left the context invalid over a field that no longer exists.
+        // The binding retracts only while it still owns the slot, so an incoming control
+        // that already replaced the verdict is not disturbed by the outgoing one.
+        WithdrawAttachedValidation(control);
 
         // OnUnmountAction (.OnUnmount) — imperative teardown half of .OnMount.
         if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
@@ -2528,6 +2613,8 @@ public sealed partial class Reconciler : IDisposable
 
         if (control is FrameworkElement refFe)
             CleanupReferenceStateForUnmount(refFe, GetElementTag(refFe));
+
+        WithdrawAttachedValidation(control);
 
         // OnUnmountAction (.OnUnmount) — imperative teardown half of .OnMount.
         if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))

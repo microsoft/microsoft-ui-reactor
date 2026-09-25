@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.UI.Reactor.Animation;
+using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -144,6 +145,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        // A standalone ReactorHostControl has no ReactorApp bootstrap, so nothing else
+        // sets ReactorApp.UIDispatcher. Cross-thread setState — including the re-render
+        // that UseValidationContext schedules when a background async validator raises
+        // ValidationContext.Changed — resolves its marshal target from that static and
+        // throws when it is null. Seed it exactly as ReactorHost does (spec 036 §4.3).
+        if (ReactorApp.UIDispatcher is null)
+            ReactorApp.UIDispatcher = _dispatcherQueue;
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
         VerticalContentAlignment = VerticalAlignment.Stretch;
         // ContentControl inherits IsTabStop=true from Control. Set it to false
@@ -357,6 +365,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // additional reset steps, throttling) only need editing here.
         void RecoverFromHookOrder(HookOrderException ex, RenderContext ctx, string mode)
         {
+            // This path returns without reconciling, so nothing downstream will consume
+            // or retire what the aborted render claimed (issue #1262).
+            Controls.Validation.ValidationRenderScope.AbandonPendingClaims();
             _logger?.LogWarning(ex,
                 "Hot reload: hook order/type changed — resetting {Mode} state and re-rendering",
                 mode);
@@ -375,7 +386,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 _rootComponent.Context.BeginRender(_requestRenderAction ??= RequestRender);
                 try
                 {
-                    newTree = _rootComponent.Render();
+                    using (ValidationRenderScope.Begin(null))
+                    {
+                        newTree = ValidationRenderScope.ApplyProvide(_rootComponent.Render());
+                    }
                 }
                 catch (HookOrderException ex) when (hotReloadRender)
                 {
@@ -394,7 +408,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 _funcContext.BeginRender(_requestRenderAction ??= RequestRender);
                 try
                 {
-                    newTree = _rootRenderFunc(_funcContext);
+                    using (ValidationRenderScope.Begin(null))
+                    {
+                        newTree = ValidationRenderScope.ApplyProvide(_rootRenderFunc(_funcContext));
+                    }
                 }
                 catch (HookOrderException ex) when (hotReloadRender)
                 {
@@ -617,6 +634,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
     private void ShowErrorFallback(Exception ex)
     {
+        // The render that failed never reaches Reconcile, so its validation claims have
+        // no consumer. Withdraw them here rather than waiting for a next render that may
+        // never come (issue #1262).
+        Controls.Validation.ValidationRenderScope.AbandonPendingClaims();
         var errorPanel = Microsoft.UI.Reactor.Core.ErrorFallback.BuildPanel(ex);
         if (_overlayWiring is not null && _overlayWiring.TryShowErrorInWrapper(errorPanel))
         {

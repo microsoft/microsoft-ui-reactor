@@ -28,6 +28,30 @@ Conventions for contributors:
 
 ### Added
 
+- **Validation now works on any control, not only inside `FormField`** — the
+  Forms guide's "Validation Context" example needed new surface to work as
+  written (issue #1262):
+  - `ValidationContext.Changed`, raised when the context's observable state
+    changes (a message appearing or disappearing, a field becoming touched, a
+    reset). `UseValidationContext()` subscribes to it, so mutating the context
+    from an event handler repaints the form.
+  - `ValidationReconciler.EvaluateRulesAsync(…)`, the asynchronous counterpart to
+    `EvaluateRules` for rules built with `ValidationRuleAsync`. Rules run in
+    order, so the resulting message order matches the order given.
+  - `EvaluateRules(ctx, setId, …)` and `EvaluateRulesAsync(ctx, setId, …)`, named
+    rule sets: the call owns that set, so a rule that disappears from it has its
+    message withdrawn. The identity is explicit because ownership is destructive
+    — two unrelated callers sharing one context must not silently retract each
+    other's rules.
+  - `FormField` marks its field touched when the editor loses focus, so the
+    default `ShowWhen.WhenTouched` reveals errors on blur as the guide describes.
+    Nothing in the framework called `MarkTouched` before, leaving that default
+    unreachable unless the app marked fields by hand (spec 011 §1E.1).
+  - `ValidationContext.SubmitAttempted`, recorded by `MarkAllTouched()` and
+    cleared by `ResetAll()`. This is what `ShowWhen.AfterFirstSubmit` waits for;
+    the framework had no notion of a submit before, so that policy could never
+    display anything.
+
 - **Framework mechanics are searchable in the ReactorGallery index (spec 064,
   issue #1275).** `find-ui --source reactor` answered "what is control X" but not
   "how does mechanism Y work": `UseState hook` and `key down event handler`
@@ -53,6 +77,17 @@ Conventions for contributors:
   step, which give different remediation for each.
 
 ### Changed
+
+- **`.Validate(fieldName, value, validators…)` now runs its validators during the
+  render that calls it**, instead of only when a `FormField` mounts the element —
+  the only consumer that ever ran them. Results are therefore readable by the
+  same `Render()` that produced them, which is what the documented
+  `When(ctx.HasError(…), …)` pattern requires. `UseValidationContext()` also
+  publishes a component-local context to the rendered subtree automatically, so
+  `FormField`, the visualizers and nested components no longer need an explicit
+  `.Provide(ValidationContexts.Current, ctx)`; an explicit provide still takes
+  precedence. The validator-only `.Validate(fieldName, validators…)` overload is
+  unchanged and still attach-only. (spec 011 §1A.5, issue #1262)
 
 - **The search index emits every clean `SampleCard` on a page, not just the first
   (spec 064 §3.2, issue #1275).** Regenerate after changing *any* card on a
@@ -113,6 +148,85 @@ Conventions for contributors:
   `winapp new --template-version`.
 
 ### Fixed
+
+- **The Forms guide's "Validation Context" example now works as written**
+  (issue #1262). Clicking **Register** on an empty form submitted successfully
+  with no errors, because five defects compounded: `.Validate()` was inert
+  outside `FormField`, the context was never provided to the subtree, reading it
+  in `Render()` was always a pass stale, mutating it scheduled no re-render, and
+  `ShowWhen.WhenTouched` was unreachable because nothing ever called
+  `MarkTouched`. Making that path work surfaced a long tail of validation bugs,
+  all fixed here:
+  - **Verdicts outliving their control.** A validated control behind a condition,
+    a whole `FormField`, or a child removed from a parent left its message in the
+    context, so a form stayed invalid over a field with no control — permanently,
+    with no way to clear it short of `ClearAll()`. The same happened when a field
+    name changed, when a rule moved to another context, and when a render threw
+    after validating.
+  - **Repaint loops.** Chaining two value overloads on one field rewrote the same
+    state every pass and announced a change each time; a failing `ValidationRule`
+    cleared and re-added its message on every reconcile, driving the reconciler
+    into its re-entrancy limit. A pass that ends where it started is now silent —
+    including for `Version`, so a `UseMemo` or `UseEffect` keyed on it no longer
+    re-runs forever.
+  - **Async rules that silently passed.** A rule built with `ValidationRuleAsync`
+    never ran its predicate when placed in the element tree, and recorded a
+    passing verdict when evaluated synchronously — reporting an invalid field as
+    valid. Mounted rules now dispatch asynchronously; the synchronous paths throw
+    instead.
+  - **Async ordering and lifetime.** Overlapping checks applied in completion
+    order, so a slow failing check could reinstate an error a newer run had
+    cleared; a verdict about a replaced value survived the change; and a
+    predicate that never completed held its rule and its `ValidationContext`
+    alive forever, with another added on every re-render. Passes are now ordered
+    per producer and cancellable.
+  - **Rule identity.** Rules were identified by their message text, so an
+    interpolated message such as `$"Must be after {start}"` orphaned the previous
+    verdict on every change and errors accumulated; two rules sharing a predicate
+    retracted each other. Identity is now the field plus the predicate's call
+    site and position.
+  - **Fields that were never registered.** A field validated only through
+    `ValidateFieldAsync`, the rule batches, or `.ValidateAsync(…)` on an element
+    built outside a render pass was skipped by `MarkAllTouched()` and the
+    validity summary.
+  - **Wrong verdicts.** A validator-only attachment inside a `FormField` was
+    validated against `null`, reporting a required-field error for a control that
+    plainly had text; `NotifyValueChanged` discarded `AddExternal` messages on
+    every call rather than only when the value actually moved; a rule batch
+    containing an async rule installed part of itself before throwing; and
+    retiring one producer removed another's message whenever both held the same
+    immutable `ValidationMessage` instance, which a caching validator or a direct
+    `Add(...)` makes reachable — leaving the field spuriously valid.
+  - **Missed repaints.** A change raised while a render was in flight was
+    announced inline, in the middle of the pass that caused it; deferring it
+    then dropped it when no subscriber existed yet, because a host flushes root
+    effects only after reconciliation. A parent rendering `ctx.IsValid()` could
+    therefore never learn that a child had invalidated the shared context.
+    Notifications are now held for the pass and delivered afterwards, to
+    whichever subscribers exist by then.
+  - **Leaks.** A `FormField` that swapped its content control left the displaced
+    editor's blur binding live, so a pooled control kept marking the old field
+    and kept its `ValidationContext` alive; and a long-lived context grew one
+    bookkeeping entry per mounted rule without bound, or per cleared field when
+    fields are named dynamically.
+  - **Registration was invisible.** `RegisteredFields` is public and
+    `MarkAllTouched()` iterates it, but registering a field raised no
+    notification, so a subscriber rendering the field set could stay stale.
+    Registration now counts as a change in every path that performs one.
+  - **Display policies that could never fire.** `FormField`'s default
+    `ShowWhen.WhenTouched` showed nothing because nothing called `MarkTouched`,
+    and `ShowWhen.AfterFirstSubmit` showed nothing because no caller supplied the
+    submit flag — both behaved exactly like `ShowWhen.Never` while silently
+    accepting the setting. Blur now marks touched, and `MarkAllTouched()` records
+    the submit attempt that `AfterFirstSubmit` waits for.
+  - **Documentation.** The guide documented `ValidationContext.IsValidating`,
+    which does not exist, and said `Validate.MustAsync` runs automatically. The
+    async section now states the real contract — attach-only, driven from an
+    effect through `ValidationReconciler.ValidateFieldAsync`. The `ShowWhen`
+    reference now also names the signal each policy waits for, since two of them
+    need one the app has to send: `WhenDirty` measures against the baseline only
+    `SetInitialValue` records, and `AfterFirstSubmit` waits for
+    `MarkAllTouched()`.
 
 - **The Visual Studio preview failed to start every session.** The extension was built
   against a newer `System.Text.Json` than Visual Studio binds extensions to, so it failed

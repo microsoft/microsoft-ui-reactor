@@ -6087,6 +6087,7 @@ ValidationAttached.RunValidators(object value) → IReadOnlyList<ValidationMessa
 new(string FieldName, IValidator[] Validators, IAsyncValidator[] AsyncValidators)
 IAsyncValidator[] AsyncValidators { get; init; }
 IValidator[] Validators { get; init; }
+bool HasValue { get; init; }
 object Value { get; init; }
 string FieldName { get; init; }
 Deconstruct(ref string FieldName, ref IValidator[] Validators, ref IAsyncValidator[] AsyncValidators) → void
@@ -6099,6 +6100,7 @@ ToString() → string
 new()
 IReadOnlyList<string> InvalidFields { get; }
 IReadOnlySet<string> RegisteredFields { get; }
+bool SubmitAttempted { get; }
 int Version { get; }
 Add(ValidationMessage message) → void
 Add(string field, string text, Severity severity = Severity.Error) → void
@@ -6123,6 +6125,7 @@ RegisterField(string field) → void
 Reset(string field) → object
 ResetAll() → IReadOnlyDictionary<string, object>
 SetInitialValue(string field, object value) → void
+event Action Changed
 
 ### static class ValidationContextComponentExtensions
 Component.UseChildValidationContext() → ValueTuple<ValidationContext, ValidationContext>
@@ -6142,6 +6145,11 @@ ToString() → string
 
 ### static class ValidationReconciler
 EvaluateRules(ValidationContext ctx, ValidationRuleElement[] rules) → void
+EvaluateRules(ValidationContext ctx, string setId, ValidationRuleElement[] rules) → void
+EvaluateRulesAsync(ValidationContext ctx, CancellationToken cancellationToken, ValidationRuleElement[] rules) → Task
+EvaluateRulesAsync(ValidationContext ctx, ValidationRuleElement[] rules) → Task
+EvaluateRulesAsync(ValidationContext ctx, string setId, CancellationToken cancellationToken, ValidationRuleElement[] rules) → Task
+EvaluateRulesAsync(ValidationContext ctx, string setId, ValidationRuleElement[] rules) → Task
 ValidateAttached(ValidationContext ctx, ValidationAttached attached, object value) → void
 ValidateField(ValidationContext ctx, string fieldName, object value, IValidator[] validators) → void
 ValidateFieldAsync(ValidationContext ctx, string fieldName, object value, IAsyncValidator[] asyncValidators, CancellationToken cancellationToken = default) → Task
