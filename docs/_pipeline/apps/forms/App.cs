@@ -227,10 +227,18 @@ class AsyncValidationDemo : Component
                     // Expected: the user typed again and this check was superseded.
                 }
                 catch (Exception ex)
+                    when (ex is not OutOfMemoryException and not StackOverflowException)
                 {
-                    // Anything else is a real failure. Surface it however your app
-                    // reports background faults — here, as a message on the field so
-                    // it cannot pass silently.
+                    // Anything else is a real failure — the network is down, the service
+                    // erroring. Surface it however your app reports background faults;
+                    // here, as a message on the field so it cannot pass silently.
+                    //
+                    // Deliberately broad rather than a list of expected exception types:
+                    // the predicate is yours, so the framework cannot know what it can
+                    // throw, and enumerating types means the one you forgot disappears.
+                    // The filter excludes only the two that must never be caught. This
+                    // is the same shape the framework itself uses for app callbacks
+                    // (see CompositeLifecycle.RunAsyncRuleAsync).
                     ctx.AddExternal("email", $"Could not check availability: {ex.Message}");
                 }
             }
