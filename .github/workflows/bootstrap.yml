@@ -16,11 +16,18 @@ on:
       # The scaffolded TestApp is built and launched by this job's packaged
       # smoke, against the source-built 0.0.0-local packages. The template
       # references Microsoft.UI.Reactor and Microsoft.UI.Reactor.Devtools (both
-      # at $ReactorVersion$), so a change to either can break packaged startup,
-      # identity activation or first render without failing any other job —
-      # every other suite runs unpackaged.
+      # at $ReactorVersion$), and Reactor.Devtools project-references
+      # Reactor.Advanced — so a change under any of the three can break the
+      # scaffolded app's restore, packaged startup, identity activation or
+      # first render.
+      #
+      # Narrower than "packaged testing" in general: ci.yml's Packaged Selftests
+      # already run the in-repo host under MSIX identity on every non-md change.
+      # What only this job covers is the *scaffolded template* path — a fresh
+      # app from the external template pack, built against local packages.
       - 'src/Reactor/**'
       - 'src/Reactor.Devtools/**'
+      - 'src/Reactor.Advanced/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
       - 'Directory.Packages.props'
@@ -37,6 +44,7 @@ on:
       - 'src/Reactor.Cli/**'
       - 'src/Reactor/**'
       - 'src/Reactor.Devtools/**'
+      - 'src/Reactor.Advanced/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
       - 'Directory.Packages.props'
