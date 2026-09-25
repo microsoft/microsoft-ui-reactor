@@ -205,8 +205,18 @@ public static class WinAppSdkTemplates
             if (!lines[i].Trim().Equals(PackageId, StringComparison.OrdinalIgnoreCase))
                 continue;
 
+            // The package id sits at one indent level and its metadata deeper, so
+            // a line indented no further than the header starts the *next* package.
+            // Stopping there matters: without it, a package with no `Version:` line
+            // borrows the next package's version, which is worse than reporting
+            // nothing — `mur doctor` would name a version that isn't installed.
+            var headerIndent = IndentOf(lines[i]);
+
             for (var j = i + 1; j < lines.Length && j <= i + 4; j++)
             {
+                if (lines[j].Trim().Length == 0) continue;
+                if (IndentOf(lines[j]) <= headerIndent) break;
+
                 var trimmed = lines[j].Trim();
                 if (trimmed.StartsWith("Version:", StringComparison.OrdinalIgnoreCase))
                     return trimmed["Version:".Length..].Trim();
@@ -215,6 +225,8 @@ public static class WinAppSdkTemplates
         }
         return null;
     }
+
+    static int IndentOf(string line) => line.Length - line.TrimStart().Length;
 
     static string? RunCapture(params string[] arguments) => RunCaptureWithExit(arguments).Output;
 

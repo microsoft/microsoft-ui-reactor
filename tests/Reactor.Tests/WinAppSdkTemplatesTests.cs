@@ -86,6 +86,34 @@ public sealed class WinAppSdkTemplatesTests
     }
 
     [Fact]
+    public void InterpretInstalledVersionOutput_does_not_borrow_the_next_packages_version()
+    {
+        // A package with no `Version:` line followed closely by another package:
+        // a bare 4-line look-ahead walks straight into the neighbour and returns
+        // *its* version. Reporting a version that is not installed is worse than
+        // reporting none — `mur doctor` would name it in a PASS line.
+        const string adjacent = """
+            Currently installed items:
+               Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
+               Microsoft.Other.Templates
+                  Version: 9.9.9
+            """;
+
+        Assert.Null(WinAppSdkTemplates.InterpretInstalledVersionOutput(adjacent));
+
+        // Sanity: the same neighbour is still readable in its own right, so the
+        // guard stops the scan rather than breaking the parser.
+        const string normal = """
+            Currently installed items:
+               Microsoft.WindowsAppSDK.WinUI.CSharp.Templates
+                  Version: 0.0.7-alpha
+               Microsoft.Other.Templates
+                  Version: 9.9.9
+            """;
+        Assert.Equal("0.0.7-alpha", WinAppSdkTemplates.InterpretInstalledVersionOutput(normal));
+    }
+
+    [Fact]
     public void InterpretInstalledVersionOutput_returns_null_when_this_pack_is_absent()
     {
         const string listing = """

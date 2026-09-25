@@ -311,7 +311,14 @@ jobs:
                   if ($job.State -eq 'Completed' -or $job.State -eq 'Failed') { break }
               }
 
-              $pkg = Get-AppxPackage -Name 'TestApp' -ErrorAction SilentlyContinue
+              # The Reactor manifest's Identity/@Name is a generated GUID, not the
+              # project name, so `Get-AppxPackage -Name TestApp` finds nothing even
+              # on a perfectly successful activation. Read the identity the
+              # template actually emitted.
+              [xml]$manifest = Get-Content 'Package.appxmanifest' -Raw
+              $identity = $manifest.Package.Identity.Name
+              Write-Host "  package identity: $identity"
+              $pkg = Get-AppxPackage -Name $identity -ErrorAction SilentlyContinue
 
               if (-not $proc) {
                   Write-Host '--- dotnet run output ---'
@@ -323,7 +330,7 @@ jobs:
 
               Write-Host "  [ok] TestApp activated (pid $($proc.Id))"
               if ($pkg) { Write-Host "  [ok] registered package $($pkg.PackageFullName)" }
-              else { throw 'TestApp is running but no loose-layout package is registered.' }
+              else { throw "TestApp is running but no loose-layout package is registered for identity '$identity'." }
 
               Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
               Stop-Job $job -ErrorAction SilentlyContinue
