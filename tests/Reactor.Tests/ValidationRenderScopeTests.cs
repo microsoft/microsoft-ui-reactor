@@ -2545,4 +2545,64 @@ public class ValidationRenderScopeTests
         Assert.True(ctx.IsDirty("f"));
         Assert.True(ErrorStyling.ShouldShowErrors(ctx, "f", ShowWhen.WhenDirty));
     }
+    [Fact]
+    public void SubmitDuringARenderFrameIsNotSuppressedAsNetZero()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("f");
+        ctx.Add("f", "required");
+        ctx.MarkTouched("f");
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Establish a delivered snapshot, so net-zero suppression has something to
+        // compare against — it only suppresses when it knows what subscribers last saw.
+        using (ValidationRenderScope.BeginReconcile())
+        {
+            ctx.AddExternal("f", "seed");
+        }
+        var afterSeed = notifications;
+        var versionAfterSeed = ctx.Version;
+
+        // MarkAllTouched from inside a frame, with every field already touched. The
+        // touched set does not move, the messages do not move, the values do not move —
+        // the submit flag is the entire delta, and a ShowWhen.AfterFirstSubmit field
+        // depends on hearing about it.
+        using (ValidationRenderScope.BeginReconcile())
+        {
+            ctx.MarkAllTouched();
+        }
+
+        Assert.True(ctx.SubmitAttempted);
+        Assert.True(notifications > afterSeed,
+            $"afterSeed={afterSeed} now={notifications}");
+        Assert.True(ctx.Version > versionAfterSeed,
+            $"version {versionAfterSeed} -> {ctx.Version}");
+    }
+
+    [Fact]
+    public void RepeatedSubmitDuringARenderFrameStaysSuppressed()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("f");
+        ctx.Add("f", "required");
+        ctx.MarkAllTouched();
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+        using (ValidationRenderScope.BeginReconcile()) { ctx.AddExternal("f", "seed"); }
+        var afterSeed = notifications;
+        var versionAfterSeed = ctx.Version;
+
+        // The flag is already set, so these frames really are net-zero and must stay
+        // silent — the property the suppression exists for.
+        for (var i = 0; i < 4; i++)
+        {
+            using (ValidationRenderScope.BeginReconcile()) { ctx.MarkAllTouched(); }
+        }
+
+        Assert.Equal(afterSeed, notifications);
+        Assert.Equal(versionAfterSeed, ctx.Version);
+    }
 }

@@ -823,9 +823,12 @@ class AsyncValidationDemo : Component
                     [Validate.MustAsync<string>(IsEmailFree, "Email is taken")],
                     cts.Token);
             }
-            // Cancel on cleanup so a check for a value the user has already replaced
-            // stops waiting, and dispose the source with it — the effect allocates a
-            // fresh one per run.
+            // Cancel on cleanup so the superseded check cannot install its verdict, and
+            // dispose the source with it — the effect allocates a fresh one per run.
+            // Note this does not interrupt work already in flight: `Validate.MustAsync`
+            // awaits your predicate without a token and only observes cancellation once
+            // it returns. Take a `CancellationToken` in the predicate itself if you need
+            // the request abandoned rather than its result discarded.
             return () =>
             {
                 try { cts.Cancel(); }

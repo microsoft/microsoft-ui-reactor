@@ -253,6 +253,7 @@ public sealed class ValidationContext
     private Dictionary<string, object?>? _lastNotifiedValues;
     private Dictionary<string, object?>? _lastNotifiedInitials;
     private HashSet<string>? _lastNotifiedTouched;
+    private bool _lastNotifiedSubmitAttempted;
     private int _lastNotifiedRegistered;
     private bool _frameTouchedNonMessageState;
     private bool _frameVersionPending;
@@ -277,6 +278,12 @@ public sealed class ValidationContext
         if (_lastNotifiedValues.Count != _currentValues.Count) return false;
         if (_lastNotifiedInitials.Count != _initialValues.Count) return false;
         if (!_lastNotifiedTouched.SetEquals(_touchedFields)) return false;
+        // The submit flag is the whole of what MarkAllTouched() changes once every field
+        // is already touched. Omitting it let a MarkAllTouched() raised from an effect
+        // during reconciliation look net-zero: the notification was dropped and the held
+        // Version bump cancelled, so a ShowWhen.AfterFirstSubmit field stayed hidden
+        // after the submit it was told about (issue #1262 review).
+        if (_lastNotifiedSubmitAttempted != _submitAttempted) return false;
 
         foreach (var (field, value) in _currentValues)
         {
@@ -301,6 +308,7 @@ public sealed class ValidationContext
         _lastNotifiedInitials = new Dictionary<string, object?>(_initialValues);
         _lastNotifiedTouched = new HashSet<string>(_touchedFields, StringComparer.Ordinal);
         _lastNotifiedRegistered = _registeredFields.Count;
+        _lastNotifiedSubmitAttempted = _submitAttempted;
     }
 
     /// <summary>
