@@ -40,12 +40,8 @@
     <!--
       Single source of truth for the current PUBLIC Microsoft.UI.Reactor package
       version. This is the ONE literal to bump at release time (see
-      docs/contributing/release-runbook.md). Two consumers read it:
-        1. tools/Templates/Microsoft.UI.Reactor.Templates.csproj — the
-           MicrosoftUIReactorVersion fallback default derives from it via
-           $(ReactorPublicVersion), so a scaffolded app's fallback framework
-           reference and the docs can never disagree.
-        2. `mur docs compile` (VersionSource.ReadPublicVersion) substitutes it
+      docs/contributing/release-runbook.md). One consumer reads it:
+        1. `mur docs compile` (VersionSource.ReadPublicVersion) substitutes it
            for the {{reactorVersion}} token in docs/_pipeline/templates/*.md.dt,
            so guide prose needs no per-release hand edits.
       Keep it a real PUBLISHED public version. Every release is a prerelease, so
@@ -82,7 +78,7 @@
     fails with HTTP 400 at publish time, AFTER earlier packages in the same
     push loop have already gone out (the loop is not atomic). Centralizing the
     defaults here guarantees every current and future package id (framework,
-    Advanced, Devtools, ProjectTemplates, …) inherits compliant metadata, so a
+    Advanced, Devtools, …) inherits compliant metadata, so a
     new package can never silently ship without it. Individual csprojs may still
     override (the '== '' guard makes these defaults, not forced values).
   -->

@@ -2,7 +2,7 @@ name: Bootstrap
 
 # Exercises bootstrap.ps1 end-to-end on a fresh windows-latest runner to
 # validate the source-checkout developer flow (`git clone` → `bootstrap.ps1`
-# → `dotnet new reactorapp`). The script is invoked non-interactively via
+# → `dotnet new reactor`). The script is invoked non-interactively via
 # `-InstallWinAppSdk -SkipPlugin`, which also exercises the winget install
 # path for the Windows App Runtime when the runner image doesn't already
 # have it.
@@ -13,7 +13,6 @@ on:
       - 'bootstrap.ps1'
       - 'tools/BootstrapFeedResolver.ps1'
       - 'src/Reactor.Cli/**'
-      - 'tools/Templates/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
       - 'Directory.Packages.props'
@@ -24,7 +23,6 @@ on:
       - 'bootstrap.ps1'
       - 'tools/BootstrapFeedResolver.ps1'
       - 'src/Reactor.Cli/**'
-      - 'tools/Templates/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
       - 'Directory.Packages.props'
@@ -144,7 +142,6 @@ jobs:
         run: |
           $expected = @(
               'local-nupkgs/Microsoft.UI.Reactor.0.0.0-local.nupkg',
-              'local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg',
               'local-nupkgs/Microsoft.UI.Reactor.Cli.1.0.0.nupkg'
           )
           $missing = @()
@@ -166,22 +163,62 @@ jobs:
           if ($cliPkgs.Count -eq 0) { throw "No Microsoft.UI.Reactor.Cli.*.nupkg found in local-nupkgs/" }
           Write-Host "  [ok] CLI tool nupkg: $($cliPkgs[0].Name)"
 
-      - name: Verify dotnet new reactorapp template registered
+      - name: Verify dotnet new reactor templates registered
         shell: pwsh
         run: |
-          $listing = dotnet new list reactorapp 2>&1
+          # Reactor's app templates ship in the Windows App SDK `dotnet new`
+          # pack, which bootstrap.ps1 §5 installs via `winapp new --list`.
+          $listing = dotnet new list reactor 2>&1
           $rc = $LASTEXITCODE
           Write-Host $listing
-          if ($rc -ne 0) { throw "dotnet new list reactorapp exited $rc" }
+          if ($rc -ne 0) { throw "dotnet new list reactor exited $rc" }
           # `dotnet new list` writes a multi-line table; PowerShell stores the
           # output as a [string[]]. -match / -notmatch against an array filter
-          # element-wise, so `-notmatch 'reactorapp'` returns the non-matching
+          # element-wise, so `-notmatch 'reactor'` returns the non-matching
           # lines (header, separator) which evaluates truthy even when the
           # template is present. Join + match to do a whole-output substring
           # check instead.
-          if (($listing -join "`n") -notmatch 'reactorapp') {
-              throw "reactorapp template not found in `dotnet new list` output"
+          $joined = $listing -join "`n"
+          # The "not found" message repeats the search term and prints a
+          # `dotnet new search reactor` hint, both of which contain `reactor` as
+          # a whole token — so the token match below reports success precisely
+          # when the template is absent. Check the negative marker first, exactly
+          # as InterpretTemplateListOutput does.
+          if ($joined -match 'No templates found') {
+              throw "``dotnet new list reactor`` found no templates"
           }
+          # Match each short name as a whole token. A plain substring check (or a
+          # \b regex) also matches `reactor-mvu` and `winui-reactor`, because '-'
+          # is a word boundary — so a pack carrying only the richer shells would
+          # pass the `reactor` probe. Short names are comma-separated inside a
+          # whitespace-delimited column, so require one of those on each side.
+          # Case-sensitive on purpose: the Template Name column carries the
+          # capitalised prose word ("Reactor MVU App"), which is a standalone
+          # token and would satisfy a case-insensitive match on its own.
+          foreach ($shortName in @('reactor', 'reactor-mvu', 'reactor-navview', 'reactor-tabview')) {
+              $token = '(?<![^\s,])' + [regex]::Escape($shortName) + '(?![^\s,])'
+              if (-not [regex]::IsMatch($joined, $token)) {
+                  throw "$shortName template not found in ``dotnet new list reactor`` output"
+              }
+              Write-Host "  [ok] $shortName"
+          }
+          # The pack itself must be the Windows App SDK one. Match the id as a
+          # whole line, not a substring: a longer id that merely contains ours
+          # (`...CSharp.Templates.Extras`) would otherwise satisfy this while the
+          # required pack is absent — the same prefix false-positive
+          # WinAppSdkTemplates.InterpretPackageInstalledOutput guards against.
+          $packageLines = (dotnet new uninstall 2>&1 | Out-String) -split "`r?`n" | ForEach-Object { $_.Trim() }
+          if ($packageLines -notcontains 'Microsoft.WindowsAppSDK.WinUI.CSharp.Templates') {
+              throw "Microsoft.WindowsAppSDK.WinUI.CSharp.Templates is not installed"
+          }
+          Write-Host "  [ok] Microsoft.WindowsAppSDK.WinUI.CSharp.Templates registered"
+          # The in-repo Microsoft.UI.Reactor.ProjectTemplates pack was deleted.
+          # Nothing may resurrect it: a stray install would hand new developers
+          # the unpackaged `reactorapp` template the docs no longer describe.
+          if ($packageLines -contains 'Microsoft.UI.Reactor.ProjectTemplates') {
+              throw "the removed Microsoft.UI.Reactor.ProjectTemplates pack is installed; it should no longer exist"
+          }
+          Write-Host "  [ok] removed Microsoft.UI.Reactor.ProjectTemplates not installed"
 
       - name: Scaffold a TestApp and restore against the local feed
         shell: pwsh
@@ -189,22 +226,31 @@ jobs:
           # Inside the repo so the root nuget.config (which maps local-nupkgs/)
           # is picked up by NuGet's parent-dir walk.
           New-Item -ItemType Directory -Path TestProjects | Out-Null
-          # The scaffolded TestApp lives under the repo, so NuGet's parent-dir
-          # walk would otherwise inherit the repo-root Directory.Packages.props
-          # and flip the app into Central Package Management — conflicting with
-          # the template's inline PackageReference versions (NU1008). Drop a
-          # nearer Directory.Packages.props that shadows the root one and turns
-          # CPM off, faithfully mimicking a real end-user scaffold (which has no
-          # central package props above it).
+          # The scaffolded TestApp lives under the repo, so MSBuild's and NuGet's
+          # parent-dir walks would otherwise apply the repo's own build rules to
+          # what is meant to be an end-user scaffold. Both walks stop at the first
+          # file they find, so shadowing them here isolates the app — which is
+          # what a real scaffold outside the repo gets.
+          #
+          #   Directory.Packages.props — the root one flips the app into Central
+          #     Package Management, conflicting with the template's inline
+          #     PackageReference versions (NU1008).
+          #   Directory.Build.props/.targets — the root pair sets
+          #     IsAotCompatible=true and promotes IL trim warnings to hard errors.
+          #     A packaged Release build runs ILLink, and CsWinRT's generated ABI
+          #     code emits IL2081 by design, so the app fails to build with 36
+          #     errors and NETSDK1144. Outside the repo those stay warnings.
           Set-Content -Path TestProjects/Directory.Packages.props -Value '<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>'
+          Set-Content -Path TestProjects/Directory.Build.props -Value '<Project />'
+          Set-Content -Path TestProjects/Directory.Build.targets -Value '<Project />'
           Push-Location TestProjects
           try {
               # Bootstrap validates the local 0.0.0-local feed produced by
               # mur pack-local. The template's normal default may point at a
               # not-yet-published public preview while a release-prep PR is in
-              # flight, so opt into the local package version explicitly here.
-              dotnet new reactorapp -n TestApp --MSUIReactorVersion 0.0.0-local
-              if ($LASTEXITCODE -ne 0) { throw "dotnet new reactorapp exited $LASTEXITCODE" }
+              # flight, so opt into the local package version explicitly here
+              dotnet new reactor -n TestApp --reactor-version 0.0.0-local
+              if ($LASTEXITCODE -ne 0) { throw "dotnet new reactor exited $LASTEXITCODE" }
               if (-not (Test-Path 'TestApp/TestApp.csproj')) { throw "TestApp/TestApp.csproj not produced" }
 
               dotnet restore TestApp/TestApp.csproj --nologo -v:m
@@ -213,14 +259,12 @@ jobs:
               Pop-Location
           }
 
-      - name: Build TestApp (template ships WindowsAppSDKSelfContained=true)
+      - name: Build TestApp (packaged single-project MSIX)
         shell: pwsh
         run: |
-          # The scaffolded template (tools/Templates/templates/WinUIApp-CSharp)
-          # explicitly sets WindowsAppSDKSelfContained=true so end users get a
-          # standalone deployable. SelfContained=true requires a concrete arch
-          # to embed the runtime under — AnyCPU is rejected by the
-          # SelfContained target. Pass the host arch explicitly.
+          # The Windows App SDK Reactor templates scaffold a *packaged*
+          # (single-project MSIX) app, which requires a concrete architecture —
+          # AnyCPU is rejected. Pass the host arch explicitly.
           $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
           dotnet build TestProjects/TestApp/TestApp.csproj `
               -c Release `
@@ -228,11 +272,119 @@ jobs:
               --nologo -v:m
           if ($LASTEXITCODE -ne 0) { throw "TestApp build exited $LASTEXITCODE" }
 
+      # A packaged app can build cleanly and still fail to register or activate,
+      # and "scaffolded apps are now packaged" is the central behaviour change in
+      # this migration — so building is not end-to-end coverage. The integration
+      # test this PR deleted did scaffold→`dotnet run`→UIA against the *unpackaged*
+      # `reactorapp` template; this is its packaged replacement, asserting the two
+      # things the build cannot: the loose layout registers, and the app activates.
+      #
+      # Registering an unsigned loose MSIX layout requires Developer Mode. GitHub's
+      # windows runners are administrators, so the AppModelUnlock switch is settable
+      # directly — same approach as the Packaged Selftests job in ci.yml.
+      - name: Enable Developer Mode
+        shell: pwsh
+        run: |
+          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock'
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name AllowDevelopmentWithoutDevLicense `
+            -PropertyType DWord -Value 1 -Force | Out-Null
+          $v = (Get-ItemProperty -Path $key -Name AllowDevelopmentWithoutDevLicense).AllowDevelopmentWithoutDevLicense
+          if ($v -ne 1) { throw "Developer Mode is not enabled (AllowDevelopmentWithoutDevLicense=$v)." }
+
+      - name: Launch TestApp (packaged registration + activation)
+        shell: pwsh
+        run: |
+          $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
+          $job = $null
+          $proc = $null
+          Push-Location TestProjects/TestApp
+          try {
+              # `dotnet run` on a single-project MSIX registers a loose-layout
+              # package and activates it. It does not return while the app is up,
+              # so run it as a job and poll.
+              $job = Start-Job -ScriptBlock {
+                  param($dir, $arch)
+                  Set-Location $dir
+                  dotnet run -c Release "-p:Platform=$arch" --nologo 2>&1
+              } -ArgumentList (Get-Location).Path, $arch
+
+              for ($i = 0; $i -lt 90; $i++) {
+                  Start-Sleep -Seconds 2
+                  $proc = Get-Process -Name 'TestApp' -ErrorAction SilentlyContinue | Select-Object -First 1
+                  if ($proc) { break }
+                  if ($job.State -eq 'Completed' -or $job.State -eq 'Failed') { break }
+              }
+
+              # The Reactor manifest's Identity/@Name is a generated GUID, not the
+              # project name, so `Get-AppxPackage -Name TestApp` finds nothing even
+              # on a perfectly successful activation. Read the identity the
+              # template actually emitted.
+              [xml]$manifest = Get-Content 'Package.appxmanifest' -Raw
+              $identity = $manifest.Package.Identity.Name
+              Write-Host "  package identity: $identity"
+              $pkg = Get-AppxPackage -Name $identity -ErrorAction SilentlyContinue
+
+              if (-not $proc) {
+                  Write-Host '--- dotnet run output ---'
+                  Receive-Job $job 2>&1 | Write-Host
+                  throw 'TestApp never started — the packaged app built but did not register/activate.'
+              }
+
+              Write-Host "  [ok] TestApp activated (pid $($proc.Id))"
+              if ($pkg) { Write-Host "  [ok] registered package $($pkg.PackageFullName)" }
+              else { throw "TestApp is running but no loose-layout package is registered for identity '$identity'." }
+
+              # A process that starts and a package that registers do not prove the
+              # Reactor UI rendered — an app can come up in Reactor's render-error
+              # fallback with a broken App.cs or package reference and still satisfy
+              # both. The deleted CreateTemplateTests caught that by asserting a UIA
+              # element; this is the packaged equivalent. The blank template renders
+              # `TitleBar("$projectname$")`, so a TitleBar named TestApp is present
+              # exactly when the scaffold rendered.
+              # Resolve winapp the same way bootstrap's Get-WinAppCliPath does:
+              # winget's MSIX install drops an app-execution alias that exists on
+              # disk without always being resolvable through this process's PATH,
+              # so a bare `winapp` can fail on exactly that installation state.
+              $winApp = (Get-Command winapp -ErrorAction SilentlyContinue).Source
+              if (-not $winApp) {
+                  $alias = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winapp.exe'
+                  if (Test-Path $alias) { $winApp = $alias }
+              }
+              if (-not $winApp) { throw 'winapp CLI not found, so the rendered-UI assertion cannot run.' }
+
+              $rendered = $false
+              for ($i = 0; $i -lt 20; $i++) {
+                  $hit = & $winApp ui search 'TestApp' --window $proc.MainWindowHandle --json 2>&1 | Out-String
+                  if ($LASTEXITCODE -eq 0 -and $hit -match 'TestApp') { $rendered = $true; break }
+                  Start-Sleep -Seconds 3
+                  $proc.Refresh()
+              }
+              if (-not $rendered) {
+                  Write-Host '--- UI tree ---'
+                  & $winApp ui inspect --app TestApp 2>&1 | Write-Host
+                  throw 'TestApp activated but its Reactor UI did not render (no element named TestApp in the tree).'
+              }
+              Write-Host '  [ok] Reactor UI rendered (TitleBar present)'
+          } finally {
+              # Every throw above leaves a live packaged app and a blocked
+              # `dotnet run` job behind. Tear them down here, not on the success
+              # path only: a leaked TestApp contaminates the idempotence steps that
+              # follow, and a leaked job can leave the runner waiting on it.
+              if ($proc) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+              if ($job) {
+                  Stop-Job $job -ErrorAction SilentlyContinue
+                  Remove-Job $job -Force -ErrorAction SilentlyContinue
+              }
+              Pop-Location
+          }
+
       - name: Verify mur upgrade is idempotent
         shell: pwsh
         run: |
           # `mur upgrade` should succeed against an already-bootstrapped tree:
-          # re-pack, re-install template (uninstall-first), refresh plugin.
+          # re-pack, ensure the `dotnet new reactor` templates are installed,
+          # refresh plugin.
           $env:Path = "$env:USERPROFILE\.dotnet\tools;$env:Path"
           mur upgrade --skip-plugin
           if ($LASTEXITCODE -ne 0) { throw "mur upgrade exited $LASTEXITCODE" }

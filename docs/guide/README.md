@@ -165,7 +165,7 @@ first; everyone else can follow the order.
 ### 7. Tooling & process
 
 - **[Dev Tooling](dev-tooling.md)** — `mur` CLI, MCP server, VS Code panel, dotnet watch, in-app dev menu
-- **[VS Extension](vs-extension.md)** — Rough experimental embedded preview for Visual Studio 2022 (17.8+) and 2026 (18.x)
+- **[VS Extension](vs-extension.md)** — Rough experimental embedded preview for Visual Studio 2022 (17.14+) and 2026 (18.x)
 - **[Testing](testing.md)** — Headless renderer, structural assertions, async test patterns
 - **[Performance](performance.md)** — ETW, EventDispatch, flame graphs
 - **[Packaging](packaging.md)** — MSIX, single-file, ARM64, AOT considerations
@@ -213,7 +213,7 @@ uniform Summary / Parameters / Returns / Discussion / Examples / See Also page.
 
 ## Minimal Project Setup
 
-The fastest path is [`dotnet new reactorapp`](getting-started.md), which
+The fastest path is [`dotnet new reactor`](getting-started.md), which
 scaffolds all of this for you. To wire it up by hand instead, create a console
 project and edit the `.csproj`:
 

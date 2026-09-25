@@ -83,7 +83,6 @@ Three things to notice:
 |---|---|---|---|---|
 | `Microsoft.UI.Reactor.<v>.nupkg` | NuGet, MSIL only | No | Not yet (tracked separately) | Framework |
 | `Microsoft.UI.Reactor.<v>.snupkg` | Symbols | No | n/a | |
-| `Microsoft.UI.Reactor.Templates.*.nupkg` | NuGet | No | Not yet | `dotnet new` templates |
 | `reactor-skill-kit-<v>.zip` | Zip | No (mur.exe is framework-dependent .NET 10) | Not yet | Contains `bin/{x64,arm64}/mur.exe`, `install-skill-kit.ps1` |
 
 No MSI, no MSIX, no Appx, no Authenticode-signed bundle. **Codesigning of NuGet and `mur.exe` is a known compliance gap** — tracked under the BinSkim/SDL stream, not in this threat model.

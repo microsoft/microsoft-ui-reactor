@@ -16,7 +16,9 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TF_BUILD)' != 'true'">
-    <PackageReference Include="System.Text.Json" />
+    <!-- Must track Reactor.VsExtension.csproj's VersionOverride so the tests bind the same
+         System.Text.Json identity the shipped extension does. See the comment there. -->
+    <PackageReference Include="System.Text.Json" VersionOverride="9.0.0" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
   </ItemGroup>

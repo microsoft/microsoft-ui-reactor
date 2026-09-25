@@ -189,7 +189,7 @@ jobs:
 
       - name: Pack Devtools NuGet
         # Microsoft.UI.Reactor.Devtools is referenced by the scaffolded
-        # `dotnet new reactorapp` csproj's Debug-only ItemGroup (the devtools menu + the
+        # `dotnet new reactor` csproj's Debug-only ItemGroup (the devtools menu + the
         # Reactor Visual Studio embedded-preview extension both need it). Ship it alongside
         # the framework so the template's restore succeeds against the published feed.
         # Version is locked to the framework version (spec 022). Packs from the AnyCPU
@@ -199,21 +199,6 @@ jobs:
           --no-build --configuration Release
           -p:Platform=AnyCPU
           -p:Version=${{ steps.version.outputs.version }}
-          -o artifacts/nupkg
-
-      - name: Pack Templates
-        # MicrosoftUIReactorVersion stamps the framework version that generated
-        # apps reference (baked into template.json by the csproj's BeforePack
-        # target). Lock it to the version published in this same run so the
-        # template can never drift behind the framework — same value used for
-        # the framework/Advanced/Devtools packs above. Without this it silently
-        # falls back to the csproj's local-dev default.
-        run: >
-          dotnet pack tools\Templates\Microsoft.UI.Reactor.Templates.csproj
-          --no-build --configuration Release
-          -p:Version=${{ steps.version.outputs.version }}
-          -p:MicrosoftUIReactorVersion=${{ steps.version.outputs.version }}
-          -p:Platform=AnyCPU
           -o artifacts/nupkg
 
       - name: Build VSIX
@@ -381,7 +366,7 @@ jobs:
 
             ### `Microsoft.UI.Reactor.Devtools.${{ steps.version.outputs.version }}.nupkg` — optional devtools host (debug + VS preview)
 
-            Referenced by the scaffolded `dotnet new reactorapp` csproj in a
+            Referenced by the scaffolded `dotnet new reactor` csproj in a
             Debug-only `ItemGroup`, paired with `RuntimeHostConfigurationOption
             Reactor.DevtoolsSupport=true`. Required to light up the right-click
             devtools menu in Debug F5 launches and for the Reactor VS embedded
