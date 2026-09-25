@@ -28,6 +28,13 @@ Conventions for contributors:
 
 ### Added
 
+- **Getting Started documents the single-file path.** A Reactor app does not need
+  a `.csproj`: .NET 10 runs a lone `.cs` file whose `#:package` / `#:property`
+  header supplies what a project file otherwise would. The guide shows the same
+  four-directive app the blog quick-start uses, run with `winapp run counter.cs`,
+  plus the two directives that let the same file run under plain `dotnet run`
+  (winappCli#794 / #874, shipped in winapp 0.7.0).
+
 - **Framework mechanics are searchable in the ReactorGallery index (spec 064,
   issue #1275).** `find-ui --source reactor` answered "what is control X" but not
   "how does mechanism Y work": `UseState hook` and `key down event handler`
