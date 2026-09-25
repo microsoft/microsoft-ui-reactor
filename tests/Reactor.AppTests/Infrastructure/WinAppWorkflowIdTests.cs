@@ -195,54 +195,89 @@ public class WinAppWorkflowIdTests
     // worse, because it reads as a working differential while measuring nothing. `ReleaseUiTurn`
     // itself is best-effort in production and is unaffected either way.
 
-    /// <summary>
-    /// Whether the resolved winapp understands <c>ui yield</c> at all, as opposed to
-    /// understanding it and refusing this caller.
-    /// </summary>
-    /// <remarks>
-    /// Delegates to the harness rather than probing separately: production now skips the yield
-    /// on a winapp without the verb, so a second probe here could disagree with the one that
-    /// actually governs behaviour, and these gates would then describe a capability the suite
-    /// was not using. Sharing the cache also keeps the whole run to a single probe process.
-    /// </remarks>
-    private static bool YieldVerbExists() => WinAppUi.SupportsUiYield;
-
     private static void RequireYieldVerb()
     {
-        var present = YieldVerbExists();
+        var support = WinAppUi.UiYieldSupport;
+        var present = support == WinAppUi.UiVerbSupport.Present;
 
         // Unconditional, so the capability is a recorded fact rather than an inference from a
         // test that quietly did not run. MTP reports `Assert.Inconclusive` as *passed with zero
         // skipped*, so without this line a run where winapp lacks the verb is indistinguishable
         // in every report from one where the differential was measured and held.
+        //
+        // The resolved path is logged beside it because the capability is a property of *that*
+        // binary: CI's own diagnostic step once reported the verb present while this gate
+        // reported it absent in the same job, which is only explicable if the two were asking
+        // different winapps. Printing the path turns that from a guess into a comparison.
         Console.WriteLine(
-            $"[Reactor.AppTests] winapp `ui yield` verb present: {present}. " +
+            $"[Reactor.AppTests] winapp `ui yield` support: {support} (present: {present}). " +
+            $"Resolved winapp: {WinAppUi.ResolvedWinAppExe}. " +
             $"Strict mode ({RequireYieldEnvVar}): {StrictYieldRequested()}.");
 
         if (present) return;
 
-        var explanation =
-            "The resolved winapp has no `ui yield` verb, so its exit code cannot report " +
-            "whether a workflow id arrived. Cooperative UI turns landed in winappCli#767 " +
-            "(merged 2026-09-09) and no published winapp contains it yet — v0.6.0 is the " +
-            "newest stable and v0.6.1 the newest prerelease, both from August 2026 — so " +
-            "there is no version to pin `setup-WinAppCli` to.";
+        var explanation = support == WinAppUi.UiVerbSupport.Unreadable
+            ? "The resolved winapp returned neither a readable `ui --cli-schema` command set nor " +
+              "a readable `ui --help` command list, so whether it implements `ui yield` was never " +
+              "established. This is not the same as the verb being absent: it means the probe " +
+              "itself failed, and treating it as absence would be reporting a measurement that " +
+              "was never taken."
+            : "The resolved winapp has no `ui yield` verb, so its exit code cannot report " +
+              "whether a workflow id arrived. Cooperative UI turns landed in winappCli#767 " +
+              "(merged 2026-09-09); pin a winapp containing it to make this measurable.";
 
-        // Opt-in enforcement. The verb cannot be required by default without turning every run
-        // red against a dependency that has not shipped it, but a caller that *has* pinned a
-        // build containing #767 needs a way to prove the continuity is live rather than take
-        // the silent skip. Setting the variable converts this gate into a hard failure, which
-        // is also the switch to flip in CI the day a release carries the verb.
-        if (StrictYieldRequested())
+        if (DecideYieldGate(support, StrictYieldRequested()) == YieldGateDecision.Fail)
         {
+            // The resolved path belongs in the failure text itself, not only in the console line
+            // above it: the capability is a property of *that* binary, and a contributor reading
+            // a CI failure summary sees the assertion message without the surrounding log.
             Assert.Fail(
-                $"{explanation} {RequireYieldEnvVar} is set, so its absence is being treated as " +
-                "a failure: either pin a winapp containing #767 or unset the variable.");
+                $"{explanation} Probe result: {support}. Resolved winapp: " +
+                $"{WinAppUi.ResolvedWinAppExe}. {RequireYieldEnvVar} is set, so anything short " +
+                "of a confirmed verb is a failure: either pin a winapp containing #767 " +
+                $"(and point {WinAppUi.WinAppExeEnvVar} at it) or unset the variable.");
         }
 
         Assert.Inconclusive(
             $"{explanation} Once a release ships with it, pin that version and set " +
             $"{RequireYieldEnvVar}=1 to make this an assertion.");
+    }
+
+    /// <summary>What the `ui yield` gate should do about a probe result.</summary>
+    internal enum YieldGateDecision
+    {
+        /// <summary>The verb is confirmed; run the differential.</summary>
+        Proceed,
+
+        /// <summary>Strict enforcement is on and the verb was not confirmed.</summary>
+        Fail,
+
+        /// <summary>Not confirmed, but enforcement is off, so the differential is skipped.</summary>
+        Inconclusive,
+    }
+
+    /// <summary>
+    /// Whether an unconfirmed verb is a failure or a skip, split out so the rule is testable.
+    /// </summary>
+    /// <remarks>
+    /// <para>Opt-in enforcement. The verb cannot be required by default without turning every run
+    /// red against a dependency that has not shipped it, but a caller that *has* pinned a build
+    /// containing winappCli#767 needs a way to prove the continuity is live rather than take the
+    /// silent skip. Setting the variable converts the gate into a hard failure, which is also the
+    /// switch to flip in CI the day a release carries the verb.</para>
+    /// <para>A seam rather than an inline condition because this is the one rule that makes
+    /// <c>REACTOR_E2E_REQUIRE_UI_YIELD</c> mean anything, and it was previously reachable only by
+    /// running the suite against a winapp that lacks the verb — which is to say, not reachable in
+    /// any automated run. Softening the strict arm to a skip would have restored exactly the
+    /// gate-that-cannot-fail this PR exists to remove, and nothing would have gone red.</para>
+    /// </remarks>
+    internal static YieldGateDecision DecideYieldGate(WinAppUi.UiVerbSupport support, bool strict)
+    {
+        if (support == WinAppUi.UiVerbSupport.Present) return YieldGateDecision.Proceed;
+
+        // Unreadable is deliberately on the failing side alongside Absent: "the probe broke" is
+        // not "the feature is missing", and a caller who asked for strictness asked to be told.
+        return strict ? YieldGateDecision.Fail : YieldGateDecision.Inconclusive;
     }
 
     /// <summary>Opt-in switch that turns a missing <c>ui yield</c> verb into a failure.</summary>
@@ -424,5 +459,569 @@ public class WinAppWorkflowIdTests
             WinAppWorkflowIdTests.IsStrictYieldValue(value),
             $"'{value}' did not enable strict mode, so pinning a winapp with the verb still " +
             "could not turn the silent skip into a measurement.");
+    }
+
+    // ── Verb capability probe ────────────────────────────────────────────────
+    //
+    // The probe this covers replaced one that asked `winapp ui yield --help` and read the exit
+    // code. Measured against winapp 0.6.3-prerelease.92, that oracle cannot discriminate:
+    //
+    //     winapp ui yield        --help  -> exit 0   (verb exists)
+    //     winapp ui bogusverbxyz --help  -> exit 0   (verb does NOT exist)
+    //     winapp ui bogusverbxyz         -> exit 1   (control: the non-help path still errors)
+    //
+    // An unrecognized verb is not rejected; winapp prints the *parent* help instead, output
+    // byte-identical to `winapp ui --help`, never naming the token it did not understand. The old
+    // probe therefore answered "present" for every verb. It still returned the right answer in
+    // practice — the published builds lacking `yield` are old enough to reject unmatched tokens —
+    // so nothing misbehaved, but it had stopped measuring, which would have made
+    // REACTOR_E2E_REQUIRE_UI_YIELD a gate incapable of failing.
+    //
+    // The fixtures below are shaped after real `winapp ui --help` output.
+
+    private const string HelpWithYield = """
+        Description:
+          Inspect and interact with any running Windows app using UI Automation (UIA).
+
+        Usage:
+          winapp ui [command] [options]
+
+        Options:
+          -?, -h, --help  Show help and usage information
+
+        Commands:
+          status                        Connect to a target app and display connection info.
+          inspect <selector>            View the UI element tree with semantic slugs and bounds.
+          invoke <selector>             Activate an element by slug or text search.
+          yield                         Release the current workflow's idle UI turn early. A
+        """;
+
+    private const string HelpWithoutYield = """
+        Description:
+          Inspect and interact with any running Windows app using UI Automation (UIA).
+
+        Usage:
+          winapp ui [command] [options]
+
+        Commands:
+          status                        Connect to a target app and display connection info.
+          inspect <selector>            View the UI element tree with semantic slugs and bounds.
+          invoke <selector>             Activate an element by slug or text search.
+        """;
+
+    [TestMethod]
+    public void VerbProbe_ReportsPresentWhenTheCommandListNamesTheVerb()
+    {
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Present,
+            WinAppUi.ParseUiVerbSupport(HelpWithYield, "yield"),
+            "A winapp that lists `yield` must be reported as having it, or the suite skips the " +
+            "continuity it is able to exercise.");
+    }
+
+    [TestMethod]
+    public void VerbProbe_ReportsAbsentWhenTheCommandListOmitsTheVerb()
+    {
+        // The case the old exit-code probe could not see. `HelpWithoutYield` is what an older
+        // winapp lists, and is exactly the text the previous implementation would have received a
+        // `0` alongside.
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Absent,
+            WinAppUi.ParseUiVerbSupport(HelpWithoutYield, "yield"),
+            "A winapp with no `yield` verb was reported as having it. That is the vacuous " +
+            "oracle this probe exists to replace: strict mode would then be unable to fail.");
+    }
+
+    [TestMethod]
+    [DataRow("workflow", DisplayName = "word from a description")]
+    [DataRow("Release", DisplayName = "first word of a description")]
+    [DataRow("element", DisplayName = "word from another description")]
+    public void VerbProbe_DoesNotMistakeDescriptionProseForAVerb(string word)
+    {
+        // Guards the obvious wrong fix. Searching the help *text* for a verb name looks like it
+        // works and does not: the parent listing carries every verb's description, so prose
+        // matches read as capabilities. Only the command names in the section count.
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Absent,
+            WinAppUi.ParseUiVerbSupport(HelpWithYield, word),
+            $"'{word}' appears only in description prose, so reporting it as a verb means the " +
+            "probe is matching text rather than parsing the command list.");
+    }
+
+    [TestMethod]
+    public void VerbProbe_ReportsUnreadableWhenThereIsNoCommandList()
+    {
+        // An error page, a pager, or a truncated read. Distinct from Absent on purpose: calling
+        // this "the verb is missing" would report a measurement that never happened.
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Unreadable,
+            WinAppUi.ParseUiVerbSupport("winapp: unknown option '--help'", "yield"),
+            "Output with no command list was treated as proof the verb is absent.");
+    }
+
+    [TestMethod]
+    public void VerbProbe_ReportsUnreadableWhenNoLongStandingVerbIsListed()
+    {
+        // The format-change guard. A `Commands:` section that contains none of the verbs that have
+        // always existed means the parse is wrong, not that winapp lost its entire surface --
+        // without this, a reformat would silently read as "yield was removed" forever.
+        const string reshaped = """
+            Commands:
+              --status                      Connect to a target app.
+              --inspect                     View the UI element tree.
+            """;
+
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Unreadable,
+            WinAppUi.ParseUiVerbSupport(reshaped, "yield"),
+            "A command list whose entries no longer parse was read as a definitive answer.");
+    }
+
+    [TestMethod]
+    public void VerbProbe_DoesNotMistakeAWrappedDescriptionLineForACommandEntry()
+    {
+        // A help renderer wraps a long description onto continuation lines indented to the
+        // description column. Those lines are prose, but they are still indented, so a parser
+        // that classifies line-by-line takes their first word as a command name. Here `yield`
+        // begins a wrapped line while no `yield` command exists -- the exact false Present the
+        // section's shallowest-indent rule exists to prevent.
+        const string wrapped = """
+            Commands:
+              status                        Connect to a target app and display connection info.
+              inspect <selector>            View the UI element tree with semantic slugs.
+              invoke <selector>             Activate an element by slug or text search. Use
+                                            yield control to an exact operation on the element.
+            """;
+
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Absent,
+            WinAppUi.ParseUiVerbSupport(wrapped, "yield"),
+            "A wrapped description line was parsed as a command entry, so description prose can " +
+            "report a verb as present. Command entries sit at the section's shallowest indent; " +
+            "anything deeper is a continuation.");
+    }
+
+    [TestMethod]
+    public void VerbProbe_StillReadsEntriesWhenDescriptionsWrap()
+    {
+        // The positive control for the test above: the shallowest-indent rule must exclude
+        // continuations without also discarding the entries around them. Without this, making
+        // the previous test pass by returning Absent unconditionally would look like a fix.
+        const string wrapped = """
+            Commands:
+              status                        Connect to a target app and display connection info.
+              inspect <selector>            View the UI element tree with semantic slugs. Use
+                                            --depth to bound how far the walk descends.
+              invoke <selector>             Activate an element by slug or text search.
+              yield                         Release the current workflow's idle UI turn early.
+            """;
+
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Present,
+            WinAppUi.ParseUiVerbSupport(wrapped, "yield"),
+            "Excluding wrapped continuation lines also discarded the real command entries.");
+    }
+
+    // ── Machine-readable command schema ──────────────────────────────────────
+    //
+    // `winapp ui --cli-schema` answers the same question exactly rather than by inference, so it
+    // is asked first and the help parser above is only the fallback for builds that predate it.
+    //
+    // Provenance: the shape below is the real envelope emitted by winapp 0.6.3-prerelease.92,
+    // captured with `winapp ui --cli-schema` (exit 0, ~91 KB, 22 subcommands). Only the
+    // `subcommands` membership matters here, so the descriptions are abridged; the key names,
+    // nesting, and sibling fields are verbatim.
+
+    private const string SchemaWithYield = """
+        {
+          "name": "ui",
+          "version": "0.6.3",
+          "schemaVersion": "1.0",
+          "description": "Inspect and interact with any running Windows app using UI Automation.",
+          "hidden": false,
+          "subcommands": {
+            "status": { "description": "Connect to a target app and display connection info." },
+            "inspect": { "description": "View the UI element tree with semantic slugs." },
+            "invoke": { "description": "Activate an element by slug or text search." },
+            "yield": { "description": "Release the current workflow's idle UI turn early." }
+          }
+        }
+        """;
+
+    private const string SchemaWithoutYield = """
+        {
+          "name": "ui",
+          "version": "0.6.3",
+          "schemaVersion": "1.0",
+          "subcommands": {
+            "status": { "description": "Connect to a target app and display connection info." },
+            "inspect": { "description": "View the UI element tree with semantic slugs." },
+            "invoke": { "description": "Activate an element by slug or text search." }
+          }
+        }
+        """;
+
+    [TestMethod]
+    public void SchemaProbe_ReportsPresentWhenTheSubcommandMapNamesTheVerb()
+    {
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Present,
+            WinAppUi.ParseUiVerbSupportFromSchema(SchemaWithYield, "yield"),
+            "A schema listing `yield` must be reported as having it.");
+    }
+
+    [TestMethod]
+    public void SchemaProbe_ReportsAbsentWhenTheSubcommandMapOmitsTheVerb()
+    {
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Absent,
+            WinAppUi.ParseUiVerbSupportFromSchema(SchemaWithoutYield, "yield"),
+            "A schema with no `yield` key was not reported as absent, so strict mode could not " +
+            "fail against a winapp predating winappCli#767.");
+    }
+
+    [TestMethod]
+    public void SchemaProbe_DoesNotMatchDescriptionProse()
+    {
+        // The schema's descriptions carry the same words the help text does. Only the
+        // `subcommands` keys are the command set.
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Absent,
+            WinAppUi.ParseUiVerbSupportFromSchema(SchemaWithYield, "Release"),
+            "A word appearing only in a description was reported as a subcommand, so the schema " +
+            "reader is matching raw JSON text rather than the key set.");
+    }
+
+    [TestMethod]
+    [DataRow("", DisplayName = "empty output")]
+    [DataRow("   ", DisplayName = "whitespace output")]
+    [DataRow("winapp: unrecognized option '--cli-schema'", DisplayName = "not JSON at all")]
+    [DataRow("[1, 2, 3]", DisplayName = "JSON, but not an object")]
+    [DataRow("""{"name":"ui","version":"0.6.3"}""", DisplayName = "object with no subcommands map")]
+    [DataRow("""{"name":"ui","subcommands":"none"}""", DisplayName = "subcommands is not an object")]
+    [DataRow("""{"subcommands":{"--status":{},"--inspect":{}}}""", DisplayName = "no long-standing verb")]
+    public void SchemaProbe_ReportsUnreadableRatherThanGuessing(string schemaJson)
+    {
+        // A winapp that predates `--cli-schema` answers with something other than a command
+        // schema, and the probe must fall through to the help parser rather than conclude the
+        // verb is missing. Reporting Absent here would resurrect the original defect in a new
+        // place: a confident answer drawn from a parse that never happened.
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Unreadable,
+            WinAppUi.ParseUiVerbSupportFromSchema(schemaJson, "yield"),
+            "Unusable schema output was treated as a definitive answer about the verb.");
+    }
+
+    // ── Probe orchestration ──────────────────────────────────────────────────
+    //
+    // Both parsers can be correct while the sequencing around them is wrong, and the parser tests
+    // above would stay green either way. These drive `ProbeYieldVerb` through its injected runner
+    // so the schema-first/help-fallback decision is measured directly, and record which argument
+    // lists were actually spawned -- "did not run the second child" is the assertion for the
+    // budget rules, and it is invisible to a test that only inspects the return value.
+
+    private static WinAppUi.BoundedRun Completed(string stdout) =>
+        new(WinAppUi.BoundedRunOutcome.Completed, 0, stdout, "");
+
+    private static WinAppUi.BoundedRun Failed(WinAppUi.BoundedRunOutcome outcome) =>
+        new(outcome, 0, "", "");
+
+    /// <summary>Records each spawn so the orchestration's decisions are observable.</summary>
+    /// <remarks>
+    /// Captures the timeout as well as the arguments. Discarding it would make the shared-budget
+    /// rule untestable in the one case that matters: with the timeout unrecorded, handing the
+    /// fallback a fresh full-length budget is indistinguishable from handing it the remainder.
+    /// </remarks>
+    private static WinAppUi.UiProbeRunner Runner(
+        List<string> calls,
+        Func<string, WinAppUi.BoundedRun> respond,
+        List<int>? timeouts = null) =>
+        (timeoutMs, args) =>
+        {
+            var joined = string.Join(' ', args);
+            calls.Add(joined);
+            timeouts?.Add(timeoutMs);
+            return respond(joined);
+        };
+
+    [TestMethod]
+    public void Probe_FallsBackToHelpWhenTheSchemaIsUnreadable()
+    {
+        // The pre-`--cli-schema` winapp. Returning Unreadable the moment the schema is unusable
+        // would silently drop support for exactly the builds this probe exists to identify.
+        var calls = new List<string>();
+        var support = WinAppUi.ProbeYieldVerb(
+            Runner(calls, a => a == "--cli-schema"
+                ? Completed("winapp: unrecognized option '--cli-schema'")
+                : Completed(HelpWithoutYield)),
+            "yield",
+            budgetMs: 10_000);
+
+        CollectionAssert.AreEqual(
+            new[] { "--cli-schema", "--help" }, calls,
+            "The probe did not fall back to `ui --help` after an unreadable schema.");
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Absent, support,
+            "An unreadable schema masked a readable help listing, losing a measurement the " +
+            "fallback path could still make.");
+    }
+
+    [TestMethod]
+    public void Probe_FallsBackToHelpAndReportsPresent()
+    {
+        // The positive control for the test above: the fallback must be able to report either
+        // answer, or "falls back" would just mean "always says Absent".
+        var calls = new List<string>();
+        var support = WinAppUi.ProbeYieldVerb(
+            Runner(calls, a => a == "--cli-schema" ? Completed("not json") : Completed(HelpWithYield)),
+            "yield",
+            budgetMs: 10_000);
+
+        Assert.AreEqual(
+            WinAppUi.UiVerbSupport.Present, support,
+            "The help fallback could not report Present, so its verdict carries no information.");
+    }
+
+    [TestMethod]
+    public void Probe_DoesNotConsultHelpWhenTheSchemaAnswers()
+    {
+        // The schema is authoritative. Asking twice would double the probe's process cost on
+        // every run for an answer already in hand.
+        var calls = new List<string>();
+        var support = WinAppUi.ProbeYieldVerb(
+            Runner(calls, _ => Completed(SchemaWithYield)), "yield", budgetMs: 10_000);
+
+        CollectionAssert.AreEqual(
+            new[] { "--cli-schema" }, calls,
+            "The probe ran `ui --help` even though the schema had already answered.");
+        Assert.AreEqual(WinAppUi.UiVerbSupport.Present, support);
+    }
+
+    [TestMethod]
+    public void Probe_StopsAtAHungSchemaAttemptInsteadOfSpendingTheRestOfTheBudget()
+    {
+        // A timeout is not a report that `--cli-schema` is unsupported, and the budget is nearly
+        // gone by the time it fires. Treating it like an unrecognized flag would spawn a second
+        // child of an already-unresponsive binary -- two 10s waits plus two 5s kill graces
+        // against an advertised 10s probe.
+        var calls = new List<string>();
+        var support = WinAppUi.ProbeYieldVerb(
+            Runner(calls, _ => Failed(WinAppUi.BoundedRunOutcome.TimedOut)),
+            "yield",
+            budgetMs: 10_000);
+
+        CollectionAssert.AreEqual(
+            new[] { "--cli-schema" }, calls,
+            "A hung schema attempt was followed by a second spawn, so an unresponsive winapp " +
+            "costs more than the probe's stated budget.");
+        Assert.AreEqual(WinAppUi.UiVerbSupport.Unreadable, support);
+    }
+
+    [TestMethod]
+    public void Probe_DoesNotStartTheFallbackWithNoBudgetLeft()
+    {
+        // The shared deadline. A slow-but-completing schema attempt must not hand the fallback a
+        // fresh full-length budget.
+        var calls = new List<string>();
+        var support = WinAppUi.ProbeYieldVerb(
+            Runner(calls, a =>
+            {
+                if (a != "--cli-schema") return Completed(HelpWithYield);
+                Thread.Sleep(120);
+                return Completed("not json");
+            }),
+            "yield",
+            budgetMs: 50);
+
+        CollectionAssert.AreEqual(
+            new[] { "--cli-schema" }, calls,
+            "The fallback was started after the shared budget was already spent.");
+        Assert.AreEqual(WinAppUi.UiVerbSupport.Unreadable, support);
+    }
+
+    [TestMethod]
+    public void Probe_HandsTheFallbackOnlyWhatIsLeftOfTheBudget()
+    {
+        // The partial-budget handoff, which the "no budget left" case above cannot detect: if the
+        // fallback were passed the full budget again, that test still passes because its schema
+        // attempt overruns the whole thing either way. Asserting on the timeout actually handed
+        // over is what separates `run(remainingMs, ...)` from `run(budgetMs, ...)`.
+        const int budgetMs = 5_000;
+        const int schemaCostMs = 300;
+
+        var calls = new List<string>();
+        var timeouts = new List<int>();
+        var support = WinAppUi.ProbeYieldVerb(
+            Runner(calls, a =>
+            {
+                if (a != "--cli-schema") return Completed(HelpWithYield);
+                Thread.Sleep(schemaCostMs);
+                return Completed("not json");
+            }, timeouts),
+            "yield",
+            budgetMs);
+
+        CollectionAssert.AreEqual(new[] { "--cli-schema", "--help" }, calls);
+        Assert.AreEqual(WinAppUi.UiVerbSupport.Present, support);
+
+        Assert.AreEqual(
+            budgetMs, timeouts[0],
+            "The first attempt should be given the whole budget.");
+        Assert.IsTrue(
+            timeouts[1] <= budgetMs - schemaCostMs,
+            $"The fallback was handed {timeouts[1]}ms of a {budgetMs}ms budget after the schema " +
+            $"attempt had already spent ~{schemaCostMs}ms, so the two waits are not sharing a " +
+            "deadline and an unresponsive winapp can exceed the advertised probe time.");
+        Assert.IsTrue(
+            timeouts[1] > 0,
+            "The fallback was started with no budget, which would kill it immediately.");
+    }
+
+    // ── Strict-mode gate ─────────────────────────────────────────────────────
+    //
+    // Written as explicit cases rather than [DataRow] because `UiVerbSupport` is internal and a
+    // public MSTest method cannot take it as a parameter (CS0051).
+
+    [TestMethod]
+    public void StrictMode_FailsWhenTheVerbIsAbsent()
+    {
+        // The rule that gives REACTOR_E2E_REQUIRE_UI_YIELD its meaning, and the one this whole
+        // PR is about: before this seam existed it could only be reached by running the suite
+        // against a winapp lacking the verb, so softening the strict arm to a skip would have
+        // reinstated a gate incapable of failing without reddening anything.
+        Assert.AreEqual(
+            YieldGateDecision.Fail,
+            DecideYieldGate(WinAppUi.UiVerbSupport.Absent, strict: true),
+            "Strict mode did not fail on a winapp with no `ui yield` verb.");
+    }
+
+    [TestMethod]
+    public void StrictMode_FailsWhenTheProbeCouldNotRead()
+    {
+        // `Unreadable` is on the failing side deliberately. "The probe broke" is not "the feature
+        // is missing", and a caller who asked for strictness asked to be told either way --
+        // folding this into the skip arm is the subtler way to get a gate that cannot fail.
+        Assert.AreEqual(
+            YieldGateDecision.Fail,
+            DecideYieldGate(WinAppUi.UiVerbSupport.Unreadable, strict: true),
+            "Strict mode treated an unreadable probe as an acceptable skip, so a broken probe " +
+            "would pass a gate whose entire purpose is to refuse unconfirmed capability.");
+    }
+
+    [TestMethod]
+    public void NonStrictMode_SkipsWhenTheVerbIsAbsent()
+    {
+        // The other half, so "fails under strict" is a discrimination rather than a constant.
+        // Requiring the verb by default would redden every run against a dependency that has
+        // not shipped it.
+        Assert.AreEqual(
+            YieldGateDecision.Inconclusive,
+            DecideYieldGate(WinAppUi.UiVerbSupport.Absent, strict: false),
+            "Without strict mode an absent verb must skip rather than fail.");
+    }
+
+    [TestMethod]
+    public void NonStrictMode_SkipsWhenTheProbeCouldNotRead()
+    {
+        Assert.AreEqual(
+            YieldGateDecision.Inconclusive,
+            DecideYieldGate(WinAppUi.UiVerbSupport.Unreadable, strict: false),
+            "Without strict mode an unreadable probe must skip rather than fail.");
+    }
+
+    [TestMethod]
+    public void ConfirmedVerb_ProceedsUnderStrictMode()
+    {
+        Assert.AreEqual(
+            YieldGateDecision.Proceed,
+            DecideYieldGate(WinAppUi.UiVerbSupport.Present, strict: true),
+            "A confirmed verb must run the differential rather than skip or fail it.");
+    }
+
+    [TestMethod]
+    public void ConfirmedVerb_ProceedsWithoutStrictMode()
+    {
+        Assert.AreEqual(
+            YieldGateDecision.Proceed,
+            DecideYieldGate(WinAppUi.UiVerbSupport.Present, strict: false),
+            "A confirmed verb must run the differential rather than skip or fail it.");
+    }
+
+    // ── Bounded process runner ───────────────────────────────────────────────
+    //
+    // The parser tests feed captured strings and never start a process, so they would stay green
+    // against a runner that read one stream to EOF before its timed wait -- the original defect.
+    // These drive real children whose output volume and lifetime the test controls, which a
+    // winapp cannot be made to do on demand.
+
+    /// <summary>A `cmd.exe` child, so the test owns how much it writes and how long it lives.</summary>
+    private static ProcessStartInfo Cmd(string command)
+    {
+        var psi = new ProcessStartInfo("cmd.exe")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add("/c");
+        psi.ArgumentList.Add(command);
+        return psi;
+    }
+
+    [TestMethod]
+    public void RunBounded_DrainsBothPipesWhenTheChildFloodsThem()
+    {
+        // A redirected stream nobody reads is a fixed-size pipe buffer (~4 KB) the child blocks
+        // on once it fills. Reading stdout to EOF first deadlocks against a full stderr; because
+        // that read preceded the timed wait, the timeout could not fire either. Far more than one
+        // buffer goes to each stream here, so a regression hangs rather than merely truncating.
+        const int lines = 2_000;
+        var run = WinAppUi.RunBounded(
+            Cmd($"for /L %i in (1,1,{lines}) do @(echo OUT-%i& echo ERR-%i 1>&2)"),
+            timeoutMs: 60_000);
+
+        Assert.AreEqual(
+            WinAppUi.BoundedRunOutcome.Completed, run.Outcome,
+            "A child that floods both redirected pipes did not complete, which is the deadlock " +
+            "this runner exists to avoid.");
+
+        var outLines = run.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
+        var errLines = run.StdErr.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
+
+        Assert.AreEqual(lines, outLines, "stdout was truncated, so it was not drained throughout.");
+        Assert.AreEqual(lines, errLines, "stderr was truncated, so it was not drained throughout.");
+    }
+
+    [TestMethod]
+    public void RunBounded_ReturnsTimedOutWithinTheBudgetForAChildThatOutlivesIt()
+    {
+        // The bound has to hold against a child that simply never exits. It writes to both
+        // streams *before* hanging, so the timeout path runs with async handlers that have
+        // genuinely fired -- redirecting the child's output to nul would leave the race between
+        // WaitForExit(int) and those callbacks unexercised. `timeout /t` errors out immediately
+        // when stdin is redirected, so sleep via ping's interval instead.
+        var clock = Stopwatch.StartNew();
+        var run = WinAppUi.RunBounded(
+            Cmd("echo OUT-BEFORE-HANG& echo ERR-BEFORE-HANG 1>&2& ping -n 30 127.0.0.1 > nul"),
+            timeoutMs: 1_000);
+        clock.Stop();
+
+        Assert.AreEqual(
+            WinAppUi.BoundedRunOutcome.TimedOut, run.Outcome,
+            "A child that outlived the budget was not reported as a timeout, so 'no answer' " +
+            "would be indistinguishable from a real exit code.");
+
+        // Generous against CI scheduling, but far below the child's own ~29s lifetime: the point
+        // is that the wait is bounded by the budget rather than by the process.
+        Assert.IsTrue(
+            clock.Elapsed < TimeSpan.FromSeconds(20),
+            $"The bounded wait took {clock.Elapsed.TotalSeconds:F1}s against a 1s budget, so it " +
+            "was bounded by the child rather than by the timeout.");
+
+        // WaitForExit(int) does not wait for the async output handlers, so anything read from
+        // the builders on this path is a torn read. Reporting none of it is the contract.
+        Assert.AreEqual("", run.StdOut, "A timed-out run reported stdout read without draining.");
+        Assert.AreEqual("", run.StdErr, "A timed-out run reported stderr read without draining.");
     }
 }

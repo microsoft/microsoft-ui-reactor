@@ -26,6 +26,11 @@
           "header": "Acrylic Brush",
           "language": "csharp",
           "code": "AcrylicBrush(\n    global::Windows.UI.Color.FromArgb(255, 100, 100, 200),\n    tintOpacity: 0.8)"
+        },
+        {
+          "header": "Acrylic Colors",
+          "language": "csharp",
+          "code": "AcrylicBrush(Color.FromArgb(255, 0, 120, 215), 0.7)"
         }
       ]
     },
@@ -56,6 +61,16 @@
           "header": "Press an icon",
           "language": "csharp",
           "code": "// `using static Factories` imports an AnimatedIcon() method that wins simple-name lookup,\n// so reaching the WinUI type's static SetState needs an alias:\nusing XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;\n\nvar source = UseMemo(() => new AnimatedSettingsVisualSource());\nvar (pressing, setPressing) = UseState(false);\nvar state = pressing ? \"Pressed\" : \"Normal\";\n\n// A Border, not a Button: hosting the icon in a Button made the same write animate only\n// intermittently, because the Button runs its own Normal/PointerOver/Pressed visual states\n// over the same content. Background is load-bearing too -- a null-background element is\n// hit-test invisible, so the pointer events below would never fire.\nBorder(HStack(AnimatedIcon(source).Size(32, 32)\n        .Set(icon =>\n        {\n            // Writing the value it already holds plays no segment, so don't.\n            if (XamlAnimatedIcon.GetState(icon) != state)\n                XamlAnimatedIcon.SetState(icon, state);\n        })))\n    .Size(72, 56).Background(Theme.SubtleFill).CornerRadius(6)\n    .OnPointerPressed((_, _) => setPressing(true))\n    .OnPointerReleased((_, _) => setPressing(false))\n    .OnPointerExited((_, _) => setPressing(false))\n// Each write of State plays the \"<from>To<to>\" marker segment — that transition IS the\n// animation; there is no Play(). Pick a transition the artwork actually draws: the built-in\n// glyphs render nothing between Normal and PointerOver even though that segment has duration."
+        },
+        {
+          "header": "Set the state directly",
+          "language": "csharp",
+          "code": "// `using static Factories` imports an AnimatedIcon() method that wins simple-name lookup,\n// so reaching the WinUI type's static SetState needs an alias:\nusing XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;\n\nvar picker = UseMemo(() => new AnimatedFindVisualSource());\nvar states = new[] { \"Normal\", \"PointerOver\", \"Pressed\" };\nvar (stateIdx, setStateIdx) = UseState(0);\nvar state = states[Math.Clamp(stateIdx, 0, states.Length - 1)];\n\nAnimatedIcon(picker).Size(32, 32)\n    .Set(icon => XamlAnimatedIcon.SetState(icon, state))\n// State is just a property, so anything can drive it — but keep it to one driver per icon.\n// A second driver that can agree on a value makes the other a silent no-op, since writing\n// State the value it already holds plays no segment at all."
+        },
+        {
+          "header": "Click a button",
+          "language": "csharp",
+          "code": "// `using static Factories` imports an AnimatedIcon() method that wins simple-name lookup,\n// so reaching the WinUI type's static SetState needs an alias:\nusing XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;\n\nvar menuNav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());\n// UseReducer's functional updater reads the live value, so two clicks coalesced into\n// one render can't drop a toggle.\nvar (open, setOpen) = UseReducer(false);\nvar menuState = open ? \"Pressed\" : \"Normal\";\n\nButton(\n    HStack(8,\n        AnimatedIcon(menuNav).Size(20, 20)\n            .Set(icon =>\n            {\n                if (XamlAnimatedIcon.GetState(icon) != menuState)\n                    XamlAnimatedIcon.SetState(icon, menuState);\n            }),\n        TextBlock(open ? \"Close\" : \"Menu\")),\n    () => setOpen(o => !o))\n// Driven by the menu being open, not by the pointer: Normal<->PointerOver renders no\n// visible change on this glyph, and a Button's own visual states race the icon's."
         }
       ]
     },
@@ -136,6 +151,11 @@
           "header": "Basic AutoSuggestBox",
           "language": "csharp",
           "code": "var (query, setQuery) = UseState(\"\");\nAutoSuggestBox(query, setQuery)"
+        },
+        {
+          "header": "With Query Submitted",
+          "language": "csharp",
+          "code": "AutoSuggestBox(submitQuery, setSubmitQuery, s => setSubmitted(s))"
         }
       ]
     },
@@ -162,6 +182,11 @@
           "header": "Basic Border",
           "language": "csharp",
           "code": "Border(TextBlock(\"Content\").Padding(16))\n    .WithBorder(Theme.CardStroke)\n    .CornerRadius(8)\n    .Background(Theme.SubtleFill)"
+        },
+        {
+          "header": "Colored Borders",
+          "language": "csharp",
+          "code": "HStack(12,\n    Border(TextBlock(\"Red\")).WithBorder(\"#FF4444\", 2),\n    Border(TextBlock(\"Green\")).WithBorder(\"#44AA44\", 2)\n)"
         }
       ]
     },
@@ -188,6 +213,11 @@
           "header": "Basic BreadcrumbBar",
           "language": "csharp",
           "code": "// The trail is fixed, so it is a memoized constant rather than state.\nvar path = UseMemo(() => new[] { \"Home\", \"Documents\", \"Reports\" });\n\nBreadcrumbBar(\n    path.Select(p => Breadcrumb(p)).ToArray(),\n    item => setClicked(item.Label))"
+        },
+        {
+          "header": "Dynamic Breadcrumb",
+          "language": "csharp",
+          "code": "// Each sample owns its own state — sharing one `path` between the two\n// cards would make navigating here rewrite the card above.\nvar (dynamicPath, setDynamicPath) = UseState(UseMemo(() => new[] { \"Home\", \"Documents\", \"Reports\" }));\n\nBreadcrumbBar(dynamicPath.Select(p => Breadcrumb(p)).ToArray(), item => {\n    var idx = Array.IndexOf(dynamicPath, item.Label);\n    if (idx >= 0) setDynamicPath(dynamicPath.Take(idx + 1).ToArray());\n})"
         }
       ]
     },
@@ -217,6 +247,21 @@
           "header": "Basic Button — .Click(handler)",
           "language": "csharp",
           "code": "Button(\"Save\").Click(() => setBasicOutput(\"Saved!\"))"
+        },
+        {
+          "header": "Disabled Button",
+          "language": "csharp",
+          "code": "Button(\"Can't Click\").IsEnabled(false)"
+        },
+        {
+          "header": "Accent style — .AccentButton()",
+          "language": "csharp",
+          "code": "Button(\"Confirm\").Click(() => setAccentOutput(\"Confirmed!\")).AccentButton()"
+        },
+        {
+          "header": "Subtle style — .SubtleButton()",
+          "language": "csharp",
+          "code": "Button(\"Cancel\").Click(() => setSubtleOutput(\"Cancelled.\")).SubtleButton()"
         }
       ]
     },
@@ -243,6 +288,11 @@
           "header": "Basic CalendarDatePicker",
           "language": "csharp",
           "code": "CalendarDatePicker(date, d => setDate(d))"
+        },
+        {
+          "header": "CalendarDatePicker with Clear",
+          "language": "csharp",
+          "code": "CalendarDatePicker(clearableDate, d => setClearableDate(d))\nButton(\"Clear Date\", () => setClearableDate(null))"
         }
       ]
     },
@@ -270,6 +320,16 @@
           "header": "Basic CalendarView",
           "language": "csharp",
           "code": "CalendarView()"
+        },
+        {
+          "header": "CalendarView in Card",
+          "language": "csharp",
+          "code": "Border(\n    CalendarView().Width(300).Height(350)\n).Background(Theme.CardBackground)\n .WithBorder(Theme.CardStroke)\n .CornerRadius(8)\n .Padding(8)"
+        },
+        {
+          "header": "Multi-select — .SelectedDatesChanged()",
+          "language": "csharp",
+          "code": "(CalendarView()\n    with { SelectionMode = CalendarViewSelectionMode.Multiple })\n    .SelectedDatesChanged(dates => setSelected(dates))\n    .Width(300).Height(350)"
         }
       ]
     },
@@ -295,6 +355,11 @@
           "header": "Absolute Positioning",
           "language": "csharp",
           "code": "// Shapes paint with Fill — Background has no effect on a Rectangle.\nCanvas(\n    Rectangle().Size(80, 80).Fill(BrushHelper.Parse(\"#FF6B6B\")).Canvas(left: 10, top: 10),\n    Rectangle().Size(80, 80).Fill(BrushHelper.Parse(\"#4ECDC4\")).Canvas(left: 60, top: 50)\n)"
+        },
+        {
+          "header": "Interactive Positioning",
+          "language": "csharp",
+          "code": "Border(TextBlock(\"Move\")).Canvas(left: offsetX, top: offsetY)"
         }
       ]
     },
@@ -351,6 +416,11 @@
           "header": "Two-State CheckBox",
           "language": "csharp",
           "code": "CheckBox(isChecked, v => setIsChecked(v), \"I agree to the terms\")"
+        },
+        {
+          "header": "Three-State CheckBox",
+          "language": "csharp",
+          "code": "ThreeStateCheckBox(threeState, v => setThreeState(v), \"Select all\")"
         }
       ]
     },
@@ -434,6 +504,16 @@
           "header": "Basic ComboBox",
           "language": "csharp",
           "code": "ComboBox(colors, selectedIndex, i => setSelectedIndex(i)).Header(\"Colors\")"
+        },
+        {
+          "header": "ComboBox with Placeholder",
+          "language": "csharp",
+          "code": "ComboBox(colors).Header(\"Colors\").PlaceholderText(\"Pick a color\")"
+        },
+        {
+          "header": "Editable ComboBox",
+          "language": "csharp",
+          "code": "ComboBox(colors, editableIndex, i => setEditableIndex(i)).Header(\"Colors\").IsEditable()"
         }
       ]
     },
@@ -461,6 +541,11 @@
           "header": "Primary Commands",
           "language": "csharp",
           "code": "var (lastAction, setLastAction) = UseState(\"(none)\");\n\nVStack(8,\n    CommandBar(primaryCommands: new AppBarItemBase[] {\n        AppBarButton(\"Add\", () => setLastAction(\"Add\"), icon: \"Add\"),\n        AppBarButton(\"Edit\", () => setLastAction(\"Edit\"), icon: \"Edit\"),\n        AppBarSeparator(),\n        AppBarButton(\"Delete\", () => setLastAction(\"Delete\"), icon: \"Delete\"),\n    }),\n    TextBlock($\"Last action: {lastAction}\"));"
+        },
+        {
+          "header": "Primary and Secondary Commands",
+          "language": "csharp",
+          "code": "var (commandAction, setCommandAction) = UseState(\"(none)\");\nvar (isBold, setIsBold) = UseState(false);\n\nVStack(8,\n    CommandBar(\n        primaryCommands: new AppBarItemBase[] {\n            AppBarButton(\"Share\", () => setCommandAction(\"Share\"), icon: \"Share\"),\n            AppBarToggleButton(\"Bold\", isBold, b => setIsBold(b), icon: \"Bold\"),\n        },\n        secondaryCommands: new AppBarItemBase[] {\n            AppBarButton(\"Copy\", () => setCommandAction(\"Copy\")),\n            AppBarButton(\"Paste\", () => setCommandAction(\"Paste\")),\n        }),\n    TextBlock($\"Last action: {commandAction}\"));"
         }
       ]
     },
@@ -488,6 +573,11 @@
           "header": "Basic CommandBarFlyout",
           "language": "csharp",
           "code": "var (lastAction, setLastAction) = UseState(\"(none)\");\n\nVStack(8,\n    CommandBarFlyout(\n        Button(\"Show Commands\"),\n        primaryCommands: new AppBarItemBase[] {\n            AppBarButton(\"Cut\", () => setLastAction(\"Cut\"), icon: \"Cut\"),\n            AppBarButton(\"Copy\", () => setLastAction(\"Copy\"), icon: \"Copy\"),\n            AppBarButton(\"Paste\", () => setLastAction(\"Paste\"), icon: \"Paste\"),\n        }),\n    TextBlock($\"Last action: {lastAction}\"));"
+        },
+        {
+          "header": "CommandBarFlyout with Secondary",
+          "language": "csharp",
+          "code": "var (commandAction, setCommandAction) = UseState(\"(none)\");\n\nVStack(8,\n    CommandBarFlyout(\n        Button(\"More Options\"),\n        primaryCommands: new AppBarItemBase[] {\n            AppBarButton(\"Share\", () => setCommandAction(\"Share\"), icon: \"Share\"),\n        },\n        secondaryCommands: new AppBarItemBase[] {\n            AppBarButton(\"Select All\", () => setCommandAction(\"Select All\")),\n            AppBarButton(\"Print\", () => setCommandAction(\"Print\")),\n        }),\n    TextBlock($\"Last action: {commandAction}\"));"
         }
       ]
     },
@@ -514,6 +604,16 @@
           "header": "Sync command",
           "language": "csharp",
           "code": "var increment = new Command { Label = \"Increment\", Execute = () => setCount(count + 1) };\nButton(increment)   // Label + Execute + IsEnabled all flow from the Command"
+        },
+        {
+          "header": "Async command — UseCommand tracks IsExecuting",
+          "language": "csharp",
+          "code": "var save = UseCommand(new Command\n{\n    Label = \"Save\",\n    ExecuteAsync = async () =>\n    {\n        setStatus(\"Saving...\"); await Task.Delay(1500); setStatus(\"Saved!\");\n    }\n});\nButton(save)   // auto-disables for the lifetime of the async lambda"
+        },
+        {
+          "header": "Debounced command — DebounceMs",
+          "language": "csharp",
+          "code": "// DebounceMs only debounces when wrapped by UseCommand (it persists the window).\nvar run = UseCommand(new Command { Label = \"Run\", Execute = Run, DebounceMs = 1000 });\nButton(run)"
         }
       ]
     },
@@ -541,6 +641,11 @@
           "header": "List to detail",
           "language": "csharp",
           "code": "string[] items = [\"Aurora\", \"Basalt\", \"Cirrus\", \"Delta\"];\nvar (selected, setSelected) = UseState<string?>(null);\n\nif (selected is not null)\n    return VStack(12,\n        Button(\"Back to list\", () => setSelected(null)),\n        TextBlock(selected).FontSize(34).Bold()\n            .ConnectedAnimation($\"hero-{selected}\"));\n\nreturn VStack(6, items.Select(i =>\n    Button(i, () => setSelected(i))\n        .ConnectedAnimation($\"hero-{i}\")).ToArray());\n\n// Source and destination must appear in the SAME render. The reconciler publishes the\n// outgoing element's snapshot during the reconcile pass and plays it into the incoming\n// element at the end of that same pass. Every keyed row is snapshotted, since the\n// reconciler cannot tell which one you activated; the unpicked ones expire on their own."
+        },
+        {
+          "header": "Both ends need the same key",
+          "language": "csharp",
+          "code": "// A key with no partner is inert -- it never throws and never warns, so a mismatch reads\n// exactly like \"the animation is broken\". Both ends must spell the key the same way.\nButton(\"Fluent\", () => setOpen(true))\n    .ConnectedAnimation(\"hero\")\n\nTextBlock(\"Fluent\").FontSize(34).Bold()\n    .ConnectedAnimation(\"hero\")   // drop this and the headline just appears"
         }
       ]
     },
@@ -570,6 +675,71 @@
           "header": "Basic Dialog",
           "language": "csharp",
           "code": "Button(\"Show Dialog\", () => setShowBasic(true)),\nContentDialog(\"Welcome\", TextBlock(\"Thank you!\"), \"OK\") with {\n    IsOpen = showBasic,\n    OnClosed = _ => setShowBasic(false),\n}"
+        },
+        {
+          "header": "Confirmation Dialog",
+          "language": "csharp",
+          "code": "ContentDialog(\"Confirm Delete\",\n    TextBlock(\"Are you sure?\"), \"Delete\") with {\n    IsOpen = showConfirm,\n    SecondaryButtonText = \"Cancel\",\n    OnClosed = r => { setResult(r.ToString()); setShowConfirm(false); },\n}"
+        },
+        {
+          "header": "Live content while open",
+          "language": "csharp",
+          "code": "// State lives in the page, but the dialog content is reconciled\n// in place while the dialog is open — no remount, no lost focus.\nContentDialog($\"Clicked {count} time(s)\",\n    VStack(8,\n        TextBlock($\"This line re-renders in place: {count}\"),\n        Button(\"+1\", () => setCount(count + 1)),\n        TextBox(note, setNote),\n        Button(\"Close\", () => setShowLive(false))),\n    \"Save\") with\n{\n    IsOpen = showLive,\n    IsPrimaryButtonEnabled = count > 0,   // tracks state live\n    OnClosed = _ => setShowLive(false),\n}"
+        }
+      ]
+    },
+    {
+      "id": "context",
+      "name": "Context",
+      "category": "Fundamentals",
+      "description": "Tree-scoped ambient state, read without threading it through every component.",
+      "details": "A `Context<T>` passes ambient state down the tree without threading it through\nevery intermediate component. Declare the context once as a static, provide a\nvalue on an ancestor with `.Provide(...)`, and read it with `UseContext`.\n\n```csharp\npublic static readonly Context<string> ThemeCtx = new(\"light\");\n\n// Provide — every descendant sees \"dark\"\nVStack(8, Component<Toolbar>(), Component<Body>()).Provide(ThemeCtx, \"dark\")\n\n// Consume, anywhere below\nvar theme = UseContext(ThemeCtx);\n```\n\nThe value passed to `new Context<T>(...)` is the default a consumer reads when\nno ancestor provides one, so `UseContext` never returns an unexpected `null`.\nProviding a new value re-renders the consumers below it, not the whole tree.",
+      "keywords": [
+        "ambient state",
+        "usecontext",
+        "provide",
+        "provider",
+        "prop drilling",
+        "tree scoped",
+        "shared state",
+        "default value"
+      ],
+      "curatedKeywords": [
+        "context",
+        "share state without passing props",
+        "pass state down the tree",
+        "usecontext hook"
+      ],
+      "relatedControls": [
+        "UseState",
+        "UseReducer"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "usings": [
+        "Microsoft.UI.Reactor.Core"
+      ],
+      "galleryRoute": "context",
+      "docs": [
+        {
+          "title": "Context guide",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/context.md"
+        },
+        {
+          "title": "reactor-getting-started skill",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-getting-started/SKILL.md"
+        }
+      ],
+      "samples": [
+        {
+          "header": "Provide on an ancestor, read anywhere below",
+          "language": "csharp",
+          "code": "public static readonly Context<string> Current = new(\"Hello from the default value\", \"Greeting\");\n\n// Consume, at any depth below the provider.\nclass GreetingLabel : Component\n{\n    public override Element Render() => TextBlock(UseContext(GreetingContext.Current));\n}\n\n// Provide — every descendant sees this value.\nVStack(4, VStack(4, Component<GreetingLabel>())).Provide(GreetingContext.Current, greeting)"
+        },
+        {
+          "header": "No provider means the default value",
+          "language": "csharp",
+          "code": "// Declared with a default, so a consumer with no provider above it still reads something.\npublic static readonly Context<string> Current = new(\"Hello from the default value\", \"Greeting\");\n\nComponent<GreetingLabel>()   // no .Provide above it — reads the default"
         }
       ]
     },
@@ -606,6 +776,11 @@
           "header": "Columns, sorting, selection & cell editing",
           "language": "csharp",
           "code": "// Memoize the source so the grid isn't remounted on every render\n// (DataGrid keys off source.GetHashCode()).\nvar source = UseMemo(() => new ListDataSource<Product>(BuildProducts(60), p => (RowKey)p.Id));\n\nDataGrid(\n    source: source,\n    columns: new FieldDescriptor[]\n    {\n        Column<Product>(\"Id\", p => p.Id, width: 60),                   // read-only\n        Column<Product>(\"Name\", p => p.Name, editable: true, displayName: \"Product\", width: 200),\n        Column<Product>(\"Category\", p => p.Category, editable: true, width: 140),\n        Column<Product>(\"Price\", p => p.Price, editable: true, format: \"C2\", width: 100),\n        Column<Product>(\"InStock\", p => p.InStock, displayName: \"In stock\", width: 90),\n    },\n    selectionMode: selection,             // driven by the Options combo below\n    onSelectionChanged: keys => setSelectedCount(keys.Count),\n    editable: true,                       // grid-level opt-in; columns opt in individually\n    editMode: EditMode.Cell,\n    onRowChanged: (key, item) =>          // called inline on the UI thread by UseMutation\n    {\n        setLastCellEdit($\"row {key.Value} → {item.Name} / {item.Category} / {item.Price:C2}\");\n        return Task.CompletedTask;\n    },\n    rowHeight: 36)\n// Click a header to sort. Columns can be reordered and resized by dragging."
+        },
+        {
+          "header": "Row edit mode",
+          "language": "csharp",
+          "code": "// `rowEditSource` and `Columns()` are the same list source and five columns\n// the card above uses — this card differs only in editMode.\nDataGrid(\n    source: rowEditSource,\n    columns: Columns(),\n    editable: true,\n    editMode: EditMode.Row,   // whole row edits and commits together\n    onRowChanged: (key, item) => { /* persist the row */ return Task.CompletedTask; },\n    rowHeight: 36)"
         }
       ]
     },
@@ -632,6 +807,11 @@
           "header": "Basic DatePicker",
           "language": "csharp",
           "code": "DatePicker(date, d => setDate(d))"
+        },
+        {
+          "header": "DatePicker with Reset",
+          "language": "csharp",
+          "code": "DatePicker(resetDate, d => setResetDate(d))\nButton(\"Today\", () => setResetDate(DateTimeOffset.Now))"
         }
       ]
     },
@@ -694,6 +874,76 @@
       ]
     },
     {
+      "id": "element-refs",
+      "name": "Element refs",
+      "category": "Fundamentals",
+      "description": "Refs to realized WinUI elements — imperative focus and reference props.",
+      "details": "An `ElementRef` is the bridge from the declarative tree to a realized WinUI\nelement. Attach it with `.Ref(...)`, then read `.Current` — it is `null` until\nthe element mounts, survives re-renders, and clears on unmount, so the same\ncell reliably points at whatever is mounted now.\n\n### UseElementFocus\n\n```csharp\nvar focusRef = this.UseElementFocus();\n\nreturn VStack(12,\n    TextBox(text, setText).Ref(focusRef.Ref),\n    Button(\"Focus the field\", () => focusRef.RequestFocus())\n);\n```\n\n`UseElementFocus` returns a handle with `.Ref` (attach to the element)\nand `.RequestFocus()` (imperatively focus it). It is a named tuple, so the\ndeconstructed form is equivalent and is what the guide uses — `RequestFocus`\nschedules the focus on the UI dispatcher, so it is safe to call from an effect\nthat runs before the element has mounted:\n\n```csharp\nvar (inputRef, requestFocus) = this.UseElementFocus();\n\nUseEffect(() => requestFocus(), Array.Empty<object>());   // focus on mount\n\nreturn TextBox(name, setName).AutomationName(\"Name\").Ref(inputRef);\n```\n\nFor a synchronous attempt, or one whose success you need to observe, call\n`Microsoft.UI.Reactor.Input.FocusManager.Focus(inputRef)` or\n`FocusManager.FocusAsync(inputRef)` instead.\n\n### UseElementRef\\<T\\> — typed refs\n\nWhen you actually need to call methods on the underlying control (`SelectAll()`\non a `TextBox`, `Focus(FocusState.Programmatic)`, etc.), use the typed variant.\n`.Current` is already typed as `T` — no cast at the call site:\n\n```csharp\nvar inputRef = this.UseElementRef<TextBox>();\n\nUseEffect(() => inputRef.Current?.SelectAll(), Array.Empty<object>());\n\nreturn TextBox(query, setQuery).Ref(inputRef);\n```\n\nThe constraint is `T : FrameworkElement`. In `DEBUG` builds Reactor asserts\nthe actual mounted element is a `T`; in release the mismatch is silent and\n`.Current` returns `null`. Spec 033 §3.\n\n### XYFocus reference props\n\nUse XYFocus refs for gamepad/keyboard directional navigation graphs.\nThe target can mount before or after the referrer; Reactor rewrites the\nWinUI `UIElement.XYFocus*` property when the referenced element becomes\navailable and clears it when that element unmounts.\n\n```csharp\nvar left = this.UseElementRef<FrameworkElement>();\nvar right = this.UseElementRef<FrameworkElement>();\n\nreturn HStack(8,\n    Button(\"Left\").Ref(left).XYFocusRight(right),\n    Button(\"Right\").Ref(right).XYFocusLeft(left));\n```\n\nFor cyclic focus rings, declare both directions. Do not assign\n`button.XYFocusRight = right.Current` in a handler; that snapshot will\nnot survive late mount or recreation. The same rule covers every reference\nprop — `TeachingTip(..., target: ref)`, `.LabeledBy(ref)`, `.DescribedBy(refs)`,\n`.FlowsTo(refs)` — and `REACTOR_REF_001` flags reading `.Current` to set one.",
+      "keywords": [
+        "element ref",
+        "useelementref",
+        "useelementfocus",
+        "request focus",
+        "autofocus",
+        "underlying control",
+        "selectall",
+        "teachingtip target",
+        "xyfocus",
+        "reference prop"
+      ],
+      "curatedKeywords": [
+        "element ref focus",
+        "focus a text box",
+        "focus on mount",
+        "call a method on the control",
+        "get the winui element"
+      ],
+      "relatedControls": [
+        "TeachingTip",
+        "UseRef",
+        "Keyboard input"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "usings": [
+        "Microsoft.UI.Reactor.Hooks",
+        "Microsoft.UI.Xaml",
+        "Microsoft.UI.Xaml.Controls"
+      ],
+      "galleryRoute": "element-refs",
+      "docs": [
+        {
+          "title": "Input and gestures guide",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/input-and-gestures.md"
+        },
+        {
+          "title": "Element refs reference",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-dsl/references/element-refs.md"
+        },
+        {
+          "title": "reactor-input skill",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-input/SKILL.md"
+        }
+      ],
+      "samples": [
+        {
+          "header": "Imperative focus with UseElementFocus",
+          "language": "csharp",
+          "code": "var (inputRef, requestFocus) = this.UseElementFocus();\n\n// Focus on mount: UseEffect(() => requestFocus(), Array.Empty<object>());\nVStack(8,\n    TextBox(focusName, setFocusName, placeholderText: \"Focus lands here\").Ref(inputRef),\n    Button(\"Focus the field\", requestFocus))"
+        },
+        {
+          "header": "Typed refs call methods on the control",
+          "language": "csharp",
+          "code": "var queryRef = this.UseElementRef<TextBox>();\n\nVStack(8,\n    TextBox(query, setQuery).Ref(queryRef),\n    Button(\"Select all\", () => queryRef.Current?.SelectAll()))"
+        },
+        {
+          "header": "Reference props take the ref, not .Current",
+          "language": "csharp",
+          "code": "var tipTarget = this.UseElementRef<FrameworkElement>();\n\nVStack(8,\n    Button(\"Show a tip anchored here\", () => setShowTip(true)).Ref(tipTarget),\n    TeachingTip(\"Anchored\", \"Resolved through the ref.\", target: tipTarget) with\n    {\n        IsOpen = showTip,\n        OnClosed = () => setShowTip(false),\n    })"
+        }
+      ]
+    },
+    {
       "id": "expander",
       "name": "Expander",
       "category": "Layout",
@@ -747,6 +997,11 @@
           "header": "Interactive Flex Container",
           "language": "csharp",
           "code": "// Every axis below is driven by the Options combos, so the\n// snippet tracks whatever the live sample is showing.\nFlex(new[] { Box(\"1\", \"#E74C3C\"), Box(\"2\", \"#3498DB\"), Box(\"3\", \"#2ECC71\") }) with\n{\n    Direction = direction,\n    JustifyContent = justify,\n    AlignItems = align,\n    Wrap = wrap,\n    ColumnGap = 8,\n    RowGap = 8,\n}"
+        },
+        {
+          "header": "FlexRow & FlexColumn Shortcuts",
+          "language": "csharp",
+          "code": "FlexRow(Box(\"A\"), Box(\"B\"), Box(\"C\"))\nFlexColumn(Box(\"X\"), Box(\"Y\"), Box(\"Z\"))"
         }
       ]
     },
@@ -803,6 +1058,11 @@
           "header": "Basic Flyout",
           "language": "csharp",
           "code": "Flyout(\n    Button(\"Show Flyout\"),\n    TextBlock(\"This is flyout content!\").Padding(8))"
+        },
+        {
+          "header": "Flyout with Actions",
+          "language": "csharp",
+          "code": "Flyout(\n    Button(\"Cart Options\"),\n    VStack(8,\n        TextBlock(\"Your cart has items.\"),\n        Button(\"Empty Cart\", () => setCount(0)))\n    .Padding(8))"
         }
       ]
     },
@@ -857,6 +1117,21 @@
           "header": "Corner Radius Resources",
           "language": "csharp",
           "code": "// Resolve at render time\nvar controlRadius = ThemeResource.CornerRadius(\"ControlCornerRadius\");\nvar overlayRadius = ThemeResource.CornerRadius(\"OverlayCornerRadius\");\n\n// Apply to elements\nBorder(TextBlock(\"Standard control\")).CornerRadius(controlRadius.TopLeft)\nBorder(TextBlock(\"Dialog surface\")).CornerRadius(overlayRadius.TopLeft)"
+        },
+        {
+          "header": "ControlCornerRadius",
+          "language": "csharp",
+          "code": "var cr = ThemeResource.CornerRadius(\"ControlCornerRadius\");\n\n// Buttons\nButton(\"Standard\", () => { }).CornerRadius(cr.TopLeft)\n\n// Text input\nTextBox(\"\", placeholderText: \"Type here...\").CornerRadius(cr.TopLeft)\n\n// Card\nBorder(VStack(4, TextBlock(\"Card Title\").SemiBold()).Margin(16))\n    .Background(Theme.CardBackground)\n    .WithBorder(Theme.CardStroke)\n    .CornerRadius(cr.TopLeft)\n\n// Tags\nBorder(TextBlock(\"Tag\").Padding(6, 2, 6, 2))\n    .Background(Theme.SubtleFill)\n    .WithBorder(Theme.ControlStroke)\n    .CornerRadius(cr.TopLeft)"
+        },
+        {
+          "header": "OverlayCornerRadius",
+          "language": "csharp",
+          "code": "var or = ThemeResource.CornerRadius(\"OverlayCornerRadius\");\n\n// Dialog\nBorder(VStack(12, TextBlock(\"Delete file?\").SemiBold()).Margin(24))\n    .Background(Theme.LayerFill)\n    .WithBorder(Theme.SurfaceStroke)\n    .CornerRadius(or.TopLeft)\n\n// Flyout / Menu\nBorder(VStack(2, FlyoutMenuItem(\"Cut\", \"\\uE8C6\"), FlyoutMenuItem(\"Copy\", \"\\uE8C8\")).Margin(4))\n    .Background(Theme.LayerFill)\n    .WithBorder(Theme.SurfaceStroke)\n    .CornerRadius(or.TopLeft)\n\n// Teaching Tip\nBorder(VStack(8, TextBlock(\"Did you know?\").SemiBold()).Margin(20))\n    .Background(Theme.LayerFill)\n    .WithBorder(Theme.SurfaceStroke)\n    .CornerRadius(or.TopLeft)"
+        },
+        {
+          "header": "Comparing Radii",
+          "language": "csharp",
+          "code": "var cr = ThemeResource.CornerRadius(\"ControlCornerRadius\");\nvar or = ThemeResource.CornerRadius(\"OverlayCornerRadius\");\n\n// Overlay container with control-radius inner elements\nBorder(\n    VStack(12,\n        TextBox(\"\", placeholderText: \"Username\").CornerRadius(cr.TopLeft),\n        Button(\"Sign In\", () => { })\n            .Background(Theme.Accent)\n            .CornerRadius(cr.TopLeft)\n    ).Margin(24)\n)\n.Background(Theme.LayerFill)\n.WithBorder(Theme.SurfaceStroke)\n.CornerRadius(or.TopLeft)  // outer overlay radius"
         }
       ]
     },
@@ -885,6 +1160,11 @@
           "header": "Column & Row Spanning",
           "language": "csharp",
           "code": "Border(TextBlock(\"Header\")).Grid(row: 0, column: 0, columnSpan: 3)\nBorder(TextBlock(\"Center\")).Grid(row: 1, column: 1, columnSpan: 2)"
+        },
+        {
+          "header": "Mixed Sizing",
+          "language": "csharp",
+          "code": "Grid(\n    columns: [GridSize.Px(100), GridSize.Star(), GridSize.Star(2)],\n    rows: [GridSize.Auto]\n    // 100px fixed, 1 star, 2 star proportional\n)"
         }
       ]
     },
@@ -914,6 +1194,11 @@
           "header": "Basic GridView",
           "language": "csharp",
           "code": "// SelectionMode is driven by the Options combo below.\nGridView(\n    items.Select(i =>\n        Border(TextBlock($\"Item {i}\")).Size(100, 100)\n    ).ToArray()\n).SelectionMode(selectionMode)"
+        },
+        {
+          "header": "Data-Driven GridView",
+          "language": "csharp",
+          "code": "GridView(\n    items, s => s,\n    (s, i) => Border(TextBlock(s)).Size(80, 80)\n)"
         }
       ]
     },
@@ -940,6 +1225,11 @@
           "header": "Navigate to URI",
           "language": "csharp",
           "code": "HyperlinkButton(\"Go to Microsoft\", new Uri(\"https://www.microsoft.com\"))"
+        },
+        {
+          "header": "HyperlinkButton with Click Handler",
+          "language": "csharp",
+          "code": "HyperlinkButton(\"Click me\", onClick: () => setClickCount(clickCount + 1))"
         }
       ]
     },
@@ -967,6 +1257,11 @@
           "header": "Symbol icons",
           "language": "csharp",
           "code": "Icon(Symbol.Home)\nIcon(Symbol.Save)\nIcon(Symbol.Delete)\nIcon(Symbol.Setting)"
+        },
+        {
+          "header": "Font glyph and Path icons",
+          "language": "csharp",
+          "code": "Icon(FontIcon(\"\\uE790\"))              // Segoe Fluent Icons glyph\nIcon(PathIcon(\"M 0,0 L 24,0 L 12,20 Z\"))  // vector path data"
         }
       ]
     },
@@ -994,6 +1289,11 @@
           "header": "Image from URI",
           "language": "csharp",
           "code": "Image(\"ms-appx:///Assets/SampleImages/LandscapeSample.png\")\n    .AutomationName(\"A stylised mountain lake at dusk\")   // alt text for screen readers\n    .Width(300).Height(300)\n// ms-appx:/// resolves against the app folder — the asset must be copied\n// to the output directory (a <Content Include=...> item in the csproj)."
+        },
+        {
+          "header": "Image with Border",
+          "language": "csharp",
+          "code": "Border(\n    Image(\"ms-appx:///Assets/SampleImages/LandscapeSample.png\")\n        .AutomationName(\"A stylised mountain lake at dusk\")\n        .Width(200).Height(200)\n).CornerRadius(12)\n .WithBorder(Theme.CardStroke)"
         }
       ]
     },
@@ -1020,6 +1320,11 @@
           "header": "Numeric Badge",
           "language": "csharp",
           "code": "InfoBadge(count)  // numeric badge\nInfoBadge(42)"
+        },
+        {
+          "header": "Dot Badge",
+          "language": "csharp",
+          "code": "InfoBadge()  // dot indicator"
         }
       ]
     },
@@ -1048,6 +1353,11 @@
           "header": "Severity fluents",
           "language": "csharp",
           "code": "InfoBar(\"Success\", \"Completed!\").Success().IsClosable(false)\nInfoBar(\"Warning\", \"Review...\").Warning().IsClosable(false)\nInfoBar(\"Error\",   \"Failed!\"  ).Error()  .IsClosable(false)\nInfoBar(\"Info\",    \"FYI…\"     ).Informational().IsClosable(false)"
+        },
+        {
+          "header": "Closable InfoBar",
+          "language": "csharp",
+          "code": "// IsOpen is controlled by your state, so mirror the native ✕ back into it\n// via OnClosed — otherwise \"Reset\" sets true to true and nothing happens.\nInfoBar(\"Closable\", \"Click close to dismiss.\").IsClosable()\n    with { OnClosed = () => setShowClosable(false) }"
         }
       ]
     },
@@ -1074,6 +1384,11 @@
           "header": "Horizontal proportions",
           "language": "csharp",
           "code": "var horizontalPanels = new Element[] { Panel(\"1x\", Theme.Accent), Panel(\"2x\", \"#5B6ABF\"), Panel(\"1x\", \"#107C10\") };\n\nInterspersedGrid(\n    Orientation.Horizontal,\n    horizontalPanels,\n    new[] { 1.0, 2.0, 1.0 },\n    8,\n    i => Border(Empty()).Width(2).Background(Theme.DividerStroke))\n    .Height(160)"
+        },
+        {
+          "header": "Vertical proportions",
+          "language": "csharp",
+          "code": "var verticalPanels = new Element[] { Panel(\"Top\", Theme.Accent), Panel(\"Middle\", \"#5B6ABF\"), Panel(\"Bottom\", \"#107C10\") };\n\nInterspersedGrid(\n    Orientation.Vertical,\n    verticalPanels,\n    new[] { 1.0, 1.5, 1.0 },\n    8,\n    i => Border(Empty()).Height(2).Background(Theme.DividerStroke))\n    .Height(240)"
         }
       ]
     },
@@ -1101,6 +1416,11 @@
           "header": "Scrollable repeated rows",
           "language": "csharp",
           "code": "ScrollView(\n    ItemsRepeater(items, s => s, (s, i) =>\n        Border(TextBlock($\"{i + 1}. {s}\"))\n            .Padding(8)\n            .Margin(0, 0, 0, 4)\n            .Background(Theme.SubtleFill)\n            .CornerRadius(4))\n).Height(260)"
+        },
+        {
+          "header": "Compact repeated badges",
+          "language": "csharp",
+          "code": "ScrollView(\n    ItemsRepeater(items, s => s, (s, i) =>\n        HStack(8,\n            Border(TextBlock($\"{i + 1}\").Center().Foreground(\"#FFFFFF\"))\n                .Background(Theme.Accent).Size(32, 32).CornerRadius(16),\n            TextBlock(s)))\n).Height(220)"
         }
       ]
     },
@@ -1129,6 +1449,86 @@
           "header": "Basic ItemsView",
           "language": "csharp",
           "code": "// The view builder MUST return an ItemContainer root —\n// ItemsView's selection / focus / animation infrastructure requires it.\nItemsView(\n    products,\n    p => p.Name,\n    (p, i) => ItemContainer(\n        Border(VStack(\n            TextBlock(p.Name).Bold(),\n            TextBlock($\"${p.Price:F2}\")\n        ))\n    )\n)"
+        },
+        {
+          "header": "Compact ItemsView",
+          "language": "csharp",
+          "code": "ItemsView(\n    products, p => p.Name,\n    (p, i) => ItemContainer(\n        HStack(8,\n            TextBlock($\"{i + 1}.\").Width(20).Foreground(Theme.SecondaryText),\n            TextBlock(p.Name).Flex(grow: 1),\n            TextBlock($\"${p.Price:F2}\").Foreground(Theme.AccentText)\n        ).Padding(8)\n    )\n).Height(250)"
+        }
+      ]
+    },
+    {
+      "id": "keyboard-input",
+      "name": "Keyboard input",
+      "category": "Fundamentals",
+      "description": "Key events and VirtualKey, and where a Command accelerator belongs instead.",
+      "details": "Attach `.OnKeyDown` / `.OnKeyUp` to any element. The handler receives\n`(sender, KeyRoutedEventArgs)`; set `e.Handled = true` to stop the event\nbubbling. `.OnPreviewKeyDown` / `.OnPreviewKeyUp` run first, during the\ntunnelling phase, and can swallow a key before the focused control sees it.\n\n```csharp\nTextBox(text, setText)\n    .OnKeyDown((s, e) =>\n    {\n        if (e.Key == VirtualKey.Enter)\n        {\n            Submit();\n            e.Handled = true;\n        }\n    })\n```\n\n**`e.Key` is `Windows.System.VirtualKey` — WinRT, not WPF.** It is not\n`System.Windows.Input.Key`, and the member names differ: `VirtualKey` has **no**\n`OemPeriod`, `OemPlus`, `OemMinus` or `Equal`. Punctuation and OEM keys simply\nhave no named member. Two ways to handle them:\n\n```csharp\n// 1. Compare the numeric virtual-key code for OEM keys.\n.OnKeyDown((s, e) =>\n{\n    if ((int)e.Key == 190) AppendDecimalPoint();   // VK_OEM_PERIOD '.'\n    if ((int)e.Key == 187) Evaluate();             // VK_OEM_PLUS   '='\n})\n\n// 2. Better for text: let WinUI resolve the character for you.\n.OnCharacterReceived((s, e) =>\n{\n    if (e.Character == '.') AppendDecimalPoint();\n    if (e.Character == '=') Evaluate();\n})\n```\n\nNamed members you *can* rely on are the letters (`VirtualKey.A`), digits\n(`VirtualKey.Number0`, `VirtualKey.NumberPad0`), the numpad operators\n(`Add`, `Subtract`, `Multiply`, `Divide`, `Decimal`), and the editing and\nnavigation keys (`Enter`, `Space`, `Back`, `Escape`, `Tab`, `Delete`,\n`Left`, `Right`, `Up`, `Down`).\n\n**Ctrl/Alt chords do not belong on `.OnKeyDown`.** A handler on a `TextBox`\nonly fires while that field has focus, so an app-wide shortcut written that way\nsilently does nothing elsewhere. Use a `Command` with an `Accelerator`, which\nregisters with WinUI's accelerator infrastructure. The `REACTOR_INPUT_001`\nanalyzer flags the mistake.\n\n```csharp\nnew Command\n{\n    Label = \"Save\",\n    Execute = Save,\n    Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),\n}\n```\n\nMind the **scope**, though: an accelerator fires when the surface carrying it is\nin the focused element's ancestor chain, so `Button(save)` on its own covers the\nbutton, not the window. `CommandHost([save], subtree)` widens it to a whole\nsubtree, and a `MenuBar` or `CommandBar` at the window root is what makes a chord\ngenuinely window-wide — those attach to the window's `KeyboardAccelerators`\ncollection. See [commanding](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/commanding.md).",
+      "keywords": [
+        "onkeydown",
+        "onkeyup",
+        "virtualkey",
+        "key down",
+        "key press",
+        "oncharacterreceived",
+        "enter key",
+        "escape key",
+        "onpreviewkeydown",
+        "oem key"
+      ],
+      "curatedKeywords": [
+        "keyboard input",
+        "key down event handler",
+        "handle a key press",
+        "enter submits the form",
+        "keyboard shortcut",
+        "virtualkey member names"
+      ],
+      "relatedControls": [
+        "Commands",
+        "Element refs",
+        "Pointer and gestures"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "usings": [
+        "Microsoft.UI.Reactor.Core",
+        "Windows.System"
+      ],
+      "galleryRoute": "keyboard-input",
+      "docs": [
+        {
+          "title": "Input and gestures guide",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/input-and-gestures.md"
+        },
+        {
+          "title": "reactor-input skill",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-input/SKILL.md"
+        },
+        {
+          "title": "Commanding guide",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/commanding.md"
+        }
+      ],
+      "samples": [
+        {
+          "header": "Enter submits",
+          "language": "csharp",
+          "code": "var (draft, setDraft) = UseState(\"\");\n\nTextBox(draft, setDraft, placeholderText: \"Type, then press Enter\")\n    .OnKeyDown((_, e) =>\n    {\n        if (e.Key != VirtualKey.Enter) return;\n        setSubmitted($\"Submitted: {draft}\");\n        e.Handled = true;   // stop the key bubbling further\n    })"
+        },
+        {
+          "header": "VirtualKey has no OEM members",
+          "language": "csharp",
+          "code": "// Named members you can rely on: letters (VirtualKey.A), digits (Number0, NumberPad0),\n// numpad operators (Add, Subtract, Multiply, Divide, Decimal), and the editing and\n// navigation keys (Enter, Space, Back, Escape, Tab, Delete, Left, Right, Up, Down).\nvar (keyLog, setKeyLog) = UseState(\"Give the box focus and press a key.\");\n\nTextBox(placeholderText: \"Press any key here\")\n    .OnKeyDown((_, e) =>\n    {\n        // VK_OEM_PERIOD '.' and VK_OEM_PLUS '=' have no named VirtualKey member.\n        if ((int)e.Key == 190) setKeyLog(\"decimal point\");\n        if ((int)e.Key == 187) setKeyLog(\"equals\");\n    })"
+        },
+        {
+          "header": "OnCharacterReceived resolves the character for you",
+          "language": "csharp",
+          "code": "var (typed, setTyped) = UseState(\"Nothing typed yet.\");\n\nTextBox(placeholderText: \"Type . or = here\")\n    .OnCharacterReceived((_, e) => setTyped($\"Character received: '{e.Character}'\"))"
+        },
+        {
+          "header": "App-wide chords belong on a Command",
+          "language": "csharp",
+          "code": "var save = new Command\n{\n    Label = \"Save\",\n    Execute = () => setSaves(saves + 1),\n    Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),\n};\n\n// Button(save) alone scopes the chord to the button's ancestor chain.\n// CommandHost widens it to this subtree; MenuBar/CommandBar at the window\n// root is what makes an accelerator genuinely window-wide.\nCommandHost([save],\n    VStack(8,\n        Button(save),\n        TextBlock($\"Saved {saves} time(s)\")))"
         }
       ]
     },
@@ -1156,6 +1556,11 @@
           "header": "Basic ListBox",
           "language": "csharp",
           "code": "var (selected, setSelected) = UseState(0);\nListBox(fruits, selected, setSelected)"
+        },
+        {
+          "header": "Styled ListBox",
+          "language": "csharp",
+          "code": "// Each sample owns its own state — sharing a setter between two\n// ListBoxes would make one card silently drive the other.\nvar (selectedColor, setSelectedColor) = UseState(-1);\nListBox(colors, selectedColor, setSelectedColor).Width(200)"
         }
       ]
     },
@@ -1234,6 +1639,11 @@
           "header": "Formatted markdown",
           "language": "csharp",
           "code": "var markdown = @\"# Markdown sample\n\nMarkdown renders **bold** text, *italic* text, and `inline code`.\n\n- Create declarative UI\n- Compose reusable components\n- Keep samples readable\";\n\nBorder(Markdown(markdown))\n    .Padding(16)\n    .Background(Theme.SubtleFill)\n    .CornerRadius(8)"
+        },
+        {
+          "header": "Links and lists",
+          "language": "csharp",
+          "code": "var markdown = @\"Learn more about [Reactor](https://github.com/microsoft/microsoft-ui-reactor).\n\n1. Write elements\n2. Render native WinUI controls\n3. Update with state\";\n\nMarkdown(markdown)"
         }
       ]
     },
@@ -1287,6 +1697,11 @@
           "header": "File/Edit/View Menus",
           "language": "csharp",
           "code": "var (lastAction, setLastAction) = UseState(\"(none)\");\n\nVStack(8,\n    MenuBar(\n        Menu(\"File\",\n            MenuItem(\"New\", () => setLastAction(\"New\"), icon: \"Page2\"),\n            MenuItem(\"Open\", () => setLastAction(\"Open\"), icon: \"OpenFile\"),\n            MenuSeparator(),\n            MenuItem(\"Save\", () => setLastAction(\"Save\"), icon: \"Save\"),\n            MenuItem(\"Exit\", () => setLastAction(\"Exit\"))),\n        Menu(\"Edit\",\n            MenuItem(\"Undo\", () => setLastAction(\"Undo\"), icon: \"Undo\"),\n            MenuItem(\"Redo\", () => setLastAction(\"Redo\"), icon: \"Redo\"),\n            MenuSeparator(),\n            MenuItem(\"Cut\", () => setLastAction(\"Cut\")),\n            MenuItem(\"Copy\", () => setLastAction(\"Copy\")),\n            MenuItem(\"Paste\", () => setLastAction(\"Paste\"))),\n        Menu(\"View\",\n            MenuItem(\"Zoom In\", () => setLastAction(\"Zoom In\"), icon: \"ZoomIn\"),\n            MenuItem(\"Zoom Out\", () => setLastAction(\"Zoom Out\"), icon: \"ZoomOut\"))),\n    TextBlock($\"Last action: {lastAction}\"));"
+        },
+        {
+          "header": "Nested SubMenus",
+          "language": "csharp",
+          "code": "var (formatAction, setFormatAction) = UseState(\"(none)\");\n\nVStack(8,\n    MenuBar(\n        Menu(\"Format\",\n            MenuSubItem(\"Text Size\",\n                MenuItem(\"Small\", () => setFormatAction(\"Small\")),\n                MenuItem(\"Medium\", () => setFormatAction(\"Medium\")),\n                MenuItem(\"Large\", () => setFormatAction(\"Large\"))),\n            MenuSubItem(\"Alignment\",\n                MenuItem(\"Left\", () => setFormatAction(\"Left\")),\n                MenuItem(\"Center\", () => setFormatAction(\"Center\")),\n                MenuItem(\"Right\", () => setFormatAction(\"Right\"))))),\n    TextBlock($\"Last action: {formatAction}\"));"
         }
       ]
     },
@@ -1314,6 +1729,11 @@
           "header": "Basic MenuFlyout",
           "language": "csharp",
           "code": "var (lastAction, setLastAction) = UseState(\"(none)\");\n\nVStack(8,\n    MenuFlyout(\n        Button(\"Open Menu\"),\n        MenuItem(\"Cut\", () => setLastAction(\"Cut\"), icon: \"Cut\"),\n        MenuItem(\"Copy\", () => setLastAction(\"Copy\"), icon: \"Copy\"),\n        MenuItem(\"Paste\", () => setLastAction(\"Paste\"), icon: \"Paste\")),\n    TextBlock($\"Last action: {lastAction}\"));"
+        },
+        {
+          "header": "MenuFlyout with Separators and SubItems",
+          "language": "csharp",
+          "code": "var (formatAction, setFormatAction) = UseState(\"(none)\");\n\nVStack(8,\n    MenuFlyout(\n        Button(\"Format\"),\n        MenuItem(\"Bold\", () => setFormatAction(\"Bold\")),\n        MenuItem(\"Italic\", () => setFormatAction(\"Italic\")),\n        MenuSeparator(),\n        MenuSubItem(\"Font Size\",\n            MenuItem(\"Small\", () => setFormatAction(\"Small\")),\n            MenuItem(\"Medium\", () => setFormatAction(\"Medium\")),\n            MenuItem(\"Large\", () => setFormatAction(\"Large\")))),\n    TextBlock($\"Last action: {formatAction}\"));"
         }
       ]
     },
@@ -1343,6 +1763,11 @@
           "header": "Left-Pane NavigationView",
           "language": "csharp",
           "code": "NavigationView(items, content: TextBlock($\"Selected: {selectedTag}\"))\nwith {\n    SelectedTag = selectedTag,\n    // The tag is nullable — guard before writing it back to state.\n    OnSelectedTagChanged = tag => { if (tag != null) setSelectedTag(tag); },\n    PaneTitle = \"Nav Demo\",\n    PaneDisplayMode = modes[paneMode],   // driven by the Options combo below\n    IsSettingsVisible = false,\n}"
+        },
+        {
+          "header": "Top-Mode NavigationView",
+          "language": "csharp",
+          "code": "NavigationView(items, content: TextBlock($\"Content area for: {topTag}\")) with {\n    PaneDisplayMode = NavigationViewPaneDisplayMode.Top\n}"
         }
       ]
     },
@@ -1370,6 +1795,16 @@
           "header": "Basic NumberBox",
           "language": "csharp",
           "code": "NumberBox(value, v => setValue(v), \"Enter a number\")"
+        },
+        {
+          "header": "NumberBox with Spin Buttons",
+          "language": "csharp",
+          "code": "NumberBox(spinValue, v => setSpinValue(v), \"Quantity\").SpinButtons()"
+        },
+        {
+          "header": "NumberBox with Range",
+          "language": "csharp",
+          "code": "NumberBox(rangeValue, v => setRangeValue(v), \"Percentage\").Range(0, 100).SpinButtons()"
         }
       ]
     },
@@ -1421,6 +1856,11 @@
           "header": "Basic PasswordBox",
           "language": "csharp",
           "code": "PasswordBox(password, p => setPassword(p), \"Enter password\")"
+        },
+        {
+          "header": "PasswordBox with Reveal Button",
+          "language": "csharp",
+          "code": "PasswordBox(revealPwd, p => setRevealPwd(p), \"Password\")\n    .PasswordRevealMode(PasswordRevealMode.Peek)"
         }
       ]
     },
@@ -1447,6 +1887,16 @@
           "header": "Display Name",
           "language": "csharp",
           "code": "PersonPicture().DisplayName(\"Jane Doe\").Width(64).Height(64)"
+        },
+        {
+          "header": "Initials",
+          "language": "csharp",
+          "code": "PersonPicture().Initials(\"JD\").Width(48).Height(48)"
+        },
+        {
+          "header": "Interactive Display Name",
+          "language": "csharp",
+          "code": "var (name, setName) = UseState(\"Jane Doe\");\nPersonPicture().DisplayName(name).Width(72).Height(72)\nTextBox(name, s => setName(s))"
         }
       ]
     },
@@ -1472,6 +1922,11 @@
           "header": "Five-page pager",
           "language": "csharp",
           "code": "PipsPager(5, pageIndex, index => setPageIndex(index))\nTextBlock($\"Page {pageIndex + 1} of 5\")\nBorder(TextBlock(pageMessages.ElementAt(pageIndex)).Center())"
+        },
+        {
+          "header": "Vertical pager",
+          "language": "csharp",
+          "code": "PipsPager(4, verticalIndex, index => setVerticalIndex(index))\n    .Set(p => p.Orientation = Orientation.Vertical)\n    .Height(160)"
         }
       ]
     },
@@ -1499,6 +1954,83 @@
           "header": "Basic Pivot",
           "language": "csharp",
           "code": "Pivot(\n    PivotItem(\"All\", TextBlock(\"All items\")),\n    PivotItem(\"Recent\", TextBlock(\"Recent items\")),\n    PivotItem(\"Favorites\", TextBlock(\"Favorite items\")))"
+        },
+        {
+          "header": "Pivot with Rich Content",
+          "language": "csharp",
+          "code": "Pivot(\n    PivotItem(\"Overview\", VStack(8,\n        SubHeading(\"Overview\"),\n        TextBlock(\"Summary of key metrics.\"))),\n    PivotItem(\"Details\", VStack(8,\n        SubHeading(\"Details\"),\n        TextBlock(\"Detailed info.\"))))"
+        }
+      ]
+    },
+    {
+      "id": "pointer-input",
+      "name": "Pointer and gestures",
+      "category": "Fundamentals",
+      "description": "Pointer and tap events plus continuous pan, pinch, and rotate gestures.",
+      "details": "Pointer handlers attach like any other modifier; Reactor installs one stable\ntrampoline per element, so re-rendering with a fresh closure costs no\nre-subscription.\n\n```csharp\nvar (isHovered, setIsHovered) = UseState(false);\n\nreturn Border(child)\n    .OnPointerEntered((s, e) => setIsHovered(true))\n    .OnPointerExited((s, e) => setIsHovered(false))\n    .Background(isHovered ? Theme.SubtleFill : Colors.Transparent);\n```\n\nEvents: `OnPointerEntered`, `OnPointerExited`, `OnPointerPressed`,\n`OnPointerReleased`, `OnPointerMoved`, `OnPointerCanceled`.\n\nThe `(s, e)` signature gives you the sender and `PointerRoutedEventArgs`.\n\n### Opting out of hit-testing\n\n`.IsHitTestVisible(false)` sets `UIElement.IsHitTestVisible` — the element\n**and its subtree** stop being pointer targets, so decorative or overlay\nlayers let pointer events pass through to whatever is underneath.\n\n```csharp\nBorder(overlayGlow).IsHitTestVisible(false)\n```\n\nUnlike `.IsEnabled(false)`, it does not grey the control out or block focus —\nreach for `.IsEnabled(false)` when you want a disabled affordance, and\n`.IsHitTestVisible(false)` when you only want clicks to fall through.\n\n## 2. Tap events\n\n`Border` and other non-control elements are not tab stops by default: a\n`Border` with `.OnTapped(...)` answers the mouse but is skipped by the\nkeyboard. Add `.IsTabStop(true)` and an `.OnKeyDown` Enter/Space handler, or\nuse a `Button`, whenever the gesture is a real command.\n\n```csharp\nBorder(child)\n    .OnTapped((s, e) => HandleClick())\n    .OnDoubleTapped((s, e) => HandleDoubleClick())\n    .OnRightTapped((s, e) => ShowContextMenu())\n```\n\nGestures follow a **phase lifecycle**: `Began → Changed (repeat) → Ended | Cancelled`.\nAttaching a gesture handler auto-enables the underlying `ManipulationMode`, so\nyou never set that yourself.\n\n### Pan gesture\n\n```csharp\nvar (offset, setOffset) = UseState(new Point(0, 0));\n\nreturn Border(child)\n    .OnPan(\n        minimumDistance: 10,  // pixels before gesture starts\n        axis: PanAxis.Both,  // or Horizontal, Vertical\n        withInertia: true,   // momentum after release\n        onBegan: (e) => { /* pan began */ },\n        onChanged: (e) =>\n        {\n            // PanGesture.Delta is the per-event movement, a Point — Reactor flattens\n            // WinUI's ManipulationDelta, so there is no e.Delta.Translation here.\n            setOffset(new Point(offset.X + e.Delta.X, offset.Y + e.Delta.Y));\n        },\n        onEnded: (e) => { /* pan ended */ })\n    .Translation((float)offset.X, (float)offset.Y, 0);\n```\n\n### 60Hz pan pattern (performance-critical)\n\nFor smooth dragging, write `Translation` directly via ref during the\ngesture and only `setState` at the end. The cell must be an **`ElementRef`**\nfrom `UseElementRef<T>` — that is what the reconciler populates. A `UseRef`\nbox is not accepted by `.Ref(...)` and would never point at anything.\n\n```csharp\nvar itemRef = this.UseElementRef<FrameworkElement>();\nvar (finalPos, setFinalPos) = UseState(new Point(0, 0));\n\nreturn Border(child)\n    .Ref(itemRef)\n    .OnPan(\n        onChanged: (e) =>\n        {\n            // Direct property write — no re-render per frame\n            if (itemRef.Current is { } el)\n            {\n                var t = el.Translation;\n                el.Translation = new System.Numerics.Vector3(\n                    t.X + (float)e.Delta.X,\n                    t.Y + (float)e.Delta.Y,\n                    t.Z);\n            }\n        },\n        onEnded: (e) =>\n        {\n            // Sync state once at end\n            if (itemRef.Current is { } el)\n                setFinalPos(new Point(el.Translation.X, el.Translation.Y));\n        });\n```\n\n### Pinch and Rotate\n\nBoth gestures carry an absolute value and a per-event delta as flat doubles —\n`Scale`/`ScaleDelta` and `Angle`/`AngleDelta`. There is no nested `e.Delta`\nobject on these two.\n\n```csharp\nvar (scale, setScale) = UseState(1.0f);\n\nreturn Border(child)\n    .OnPinch(\n        onChanged: (e) => setScale(scale * (float)e.ScaleDelta),\n        onEnded: (e) => { })\n    .Scale(scale);\n\n// Rotation:\nvar (angle, setAngle) = UseState(0f);\n\nreturn Border(child)\n    .OnRotate(\n        onChanged: (e) => setAngle(angle + (float)e.AngleDelta),\n        onEnded: (e) => { })\n    .Rotation(angle);\n```\n\n## 5. Long press\n\nTouch/pen has built-in long press; mouse requires emulation:\n\n```csharp\nBorder(child)\n    .OnLongPress(\n        onTriggered: (e) => ShowEditMode(),\n        enableMouseEmulation: true)  // also trigger on mouse press-and-hold\n```",
+      "keywords": [
+        "onpointerentered",
+        "onpointerexited",
+        "ontapped",
+        "ondoubletap",
+        "onrighttapped",
+        "onpan",
+        "onpinch",
+        "onlongpress",
+        "hover",
+        "hit testing"
+      ],
+      "curatedKeywords": [
+        "pointer input",
+        "mouse events",
+        "hover effect",
+        "tap handler",
+        "drag with a gesture",
+        "pinch to zoom",
+        "press and hold"
+      ],
+      "relatedControls": [
+        "Keyboard input",
+        "Element refs"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "usings": [
+        "Microsoft.UI.Reactor.Hooks",
+        "Microsoft.UI.Xaml",
+        "Windows.System"
+      ],
+      "galleryRoute": "pointer-input",
+      "docs": [
+        {
+          "title": "Input and gestures guide",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/input-and-gestures.md"
+        },
+        {
+          "title": "reactor-input skill",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-input/SKILL.md"
+        }
+      ],
+      "samples": [
+        {
+          "header": "Pointer enter and exit",
+          "language": "csharp",
+          "code": "var (isHovered, setIsHovered) = UseState(false);\n\nBorder(TextBlock(isHovered ? \"Pointer is over me.\" : \"Move the pointer here.\"))\n    .Background(isHovered ? Theme.SubtleFill : Theme.LayerFill)\n    .OnPointerEntered((_, _) => setIsHovered(true))\n    .OnPointerExited((_, _) => setIsHovered(false))"
+        },
+        {
+          "header": "Tap, double-tap, right-tap",
+          "language": "csharp",
+          "code": "var (tapLog, setTapLog) = UseState(\"Tap, double-tap, or right-tap the card.\");\n\nBorder(TextBlock(tapLog))\n    .IsTabStop(true)\n    .AutomationName(\"Tap surface\")\n    .OnTapped((_, _) => setTapLog(\"Tapped.\"))\n    .OnDoubleTapped((_, _) => setTapLog(\"Double-tapped.\"))\n    .OnRightTapped((_, _) => setTapLog(\"Right-tapped.\"))\n    .OnLongPress(onTriggered: () => setTapLog(\"Long-pressed.\"), enableMouseEmulation: true)\n    // Reachable by Tab is not the same as operable — pair the tap with Enter/Space.\n    .OnKeyDown((_, e) =>\n    {\n        if (e.Key is not (VirtualKey.Enter or VirtualKey.Space)) return;\n        setTapLog(\"Activated from the keyboard.\");\n        e.Handled = true;\n    })"
+        },
+        {
+          "header": "Pinch and rotate",
+          "language": "csharp",
+          "code": "var (scale, scaleBy) = UseReducer(1.0f);\nvar (angle, rotateBy) = UseReducer(0f);\n\nBorder(TextBlock(\"Pinch or rotate me\"))\n    .OnPinch(onChanged: e => scaleBy(s => s * (float)e.ScaleDelta))\n    .OnRotate(onChanged: e => rotateBy(a => a + (float)e.AngleDelta))\n    .Scale(scale)\n    .Rotation(angle)"
+        },
+        {
+          "header": "60Hz drag — write through an element ref",
+          "language": "csharp",
+          "code": "var smoothRef = this.UseElementRef<FrameworkElement>();\n\nBorder(TextBlock(\"Drag me smoothly\"))\n    .Ref(smoothRef)\n    .OnPan(\n        onChanged: e =>\n        {\n            // Direct property write — no re-render per frame.\n            if (smoothRef.Current is { } el)\n            {\n                var t = el.Translation;\n                el.Translation = new System.Numerics.Vector3(\n                    t.X + (float)e.Delta.X, t.Y + (float)e.Delta.Y, t.Z);\n            }\n        },\n        onEnded: _ =>\n        {\n            // One state write, at the end of the gesture.\n            if (smoothRef.Current is { } el)\n                setResting($\"Rested at {el.Translation.X:F0}, {el.Translation.Y:F0}\");\n        })"
         }
       ]
     },
@@ -1527,6 +2059,11 @@
           "header": "Light-dismiss popup",
           "language": "csharp",
           "code": "Button(\"Show popup\", () => setOpen(true))\n\nPopup(\n    Border(VStack(8,\n        TextBlock(\"Hello from a Popup\").SemiBold(),\n        Button(\"Close\", () => setOpen(false))))\n        .Padding(16)\n        .Background(Theme.CardBackground)\n        .WithBorder(Theme.DividerStroke)\n        .CornerRadius(8),\n    open,\n    () => setOpen(false))\n    .IsLightDismissEnabled()"
+        },
+        {
+          "header": "Popup without light dismiss",
+          "language": "csharp",
+          "code": "Button(\"Show persistent popup\", () => setPersistentOpen(true))\n\nPopup(\n    Border(VStack(8,\n        TextBlock(\"Use the button to close this popup.\").SemiBold(),\n        Button(\"Close\", () => setPersistentOpen(false))))\n        .Padding(16)\n        .Background(Theme.CardBackground)\n        .WithBorder(Theme.DividerStroke)\n        .CornerRadius(8),\n    persistentOpen,\n    () => setPersistentOpen(false))\n    .IsLightDismissEnabled(false)"
         }
       ]
     },
@@ -1553,6 +2090,11 @@
           "header": "Determinate ProgressBar",
           "language": "csharp",
           "code": "Progress(value).Width(300)"
+        },
+        {
+          "header": "Indeterminate ProgressBar",
+          "language": "csharp",
+          "code": "ProgressIndeterminate().Width(300)"
         }
       ]
     },
@@ -1579,6 +2121,11 @@
           "header": "Determinate ProgressRing",
           "language": "csharp",
           "code": "ProgressRing(value).Width(60).Height(60)"
+        },
+        {
+          "header": "Indeterminate ProgressRing",
+          "language": "csharp",
+          "code": "ProgressRing().IsActive(true)"
         }
       ]
     },
@@ -1636,6 +2183,11 @@
           "header": "RadioButtons Group",
           "language": "csharp",
           "code": "RadioButtons(options, groupIndex, i => setGroupIndex(i))"
+        },
+        {
+          "header": "Individual RadioButton Items",
+          "language": "csharp",
+          "code": "// RadioButton's third parameter is Action<bool> — it fires for both the check\n// and the uncheck, so guard on the value before committing the choice.\nRadioButton(\"Choice A\", individualChoice == \"A\", v => { if (v) setIndividualChoice(\"A\"); }, \"choices\")\nRadioButton(\"Choice B\", individualChoice == \"B\", v => { if (v) setIndividualChoice(\"B\"); }, \"choices\")"
         }
       ]
     },
@@ -1661,6 +2213,11 @@
           "header": "Choose a size",
           "language": "csharp",
           "code": "var sizes = new[] { \"Small\", \"Medium\", \"Large\" };\n\nRadioButtons(sizes, sizeIndex, index => setSizeIndex(index))\nTextBlock($\"Selected size: {sizes.ElementAt(sizeIndex)}\")"
+        },
+        {
+          "header": "RadioButtons with a header",
+          "language": "csharp",
+          "code": "var deliveryOptions = new[]\n{\n    \"Standard\", \"Two-day\", \"Overnight\", \"Pick up in store\"\n};\n\nRadioButtons(deliveryOptions, deliveryIndex, index => setDeliveryIndex(index))\n    .Set(rb => rb.Header = \"Choose one\")"
         }
       ]
     },
@@ -1687,6 +2244,16 @@
           "header": "Basic RatingControl",
           "language": "csharp",
           "code": "RatingControl(rating, v => setRating(v))"
+        },
+        {
+          "header": "Read-Only Rating",
+          "language": "csharp",
+          "code": "RatingControl(4.0).IsReadOnly()"
+        },
+        {
+          "header": "Custom Max Rating",
+          "language": "csharp",
+          "code": "RatingControl(customRating, v => setCustomRating(v)).MaxRating(10)"
         }
       ]
     },
@@ -1713,6 +2280,11 @@
           "header": "Pull to refresh list",
           "language": "csharp",
           "code": "var (items, setItems) = UseState(initialItems);\n\nRefreshContainer(\n    ListView(items.Select(i => (Element)TextBlock(i).Padding(8)).ToArray())\n        .Height(240),\n    () => setItems(new[] { $\"Refreshed {DateTime.Now:T}\" }\n        .Concat(items)\n        .ToList()))"
+        },
+        {
+          "header": "Static refresh surface",
+          "language": "csharp",
+          "code": "RefreshContainer(\n    ListView(\n        TextBlock(\"Messages\").Padding(8),\n        TextBlock(\"Tasks\").Padding(8),\n        TextBlock(\"Notifications\").Padding(8))\n        .Height(160),\n    () => { })"
         }
       ]
     },
@@ -1739,6 +2311,11 @@
           "header": "Basic RelativePanel",
           "language": "csharp",
           "code": "RelativePanel(\n    Border(\"Top-Left\").RelativePanel(name: \"topLeft\",\n        alignLeftWithPanel: true, alignTopWithPanel: true),\n    Border(\"Right\").RelativePanel(name: \"r\", rightOf: \"topLeft\")\n)"
+        },
+        {
+          "header": "Panel Alignment",
+          "language": "csharp",
+          "code": "Border(\"Center\").RelativePanel(name: \"center\",\n    alignHorizontalCenterWithPanel: true,\n    alignVerticalCenterWithPanel: true)"
         }
       ]
     },
@@ -1791,6 +2368,11 @@
           "header": "Basic RichEditBox",
           "language": "csharp",
           "code": "var (text, setText) = UseState(\"Type here...\");\nRichEditBox(text, setText).Width(400).Height(150)"
+        },
+        {
+          "header": "With Character Count",
+          "language": "csharp",
+          "code": "var (countedText, setCountedText) = UseState(\"Type here...\");\nRichEditBox(countedText, setCountedText).Width(400).Height(120)\nTextBlock($\"Characters: {countedText.Length}\")"
         }
       ]
     },
@@ -1818,6 +2400,16 @@
           "header": "Basic RichTextBlock",
           "language": "csharp",
           "code": "RichTextBlock(\"This is a simple rich text block...\")"
+        },
+        {
+          "header": "Structured Rich Text",
+          "language": "csharp",
+          "code": "RichTextBlock(new[]\n{\n    Paragraph(Run(\"Bold\") with { IsBold = true }, Run(\"normal\")),\n    Paragraph(Run(\"Italic\") with { IsItalic = true })\n})"
+        },
+        {
+          "header": "Simple RichTextBlock String",
+          "language": "csharp",
+          "code": "RichTextBlock(\"Line one\")\nRichTextBlock(\"Line two\")"
         }
       ]
     },
@@ -1872,6 +2464,11 @@
           "header": "Basic SelectorBar",
           "language": "csharp",
           "code": "SelectorBar(\n    new[] {\n        SelectorBarItem(\"Recent\", icon: \"Clock\"),\n        SelectorBarItem(\"Shared\", icon: \"People\"),\n        SelectorBarItem(\"Favorites\", icon: \"Favorite\"),\n    },\n    selectedIndex: selectedIdx,\n    onSelectedIndexChanged: i => setSelectedIdx(i))"
+        },
+        {
+          "header": "SelectorBar without Icons",
+          "language": "csharp",
+          "code": "SelectorBar(\n    new[] {\n        SelectorBarItem(\"Day\"),\n        SelectorBarItem(\"Week\"),\n        SelectorBarItem(\"Month\"),\n    })"
         }
       ]
     },
@@ -1899,6 +2496,11 @@
           "header": "Grid and group views",
           "language": "csharp",
           "code": "SemanticZoom(\n    GridView(labels.Select(label =>\n        Border(TextBlock(label).Center()).Padding(12)).ToArray()),\n    ListView(groups.Select(group =>\n        Border(TextBlock(group).SemiBold()).Padding(12)).ToArray())\n).Height(300)"
+        },
+        {
+          "header": "Letter sections",
+          "language": "csharp",
+          "code": "SemanticZoom(\n    GridView(groups\n        .SelectMany(group => Enumerable.Range(1, 3).Select(i => $\"{group} sample {i}\"))\n        .Select(text => Border(TextBlock(text))).ToArray()),\n    ListView(groups.Select(group => TextBlock(group).FontSize(20).Bold()).ToArray())\n).Height(300)"
         }
       ]
     },
@@ -1925,6 +2527,11 @@
           "header": "Filled shapes",
           "language": "csharp",
           "code": "var accent = new SolidColorBrush(Colors.SteelBlue);\nvar fill = new SolidColorBrush(Colors.MediumPurple);\n\nRectangle().Width(80).Height(56).Fill(accent)\nEllipse().Width(72).Height(56).Fill(fill)\nRectangle().Width(80).Height(56).Fill(new SolidColorBrush(Colors.SeaGreen))\n    .Set(r => { r.RadiusX = 14; r.RadiusY = 14; })   // shapes round via RadiusX/Y, not .CornerRadius"
+        },
+        {
+          "header": "Line and Path",
+          "language": "csharp",
+          "code": "var accent = new SolidColorBrush(Colors.SteelBlue);\nLine(10, 10, 100, 70).Stroke(accent).StrokeThickness(4)\n\n// Path2D draws an arbitrary Geometry:\nvar triangle = new PathGeometry();\nvar figure = new PathFigure { StartPoint = new Point(10, 70), IsClosed = true };\nfigure.Segments.Add(new LineSegment { Point = new Point(50, 10) });\nfigure.Segments.Add(new LineSegment { Point = new Point(90, 70) });\ntriangle.Figures.Add(figure);\nPath2D().Fill(new SolidColorBrush(Colors.OrangeRed)).Set(p => p.Data = triangle)"
         }
       ]
     },
@@ -1952,6 +2559,16 @@
           "header": "Basic Slider",
           "language": "csharp",
           "code": "Slider(value, 0, 100, v => setValue(v)).Header(\"Volume\")"
+        },
+        {
+          "header": "Slider with Step Frequency",
+          "language": "csharp",
+          "code": "Slider(stepValue, 0, 100, v => setStepValue(v)).StepFrequency(10).Header(\"Step by 10\")"
+        },
+        {
+          "header": "Vertical Slider",
+          "language": "csharp",
+          "code": "Slider(verticalValue, 0, 100, v => setVerticalValue(v))\n    .Orientation(Orientation.Vertical)\n    .Height(200)"
         }
       ]
     },
@@ -1979,6 +2596,26 @@
           "header": "Margin vs Padding",
           "language": "csharp",
           "code": "// Margin — works on ALL elements\nTextBlock(\"Hello\").Margin(8)\nVStack(TextBlock(\"A\"), TextBlock(\"B\")).Margin(16)\nBorder(TextBlock(\"Content\")).Margin(12)\n\n// Padding — Border, Control, Grid, StackPanel, RelativePanel and TextBlock\nBorder(TextBlock(\"Content\")).Padding(16)               // ✓ works\nButton(\"Go\").Padding(12)                               // ✓ works\nGrid(columns: [GridSize.Star()], rows: [GridSize.Auto], TextBlock(\"Cell\"))\n    .Padding(16)                                         // ✓ works\nVStack(8, TextBlock(\"A\"), TextBlock(\"B\")).Padding(16)  // ✓ works\nTextBlock(\"Hello\").Padding(8)                          // ✓ works"
+        },
+        {
+          "header": "Margin",
+          "language": "csharp",
+          "code": "// Uniform — same on all sides\nelement.Margin(16)\n\n// Horizontal, Vertical\nelement.Margin(horizontal: 24, vertical: 8)\n\n// Per-side: left, top, right, bottom\nelement.Margin(4, 8, 16, 24)"
+        },
+        {
+          "header": "Padding",
+          "language": "csharp",
+          "code": "// Uniform — same on all sides\nBorder(TextBlock(\"Content\")).Padding(16)\n\n// Horizontal, Vertical\nBorder(TextBlock(\"Content\")).Padding(horizontal: 24, vertical: 8)\n\n// Per-side: left, top, right, bottom\nBorder(TextBlock(\"Content\")).Padding(4, 8, 16, 24)"
+        },
+        {
+          "header": "Stack Spacing",
+          "language": "csharp",
+          "code": "// VStack with spacing between children\nVStack(8,\n    TextBlock(\"Item 1\"),\n    TextBlock(\"Item 2\"),\n    TextBlock(\"Item 3\")\n)\n\n// HStack with spacing between children\nHStack(12,\n    Button(\"A\"),\n    Button(\"B\"),\n    Button(\"C\")\n)"
+        },
+        {
+          "header": "Page Layout Spacing",
+          "language": "csharp",
+          "code": "// Typical page structure\nVStack(16,                          // 16px between sections\n    VStack(4,                       // 4px title-to-subtitle gap\n        TextBlock(\"Page Title\"),\n        TextBlock(\"Description\")\n    ),\n\n    Border(                         // Card with inner padding\n        VStack(8,                   // 8px between card children\n            TextBlock(\"Section\"),\n            TextBlock(\"Content\"),\n            HStack(8,               // 8px between buttons\n                Button(\"Primary\"),\n                Button(\"Secondary\")\n            )\n        )\n    )\n    .Background(Theme.CardBackground)\n    .WithBorder(Theme.CardStroke)\n    .Padding(16)                    // 16px card padding\n)\n.Margin(36, 24, 36, 36)            // page-level margins"
         }
       ]
     },
@@ -2006,6 +2643,11 @@
           "header": "Basic SplitButton",
           "language": "csharp",
           "code": "SplitButton(\"Send\", () => setLastAction(\"Send clicked\"), MenuItems(\n    MenuItem(\"Send now\", () => setLastAction(\"Send now\")),\n    MenuItem(\"Schedule\", () => setLastAction(\"Schedule\"))))"
+        },
+        {
+          "header": "Toggle SplitButton",
+          "language": "csharp",
+          "code": "ToggleSplitButton(\"Bold\", isToggled, v => setIsToggled(v), MenuItems(\n    MenuItem(\"Italic\"),\n    MenuItem(\"Underline\")))"
         }
       ]
     },
@@ -2059,6 +2701,16 @@
           "header": "VStack (Vertical)",
           "language": "csharp",
           "code": "VStack(8,\n    Box(\"A\"), Box(\"B\"), Box(\"C\"), Box(\"D\")\n)"
+        },
+        {
+          "header": "HStack (Horizontal)",
+          "language": "csharp",
+          "code": "HStack(8,\n    Box(\"1\"), Box(\"2\"), Box(\"3\"), Box(\"4\")\n)"
+        },
+        {
+          "header": "Nested Stacks",
+          "language": "csharp",
+          "code": "VStack(12,\n    HStack(8, Box(\"R1\"), Box(\"R1\"), Box(\"R1\")),\n    HStack(8, Box(\"R2\"), Box(\"R2\"))\n)"
         }
       ]
     },
@@ -2084,6 +2736,11 @@
           "header": "Left and right actions",
           "language": "csharp",
           "code": "SwipeControl(\n    Border(TextBlock(\"Swipe me left or right\"))\n        .Padding(16)\n        .Background(Theme.CardBackground),\n    leftItems: new[] { new SwipeItemData(\"Archive\", () => { }) },\n    rightItems: new[] { new SwipeItemData(\"Delete\", () => { }) })"
+        },
+        {
+          "header": "Action status",
+          "language": "csharp",
+          "code": "var (status, setStatus) = UseState(\"No swipe action invoked yet.\");\n\nSwipeControl(\n    Border(TextBlock(\"Swipe to invoke an action\")).Padding(16),\n    leftItems: new[] { new SwipeItemData(\"Flag\", () => setStatus(\"Flag action invoked.\")) },\n    rightItems: new[] { new SwipeItemData(\"Remove\", () => setStatus(\"Remove action invoked.\")) })"
         }
       ]
     },
@@ -2111,6 +2768,11 @@
           "header": "Basic TabView",
           "language": "csharp",
           "code": "// Where the selection lands after a close: closing a tab left of the\n// selected one shifts it down, then clamp into the shorter list.\nstatic int SelectionAfterClose(int selected, int closed, int remaining) =>\n    remaining == 0 ? -1 : Math.Clamp(closed < selected ? selected - 1 : selected, 0, remaining - 1);\n\nvar (tabs, setTabs) = UseState(UseMemo(() => new[] { \"Home\", \"Document\", \"Settings\" }));\nvar (idx, setIdx) = UseState(0);\n\nTabView(tabs.Select(t => Tab(t, TextBlock($\"{t} content\").Padding(16))).ToArray()) with\n{\n    SelectedIndex = idx,\n    OnSelectedIndexChanged = i => setIdx(i),\n    // The per-tab ✕ only raises TabCloseRequested — the app removes the tab, and\n    // must also pull the selection back into range.\n    OnTabCloseRequested = i =>\n    {\n        var remaining = tabs.Where((_, n) => n != i).ToArray();\n        setTabs(remaining);\n        setIdx(SelectionAfterClose(idx, i, remaining.Length));\n    },\n}"
+        },
+        {
+          "header": "Dynamic Tabs",
+          "language": "csharp",
+          "code": "// Same clamp helper as the Basic card above.\nstatic int SelectionAfterClose(int selected, int closed, int remaining) =>\n    remaining == 0 ? -1 : Math.Clamp(closed < selected ? selected - 1 : selected, 0, remaining - 1);\n\nvar (tabs, setTabs) = UseState(UseMemo(() => new[] { \"Tab 1\", \"Tab 2\", \"Tab 3\" }));\nvar (idx, setIdx) = UseState(0);\nvar (nextId, setNextId) = UseState(4);   // ids, not a count, so titles stay unique\n\nTabView(tabs.Select(t => Tab(t, TextBlock($\"Content of {t}\").Padding(16))).ToArray()) with\n{\n    SelectedIndex = idx,\n    OnSelectedIndexChanged = i => setIdx(i),\n    OnTabCloseRequested = i =>\n    {\n        var remaining = tabs.Where((_, n) => n != i).ToArray();\n        setTabs(remaining);\n        setIdx(SelectionAfterClose(idx, i, remaining.Length));\n    },\n}\n\nButton(\"Add Tab\", () =>\n{\n    setTabs(tabs.Append($\"Tab {nextId}\").ToArray());\n    setNextId(nextId + 1);\n})"
         }
       ]
     },
@@ -2139,6 +2801,16 @@
           "header": "Basic TeachingTip",
           "language": "csharp",
           "code": "Button(\"Show Tip\", () => setShowTip(true)),\nTeachingTip(\"Welcome!\", \"Helpful guidance text.\") with {\n    IsOpen = showTip,\n    OnClosed = () => setShowTip(false),\n}"
+        },
+        {
+          "header": "TeachingTip (Title Only)",
+          "language": "csharp",
+          "code": "Button(\"Show title-only tip\", () => setShowTitleOnlyTip(true)),\nTeachingTip(\"Did you know you can customize the title bar?\") with {\n    IsOpen = showTitleOnlyTip,\n    OnClosed = () => setShowTitleOnlyTip(false),\n}"
+        },
+        {
+          "header": "TeachingTip targeting another subtree",
+          "language": "csharp",
+          "code": "var target = this.UseElementRef<FrameworkElement>();\n\nHStack(\n    Border(Button(\"Show anchored tip\", () => setShowTargetedTip(true)).Ref(target)),\n    Border(TeachingTip(\"Cross-container target\", target: target) with\n    {\n        IsOpen = showTargetedTip,\n        OnClosed = () => setShowTargetedTip(false),\n    }));"
         }
       ]
     },
@@ -2168,6 +2840,31 @@
           "header": "Basic TextBox",
           "language": "csharp",
           "code": "TextBox(text, v => setText(v), \"Type here...\")"
+        },
+        {
+          "header": "Multiline TextBox",
+          "language": "csharp",
+          "code": "TextBox(multiline, v => setMultiline(v), \"Enter multiple lines...\")\n    .AcceptsReturn()\n    .TextWrapping(TextWrapping.Wrap)\n    .Height(120)"
+        },
+        {
+          "header": "TextBox with Header",
+          "language": "csharp",
+          "code": "TextBox(headerText, v => setHeaderText(v), \"user@example.com\").Header(\"Email\")"
+        },
+        {
+          "header": "Numeric input — .NumericInput()",
+          "language": "csharp",
+          "code": "TextBox(numericText, v => setNumericText(v), \"0\")\n    .Header(\"Quantity\")\n    .NumericInput()\n    .Description(\"Soft keyboards show a number pad.\")"
+        },
+        {
+          "header": "Email input — .EmailInput()",
+          "language": "csharp",
+          "code": "TextBox(emailText, v => setEmailText(v), \"name@contoso.com\")\n    .Header(\"Email address\")\n    .EmailInput()\n    .Description(\"Hints the IME to surface '@' and '.com'.\")"
+        },
+        {
+          "header": "URL input — .UrlInput()",
+          "language": "csharp",
+          "code": "TextBox(urlText, v => setUrlText(v), \"https://example.com\")\n    .Header(\"Homepage\")\n    .UrlInput()\n    .Description(\"Hints the IME to surface '/' and '.com'.\")"
         }
       ]
     },
@@ -2195,6 +2892,11 @@
           "header": "Light / Dark Toggle",
           "language": "csharp",
           "code": "var (isDark, setIsDark) = UseState(false);\nBorder(VStack(12,\n    ToggleSwitch(isDark, b => setIsDark(b), onContent: \"Dark\", offContent: \"Light\", header: \"Theme\"),\n    preview).Padding(16))\n    .RequestedTheme(isDark ? ElementTheme.Dark : ElementTheme.Light)\n    .Background(Theme.SolidBackground)"
+        },
+        {
+          "header": "Theme Tokens Reference",
+          "language": "csharp",
+          "code": "Theme.Accent, Theme.CardBackground,\nTheme.SubtleFill, Theme.SolidBackground"
         }
       ]
     },
@@ -2220,6 +2922,11 @@
           "header": "Basic TimePicker",
           "language": "csharp",
           "code": "TimePicker(time, t => setTime(t))"
+        },
+        {
+          "header": "TimePicker with Preset",
+          "language": "csharp",
+          "code": "TimePicker(presetTime, t => setPresetTime(t))\nButton(\"Set to Noon\", () => setPresetTime(new TimeSpan(12, 0, 0)))"
         }
       ]
     },
@@ -2243,6 +2950,16 @@
           "header": "Basic TitleBar",
           "language": "csharp",
           "code": "TitleBar(\"My Application\")"
+        },
+        {
+          "header": "TitleBar with Subtitle",
+          "language": "csharp",
+          "code": "TitleBar(\"My App\").Subtitle(\"Preview\")"
+        },
+        {
+          "header": "TitleBar with Content",
+          "language": "csharp",
+          "code": "(TitleBar(\"Gallery\") with {\n    Content = HStack(8,\n        AutoSuggestBox(\"\", _ => {}).Width(200),\n        Button(Icon(FontIcon(\"\\uE713\", fontSize: 16)), OnSettings)\n            .AutomationName(\"Settings\").IsDragRegion(false))\n}).AutoRefreshDragRegions()"
         }
       ]
     },
@@ -2271,6 +2988,16 @@
           "header": "Basic ToggleButton",
           "language": "csharp",
           "code": "ToggleButton(\"Mute\", isChecked, v => setIsChecked(v))"
+        },
+        {
+          "header": "ToggleButton with State Display",
+          "language": "csharp",
+          "code": "ToggleButton(isChecked2 ? \"ON\" : \"OFF\", isChecked2, v => setIsChecked2(v))"
+        },
+        {
+          "header": "Three-State ToggleButton",
+          "language": "csharp",
+          "code": "ThreeStateToggleButton(\"Review\", triState, v => setTriState(v))"
         }
       ]
     },
@@ -2296,6 +3023,11 @@
           "header": "Bullets toggle",
           "language": "csharp",
           "code": "ToggleSplitButton(\"Bullets\", bulletsOn, value => setBulletsOn(value))\n\nTextBlock(bulletsOn ? \"Bullets are on\" : \"Bullets are off\")"
+        },
+        {
+          "header": "Bold text toggle",
+          "language": "csharp",
+          "code": "ToggleSplitButton(\"Bold\", boldOn, value => setBoldOn(value))\n\n(boldOn ? TextBlock(\"Preview text\").Bold() : TextBlock(\"Preview text\"))\n    .FontSize(20)"
         }
       ]
     },
@@ -2322,6 +3054,16 @@
           "header": "Basic ToggleSwitch",
           "language": "csharp",
           "code": "ToggleSwitch(isOn, v => setIsOn(v)).AutomationName(\"Basic toggle\")"
+        },
+        {
+          "header": "Custom On/Off Labels",
+          "language": "csharp",
+          "code": "ToggleSwitch(customOn, v => setCustomOn(v), \"Working\", \"Not working\")"
+        },
+        {
+          "header": "ToggleSwitch with Header",
+          "language": "csharp",
+          "code": "ToggleSwitch(headerOn, v => setHeaderOn(v)).Header(\"Wi-Fi\")"
         }
       ]
     },
@@ -2348,6 +3090,21 @@
           "header": "Text ToolTip",
           "language": "csharp",
           "code": "Button(\"Hover Me\").ToolTip(\"This is a simple tooltip\")\nButton(\"Save\").ToolTip(\"Save document (Ctrl+S)\")"
+        },
+        {
+          "header": "ToolTip on Various Controls",
+          "language": "csharp",
+          "code": "TextBlock(\"Hover this text\").Foreground(Theme.AccentText)\n    .ToolTip(\"Text elements can have tooltips too\")\nCheckBox(false, label: \"Enable\").ToolTip(\"Enable the feature\")\nToggleSwitch(false).AutomationName(\"Dark mode\").ToolTip(\"Toggle dark mode\")"
+        },
+        {
+          "header": "Rich ToolTip",
+          "language": "csharp",
+          "code": "Button(\"Rich Tooltip\").WithToolTip(\n    VStack(4,\n        TextBlock(\"Title\").Bold(),\n        TextBlock(\"Description\").FontSize(12)))"
+        },
+        {
+          "header": "ToolTip Placement",
+          "language": "csharp",
+          "code": "Button(\"Left\").ToolTip(\"Opens to the left\", PlacementMode.Left)\nButton(\"Follows Mouse\").ToolTip(\"Tracks the pointer\", PlacementMode.Mouse)\n\n// Placement also composes with a rich tooltip:\nButton(\"Info\")\n    .WithToolTip(VStack(TextBlock(\"Title\").Bold()), PlacementMode.Right)"
         }
       ]
     },
@@ -2376,6 +3133,16 @@
           "header": "ScaleTransition",
           "language": "csharp",
           "code": "var (enlarged, setEnlarged) = UseState(false);\n\nVStack(12,\n    Button(enlarged ? \"Shrink\" : \"Enlarge\", () => setEnlarged(!enlarged)),\n    Border(TextBlock(\"Scales from its centre\"))\n        .Scale(enlarged ? 1.4f : 1.0f)\n        .ScaleTransition())\n// Something has to change the value: the transition animates Scale whenever it changes,\n// so without the button this renders a static element and nothing ever runs.\n// Scale is a compositor transform, not a layout change: siblings do not reflow, so a\n// growing element overlaps them rather than pushing them aside."
+        },
+        {
+          "header": "TranslationTransition",
+          "language": "csharp",
+          "code": "var (moved, setMoved) = UseState(false);\n\nTextBlock(\"Slides horizontally\")\n    .Translation(moved ? 150f : 0f, 0f, 0f)\n    .TranslationTransition()\n// Translation is an offset from the layout position, in device-independent pixels.\n// The element's layout slot does not move, so nothing around it reflows."
+        },
+        {
+          "header": "LayoutAnimation",
+          "language": "csharp",
+          "code": "// Hoisted out of Render: a collection expression written inline in UseState is rebuilt\n// every render even though only the first one is ever read (REACTOR_HOOKS_013).\nstatic readonly IReadOnlyList<string> Seed = [\"Beta\", \"Gamma\", \"Delta\"];\n\nvar (items, setItems) = UseState(Seed);\n\nVStack(6, items.Select(i =>\n    Border(TextBlock(i))\n        .LayoutAnimation()       // animate position changes layout produced\n        .WithKey($\"layout-{i}\")  // identity across the reorder\n).ToArray())\n\n// .LayoutAnimation() animates the OFFSET a layout pass assigned, so something has to\n// actually move: insert at the front, not the end. .SpringLayoutAnimation(dampingRatio,\n// period) swaps the easing for a spring. .WithKey is not optional here -- without it the\n// reconciler reuses row 0's control for whatever is now first and nothing travels."
         }
       ]
     },
@@ -2429,6 +3196,11 @@
           "header": "Type ramp factories — Title / Subtitle / Body",
           "language": "csharp",
           "code": "Display(\"Display — 68px Semibold\")\nTitleLarge(\"TitleLarge — 40px Semibold\")\nTitle(\"Title — 28px Semibold\")\nSubtitle(\"Subtitle — 20px Semibold\")\nBodyLarge(\"BodyLarge — 18px regular\")\nBodyStrong(\"BodyStrong — 14px Semibold\")\nBody(\"Body — 14px regular body text\")"
+        },
+        {
+          "header": "Composed example — article card",
+          "language": "csharp",
+          "code": "Card(VStack(8,\n    Title(\"Release notes\"),\n    Subtitle(\"Version 2.5\"),\n    BodyStrong(\"New update available\"),\n    Body(\"…body…\"),\n    Body(\"…body…\")\n))"
         }
       ]
     },
@@ -2457,6 +3229,31 @@
           "header": "Text Hierarchy Helpers",
           "language": "csharp",
           "code": "Heading(\"Heading\")       // 28px Bold\nSubHeading(\"SubHeading\") // 20px SemiBold\nTextBlock(\"Body Text\")        // 14px Normal\nCaption(\"Caption\")       // 12px Normal"
+        },
+        {
+          "header": "Font Sizes",
+          "language": "csharp",
+          "code": "TextBlock(\"14px\").FontSize(14)\nTextBlock(\"20px\").FontSize(20)\nTextBlock(\"32px\").FontSize(32)"
+        },
+        {
+          "header": "Font Weights",
+          "language": "csharp",
+          "code": "TextBlock(\"Normal weight\")\nTextBlock(\"SemiBold\").SemiBold()\nTextBlock(\"Bold\").Bold()"
+        },
+        {
+          "header": "Applying XAML Text Styles",
+          "language": "csharp",
+          "code": "TextBlock(\"Title\").ApplyStyle(\"TitleTextBlockStyle\")\nTextBlock(\"Subtitle\").ApplyStyle(\"SubtitleTextBlockStyle\")\nTextBlock(\"Body Strong\").ApplyStyle(\"BodyStrongTextBlockStyle\")\nTextBlock(\"Body\").ApplyStyle(\"BodyTextBlockStyle\")\nTextBlock(\"Caption\").ApplyStyle(\"CaptionTextBlockStyle\")"
+        },
+        {
+          "header": "Text Wrapping & Trimming",
+          "language": "csharp",
+          "code": "// Wrapping\nTextBlock(\"Long text...\")\n    .TextWrapping(TextWrapping.Wrap)\n\n// Trimming with ellipsis\nTextBlock(\"Long text...\")\n    .TextWrapping(TextWrapping.NoWrap)\n    .TextTrimming(TextTrimming.CharacterEllipsis)\n\n// Max lines with trimming\nTextBlock(\"Long text...\")\n    .TextWrapping(TextWrapping.Wrap)\n    .TextTrimming(TextTrimming.CharacterEllipsis)\n    .MaxLines(2)"
+        },
+        {
+          "header": "Text Color & Hierarchy",
+          "language": "csharp",
+          "code": "// Heading — Subtitle style, primary color\nTextBlock(\"Notifications\")\n    .ApplyStyle(\"SubtitleTextBlockStyle\")\n    .Foreground(Theme.PrimaryText)\n\n// Title — SemiBold, primary color\nTextBlock(\"New update\").SemiBold()\n    .Foreground(Theme.PrimaryText)\n\n// Description — smaller, secondary color\nTextBlock(\"Details...\").FontSize(13)\n    .Foreground(Theme.SecondaryText)\n\n// Action link — accent color\nTextBlock(\"Install now\").FontSize(13)\n    .Foreground(Theme.AccentText)\n\n// Timestamp — smallest, tertiary color\nTextBlock(\"3 hours ago\").FontSize(12)\n    .Foreground(Theme.TertiaryText)"
         }
       ]
     },
@@ -2483,6 +3280,336 @@
           "header": "Horizontal fill",
           "language": "csharp",
           "code": "UniformGrid(\n    Orientation.Horizontal,\n    Enumerable.Range(1, 9).Select(i =>\n        Border(TextBlock($\"{i}\").Center().Foreground(\"#FFFFFF\"))\n            .Background(Theme.Accent)\n            .Size(60, 60)\n            .Margin(4)\n            .CornerRadius(4)).ToArray())"
+        },
+        {
+          "header": "Vertical fill",
+          "language": "csharp",
+          "code": "UniformGrid(\n    Orientation.Vertical,\n    Enumerable.Range(1, 9).Select(i =>\n        Border(TextBlock($\"{i}\").Center().Foreground(\"#FFFFFF\"))\n            .Background(\"#5B6ABF\")\n            .Size(60, 60)\n            .Margin(4)\n            .CornerRadius(4)).ToArray())"
+        }
+      ]
+    },
+    {
+      "id": "use-effect",
+      "name": "UseEffect",
+      "category": "Fundamentals",
+      "description": "Side effects and lifecycle — run after render, clean up on unmount.",
+      "details": "`UseEffect(action, deps)` runs *after* the render commits. Return an `Action`\nto register cleanup — it runs before the next execution of the effect and once\nmore on unmount, which is what makes timers, subscriptions, and event handlers\nsafe to own from a component.\n\n```csharp\nvar (ticks, bumpTicks) = UseReducer(0);\n\nUseEffect(() =>\n{\n    var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };\n    timer.Tick += (_, _) => bumpTicks(t => t + 1);\n    timer.Start();\n    return () => timer.Stop();     // cleanup on dep change and on unmount\n}, Array.Empty<object>());\n```\n\nDependency rules:\n\n- Deps are a `params` argument, so `UseEffect(fn)` and\n  `UseEffect(fn, Array.Empty<object>())` are the same call: empty deps compare\n  equal on every later render, so the effect runs **once, on mount**.\n- One or more deps → re-runs whenever any of them compares unequal.\n- **A freshly allocated object or lambda is never equal to the previous one**, so\n  it defeats the comparison and the effect re-runs every commit. (A type with\n  value-based `Equals`, such as a `record`, is the exception.)\n- **A lone reference-type array is the other exception** — it is treated as a\n  dependency *list* and compared element-wise, so `new[] { a, b }` re-allocated\n  each render with equal contents is stable.\n- **Tuple deps are rejected by the analyzer, not by the runtime.** A `ValueTuple`\n  of value types compares by value, so `(x, y)` would work — but\n  `REACTOR_HOOKS_004` classifies every tuple expression as an unstable dep and\n  fails the build. Use a string key such as `$\"{x}|{y}\"`, or separate deps:\n  `UseEffect(fn, x, y)`.",
+      "keywords": [
+        "side effect",
+        "on mount",
+        "cleanup",
+        "unmount",
+        "dependencies",
+        "deps",
+        "timer",
+        "subscription",
+        "dispose",
+        "after render"
+      ],
+      "curatedKeywords": [
+        "useeffect lifecycle",
+        "lifecycle",
+        "run code on mount",
+        "clean up on unmount",
+        "effect dependencies",
+        "component lifecycle"
+      ],
+      "relatedControls": [
+        "UseState",
+        "UseRef",
+        "UseMemo"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "usings": [
+        "Microsoft.UI.Xaml"
+      ],
+      "galleryRoute": "use-effect",
+      "docs": [
+        {
+          "title": "Effects guide",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/effects.md"
+        },
+        {
+          "title": "Hooks guide",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/hooks.md"
+        },
+        {
+          "title": "reactor-getting-started skill",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-getting-started/SKILL.md"
+        }
+      ],
+      "samples": [
+        {
+          "header": "An effect that cleans up after itself",
+          "language": "csharp",
+          "code": "var (ticks, bumpTicks) = UseReducer(0);\n\nUseEffect(() =>\n{\n    var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };\n    timer.Tick += (_, _) => bumpTicks(t => t + 1);\n    timer.Start();\n    return () => timer.Stop();\n}, Array.Empty<object>());"
+        },
+        {
+          "header": "Run once, on mount",
+          "language": "csharp",
+          "code": "var (mountNote, setMountNote) = UseState(\"\");\n\n// Array.Empty<object>() means \"no dependencies\" — the effect runs exactly once.\nUseEffect(() => setMountNote($\"Mounted at {DateTime.Now:HH:mm:ss}\"), Array.Empty<object>());"
+        },
+        {
+          "header": "Re-run when a dependency changes",
+          "language": "csharp",
+          "code": "var (query, setQuery) = UseState(\"\");\nvar (runs, bumpRuns) = UseReducer(0);\n\nUseEffect(() => bumpRuns(r => r + 1), query);\n\nTextBox(query, setQuery, placeholderText: \"Type to change the dependency\")"
+        },
+        {
+          "header": "Dependencies must be stable across renders",
+          "language": "csharp",
+          "code": "var (width, setWidth) = UseState(0.0);\nvar (height, setHeight) = UseState(0.0);\n\n// A scalar key collapses several values into one stable dependency.\nUseEffect(() => setMountNote($\"{width} x {height}\"), $\"{width}|{height}\");\n\n// Or pass them as separate dependencies.\nUseEffect(() => setMountNote($\"{width} x {height}\"), width, height);"
+        }
+      ]
+    },
+    {
+      "id": "use-memo",
+      "name": "UseMemo",
+      "category": "Fundamentals",
+      "description": "Memoized computations and stable callbacks, via UseMemo and UseCallback.",
+      "details": "`UseMemo<T>(factory, deps)` caches the result of an expensive computation and\nrecomputes it only when a dependency changes. `UseCallback(action, deps)` does\nthe same for a delegate, so a child that compares handlers by reference is not\nre-rendered by a freshly allocated lambda.\n\n```csharp\nvar sorted = UseMemo(() => items.OrderBy(i => i.Name).ToList(), items);\nvar onReset = UseCallback(() => setQuery(\"\"), Array.Empty<object>());\n```\n\nBoth obey the same dependency rule as `UseEffect`: a fresh **object** or\n**lambda** allocated during render is never equal to the previous one and defeats\nthe cache entirely (a `record` is the exception, and a lone reference-type array\nis treated as a dependency *list* and compared element-wise, so equal contents\nstay stable). A tuple expression — though value-equal at runtime — is rejected\noutright by `REACTOR_HOOKS_004`. Memoize the computation, not the render —\n`UseMemo` is for work that is measurably expensive, not for every projection.",
+      "keywords": [
+        "usecallback",
+        "memoize",
+        "cache",
+        "expensive computation",
+        "stable delegate",
+        "dependencies",
+        "recompute"
+      ],
+      "curatedKeywords": [
+        "memoize a computation",
+        "stable callback",
+        "avoid recomputing",
+        "performance hook"
+      ],
+      "relatedControls": [
+        "UseState",
+        "UseEffect"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "use-memo",
+      "docs": [
+        {
+          "title": "Performance guide",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/performance.md"
+        },
+        {
+          "title": "Hooks guide",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/hooks.md"
+        },
+        {
+          "title": "reactor-getting-started skill",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-getting-started/SKILL.md"
+        }
+      ],
+      "samples": [
+        {
+          "header": "Memoized computation",
+          "language": "csharp",
+          "code": "var (filter, setFilter) = UseState(\"\");\n\nvar matches = UseMemo(\n    () => Fruits.Where(f => f.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToArray(),\n    filter);\n\nTextBox(filter, setFilter, placeholderText: \"Filter the list\")"
+        },
+        {
+          "header": "UseCallback — a stable delegate",
+          "language": "csharp",
+          "code": "var (clicks, bumpClicks) = UseReducer(0);\n\nvar resetClicks = UseCallback(() => bumpClicks(_ => 0), Array.Empty<object>());\n\nButton(\"Reset\", resetClicks)"
+        },
+        {
+          "header": "Dependencies must survive a render",
+          "language": "csharp",
+          "code": "var (width, setWidth) = UseState(3.0);\nvar (height, setHeight) = UseState(4.0);\n\n// A scalar key is stable across renders and reads clearly in the deps slot.\nvar area = UseMemo(() => width * height, $\"{width}|{height}\");\n\n// Passing the values as separate dependencies works the same way.\nvar areaFromPair = UseMemo(() => width * height, width, height);"
+        }
+      ]
+    },
+    {
+      "id": "use-reducer",
+      "name": "UseReducer",
+      "category": "Fundamentals",
+      "description": "State derived from the previous value — the hook collections need.",
+      "details": "`UseReducer` is the hook for state derived from the previous value — above all\ncollections, where `UseState` silently fails to re-render because the mutated\nlist is the same reference.\n\n```csharp\nvar (items, updateItems) = UseReducer(new List<string>());\n\nupdateItems(list => [.. list, \"New item\"]);   // always a NEW list\n```\n\nThe updater receives the current value and returns the next one, so it is\ncorrect even when several updates are queued in one tick — unlike\n`setItems(items.Concat(...))`, which reads a captured `items` that may\nalready be stale.\n\nThe two-type-parameter overload takes an explicit reducer for action-style\nstate machines:\n\n```csharp\nvar (state, dispatch) = UseReducer<BoardState, BoardAction>(Board.Reduce, BoardState.Initial);\n```",
+      "keywords": [
+        "reducer",
+        "dispatch",
+        "action",
+        "previous state",
+        "add item",
+        "remove item",
+        "updater",
+        "immutable update"
+      ],
+      "curatedKeywords": [
+        "update a list",
+        "state from the previous value",
+        "reducer",
+        "add to a collection",
+        "list does not re-render"
+      ],
+      "relatedControls": [
+        "UseState",
+        "ListView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "use-reducer",
+      "docs": [
+        {
+          "title": "Hooks guide",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/hooks.md"
+        },
+        {
+          "title": "Reactivity model",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/reactivity-model.md"
+        },
+        {
+          "title": "reactor-getting-started skill",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-getting-started/SKILL.md"
+        }
+      ],
+      "samples": [
+        {
+          "header": "The hook collections need",
+          "language": "csharp",
+          "code": "var (items, updateItems) = UseReducer(new List<string>());\n\nHStack(8,\n    Button(\"Add item\", () => updateItems(list => [.. list, $\"Item {list.Count + 1}\"])),\n    Button(\"Clear\", () => updateItems(_ => new List<string>())))"
+        },
+        {
+          "header": "Action-style reducer",
+          "language": "csharp",
+          "code": "enum CartAction { Add, Remove, Clear }\n\nstatic int Reduce(int state, CartAction action) => action switch\n{\n    CartAction.Add => state + 1,\n    CartAction.Remove => Math.Max(0, state - 1),\n    _ => 0,\n};\n\nvar (cart, dispatch) = UseReducer<int, CartAction>(Reduce, 0);\nButton(\"Add\", () => dispatch(CartAction.Add))"
+        },
+        {
+          "header": "Two updates in one tick compose",
+          "language": "csharp",
+          "code": "var (score, updateScore) = UseReducer(0);\n\nButton(\"Add two points\", () =>\n{\n    updateScore(s => s + 1);\n    updateScore(s => s + 1);   // sees the value the line above produced\n})"
+        }
+      ]
+    },
+    {
+      "id": "use-ref",
+      "name": "UseRef",
+      "category": "Fundamentals",
+      "description": "A mutable box that survives re-renders without triggering one.",
+      "details": "`UseRef<T>(initial)` returns a `Ref<T>` — a mutable box that survives re-renders\nand, unlike `UseState`, **never triggers one**. Use it for values a render does\nnot read: a timer handle, a subscription token, a \"did I already do this\" flag,\nor a high-frequency value written during a gesture.\n\n```csharp\nvar timerRef = UseRef<DispatcherTimer?>(null);\n\ntimerRef.Current = new DispatcherTimer();   // .Current is the property — NOT .Value\ntimerRef.Current.Start();\n```\n\n`Ref<T>` is Reactor's own box and exposes `.Current`. Do not confuse it with\n`ElementRef` / `UseElementRef<T>`, which points at a realized WinUI element and\nis populated by the reconciler rather than by you.",
+      "keywords": [
+        "mutable box",
+        "current",
+        "no re-render",
+        "timer handle",
+        "persist across renders",
+        "instance field",
+        "guard flag"
+      ],
+      "curatedKeywords": [
+        "value that survives renders",
+        "mutable ref",
+        "store something without re-rendering",
+        "hold a handle"
+      ],
+      "relatedControls": [
+        "Element refs",
+        "UseState",
+        "UseEffect"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "usings": [
+        "Microsoft.UI.Xaml"
+      ],
+      "galleryRoute": "use-ref",
+      "docs": [
+        {
+          "title": "Hooks guide",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/hooks.md"
+        },
+        {
+          "title": "reactor-getting-started skill",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-getting-started/SKILL.md"
+        }
+      ],
+      "samples": [
+        {
+          "header": "Writing a ref does not re-render",
+          "language": "csharp",
+          "code": "var silentRef = UseRef(0);\nvar (shown, setShown) = UseState(0);\n\nHStack(8,\n    Button(\"Count silently\", () => silentRef.Current++),\n    Button(\"Publish the count\", () => setShown(silentRef.Current)))"
+        },
+        {
+          "header": "Holding a handle across renders",
+          "language": "csharp",
+          "code": "var timerRef = UseRef<DispatcherTimer?>(null);\n\n// A Ref is never disposed for you — pair it with an unmount cleanup.\nUseEffect(() => () => { timerRef.Current?.Stop(); timerRef.Current = null; }, Array.Empty<object>());\n\nButton(\"Start\", () =>\n{\n    if (timerRef.Current is not null) return;\n    var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };\n    timer.Tick += (_, _) => bumpElapsed(e => e + 1);\n    timer.Start();\n    timerRef.Current = timer;   // survives every later render\n})"
+        },
+        {
+          "header": "A one-time guard",
+          "language": "csharp",
+          "code": "var greetedRef = UseRef(false);\n\nUseEffect(() =>\n{\n    if (greetedRef.Current) return;\n    greetedRef.Current = true;      // .Current is the property — NOT .Value\n    setGreeting(\"Greeted exactly once.\");\n}, Array.Empty<object>());"
+        }
+      ]
+    },
+    {
+      "id": "use-state",
+      "name": "UseState",
+      "category": "Fundamentals",
+      "description": "Component state — a value plus a setter that schedules a re-render.",
+      "details": "`UseState<T>(initial)` returns `(value, setValue)`. Calling the setter with a\nvalue that differs from the current one schedules a re-render; the new value is\nvisible on the *next* render, not on the line after the call.\n\n```csharp\nvar (count, setCount) = UseState(0);\n\nreturn VStack(8,\n    TextBlock($\"Count: {count}\"),\n    Button(\"Increment\", () => setCount(count + 1)));\n```\n\nTwo rules decide whether `UseState` is the right hook:\n\n- **Hook order is constant.** Never call a hook inside `if`, `for`, or a\n  nested lambda — call them all unconditionally and use the result\n  conditionally. `REACTOR_HOOKS_001` enforces this.\n- **Reference types need a new instance.** `UseState(new List<T>())` followed\n  by `list.Add(item)` will not re-render: the reference is unchanged, so the\n  setter never sees a difference. Reach for `UseReducer` instead.\n\nPass `threadSafe: true` when the setter is called from a background thread.",
+      "keywords": [
+        "setstate",
+        "re-render",
+        "counter",
+        "local state",
+        "controlled input",
+        "hook",
+        "component state",
+        "hook order",
+        "threadsafe"
+      ],
+      "curatedKeywords": [
+        "state management",
+        "usestate hook",
+        "component state",
+        "make the ui update",
+        "hold a value between renders"
+      ],
+      "relatedControls": [
+        "UseReducer",
+        "UseEffect",
+        "Context"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "use-state",
+      "docs": [
+        {
+          "title": "Hooks guide",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/hooks.md"
+        },
+        {
+          "title": "Reactivity model",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/reactivity-model.md"
+        },
+        {
+          "title": "reactor-getting-started skill",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-getting-started/SKILL.md"
+        }
+      ],
+      "samples": [
+        {
+          "header": "A value and its setter",
+          "language": "csharp",
+          "code": "var (count, setCount) = UseState(0);\n\nVStack(8,\n    HStack(8,\n        Button(\"Increment\", () => setCount(count + 1)),\n        Button(\"Reset\", () => setCount(0))),\n    TextBlock($\"Count: {count}\"))"
+        },
+        {
+          "header": "Controlled text input",
+          "language": "csharp",
+          "code": "var (name, setName) = UseState(\"\");\n\nVStack(8,\n    TextBox(name, setName, placeholderText: \"Type your name\").AutomationName(\"Name\"),\n    TextBlock(name.Length == 0 ? \"Nothing typed yet.\" : $\"Hello, {name}!\"))"
+        },
+        {
+          "header": "State decides what renders",
+          "language": "csharp",
+          "code": "var (showDetails, setShowDetails) = UseState(false);\n\nVStack(8,\n    ToggleSwitch(showDetails, setShowDetails, header: \"Show details\"),\n    showDetails ? TextBlock(\"Details are visible.\") : Empty())"
+        },
+        {
+          "header": "A reference type needs a new instance",
+          "language": "csharp",
+          "code": "// Does NOT re-render — the same List reference before and after.\nvar (todos, setTodos) = UseState(new List<string>());\ntodos.Add(\"wrong\");\nsetTodos(todos);\n\n// Re-renders — a new list every time.\nvar (items, updateItems) = UseReducer(new List<string>());\nupdateItems(list => [.. list, \"right\"]);"
         }
       ]
     },
@@ -2505,6 +3632,16 @@
           "header": "Scaling Content",
           "language": "csharp",
           "code": "Viewbox(\n    VStack(4, TextBlock(\"Hello\").Bold(), TextBlock(\"Scaled\"))\n)"
+        },
+        {
+          "header": "Viewbox Comparison",
+          "language": "csharp",
+          "code": "// Same content at different sizes:\nBorder(Viewbox(TextBlock(\"ABC\"))).Size(100, 100)\nBorder(Viewbox(TextBlock(\"ABC\"))).Size(150, 80)"
+        },
+        {
+          "header": "Stretch Modes",
+          "language": "csharp",
+          "code": "Viewbox(TextBlock(\"ABC\")).Stretch(Stretch.Uniform)\nViewbox(TextBlock(\"ABC\")).Stretch(Stretch.Fill)\nViewbox(TextBlock(\"ABC\")).Stretch(Stretch.UniformToFill)\nViewbox(TextBlock(\"ABC\")).Stretch(Stretch.None)"
         }
       ]
     },
@@ -2528,6 +3665,11 @@
           "header": "Load URL",
           "language": "csharp",
           "code": "// ── type members ──\n// new Uri(text) throws on half-typed input, and a throw out of Render() replaces the\n// whole page with the error boundary — so parse first and only commit what parses.\nstatic Uri? ParseWebUrl(string text) =>\n    Uri.TryCreate(text.Trim(), UriKind.Absolute, out var uri)\n    && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)\n        ? uri : null;\n\nconst string DefaultUrl = \"https://learn.microsoft.com/windows/apps/\";\nstatic readonly Uri DefaultUri = new Uri(DefaultUrl);\n\n// ── inside Render() ──\nvar (urlText, setUrlText) = UseState(DefaultUrl);\nvar (loadedUrl, setLoadedUrl) = UseState(DefaultUri);\nvar target = ParseWebUrl(urlText);\n\nVStack(8,\n    HStack(8,\n        TextBox(urlText, s => setUrlText(s), \"https://example.com\").Width(400).UrlInput(),\n        Button(\"Go\", () => { if (target is not null) setLoadedUrl(target); })\n            .IsEnabled(target is not null)\n            .VAlign(VerticalAlignment.Center)),\n    target is null\n        ? Caption(\"Enter an absolute http:// or https:// URL.\").Foreground(Theme.SystemCritical)\n        : Caption($\"Showing {loadedUrl}\").Foreground(Theme.SecondaryText),\n    WebView2(loadedUrl).Width(600).Height(400))"
+        },
+        {
+          "header": "WebView2 with Preset URLs",
+          "language": "csharp",
+          "code": "// ── type members ──\nstatic readonly Uri LearnUri = new Uri(\"https://learn.microsoft.com\");\nstatic readonly Uri BingUri = new Uri(\"https://www.bing.com\");\n\n// ── inside Render() ──\n// Its own state slot: a card sharing one with its neighbour drives the neighbour too.\nvar (presetUrl, setPresetUrl) = UseState(LearnUri);\n\nVStack(8,\n    HStack(8,\n        Button(\"Microsoft Learn\", () => setPresetUrl(LearnUri)),\n        Button(\"Bing\", () => setPresetUrl(BingUri))),\n    WebView2(presetUrl).Width(600).Height(300))"
         }
       ]
     },
@@ -2555,6 +3697,11 @@
           "header": "Basic WrapGrid",
           "language": "csharp",
           "code": "WrapGrid(\n    Enumerable.Range(1, 10).Select(i =>\n        Border(TextBlock($\"{i}\")).Size(70, 70).Margin(4)\n    ).ToArray()\n)"
+        },
+        {
+          "header": "MaxRowsOrColumns WrapGrid",
+          "language": "csharp",
+          "code": "WrapGrid(4,  // max 4 per row\n    Enumerable.Range(1, 12).Select(i => Border(TextBlock($\"#{i}\")).Size(80, 50)).ToArray()\n)"
         }
       ]
     }

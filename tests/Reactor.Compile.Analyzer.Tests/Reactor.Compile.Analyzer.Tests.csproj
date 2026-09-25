@@ -24,15 +24,8 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
-    <!--
-      Pin away from transitive System.Formats.Asn1 5.0.0 (GHSA-447r-wph3-92pm,
-      High) pulled in through the Microsoft.CodeAnalysis.* / Test.Sdk graph.
-      Aligned with the net8.0 TFM; the in-box runtime ships 8.0.x.
-    -->
-    <PackageReference Include="System.Formats.Asn1" />
   </ItemGroup>
 
   <ItemGroup>

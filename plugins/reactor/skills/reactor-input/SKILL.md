@@ -37,6 +37,11 @@ etc.) when you attach a handler, so you never need to set those manually.
 
 ## 1. Pointer events
 
+<!-- index:pointer-input -->
+Pointer handlers attach like any other modifier; Reactor installs one stable
+trampoline per element, so re-rendering with a fresh closure costs no
+re-subscription.
+
 ```csharp
 var (isHovered, setIsHovered) = UseState(false);
 
@@ -67,14 +72,26 @@ reach for `.IsEnabled(false)` when you want a disabled affordance, and
 
 ## 2. Tap events
 
+`Border` and other non-control elements are not tab stops by default: a
+`Border` with `.OnTapped(...)` answers the mouse but is skipped by the
+keyboard. Add `.IsTabStop(true)` and an `.OnKeyDown` Enter/Space handler, or
+use a `Button`, whenever the gesture is a real command.
+
 ```csharp
 Border(child)
     .OnTapped((s, e) => HandleClick())
     .OnDoubleTapped((s, e) => HandleDoubleClick())
     .OnRightTapped((s, e) => ShowContextMenu())
 ```
+<!-- /index:pointer-input -->
 
 ## 3. Keyboard events
+
+<!-- index:keyboard-input -->
+Attach `.OnKeyDown` / `.OnKeyUp` to any element. The handler receives
+`(sender, KeyRoutedEventArgs)`; set `e.Handled = true` to stop the event
+bubbling. `.OnPreviewKeyDown` / `.OnPreviewKeyUp` run first, during the
+tunnelling phase, and can swallow a key before the focused control sees it.
 
 ```csharp
 TextBox(text, setText)
@@ -88,9 +105,62 @@ TextBox(text, setText)
     })
 ```
 
+**`e.Key` is `Windows.System.VirtualKey` — WinRT, not WPF.** It is not
+`System.Windows.Input.Key`, and the member names differ: `VirtualKey` has **no**
+`OemPeriod`, `OemPlus`, `OemMinus` or `Equal`. Punctuation and OEM keys simply
+have no named member. Two ways to handle them:
+
+```csharp
+// 1. Compare the numeric virtual-key code for OEM keys.
+.OnKeyDown((s, e) =>
+{
+    if ((int)e.Key == 190) AppendDecimalPoint();   // VK_OEM_PERIOD '.'
+    if ((int)e.Key == 187) Evaluate();             // VK_OEM_PLUS   '='
+})
+
+// 2. Better for text: let WinUI resolve the character for you.
+.OnCharacterReceived((s, e) =>
+{
+    if (e.Character == '.') AppendDecimalPoint();
+    if (e.Character == '=') Evaluate();
+})
+```
+
+Named members you *can* rely on are the letters (`VirtualKey.A`), digits
+(`VirtualKey.Number0`, `VirtualKey.NumberPad0`), the numpad operators
+(`Add`, `Subtract`, `Multiply`, `Divide`, `Decimal`), and the editing and
+navigation keys (`Enter`, `Space`, `Back`, `Escape`, `Tab`, `Delete`,
+`Left`, `Right`, `Up`, `Down`).
+
+**Ctrl/Alt chords do not belong on `.OnKeyDown`.** A handler on a `TextBox`
+only fires while that field has focus, so an app-wide shortcut written that way
+silently does nothing elsewhere. Use a `Command` with an `Accelerator`, which
+registers with WinUI's accelerator infrastructure. The `REACTOR_INPUT_001`
+analyzer flags the mistake.
+
+```csharp
+new Command
+{
+    Label = "Save",
+    Execute = Save,
+    Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),
+}
+```
+
+Mind the **scope**, though: an accelerator fires when the surface carrying it is
+in the focused element's ancestor chain, so `Button(save)` on its own covers the
+button, not the window. `CommandHost([save], subtree)` widens it to a whole
+subtree, and a `MenuBar` or `CommandBar` at the window root is what makes a chord
+genuinely window-wide — those attach to the window's `KeyboardAccelerators`
+collection. See [commanding](../../../../docs/guide/commanding.md).
+<!-- /index:keyboard-input -->
+
 ## 4. Continuous gestures (Pan, Pinch, Rotate)
 
+<!-- index:pointer-input -->
 Gestures follow a **phase lifecycle**: `Began → Changed (repeat) → Ended | Cancelled`.
+Attaching a gesture handler auto-enables the underlying `ManipulationMode`, so
+you never set that yourself.
 
 ### Pan gesture
 
@@ -105,9 +175,9 @@ return Border(child)
         onBegan: (e) => { /* pan began */ },
         onChanged: (e) =>
         {
-            setOffset(new Point(
-                offset.X + e.Delta.Translation.X,
-                offset.Y + e.Delta.Translation.Y));
+            // PanGesture.Delta is the per-event movement, a Point — Reactor flattens
+            // WinUI's ManipulationDelta, so there is no e.Delta.Translation here.
+            setOffset(new Point(offset.X + e.Delta.X, offset.Y + e.Delta.Y));
         },
         onEnded: (e) => { /* pan ended */ })
     .Translation((float)offset.X, (float)offset.Y, 0);
@@ -116,10 +186,12 @@ return Border(child)
 ### 60Hz pan pattern (performance-critical)
 
 For smooth dragging, write `Translation` directly via ref during the
-gesture and only `setState` at the end:
+gesture and only `setState` at the end. The cell must be an **`ElementRef`**
+from `UseElementRef<T>` — that is what the reconciler populates. A `UseRef`
+box is not accepted by `.Ref(...)` and would never point at anything.
 
 ```csharp
-var itemRef = UseRef<UIElement>();
+var itemRef = this.UseElementRef<FrameworkElement>();
 var (finalPos, setFinalPos) = UseState(new Point(0, 0));
 
 return Border(child)
@@ -132,8 +204,8 @@ return Border(child)
             {
                 var t = el.Translation;
                 el.Translation = new System.Numerics.Vector3(
-                    t.X + (float)e.Delta.Translation.X,
-                    t.Y + (float)e.Delta.Translation.Y,
+                    t.X + (float)e.Delta.X,
+                    t.Y + (float)e.Delta.Y,
                     t.Z);
             }
         },
@@ -147,12 +219,16 @@ return Border(child)
 
 ### Pinch and Rotate
 
+Both gestures carry an absolute value and a per-event delta as flat doubles —
+`Scale`/`ScaleDelta` and `Angle`/`AngleDelta`. There is no nested `e.Delta`
+object on these two.
+
 ```csharp
 var (scale, setScale) = UseState(1.0f);
 
 return Border(child)
     .OnPinch(
-        onChanged: (e) => setScale(scale * (float)e.Delta.Scale),
+        onChanged: (e) => setScale(scale * (float)e.ScaleDelta),
         onEnded: (e) => { })
     .Scale(scale);
 
@@ -161,7 +237,7 @@ var (angle, setAngle) = UseState(0f);
 
 return Border(child)
     .OnRotate(
-        onChanged: (e) => setAngle(angle + (float)e.Delta.Rotation),
+        onChanged: (e) => setAngle(angle + (float)e.AngleDelta),
         onEnded: (e) => { })
     .Rotation(angle);
 ```
@@ -176,8 +252,15 @@ Border(child)
         onTriggered: (e) => ShowEditMode(),
         enableMouseEmulation: true)  // also trigger on mouse press-and-hold
 ```
+<!-- /index:pointer-input -->
 
 ## 6. Focus management
+
+<!-- index:element-refs -->
+An `ElementRef` is the bridge from the declarative tree to a realized WinUI
+element. Attach it with `.Ref(...)`, then read `.Current` — it is `null` until
+the element mounts, survives re-renders, and clears on unmount, so the same
+cell reliably points at whatever is mounted now.
 
 ### UseElementFocus
 
@@ -191,7 +274,22 @@ return VStack(12,
 ```
 
 `UseElementFocus` returns a handle with `.Ref` (attach to the element)
-and `.RequestFocus()` (imperatively focus it).
+and `.RequestFocus()` (imperatively focus it). It is a named tuple, so the
+deconstructed form is equivalent and is what the guide uses — `RequestFocus`
+schedules the focus on the UI dispatcher, so it is safe to call from an effect
+that runs before the element has mounted:
+
+```csharp
+var (inputRef, requestFocus) = this.UseElementFocus();
+
+UseEffect(() => requestFocus(), Array.Empty<object>());   // focus on mount
+
+return TextBox(name, setName).AutomationName("Name").Ref(inputRef);
+```
+
+For a synchronous attempt, or one whose success you need to observe, call
+`Microsoft.UI.Reactor.Input.FocusManager.Focus(inputRef)` or
+`FocusManager.FocusAsync(inputRef)` instead.
 
 ### UseElementRef\<T\> — typed refs
 
@@ -229,7 +327,10 @@ return HStack(8,
 
 For cyclic focus rings, declare both directions. Do not assign
 `button.XYFocusRight = right.Current` in a handler; that snapshot will
-not survive late mount or recreation.
+not survive late mount or recreation. The same rule covers every reference
+prop — `TeachingTip(..., target: ref)`, `.LabeledBy(ref)`, `.DescribedBy(refs)`,
+`.FlowsTo(refs)` — and `REACTOR_REF_001` flags reading `.Current` to set one.
+<!-- /index:element-refs -->
 
 ### Focus events
 
