@@ -8,6 +8,7 @@
 
   <!-- Name and Publisher are mirrored by AppxLooseLayoutDeployment, which registers and
        removes this package by name; PackagedHarnessTests asserts they stay in step. -->
+  <!-- <snippet:msix-identity> -->
   <Identity
     Name="Microsoft.UI.Reactor.PackagedTests.Host"
     Publisher="CN=Microsoft.UI.Reactor.PackagedTests.Host"
@@ -22,6 +23,7 @@
   <Dependencies>
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
   </Dependencies>
+  <!-- </snippet:msix-identity> -->
 
   <Resources>
     <Resource Language="en-us" />

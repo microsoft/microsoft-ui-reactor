@@ -83,7 +83,6 @@ When `radius` changes, the new `redrawKey` tells Reactor to invalidate the canva
 
 - [`Microsoft.UI.Reactor`](https://www.nuget.org/packages/Microsoft.UI.Reactor) — the core declarative WinUI 3 framework (required).
 - [`Microsoft.UI.Reactor.Devtools`](https://www.nuget.org/packages/Microsoft.UI.Reactor.Devtools) — optional developer-loop devtools host.
-- [`Microsoft.UI.Reactor.ProjectTemplates`](https://www.nuget.org/packages/Microsoft.UI.Reactor.ProjectTemplates) — `dotnet new` templates.
 
 ## Feedback & Contributing
 

@@ -17,18 +17,17 @@ namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
 /// Debug-only check passes if the generator is unconditionally on, and a Release-only
 /// check passes if it is unconditionally off.</para>
 ///
-/// <para>Like its sibling <see cref="CreateTemplateTests"/> this needs network access to
-/// restore the Windows App SDK, so it only runs where NuGet.org is reachable (CI's
-/// "Integration Tests" job). On a network-restricted machine both fail identically with
-/// NU1301 during restore.</para>
+/// <para>This needs network access to restore the Windows App SDK, so it only runs
+/// where NuGet.org is reachable (CI's "Integration Tests" job). On a
+/// network-restricted machine it fails with NU1301 during restore.</para>
 /// </summary>
 [Collection(LocalPackageFeedCollection.Name)]
 public sealed class SourceMapPackageConsumerTests : IDisposable
 {
-    private readonly TemplatePackageTestFixture _fixture;
+    private readonly LocalPackageFeedFixture _fixture;
     private readonly string _tempRoot = Path.Join(Path.GetTempPath(), $"reactor-sourcemap-pkg-{Guid.NewGuid():N}");
 
-    public SourceMapPackageConsumerTests(TemplatePackageTestFixture fixture)
+    public SourceMapPackageConsumerTests(LocalPackageFeedFixture fixture)
     {
         _fixture = fixture;
         Directory.CreateDirectory(_tempRoot);

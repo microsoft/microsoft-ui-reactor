@@ -105,27 +105,24 @@ public class MinimalCsprojDocTests
     }
 
     [Fact]
-    public void Documented_package_id_matches_the_scaffolded_template()
+    public void Documented_package_id_is_the_framework_package()
     {
-        // Cross-check against the real `dotnet new reactorapp` template, which
-        // the page names as the fast path. If the two ever disagree on which
-        // package to reference, one of them is lying to the reader.
-        var repoRoot = FindRepoRoot();
-        var templateCsproj = global::System.IO.Path.Join(
-            repoRoot, "tools", "Templates", "templates", "WinUIApp-CSharp", "Company.ReactorApp1.csproj");
+        // The page names `dotnet new reactor` as the fast path, but those
+        // templates now live in the Windows App SDK pack and are not present in
+        // this repo, so there is no in-repo csproj to cross-check against. Pin
+        // the next best invariant: the hand-authored block documents the real
+        // framework package id, which is what a reader copies.
+        var doc = global::System.Xml.Linq.XDocument.Parse(ExtractMinimalSetupCsproj());
 
-        Assert.True(global::System.IO.File.Exists(templateCsproj),
-            $"Expected the scaffolded template at {templateCsproj}; if it moved, update this test.");
-
-        var scaffoldIds = global::System.Xml.Linq.XDocument.Load(templateCsproj)
-            .Descendants("PackageReference")
+        var documentedIds = doc.Descendants("PackageReference")
             .Select(p => p.Attribute("Include")?.Value)
+            .Where(id => id is not null)
             .ToList();
 
-        // Positive control: the scaffold really does carry package references,
-        // so a miss below is a disagreement and not an empty parse.
-        Assert.NotEmpty(scaffoldIds);
-        Assert.Contains(PackageId, scaffoldIds);
+        // Positive control: the block really does carry package references, so a
+        // miss below is a disagreement and not an empty parse.
+        Assert.NotEmpty(documentedIds);
+        Assert.Contains(PackageId, documentedIds);
     }
 
     [Fact]

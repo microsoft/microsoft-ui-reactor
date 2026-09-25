@@ -71,7 +71,6 @@ The devtools surface is **developer-loop only** and ships with hard gates:
 
 - [`Microsoft.UI.Reactor`](https://www.nuget.org/packages/Microsoft.UI.Reactor) — the core declarative WinUI 3 framework (required).
 - [`Microsoft.UI.Reactor.Advanced`](https://www.nuget.org/packages/Microsoft.UI.Reactor.Advanced) — optional Win2D/graphics components.
-- [`Microsoft.UI.Reactor.ProjectTemplates`](https://www.nuget.org/packages/Microsoft.UI.Reactor.ProjectTemplates) — `dotnet new` templates.
 
 ## Feedback & Contributing
 

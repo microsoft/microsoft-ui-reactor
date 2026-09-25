@@ -29,10 +29,12 @@ public class WinAppSDKReferenceGuardTests
 
     // Repo-root-relative, '/'-separated csproj paths allowed to reference the
     // Microsoft.WindowsAppSDK metapackage directly.
-    private static readonly HashSet<string> Allowlist = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "tools/Templates/templates/WinUIApp-CSharp/Company.ReactorApp1.csproj",
-    };
+    //
+    // Empty since the in-repo `dotnet new reactorapp` template was removed — it
+    // was the only project that pinned the metapackage itself, because a
+    // scaffolded consumer does not inherit this repo's central injection. The
+    // replacement templates live in the Windows App SDK pack, outside this repo.
+    private static readonly HashSet<string> Allowlist = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Source-level guard: no repo project may declare a direct

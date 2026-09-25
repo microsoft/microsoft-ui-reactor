@@ -45,6 +45,13 @@ Conventions for contributors:
   shape acts as a positive control, so a broken probe is reported as unverified rather than
   blamed on the deployment. (issue #1268)
 
+- **`mur templates status`** reports whether `dotnet new reactor` actually resolves, rather than
+  merely whether the template pack id is registered — an installed-but-too-old pack (`0.0.6-alpha`
+  shipped before the Reactor templates existed) is a PASS on the package check and a failure on the
+  next scaffold. Exit codes are load-bearing: `0` available, `1` probe failed, `2` pack installed
+  but too old, `3` pack not installed. It backs `mur doctor` and `bootstrap.ps1`'s verification
+  step, which give different remediation for each.
+
 ### Changed
 
 - **The search index emits every clean `SampleCard` on a page, not just the first
@@ -65,7 +72,45 @@ Conventions for contributors:
 
 ### Deprecated
 
+- **`Microsoft.UI.Reactor.ProjectTemplates` is deprecated on NuGet.org.** Published versions
+  remain restorable but are marked deprecated with a pointer to `dotnet new reactor`. Scaffold the
+  replacement with `winapp new -t reactor -n MyApp`, which installs the Windows App SDK template
+  pack on demand. To install the pack without scaffolding, pin it explicitly —
+  `dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>` — since it is
+  prerelease-only and a bare `dotnet new install` resolves stable versions.
+
 ### Removed
+
+- **Removed the in-repo `Microsoft.UI.Reactor.ProjectTemplates` package and its
+  `dotnet new reactorapp` template** (`tools/Templates/`). Reactor's project templates now ship in
+  the official Windows App SDK `dotnet new` pack
+  ([`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`](https://www.nuget.org/packages/Microsoft.WindowsAppSDK.WinUI.CSharp.Templates)
+  `0.0.7-alpha` and later), which provides `reactor`, `reactor-mvu`, `reactor-navview`, and
+  `reactor-tabview` (microsoft/WindowsAppSDK#6620, microsoft/WindowsAppSDK#6786).
+
+  **Behaviour change:** scaffolded apps are now **packaged** (single-project MSIX) rather than
+  unpackaged, so `dotnet run` launches with full package identity and requires Developer Mode.
+  No template produces the unpackaged shape any more — scaffold with `dotnet new reactor` and set
+  `<WindowsPackageType>None</WindowsPackageType>` yourself (see the packaging guide).
+
+  `mur pack-local` no longer produces a templates nupkg and its `--framework-version` flag is
+  gone; the release workflow no longer packs or publishes the package.
+
+- **Removed `mur templates install`.** Installing the Windows App SDK template pack is the
+  Windows App SDK CLI's job: `winapp new -t reactor -n MyApp` installs the pack on demand and
+  scaffolds in one step, and `winapp new --list` installs it without scaffolding. `bootstrap.ps1`
+  now drives that command, and `mur upgrade` reports on the templates instead of installing them.
+  `mur templates status` (see Added) still backs `mur doctor` and bootstrap's verification.
+
+  Reactor carried its own installer because `dotnet new install` has no `--prerelease` switch and
+  resolves stable-only, which fails outright while the pack is prerelease-only; working around
+  that meant resolving versions off the NuGet flat container and tiptoeing around
+  `dotnet new install --force`, which uninstalls the existing pack *before* downloading the
+  replacement. `winapp` handles all of it, so roughly 700 lines of that machinery are gone.
+
+  The `-WinAppSdkTemplatesSource` bootstrap parameter is removed with it — `winapp` has no
+  local-folder equivalent. `-WinAppSdkTemplatesVersion` still works and now maps to
+  `winapp new --template-version`.
 
 ### Fixed
 

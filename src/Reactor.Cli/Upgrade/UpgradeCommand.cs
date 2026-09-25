@@ -1,10 +1,11 @@
 // `mur upgrade` — refresh a Reactor developer install after `git pull`.
 //
 // Re-runs the source-side steps of bootstrap.ps1:
-//   1. Re-pack the framework + ProjectTemplates into local-nupkgs/
+//   1. Re-pack the framework packages into local-nupkgs/
 //      (delegates to `mur pack-local`).
-//   2. Reinstall the `dotnet new reactorapp` template (uninstall first so the
-//      template engine drops its cached copy).
+//   2. Make sure the Windows App SDK `dotnet new` template pack (which ships
+//      `dotnet new reactor`) is installed — self-healing for a checkout that
+//      was bootstrapped before the templates moved there.
 //   3. Refresh the Claude Code plugin install.
 //   4. Rebuild + reinstall the Reactor VS preview extension (best-effort —
 //      skipped if VS / the VSIX-dev workload aren't installed, same probe
@@ -17,6 +18,7 @@
 
 using System.Diagnostics;
 using Microsoft.UI.Reactor.Cli.Pack;
+using Microsoft.UI.Reactor.Cli.Templates;
 
 namespace Microsoft.UI.Reactor.Cli.Upgrade;
 
@@ -35,8 +37,8 @@ public static class UpgradeCommand
             return 1;
         }
 
-        // 1. Re-pack framework + templates.
-        Console.WriteLine("==> Repacking Microsoft.UI.Reactor + ProjectTemplates");
+        // 1. Re-pack framework packages.
+        Console.WriteLine("==> Repacking Microsoft.UI.Reactor packages");
         var rc = PackLocalCommand.Run(Array.Empty<string>());
         if (rc != 0)
         {
@@ -44,25 +46,30 @@ public static class UpgradeCommand
             return rc;
         }
 
-        // 2. Reinstall the dotnet new template. Uninstall first so the template
-        //    engine drops the cached version by id (the installer otherwise wins
-        //    against a same-id repack — see getting-started.md caveat).
+        // 2. Report on the `dotnet new reactor` templates. They ship in the Windows
+        //    App SDK template pack rather than being built from this checkout, so
+        //    `git pull` never invalidates them and there is nothing to refresh here.
+        //    Installing them is `winapp`'s job, so this only probes and points.
         Console.WriteLine();
-        Console.WriteLine("==> Reinstalling `dotnet new reactorapp` template");
-        var feed = Path.Combine(repoRoot, "local-nupkgs");
-        var templateNupkg = Path.Combine(feed, $"Microsoft.UI.Reactor.ProjectTemplates.{PackLocalCommand.DefaultLocalVersion}.nupkg");
-        if (!File.Exists(templateNupkg))
+        Console.WriteLine($"==> Checking `dotnet new {WinAppSdkTemplates.BlankShortName}` templates ({WinAppSdkTemplates.PackageId})");
+        switch (WinAppSdkTemplates.AreTemplatesAvailable())
         {
-            Console.Error.WriteLine($"mur upgrade: template nupkg not found at {templateNupkg} after pack-local.");
-            return 1;
-        }
-        // Uninstall is best-effort: non-zero exit just means it wasn't installed.
-        RunDotnet(repoRoot, ignoreExitCode: true, "new", "uninstall", CleanLocalCommand.TemplatePackageId);
-        rc = RunDotnet(repoRoot, ignoreExitCode: false, "new", "install", templateNupkg);
-        if (rc != 0)
-        {
-            Console.Error.WriteLine("mur upgrade: template install failed.");
-            return rc;
+            case true:
+                Console.WriteLine(
+                    $"  `dotnet new {WinAppSdkTemplates.BlankShortName}` is available " +
+                    $"({WinAppSdkTemplates.PackageId} {WinAppSdkTemplates.GetInstalledVersion() ?? "(unknown)"}).");
+                break;
+            case false:
+                // Best-effort: a developer who scaffolds by hand shouldn't have
+                // `mur upgrade` fail over a template pack it no longer manages.
+                Console.Error.WriteLine(
+                    $"  `dotnet new {WinAppSdkTemplates.BlankShortName}` is not available. Install the pack with " +
+                    $"`winapp new --list`, or scaffold directly with " +
+                    $"`winapp new -t {WinAppSdkTemplates.BlankShortName} -n MyApp`.");
+                break;
+            default:
+                Console.Error.WriteLine("  Could not enumerate `dotnet new` templates; skipping the check.");
+                break;
         }
 
         // 3. Refresh Claude plugin (best-effort; not every user has Claude Code).
@@ -129,6 +136,7 @@ public static class UpgradeCommand
         Console.WriteLine();
         Console.WriteLine("Upgrade complete.");
         Console.WriteLine();
+        var feed = Path.Join(repoRoot, "local-nupkgs");
         Console.WriteLine("  To bump `mur` itself (which can't update its own running process), run:");
         Console.WriteLine($"    dotnet tool update -g --add-source \"{feed}\" Microsoft.UI.Reactor.Cli");
         Console.WriteLine("  Or just re-run ./bootstrap.ps1 from the repo root.");
@@ -278,39 +286,6 @@ public static class UpgradeCommand
         return null;
     }
 
-    static int RunDotnet(string workingDirectory, bool ignoreExitCode, params string[] arguments)
-    {
-        var psi = new ProcessStartInfo("dotnet")
-        {
-            UseShellExecute = false,
-            WorkingDirectory = workingDirectory,
-        };
-        foreach (var a in arguments) psi.ArgumentList.Add(a);
-
-        Process? proc;
-        try
-        {
-            proc = Process.Start(psi);
-        }
-        catch (Exception ex)
-        {
-            if (ignoreExitCode) return 0;
-            Console.Error.WriteLine($"mur upgrade: failed to start `dotnet {string.Join(' ', arguments)}`: {ex.Message}");
-            Console.Error.WriteLine("  Verify .NET 10+ is installed and `dotnet` resolves on PATH.");
-            return 1;
-        }
-        if (proc is null)
-        {
-            if (ignoreExitCode) return 0;
-            Console.Error.WriteLine($"mur upgrade: `dotnet {string.Join(' ', arguments)}` did not start (Process.Start returned null).");
-            return 1;
-        }
-        using (proc)
-        {
-            proc.WaitForExit();
-            return ignoreExitCode ? 0 : proc.ExitCode;
-        }
-    }
 
     static void CopyDirectory(string src, string dst)
     {
