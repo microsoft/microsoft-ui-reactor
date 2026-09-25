@@ -159,7 +159,12 @@ Conventions for contributors:
   - **Leaks.** A `FormField` that swapped its content control left the displaced
     editor's blur binding live, so a pooled control kept marking the old field
     and kept its `ValidationContext` alive; and a long-lived context grew one
-    bookkeeping entry per mounted rule without bound.
+    bookkeeping entry per mounted rule without bound, or per cleared field when
+    fields are named dynamically.
+  - **Registration was invisible.** `RegisteredFields` is public and
+    `MarkAllTouched()` iterates it, but registering a field raised no
+    notification, so a subscriber rendering the field set could stay stale.
+    Registration now counts as a change in every path that performs one.
   - **Display policies that could never fire.** `FormField`'s default
     `ShowWhen.WhenTouched` showed nothing because nothing called `MarkTouched`,
     and `ShowWhen.AfterFirstSubmit` showed nothing because no caller supplied the

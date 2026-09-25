@@ -353,11 +353,27 @@ public sealed class ValidationContext
     /// </summary>
     public void RegisterField(string field)
     {
+        bool changed;
         lock (_lock)
         {
-            _registeredFields.Add(field);
+            changed = RegisterFieldLocked(field);
+            if (changed) BumpVersionLocked();
         }
+        if (changed) RaiseChanged();
     }
+
+    /// <summary>
+    /// Adds a field to the registered set, reporting whether it was actually new.
+    /// <para>
+    /// Registration is observable: <see cref="RegisteredFields"/> is public, and
+    /// <see cref="MarkAllTouched"/> and the validity summary both iterate it. Every
+    /// registration path therefore has to fold this into its change decision, or a
+    /// subscriber rendering the field set goes stale — which is what happened while five
+    /// separate call sites each added to the set directly and none of them counted it
+    /// (issue #1262 review).
+    /// </para>
+    /// </summary>
+    private bool RegisterFieldLocked(string field) => _registeredFields.Add(field);
 
     /// <summary>
     /// Returns all registered field names.
@@ -429,6 +445,27 @@ public sealed class ValidationContext
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>
+    /// Drops every piece of per-field producer bookkeeping in one place: owned messages,
+    /// ownership stamps, in-flight async tokens, and rule-set membership.
+    /// <para>
+    /// A helper rather than four lines repeated at each call site, because they have to
+    /// move together and did not: <c>_producerStamp</c> was added later and the clearing
+    /// paths kept dropping only the other three, which both broke the documented
+    /// invariant that a stamp exists exactly while its producer owns messages and grew
+    /// the map without bound for dynamically named fields (issue #1262 review).
+    /// </para>
+    /// </summary>
+    private void DropFieldProducerStateLocked(string field)
+    {
+        _owned.Remove(field);
+        _producerStamp.Remove(field);
+        // An async pass still in flight would otherwise repopulate what the caller just
+        // cleared: dropping the token makes its result stale on arrival.
+        _asyncGeneration.Remove(field);
+        InvalidateRuleSetsLocked(field);
+    }
+
+    /// <summary>
     /// Clears all validation messages (both internal and external) for the specified field.
     /// </summary>
     public void Clear(string field)
@@ -439,11 +476,7 @@ public sealed class ValidationContext
             changed = false;
             if (_messages.Remove(field)) changed = true;
             if (_externalMessages.Remove(field)) changed = true;
-            _owned.Remove(field);
-            // An async pass still in flight would otherwise repopulate what this just
-            // cleared: dropping the token makes its result stale on arrival.
-            _asyncGeneration.Remove(field);
-            InvalidateRuleSetsLocked(field);
+            DropFieldProducerStateLocked(field);
             if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged(messagesOnly: true);
@@ -459,10 +492,7 @@ public sealed class ValidationContext
         lock (_lock)
         {
             changed = _messages.Remove(field);
-            _owned.Remove(field);
-            // As in Clear: a pending async pass must not repopulate what this dropped.
-            _asyncGeneration.Remove(field);
-            InvalidateRuleSetsLocked(field);
+            DropFieldProducerStateLocked(field);
             if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged(messagesOnly: true);
@@ -698,7 +728,7 @@ public sealed class ValidationContext
         int token;
         lock (_lock)
         {
-            _registeredFields.Add(field);
+            var newField = RegisterFieldLocked(field);
 
             var known = _currentValues.TryGetValue(field, out var previous);
             changed = !known || !Equals(previous, value);
@@ -708,6 +738,13 @@ public sealed class ValidationContext
                 _externalMessages.Remove(field);
                 RetractAsyncProducersLocked(field);
                 InvalidateRuleSetsLocked(field);
+                BumpVersionLocked();
+            }
+            else if (newField)
+            {
+                // The value is unchanged, but the field set is not — and that is
+                // observable on its own.
+                changed = true;
                 BumpVersionLocked();
             }
 
@@ -769,7 +806,7 @@ public sealed class ValidationContext
         bool valueChangedForNotify;
         lock (_lock)
         {
-            var newField = _registeredFields.Add(field);
+            var newField = RegisterFieldLocked(field);
 
             var known = _currentValues.TryGetValue(field, out var previous);
             var valueChanged = !known || !Equals(previous, value);
@@ -795,7 +832,7 @@ public sealed class ValidationContext
             // writing this field, and it must survive the sync pass.
             if (ApplyOwnedLocked(field, SyncProducer, messages)) messagesChanged = true;
 
-            changed = valueChanged || messagesChanged;
+            changed = valueChanged || messagesChanged || newField;
             valueChangedForNotify = valueChanged || newField;
             if (changed) BumpVersionLocked();
         }
@@ -1141,7 +1178,7 @@ public sealed class ValidationContext
 
             foreach (var (field, producer, messages) in verdicts)
             {
-                _registeredFields.Add(field);
+                if (RegisterFieldLocked(field)) changed = true;
                 if (ApplyOwnedLocked(field, producer, messages)) changed = true;
             }
 
@@ -1232,7 +1269,7 @@ public sealed class ValidationContext
 
             foreach (var (field, producer, messages) in verdicts)
             {
-                _registeredFields.Add(field);
+                if (RegisterFieldLocked(field)) changed = true;
                 if (ApplyOwnedLocked(field, producer, messages)) changed = true;
             }
 
@@ -1440,9 +1477,7 @@ public sealed class ValidationContext
             changed = _touchedFields.Remove(field);
             if (_messages.Remove(field)) changed = true;
             if (_externalMessages.Remove(field)) changed = true;
-            _owned.Remove(field);
-            _asyncGeneration.Remove(field);
-            InvalidateRuleSetsLocked(field);
+            DropFieldProducerStateLocked(field);
 
             _initialValues.TryGetValue(field, out initial);
             // Only rewind a value the context is actually tracking. Creating an entry

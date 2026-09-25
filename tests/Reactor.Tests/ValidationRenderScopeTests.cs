@@ -246,12 +246,16 @@ public class ValidationRenderScopeTests
         }
 
         RenderPass("John Doe");
-        Assert.Equal(0, notifications);         // nothing moved on first paint
+        // One notification, for registering "name". Registration is observable state
+        // (RegisteredFields is public and MarkAllTouched iterates it), so the first pass
+        // that introduces a field is a real change — the value and baseline genuinely did
+        // not move (issue #1262 review).
+        Assert.Equal(1, notifications);
         Assert.False(ctx.IsDirty("name"));
 
         RenderPass("John Doex");                // user typed
         var afterEdit = notifications;
-        Assert.Equal(1, afterEdit);
+        Assert.Equal(2, afterEdit);
         Assert.True(ctx.IsDirty("name"));
 
         // Every subsequent repaint over the same value must be silent.
@@ -698,18 +702,26 @@ public class ValidationRenderScopeTests
         ctx.Changed += () => notifications++;
 
         rule.Evaluate(ctx);
-        Assert.Equal(0, notifications);   // passing, nothing to record
+        // One notification, for the field being registered — `rule.Evaluate` registers
+        // "confirm" the first time it runs. The verdict itself is passing, so no message
+        // is recorded; registration is the whole of the change (issue #1262 review).
+        Assert.Equal(1, notifications);
         Assert.True(ctx.IsValid());
 
         passing = false;
         rule.Evaluate(ctx);
-        Assert.Equal(1, notifications);
+        Assert.Equal(2, notifications);
         Assert.False(ctx.IsValid());
 
         passing = true;
         rule.Evaluate(ctx);
-        Assert.Equal(2, notifications);
+        Assert.Equal(3, notifications);
         Assert.True(ctx.IsValid());
+
+        // The point of this test: re-evaluating a settled verdict stays silent, so the
+        // count above is not a repaint treadmill.
+        for (var i = 0; i < 5; i++) rule.Evaluate(ctx);
+        Assert.Equal(3, notifications);
     }
 
     [Fact]
@@ -2604,5 +2616,69 @@ public class ValidationRenderScopeTests
 
         Assert.Equal(afterSeed, notifications);
         Assert.Equal(versionAfterSeed, ctx.Version);
+    }
+    // ════════════════════════════════════════════════════════════════
+    //  Registration and per-field producer cleanup (issue #1262 review)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void RegisteringAFieldIsObservable()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+        var versionBefore = ctx.Version;
+
+        ctx.RegisterField("f");
+
+        // RegisteredFields is public, and MarkAllTouched iterates it — a subscriber
+        // rendering the field set has to hear about a new one.
+        Assert.Contains("f", ctx.RegisteredFields);
+        Assert.Equal(1, notifications);
+        Assert.True(ctx.Version > versionBefore);
+
+        // Re-registering the same field changes nothing and stays silent.
+        ctx.RegisterField("f");
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
+    public void RegistrationNotifiesEvenWhenValueAndMessagesAreUnchanged()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Value null, no messages: before the fix nothing here counted as a change, so
+        // the newly registered field was invisible to subscribers.
+        ctx.ApplyValidation("f", null, []);
+
+        Assert.Contains("f", ctx.RegisteredFields);
+        Assert.Equal(1, notifications);
+
+        // Same call again is genuinely net-zero.
+        ctx.ApplyValidation("f", null, []);
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
+    public void ClearingAFieldDropsItsProducerStamps()
+    {
+        var ctx = new ValidationContext();
+
+        // Every per-field clearing path has to drop the stamp with the ownership, or the
+        // documented invariant breaks and the map grows without bound for dynamically
+        // named fields.
+        for (var i = 0; i < 100; i++)
+        {
+            ctx.ApplyOwned($"f{i}", "sync", [new ValidationMessage($"f{i}", "bad")]);
+            Assert.Equal(1, ctx.ProducerStampEntryCount);
+            ctx.Clear($"f{i}");
+            Assert.Equal(0, ctx.ProducerStampEntryCount);
+        }
+
+        ctx.ApplyOwned("r", "sync", [new ValidationMessage("r", "bad")]);
+        ctx.Reset("r");
+        Assert.Equal(0, ctx.ProducerStampEntryCount);
     }
 }
