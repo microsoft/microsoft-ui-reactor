@@ -53,7 +53,18 @@
     <PackageReference Include="Microsoft.VSSDK.BuildTools" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
     <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VisualStudio.SDK.Analyzers" PrivateAssets="all" />
-    <PackageReference Include="System.Text.Json" />
+    <!-- Do NOT follow the repo-wide System.Text.Json version here.
+         Visual Studio ships System.Text.Json as a *shared assembly* and binds every
+         extension to its own copy via a devenv.exe.config <bindingRedirect> with a hard
+         upper bound (VS 18: oldVersion="0.0.0.0-10.0.0.10"). Redirects unify UPWARD only,
+         so an extension compiled against a higher assembly version falls outside the
+         range, no redirect applies, and — because the VSIX does not ship
+         System.Text.Json.dll (VS strips assemblies it provides) and the package registers
+         no BindingPath — the CLR finds nothing and throws FileNotFoundException on the
+         first call that touches the assembly. The safe ceiling is the version
+         Microsoft.VisualStudio.SDK itself depends on, because every VS that satisfies the
+         SDK redirects at least that high. VsSharedAssemblyBindingTests gates this. -->
+    <PackageReference Include="System.Text.Json" VersionOverride="9.0.0" />
     <!-- Pin transitive MessagePack (via Microsoft.VisualStudio.SDK → StreamJsonRpc) to a
          version that includes the GHSA-hv8m-jj95-wg3x LZ4 decompression fix and the
          v2.5.205 unsafe-gadget disallow-list additions from upstream PR #2269 that
