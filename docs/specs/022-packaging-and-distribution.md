@@ -195,9 +195,13 @@ structure: that version's `MrtCore.PriExpansion.targets` still passes a bare
 `\\?\` handling at all.
 
 Consumers also do not choose this package directly. Build tools reach an app only through
-`Microsoft.WindowsAppSDK.Base`, the sole package in the graph that references them, and
-every Base — including the newest experimental, 2.0.5-experimental2 — pins
-`1.7.251221100`. So the version is transitive: an app cannot opt into a fixed build-tools
+`Microsoft.WindowsAppSDK.Base`, the sole package in the graph that references them — and
+**no Base pins even the newest published build tools**, let alone the fixed private drop.
+Verified at nuspec level across stable *and* prerelease: 2.0.4 (the newest stable, pulled
+by Windows App SDK 2.5.1) and 2.0.5-experimental2 (the newest of any kind) both pin
+`1.7.251221100`; 2.0.250911001-experimental pins an older `1.7.20250829.1` still. Note the
+version strings: a plain `2.0.5` does not exist, only `2.0.5-experimental2`, so a probe for
+the former 404s without that meaning there is no newer Base. So the version is transitive: an app cannot opt into a fixed build-tools
 release by upgrading Windows App SDK, and pinning the newest published one would not help
 either.
 
