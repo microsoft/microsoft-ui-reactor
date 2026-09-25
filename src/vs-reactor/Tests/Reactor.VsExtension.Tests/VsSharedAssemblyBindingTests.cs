@@ -99,8 +99,7 @@ namespace Reactor.VsExtension.Tests
         [Fact]
         public void VsixManifest_DoesNotAdvertiseHostsOlderThanThePinnedBaseline()
         {
-            var manifest = FindRepoFile(Path.Combine(
-                "src", "vs-reactor", "Reactor.VsExtension", "source.extension.vsixmanifest"));
+            var manifest = FindRepoFile("src/vs-reactor/Reactor.VsExtension/source.extension.vsixmanifest");
 
             // Parsed as XML and scoped to the host elements rather than pattern-matched out of
             // the raw text: a regex over version literals silently skips any shape it did not
@@ -170,6 +169,16 @@ namespace Reactor.VsExtension.Tests
 
         private static string FindRepoFile(string relativePath)
         {
+            // A rooted argument would make Path.Combine below discard dir.FullName, so every
+            // iteration would probe the same absolute path and the walk would be meaningless.
+            // Fail loudly rather than let the lookup quietly stop searching.
+            if (Path.IsPathRooted(relativePath))
+            {
+                throw new ArgumentException(
+                    $"Expected a repo-relative path, got the rooted path '{relativePath}'.",
+                    nameof(relativePath));
+            }
+
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir != null)
             {
