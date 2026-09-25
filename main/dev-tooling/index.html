@@ -3939,12 +3939,12 @@ subcommands map one-to-one to the workflows below.</p>
 </tr>
 <tr>
 <td><code>mur doctor</code></td>
-<td>Verify the install — SDK, <code>mur</code>, local feed, template, plugin</td>
+<td>Verify the install — SDK, <code>mur</code>, local feed, templates, plugin</td>
 <td><code>mur doctor</code></td>
 </tr>
 <tr>
 <td><code>mur upgrade</code></td>
-<td>Re-pack framework + templates and refresh the plugin after a <code>git pull</code></td>
+<td>Re-pack the framework and refresh the plugin after a <code>git pull</code>; checks template availability but does not install the pack (that's <code>winapp new</code>)</td>
 <td><code>mur upgrade</code></td>
 </tr>
 <tr>
@@ -3954,11 +3954,21 @@ subcommands map one-to-one to the workflows below.</p>
 </tr>
 <tr>
 <td><code>mur pack-local</code> / <code>mur clean-local</code></td>
-<td>Package / clean the local NuGet feed for source-built framework smoke tests; the app template defaults to the public Reactor preview unless <code>--MSUIReactorVersion</code> is supplied</td>
+<td>Package / clean the local NuGet feed for source-built framework smoke tests; scaffolded apps default to the public Reactor preview unless <code>--reactor-version</code> is supplied</td>
 <td><code>mur pack-local</code></td>
+</tr>
+<tr>
+<td><code>mur templates status</code></td>
+<td>Report whether <code>dotnet new reactor</code> resolves (exit <code>0</code> available, <code>1</code> probe failed, <code>2</code> pack too old, <code>3</code> pack missing)</td>
+<td><code>mur templates status</code></td>
 </tr>
 </tbody>
 </table>
+<p>To <em>install</em> the template pack, use the Windows App SDK CLI rather than <code>mur</code>:
+<code>winapp new -t reactor -n MyApp</code> installs it on demand and scaffolds in one
+step, and <code>winapp new --list</code> installs it without scaffolding. <code>bootstrap.ps1</code>
+drives that same command, so a bootstrapped checkout can go straight to
+<code>dotnet new reactor</code>.</p>
 <p>Beyond the subcommands there are four top-level options worth knowing:
 <code>mur --create &lt;Name&gt;</code> scaffolds a new Reactor project, <code>mur --skill</code>
 prints the embedded <code>SKILL.md</code> agent reference, <code>mur --api</code> prints the

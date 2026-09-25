@@ -3390,9 +3390,9 @@
 <p>A Microsoft.UI.Reactor (Reactor) app is a normal WinUI 3 / Windows App SDK executable —
 <code>dotnet publish</code> produces the deployable artifact and the framework
 itself adds nothing exotic to the project file. What you choose at
-publish time is the <strong>shape</strong> of that artifact: an unpackaged folder
-(the <a href="../getting-started/"><code>dotnet new reactorapp</code></a> default), a signed
-MSIX, a single-file bundle, or a Native AOT native binary — each
+publish time is the <strong>shape</strong> of that artifact: a packaged MSIX
+(the <a href="../getting-started/"><code>dotnet new reactor</code></a> default), an unpackaged
+folder, a single-file bundle, or a Native AOT native binary — each
 combined with a <code>win-x64</code> or <code>win-arm64</code> runtime identifier. The
 trade-offs are the same ones any WinUI 3 app faces; the
 Reactor-specific notes on this page cover what changes when your
@@ -3411,7 +3411,7 @@ INPC walker).</p>
 </thead>
 <tbody>
 <tr>
-<td>Unpackaged (template default)</td>
+<td>Unpackaged</td>
 <td><code>WindowsPackageType=None</code>, <code>WindowsAppSDKSelfContained=true</code></td>
 <td><code>win-x64</code> / <code>win-arm64</code></td>
 <td>A folder with <code>MyApp.exe</code> and the WinUI 3 runtime alongside it. Run from anywhere; ship as a zip.</td>
@@ -3436,14 +3436,21 @@ INPC walker).</p>
 </tr>
 </tbody>
 </table>
+<p>A scaffolded app starts out <strong>packaged</strong>: <code>dotnet new reactor</code> emits a
+<code>Package.appxmanifest</code> and sets <code>EnableMsixTooling</code>, so <code>dotnet run</code>
+registers a loose-layout package and the app has identity from the
+first launch. The properties in the MSIX row above are the <em>publish</em>
+knobs for producing and signing a redistributable <code>.msix</code> — a separate
+concern the scaffold deliberately leaves off, since a fresh clone
+should build without a developer certificate.</p>
 <p>The four shapes are not mutually exclusive — MSIX wraps any of the
 three publish outputs, and AOT layers on top of either an unpackaged
 folder or an MSIX. The decision is usually distribution-channel-first
 (Store / sideload / direct download) and then performance-second.</p>
 <p><img alt="Reactor publish pipeline: dotnet publish takes a Reactor CSPROJ to one of three output shapes (unpackaged folder, single-file bundle, signed MSIX), with Native AOT layered on top of either the unpackaged or the MSIX form" src="../images/packaging/publish-pipeline.svg" /></p>
 <h2 id="the-unpackaged-shape">The unpackaged shape<a class="headerlink" href="#the-unpackaged-shape" title="Permanent link">&para;</a></h2>
-<p><code>dotnet new reactorapp</code> scaffolds an unpackaged WinUI 3 project — the
-shape every sample in this repo also uses:</p>
+<p>Prefer a zip-and-go folder over an MSIX? Set <code>WindowsPackageType=None</code>
+on a scaffolded project — the shape every sample in this repo uses:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">&lt;PropertyGroup&gt;</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">&lt;OutputType&gt;</span>WinExe<span class="nt">&lt;/OutputType&gt;</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">&lt;TargetFramework&gt;</span>net10.0-windows10.0.22621.0<span class="nt">&lt;/TargetFramework&gt;</span>
@@ -3507,7 +3514,27 @@ shape adds three properties on top of the unpackaged CSPROJ:</p>
 <a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="nt">&lt;/ItemGroup&gt;</span>
 </code></pre></div>
 <p><code>Package.appxmanifest</code> declares the package identity (Publisher,
-PackageFamilyName, capabilities, file-type associations). The
+PackageFamilyName, capabilities, file-type associations). Here is the
+identity block from this repo's own packaged selftest host, which is a
+real single-project MSIX app:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">&lt;Identity</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="na">Name=</span><span class="s">&quot;Microsoft.UI.Reactor.PackagedTests.Host&quot;</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="na">Publisher=</span><span class="s">&quot;CN=Microsoft.UI.Reactor.PackagedTests.Host&quot;</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="na">Version=</span><span class="s">&quot;1.0.0.0&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">&lt;Properties&gt;</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">&lt;DisplayName&gt;</span>Reactor<span class="w"> </span>Packaged<span class="w"> </span>Test<span class="w"> </span>Host<span class="nt">&lt;/DisplayName&gt;</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">&lt;PublisherDisplayName&gt;</span>Microsoft.UI.Reactor<span class="nt">&lt;/PublisherDisplayName&gt;</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span><span class="nt">&lt;Logo&gt;</span>Images\StoreLogo.png<span class="nt">&lt;/Logo&gt;</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="nt">&lt;/Properties&gt;</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="nt">&lt;Dependencies&gt;</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">  </span><span class="nt">&lt;TargetDeviceFamily</span><span class="w"> </span><span class="na">Name=</span><span class="s">&quot;Windows.Desktop&quot;</span><span class="w"> </span><span class="na">MinVersion=</span><span class="s">&quot;10.0.17763.0&quot;</span><span class="w"> </span><span class="na">MaxVersionTested=</span><span class="s">&quot;10.0.22621.0&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="nt">&lt;/Dependencies&gt;</span>
+</code></pre></div>
+<p><code>Publisher</code> must match the subject of the signing certificate, and
+<code>Name</code> plus <code>Publisher</code> together derive the PackageFamilyName that
+Windows uses to identify the app. The
 <a href="https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/packaging/">WinUI 3 packaging docs</a>
 cover the manifest surface in full. The signing certificate is
 either a Microsoft Store-issued cert (for Store submissions) or a
@@ -3521,12 +3548,12 @@ self-extracts on launch. For a WinUI 3 app the native runtime bits
 are not in managed assemblies, so the bare <code>PublishSingleFile=true</code>
 leaves several DLLs alongside the binary — add
 <code>IncludeNativeLibrariesForSelfExtract</code> to fold those into the bundle:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">&lt;PropertyGroup&gt;</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">&lt;PublishSingleFile&gt;</span>true<span class="nt">&lt;/PublishSingleFile&gt;</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">&lt;SelfContained&gt;</span>true<span class="nt">&lt;/SelfContained&gt;</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">&lt;IncludeNativeLibrariesForSelfExtract&gt;</span>true<span class="nt">&lt;/IncludeNativeLibrariesForSelfExtract&gt;</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="nt">&lt;RuntimeIdentifier&gt;</span>win-x64<span class="nt">&lt;/RuntimeIdentifier&gt;</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">&lt;/PropertyGroup&gt;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">&lt;PropertyGroup&gt;</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">&lt;PublishSingleFile&gt;</span>true<span class="nt">&lt;/PublishSingleFile&gt;</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nt">&lt;SelfContained&gt;</span>true<span class="nt">&lt;/SelfContained&gt;</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nt">&lt;IncludeNativeLibrariesForSelfExtract&gt;</span>true<span class="nt">&lt;/IncludeNativeLibrariesForSelfExtract&gt;</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="nt">&lt;RuntimeIdentifier&gt;</span>win-x64<span class="nt">&lt;/RuntimeIdentifier&gt;</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="nt">&lt;/PropertyGroup&gt;</span>
 </code></pre></div>
 <p>The trade-off is first-launch latency — the runtime extracts the
 embedded assemblies to <code>%TEMP%\.net\</code> (or the directory in
@@ -3545,8 +3572,8 @@ location, but trimming away the assembly name (via
 <code>&lt;Platforms&gt;x64;ARM64&lt;/Platforms&gt;</code> line in the project template
 exists so MSBuild accepts the per-platform restore. Build for both
 in CI by running publish twice:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">dotnet</span> <span class="n">publish</span> <span class="n">-c</span> <span class="n">Release</span> <span class="n">-r</span> <span class="n">win-x64</span>   <span class="n">-o</span> <span class="n">out</span><span class="p">/</span><span class="n">x64</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">dotnet</span> <span class="n">publish</span> <span class="n">-c</span> <span class="n">Release</span> <span class="n">-r</span> <span class="n">win-arm64</span> <span class="n">-o</span> <span class="n">out</span><span class="p">/</span><span class="n">arm64</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">dotnet</span> <span class="n">publish</span> <span class="n">-c</span> <span class="n">Release</span> <span class="n">-r</span> <span class="n">win-x64</span>   <span class="n">-o</span> <span class="n">out</span><span class="p">/</span><span class="n">x64</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">dotnet</span> <span class="n">publish</span> <span class="n">-c</span> <span class="n">Release</span> <span class="n">-r</span> <span class="n">win-arm64</span> <span class="n">-o</span> <span class="n">out</span><span class="p">/</span><span class="n">arm64</span>
 </code></pre></div>
 <p>There is no separate Reactor build for ARM64 — <code>Reactor.dll</code> is
 AnyCPU-equivalent managed code that compiles for both architectures
@@ -3555,84 +3582,40 @@ and any <code>System.Drawing.Common</code> / <code>TraceEvent</code> natives tra
 pulled in by Reactor) ship per-RID, which is why the runtime
 identifier matters even for managed-only Reactor code. The repo's
 sample apps default to <code>&lt;Platforms&gt;x64;ARM64&lt;/Platforms&gt;</code>; the
-<code>reactorapp</code> template uses <code>&lt;Platforms&gt;x64;ARM64;X86&lt;/Platforms&gt;</code>
-(X86 retained for parity with the WinUI 3 templates), but Reactor
+<code>dotnet new reactor</code> templates use <code>&lt;Platforms&gt;x86;x64;ARM64&lt;/Platforms&gt;</code>
+(x86 retained for parity with the WinUI 3 templates), but Reactor
 itself is only tested on x64 / ARM64.</p>
 <h2 id="native-aot">Native AOT<a class="headerlink" href="#native-aot" title="Permanent link">&para;</a></h2>
 <p>Reactor's perf-bench projects publish under AOT and run cleanly —
 the framework is built to be AOT-compatible on its hot path. The
 shape is the same as any other AOT publish, with <code>PublishAot=true</code>
 and a runtime identifier:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">&lt;PropertyGroup&gt;</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">&lt;OutputType&gt;</span>WinExe<span class="nt">&lt;/OutputType&gt;</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">&lt;TargetFramework&gt;</span>net10.0-windows10.0.22621.0<span class="nt">&lt;/TargetFramework&gt;</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nt">&lt;Platforms&gt;</span>x64;ARM64<span class="nt">&lt;/Platforms&gt;</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="nt">&lt;RootNamespace&gt;</span>StressPerf.Reactor<span class="nt">&lt;/RootNamespace&gt;</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span><span class="nt">&lt;AssemblyName&gt;</span>StressPerf.Reactor<span class="nt">&lt;/AssemblyName&gt;</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">  </span><span class="nt">&lt;ImplicitUsings&gt;</span>enable<span class="nt">&lt;/ImplicitUsings&gt;</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">  </span><span class="nt">&lt;Nullable&gt;</span>enable<span class="nt">&lt;/Nullable&gt;</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">  </span><span class="nt">&lt;UseWinUI&gt;</span>true<span class="nt">&lt;/UseWinUI&gt;</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">  </span><span class="nt">&lt;WindowsPackageType&gt;</span>None<span class="nt">&lt;/WindowsPackageType&gt;</span>
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">  </span><span class="nt">&lt;PublishAot&gt;</span>true<span class="nt">&lt;/PublishAot&gt;</span>
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="nt">&lt;/PropertyGroup&gt;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">&lt;PropertyGroup&gt;</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">&lt;OutputType&gt;</span>WinExe<span class="nt">&lt;/OutputType&gt;</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span><span class="nt">&lt;TargetFramework&gt;</span>net10.0-windows10.0.22621.0<span class="nt">&lt;/TargetFramework&gt;</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span><span class="nt">&lt;Platforms&gt;</span>x64;ARM64<span class="nt">&lt;/Platforms&gt;</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span><span class="nt">&lt;RootNamespace&gt;</span>StressPerf.Reactor<span class="nt">&lt;/RootNamespace&gt;</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span><span class="nt">&lt;AssemblyName&gt;</span>StressPerf.Reactor<span class="nt">&lt;/AssemblyName&gt;</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span><span class="nt">&lt;ImplicitUsings&gt;</span>enable<span class="nt">&lt;/ImplicitUsings&gt;</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">  </span><span class="nt">&lt;Nullable&gt;</span>enable<span class="nt">&lt;/Nullable&gt;</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">  </span><span class="nt">&lt;UseWinUI&gt;</span>true<span class="nt">&lt;/UseWinUI&gt;</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">  </span><span class="nt">&lt;WindowsPackageType&gt;</span>None<span class="nt">&lt;/WindowsPackageType&gt;</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">  </span><span class="nt">&lt;PublishAot&gt;</span>true<span class="nt">&lt;/PublishAot&gt;</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="nt">&lt;/PropertyGroup&gt;</span>
 </code></pre></div>
 <p><code>dotnet publish -c Release -r win-x64</code> produces a native binary —
 no <code>coreclr.dll</code>, no JIT, ~50 ms cold start versus ~250 ms for the
-JIT-based build on the same hardware. The project template gates
-the same shape behind a <code>NativeAot</code> parameter:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">&lt;PropertyGroup&gt;</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span><span class="nt">&lt;OutputType&gt;</span>WinExe<span class="nt">&lt;/OutputType&gt;</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="nt">&lt;TargetFramework</span><span class="w"> </span><span class="na">Condition=</span><span class="s">&quot;&#39;$(TargetFrameworkOverride)&#39; == &#39;&#39;&quot;</span><span class="nt">&gt;</span>net10.0-windows10.0.22621.0<span class="nt">&lt;/TargetFramework&gt;</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="nt">&lt;TargetFramework</span><span class="w"> </span><span class="na">Condition=</span><span class="s">&quot;&#39;$(TargetFrameworkOverride)&#39; != &#39;&#39;&quot;</span><span class="nt">&gt;</span>TargetFrameworkOverride-windows10.0.22621.0<span class="nt">&lt;/TargetFramework&gt;</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="cm">&lt;!--</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="cm">        x64 first so an unqualified `dotnet build` / F5 picks the right default on the</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="cm">        majority of dev machines. ARM64 second for Snapdragon X. X86 retained for parity</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="cm">        with the WinUI 3 templates even though Reactor itself is only tested on x64 / ARM64.</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="cm">    --&gt;</span>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">    </span><span class="nt">&lt;Platforms&gt;</span>x64;ARM64;X86<span class="nt">&lt;/Platforms&gt;</span>
-<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">    </span><span class="nt">&lt;UseWinUI&gt;</span>true<span class="nt">&lt;/UseWinUI&gt;</span>
-<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">    </span><span class="nt">&lt;WindowsPackageType&gt;</span>None<span class="nt">&lt;/WindowsPackageType&gt;</span>
-<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">    </span><span class="cm">&lt;!--</span>
-<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="cm">        WindowsAppSDKSelfContained bundles the Windows App SDK runtime alongside the</span>
-<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="cm">        published exe so the app:</span>
-<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="cm">          (a) runs from any folder without a separate Windows App Runtime install, and</span>
-<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="cm">          (b) survives `dotnet watch run` hot reload (used by the Reactor Visual Studio</span>
-<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a><span class="cm">              embedded-preview extension — spec 056). Incremental rebuilds otherwise</span>
-<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a><span class="cm">              double-count transitive Microsoft.WindowsAppSDK.* references and trip</span>
-<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a><span class="cm">              Microsoft.WindowsAppSDK.ComponentReference.targets&#39; strict version check</span>
-<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="cm">              (&quot;version 2.0.20;2.0.20 was referenced&quot;). Self-contained bundling</span>
-<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a><span class="cm">              sidesteps that check.</span>
-<a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a><span class="cm">        Tradeoff: ~30 MB extra in the publish output. To ship framework-dependent</span>
-<a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a><span class="cm">        (smaller publish, requires the user to install Microsoft.WindowsAppRuntime</span>
-<a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a><span class="cm">        separately) flip this to false and ensure your install instructions tell users</span>
-<a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a><span class="cm">        to install the runtime first.</span>
-<a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a><span class="cm">    --&gt;</span>
-<a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a><span class="w">    </span><span class="nt">&lt;WindowsAppSDKSelfContained&gt;</span>true<span class="nt">&lt;/WindowsAppSDKSelfContained&gt;</span>
-<a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a><span class="w">    </span><span class="nt">&lt;TargetPlatformMinVersion&gt;</span>10.0.17763.0<span class="nt">&lt;/TargetPlatformMinVersion&gt;</span>
-<a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a><span class="w">    </span><span class="nt">&lt;SupportedOSPlatformVersion&gt;</span>10.0.17763.0<span class="nt">&lt;/SupportedOSPlatformVersion&gt;</span>
-<a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a><span class="w">    </span><span class="nt">&lt;Nullable&gt;</span>enable<span class="nt">&lt;/Nullable&gt;</span>
-<a id="__codelineno-5-32" name="__codelineno-5-32" href="#__codelineno-5-32"></a><span class="w">    </span><span class="cm">&lt;!--</span>
-<a id="__codelineno-5-33" name="__codelineno-5-33" href="#__codelineno-5-33"></a><span class="cm">        Embeds the app icon in the .exe so File Explorer and shortcuts show it.</span>
-<a id="__codelineno-5-34" name="__codelineno-5-34" href="#__codelineno-5-34"></a><span class="cm">        The ReactorApp.Run(icon:) call in App.cs sets the *window* icon (taskbar /</span>
-<a id="__codelineno-5-35" name="__codelineno-5-35" href="#__codelineno-5-35"></a><span class="cm">        Alt-Tab / Task Manager); without either, Reactor falls back to</span>
-<a id="__codelineno-5-36" name="__codelineno-5-36" href="#__codelineno-5-36"></a><span class="cm">        Assets\AppIcon.ico and then to this embedded icon.</span>
-<a id="__codelineno-5-37" name="__codelineno-5-37" href="#__codelineno-5-37"></a><span class="cm">    --&gt;</span>
-<a id="__codelineno-5-38" name="__codelineno-5-38" href="#__codelineno-5-38"></a><span class="w">    </span><span class="nt">&lt;ApplicationIcon&gt;</span>Assets\AppIcon.ico<span class="nt">&lt;/ApplicationIcon&gt;</span>
-<a id="__codelineno-5-39" name="__codelineno-5-39" href="#__codelineno-5-39"></a><span class="w">    </span><span class="cm">&lt;!--</span>
-<a id="__codelineno-5-40" name="__codelineno-5-40" href="#__codelineno-5-40"></a><span class="cm">        Auto-resolve RuntimeIdentifier from the host SDK when the caller hasn&#39;t pinned</span>
-<a id="__codelineno-5-41" name="__codelineno-5-41" href="#__codelineno-5-41"></a><span class="cm">        Platform / RuntimeIdentifier explicitly. Lets `dotnet build` / `dotnet run`</span>
-<a id="__codelineno-5-42" name="__codelineno-5-42" href="#__codelineno-5-42"></a><span class="cm">        succeed without forcing -p:Platform=x64 on every invocation — WindowsAppSDK&#39;s</span>
-<a id="__codelineno-5-43" name="__codelineno-5-43" href="#__codelineno-5-43"></a><span class="cm">        self-contained build path requires a concrete RID.</span>
-<a id="__codelineno-5-44" name="__codelineno-5-44" href="#__codelineno-5-44"></a><span class="cm">    --&gt;</span>
-<a id="__codelineno-5-45" name="__codelineno-5-45" href="#__codelineno-5-45"></a><span class="w">    </span><span class="nt">&lt;RuntimeIdentifier</span><span class="w"> </span><span class="na">Condition=</span><span class="s">&quot;&#39;$(RuntimeIdentifier)&#39; == &#39;&#39; And (&#39;$(Platform)&#39; == &#39;&#39; Or &#39;$(Platform)&#39; == &#39;AnyCPU&#39; Or &#39;$(Platform)&#39; == &#39;Any CPU&#39;)&quot;</span><span class="nt">&gt;</span>$(NETCoreSdkPortableRuntimeIdentifier)<span class="nt">&lt;/RuntimeIdentifier&gt;</span>
-<a id="__codelineno-5-46" name="__codelineno-5-46" href="#__codelineno-5-46"></a><span class="w">    </span><span class="cm">&lt;!--#if (NativeAot) --&gt;</span>
-<a id="__codelineno-5-47" name="__codelineno-5-47" href="#__codelineno-5-47"></a><span class="w">    </span><span class="nt">&lt;PublishAot&gt;</span>true<span class="nt">&lt;/PublishAot&gt;</span>
-<a id="__codelineno-5-48" name="__codelineno-5-48" href="#__codelineno-5-48"></a><span class="w">    </span><span class="nt">&lt;InvariantGlobalization&gt;</span>true<span class="nt">&lt;/InvariantGlobalization&gt;</span>
-<a id="__codelineno-5-49" name="__codelineno-5-49" href="#__codelineno-5-49"></a><span class="w">    </span><span class="cm">&lt;!--#endif --&gt;</span>
-<a id="__codelineno-5-50" name="__codelineno-5-50" href="#__codelineno-5-50"></a><span class="nt">&lt;/PropertyGroup&gt;</span>
+JIT-based build on the same hardware.</p>
+<p>The <code>dotnet new reactor</code> templates do <strong>not</strong> enable AOT — they ship
+<code>PublishReadyToRun</code> + <code>PublishTrimmed</code> for non-Debug configurations
+instead. To go all the way to AOT, add the properties to the scaffolded
+CSPROJ yourself:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">&lt;PropertyGroup</span><span class="w"> </span><span class="na">Condition=</span><span class="s">&quot;&#39;$(Configuration)&#39; != &#39;Debug&#39;&quot;</span><span class="nt">&gt;</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">&lt;PublishAot&gt;</span>true<span class="nt">&lt;/PublishAot&gt;</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="nt">&lt;InvariantGlobalization&gt;</span>true<span class="nt">&lt;/InvariantGlobalization&gt;</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="nt">&lt;/PropertyGroup&gt;</span>
 </code></pre></div>
-<p>Pass <code>dotnet new reactorapp --NativeAot true</code> to get the AOT-enabled
-variant. <code>InvariantGlobalization=true</code> is paired with <code>PublishAot</code>
+<p><code>InvariantGlobalization=true</code> is paired with <code>PublishAot</code>
 because the alternative — shipping the full ICU data — pulls in
 trim warnings that the AOT analyzer flags as actionable.</p>
 <blockquote>
@@ -3731,7 +3714,7 @@ in Release too.</p>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong><a href="../dev-tooling/">Dev Tooling</a></strong> — Previous: the inner-loop side of the build pipeline (<code>mur pack-local</code>, <code>dotnet watch</code>, hot reload).</li>
-<li><strong><a href="../getting-started/">Getting Started</a></strong> — Where the <code>dotnet new reactorapp</code> template that produces the unpackaged shape comes from.</li>
+<li><strong><a href="../getting-started/">Getting Started</a></strong> — Where the <code>dotnet new reactor</code> templates that produce the packaged shape come from.</li>
 <li><strong><a href="../performance/">Performance</a></strong> — When you should reach for AOT (cold-start budgets, startup-perf benchmarks).</li>
 <li><strong><a href="../perf-instrumentation/">Perf Instrumentation</a></strong> — The ETW / EventPipe pipeline that survives AOT publish unchanged.</li>
 <li><strong><a href="../dev-tooling/">Dev Tooling</a></strong> — How the <code>Reactor.DevtoolsSupport</code> capability switch combines with <code>--devtools</code> activation.</li>
