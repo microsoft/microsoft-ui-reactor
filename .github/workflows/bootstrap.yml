@@ -332,6 +332,27 @@ jobs:
               if ($pkg) { Write-Host "  [ok] registered package $($pkg.PackageFullName)" }
               else { throw "TestApp is running but no loose-layout package is registered for identity '$identity'." }
 
+              # A process that starts and a package that registers do not prove the
+              # Reactor UI rendered — an app can come up in Reactor's render-error
+              # fallback with a broken App.cs or package reference and still satisfy
+              # both. The deleted CreateTemplateTests caught that by asserting a UIA
+              # element; this is the packaged equivalent. The blank template renders
+              # `TitleBar("$projectname$")`, so a TitleBar named TestApp is present
+              # exactly when the scaffold rendered.
+              $rendered = $false
+              for ($i = 0; $i -lt 20; $i++) {
+                  $hit = winapp ui search 'TestApp' --window $proc.MainWindowHandle --json 2>&1 | Out-String
+                  if ($LASTEXITCODE -eq 0 -and $hit -match 'TestApp') { $rendered = $true; break }
+                  Start-Sleep -Seconds 3
+                  $proc.Refresh()
+              }
+              if (-not $rendered) {
+                  Write-Host '--- UI tree ---'
+                  winapp ui inspect --app TestApp 2>&1 | Write-Host
+                  throw 'TestApp activated but its Reactor UI did not render (no element named TestApp in the tree).'
+              }
+              Write-Host '  [ok] Reactor UI rendered (TitleBar present)'
+
               Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
               Stop-Job $job -ErrorAction SilentlyContinue
               Remove-Job $job -Force -ErrorAction SilentlyContinue

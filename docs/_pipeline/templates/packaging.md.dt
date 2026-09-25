@@ -4,13 +4,13 @@ app: packaging
 order: 2.8
 audience: intermediate
 goal: |
-  How to ship a Reactor app: the unpackaged WindowsPackageType=None
-  shape that the project template produces, MSIX for Store /
-  sideloading, single-file publish, ARM64 as a second runtime
-  identifier, and what does and doesn't work under Native AOT given
-  Reactor's reflection-heavy DataGrid / devtools paths. Solid tier —
-  CSPROJ-driven snippets pulled from real samples + the
-  `dotnet new reactor` templates.
+  How to ship a Reactor app: the packaged single-project MSIX shape
+  that `dotnet new reactor` produces by default, the unpackaged
+  WindowsPackageType=None alternative, single-file publish, ARM64 as a
+  second runtime identifier, and what does and doesn't work under
+  Native AOT given Reactor's reflection-heavy DataGrid / devtools
+  paths. Solid tier — CSPROJ-driven snippets pulled from real samples
+  + the `dotnet new reactor` templates.
 tier: solid
 ---
 
