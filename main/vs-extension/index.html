@@ -3194,6 +3194,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#packaged-msix-projects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Packaged (MSIX) projects
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#known-limitations" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3255,7 +3266,7 @@
 <blockquote>
 <p>⚠️ <strong>Very rough / experimental.</strong> This is the roughest surface in an already experimental Reactor repository. It is meant for early feedback on the embedded-preview direction, not for reliable day-to-day development yet. Expect install friction, solution-load races, HWND/DPI edge cases, blank-window bugs, and breaking changes while this area is hardened.</p>
 </blockquote>
-<p>The Visual Studio Embedded Preview hosts a live Microsoft.UI.Reactor (Reactor) component inside a Visual Studio tool window — Visual Studio 2022 (17.8+) or Visual Studio 2026 (18.x), with the <strong>Visual Studio extension development</strong> workload. Unlike the VS Code preview, which streams screenshots, the Visual Studio extension embeds the real WinUI surface so mouse, keyboard, focus, popups, and accessibility tree inspection work against the running app.</p>
+<p>The Visual Studio Embedded Preview hosts a live Microsoft.UI.Reactor (Reactor) component inside a Visual Studio tool window — Visual Studio 2022 (17.14+) or Visual Studio 2026 (18.x), with the <strong>Visual Studio extension development</strong> workload. Unlike the VS Code preview, which streams screenshots, the Visual Studio extension embeds the real WinUI surface so mouse, keyboard, focus, popups, and accessibility tree inspection work against the running app.</p>
 <h2 id="when-to-use-it">When to use it<a class="headerlink" href="#when-to-use-it" title="Permanent link">&para;</a></h2>
 <p>Use the Visual Studio extension when you are building a Reactor desktop app in Visual Studio and want an interactive preview docked next to the editor. Use the VS Code extension when you need a cross-editor thumbnail stream or are working outside Visual Studio; it remains the portable preview option, but it is not interactive.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
@@ -3269,6 +3280,12 @@
 <li><strong>L1 hot reload</strong> — edits inside a <code>Render</code> body usually apply in place. The embedded UI refreshes without recreating the placeholder HWND.</li>
 <li><strong>L2 respawn</strong> — rude edits such as record/type shape changes cause <code>dotnet watch</code> to rebuild and restart the child. The extension detects the new port/token pair and re-embeds the new child into the same placeholder, normally within about 10 seconds.</li>
 </ul>
+<h2 id="packaged-msix-projects">Packaged (MSIX) projects<a class="headerlink" href="#packaged-msix-projects" title="Permanent link">&para;</a></h2>
+<p>Packaged projects work with no project changes: <code>dotnet new reactor</code> generates a packaged
+app that carries the Windows App SDK run support, and the preview supplies the rest. A
+project converted to MSIX by hand needs that run support
+(<code>Microsoft.Windows.SDK.BuildTools.WinApp</code>) added before the preview can attach.</p>
+<p>To preview the app unpackaged instead, set <code>&lt;WindowsPackageType&gt;None&lt;/WindowsPackageType&gt;</code>.</p>
 <h2 id="known-limitations">Known limitations<a class="headerlink" href="#known-limitations" title="Permanent link">&para;</a></h2>
 <ul>
 <li>WinAppSDK 1.6 or newer is required by the target Reactor app.</li>
