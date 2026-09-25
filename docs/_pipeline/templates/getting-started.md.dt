@@ -126,12 +126,13 @@ runnable example into an issue.
 
 One package reference is enough, exactly as in the
 [minimal `.csproj`](index.md#minimal-setup) — `Microsoft.UI.Reactor` brings the
-Windows App SDK in transitively. The four properties are the project-file
+Windows App SDK in transitively. The properties below are the project-file
 settings that have nowhere else to live, and each fails in a way that does not
 name its own cause:
 
 | Directive | Why it is required |
 |---|---|
+| `OutputType=WinExe` | Links the app for the Windows GUI subsystem. Without it the build still succeeds, but the `.exe` is a console binary, so Windows opens a console window alongside your UI for as long as the app runs. |
 | `TargetFramework=net10.0-windows10.0.22621.0` | Reactor ships `net10.0-windows10.0.22621`. A lower Windows version compiles against nothing and you get `CS0234: the namespace 'Reactor' does not exist`, as if the package were missing. |
 | `UseWinUI=true` | Brings in the WinUI 3 targets. |
 | `RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)` | The Windows App SDK needs a concrete architecture; without one the build fails with *"WindowsAppSDKSelfContained requires a supported Windows architecture."* Resolving it from the SDK keeps the file working on x64 and ARM64 alike, rather than pinning it to one. Same line the minimal `.csproj` uses. |

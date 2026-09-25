@@ -113,6 +113,33 @@ public class SingleFileGuideHeaderTests
     }
 
     /// <summary>
+    /// Both examples must declare <c>OutputType=WinExe</c>.
+    /// </summary>
+    /// <remarks>
+    /// This one does not fail the build, which is why it is easy to drop: the app still runs.
+    /// It links for the wrong subsystem instead. Measured on this tree — the PE subsystem byte
+    /// reads 3 (console) without the directive and 2 (Windows GUI) with it — so omitting it
+    /// leaves a console window sitting behind the app's UI for its whole lifetime.
+    /// </remarks>
+    [Fact]
+    public void BothExamples_DeclareWindowsSubsystemOutputType()
+    {
+        var guide = File.ReadAllText(Path.Combine(RepoRoot(), GuideTemplate));
+        var blocks = HeaderBlocks(guide);
+
+        Assert.Equal(2, blocks.Count);
+
+        foreach (var block in blocks)
+        {
+            Assert.True(
+                block.Contains("#:property OutputType=WinExe", StringComparison.Ordinal),
+                "Every single-file header must declare '#:property OutputType=WinExe'. Without it "
+                + "the build succeeds but links for the console subsystem, so a console window "
+                + "opens alongside the app's UI.");
+        }
+    }
+
+    /// <summary>
     /// The contiguous runs of <c>#:</c> directives in the guide, in document order.
     /// </summary>
     private static List<string> HeaderBlocks(string guide)
