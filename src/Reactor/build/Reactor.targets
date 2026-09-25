@@ -204,9 +204,11 @@
     can suggest they do).
 
     NOT removed by an SDK upgrade alone, and not by EnableMsixTooling alone either.
-    WindowsAppSDK#6394 is CLOSED, fixed in MSIX build tools 1.7.260903100 by
-    Pri.targets' AddProjectPriToResolvedFileToPublish / AddXbfFilesToResolvedFileToPublish.
-    Two things keep that out of reach for a Reactor app today:
+    WindowsAppSDK#6394 was closed 2026-09-24 as fixed in MSIX build tools 1.7.260903100
+    by Pri.targets' AddProjectPriToResolvedFileToPublish / AddXbfFilesToResolvedFileToPublish,
+    then REOPENED 2026-09-25 - upstream's own words: "Reopening because fix on MRT core
+    version used when not enabling msix tooling is still not released." That is the same
+    gate measured below. Two things keep the fix out of reach for a Reactor app today:
 
       1. Those targets are imported only via EnableMsixTooling -> MsixPackageSupport ->
          ShouldImportMsixCommonTargets -> Packaging.targets -> Pri.targets. With the flag
