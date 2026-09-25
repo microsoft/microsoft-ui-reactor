@@ -296,6 +296,8 @@ jobs:
         shell: pwsh
         run: |
           $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
+          $job = $null
+          $proc = $null
           Push-Location TestProjects/TestApp
           try {
               # `dotnet run` on a single-project MSIX registers a loose-layout
@@ -307,7 +309,6 @@ jobs:
                   dotnet run -c Release "-p:Platform=$arch" --nologo 2>&1
               } -ArgumentList (Get-Location).Path, $arch
 
-              $proc = $null
               for ($i = 0; $i -lt 90; $i++) {
                   Start-Sleep -Seconds 2
                   $proc = Get-Process -Name 'TestApp' -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -327,8 +328,6 @@ jobs:
               if (-not $proc) {
                   Write-Host '--- dotnet run output ---'
                   Receive-Job $job 2>&1 | Write-Host
-                  Stop-Job $job -ErrorAction SilentlyContinue
-                  Remove-Job $job -Force -ErrorAction SilentlyContinue
                   throw 'TestApp never started — the packaged app built but did not register/activate.'
               }
 
@@ -367,11 +366,16 @@ jobs:
                   throw 'TestApp activated but its Reactor UI did not render (no element named TestApp in the tree).'
               }
               Write-Host '  [ok] Reactor UI rendered (TitleBar present)'
-
-              Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-              Stop-Job $job -ErrorAction SilentlyContinue
-              Remove-Job $job -Force -ErrorAction SilentlyContinue
           } finally {
+              # Every throw above leaves a live packaged app and a blocked
+              # `dotnet run` job behind. Tear them down here, not on the success
+              # path only: a leaked TestApp contaminates the idempotence steps that
+              # follow, and a leaked job can leave the runner waiting on it.
+              if ($proc) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+              if ($job) {
+                  Stop-Job $job -ErrorAction SilentlyContinue
+                  Remove-Job $job -Force -ErrorAction SilentlyContinue
+              }
               Pop-Location
           }
 
