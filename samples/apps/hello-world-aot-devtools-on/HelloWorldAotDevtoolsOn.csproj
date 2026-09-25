@@ -44,17 +44,6 @@
     <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />
   </ItemGroup>
 
-  <Target Name="_CopyWinUIResourcesForAot" AfterTargets="Publish"
-          Condition="'$(PublishAot)' == 'true' and '$(AppxPackage)' != 'true'">
-    <ItemGroup>
-      <_WinUIResourcesForAot Include="$(OutputPath)**\*.xbf" />
-      <_WinUIResourcesForAot Include="$(OutputPath)$(AssemblyName).pri" Condition="Exists('$(OutputPath)$(AssemblyName).pri')" />
-    </ItemGroup>
-    <Copy SourceFiles="@(_WinUIResourcesForAot)"
-          DestinationFiles="@(_WinUIResourcesForAot->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
-  </Target>
-
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
     <ProjectReference Include="..\..\..\src\Reactor.Devtools\Reactor.Devtools.csproj" />

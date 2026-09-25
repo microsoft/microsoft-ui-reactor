@@ -112,13 +112,21 @@
       sidecar assets. ProjectReference consumers get them from the library
       output automatically, but PackageReference publish only copies assemblies
       unless the package target explicitly marks these files for output/publish.
+
+      There is deliberately NO Reactor.pri item here (issue #1271). The package no
+      longer ships one: it carried a single EmbeddedData copy of the .xbf below, and
+      any .pri that reaches the consumer's layout — whether via lib/ or via a
+      CopyToOutputDirectory item like these — is handed to the Windows App SDK's
+      `makepri.exe Dump` expansion, whose $(IntermediateOutputPath) output path
+      breaks past MAX_PATH on deep trees.
+
+      The loose files below are what satisfy InitializeComponent once the .pri is gone.
+      Measured: the consuming app's own generated .pri then contains NO Reactor entry at
+      all, and the app still resolves ms-appx:///Reactor/Hosting/ReactorApplication.xaml
+      — for an unpackaged app that URI falls back to the file on disk beside the
+      executable. Either sidecar alone is sufficient (the .xaml is parsed when the .xbf
+      is absent); both ship so the compiled path stays available.
     -->
-    <None Include="$(MSBuildThisFileDirectory)..\lib\**\Reactor.pri"
-          Link="Reactor.pri"
-          TargetPath="Reactor.pri"
-          CopyToOutputDirectory="PreserveNewest"
-          CopyToPublishDirectory="PreserveNewest"
-          Visible="false" />
     <None Include="$(MSBuildThisFileDirectory)..\lib\**\Reactor\Hosting\ReactorApplication.xaml"
           Link="Reactor\Hosting\ReactorApplication.xaml"
           TargetPath="Reactor\Hosting\ReactorApplication.xaml"
@@ -162,5 +170,83 @@
       <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
                                       Value="true" />
     </ItemGroup>
+  </Target>
+
+  <!--
+    Publish fix for WindowsAppSDK#6394.
+
+    An UNPACKAGED (WindowsPackageType=None) WinUI 3 app generates its resource index
+    ($(TargetName).pri) and its compiled XAML (*.xbf) into the BUILD output, but nothing
+    copies them into the PUBLISH output — the MakePRI publish stage is gated on
+    AppxPackage=true. The published app then starts with no resource index, so
+    XamlControlsResources loads as an empty dictionary and MRT lookups fail
+    (TabView/NavigationView throw FileNotFoundException out of
+    ResourceAccessor::GetLocalizedStringResource). Measured on the stock `reactorapp`
+    template: the published app dies at startup with 0xC000027B
+    (STATUS_APPLICATION_INTERNAL_EXCEPTION) inside native XAML, and dropping the app's
+    own .pri back into the publish folder makes it run.
+
+    This target lives here, in the targets Reactor SHIPS, rather than in each app,
+    because every Reactor app hits it. It supersedes the per-project
+    `_CopyWinUIResourcesForAot` snippet that samples used to carry: that one was gated on
+    PublishAot=true, but the gap is not AOT-specific — a plain `dotnet publish -c Release`
+    loses the .pri too.
+
+    Opt out with <ReactorCopyWinUIResourcesToPublish>false</ReactorCopyWinUIResourcesToPublish>.
+
+    Scoped to UNPACKAGED executables on purpose. A packaged (MSIX) app normally sets
+    EnableMsixTooling=true - VS's packaged WinUI template does, as does every MSIX
+    project in this repo - so it already gets the platform's own fix and is excluded
+    here by AppxPackage/WindowsPackageType. The two populations are complementary, not
+    overlapping. samples/ReactorGallery exercises both: unpackaged by default,
+    -p:GalleryPackaged=true flips it to MSIX and sets EnableMsixTooling in the same
+    conditional block (the two settings never co-exist, though reading the raw csproj
+    can suggest they do).
+
+    NOT removed by an SDK upgrade alone, and not by EnableMsixTooling alone either.
+    WindowsAppSDK#6394 was closed 2026-09-24 as fixed in MSIX build tools 1.7.260903100
+    by Pri.targets' AddProjectPriToResolvedFileToPublish / AddXbfFilesToResolvedFileToPublish,
+    then REOPENED 2026-09-25 - upstream's own words: "Reopening because fix on MRT core
+    version used when not enabling msix tooling is still not released." That is the same
+    gate measured below. Two things keep the fix out of reach for a Reactor app today:
+
+      1. Those targets are imported only via EnableMsixTooling -> MsixPackageSupport ->
+         ShouldImportMsixCommonTargets -> Packaging.targets -> Pri.targets. With the flag
+         off the build takes the MrtCore branch, which has no publish step. The official
+         WinUI templates DO set the flag, which is why upstream considers it fixed;
+         Reactor's template ships WindowsPackageType=None without it.
+      2. The .xbf half landed only in 1.7.260903100, and no Microsoft.WindowsAppSDK
+         release pulls that yet - 2.5.1 resolves 1.7.251221100. Measured: an unpackaged
+         consumer with EnableMsixTooling=true on the version the SDK actually resolves
+         publishes its app .pri but NOT its own compiled .xbf.
+
+    So enabling the flag today would fix half the gap and add the whole single-project
+    MSIX pipeline. Delete this target once an SDK release pulls build tools >=
+    1.7.260903100 AND either those targets leave the gate or the template adopts the
+    flag; the opt-out control in PriPackagingTests fails when that happens.
+
+    Note the Exclude: $(PublishDir) is nested INSIDE $(OutputPath) by default
+    (bin\<cfg>\<tfm>\<rid>\publish\), so globbing $(OutputPath)**\*.xbf without it would
+    re-collect the files a previous publish already copied and recreate them one level
+    deeper on every subsequent publish.
+  -->
+  <Target Name="_ReactorCopyWinUIResourcesToPublish"
+          AfterTargets="Publish"
+          Condition="'$(ReactorCopyWinUIResourcesToPublish)' != 'false'
+                     and '$(PublishDir)' != ''
+                     and '$(AppxPackage)' != 'true'
+                     and '$(WindowsPackageType)' != 'MSIX'
+                     and ('$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe')">
+    <ItemGroup>
+      <_ReactorWinUIPublishResource Include="$(OutputPath)**\*.xbf"
+                                    Exclude="$(PublishDir)**\*.xbf" />
+      <_ReactorWinUIPublishResource Include="$(ProjectPriFullPath)"
+                                    Condition="'$(ProjectPriFullPath)' != '' and Exists('$(ProjectPriFullPath)')" />
+      <_ReactorWinUIPublishResource Include="$(OutputPath)$(AssemblyName).pri"
+                                    Condition="'$(ProjectPriFullPath)' == '' and Exists('$(OutputPath)$(AssemblyName).pri')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_ReactorWinUIPublishResource)"
+          DestinationFiles="@(_ReactorWinUIPublishResource->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
   </Target>
 </Project>

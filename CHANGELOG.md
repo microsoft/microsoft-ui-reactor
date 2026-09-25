@@ -144,6 +144,25 @@ Conventions for contributors:
   `Assert.Inconclusive`, which Microsoft.Testing.Platform prints as "passed, zero skipped"
   (PR #1272).
 
+- **Reactor packages no longer ship a `.pri`, so consuming apps build at path depths where
+  they previously failed (issue #1271).** The index sat beside the assembly in `lib/`, where
+  `ResolveAssemblyReference` treats it as a reference-related file and the Windows App SDK
+  expands it with `makepri.exe Dump` into `$(IntermediateOutputPath)` — a path that breaks
+  past `MAX_PATH` and fails the build with `PRI175` / `PRI222` / `APPX0002`. Nothing is lost:
+  the `.Advanced` and `.Devtools` indexes were empty and the core one only embedded a second
+  copy of `ReactorApplication.xbf`, which still ships loose. `.pri` *generation* is unchanged,
+  so `ProjectReference` consumers are unaffected. The core package now also exposes one
+  `lib/` folder instead of two for the same target framework.
+
+- **Published unpackaged apps no longer start with an empty resource dictionary
+  ([WindowsAppSDK#6394](https://github.com/microsoft/WindowsAppSDK/issues/6394)).** The
+  Windows App SDK leaves an unpackaged app's own `.pri` and `.xbf` out of the publish
+  output, so the app resolved no theme resources and died at startup with `0xC000027B`
+  inside native XAML. Reactor's targets now copy them, for AOT and non-AOT publishes alike
+  — opt out with `<ReactorCopyWinUIResourcesToPublish>false</ReactorCopyWinUIResourcesToPublish>`.
+  Replaces the per-project `_CopyWinUIResourcesForAot` snippet (removed from 11 projects),
+  which only covered `PublishAot=true` builds.
+
 ### Security
 
 ## [0.1.0-preview.16] — 2026-09-22
