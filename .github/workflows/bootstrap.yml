@@ -202,16 +202,20 @@ jobs:
               }
               Write-Host "  [ok] $shortName"
           }
-          # The pack itself must be the Windows App SDK one.
-          $packages = dotnet new uninstall 2>&1 | Out-String
-          if ($packages -notmatch 'Microsoft\.WindowsAppSDK\.WinUI\.CSharp\.Templates') {
+          # The pack itself must be the Windows App SDK one. Match the id as a
+          # whole line, not a substring: a longer id that merely contains ours
+          # (`...CSharp.Templates.Extras`) would otherwise satisfy this while the
+          # required pack is absent — the same prefix false-positive
+          # WinAppSdkTemplates.InterpretPackageInstalledOutput guards against.
+          $packageLines = (dotnet new uninstall 2>&1 | Out-String) -split "`r?`n" | ForEach-Object { $_.Trim() }
+          if ($packageLines -notcontains 'Microsoft.WindowsAppSDK.WinUI.CSharp.Templates') {
               throw "Microsoft.WindowsAppSDK.WinUI.CSharp.Templates is not installed"
           }
           Write-Host "  [ok] Microsoft.WindowsAppSDK.WinUI.CSharp.Templates registered"
           # The in-repo Microsoft.UI.Reactor.ProjectTemplates pack was deleted.
           # Nothing may resurrect it: a stray install would hand new developers
           # the unpackaged `reactorapp` template the docs no longer describe.
-          if ($packages -match 'Microsoft\.UI\.Reactor\.ProjectTemplates') {
+          if ($packageLines -contains 'Microsoft.UI.Reactor.ProjectTemplates') {
               throw "the removed Microsoft.UI.Reactor.ProjectTemplates pack is installed; it should no longer exist"
           }
           Write-Host "  [ok] removed Microsoft.UI.Reactor.ProjectTemplates not installed"
