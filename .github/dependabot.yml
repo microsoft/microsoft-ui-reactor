@@ -76,9 +76,10 @@ updates:
       - dependency-name: "Microsoft.Graphics.Win2D"
       # MessagePack is a transitive dependency (Microsoft.VisualStudio.SDK ->
       # StreamJsonRpc) pinned in Directory.Packages.props to the 2.x line for
-      # StreamJsonRpc compatibility, at >= 2.5.301 for the GHSA-hv8m-jj95-wg3x
-      # LZ4 decompression fix. Block breaking major (3.x) bumps; 2.x security
-      # patches are still allowed.
+      # StreamJsonRpc compatibility, at >= 2.5.302 for the GHSA-hv8m-jj95-wg3x
+      # LZ4 decompression fix plus the v2.5.205 unsafe-gadget disallow-list
+      # additions (upstream PR #2269) that v2.5.301 omitted. Block breaking
+      # major (3.x) bumps; 2.x security patches are still allowed.
       - dependency-name: "MessagePack"
         update-types: ["version-update:semver-major"]
 

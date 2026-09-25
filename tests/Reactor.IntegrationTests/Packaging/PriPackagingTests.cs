@@ -28,7 +28,7 @@ namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
 [Collection(LocalPackageFeedCollection.Name)]
 public sealed class PriPackagingTests : IDisposable
 {
-    private readonly TemplatePackageTestFixture _fixture;
+    private readonly LocalPackageFeedFixture _fixture;
     private readonly string _tempRoot = Path.Join(Path.GetTempPath(), $"rpri-{Guid.NewGuid():N}");
 
     private static readonly string[] PackageIds =
@@ -38,7 +38,7 @@ public sealed class PriPackagingTests : IDisposable
         "Microsoft.UI.Reactor.Devtools",
     ];
 
-    public PriPackagingTests(TemplatePackageTestFixture fixture)
+    public PriPackagingTests(LocalPackageFeedFixture fixture)
     {
         _fixture = fixture;
         Directory.CreateDirectory(_tempRoot);

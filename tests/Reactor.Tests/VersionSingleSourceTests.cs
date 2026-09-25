@@ -105,27 +105,6 @@ public sealed class VersionSingleSourceTests
         Assert.Matches(@"^\d+\.\d+\.\d+", match.Groups[1].Value.Trim());
     }
 
-    [Fact]
-    public void TemplatesCsproj_fallback_derives_from_ReactorPublicVersion()
-    {
-        // The templates csproj's MicrosoftUIReactorVersion fallback default must
-        // derive from $(ReactorPublicVersion), NOT carry its own literal — that
-        // is what collapses the repo to ONE framework-version literal.
-        var (path, text) = ReadRepoFile(Path.Join(
-            "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj"));
-
-        Assert.Matches(
-            @"<MicrosoftUIReactorVersion\b[^>]*>\s*\$\(ReactorPublicVersion\)\s*</MicrosoftUIReactorVersion>",
-            text);
-
-        var literalFallback = global::System.Text.RegularExpressions.Regex.IsMatch(
-            text, @"<MicrosoftUIReactorVersion\b[^>]*>\s*" + PreviewLiteralPattern);
-        Assert.False(
-            literalFallback,
-            $"'{path}' hardcodes a preview version in <MicrosoftUIReactorVersion>. Derive the fallback from " +
-            "$(ReactorPublicVersion) instead so the repo has exactly one framework-version literal.");
-    }
-
     // ── Guard 3: CI compiled-docs freshness gate is wired ─────────────────
     //
     // Widened for issue #1052. This guard used to pin a two-file

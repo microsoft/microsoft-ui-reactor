@@ -6,21 +6,26 @@ user-invocable: true
 
 ## Process
 
-> ### ⚠️ ALWAYS start a new app with `dotnet new reactorapp`
+> ### ⚠️ ALWAYS start a new app with `dotnet new reactor`
 >
 > Unless the user has explicitly asked you to do something else (e.g. modify an existing project, write a single-file `#:package` script on purpose, or convert from XAML/MVVM into an existing tree), **your very first action on a new Reactor app is:**
 >
 > ```
-> dotnet new reactorapp -n <AppName>
+> dotnet new reactor -n <AppName>
 > ```
 >
 > Run it from the workspace root. It produces a working `.csproj` and `App.cs` already wired against `Microsoft.UI.Reactor` (the `App.cs` carries its own `using` directives — there is no `GlobalUsings.cs`, and you should not add one). **Edit that. Do not hand-write a `.csproj` and `App.cs` from scratch** — that path consistently leads to invented API names (`UseElementFocus`, `AutomationLandmarkType.Complementary`, etc.), wasted `mur check` round-trips, and longer sessions.
 >
-> If the template isn't installed yet, install it before scaffolding:
+> Richer starting points: `reactor-mvu` (Model-View-Update via `UseReducer`), `reactor-navview` (`NavigationView` shell), `reactor-tabview` (`TabView` shell).
+>
+> If the templates aren't installed yet, scaffold with the Windows App SDK CLI
+> instead — it installs the pack on demand, so there is no version to pin:
 >
 > ```
-> dotnet new install Microsoft.UI.Reactor.ProjectTemplates
+> winapp new -t reactor -n <AppName>
 > ```
+>
+> To install the pack without scaffolding, run `winapp new --list`.
 
 You build Reactor apps in this rhythm: scaffold → understand requirements → draft component tree → write files in a batch → `mur check`.
 
@@ -31,7 +36,7 @@ Before continuing
 
 Then for each task:
 
-1. **Scaffold first** (see the callout above). For a new app: `dotnet new reactorapp -n <AppName>`. Skip this step *only* if the user has told you to write a single-file script, edit an existing project, or otherwise asked for a non-scaffolded shape.
+1. **Scaffold first** (see the callout above). For a new app: `dotnet new reactor -n <AppName>`. Skip this step *only* if the user has told you to write a single-file script, edit an existing project, or otherwise asked for a non-scaffolded shape.
 2. **Understand the task.** Note what the app needs to do. Don't guess at requirements.
 3. **Draft.** Sketch the component tree, identify state, decide where each piece lives. If you know how you'd build the equivalent in React, you already know the shape — just translate to the C# spelling.
 4. **Write the files in a batch.** Add models and child components in one stretch on top of the scaffolded `App.cs`. Don't stop and rebuild after each file — build once at the end.

@@ -211,6 +211,7 @@ try {
     Assert-Throws { Resolve-ReactorNuGetFeed -ExplicitConfig (Join-Path $tmp 'missing.config') } `
         'missing explicit NuGet config is rejected'
 
+
     $restoreArgs = Get-ReactorRestoreArguments `
         -NuGetSource 'https://packagefeedproxy.microsoft.io/nuget/v3/index.json' `
         -NpmRegistry 'https://packagefeedproxy.microsoft.io/npm'

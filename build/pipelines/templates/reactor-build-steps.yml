@@ -357,14 +357,6 @@ steps:
           -o "${{ parameters.outputDirectory }}\nupkg"
       displayName: 'Pack Devtools NuGet'
 
-    - pwsh: |
-        dotnet pack tools/Templates/Microsoft.UI.Reactor.Templates.csproj `
-          --no-build --configuration ${{ parameters.configuration }} `
-          -p:Version=$(PackageVersion) `
-          -p:Platform=AnyCPU `
-          -o "${{ parameters.outputDirectory }}\nupkg"
-      displayName: 'Pack Templates'
-
     # ── NuGet.org Microsoft-compliance pre-flight (fail BEFORE the gated publish). ──
     # nuget.org enforces https://aka.ms/Microsoft-NuGet-Compliance on every
     # Microsoft-signed package: a missing ProjectUrl (or other required field) is
@@ -379,7 +371,7 @@ steps:
     # never drift from what nuget.org actually enforces — the tool embeds the same
     # default rule set the server uses (required ProjectUrl + license, authors must
     # be "Microsoft", allowed copyright notices, etc.) and emits the identical
-    # "missing required ProjectUrl" message we saw reject ProjectTemplates at push
+    # "missing required ProjectUrl" message that has rejected a package at push
     # time. It is a net472 console exe shipped INSIDE the package's tools/ folder
     # (NOT a dotnet tool — `dotnet tool install` rejects it), so we restore the
     # package from the INTERNAL feed (it has been seeded there; the sealed build
