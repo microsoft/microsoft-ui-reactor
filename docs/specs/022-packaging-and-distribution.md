@@ -175,8 +175,10 @@ app builds fine.
 
 Relocating the file is *not* a fix: a `.pri` that reaches the consumer's layout by any
 route — including a `CopyToOutputDirectory` item from a non-reference folder — also lands
-in `@(PackagingOutputs)`, where `_ExpandPriFiles` hands it to the same task. It has to be
-absent.
+in `@(PackagingOutputs)`, where `_ExpandPriFiles` hands it to the same task. Measured:
+shipping `Reactor.pri` from a `sidecar/` folder with a plain
+`<None CopyToOutputDirectory="PreserveNewest">` item still produces a
+`makepri.exe Dump -IndexFile …\sidecar\Reactor.pri` invocation. It has to be absent.
 
 Each of the three csproj files therefore narrows the allow-list that decides what may sit
 in the build-output folder:
@@ -194,6 +196,27 @@ What consumers need instead is the loose `ReactorApplication.xbf`, which
 by the `_PackReactorApplicationXbf` target rather than a `<None>` item, because a `<None>`
 guarded with `Exists()` is evaluated before the build produces the file and silently
 shipped a package without it.
+
+### Why removing the `.pri` is safe for packaged apps too
+
+Worth stating because the mechanism differs and the obvious worry is real. For a
+**packaged** (MSIX) consumer the old `lib/` `.pri` was not inert: it reached the app
+layout, so the app's own `makepri New` merged it into `resources.pri`. Measured on a
+packaged consumer of 0.1.0-preview.16, that index contains
+`ms-resource://<App>/Files/Reactor/Hosting/ReactorApplication.xbf`; built against this
+branch, it does not. So the `.pri` genuinely was carrying the sidecar there.
+
+It is still safe to drop, because the loose files carry it either way. Measured on the
+same packaged app, registered and launched:
+
+| packaged consumer | app starts | theme resources resolve |
+|---|---|---|
+| 0.1.0-preview.16 (has `.pri`) | yes | yes |
+| this branch (no `.pri`) | **yes** | **yes** |
+| this branch, loose `.xaml`+`.xbf` deleted | **crashes** | **no** |
+
+The third row is the control: it is what makes the second row evidence rather than a
+coincidence, and it confirms the loose sidecars — not the `.pri` — are load-bearing.
 
 ### Exactly one `lib/` folder
 
