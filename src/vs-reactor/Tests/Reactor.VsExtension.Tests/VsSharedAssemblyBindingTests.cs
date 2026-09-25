@@ -41,11 +41,17 @@ namespace Reactor.VsExtension.Tests
         // VS release that satisfies the SDK redirects at least that high, and building lower is
         // always safe because redirects unify upward. Bump these only together with the
         // Microsoft.VisualStudio.SDK PackageVersion in Directory.Packages.props.
+        //
+        // Only *direct* assembly references are gated, because that is what the CLR resolves
+        // against this assembly's manifest. An entry for something the extension does not
+        // reference directly would never be exercised and would be pure false confidence, so
+        // EveryGatedAssemblyIsActuallyReferenced fails on any such entry rather than letting it
+        // sit dormant. System.Text.Encodings.Web was exactly that: transitive through
+        // System.Text.Json, with no direct reference for this probe to ever see.
         private static readonly IReadOnlyDictionary<string, Version> Ceilings =
             new Dictionary<string, Version>(StringComparer.OrdinalIgnoreCase)
             {
                 ["System.Text.Json"] = new Version(9, 0, 0, 0),
-                ["System.Text.Encodings.Web"] = new Version(9, 0, 0, 0),
             };
 
         private static AssemblyName[] ExtensionReferences()
@@ -198,16 +204,33 @@ namespace Reactor.VsExtension.Tests
 
         /// <summary>
         /// Positive control for <see cref="SharedAssemblyReferences_StayWithinVsBindingRedirectCeiling"/>:
-        /// a clean result there is only meaningful if the probe can actually see the reference
-        /// it gates. If the extension legitimately stops using System.Text.Json, delete this
-        /// whole class rather than relaxing this assertion.
+        /// a clean result there is only meaningful if the probe can actually see the references
+        /// it gates. Because that probe reads direct assembly references, a ceiling entry for
+        /// something referenced only transitively would never be evaluated and the gate would
+        /// report success having tested nothing. Asserting every entry is visible makes a
+        /// dormant entry impossible: add one the extension does not reference directly and this
+        /// fails, forcing it to be made real or dropped.
         /// </summary>
         [Fact]
-        public void ExtensionReferences_IncludeAGatedSharedAssembly()
+        public void EveryGatedAssemblyIsActuallyReferenced()
         {
-            var names = ExtensionReferences().Select(r => r.Name).ToArray();
+            var names = ExtensionReferences()
+                .Select(r => r.Name)
+                .Where(n => n != null)
+                .ToArray();
 
-            Assert.Contains("System.Text.Json", names);
+            var dormant = Ceilings.Keys
+                .Where(k => !names.Contains(k, StringComparer.OrdinalIgnoreCase))
+                .ToArray();
+
+            Assert.True(
+                dormant.Length == 0,
+                "These entries in Ceilings are not direct assembly references of Reactor.VsExtension, "
+                + "so the ceiling gate never evaluates them and would stay green no matter what version "
+                + "resolved: " + string.Join(", ", dormant) + ". Either the extension should reference them "
+                + "directly, or they should be removed — a ceiling nothing checks is false confidence. "
+                + "(Transitive dependencies are not covered by this gate; the CLR resolves this assembly's "
+                + "own manifest references, which is what the binding failure this guards against involves.)");
         }
 
         [Fact]
