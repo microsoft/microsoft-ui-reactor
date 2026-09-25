@@ -70,6 +70,95 @@ identity — the same thing F5 does in Visual Studio. That requires **Developer
 Mode** (Settings → System → For developers). See [Packaging](packaging.md) for
 the unpackaged alternative.
 
+## One file, no project
+
+A Reactor app does not need a `.csproj`. .NET 10 runs a single `.cs` file
+directly, and file-level `#:` directives supply the configuration a project file
+otherwise would:
+
+```csharp
+#:package Microsoft.UI.Reactor@0.1.0-preview.16
+#:property OutputType=WinExe
+#:property TargetFramework=net10.0-windows10.0.22621.0
+#:property UseWinUI=true
+#:property WindowsPackageType=None
+#:property RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)
+
+using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
+using static Microsoft.UI.Reactor.Factories;
+
+ReactorApp.Run<Counter>("Counter");
+
+class Counter : Component
+{
+    public override Element Render()
+    {
+        var (count, setCount) = UseState(0);
+
+        return VStack(12,
+            TextBlock($"Count: {count}").FontSize(24).Bold(),
+            Button("Increment", () => setCount(count + 1))
+        ).Padding(24);
+    }
+}
+```
+
+```powershell
+dotnet run counter.cs
+```
+
+That is the whole app — one file, no scaffolding, no build output to manage.
+It is the fastest way to try an idea, reproduce a bug, or paste a complete
+runnable example into an issue.
+
+One package reference is enough, exactly as in the
+[minimal `.csproj`](index.md#minimal-setup) — `Microsoft.UI.Reactor` brings the
+Windows App SDK in transitively. The four properties are the project-file
+settings that have nowhere else to live, and each fails in a way that does not
+name its own cause:
+
+| Directive | Why it is required |
+|---|---|
+| `TargetFramework=net10.0-windows10.0.22621.0` | Reactor ships `net10.0-windows10.0.22621`. A lower Windows version compiles against nothing and you get `CS0234: the namespace 'Reactor' does not exist`, as if the package were missing. |
+| `UseWinUI=true` | Brings in the WinUI 3 targets. |
+| `RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)` | The Windows App SDK needs a concrete architecture; without one the build fails with *"WindowsAppSDKSelfContained requires a supported Windows architecture."* Resolving it from the SDK keeps the file working on x64 and ARM64 alike, rather than pinning it to one. Same line the minimal `.csproj` uses. |
+| `WindowsPackageType=None` | Declares the app unpackaged so the WinAppSDK bootstrapper initializes. **Omit it and the app builds cleanly, then dies at startup with `COMException … REGDB_E_CLASSNOTREG`** — the bootstrapper ships in the output but never runs. That error says nothing about the missing directive, so it is worth recognizing. |
+
+### Single file, packaged
+
+Dropping `WindowsPackageType=None` is also how you opt *in* to package identity —
+you just need something to supply the manifest. Add the Windows App SDK build
+tools and `dotnet run` hands off automatically:
+
+```csharp
+#:package Microsoft.UI.Reactor@0.1.0-preview.16
+#:package Microsoft.Windows.SDK.BuildTools.WinApp@0.7.0
+#:property OutputType=WinExe
+#:property TargetFramework=net10.0-windows10.0.22621.0
+#:property UseWinUI=true
+#:property RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)
+```
+
+```powershell
+dotnet run counter.cs
+# [WinAppRunSupport] Intercepted 'dotnet run' for packaged app
+# Launching packaged application...
+```
+
+The package synthesizes an appxmanifest from the `#:property` values, registers
+a loose layout, and launches the app with real package identity — so
+`Package.Current` and the `ms-appx:` scheme work from a single file. It bundles
+the CLI it needs, so nothing has to be installed globally.
+
+If you would rather drive that explicitly, or you already have the
+[Windows App SDK CLI](https://github.com/microsoft/winappCli) installed,
+`winapp run counter.cs` does the same thing without the extra `#:package` line.
+Both need **winapp 0.7.0 or later**.
+
+So the header is the switch: keep `WindowsPackageType=None` for a plain
+unpackaged window, or drop it and add the build tools for a packaged app.
+
 ## Contributor setup (one-time)
 
 Working *on* Reactor rather than with it? Clone and bootstrap:

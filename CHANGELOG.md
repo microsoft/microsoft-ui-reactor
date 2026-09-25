@@ -28,6 +28,21 @@ Conventions for contributors:
 
 ### Added
 
+- **Getting Started documents the single-file path (`dotnet run counter.cs`).**
+  A Reactor app does not need a `.csproj`: .NET 10 runs a lone `.cs` file whose
+  `#:package` / `#:property` header supplies what a project file otherwise would.
+  The guide now covers both shapes — unpackaged via `WindowsPackageType=None`,
+  and packaged by dropping that directive and adding
+  `Microsoft.Windows.SDK.BuildTools.WinApp`, which intercepts `dotnet run` and
+  launches with real package identity (winappCli#794 / #874, shipped in winapp
+  0.7.0). It also names the two failures whose error text does not point at the
+  cause: omitting `WindowsPackageType=None` builds clean and then dies at
+  startup with `REGDB_E_CLASSNOTREG`, and a Windows version below 22621 compiles
+  against nothing and reports `CS0234: the namespace 'Reactor' does not exist`,
+  which reads like a missing package. `SingleFileGuideHeaderTests` ties the
+  documented target framework to `src/Reactor/Reactor.csproj` so that second one
+  cannot rot back in.
+
 - **Framework mechanics are searchable in the ReactorGallery index (spec 064,
   issue #1275).** `find-ui --source reactor` answered "what is control X" but not
   "how does mechanism Y work": `UseState hook` and `key down event handler`
