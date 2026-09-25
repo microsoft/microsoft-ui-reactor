@@ -974,6 +974,14 @@ public sealed class ValidationContext
 
     /// <summary>
     /// Marks all registered fields as touched. Typically called on form submit.
+    /// <para>
+    /// Also records that a submit was attempted, which is what
+    /// <see cref="ShowWhen.AfterFirstSubmit"/> waits for. The framework has no other
+    /// notion of "submit": this is the call the guide tells you to make on a submit
+    /// attempt, so tying the two together is what makes that policy reachable on a
+    /// <c>FormField</c> at all — before this it could never show an error, behaving
+    /// identically to <see cref="ShowWhen.Never"/> (issue #1262).
+    /// </para>
     /// </summary>
     public void MarkAllTouched()
     {
@@ -988,10 +996,23 @@ public sealed class ValidationContext
             foreach (var field in _registeredFields)
                 _touchedFields.Add(field);
 
-            changed = _touchedFields.Count != touchedBefore;
+            changed = _touchedFields.Count != touchedBefore || !_submitAttempted;
+            _submitAttempted = true;
             if (changed) BumpVersionLocked();
         }
         if (changed) RaiseChanged();
+    }
+
+    private bool _submitAttempted;
+
+    /// <summary>
+    /// Whether <see cref="MarkAllTouched"/> has been called since the last reset — the
+    /// context's record of a submit attempt, read by
+    /// <see cref="ShowWhen.AfterFirstSubmit"/>.
+    /// </summary>
+    public bool SubmitAttempted
+    {
+        get { lock (_lock) return _submitAttempted; }
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -1442,8 +1463,12 @@ public sealed class ValidationContext
         bool changed;
         lock (_lock)
         {
-            changed = _touchedFields.Count > 0 || _messages.Count > 0 || _externalMessages.Count > 0;
+            changed = _touchedFields.Count > 0 || _messages.Count > 0
+                || _externalMessages.Count > 0 || _submitAttempted;
             _touchedFields.Clear();
+            // A reset returns the form to its pre-submit state, so the next
+            // AfterFirstSubmit reveal waits for a fresh submit attempt.
+            _submitAttempted = false;
             _messages.Clear();
             _externalMessages.Clear();
             _owned.Clear();

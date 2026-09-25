@@ -199,10 +199,18 @@ return FormField(
 ```
 
 `ShowWhen` controls when error messages appear:
-- `WhenTouched` — after the user has interacted with the field (recommended default)
+- `WhenTouched` — after the user has interacted with the field (recommended default).
+  `FormField` marks its own field touched on blur; elsewhere call `MarkTouched`.
 - `Always` — immediately, even before user interaction
-- `WhenDirty` — only after the value has changed
-- `AfterFirstSubmit` — only after the first submit attempt
+- `WhenDirty` — only after the value has changed from its baseline. Requires
+  `SetInitialValue(field, value)`: with no baseline recorded a field is never
+  dirty, so this policy stays silent forever.
+- `AfterFirstSubmit` — only after the first submit attempt, which is
+  `MarkAllTouched()`. `ResetAll()` clears it, so the next reveal waits for a
+  fresh submit.
+
+The verdict itself is unaffected by any of these — `IsValid()` and
+`GetMessages()` are current from the first render. `ShowWhen` only gates display.
 
 ## 6. Masked input
 

@@ -47,6 +47,10 @@ Conventions for contributors:
     default `ShowWhen.WhenTouched` reveals errors on blur as the guide describes.
     Nothing in the framework called `MarkTouched` before, leaving that default
     unreachable unless the app marked fields by hand (spec 011 §1E.1).
+  - `ValidationContext.SubmitAttempted`, recorded by `MarkAllTouched()` and
+    cleared by `ResetAll()`. This is what `ShowWhen.AfterFirstSubmit` waits for;
+    the framework had no notion of a submit before, so that policy could never
+    display anything.
 
 - **Framework mechanics are searchable in the ReactorGallery index (spec 064,
   issue #1275).** `find-ui --source reactor` answered "what is control X" but not
@@ -156,10 +160,20 @@ Conventions for contributors:
     editor's blur binding live, so a pooled control kept marking the old field
     and kept its `ValidationContext` alive; and a long-lived context grew one
     bookkeeping entry per mounted rule without bound.
+  - **Display policies that could never fire.** `FormField`'s default
+    `ShowWhen.WhenTouched` showed nothing because nothing called `MarkTouched`,
+    and `ShowWhen.AfterFirstSubmit` showed nothing because no caller supplied the
+    submit flag — both behaved exactly like `ShowWhen.Never` while silently
+    accepting the setting. Blur now marks touched, and `MarkAllTouched()` records
+    the submit attempt that `AfterFirstSubmit` waits for.
   - **Documentation.** The guide documented `ValidationContext.IsValidating`,
     which does not exist, and said `Validate.MustAsync` runs automatically. The
     async section now states the real contract — attach-only, driven from an
-    effect through `ValidationReconciler.ValidateFieldAsync`.
+    effect through `ValidationReconciler.ValidateFieldAsync`. The `ShowWhen`
+    reference now also names the signal each policy waits for, since two of them
+    need one the app has to send: `WhenDirty` measures against the baseline only
+    `SetInitialValue` records, and `AfterFirstSubmit` waits for
+    `MarkAllTouched()`.
 
 - **Wrong code and guidance in the shipped agent-kit skills (spec 064 §4, issue
   #1275).** Three gesture snippets in `reactor-input` used WinUI's nested

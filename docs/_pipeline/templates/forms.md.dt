@@ -245,6 +245,13 @@ its content. Errors appear below the field after the field is touched (focus
 then blur). The `ShowWhen` parameter controls when errors become visible:
 `WhenTouched` (default), `WhenDirty`, `AfterFirstSubmit`, `Always`, or `Never`.
 
+Two of those need a signal you have to send yourself. `WhenDirty` compares
+against a baseline, so it stays silent until `SetInitialValue(field, value)`
+records one. `AfterFirstSubmit` waits for `MarkAllTouched()` — the call the
+submit handler above already makes — and `ResetAll()` puts it back. `ShowWhen`
+gates display only: `IsValid()` and `GetMessages()` are current from the first
+render whichever policy you pick.
+
 ## Built-in Validators
 
 | Validator | Purpose |

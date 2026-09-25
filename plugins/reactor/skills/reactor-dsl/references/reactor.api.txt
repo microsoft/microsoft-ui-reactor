@@ -6100,6 +6100,7 @@ ToString() → string
 new()
 IReadOnlyList<string> InvalidFields { get; }
 IReadOnlySet<string> RegisteredFields { get; }
+bool SubmitAttempted { get; }
 int Version { get; }
 Add(ValidationMessage message) → void
 Add(string field, string text, Severity severity = Severity.Error) → void

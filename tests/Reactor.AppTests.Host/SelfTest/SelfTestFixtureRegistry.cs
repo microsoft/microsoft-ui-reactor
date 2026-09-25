@@ -829,6 +829,7 @@ internal static class SelfTestFixtureRegistry
         "ValCov_Issue1262_UnmountWithdrawsVerdict",
         "ValCov_Issue1262_ValidatorsRunOnce",
         "ValCov_Issue1262_PredicateCancellationReported",
+        "ValCov_Issue1262_AfterFirstSubmitReveals",
         // Controls coverage — MaskEngine, InputFormatter, AutoSuggest
         "ControlsCov_MaskEngineBasic",
         "ControlsCov_MaskEngineNavigation",
@@ -2752,6 +2753,7 @@ internal static class SelfTestFixtureRegistry
         "ValCov_Issue1262_UnmountWithdrawsVerdict" => new ValidationCoverageFixtures.Issue1262_ValidatedControlUnmountWithdraws(harness),
         "ValCov_Issue1262_ValidatorsRunOnce" => new ValidationCoverageFixtures.Issue1262_ValidatorsRunOncePerRender(harness),
         "ValCov_Issue1262_PredicateCancellationReported" => new ValidationCoverageFixtures.Issue1262_PredicateCancellationIsReported(harness),
+        "ValCov_Issue1262_AfterFirstSubmitReveals" => new ValidationCoverageFixtures.Issue1262_AfterFirstSubmitReveals(harness),
         // Controls coverage
         "ControlsCov_MaskEngineBasic" => new ControlsCoverageFixtures.MaskEngineBasic(harness),
         "ControlsCov_MaskEngineNavigation" => new ControlsCoverageFixtures.MaskEngineNavigation(harness),

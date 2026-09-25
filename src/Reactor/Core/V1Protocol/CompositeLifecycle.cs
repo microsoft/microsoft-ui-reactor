@@ -379,7 +379,11 @@ internal static class CompositeLifecycle
         // Collect messages from the validation context
         var allMessages = valCtx?.GetAllMessages() ?? (IReadOnlyList<ValidationMessage>)[];
         var (caught, _) = ErrorBubbling.FilterMessages(allMessages, vv.SeverityFilter);
-        var shouldDisplay = ErrorBubbling.ShouldDisplay(caught, vv.ShowWhen, valCtx);
+        // Same submit-attempt plumbing as FormField: without it a visualizer set to
+        // ShowWhen.AfterFirstSubmit could never display, since nothing else supplies
+        // the flag (issue #1262).
+        var shouldDisplay = ErrorBubbling.ShouldDisplay(
+            caught, vv.ShowWhen, valCtx, valCtx?.SubmitAttempted ?? false);
 
         switch (vv.Style)
         {
@@ -878,7 +882,8 @@ internal static class CompositeLifecycle
         if (valCtx is not null && fieldName is not null)
         {
             var severity = valCtx.HighestSeverity(fieldName);
-            if (severity is not null && ErrorStyling.ShouldShowErrors(valCtx, fieldName, showWhen))
+            if (severity is not null
+                && ErrorStyling.ShouldShowErrors(valCtx, fieldName, showWhen, valCtx.SubmitAttempted))
             {
                 var brushKey = ErrorStyling.GetBrushKey(severity.Value);
                 var brush = ThemeRef.Resolve(brushKey, ctrl);
@@ -901,7 +906,7 @@ internal static class CompositeLifecycle
         string? description, ShowWhen showWhen)
     {
         var (descText, isError) = FormFieldHelpers.GetDescriptionOrError(
-            valCtx, fieldName, description, showWhen);
+            valCtx, fieldName, description, showWhen, valCtx?.SubmitAttempted ?? false);
 
         if (descText is null)
         {

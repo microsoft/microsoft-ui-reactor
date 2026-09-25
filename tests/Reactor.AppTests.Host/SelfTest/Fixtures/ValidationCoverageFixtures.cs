@@ -2441,4 +2441,78 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
         }
     }
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 — ShowWhen.AfterFirstSubmit was unreachable on a FormField.
+    //
+    //  FormField called ShouldShowErrors without the submitAttempted argument,
+    //  so it defaulted to false forever and the policy behaved exactly like
+    //  ShowWhen.Never — the same shape as the WhenTouched defect. Nothing in
+    //  the framework supplied the flag; only the manual .WithErrorStyling(...)
+    //  path could, by passing it by hand. MarkAllTouched() is the submit signal
+    //  the guide tells callers to send, so the context records it.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal sealed record AfterSubmitProps(Action<ValidationContext> OnContext);
+
+    internal sealed class AfterSubmitOwner : Component<AfterSubmitProps>
+    {
+        public override Element Render()
+        {
+            var ctx = this.UseValidationContext();
+            Props.OnContext(ctx);
+
+            return VStack(8,
+                FormField(
+                    TextBox("").Validate("afs", "", Validate.Required("afs is required")),
+                    label: "AFS",
+                    showWhen: ShowWhen.AfterFirstSubmit),
+                TextBlock("afs-tail"));
+        }
+    }
+
+    internal class Issue1262_AfterFirstSubmitReveals(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            ValidationContext? ctx = null;
+
+            host.Mount(c => VStack(12,
+                Component<AfterSubmitOwner, AfterSubmitProps>(
+                    new AfterSubmitProps(found => ctx = found)),
+                TextBlock("host")));
+
+            await Harness.Render();
+            H.Check("Issue1262_AFS_ContextResolved", ctx is not null);
+            if (ctx is null) return;
+
+            // The verdict exists from the first render; only its display is gated.
+            H.Check("Issue1262_AFS_ErrorExistsInContext", ctx.HasError("afs"),
+                $"hasError={ctx.HasError("afs")}");
+            H.Check("Issue1262_AFS_HiddenBeforeSubmit",
+                H.FindText("afs is required") is null,
+                "error text was visible before any submit attempt");
+            H.Check("Issue1262_AFS_FlagStartsFalse", !ctx.SubmitAttempted);
+
+            // The submit signal the guide documents.
+            ctx.MarkAllTouched();
+            await Harness.Render();
+            await Harness.Render();
+
+            H.Check("Issue1262_AFS_FlagSetAfterSubmit", ctx.SubmitAttempted);
+            H.Check("Issue1262_AFS_ShownAfterSubmit",
+                H.FindText("afs is required") is not null,
+                "error text still hidden after MarkAllTouched()");
+
+            // ResetAll returns the form to its pre-submit state.
+            ctx.ResetAll();
+            await Harness.Render();
+            await Harness.Render();
+            H.Check("Issue1262_AFS_FlagClearedByResetAll", !ctx.SubmitAttempted);
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 afs done"));
+            await Harness.Render();
+        }
+    }
 }

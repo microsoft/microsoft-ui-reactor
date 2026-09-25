@@ -863,16 +863,25 @@ public class ValidationRenderScopeTests
     }
 
     [Fact]
-    public void MarkAllTouched_With_No_Registered_Fields_Is_Silent()
+    public void MarkAllTouched_With_No_Registered_Fields_Notifies_Once_For_The_Submit_Flag()
     {
         var ctx = new ValidationContext();
         var notifications = 0;
         ctx.Changed += () => notifications++;
 
+        // Contract change (issue #1262): the touched-set does not move here, but
+        // SubmitAttempted does, and that is observable state — ShowWhen.AfterFirstSubmit
+        // reads it, and a component can render it directly. Staying silent would leave an
+        // AfterFirstSubmit visualizer showing nothing after a submit it was told about.
         ctx.MarkAllTouched();
 
-        Assert.Equal(0, notifications);
-        Assert.Equal(0, ctx.Version);
+        Assert.Equal(1, notifications);
+        Assert.True(ctx.SubmitAttempted);
+
+        // Still bounded: the flag only flips once, so submitting again is silent. This is
+        // the property the original version of this test was protecting.
+        ctx.MarkAllTouched();
+        Assert.Equal(1, notifications);
     }
 
     [Fact]
@@ -2455,5 +2464,85 @@ public class ValidationRenderScopeTests
         Assert.Equal(versionBefore, ctx.Version);
         Assert.Equal(0, notifications);
         Assert.False(ctx.IsDirty("fresh"));
+    }
+    // ════════════════════════════════════════════════════════════════
+    //  ShowWhen.AfterFirstSubmit reachability (issue #1262)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void AfterFirstSubmitHidesUntilMarkAllTouched()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("f");
+        ctx.Add("f", "required");
+
+        // Before a submit attempt the policy hides, exactly like the guide says.
+        Assert.False(ctx.SubmitAttempted);
+        Assert.False(ErrorStyling.ShouldShowErrors(
+            ctx, "f", ShowWhen.AfterFirstSubmit, ctx.SubmitAttempted));
+
+        // MarkAllTouched is the submit signal the guide tells callers to send.
+        ctx.MarkAllTouched();
+
+        Assert.True(ctx.SubmitAttempted);
+        Assert.True(ErrorStyling.ShouldShowErrors(
+            ctx, "f", ShowWhen.AfterFirstSubmit, ctx.SubmitAttempted));
+    }
+
+    [Fact]
+    public void ResetAllReturnsToThePreSubmitState()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("f");
+        ctx.SetInitialValue("f", "a");
+        ctx.Add("f", "required");
+        ctx.MarkAllTouched();
+        Assert.True(ctx.SubmitAttempted);
+
+        ctx.ResetAll();
+
+        // A reset puts the form back before its submit, so the next reveal waits for a
+        // fresh attempt rather than showing immediately.
+        Assert.False(ctx.SubmitAttempted);
+    }
+
+    [Fact]
+    public void FirstSubmitAttemptNotifiesEvenWhenEveryFieldWasAlreadyTouched()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("f");
+        ctx.MarkTouched("f");
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Every field is touched already, so the touched-set does not move — but the
+        // submit flag does, and an AfterFirstSubmit visualizer has to repaint for it.
+        ctx.MarkAllTouched();
+
+        Assert.True(ctx.SubmitAttempted);
+        Assert.Equal(1, notifications);
+
+        // A second attempt changes nothing and stays silent.
+        ctx.MarkAllTouched();
+        Assert.Equal(1, notifications);
+    }
+    [Fact]
+    public void WhenDirtyStaysSilentWithoutABaseline()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("f");
+        ctx.Add("f", "required");
+        ctx.NotifyValueChanged("f", "typed something");
+
+        // Documented precondition: dirty is measured against a baseline, and only
+        // SetInitialValue records one. Without it the value can change all it likes and
+        // the field is never dirty, so WhenDirty never displays.
+        Assert.False(ctx.IsDirty("f"));
+        Assert.False(ErrorStyling.ShouldShowErrors(ctx, "f", ShowWhen.WhenDirty));
+
+        ctx.SetInitialValue("f", "");
+        Assert.True(ctx.IsDirty("f"));
+        Assert.True(ErrorStyling.ShouldShowErrors(ctx, "f", ShowWhen.WhenDirty));
     }
 }
