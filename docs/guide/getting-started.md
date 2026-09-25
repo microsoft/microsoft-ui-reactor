@@ -81,84 +81,80 @@ otherwise would:
 #:property OutputType=WinExe
 #:property TargetFramework=net10.0-windows10.0.22621.0
 #:property UseWinUI=true
-#:property WindowsPackageType=None
-#:property RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)
 
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 
-ReactorApp.Run<Counter>("Counter");
+ReactorApp.Run<MyApp>("Hello Reactor");
 
-class Counter : Component
+class MyApp : Component
 {
     public override Element Render()
     {
         var (count, setCount) = UseState(0);
 
-        return VStack(12,
-            TextBlock($"Count: {count}").FontSize(24).Bold(),
-            Button("Increment", () => setCount(count + 1))
-        ).Padding(24);
+        return VStack(
+            Heading($"Count: {count}"),
+            HStack(8,
+                Button("-", () => setCount(count - 1)),
+                Button("+", () => setCount(count + 1))
+            )
+        );
     }
 }
 ```
 
+Save it as `counter.cs` and run it:
+
 ```powershell
-dotnet run counter.cs
+winapp run counter.cs
 ```
 
 That is the whole app — one file, no scaffolding, no build output to manage.
 It is the fastest way to try an idea, reproduce a bug, or paste a complete
-runnable example into an issue.
+runnable example into an issue. `winapp run` builds the file, synthesizes an
+appxmanifest from the `#:property` values, and launches it with package
+identity. It needs **winapp 0.7.0 or later**.
 
 One package reference is enough, exactly as in the
 [minimal `.csproj`](index.md#minimal-setup) — `Microsoft.UI.Reactor` brings the
-Windows App SDK in transitively. The properties below are the project-file
-settings that have nowhere else to live, and each fails in a way that does not
-name its own cause:
+Windows App SDK in transitively. The three properties are the project-file
+settings that have nowhere else to live:
 
 | Directive | Why it is required |
 |---|---|
 | `OutputType=WinExe` | Links the app for the Windows GUI subsystem. Without it the build still succeeds, but the `.exe` is a console binary, so Windows opens a console window alongside your UI for as long as the app runs. |
 | `TargetFramework=net10.0-windows10.0.22621.0` | Reactor ships `net10.0-windows10.0.22621`. A lower Windows version compiles against nothing and you get `CS0234: the namespace 'Reactor' does not exist`, as if the package were missing. |
 | `UseWinUI=true` | Brings in the WinUI 3 targets. |
-| `RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)` | The Windows App SDK needs a concrete architecture; without one the build fails with *"WindowsAppSDKSelfContained requires a supported Windows architecture."* Resolving it from the SDK keeps the file working on x64 and ARM64 alike, rather than pinning it to one. Same line the minimal `.csproj` uses. |
-| `WindowsPackageType=None` | Declares the app unpackaged so the WinAppSDK bootstrapper initializes. **Omit it and the app builds cleanly, then dies at startup with `COMException … REGDB_E_CLASSNOTREG`** — the bootstrapper ships in the output but never runs. That error says nothing about the missing directive, so it is worth recognizing. |
 
-### Single file, packaged
+### Running it with plain `dotnet`
 
-Dropping `WindowsPackageType=None` is also how you opt *in* to package identity —
-you just need something to supply the manifest. Add the Windows App SDK build
-tools and `dotnet run` hands off automatically:
+`winapp run` passes the target architecture through to the build. `dotnet run`
+does not, so on its own it stops with *"WindowsAppSDKSelfContained requires a
+supported Windows architecture"*. Two more directives make the file
+self-sufficient:
 
 ```csharp
-#:package Microsoft.UI.Reactor@0.1.0-preview.16
-#:package Microsoft.Windows.SDK.BuildTools.WinApp@0.7.0
-#:property OutputType=WinExe
-#:property TargetFramework=net10.0-windows10.0.22621.0
-#:property UseWinUI=true
+#:property WindowsPackageType=None
 #:property RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)
 ```
 
 ```powershell
 dotnet run counter.cs
-# [WinAppRunSupport] Intercepted 'dotnet run' for packaged app
-# Launching packaged application...
 ```
 
-The package synthesizes an appxmanifest from the `#:property` values, registers
-a loose layout, and launches the app with real package identity — so
-`Package.Current` and the `ms-appx:` scheme work from a single file. It bundles
-the CLI it needs, so nothing has to be installed globally.
+| Directive | Why it is required |
+|---|---|
+| `RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)` | Supplies the architecture the Windows App SDK needs, resolved from the SDK so the same file works on x64 and ARM64 rather than being pinned to one. Same line the minimal `.csproj` uses. |
+| `WindowsPackageType=None` | Declares the app unpackaged so the WinAppSDK bootstrapper initializes. **Omit it and the app builds cleanly, then dies at startup with `COMException … REGDB_E_CLASSNOTREG`** — the bootstrapper ships in the output but never runs. That error says nothing about the missing directive, so it is worth recognizing. |
 
-If you would rather drive that explicitly, or you already have the
-[Windows App SDK CLI](https://github.com/microsoft/winappCli) installed,
-`winapp run counter.cs` does the same thing without the extra `#:package` line.
-Both need **winapp 0.7.0 or later**.
-
-So the header is the switch: keep `WindowsPackageType=None` for a plain
-unpackaged window, or drop it and add the build tools for a packaged app.
+This shape is unpackaged, so there is no package identity: `Package.Current` and
+`ms-appx:` URIs are unavailable. To keep those under `dotnet run`, drop
+`WindowsPackageType=None` and add
+`#:package Microsoft.Windows.SDK.BuildTools.WinApp@0.7.0` instead — its targets
+intercept `dotnet run`, synthesize the manifest, and launch the app packaged,
+which is the same thing `winapp run` does without the extra reference.
 
 ## Contributor setup (one-time)
 

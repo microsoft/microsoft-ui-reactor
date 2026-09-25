@@ -189,62 +189,61 @@ public class InlineSnippetLedgerTests
                 // app — the snippet mechanism extracts from projects. It stays one contiguous
                 // block rather than a ledgered header plus a snippet-backed body because the
                 // section's whole claim is "this is the entire file"; splitting it would show the
-                // reader two fragments to reassemble.
+                // reader two fragments to reassemble. It is also kept verbatim in step with the
+                // published blog's quick-start, so the two cannot drift.
                 //
                 // What that costs is smaller than it looks. Every construct in the body is
                 // exercised by a compiled snippet on this same page — ReactorApp.Run<T>(string),
-                // Component/Render, UseState, VStack(spacing, …), TextBlock($"…").FontSize(…),
-                // .Bold() and .Padding(…) all appear in getting-started/hello-world, and
+                // Component/Render, UseState, VStack, Heading and HStack(spacing, …) all appear
+                // in getting-started/hello-world and getting-started/layout-basics, and
                 // UseState + Button(string, Action) in getting-started/usestate-counter. An API
                 // rename that broke this block would redden those first.
                 //
-                // The genuinely unverified part is the six #: directives, and they are covered
+                // The genuinely unverified part is the #: directives, and they are covered
                 // separately: the Reactor version is the {{reactorVersion}} token the doc
                 // compiler substitutes, and SingleFileGuideHeaderTests pins the TargetFramework
-                // to src/Reactor/Reactor.csproj. That last one matters because a stale Windows
-                // version surfaces as CS0234 "the namespace 'Reactor' does not exist", which
-                // reads like a missing package rather than a wrong TFM.
+                // to src/Reactor/Reactor.csproj and asserts each remaining directive sits in the
+                // block that needs it. That TFM check matters because a stale Windows version
+                // surfaces as CS0234 "the namespace 'Reactor' does not exist", which reads like
+                // a missing package rather than a wrong TFM.
                 ["""
                  #:package Microsoft.UI.Reactor@{{reactorVersion}}
                  #:property OutputType=WinExe
                  #:property TargetFramework=net10.0-windows10.0.22621.0
                  #:property UseWinUI=true
-                 #:property WindowsPackageType=None
-                 #:property RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)
 
                  using Microsoft.UI.Reactor;
                  using Microsoft.UI.Reactor.Core;
                  using static Microsoft.UI.Reactor.Factories;
 
-                 ReactorApp.Run<Counter>("Counter");
+                 ReactorApp.Run<MyApp>("Hello Reactor");
 
-                 class Counter : Component
+                 class MyApp : Component
                  {
                      public override Element Render()
                      {
                          var (count, setCount) = UseState(0);
 
-                         return VStack(12,
-                             TextBlock($"Count: {count}").FontSize(24).Bold(),
-                             Button("Increment", () => setCount(count + 1))
-                         ).Padding(24);
+                         return VStack(
+                             Heading($"Count: {count}"),
+                             HStack(8,
+                                 Button("-", () => setCount(count - 1)),
+                                 Button("+", () => setCount(count + 1))
+                             )
+                         );
                      }
                  }
                  """] =
-                    "File-based app: no .csproj by definition, so it cannot be a doc app. Its DSL is covered by the compiled hello-world/usestate-counter snippets on the same page; its TFM by SingleFileGuideHeaderTests.",
+                    "File-based app: no .csproj by definition, so it cannot be a doc app. Matches the published blog's quick-start verbatim. Its DSL is covered by the compiled hello-world/usestate-counter/layout-basics snippets on the same page; its TFM by SingleFileGuideHeaderTests.",
 
-                // The packaged variant, shown as a header-only fragment because the point is the
-                // two-line delta from the block above — add the build tools package, drop
-                // WindowsPackageType=None — not the component body, which is unchanged.
+                // The two directives that let the same file run under plain `dotnet` instead of
+                // `winapp run`. A fragment by design: the point is the delta, not a second copy
+                // of the app.
                 ["""
-                 #:package Microsoft.UI.Reactor@{{reactorVersion}}
-                 #:package Microsoft.Windows.SDK.BuildTools.WinApp@0.7.0
-                 #:property OutputType=WinExe
-                 #:property TargetFramework=net10.0-windows10.0.22621.0
-                 #:property UseWinUI=true
+                 #:property WindowsPackageType=None
                  #:property RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)
                  """] =
-                    "Header-only delta for the packaged variant; same file-based-app constraint, TFM guarded by SingleFileGuideHeaderTests.",
+                    "Two-line delta for running the same file under plain dotnet; placement is guarded by SingleFileGuideHeaderTests.",
             },
 
             ["source-mapping"] = new(StringComparer.Ordinal)

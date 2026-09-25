@@ -77,100 +77,98 @@ public class SingleFileGuideHeaderTests
     }
 
     /// <summary>
-    /// The unpackaged example must declare <c>WindowsPackageType=None</c> and the packaged one
-    /// must not — the directive's *placement* is what the section teaches.
+    /// The primary example carries the full header; the second block is the <c>dotnet run</c>
+    /// delta and must carry exactly the two directives that delta exists to add.
     /// </summary>
     /// <remarks>
-    /// Asserting the file merely contains the directive somewhere is too weak: the two blocks
-    /// differ by two lines, so the realistic drift is a copy-paste that moves it between them,
-    /// not one that deletes it. Moving it would leave a whole-file <c>Contains</c> green while
-    /// the unpackaged example lost the directive its own table says is mandatory *and* the
-    /// packaged example silently stopped being packaged. Without the directive an app builds
-    /// clean and then dies at startup with <c>REGDB_E_CLASSNOTREG</c>, because the WinAppSDK
-    /// bootstrapper ships in the output but never auto-initializes.
+    /// The section's whole shape is "here is the file, and here are the two lines you add to run
+    /// it without <c>winapp</c>". If either directive migrated into the primary block, that block
+    /// would stop matching the blog and the published quick-start, and the delta would no longer
+    /// be a delta — while a whole-file <c>Contains</c> check stayed green through the move. So
+    /// placement is asserted, not just presence.
     /// </remarks>
     [Fact]
-    public void PackageTypeDirective_SitsInTheUnpackagedExampleOnly()
+    public void DotnetDeltaDirectives_SitInTheSecondBlockOnly()
     {
         var guide = File.ReadAllText(Path.Join(RepoRoot(), GuideTemplate));
         var blocks = HeaderBlocks(guide);
 
-        // Two header blocks: the unpackaged example, then the packaged delta. If the section is
+        // Two header blocks: the complete file, then the dotnet-run delta. If the section is
         // restructured into a different number, this needs rereading rather than silently
         // passing over whichever blocks happen to remain.
         Assert.Equal(2, blocks.Count);
 
-        Assert.True(
-            blocks[0].Contains("#:property WindowsPackageType=None", StringComparison.Ordinal),
-            "The first #: header block is the unpackaged example and must declare "
-            + "'#:property WindowsPackageType=None'. Without it the app builds clean and then "
-            + "dies at startup with REGDB_E_CLASSNOTREG.");
-
-        Assert.False(
-            blocks[1].Contains("#:property WindowsPackageType=None", StringComparison.Ordinal),
-            "The second #: header block is the packaged example and must NOT declare "
-            + "'#:property WindowsPackageType=None' — dropping that directive is precisely what "
-            + "opts the app into package identity.");
-    }
-
-    /// <summary>
-    /// Every directive the guide's table calls load-bearing must appear in both header blocks.
-    /// </summary>
-    /// <remarks>
-    /// These are asserted together because they share a failure mode: the block is exempt from
-    /// compilation, so dropping any one of them leaves the whole suite green while a reader's
-    /// <c>dotnet run</c> fails. Each row of the table is a claim, and each claim is checked.
-    /// <list type="bullet">
-    /// <item><c>OutputType=WinExe</c> — does not fail the build at all; it links the app for the
-    /// console subsystem instead. Measured on this tree: the PE subsystem byte reads 3 (console)
-    /// without it and 2 (Windows GUI) with it, so a console window sits behind the UI.</item>
-    /// <item><c>UseWinUI=true</c> — brings in the WinUI 3 targets.</item>
-    /// <item><c>RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)</c> — supplies the
-    /// architecture the Windows App SDK requires, and resolves it from the SDK so the file stays
-    /// portable across x64 and ARM64. Without it the build fails with "WindowsAppSDKSelfContained
-    /// requires a supported Windows architecture".</item>
-    /// </list>
-    /// <c>WindowsPackageType</c> is deliberately absent from this list — it is the one directive
-    /// that must differ between the two blocks, so it is checked separately for placement.
-    /// </remarks>
-    [Theory]
-    [InlineData("#:property OutputType=WinExe")]
-    [InlineData("#:property UseWinUI=true")]
-    [InlineData("#:property RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)")]
-    public void BothExamples_DeclareTheLoadBearingDirectives(string directive)
-    {
-        var guide = File.ReadAllText(Path.Join(RepoRoot(), GuideTemplate));
-        var blocks = HeaderBlocks(guide);
-
-        Assert.Equal(2, blocks.Count);
-
-        for (var i = 0; i < blocks.Count; i++)
+        foreach (var directive in new[]
+        {
+            "#:property WindowsPackageType=None",
+            "#:property RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)",
+        })
         {
             Assert.True(
-                blocks[i].Contains(directive, StringComparison.Ordinal),
-                $"Header block {i + 1} of {GuideTemplate} is missing '{directive}'. The guide's "
-                + "directive table documents it as required, and this block is exempt from "
-                + "compilation, so nothing else would catch its removal.");
+                blocks[1].Contains(directive, StringComparison.Ordinal),
+                $"The second #: block is the 'run it with plain dotnet' delta and must declare "
+                + $"'{directive}'. Without RuntimeIdentifier the build stops with "
+                + "\"WindowsAppSDKSelfContained requires a supported Windows architecture\"; "
+                + "without WindowsPackageType=None the app builds clean and then dies at startup "
+                + "with REGDB_E_CLASSNOTREG.");
+
+            Assert.False(
+                blocks[0].Contains(directive, StringComparison.Ordinal),
+                $"The first #: block is the complete single-file app as `winapp run` needs it, "
+                + $"and must NOT declare '{directive}'. winapp supplies the architecture itself, "
+                + "and that four-directive header is what the published blog and quick-start "
+                + "show — adding a line here silently forks them.");
         }
     }
 
     /// <summary>
-    /// The packaged example must reference the package that supplies its manifest.
+    /// Every directive the primary header's table calls load-bearing must appear in it.
     /// </summary>
     /// <remarks>
-    /// Presence only. See the class remarks for why the version is not pinned here.
+    /// These share a failure mode: the block is exempt from compilation, so dropping any one of
+    /// them leaves the whole suite green while a reader's run fails. Each row of the table is a
+    /// claim, and each claim is checked.
+    /// <list type="bullet">
+    /// <item><c>OutputType=WinExe</c> — does not fail the build at all; it links the app for the
+    /// console subsystem instead. Measured on this tree: the PE subsystem byte reads 3 (console)
+    /// without it and 2 (Windows GUI) with it, so a console window sits behind the UI.</item>
+    /// <item><c>TargetFramework</c> — also checked against the framework project by
+    /// <see cref="DocumentedTargetFramework_MatchesTheFrameworkProject"/>; this pins its presence
+    /// in the primary block specifically.</item>
+    /// <item><c>UseWinUI=true</c> — brings in the WinUI 3 targets.</item>
+    /// </list>
     /// </remarks>
-    [Fact]
-    public void PackagedExample_ReferencesTheBuildToolsPackage()
+    [Theory]
+    [InlineData("#:property OutputType=WinExe")]
+    [InlineData("#:property TargetFramework=")]
+    [InlineData("#:property UseWinUI=true")]
+    public void PrimaryHeader_DeclaresTheLoadBearingDirectives(string directive)
     {
         var guide = File.ReadAllText(Path.Join(RepoRoot(), GuideTemplate));
         var blocks = HeaderBlocks(guide);
 
         Assert.Equal(2, blocks.Count);
         Assert.True(
-            blocks[1].Contains("Microsoft.Windows.SDK.BuildTools.WinApp", StringComparison.Ordinal),
-            "The packaged example must reference Microsoft.Windows.SDK.BuildTools.WinApp, whose "
-            + "targets synthesize the appxmanifest and intercept 'dotnet run'.");
+            blocks[0].Contains(directive, StringComparison.Ordinal),
+            $"The primary single-file header in {GuideTemplate} is missing '{directive}'. The "
+            + "guide's directive table documents it as required, and this block is exempt from "
+            + "compilation, so nothing else would catch its removal.");
+    }
+
+    /// <summary>
+    /// The section must still name the package that turns <c>dotnet run</c> into a packaged
+    /// launch.
+    /// </summary>
+    /// <remarks>
+    /// It is prose rather than a third header block, so nothing else would notice it going
+    /// missing. Presence only — see the class remarks for why the version is not pinned.
+    /// </remarks>
+    [Fact]
+    public void Section_NamesTheBuildToolsPackageForPackagedDotnetRun()
+    {
+        var guide = File.ReadAllText(Path.Join(RepoRoot(), GuideTemplate));
+
+        Assert.Contains("Microsoft.Windows.SDK.BuildTools.WinApp", guide, StringComparison.Ordinal);
     }
 
     /// <summary>
