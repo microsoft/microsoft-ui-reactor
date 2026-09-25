@@ -2373,8 +2373,17 @@ internal static class ValidationCoverageFixtures
             int seen; string names;
             lock (reported) { seen = reported.Count; names = string.Join("|", reported); }
 
-            H.Check("Issue1262_Cancel_ForeignCancellationReported", seen > 0,
-                $"reported={seen} names={names}");
+            // EventListener callbacks for managed EventSource events do not flow under
+            // NativeAOT publish — IsEnabled() returns false on the emit side, so the
+            // listener observes nothing regardless of what the classification did. The
+            // same guard NativeDockingReliabilityFixture uses, and for the same reason:
+            // asserting here would fail the AOT run for a runtime limitation rather than
+            // a defect. The JIT selftest run covers it.
+            if (global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+            {
+                H.Check("Issue1262_Cancel_ForeignCancellationReported", seen > 0,
+                    $"reported={seen} names={names}");
+            }
 
             // Positive control: the same subscription, same operation name, must stay
             // silent for the lifecycle cancellation it is supposed to ignore. A sink
@@ -2405,8 +2414,14 @@ internal static class ValidationCoverageFixtures
 
             int quietCount; string quietNames;
             lock (quiet) { quietCount = quiet.Count; quietNames = string.Join("|", quiet); }
-            H.Check("Issue1262_Cancel_LifecycleCancellationSilent", quietCount == 0,
-                $"reported={quietCount} names={quietNames}");
+            // Guarded for the same reason as the check above, and additionally because a
+            // listener that can never observe anything satisfies "stayed silent"
+            // vacuously — the control would stop controlling for anything.
+            if (global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+            {
+                H.Check("Issue1262_Cancel_LifecycleCancellationSilent", quietCount == 0,
+                    $"reported={quietCount} names={quietNames}");
+            }
 
             var done = H.CreateHost();
             done.Mount(c => TextBlock("Issue1262 cancellation done"));
