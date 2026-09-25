@@ -69,22 +69,10 @@ Conventions for contributors:
 
 ### Fixed
 
-- **The Visual Studio preview failed every session with
-  `FileNotFoundException: Could not load file or assembly 'System.Text.Json,
-  Version=10.0.0.12'`.** Visual Studio ships `System.Text.Json` as a
-  *shared assembly* and binds extensions to its own copy through a
-  `devenv.exe.config` `<bindingRedirect>` with a hard upper bound (VS 18:
-  `oldVersion="0.0.0.0-10.0.0.10"`). Redirects unify *upward* only, so when the
-  repo-wide Central Package Management pin rolled to `10.0.12` the extension began
-  requesting an assembly version *past* that ceiling: no redirect applied, the VSIX
-  carries no private copy (VS strips assemblies it provides) and the package
-  registers no `BindingPath`, so the CLR found nothing and threw on the first JSON
-  call — `EmbedClient.StatusAsync`, i.e. the very first thing every preview session
-  does. The extension now pins `System.Text.Json` to the `Microsoft.VisualStudio.SDK`
-  baseline (`9.0.0`) with a `VersionOverride` rather than following the repo-wide
-  version, and a new `VsSharedAssemblyBindingTests` gate reads the compiled
-  assembly references and fails the build if any VS shared assembly exceeds the
-  ceiling again.
+- **The Visual Studio preview failed to start every session.** The extension was built
+  against a newer `System.Text.Json` than Visual Studio binds extensions to, so it failed
+  to load at runtime. It now tracks the `Microsoft.VisualStudio.SDK` baseline, with a test
+  to keep it there.
 
 - **Packaged (MSIX) apps now work in the Visual Studio preview.** The Reactor templates
   generate a packaged app by default, and previewing one previously failed. It now works
