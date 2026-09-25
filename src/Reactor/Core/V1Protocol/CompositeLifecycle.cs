@@ -750,8 +750,23 @@ internal static class CompositeLifecycle
         var binding = new TouchBinding { Context = valCtx, FieldName = fieldName };
         Reconciler.GetOrCreateReactorState(fe).ValidationTouchBinding = binding;
         ReplaceRootBinding(formFieldRoot, binding);
-        fe.LostFocus += (_, _) =>
+        fe.LosingFocus += (_, args) =>
         {
+            // LosingFocus rather than LostFocus, and filtered by where focus is going.
+            // Both are routed, so both also fire when focus moves *between descendants*
+            // of a composite editor — a NumberBox's text part to one of its spin
+            // buttons, a DatePicker between its three selectors. The field has not been
+            // blurred at all in that case, so marking it touched contradicts the
+            // documented "focus then blur" and can reveal an error while the user is
+            // still inside the control (issue #1262 review). LostFocus cannot make this
+            // distinction: it carries no destination, and the new focus is not yet set
+            // when it fires.
+            //
+            // A null destination — focus leaving the window entirely — is a real blur
+            // and falls through to mark touched.
+            if (args.NewFocusedElement is DependencyObject next && IsDescendantOf(next, fe))
+                return;
+
             if (binding.Context is { } ctx && binding.FieldName is { Length: > 0 } field)
                 ctx.MarkTouched(field);
         };

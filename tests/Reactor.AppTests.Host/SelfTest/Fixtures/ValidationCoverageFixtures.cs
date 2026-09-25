@@ -2520,4 +2520,85 @@ internal static class ValidationCoverageFixtures
             await Harness.Render();
         }
     }
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #1262 review — focus moving *inside* a composite editor is not a blur.
+    //
+    //  LostFocus/LosingFocus are routed, so they also fire when focus moves
+    //  between descendants of one editor — a NumberBox's text part to its spin
+    //  buttons, a DatePicker between selectors. The field has not been blurred
+    //  then, and marking it touched reveals the error while the user is still
+    //  inside the control.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class Issue1262_InternalFocusMoveIsNotABlur(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var ctx = new ValidationContext();
+            var host = H.CreateHost();
+
+            // Content with two focusable parts. Moving focus from one to the other is
+            // the routed-event case: LosingFocus bubbles to the content root even though
+            // focus never left the field. A single control cannot exercise this — it has
+            // only one focusable part, so no internal transition exists to route.
+            host.Mount(c => VStack(12,
+                FormField(
+                    VStack(4,
+                        TextBox("").AutomationId("PartA"),
+                        TextBox("").AutomationId("PartB")),
+                    label: "Amount",
+                    fieldName: "amount"),
+                TextBox("").AutomationId("Elsewhere"))
+                .Provide(ValidationContexts.Current, ctx));
+
+            await Harness.Render();
+            ctx.Add("amount", "amount is required");
+            await Harness.Render();
+
+            static Microsoft.UI.Xaml.Controls.TextBox? ById(Harness harness, string id)
+                => harness.FindControl<Microsoft.UI.Xaml.Controls.TextBox>(
+                    tb => Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(tb) == id);
+
+            var partA = ById(H, "PartA");
+            var partB = ById(H, "PartB");
+            var elsewhere = ById(H, "Elsewhere");
+
+            H.Check("Issue1262_InnerFocus_PartsMounted",
+                partA is not null && partB is not null && elsewhere is not null);
+            if (partA is null || partB is null || elsewhere is null) return;
+
+            partA.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            H.Check("Issue1262_InnerFocus_NotTouchedOnEntry", !ctx.IsTouched("amount"),
+                $"touched={ctx.IsTouched("amount")}");
+
+            // The case under test: focus moves to a sibling part of the same field.
+            partB.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            await Harness.Render();
+
+            // Instrument check: the move must actually have happened, or "not touched"
+            // proves nothing (the previous version of this fixture focused the part that
+            // already had focus, so no transition fired and the assertion was vacuous).
+            var focusedNow = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(partB.XamlRoot);
+            H.Check("Issue1262_InnerFocus_MoveActuallyHappened",
+                ReferenceEquals(focusedNow, partB),
+                $"focused={focusedNow?.GetType().Name ?? "<null>"}");
+
+            H.Check("Issue1262_InnerFocus_StillNotTouched", !ctx.IsTouched("amount"),
+                $"touched={ctx.IsTouched("amount")}");
+
+            // Positive control: leaving the field really does mark it touched, so the
+            // check above is not passing because nothing ever marks.
+            elsewhere.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            await Harness.Render();
+            H.Check("Issue1262_InnerFocus_TouchedOnRealBlur", ctx.IsTouched("amount"),
+                $"touched={ctx.IsTouched("amount")}");
+
+            var done = H.CreateHost();
+            done.Mount(c => TextBlock("Issue1262 inner focus done"));
+            await Harness.Render();
+        }
+    }
 }
