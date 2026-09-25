@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using Microsoft.UI.Reactor.VsExtension.Embed;
 using Xunit;
 
@@ -74,29 +74,68 @@ namespace Reactor.VsExtension.Tests
             var manifest = FindRepoFile(Path.Combine(
                 "src", "vs-reactor", "Reactor.VsExtension", "source.extension.vsixmanifest"));
 
-            var text = File.ReadAllText(manifest);
-            var ranges = Regex.Matches(text, @"Version=""\[(?<min>\d+\.\d+)\s*,")
-                .Cast<Match>()
-                .Select(m => m.Groups["min"].Value)
+            // Parsed as XML and scoped to the host elements rather than pattern-matched out of
+            // the raw text: a regex over version literals silently skips any shape it did not
+            // anticipate (a patch component such as [17.8.1,19.0) being the obvious one), and a
+            // skipped range reads exactly like a compliant one.
+            var doc = XDocument.Load(manifest);
+            var declarations = doc.Descendants()
+                .Where(e => e.Name.LocalName == "InstallationTarget" || e.Name.LocalName == "Prerequisite")
+                .Select(e => new
+                {
+                    Element = e.Name.LocalName,
+                    Id = (string?)e.Attribute("Id"),
+                    Version = (string?)e.Attribute("Version"),
+                })
+                .Where(d => !string.IsNullOrWhiteSpace(d.Version))
                 .ToArray();
 
-            // Positive control: a manifest we failed to parse must not read as "no violations".
-            Assert.NotEmpty(ranges);
+            // Positive control: a manifest we failed to read must not report "no violations".
+            Assert.NotEmpty(declarations);
 
-            var tooOld = ranges
-                .Select(v => new Version(v))
-                .Where(v => v < MinimumSupportedVsHost)
-                .Select(v => v.ToString())
-                .Distinct()
-                .ToArray();
+            var tooOld = new List<string>();
+            foreach (var declaration in declarations)
+            {
+                // Unparseable is a failure, never a skip — that is the hole this replaced.
+                var minimum = ParseRangeMinimum(declaration.Version!);
+                if (minimum < MinimumSupportedVsHost)
+                {
+                    tooOld.Add($"{declaration.Element} {declaration.Id} {declaration.Version}");
+                }
+            }
 
             Assert.True(
-                tooOld.Length == 0,
-                $"source.extension.vsixmanifest advertises Visual Studio {string.Join(", ", tooOld)}, "
-                + $"older than the {MinimumSupportedVsHost} baseline the extension's System.Text.Json pin "
-                + "requires. Those hosts redirect System.Text.Json below the pinned version, so the "
-                + "extension would fail to load there with FileNotFoundException. Raise the manifest "
-                + "minimum, or lower the pin and this constant together.");
+                tooOld.Count == 0,
+                $"source.extension.vsixmanifest advertises Visual Studio hosts older than {MinimumSupportedVsHost}, "
+                + "which redirect System.Text.Json below the version the extension is pinned to, so the extension "
+                + "would fail to load there with FileNotFoundException. Raise the manifest minimum, or lower the "
+                + "pin and this constant together. Offending declarations: " + string.Join("; ", tooOld));
+        }
+
+        /// <summary>
+        /// Reads the lower bound out of a VSIX version range such as <c>[17.14,19.0)</c>,
+        /// <c>[17.8.1,19.0)</c> or a bare <c>17.14</c>. Throws rather than returning a
+        /// sentinel, so an unrecognised shape fails the gate instead of slipping past it.
+        /// </summary>
+        private static Version ParseRangeMinimum(string range)
+        {
+            var text = range.Trim().TrimStart('[', '(');
+            var comma = text.IndexOf(',');
+            if (comma >= 0)
+            {
+                text = text.Substring(0, comma);
+            }
+
+            text = text.TrimEnd(']', ')').Trim();
+
+            if (!Version.TryParse(text, out var version))
+            {
+                throw new FormatException(
+                    $"Could not read a minimum version out of the manifest range '{range}'. "
+                    + "Teach this parser the new shape — do not let it be skipped.");
+            }
+
+            return version;
         }
 
         private static string FindRepoFile(string relativePath)
