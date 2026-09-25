@@ -86,6 +86,20 @@ Conventions for contributors:
   assembly references and fails the build if any VS shared assembly exceeds the
   ceiling again.
 
+- **The VS preview failed opaquely on packaged (MSIX) projects.** The preview starts the
+  target with `dotnet watch run`, which launches the built `.exe` directly. A packaged
+  project needs package identity for the Windows App SDK deployment initializer — without
+  it the app died at `.cctor()` with `COMException (0x80040154): Class not registered
+  (REGDB_E_CLASSNOTREG)` before any Reactor code ran — and it needs an inherited stdout,
+  because the devtools handshake reports `CAPTURE_PORT` there and the default AUMID
+  activation is brokered with no stdout at all. Either gap alone leaves the preview dead.
+  The extension now recognises that stderr signature and answers with the two project
+  changes that fix it (`Microsoft.Windows.SDK.BuildTools.WinApp` plus
+  `WinAppRunUseExecutionAlias`) instead of a generic list of guesses, and the
+  [VS extension guide](docs/guide/vs-extension.md) documents the packaged setup. The
+  matcher requires both halves of the signature, so an unrelated `REGDB_E_CLASSNOTREG` is
+  not mislabelled as a packaging problem.
+
 - **Wrong code and guidance in the shipped agent-kit skills (spec 064 §4, issue
   #1275).** Three gesture snippets in `reactor-input` used WinUI's nested
   `ManipulationDelta` shape rather than Reactor's flat gesture structs, and the

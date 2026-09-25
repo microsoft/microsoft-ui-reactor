@@ -26,6 +26,37 @@ The component picker is a ComboBox in the tool window chrome. By default it auto
 - **L1 hot reload** — edits inside a `Render` body usually apply in place. The embedded UI refreshes without recreating the placeholder HWND.
 - **L2 respawn** — rude edits such as record/type shape changes cause `dotnet watch` to rebuild and restart the child. The extension detects the new port/token pair and re-embeds the new child into the same placeholder, normally within about 10 seconds.
 
+## Packaged (MSIX) projects
+
+The preview starts your app with `dotnet watch run`, which launches the built `.exe`
+directly. That is fine for the unpackaged default, but a packaged project — one where
+`WindowsPackageType` is `MSIX` rather than `None` — needs two extra things, because a
+bare `.exe` launch provides neither.
+
+```xml
+<PropertyGroup>
+  <WinAppRunUseExecutionAlias>true</WinAppRunUseExecutionAlias>
+</PropertyGroup>
+<ItemGroup>
+  <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="*" />
+</ItemGroup>
+```
+
+**`Microsoft.Windows.SDK.BuildTools.WinApp` supplies package identity.** It overrides the
+SDK's `ComputeRunArguments`, pointing `RunCommand` at a launcher that registers a debug
+identity and activates the app as a package. Without it the app starts with no package
+graph, so the Windows App SDK deployment initializer cannot resolve its WinRT types and
+the process dies before any Reactor code runs, with
+`COMException (0x80040154): Class not registered (REGDB_E_CLASSNOTREG)`.
+
+**`WinAppRunUseExecutionAlias` supplies stdout.** It makes that launcher activate the app
+through a generated execution alias instead of its default AUMID activation. AUMID
+activation is brokered and has no stdout at all, and the devtools handshake reports
+`CAPTURE_PORT` on stdout — so without this the app runs but the preview can never attach.
+
+Either one alone leaves the preview broken. To preview unpackaged instead, set
+`<WindowsPackageType>None</WindowsPackageType>`.
+
 ## Known limitations
 
 - WinAppSDK 1.6 or newer is required by the target Reactor app.

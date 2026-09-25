@@ -425,14 +425,26 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
                     detail.Append(((int)_firstSessionTimeout.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture));
                     detail.AppendLine("s.");
                     detail.AppendLine();
-                    detail.AppendLine("Common causes:");
-                    detail.AppendLine("  • First `dotnet watch` build is slow on a cold disk cache. The session will");
-                    detail.AppendLine("    automatically recover if the child eventually emits CAPTURE_PORT — watch");
-                    detail.AppendLine("    the Output pane. Set Reactor_VsExtension_HandshakeTimeoutSeconds=300");
-                    detail.AppendLine("    in the VS environment to extend this timeout.");
-                    detail.AppendLine("  • Target project does not reference Microsoft.UI.Reactor.Devtools.");
-                    detail.AppendLine("  • Target project is missing  <RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\" Value=\"true\" Trim=\"true\" />");
-                    detail.AppendLine("  • MSBuild really did fail — see the stderr below.");
+
+                    // A recognised failure signature is far more useful than the generic list,
+                    // so lead with it and skip the guesses entirely.
+                    var diagnosis = ChildFailureDiagnostics.Describe(stderr);
+                    if (diagnosis != null)
+                    {
+                        detail.AppendLine(diagnosis);
+                    }
+                    else
+                    {
+                        detail.AppendLine("Common causes:");
+                        detail.AppendLine("  • First `dotnet watch` build is slow on a cold disk cache. The session will");
+                        detail.AppendLine("    automatically recover if the child eventually emits CAPTURE_PORT — watch");
+                        detail.AppendLine("    the Output pane. Set Reactor_VsExtension_HandshakeTimeoutSeconds=300");
+                        detail.AppendLine("    in the VS environment to extend this timeout.");
+                        detail.AppendLine("  • Target project does not reference Microsoft.UI.Reactor.Devtools.");
+                        detail.AppendLine("  • Target project is missing  <RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\" Value=\"true\" Trim=\"true\" />");
+                        detail.AppendLine("  • MSBuild really did fail — see the stderr below.");
+                    }
+
                     if (!string.IsNullOrWhiteSpace(stderr))
                     {
                         detail.AppendLine();
