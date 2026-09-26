@@ -6,6 +6,8 @@ on:
     branches: [main]
   schedule:
     - cron: '17 8 * * *'
+  # Baseline for the sharding prototype: manual runs only, no other change.
+  workflow_dispatch:
 
 jobs:
   changes:
