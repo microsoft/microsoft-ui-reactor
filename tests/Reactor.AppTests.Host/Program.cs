@@ -7,6 +7,23 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.AppTests.Host;
 using Microsoft.UI.Reactor.AppTests.Host.DevtoolsStress;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
+using Reactor.Tests.Shared;
+
+// `--shard <k>/<n>` selects one CI slice of the selftest corpus, for both `--list-fixtures` and
+// `--self-test`, so discovery and execution see the same set. A malformed spec exits 2 before
+// anything runs: failing open would run all or none of the suite while still looking sharded.
+SelfTestShard? shard = null;
+var shardIdx = Array.IndexOf(args, SelfTestShard.Flag);
+if (shardIdx >= 0)
+{
+    var spec = shardIdx + 1 < args.Length ? args[shardIdx + 1] : null;
+    if (!SelfTestShard.TryParse(spec, out var parsedShard, out var shardError))
+    {
+        Console.Error.WriteLine($"{SelfTestShard.Flag}: {shardError}");
+        Environment.Exit(2);
+    }
+    shard = parsedShard;
+}
 
 if (args.Contains("--list-fixtures"))
 {
@@ -17,8 +34,12 @@ if (args.Contains("--list-fixtures"))
     // cannot run must not get a test case that could only ever report "skipped" (issue #1154).
     // The two wrappers' list parsers both drop `#` lines, so the trailer below is inert to
     // discovery while still naming the exclusions for a human running this by hand.
-    foreach (var name in SelfTestFixtureRegistry.FixturesForCurrentTier)
+    var corpus = SelfTestFixtureRegistry.FixturesForCurrentTier;
+    var listed = shard is { } listShard ? listShard.Select(corpus) : corpus;
+    foreach (var name in listed)
         Console.WriteLine(name);
+    if (shard is { } reportedShard)
+        Console.WriteLine($"{SelfTestShard.Marker}{reportedShard}: {listed.Length} of {corpus.Length} fixtures");
     SelfTestRunner.WriteNotApplicableTrailer();
     return;
 }
@@ -42,6 +63,7 @@ if (args.Contains("--self-test"))
     var filterIdx = Array.IndexOf(args, "--filter");
     if (filterIdx >= 0 && filterIdx + 1 < args.Length)
         SelfTestRunner.Filter = args[filterIdx + 1];
+    SelfTestRunner.Shard = shard;
     if (args.Contains("--no-aot-skip"))
         SelfTestRunner.SkipAotPatterns = false;
     SelfTestRunner.RunAll();

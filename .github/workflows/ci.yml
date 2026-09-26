@@ -6,6 +6,15 @@ on:
     branches: [main]
   schedule:
     - cron: '17 8 * * *'
+  # Lets a branch be measured without opening a PR. Every change filter defaults to true for a
+  # manual run (see the `changes` job), so it exercises the full job set.
+  workflow_dispatch:
+
+# Supersede only an older run of the same PR. Every other event gets a group of its own (the run
+# ID), so main, scheduled and manual runs are never cancelled or queued behind one another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
@@ -195,7 +204,7 @@ jobs:
         run: dotnet test tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj --no-restore
 
   selftests:
-    name: Selftests
+    name: Selftests (${{ matrix.shard }}/2)
     needs: changes
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
@@ -204,6 +213,15 @@ jobs:
     # (issue #988). This job-level cap is the outer backstop for a genuinely wedged runner, so it
     # must sit above that budget but well below the 360-minute default.
     timeout-minutes: 45
+    # Two runners, each running half the fixture corpus (tests/_shared/SelfTestShard.cs). Every
+    # shard also proves the split covers every fixture exactly once
+    # (SelfTestBatch.Shards_PartitionTheCorpus), so a shard cannot quietly drop part of the suite.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    env:
+      REACTOR_SELFTEST_SHARD: ${{ matrix.shard }}/2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -219,13 +237,21 @@ jobs:
         run: dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore -p:Platform=x64
 
   packaged-tests:
-    name: Packaged Selftests (MSIX)
+    name: Packaged Selftests (MSIX) (${{ matrix.shard }}/2)
     needs: changes
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
     # Same budget as the unpackaged Selftests job: this runs the same fixture corpus, just
     # under package identity, plus one package registration.
     timeout-minutes: 45
+    # Sharded exactly like the Selftests job; Packaged_IdentityGuard is pinned into every shard,
+    # so each one still proves it ran with package identity.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    env:
+      REACTOR_SELFTEST_SHARD: ${{ matrix.shard }}/2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -277,11 +303,24 @@ jobs:
           exit 0
 
   e2e-tests:
-    name: E2E Tests (winapp ui)
+    name: E2E Tests (winapp ui) (${{ matrix.shard }}/2)
     needs: changes
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
     timeout-minutes: 45
+    # Two runners with complementary class filters (tests/Reactor.AppTests/Select-E2EShard.ps1).
+    # Shard 1 runs the classes below; shard 2 runs everything else, so a new class lands in
+    # shard 2 without touching this list. Each shard proves the two add up to the whole suite
+    # before it runs, and that its TRX accounts for every test it selected afterwards.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    env:
+      E2E_SHARD1_CLASSES: >-
+        AccessibilityInteractionTests,AccessibilityTests,ChartAccessibilityTests,
+        ChartKeyboardNavTests,DataGridTests,DockingInputTests,DockingTearOffE2ETests,
+        DragDropTests,GestureTests
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -418,6 +457,11 @@ jobs:
       - name: Build E2E tests + Host (Debug x64)
         run: dotnet build tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64
 
+      - name: Select this shard's tests
+        id: select
+        shell: pwsh
+        run: ./tests/Reactor.AppTests/Select-E2EShard.ps1 -Shard ${{ matrix.shard }} -Shard1Classes $env:E2E_SHARD1_CLASSES
+
       - name: Test
         # --results-directory pins the TRX under the workspace root so the gate below can find it.
         # Without it, `dotnet test <csproj>` drops results under the project dir
@@ -433,7 +477,24 @@ jobs:
           # this the continuity tests report Assert.Inconclusive, which MTP prints as "passed,
           # zero skipped" — indistinguishable from having actually measured the differential.
           REACTOR_E2E_REQUIRE_UI_YIELD: '1'
-        run: dotnet test tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64 --no-build --report-trx --report-trx-filename app-tests.trx --results-directory TestResults
+          E2E_FILTER: ${{ steps.select.outputs.filter }}
+        run: dotnet test tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64 --no-build --filter "$env:E2E_FILTER" --report-trx --report-trx-filename app-tests.trx --results-directory TestResults
+
+      - name: Check the shard ran every selected test
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        env:
+          EXPECTED: ${{ steps.select.outputs.expected }}
+        run: |
+          $trx = Get-ChildItem -Path TestResults -Filter app-tests.trx -Recurse | Select-Object -First 1
+          if (-not $trx) { throw "AppTests TRX results were not produced." }
+          $counters = Select-Xml -Path $trx.FullName -XPath "//*[local-name()='Counters']" | Select-Object -First 1
+          if (-not $counters) { throw "The TRX has no Counters element." }
+          $total = [int]$counters.Node.GetAttribute('total')
+          if ($total -ne [int]$env:EXPECTED) {
+            throw "The TRX reports $total test(s), but discovery selected $env:EXPECTED for this shard."
+          }
+          Write-Host "TRX accounts for all $total selected test(s)."
 
       - name: Fail on skipped input-injection E2Es
         shell: pwsh
@@ -467,6 +528,9 @@ jobs:
       # binary that is not winapp, so the probe cannot confirm the verb no matter what upstream
       # ships. That keeps this meaningful after `latest` moves.
       - name: Prove the strict `ui yield` gate can fail
+        # Runs two named tests with its own filter, independent of the shard split, so one shard
+        # is enough.
+        if: matrix.shard == 2
         shell: pwsh
         env:
           REACTOR_E2E_REQUIRE_UI_YIELD: '1'
@@ -496,6 +560,16 @@ jobs:
           # the step reports the exact failure it was written to assert. Measured: the step
           # printed its success line and still exited 2.
           exit 0
+
+      # Per-test durations, which is what the shard 1 class list is balanced against.
+      - name: Upload TRX
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-trx-${{ matrix.shard }}
+          path: TestResults/**/app-tests.trx
+          if-no-files-found: ignore
+          retention-days: 14
 
   build-solution:
     name: Build solution
@@ -639,11 +713,18 @@ jobs:
           Write-Host "No High/Critical vulnerable packages in shipped projects."
 
   aot-selftests:
-    name: AOT Selftests
+    name: AOT Selftests (${{ matrix.shard }}/2)
     needs: changes
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
     timeout-minutes: 30
+    # Half the fixture corpus per runner, split like the JIT Selftests job. Each shard publishes
+    # its own AOT host: fanning one publish out through an artifact would put an upload, a second
+    # job start and a download on the critical path, which costs more than a parallel publish.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -675,22 +756,48 @@ jobs:
       # XAML metadata, hot-reload state migration, and the UseObservableTree
       # property walk); any *new* failure surfaces as exit code 1 and fails the job.
       # See docs/aot-support.md for the skip-list debugging workflow.
+      #
+      # There is no MSTest wrapper here to check the shard, so the two steps below do it: the
+      # listings must partition the corpus, and the run's TAP plan must match this shard's
+      # listing and reach its trailer.
+      - name: Check the shard partition
+        id: shard
+        shell: pwsh
+        run: >
+          ./tests/Reactor.AppTests.Host/Test-SelfTestShards.ps1
+          -HostExe (Join-Path '${{ runner.temp }}/aot-publish' 'Reactor.AppTests.Host.exe')
+          -Count 2 -Shard ${{ matrix.shard }}
+
       - name: Run AOT selftests
         shell: pwsh
+        env:
+          EXPECTED: ${{ steps.shard.outputs.expected }}
         run: |
           $exe = Join-Path '${{ runner.temp }}/aot-publish' 'Reactor.AppTests.Host.exe'
           if (-not (Test-Path $exe)) {
             Write-Error "AOT-published host not found at $exe"
             exit 1
           }
-          & $exe --self-test 2>&1 | Tee-Object -FilePath aot-selftest-output.tap
-          exit $LASTEXITCODE
+          & $exe --self-test --shard ${{ matrix.shard }}/2 2>&1 | Tee-Object -FilePath aot-selftest-output.tap
+          $code = $LASTEXITCODE
+
+          $tap = Get-Content aot-selftest-output.tap
+          $plan = $tap | Where-Object { $_ -match '^1\.\.(\d+)$' } | Select-Object -First 1
+          if (-not $plan) { throw 'The run printed no TAP plan (1..N).' }
+          $planned = [int]($plan.Substring(3))
+          if ($planned -ne [int]$env:EXPECTED) {
+            throw "The run planned $planned fixture(s), but shard ${{ matrix.shard }}/2 lists $env:EXPECTED."
+          }
+          if (-not ($tap | Where-Object { $_ -like '# Total failures:*' })) {
+            throw "The run never reached its '# Total failures:' trailer, so the TAP stream is truncated (exit $code)."
+          }
+          exit $code
 
       - name: Upload TAP output
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: aot-selftest-tap
+          name: aot-selftest-tap-${{ matrix.shard }}
           path: aot-selftest-output.tap
           if-no-files-found: ignore
 

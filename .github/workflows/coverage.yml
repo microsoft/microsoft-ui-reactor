@@ -59,17 +59,29 @@ permissions:
   contents: read
   pull-requests: read
 
+# One in-flight run per target — a PR number, or the branch ref for a push /
+# blank-input dispatch. A newer trigger supersedes an older one. Workflow-level, so the
+# lanes and the merge are cancelled together.
+concurrency:
+  group: coverage-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.ref }}
+  cancel-in-progress: true
+
+# ── Lanes ─────────────────────────────────────────────────────────────────────
+# The measurement used to be one serial job: build Reactor.Tests, build the Host, run the
+# unit leg, then the ~6-minute selftest leg. The legs are independent until the final
+# merge, so they now run on separate runners, and the selftest leg is split in two with
+# the Host's --shard partition (tests/_shared/SelfTestShard.cs). `dotnet-coverage merge`
+# unions the lane reports exactly as it used to union the two legs, and the merge
+# refuses to run unless it received every expected lane report and nothing else.
 jobs:
-  coverage:
-    name: Merged coverage
-    # One in-flight run per target — a PR number, or the branch ref for a push /
-    # blank-input dispatch. A newer trigger supersedes an older one.
-    concurrency:
-      group: coverage-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.ref }}
-      cancel-in-progress: true
-    runs-on: windows-latest
-    # One instrumented merged-coverage pass (head on PRs; main on push).
-    timeout-minutes: 40
+  target:
+    name: Resolve coverage target
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.pr.outputs.ref }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+      number: ${{ steps.pr.outputs.number }}
+      is_baseline: ${{ steps.pr.outputs.is_baseline }}
     steps:
       - name: Resolve coverage target
         id: pr
@@ -124,6 +136,27 @@ jobs:
             core.setOutput('number', prNumber);
             core.setOutput('is_baseline', isBaseline ? 'true' : 'false');
 
+  lane:
+    name: Coverage (${{ matrix.lane }})
+    needs: target
+    runs-on: windows-latest
+    timeout-minutes: 40
+    strategy:
+      # Every lane is needed for a valid number, but letting the others finish keeps their
+      # reports for the debugging artifact and shows every failure from one run.
+      fail-fast: false
+      matrix:
+        include:
+          - lane: unit
+            part: Unit
+            shard: ''
+          - lane: selftest-1
+            part: SelfTest
+            shard: '1/2'
+          - lane: selftest-2
+            part: SelfTest
+            shard: '2/2'
+    steps:
       # Unprivileged checkout of the single commit to measure. On a pull_request this
       # is the PR head — untrusted PR code — but the job is read-only (no write token,
       # no secrets), so running the PR's own build/measure scripts here is acceptable;
@@ -131,7 +164,7 @@ jobs:
       # false so the PR build code that runs later gets no usable git credential.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ steps.pr.outputs.ref }}
+          ref: ${{ needs.target.outputs.ref }}
           persist-credentials: false
 
       - name: Setup .NET
@@ -142,24 +175,76 @@ jobs:
       - name: Install dotnet-coverage
         run: dotnet tool install -g dotnet-coverage
 
-      # Cheap guard: run the pure parser + delta-math tests before the ~10-min
-      # instrumented measure. Also runs standalone in coverage-lib-tests.yml on PRs.
+      - name: Measure ${{ matrix.lane }} coverage
+        shell: pwsh
+        run: |
+          ./tests/coverage/ci/Measure-Coverage.ps1 `
+            -Root . `
+            -Part ${{ matrix.part }} `
+            -Shard '${{ matrix.shard }}' `
+            -WorkDir "$env:GITHUB_WORKSPACE/coverage-out/${{ matrix.lane }}"
+
+      - name: Upload ${{ matrix.lane }} report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-part-${{ matrix.lane }}
+          path: coverage-out/${{ matrix.lane }}/
+          if-no-files-found: error
+          retention-days: 14
+
+  coverage:
+    name: Merged coverage
+    needs: [target, lane]
+    # Runs when a lane failed, too, so the poster still gets a (failed) coverage-data and
+    # renders CAUTION instead of saying nothing. Not when the run was cancelled (superseded).
+    if: ${{ !cancelled() && needs.target.result == 'success' }}
+    # The merge is text processing, so it runs on the runner that starts fastest.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Same unprivileged checkout as the lanes: this job runs the PR's own merge script.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.target.outputs.ref }}
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install dotnet-coverage
+        run: dotnet tool install -g dotnet-coverage
+
+      # Cheap guard: run the pure parser + delta-math tests before trusting the merge.
+      # Also runs standalone in coverage-lib-tests.yml on PRs.
       - name: Test coverage scripts
         shell: pwsh
         run: |
           ./tests/coverage/ci/CoverageLib.Tests.ps1
           ./tests/coverage/ci/Measure-Coverage.Tests.ps1
 
-      # Measure the checked-out commit. continue-on-error so a failing build doesn't
-      # abort the job — the upload + trusted poster still run; the final step surfaces
-      # the failure as a red check and the poster renders a CAUTION comment.
-      - name: Measure coverage
+      - name: Download lane reports
+        if: needs.lane.result == 'success'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: coverage-part-*
+          path: coverage-out/parts
+
+      # Merge the lane reports. continue-on-error so a failed merge doesn't abort the job:
+      # the upload + trusted poster still run; the final step surfaces the failure as a red
+      # check and the poster renders a CAUTION comment.
+      - name: Merge coverage
         id: measure
+        if: needs.lane.result == 'success'
         continue-on-error: true
         shell: pwsh
         run: |
           ./tests/coverage/ci/Measure-Coverage.ps1 `
             -Root . `
+            -Part Merge `
+            -PartsDir "$env:GITHUB_WORKSPACE/coverage-out/parts" `
+            -ExpectedParts unit, selftest-1, selftest-2 `
             -OutFile "$env:GITHUB_WORKSPACE/coverage-out/coverage.json" `
             -WorkDir "$env:GITHUB_WORKSPACE/coverage-out/reports"
 
@@ -168,6 +253,7 @@ jobs:
         if: always()
         shell: pwsh
         env:
+          LANES_RESULT: ${{ needs.lane.result }}
           MEASURE_OUTCOME: ${{ steps.measure.outcome }}
         run: |
           . ./tests/coverage/ci/CoverageLib.ps1
@@ -175,22 +261,23 @@ jobs:
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           $file = Join-Path $out 'coverage.json'
           $failedJson = '{ "line": null, "branch": null, "branchesCovered": null, "branchesTotal": null, "outcome": "failed" }'
-          # Trust the numbers ONLY when the measure step SUCCEEDED *and* actually
-          # produced a valid coverage.json. This job runs untrusted PR test code with
-          # write access to the workspace, so a PR could pre-plant a fake file; and a
-          # green-but-empty measure (a script/path regression that exits 0 without
-          # writing real numbers) must not silently post a blank comment. In either
-          # case overwrite with a failed placeholder — the poster then renders CAUTION
-          # and the run goes red via the data_ok gate below.
+          # Trust the numbers ONLY when every lane SUCCEEDED, the merge SUCCEEDED *and* it
+          # actually produced a valid coverage.json. A failed lane means the merge would
+          # union a partial set, and the numbers would read as a coverage drop. This job
+          # runs untrusted PR code with write access to the workspace, so a PR could
+          # pre-plant a fake file; and a green-but-empty measure (a script/path regression
+          # that exits 0 without writing real numbers) must not silently post a blank
+          # comment. In either case overwrite with a failed placeholder — the poster then
+          # renders CAUTION and the run goes red via the data_ok gate below.
           $ok = $false
-          if ($env:MEASURE_OUTCOME -eq 'success') {
+          if ($env:LANES_RESULT -eq 'success' -and $env:MEASURE_OUTCOME -eq 'success') {
             $raw = $null
             if (Test-Path $file) { try { $raw = Get-Content $file -Raw | ConvertFrom-Json } catch { $raw = $null } }
             if (Test-CoverageMetricsPresent (ConvertTo-SafeCoverageMetrics $raw)) { $ok = $true }
           }
           if (-not $ok) {
             Set-Content -LiteralPath $file -Value $failedJson -Encoding UTF8
-            Write-Warning "No valid coverage numbers (measure outcome=$($env:MEASURE_OUTCOME)); the comment will render CAUTION and the check will be red."
+            Write-Warning "No valid coverage numbers (lanes=$($env:LANES_RESULT), merge outcome=$($env:MEASURE_OUTCOME)); the comment will render CAUTION and the check will be red."
           }
           "data_ok=$(if ($ok) { 'true' } else { 'false' })" | Out-File $env:GITHUB_OUTPUT -Append
 
@@ -201,7 +288,7 @@ jobs:
         if: always()
         shell: pwsh
         env:
-          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          HEAD_SHA: ${{ needs.target.outputs.head_sha }}
         run: |
           . ./tests/coverage/ci/CoverageLib.ps1
           function Read-Json($p) {
@@ -220,7 +307,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: coverage-reports-${{ steps.pr.outputs.head_sha }}
+          name: coverage-reports-${{ needs.target.outputs.head_sha }}
           path: coverage-out/reports/**
           if-no-files-found: warn
           retention-days: 14
@@ -234,7 +321,7 @@ jobs:
       # runs upload `coverage-baseline` (the cached baseline future PRs compare
       # against) with a longer retention so it survives between main pushes.
       - name: Upload coverage data (PR)
-        if: ${{ always() && steps.pr.outputs.is_baseline != 'true' }}
+        if: ${{ always() && needs.target.outputs.is_baseline != 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-data
@@ -243,7 +330,7 @@ jobs:
           retention-days: 14
 
       - name: Upload coverage baseline (main)
-        if: ${{ steps.pr.outputs.is_baseline == 'true' && steps.ensure.outputs.data_ok == 'true' }}
+        if: ${{ needs.target.outputs.is_baseline == 'true' && steps.ensure.outputs.data_ok == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-baseline
@@ -251,9 +338,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
 
-      # Surface a red check when coverage produced no valid numbers — a build/measure
-      # failure OR a green-but-empty measure (data_ok is false in both). The comment
-      # is still posted (CAUTION) for PRs; a bad main baseline is visible too.
+      # Surface a red check when coverage produced no valid numbers — a failed lane, a
+      # failed merge, OR a green-but-empty measure (data_ok is false in all three). The
+      # comment is still posted (CAUTION) for PRs; a bad main baseline is visible too.
       - name: Reflect coverage status
         if: always()
         shell: pwsh
@@ -261,6 +348,6 @@ jobs:
           DATA_OK: ${{ steps.ensure.outputs.data_ok }}
         run: |
           if ($env:DATA_OK -ne 'true') {
-            throw 'Coverage produced no valid numbers (build/measure failed or emitted nothing) — see the coverage comment and the coverage-reports artifact.'
+            throw 'Coverage produced no valid numbers (a lane or the merge failed, or it emitted nothing) — see the coverage comment and the coverage-reports artifact.'
           }
           Write-Host 'Coverage measurement completed successfully.'

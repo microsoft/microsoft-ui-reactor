@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Reactor.Tests.Shared;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 
@@ -15,6 +16,12 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 internal static class SelfTestRunner
 {
     public static string? Filter { get; set; }
+
+    /// <summary>
+    /// The CI slice to run (<c>--shard k/n</c>), or <see langword="null"/> for the whole corpus.
+    /// Applied before <see cref="Filter"/>; see <see cref="SelfTestShard"/>.
+    /// </summary>
+    public static SelfTestShard? Shard { get; set; }
 
     /// <summary>
     /// Process exit code captured by the final-exit path (<see
@@ -389,6 +396,7 @@ internal static class SelfTestRunner
                     // a pattern naming a fixture this tier doesn't run is still a valid
                     // pattern, not a stale one.
                     ValidateDefaultSkipPatterns(allFixtures);
+                    SelfTestShard.ValidatePinnedFixtures(allFixtures);
 
                     // The tier's corpus, not the registry's. A fixture declared for the other
                     // tier is structurally unable to assert here, so it is not run at all —
@@ -396,15 +404,19 @@ internal static class SelfTestRunner
                     // run's skip inventory on every run (issue #1154).
                     var tierFixtures = SelfTestFixtureRegistry.FixturesForCurrentTier;
 
+                    // Shard first, then filter, so a fixture's shard never depends on the filter.
+                    var shardFixtures = Shard is { } shard ? shard.Select(tierFixtures) : tierFixtures;
                     var fixtures = Filter is not null
-                        ? tierFixtures.Where(f => f.Contains(Filter, StringComparison.OrdinalIgnoreCase)).ToArray()
-                        : tierFixtures;
+                        ? shardFixtures.Where(f => f.Contains(Filter, StringComparison.OrdinalIgnoreCase)).ToArray()
+                        : shardFixtures;
                     harness.SetupTitleBar(fixtures.Length);
                     window.Activate();
                     await Harness.Render(); // wait for initial layout
 
                     Console.WriteLine($"TAP version 14");
                     Console.WriteLine($"1..{fixtures.Length}");
+                    if (Shard is { } runShard)
+                        Console.WriteLine($"{SelfTestShard.Marker}{runShard}: {shardFixtures.Length} of {tierFixtures.Length} fixtures");
 
                     // Suite clock. The whole run shares one process budget in the
                     // MSTest wrapper (SelfTestBatch.SelfTestTimeoutMs), and when it

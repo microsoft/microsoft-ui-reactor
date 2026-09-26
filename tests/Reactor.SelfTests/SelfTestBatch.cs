@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Reactor.Tests.Shared;
 
 namespace Microsoft.UI.Reactor.SelfTests;
 
@@ -129,12 +130,40 @@ public class SelfTestBatch
 
     private static double ElapsedSeconds => _hostElapsedSeconds ?? _wrapperElapsedSeconds;
 
+    /// <summary>
+    /// The CI shard this run covers, from <c>REACTOR_SELFTEST_SHARD</c>, or <see langword="null"/>
+    /// to run the whole corpus. Lazy so a malformed value fails discovery with a readable message
+    /// rather than as a type-initializer exception.
+    /// </summary>
+    private static readonly Lazy<SelfTestShard?> ConfiguredShard =
+        new(() => ResolveShard(Environment.GetEnvironmentVariable(SelfTestShard.EnvVar)));
+
+    /// <summary>
+    /// Parses the shard override. Unset or blank runs everything. Anything else must parse, since a
+    /// value that fell back to "everything" would still look like a shard in CI while doubling that
+    /// runner's work, and one that fell back to "nothing" would pass having measured nothing.
+    /// </summary>
+    internal static SelfTestShard? ResolveShard(string? envValue)
+    {
+        if (string.IsNullOrWhiteSpace(envValue)) return null;
+        if (!SelfTestShard.TryParse(envValue, out var shard, out var error))
+            throw new InvalidOperationException(
+                $"{SelfTestShard.EnvVar}='{envValue}' is not a valid shard: {error} " +
+                "Unset it to run the whole corpus.");
+        return shard;
+    }
+
+    /// <summary>Appends <c>--shard k/n</c> to a Host command line when a shard is configured.</summary>
+    internal static string WithShard(string args, SelfTestShard? shard) =>
+        shard is { } s ? $"{args} {SelfTestShard.Flag} {s}" : args;
+
     [ClassInitialize]
     public static void RunSelfTests(TestContext context)
     {
         var exe = FindHostExe();
         var stopwatch = Stopwatch.StartNew();
-        var (stdout, stderr, exitCode, timedOut) = RunProcess(exe, "--self-test", SelfTestTimeoutMs);
+        var (stdout, stderr, exitCode, timedOut) =
+            RunProcess(exe, WithShard("--self-test", ConfiguredShard.Value), SelfTestTimeoutMs);
         stopwatch.Stop();
         _wrapperElapsedSeconds = stopwatch.Elapsed.TotalSeconds;
         _exitCode = exitCode;
@@ -1797,6 +1826,145 @@ public class SelfTestBatch
             $"--- tail of full output ---\n{Tail(_fullOutput, 4000)}");
     }
 
+    // -- Sharding: the partition and the run must both account for every fixture ---
+
+    /// <summary>
+    /// Proves the Host's <c>--shard</c> listings partition its corpus: every fixture is in exactly
+    /// one shard, the pinned controls are in all of them, and nothing is invented. This is the
+    /// selftest version of the exhaustive-discovery check in winappCli's shard runner.
+    /// </summary>
+    /// <remarks>
+    /// <para>Runs on <b>every</b> run, sharded or not. When no shard is configured it checks a 1/2 +
+    /// 2/2 split, so the mechanism is proven locally and in unsharded jobs too, rather than only in
+    /// the CI configuration that depends on it. Each listing is the <c>--list-fixtures</c> fast path,
+    /// which returns before WinUI starts, so the whole check costs a few process launches.</para>
+    /// <para>When sharded, it also ties this run's discovery to the shard it claims to be, so the
+    /// partition proven here is the one the per-fixture tests actually report on.</para>
+    /// </remarks>
+    [TestMethod]
+    public void Shards_PartitionTheCorpus()
+    {
+        var configured = ConfiguredShard.Value;
+        var count = configured?.Count ?? 2;
+        var exe = FindHostExe();
+
+        var corpus = ListFixtures(exe, null);
+        var shards = Enumerable.Range(1, count)
+            .Select(k => (IReadOnlyList<string>)ListFixtures(exe, new SelfTestShard(k, count)))
+            .ToArray();
+
+        var problems = SelfTestShard.FindPartitionProblems(corpus, shards);
+        Assert.AreEqual(0, problems.Count,
+            $"`--list-fixtures --shard k/{count}` does not partition the {corpus.Length}-fixture " +
+            $"corpus, so a sharded CI run would skip, double-run, or invent fixtures ({problems.Count} " +
+            $"problem(s)):\n  {SelfTestShard.Describe(problems)}");
+
+        // FindPartitionProblems only checks the pins it is given. This ties them to the control
+        // this wrapper actually asserts on, so dropping it from the pin list fails here, by name,
+        // instead of as a missing skip on every shard but one.
+        var unpinned = Enumerable.Range(0, count).Where(k => !shards[k].Contains(SkipVerdictControlFixture)).ToArray();
+        Assert.AreEqual(0, unpinned.Length,
+            $"'{SkipVerdictControlFixture}' is missing from shard(s) " +
+            $"{string.Join(", ", unpinned.Select(k => $"{k + 1}/{count}"))}. SkippedFixtures_AreReported " +
+            $"and SkipDirectives_SurviveIntoTheReport require it in every run, so it must stay in " +
+            $"SelfTestShard.PinnedFixtures.");
+
+        var expected = configured is { } s ? shards[s.Index - 1] : corpus;
+        CollectionAssert.AreEquivalent(expected.ToList(), FixtureNames.Value.ToList(),
+            configured is null
+                ? "Unsharded discovery must be the whole corpus."
+                : $"Discovery for shard {configured} must be exactly that shard's listing.");
+    }
+
+    /// <summary>
+    /// A malformed shard must stop the Host before it runs anything. Failing open would run the
+    /// whole corpus, or none of it, and still look sharded.
+    /// </summary>
+    [TestMethod]
+    public void Host_RejectsMalformedShardSpecs()
+    {
+        var exe = FindHostExe();
+        foreach (var spec in new[] { "3/2", "0/2", "1/0", "half" })
+        {
+            var (stdout, stderr, exitCode, timedOut) =
+                RunProcess(exe, $"--list-fixtures {SelfTestShard.Flag} {spec}", ListFixturesTimeoutMs);
+
+            Assert.IsFalse(timedOut, $"`--shard {spec}` did not exit within {ListFixturesTimeoutMs}ms.");
+            Assert.AreEqual(2, exitCode,
+                $"`--shard {spec}` exited {exitCode}; a malformed spec must exit 2.\nstdout:\n{Tail(stdout, 500)}");
+            Assert.AreEqual(0, ParseFixtureNames(stdout).Length,
+                $"`--shard {spec}` still listed fixtures, so it ran something despite the invalid spec.");
+            StringAssert.Contains(stderr, SelfTestShard.Flag,
+                $"`--shard {spec}` failed without naming the flag it rejected.");
+        }
+    }
+
+    /// <summary>
+    /// The run must cover exactly what discovery offered: the TAP plan (<c>1..N</c>) matches the
+    /// discovered count, and no fixture outside discovery reported.
+    /// </summary>
+    /// <remarks>
+    /// Per-fixture tests only ask about fixtures that were discovered, so a Host that honoured
+    /// <c>--shard</c> in <c>--list-fixtures</c> but ignored it in <c>--self-test</c> would run the
+    /// whole corpus on every shard and stay green, and sharding would silently save nothing. This is
+    /// the check that notices.
+    /// </remarks>
+    [TestMethod]
+    public void Run_CoversExactlyTheDiscoveredFixtures()
+    {
+        Assert.IsTrue(_initialized, "Self-test batch did not run.");
+        if (_initError is not null)
+            Assert.Fail(_initError);
+
+        if (_timedOut || _abortedReason is not null)
+        {
+            Assert.Inconclusive(
+                $"{_abortedReason ?? "The suite was killed by its process budget"}; a truncated run " +
+                $"cannot be compared with discovery.");
+        }
+
+        var discovered = FixtureNames.Value;
+        var plan = ExtractPlanCount(_fullOutput);
+        Assert.AreEqual(discovered.Length, plan,
+            $"The Host planned {plan?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "no"} " +
+            $"fixture(s) (TAP '1..N') but discovery offered {discovered.Length}. The run and " +
+            $"discovery selected different sets; check that `--self-test` and `--list-fixtures` apply " +
+            $"the same {SelfTestShard.Flag} ({ConfiguredShard.Value?.ToString() ?? "none"}).");
+
+        var known = new HashSet<string>(discovered, StringComparer.Ordinal);
+        var extra = _byFixture.Keys.Where(k => !known.Contains(k)).OrderBy(k => k, StringComparer.Ordinal).ToArray();
+        Assert.AreEqual(0, extra.Length,
+            $"The Host ran fixture(s) that discovery did not offer, so no test case reports them:\n  " +
+            string.Join("\n  ", extra));
+    }
+
+    /// <summary>
+    /// The count from the first TAP plan line (<c>1..N</c>), or <see langword="null"/> if none.
+    /// </summary>
+    internal static int? ExtractPlanCount(string stdout)
+    {
+        if (string.IsNullOrEmpty(stdout)) return null;
+        foreach (var raw in stdout.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.StartsWith("1..", StringComparison.Ordinal)
+                && int.TryParse(line.AsSpan(3), System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var planned))
+                return planned;
+        }
+        return null;
+    }
+
+    private static string[] ListFixtures(string exe, SelfTestShard? shard)
+    {
+        var args = WithShard("--list-fixtures", shard);
+        var (stdout, stderr, exitCode, timedOut) = RunProcess(exe, args, ListFixturesTimeoutMs);
+        if (timedOut || exitCode != 0)
+            throw new InvalidOperationException(
+                $"`{args}` failed (exit {exitCode}, timed out: {timedOut}).\nstderr:\n{stderr}");
+        return ParseFixtureNames(stdout);
+    }
+
     // -- Discovery: one-shot Host launch to list fixture names -----------------
 
     private static readonly Lazy<string[]> FixtureNames = new(LoadFixtureNames);
@@ -1804,20 +1972,21 @@ public class SelfTestBatch
     private static string[] LoadFixtureNames()
     {
         var exe = FindHostExe();
-        var (stdout, stderr, exitCode, timedOut) = RunProcess(exe, "--list-fixtures", ListFixturesTimeoutMs);
+        var args = WithShard("--list-fixtures", ConfiguredShard.Value);
+        var (stdout, stderr, exitCode, timedOut) = RunProcess(exe, args, ListFixturesTimeoutMs);
 
         if (timedOut)
-            throw new TimeoutException($"`--list-fixtures` timed out after {ListFixturesTimeoutMs}ms. Host: {exe}");
+            throw new TimeoutException($"`{args}` timed out after {ListFixturesTimeoutMs}ms. Host: {exe}");
 
         if (exitCode != 0)
             throw new InvalidOperationException(
-                $"`--list-fixtures` failed with exit code {exitCode}.\nstdout:\n{stdout}\nstderr:\n{stderr}");
+                $"`{args}` failed with exit code {exitCode}.\nstdout:\n{stdout}\nstderr:\n{stderr}");
 
         var names = ParseFixtureNames(stdout);
 
         if (names.Length == 0)
             throw new InvalidOperationException(
-                $"`--list-fixtures` returned no fixture names.\nstdout:\n{stdout}\nstderr:\n{stderr}");
+                $"`{args}` returned no fixture names.\nstdout:\n{stdout}\nstderr:\n{stderr}");
 
         return names;
     }

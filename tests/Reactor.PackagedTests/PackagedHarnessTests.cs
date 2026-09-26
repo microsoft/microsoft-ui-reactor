@@ -1,5 +1,6 @@
 using System.Xml.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Reactor.Tests.Shared;
 
 namespace Microsoft.UI.Reactor.PackagedTests;
 
@@ -591,6 +592,33 @@ public class PackagedHarnessTests
             "PackagedIdentityFixtures.PackagedHostAssemblyName drifted from the packaged host's " +
             "<AssemblyName>. The tier gate keys off that name, so every identity-dependent " +
             "fixture would silently skip inside the packaged tier.");
+    }
+
+    // ── Sharding (REACTOR_SELFTEST_SHARD) ────────────────────────────────────────
+
+    [TestMethod]
+    public void ResolveShard_UnsetRunsEverythingAndGarbageFailsLoudly()
+    {
+        Assert.IsNull(PackagedSelfTestBatch.ResolveShard(null));
+        Assert.IsNull(PackagedSelfTestBatch.ResolveShard(" "));
+        Assert.AreEqual(new SelfTestShard(1, 2), PackagedSelfTestBatch.ResolveShard("1/2"));
+
+        var threw = false;
+        try { PackagedSelfTestBatch.ResolveShard("0/2"); }
+        catch (InvalidOperationException) { threw = true; }
+        Assert.IsTrue(threw, "A malformed shard must fail discovery, not fall back to the whole corpus.");
+    }
+
+    [TestMethod]
+    public void WithShard_AndPlanCount_MatchTheUnpackagedWrapper()
+    {
+        Assert.AreEqual("--list-fixtures", PackagedSelfTestBatch.WithShard("--list-fixtures", null));
+        Assert.AreEqual("--self-test --shard 2/2",
+            PackagedSelfTestBatch.WithShard("--self-test", new SelfTestShard(2, 2)));
+
+        // The guard's second pass appends its own `1..1`, so only the first plan may count.
+        Assert.AreEqual(760, PackagedSelfTestBatch.ExtractPlanCount("TAP version 14\n1..760\n# Running: A\n1..1\n"));
+        Assert.IsNull(PackagedSelfTestBatch.ExtractPlanCount("# Running: A\nok A_Check\n"));
     }
 
     /// <summary>Extracts the value of a <c>const string NAME = "value";</c> declaration.</summary>

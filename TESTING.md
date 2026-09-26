@@ -246,9 +246,45 @@ For faster iteration with raw TAP output, you can bypass MSTest and run the Host
 # Raw TAP output
 dotnet run --project tests/Reactor.AppTests.Host -- --self-test
 
-# Filter by fixture name prefix
+# Filter by fixture name (a case-insensitive substring match, so a prefix works)
 dotnet run --project tests/Reactor.AppTests.Host -- --self-test --filter "Flex"
+
+# One CI shard: the k-th of n round-robin slices of the corpus
+dotnet run --project tests/Reactor.AppTests.Host -- --self-test --shard 1/2
 ```
+
+### Sharding the corpus across runners
+
+CI splits the selftest corpus in two for the Selftests, Packaged Selftests, AOT Selftests and
+Coverage jobs, one runner per half, with `--shard <k>/<n>`. The split lives in
+`tests/_shared/SelfTestShard.cs`, which both hosts and both wrappers compile.
+
+- **It is a partition by construction.** Non-pinned fixtures are dealt round-robin in registry
+  order, so each fixture lands in exactly one shard and a new fixture needs no list edit.
+- **Pinned controls run in every shard.** `SelfTestVerdict_OnlySkips_PositiveControl` and
+  `Packaged_IdentityGuard` are what the wrappers' suite-level checks assert on.
+- **The shard is selected before `--filter`**, so a fixture's shard does not depend on the filter.
+- **A malformed spec exits 2** before anything runs. Failing open would run all or none of the
+  suite while still looking sharded.
+
+`--list-fixtures` honours `--shard` too, so discovery and the run select the same set. The wrappers
+take the shard from `REACTOR_SELFTEST_SHARD=<k>/<n>` and run it with no other change. Two tests
+make sure no shard quietly drops part of the suite:
+
+- `Shards_PartitionTheCorpus` lists every shard and requires each fixture in exactly one of them.
+  Unsharded runs check a 1/2 + 2/2 split, so the mechanism is proven locally too.
+- `Run_CoversExactlyTheDiscoveredFixtures` requires the run's TAP plan to match discovery.
+
+The AOT job and the coverage lanes run the Host directly, so they use
+`tests/Reactor.AppTests.Host/Test-SelfTestShards.ps1` for the same partition check.
+
+A tiny shard is also the quickest way to smoke-test the whole wrapper locally:
+`$env:REACTOR_SELFTEST_SHARD='1/64'; dotnet test tests/Reactor.SelfTests -p:Platform=x64` runs
+about 25 fixtures plus every suite-level check in roughly 20 seconds.
+
+> **PowerShell gotcha:** the Host is a GUI-subsystem exe. `$x = & $exe --list-fixtures` neither
+> waits for it nor captures its output. Pipe the call instead:
+> `& $exe --list-fixtures 2>&1 | ForEach-Object { "$_" }`.
 
 ### Not every test here wraps a TAP fixture
 
@@ -473,6 +509,7 @@ Fixtures with no result are reported **Skipped (`Assert.Inconclusive`)**, not pa
 | `REACTOR_SELFTEST_TIMEOUT_SECONDS` | 900 | Hard process budget. Malformed or non-positive values fall back to the default. |
 | `REACTOR_SELFTEST_HANG_TIMEOUT_SECONDS` | 60 | Host off-dispatcher hang watchdog. **`0` or negative disables it entirely** (useful when attaching a debugger, which also auto-disables it); malformed values fall back to 60. |
 | `REACTOR_SELFTEST_VIZ_PACING` | unset | Set to `1` to restore the human-observable pacing in the docking visual-demo fixtures. |
+| `REACTOR_SELFTEST_SHARD` | unset | `<k>/<n>` runs one shard of the corpus (see [Sharding](#sharding-the-corpus-across-runners)). Read by both wrappers. Malformed values fail discovery rather than falling back. |
 
 **Keeping the margin.** The Host emits `# Suite elapsed: <seconds>` and `# Fixture time: <name> <ms>` as TAP comments (inert to `ParseTap` and to CI's `^not ok ` greps), and `SelfTestBatch.SuiteDuration_WithinBudget` reports elapsed / budget / % every run. Above `SuiteDurationWarnSeconds` it also reports Inconclusive — deliberately not a failure, since duration depends on runner speed and a hard gate here would itself be a flake. If you see that warning, trim suite time or raise the budget **deliberately**, rather than discovering the cap in an unrelated red PR.
 
@@ -786,11 +823,12 @@ once, with a real fixture to pin the contract against.
 
 ### Scope and knobs
 
-The whole corpus runs under identity (~5 min, on its own CI runner).
+The whole corpus runs under identity, split across two CI runners (~3 min each).
 
 | Environment variable | Effect |
 |---|---|
 | `REACTOR_PACKAGED_FILTER=<substring>` | Narrow to a subset. `Packaged_IdentityGuard` is fetched in a second pass if your filter excludes it. |
+| `REACTOR_SELFTEST_SHARD=<k>/<n>` | Run one shard, as CI does. Shared with the unpackaged wrapper; `Packaged_IdentityGuard` is pinned into every shard. |
 | `REACTOR_PACKAGED_HOST_DIR=<dir>` | Use a different built layout. Absolute, cwd-relative, or repo-relative. |
 | `REACTOR_PACKAGED_TIMEOUT_SECONDS=<n>` | Override the 900 s process budget. |
 
@@ -970,6 +1008,13 @@ was holding. MSTest does not parallelize unless asked, so the attribute changes 
 it is there so a `.runsettings` or a `--parallel` can't flip the assumption the tier is built on
 without anyone noticing, because the resulting failures would read as ordinary UI flake.
 
+CI instead splits the tier across **two runners**, each with its own desktop, using
+`tests/Reactor.AppTests/Select-E2EShard.ps1`. Shard 1 runs the classes listed in `ci.yml`'s
+`E2E_SHARD1_CLASSES`, and shard 2 runs the exact complement, so a new class lands in shard 2
+automatically. Before either shard runs, discovery must show both halves non-empty and summing
+to the whole suite. Afterwards, each shard's TRX must account for every test it selected. Each
+shard uploads its TRX, which holds the per-test durations to rebalance the list against.
+
 ### Don't co-locate the E2E and selftest tiers
 
 CI runs them as separate jobs on separate runners today, and that isolation is load-bearing
@@ -1035,7 +1080,10 @@ dotnet-coverage merge coverage\unit.cobertura.xml coverage\selftest.cobertura.xm
 You don't have to run the merge locally — the **Coverage** workflow
 (`.github/workflows/coverage.yml`) runs this same unit + selftest recipe and
 reports the merged line/branch numbers, **compared against a cached `main`
-baseline**.
+baseline**. It runs the recipe as parallel lanes: one unit lane and two selftest
+shards, each running `Measure-Coverage.ps1 -Part Unit|SelfTest`. A final
+**Merged coverage** job unions their reports (`-Part Merge`), and refuses to
+report a number unless it received exactly the expected lane reports.
 
 - **Automatic on every PR:** it runs on each PR commit, measures the merged
   coverage of the **PR head** (one instrumented pass), and posts a **sticky

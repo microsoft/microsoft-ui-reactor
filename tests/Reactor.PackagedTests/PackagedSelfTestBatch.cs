@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Reactor.Tests.Shared;
 
 namespace Microsoft.UI.Reactor.PackagedTests;
 
@@ -43,6 +44,33 @@ public class PackagedSelfTestBatch
     private static string _fullOutput = "";
     private static string? _initError;
     private static int _exitCode;
+    // The TAP plan (`1..N`) of the main run only. The identity-guard second pass prints its own
+    // plan, so this is captured before that pass's output is appended.
+    private static int? _mainRunPlanCount;
+
+    /// <summary>
+    /// The CI shard this run covers, from <c>REACTOR_SELFTEST_SHARD</c> (shared with the
+    /// unpackaged wrapper), or <see langword="null"/> to run the whole corpus.
+    /// </summary>
+    private static readonly Lazy<SelfTestShard?> ConfiguredShard =
+        new(() => ResolveShard(Environment.GetEnvironmentVariable(SelfTestShard.EnvVar)));
+
+    /// <summary>
+    /// Parses the shard override; unset or blank runs everything, anything else must parse.
+    /// Mirrors <c>Reactor.SelfTests.SelfTestBatch.ResolveShard</c>.
+    /// </summary>
+    internal static SelfTestShard? ResolveShard(string? envValue)
+    {
+        if (string.IsNullOrWhiteSpace(envValue)) return null;
+        if (!SelfTestShard.TryParse(envValue, out var shard, out var error))
+            throw new InvalidOperationException(
+                $"{SelfTestShard.EnvVar}='{envValue}' is not a valid shard: {error} " +
+                "Unset it to run the whole corpus.");
+        return shard;
+    }
+
+    internal static string WithShard(string args, SelfTestShard? shard) =>
+        shard is { } s ? $"{args} {SelfTestShard.Flag} {s}" : args;
 
     /// <summary>Resolved once so discovery and execution can never disagree on the set.</summary>
     private static readonly Lazy<string[]> _fixtureNames = new(DiscoverFixtures);
@@ -87,9 +115,10 @@ public class PackagedSelfTestBatch
             _aliasPath = alias;
 
             var filter = ResolveFilter();
-            var (stdout, stderr, exitCode, timedOut) = RunHost(alias, filter);
+            var (stdout, stderr, exitCode, timedOut) = RunHost(alias, filter, ConfiguredShard.Value);
             _exitCode = exitCode;
             _fullOutput = CombineStreams(stdout, stderr);
+            _mainRunPlanCount = ExtractPlanCount(stdout);
 
             if (timedOut)
             {
@@ -128,7 +157,7 @@ public class PackagedSelfTestBatch
             // would make the documented knob unusable) it is fetched in a second, cheap pass.
             if (!FilterSelects(filter, IdentityGuardFixture))
             {
-                var guard = RunHost(alias, IdentityGuardFixture);
+                var guard = RunHost(alias, IdentityGuardFixture, shard: null);
                 var guardOutput = CombineStreams(guard.Stdout, guard.Stderr);
                 _fullOutput += $"\n--- identity guard pass ---\n{guardOutput}";
 
@@ -395,6 +424,93 @@ public class PackagedSelfTestBatch
             $"failed after its last fixture.\n{Tail(_fullOutput, 3000)}");
     }
 
+    /// <summary>
+    /// Proves the packaged host's <c>--shard</c> listings partition its corpus, with both controls
+    /// (the skip positive control and <c>Packaged_IdentityGuard</c>) pinned into every shard.
+    /// Mirrors <c>SelfTestBatch.Shards_PartitionTheCorpus</c>, and runs unsharded too (checking
+    /// a 1/2 + 2/2 split) so the mechanism is proven outside the CI configuration that uses it.
+    /// </summary>
+    [TestMethod]
+    public void Shards_PartitionTheCorpus()
+    {
+        var configured = ConfiguredShard.Value;
+        var count = configured?.Count ?? 2;
+        var exe = ResolveListingExe();
+
+        var corpus = ListFixtures(exe, null);
+        var shards = Enumerable.Range(1, count)
+            .Select(k => (IReadOnlyList<string>)ListFixtures(exe, new SelfTestShard(k, count)))
+            .ToArray();
+
+        var problems = SelfTestShard.FindPartitionProblems(corpus, shards);
+        Assert.AreEqual(0, problems.Count,
+            $"`--list-fixtures --shard k/{count}` does not partition the {corpus.Length}-fixture " +
+            $"packaged corpus ({problems.Count} problem(s)):\n  {SelfTestShard.Describe(problems)}");
+
+        var unguarded = Enumerable.Range(0, count).Where(k => !shards[k].Contains(IdentityGuardFixture)).ToArray();
+        Assert.AreEqual(0, unguarded.Length,
+            $"'{IdentityGuardFixture}' is missing from shard(s) " +
+            $"{string.Join(", ", unguarded.Select(k => $"{k + 1}/{count}"))}. It is what establishes " +
+            "that a packaged run had identity, so every shard must run it; keep it in " +
+            "SelfTestShard.PinnedFixtures.");
+
+        var filter = ResolveFilter();
+        var expected = configured is { } s ? shards[s.Index - 1] : corpus;
+        CollectionAssert.AreEquivalent(
+            expected.Where(n => FilterSelects(filter, n)).ToList(),
+            _fixtureNames.Value.ToList(),
+            configured is null
+                ? "Unsharded discovery must be the whole (filtered) corpus."
+                : $"Discovery for shard {configured} must be exactly that shard's (filtered) listing.");
+    }
+
+    /// <summary>
+    /// The main run's TAP plan must match discovery, so a host that honoured <c>--shard</c> in
+    /// <c>--list-fixtures</c> but not in <c>--self-test</c> cannot run the whole corpus on every
+    /// shard and stay green. Mirrors <c>SelfTestBatch.Run_CoversExactlyTheDiscoveredFixtures</c>;
+    /// the identity guard's second pass is excluded because it has its own plan.
+    /// </summary>
+    [TestMethod]
+    public void Run_CoversExactlyTheDiscoveredFixtures()
+    {
+        FailIfNotInitialized();
+
+        Assert.AreEqual(
+            _fixtureNames.Value.Length, _mainRunPlanCount,
+            $"The packaged host planned {_mainRunPlanCount?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "no"} " +
+            $"fixture(s) (TAP '1..N') but discovery offered {_fixtureNames.Value.Length}. Check that " +
+            $"`--self-test` and `--list-fixtures` apply the same {SelfTestShard.Flag} " +
+            $"({ConfiguredShard.Value?.ToString() ?? "none"}) and filter.");
+    }
+
+    /// <summary>
+    /// The count from the first TAP plan line (<c>1..N</c>), or <see langword="null"/> if none.
+    /// Mirrors <c>SelfTestBatch.ExtractPlanCount</c>.
+    /// </summary>
+    internal static int? ExtractPlanCount(string stdout)
+    {
+        if (string.IsNullOrEmpty(stdout)) return null;
+        foreach (var raw in stdout.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.StartsWith("1..", StringComparison.Ordinal)
+                && int.TryParse(line.AsSpan(3), System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var planned))
+                return planned;
+        }
+        return null;
+    }
+
+    private static string[] ListFixtures(string exe, SelfTestShard? shard)
+    {
+        var args = WithShard("--list-fixtures", shard);
+        var (stdout, stderr, exitCode, timedOut) = RunProcess(exe, args, 60_000);
+        if (timedOut || exitCode != 0)
+            throw new InvalidOperationException(
+                $"`{args}` failed (exit {exitCode}, timed out: {timedOut}).\nstderr:\n{stderr}");
+        return ParseFixtureList(stdout, filter: null);
+    }
+
     private static void FailIfNotInitialized()
     {
         if (_initError is not null) Assert.Fail(_initError);
@@ -466,15 +582,10 @@ public class PackagedSelfTestBatch
     /// </remarks>
     private static string[] DiscoverFixtures()
     {
-        var layout = AppxLooseLayoutDeployment.ResolveLayoutDirectory();
-        var exe = Path.Join(layout, "Reactor.PackagedTests.Host.exe");
-        if (!File.Exists(exe))
-        {
-            throw new FileNotFoundException(
-                $"Packaged host not built. Expected: {exe}\n{AppxLooseLayoutDeployment.BuildHint}");
-        }
+        var exe = ResolveListingExe();
 
-        var (stdout, stderr, exitCode, timedOut) = RunProcess(exe, "--list-fixtures", 60_000);
+        var (stdout, stderr, exitCode, timedOut) =
+            RunProcess(exe, WithShard("--list-fixtures", ConfiguredShard.Value), 60_000);
 
         // Discovery failures must be loud. A --list-fixtures run that printed some names and
         // then died would otherwise silently narrow the tier to whatever it managed to emit,
@@ -500,6 +611,22 @@ public class PackagedSelfTestBatch
         }
 
         return names;
+    }
+
+    /// <summary>
+    /// The packaged host's plain build-output executable, used for the <c>--list-fixtures</c>
+    /// fast path. See <see cref="DiscoverFixtures"/> for why listing runs unpackaged.
+    /// </summary>
+    private static string ResolveListingExe()
+    {
+        var layout = AppxLooseLayoutDeployment.ResolveLayoutDirectory();
+        var exe = Path.Join(layout, "Reactor.PackagedTests.Host.exe");
+        if (!File.Exists(exe))
+        {
+            throw new FileNotFoundException(
+                $"Packaged host not built. Expected: {exe}\n{AppxLooseLayoutDeployment.BuildHint}");
+        }
+        return exe;
     }
 
     /// <summary>
@@ -658,9 +785,9 @@ public class PackagedSelfTestBatch
     }
 
     private static (string Stdout, string Stderr, int ExitCode, bool TimedOut) RunHost(
-        string alias, string? filter)
+        string alias, string? filter, SelfTestShard? shard)
     {
-        var args = "--self-test";
+        var args = WithShard("--self-test", shard);
         if (filter is not null) args += $" --filter {filter}";
         return RunProcess(alias, args, TimeoutMs);
     }

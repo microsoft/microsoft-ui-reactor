@@ -56,6 +56,48 @@ function Get-Func([string]$name) {
     $f.Extent.Text
 }
 Invoke-Expression (Get-Func 'Invoke-Checked')
+Invoke-Expression (Get-Func 'Resolve-CoveragePlan')
+Invoke-Expression (Get-Func 'Assert-ExpectedParts')
+
+function Assert-Throws {
+    param([scriptblock]$Action, [string]$Like, [string]$Message)
+    $threw = $false; $text = ''
+    try { & $Action } catch { $threw = $true; $text = $_.Exception.Message }
+    Assert-True ($threw -and $text -like $Like) "$Message (threw=$threw, message=[$text])"
+}
+
+# --- Resolve-CoveragePlan: which steps each lane runs. ---
+$all = Resolve-CoveragePlan -Part All -OutFile out.json
+Assert-True ($all.BuildUnit -and $all.BuildSelfTest -and $all.CollectUnit -and $all.CollectSelf -and $all.Merge) 'All runs every step'
+Assert-Equal 'selftest.cobertura.xml' $all.SelfTestReport 'All keeps the unsharded selftest report name'
+
+$unit = Resolve-CoveragePlan -Part Unit
+Assert-True ($unit.BuildUnit -and $unit.CollectUnit) 'Unit builds and collects the unit leg'
+Assert-True (-not ($unit.BuildSelfTest -or $unit.CollectSelf -or $unit.Merge)) 'Unit neither touches the Host nor merges'
+
+$self = Resolve-CoveragePlan -Part SelfTest -Shard ' 2/3 '
+Assert-True ($self.BuildSelfTest -and $self.CollectSelf) 'SelfTest builds and collects the selftest leg'
+Assert-True (-not ($self.BuildUnit -or $self.CollectUnit -or $self.Merge)) 'SelfTest neither builds Reactor.Tests nor merges'
+Assert-Equal 'selftest-2.cobertura.xml' $self.SelfTestReport 'a shard names its report after its index'
+Assert-Equal '2/3' $self.Shard 'the shard spec is trimmed'
+
+$merge = Resolve-CoveragePlan -Part Merge -OutFile out.json -PartsDir parts -ExpectedParts unit, selftest-1
+Assert-True ($merge.Merge -and -not ($merge.BuildUnit -or $merge.BuildSelfTest -or $merge.CollectUnit -or $merge.CollectSelf)) 'Merge only merges'
+
+Assert-Throws { Resolve-CoveragePlan -Part Unit -Shard 1/2 } '*only applies to -Part SelfTest*' 'a shard on a non-selftest lane is rejected'
+Assert-Throws { Resolve-CoveragePlan -Part SelfTest -Shard 3/2 } '*out of range*' 'an out-of-range shard is rejected'
+Assert-Throws { Resolve-CoveragePlan -Part SelfTest -Shard half } '*must look like k/n*' 'a malformed shard is rejected'
+Assert-Throws { Resolve-CoveragePlan -Part Merge -OutFile out.json -PartsDir parts } '*needs -ExpectedParts*' 'Merge requires the expected lane list'
+Assert-Throws { Resolve-CoveragePlan -Part All } '*needs -OutFile*' 'All requires -OutFile'
+
+# --- Assert-ExpectedParts: the merge sees exactly the lanes it expects. ---
+$expected = @('unit', 'selftest-1', 'selftest-2')
+$threw = $false
+try { Assert-ExpectedParts -Found @('selftest-2.cobertura.xml', 'unit.cobertura.xml', 'selftest-1.cobertura.xml') -Expected $expected } catch { $threw = $true }
+Assert-True (-not $threw) 'the exact lane set, in any order, is accepted'
+Assert-Throws { Assert-ExpectedParts -Found @('unit.cobertura.xml', 'selftest-1.cobertura.xml') -Expected $expected } '*Missing: `[selftest-2.cobertura.xml`]*' 'a missing lane fails the merge'
+Assert-Throws { Assert-ExpectedParts -Found @('unit.cobertura.xml', 'selftest-1.cobertura.xml', 'selftest-2.cobertura.xml', 'selftest.cobertura.xml') -Expected $expected } '*Unexpected: `[selftest.cobertura.xml`]*' 'an unexpected lane fails the merge'
+Assert-Throws { Assert-ExpectedParts -Found @('unit.cobertura.xml', 'unit.cobertura.xml', 'selftest-1.cobertura.xml', 'selftest-2.cobertura.xml') -Expected $expected } '*Duplicate lane reports*' 'a duplicated lane fails the merge'
 
 # --- Invoke-Checked: throws on a non-zero exit code, silent on zero. ---
 $threw = $false
