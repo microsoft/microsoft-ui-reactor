@@ -139,6 +139,36 @@ public class DataGridState<T>
     /// </summary>
     internal bool SuppressNextLostFocusCommit { get; set; }
 
+    /// <summary>
+    /// Invoked synchronously when the grid is about to make an edit transition whose re-render
+    /// destroys the element that currently holds keyboard focus: opening an editor
+    /// (<see cref="BeginEdit(int, int)"/>, <see cref="BeginRowEdit"/>), or committing the in-flight
+    /// edit on the first half of a commit-then-begin click (the cell tap, and the row pointer
+    /// press that precedes it on a cross-row tap). Runs BEFORE the state change, while that
+    /// element still exists. <see cref="DataGridComponent{T}"/> reassigns it every render to park
+    /// focus on the grid root when focus sits on one of the grid's own descendants. Null when the
+    /// state is driven without a renderer.
+    /// </summary>
+    /// <remarks>
+    /// <para>Why (issue #1288, measured on CI): when the focused element — the row's "Edit"
+    /// button, or the previous cell's editor — is removed from the tree, XAML moves focus to the
+    /// next element in tab order, which lies OUTSIDE the grid because the grid is a single tab
+    /// stop. The grid's blur-commit net then races the new editor's deferred focus: when its
+    /// deferred check runs first, it finds focus outside the grid and commits the edit the user
+    /// just opened — a spurious unchanged <c>onRowChanged</c>, and an editor that closes as it
+    /// appears.</para>
+    ///
+    /// <para>Parking focus on the root first means no focused element is ever destroyed, so
+    /// XAML never moves focus out of the grid and there is no race to lose. It is not a timing
+    /// heuristic: the render that removes the element is always a later dispatcher tick than the
+    /// transition that calls this.</para>
+    ///
+    /// <para>Deliberately NOT invoked for row-mode Tab traversal, which does not destroy the
+    /// focused editor: native Tab has already moved focus, and the
+    /// <see cref="SuppressNextLostFocusCommit"/> claim owns that focus-out.</para>
+    /// </remarks>
+    internal Action? BeforeEditTransition { get; set; }
+
     // ── Editor focus requests (#976) ─────────────────────────────
     //
     // The focus APIs above move a purely LOGICAL cell cursor. This is the seam that turns an
@@ -1229,11 +1259,18 @@ public class DataGridState<T>
         // Commit any active edit when clicking a DIFFERENT row. Clicking within the same row is
         // handled by the cell's OnTapped handler (commit-then-begin); skipping it here prevents the
         // editing TextBox being dismissed when the user clicks to position the cursor.
+        //
+        // This runs on pointer PRESS, before the cell's Tapped (on release) opens the next editor,
+        // so for a cross-row commit-then-begin tap it is this commit that schedules the removal of
+        // the focused editor. Park focus first, while that editor still exists (#1288).
         if (IsEditing)
         {
             var editingKey = EditingRowKey;
             if (editingKey is null || !editingKey.Value.Equals(key))
+            {
+                BeforeEditTransition?.Invoke();
                 CommitInFlightEditThroughDispatcher();
+            }
         }
 
         SetFocus(idx, _focusedColIndex >= 0 ? _focusedColIndex : 0);
@@ -1309,8 +1346,15 @@ public class DataGridState<T>
 
         // Commit any in-flight edit BEFORE starting a new one — BeginEdit overwrites the pending
         // value with the new cell's current value, which would destroy an in-flight edit otherwise.
+        //
+        // Park focus before that commit: committing is what schedules the removal of the in-flight
+        // edit's (focused) editor, so this is the last point at which it is still safe to move
+        // focus off it. BeginEdit parks again below, which is then a no-op (#1288).
         if (IsEditing)
+        {
+            BeforeEditTransition?.Invoke();
             CommitInFlightEditThroughDispatcher();
+        }
 
         SetFocus(rowIdx, colIdx);
         BeginEdit(rowIdx, colIdx);
@@ -1692,6 +1736,10 @@ public class DataGridState<T>
         var rowKey = new RowKey(keyStr);
         var currentValue = col.GetValue(item!);
 
+        // The editor is definitely opening; move focus off anything the re-render will destroy
+        // while it still exists (#1288).
+        BeforeEditTransition?.Invoke();
+
         _editingRowKey = rowKey;
         _editingColumnName = col.Name;
         _editingValue = currentValue;
@@ -1861,6 +1909,10 @@ public class DataGridState<T>
         }
 
         if (values.Count == 0) return false;
+
+        // The row edit is definitely opening; move focus off anything the re-render will destroy
+        // — above all the row's own "Edit" button, which the user just pressed (#1288).
+        BeforeEditTransition?.Invoke();
 
         _editingRowKey = rowKey;
         _editingColumnName = null; // null signals row mode
