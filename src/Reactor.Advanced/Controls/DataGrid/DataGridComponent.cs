@@ -388,6 +388,15 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // would otherwise change the hook call sequence and throw HookOrderException).
         var lostFocusWired = UseRef(false);
         var lostFocusSetter = UseRef<Action<global::Microsoft.UI.Xaml.Controls.Grid>?>(null);
+
+        // The live root control, captured by the setter below on every mount/update (a pooled
+        // root can change across mounts), and the reference-stable park hook that reads it. Both
+        // declared unconditionally for the same hook-order reason as the refs above (#1288).
+        var gridRootRef = UseRef<FrameworkElement?>(null);
+        var parkFocusHook = UseRef<Action?>(null);
+        parkFocusHook.Current ??= () => ParkFocusOnGridRoot(gridRootRef.Current);
+        state.BeforeEditTransition = parkFocusHook.Current;
+
         if (el.Editable)
         {
             // Cache the LostFocus setter (and its closure) in a ref so the lambda isn't
@@ -398,6 +407,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             lostFocusSetter.Current ??=
                 g =>
                 {
+                    gridRootRef.Current = g;
                     if (lostFocusWired.Current) return;
                     lostFocusWired.Current = true;
                     g.LostFocus += (sender, e) =>
@@ -1302,6 +1312,47 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
              parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
         {
             if (ReferenceEquals(parent, root)) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Move keyboard focus onto the grid root when it currently sits on one of the grid's own
+    /// DESCENDANTS. Returns whether focus was moved. Wired as
+    /// <see cref="DataGridState{T}.BeforeEditTransition"/>, which explains why (#1288).
+    /// </summary>
+    /// <remarks>
+    /// <para>The root is the right place to park: it is a tab stop (<c>IsTabStop(true)</c>), it is
+    /// the element the blur-commit net is wired to, and it survives every re-render, unlike the
+    /// row's Edit button or a previous cell's editor. When an editor opens, its own deferred focus
+    /// request then moves focus from the root into it, entirely inside the grid. When a row click
+    /// only commits (it landed on a read-only cell), focus simply stays on the grid the user
+    /// clicked rather than jumping to the next tab stop outside it.</para>
+    ///
+    /// <para>Leaves focus alone in every other case, each for a reason:</para>
+    /// <list type="bullet">
+    /// <item><description>Focus already on the root — nothing the render removes holds it.</description></item>
+    /// <item><description>Focus outside the grid — a programmatic <c>BeginEdit()</c> from a toolbar
+    /// must not steal focus into the grid (the editor's own request decides that, as before).</description></item>
+    /// <item><description>No focus, or no live root — nothing to protect.</description></item>
+    /// </list>
+    ///
+    /// <para>Programmatic focus state, so parking shows no focus visual on the root.</para>
+    /// </remarks>
+    internal static bool ParkFocusOnGridRoot(FrameworkElement? root)
+    {
+        if (root?.XamlRoot is not { } xamlRoot) return false;
+
+        if (Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot) is not DependencyObject focused
+            || ReferenceEquals(focused, root))
+            return false;
+
+        for (var parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(focused); parent is not null;
+             parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
+        {
+            if (ReferenceEquals(parent, root))
+                return root.Focus(FocusState.Programmatic);
         }
 
         return false;

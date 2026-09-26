@@ -252,11 +252,7 @@ public class DataGridTests : AppTestBase
     [TestMethod]
     public void Interactive_DataGrid_RowEditTab_WrapsToFirstEditorWithoutCommitting()
     {
-        NavigateToFixtureFresh("DataGrid_RowEditGrid");
-        WaitForText("RowEditLog", "Edits:");
-        Assert.IsNotNull(WaitForName("Alice"), "'Alice' (row 1 FirstName) should be visible");
-
-        BeginRowEditOnFirstRow();
+        FreshRowEditGridWithFirstRowEditing();
 
         // Focus starts in FirstName. Step forward through every editable column, asserting the
         // DESTINATION of each move. Three editable columns make direction expressible: forward
@@ -305,11 +301,7 @@ public class DataGridTests : AppTestBase
     [TestMethod]
     public void Interactive_DataGrid_RowEditTab_DoesNotSuppressNextCommit()
     {
-        NavigateToFixtureFresh("DataGrid_RowEditGrid");
-        WaitForText("RowEditLog", "Edits:");
-        Assert.IsNotNull(WaitForName("Alice"), "'Alice' (row 1 FirstName) should be visible");
-
-        BeginRowEditOnFirstRow();
+        FreshRowEditGridWithFirstRowEditing();
 
         // Type into FirstName, Tab (arms the guard), then type into MiddleName — only reachable if
         // the Tab moved focus without committing.
@@ -377,33 +369,171 @@ public class DataGridTests : AppTestBase
     }
 
     /// <summary>
-    /// Click the first row's "Edit" button to enter row-edit mode and wait until its editors are
-    /// realized. Row mode has one Edit button per row and they share a name, so take the topmost.
+    /// Land the row-edit fixture in the exact state both row-mode Tab tests require: freshly
+    /// navigated, <c>RowEditLog</c> still empty, and row 1 in row-edit mode with its editors
+    /// realized.
     /// </summary>
-    private void BeginRowEditOnFirstRow()
+    /// <remarks>
+    /// <para>This retries the WHOLE setup — navigate, then begin the row edit — rather than just
+    /// re-clicking, because two different things can undo a begin-edit before the caller looks,
+    /// and a caller that only asks "is there a Save button?" cannot tell them apart. Reporting a
+    /// bare <c>null</c> for both is what made issue #1288 unreadable from a CI log.</para>
+    ///
+    /// <para><b>Shape 1 — the click lands but nothing happens.</b> <c>winapp ui click</c> is
+    /// SendInput: it goes to whatever window is foreground at that instant, so losing activation
+    /// between winapp's own foreground check and the injection sends the press elsewhere while the
+    /// verb still reports success. <c>RowEditLog</c> stays <c>"Edits:"</c>.</para>
+    ///
+    /// <para><b>Shape 2 — the row edit starts and is committed before Save can be seen.</b> The
+    /// tell is an unchanged entry appearing in the log, e.g. <c>Edits:[1:Alice,Marie,Smith]</c>.
+    /// This was a DataGrid bug (#1288): the re-render that opens the row editors removed the Edit
+    /// button while it still held keyboard focus, XAML moved focus to the next tab stop — the
+    /// blur anchor, outside the grid — and the grid's blur-commit net saw that before the new
+    /// editor had claimed focus. On stock code the CI stress lane recorded it as the FIRST attempt
+    /// of <c>DoesNotSuppressNextCommit</c>'s setup in 13 of 60 runs, every one of this shape and
+    /// with the Host foreground throughout; its focus trace showed the jump to the blur anchor
+    /// every time. The grid now parks focus on its root before that re-render
+    /// (<c>DataGridState.BeforeEditTransition</c>). The retry has to RE-NAVIGATE rather than just
+    /// re-click: a spurious commit left in <c>RowEditLog</c> would break both callers' oracles,
+    /// which count <c>'['</c> occurrences.</para>
+    ///
+    /// <para>This cannot heal a real regression. A grid that no longer enters row-edit mode
+    /// produces no Save on any attempt AND no log entry, so the failure still fires — and now
+    /// names which shape it saw on each attempt. Verified by mutation: with
+    /// <c>BeginRowEdit</c> no-oped, all four attempts report shape 1 and the test fails.</para>
+    ///
+    /// <para>A recovered attempt is written to the test's output rather than silently absorbed,
+    /// so the TRX of a passing run still says how often the setup had to be retried, and why.
+    /// A retry that heals a flake must not also erase the evidence of it.</para>
+    /// </remarks>
+    private void FreshRowEditGridWithFirstRowEditing()
     {
-        var deadline = DateTime.UtcNow.AddMilliseconds(5000);
-        while (DateTime.UtcNow < deadline)
+        const int MaxAttempts = 4;
+        var attempts = new List<string>();
+
+        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
-            var buttons = App.Search("Edit").Where(m => m.Name == "Edit").ToList();
-            if (buttons.Count > 0)
+            NavigateToFixtureFresh("DataGrid_RowEditGrid");
+            WaitForText("RowEditLog", "Edits:");
+            Assert.IsNotNull(WaitForName("Alice"), "'Alice' (row 1 FirstName) should be visible");
+
+            var note = TryBeginRowEditOnFirstRow();
+            if (note is null)
             {
-                var first = buttons[0];
-                // Normalize a missing AutomationId to null rather than "": UiElement.GetAttribute
-                // branches on `AutomationId != null`, so an empty-but-non-null id would send it
-                // down the read-by-automation-id path with an empty id.
-                var id = string.IsNullOrEmpty(first.AutomationId) ? null : first.AutomationId;
-                Element(id ?? first.Selector, id).Click();
-                // Save/Cancel only exist while the row is being edited, so their arrival is proof
-                // the row edit actually started before we start pressing Tab.
-                Assert.IsNotNull(WaitForName("Save"), "Row edit did not start — no 'Save' button appeared.");
-                _ = WaitForEditor();
+                if (attempts.Count > 0)
+                    TestContext?.WriteLine(
+                        $"[#1288] row edit started on attempt {attempt} of {MaxAttempts} after:\n  " +
+                        string.Join("\n  ", attempts));
                 return;
             }
-            Thread.Sleep(100);
+
+            attempts.Add($"attempt {attempt}: {note}");
         }
 
-        Assert.Fail("Row-mode 'Edit' button never appeared.");
+        Assert.Fail(
+            $"Row edit never started on row 1 after {MaxAttempts} attempts.\n  " +
+            string.Join("\n  ", attempts) + "\n" + DumpRowEditState());
+    }
+
+    /// <summary>
+    /// One attempt at putting row 1 into row-edit mode. Returns <see langword="null"/> on success,
+    /// otherwise a description of what was observed instead.
+    /// </summary>
+    private string? TryBeginRowEditOnFirstRow()
+    {
+        var button = WaitForTopmostRowEditButton();
+        if (button is null)
+            return "row-mode 'Edit' button never appeared";
+
+        var logBefore = App.GetValue("RowEditLog") ?? "";
+        var foregroundBefore = HostIsForeground();
+        try
+        {
+            // The row Edit buttons carry no AutomationId, so they are addressed by winapp's
+            // volatile slug — a display hint, not a stable handle. It is resolved fresh on every
+            // attempt because a previous attempt's re-render invalidates it.
+            Element(button.Selector).Click();
+        }
+        catch (WinAppException ex)
+        {
+            return $"click on {button.Selector} was refused — {ex.Message.Trim()}";
+        }
+
+        // Save/Cancel only exist while the row is being edited, so their arrival is proof the row
+        // edit actually started before we start pressing Tab.
+        if (WaitForName("Save", timeoutMs: 2500) is not null)
+        {
+            _ = WaitForEditor();
+            return null;
+        }
+
+        var logAfter = App.GetValue("RowEditLog") ?? "";
+        var where = $"{button.Selector} at ({button.X},{button.Y}); " +
+                    $"host foreground before/after click = {foregroundBefore}/{HostIsForeground()}";
+
+        return logAfter != logBefore
+            ? $"row edit started but committed before 'Save' could be observed — RowEditLog went " +
+              $"'{logBefore}' -> '{logAfter}' (clicked {where})"
+            : $"click landed but nothing happened — RowEditLog still '{logAfter}' (clicked {where})";
+    }
+
+    /// <summary>
+    /// The on-screen row-mode "Edit" button of the FIRST row, or <see langword="null"/> if none
+    /// appears. Row mode renders one Edit button per row and they all share the name, so the rows
+    /// are ordered by their vertical position rather than by whatever order UIA happens to return.
+    /// </summary>
+    private static UiMatch? WaitForTopmostRowEditButton(int timeoutMs = 5000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        do
+        {
+            var topmost = App.Search("Edit")
+                .Where(m => m.Name == "Edit" && !m.IsOffscreen)
+                .OrderBy(m => m.Y)
+                .FirstOrDefault();
+            if (topmost is not null)
+                return topmost;
+            Thread.Sleep(100);
+        }
+        while (DateTime.UtcNow < deadline);
+
+        return null;
+    }
+
+    /// <summary>
+    /// Whether the Host window currently holds the foreground, or <see langword="null"/> when that
+    /// cannot be read. Recorded around the begin-edit click because both failure shapes described
+    /// on <see cref="FreshRowEditGridWithFirstRowEditing"/> come from something else owning the
+    /// desktop, and the before/after pair is the cheapest evidence of whether it did.
+    /// </summary>
+    private static bool? HostIsForeground()
+    {
+        try { return App.ListWindows().FirstOrDefault(w => w.Hwnd == HostHwnd)?.IsForeground; }
+        catch (WinAppException) { return null; }
+    }
+
+    /// <summary>
+    /// Everything needed to tell the failure shapes apart from a CI log alone, so a recurrence of
+    /// #1288 never again reports only <c>actual: null</c>.
+    /// </summary>
+    private string DumpRowEditState()
+    {
+        string Fmt(UiMatch m) =>
+            $"      type={m.Type} name='{m.Name}' aid='{m.AutomationId}' sel='{m.Selector}' " +
+            $"rect=({m.X},{m.Y},{m.Width}x{m.Height}) enabled={m.IsEnabled} offscreen={m.IsOffscreen}";
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var probe in new[] { "Save", "Cancel" })
+            sb.AppendLine($"  search('{probe}') -> {App.Search(probe).Count} match(es)");
+        foreach (var m in App.Search("Edit").Where(m => m.Name == "Edit"))
+            sb.AppendLine($"  row 'Edit' button:\n{Fmt(m)}");
+        sb.AppendLine($"  inline editor: {App.FindFirstEditableSelector() ?? "<none>"}");
+        sb.AppendLine($"  focused AutomationId: '{Uia.GetFocusedAutomationId()}'");
+        sb.AppendLine($"  RowEditLog: '{App.GetValue("RowEditLog")}'");
+        sb.AppendLine($"  FixtureStatus: '{App.GetValue("FixtureStatus")}'");
+        foreach (var w in App.ListWindows())
+            sb.AppendLine($"  window hwnd={w.Hwnd} foreground={w.IsForeground} title='{w.Title}'");
+        return sb.ToString();
     }
 
     /// <summary>
@@ -574,7 +704,11 @@ public class DataGridTests : AppTestBase
                 return Element(selector);
             Thread.Sleep(100);
         }
-        throw new WinAppException("DataGrid inline editor (Edit control) did not appear after the cell tap.");
+        // EditLog tells the two causes apart: an editor that never opened leaves it unchanged, while
+        // one that opened and was committed straight away (#1288) leaves an unchanged entry behind.
+        throw new WinAppException(
+            "DataGrid inline editor (Edit control) did not appear after the cell tap. " +
+            $"EditLog='{App.GetValue("EditLog")}'");
     }
 
     /// <summary>

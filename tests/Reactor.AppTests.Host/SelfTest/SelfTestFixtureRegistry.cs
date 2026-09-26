@@ -877,6 +877,9 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_EditorFocusCustomEditors",
         "DataGrid_EditorFocusDebtRepaid",
         "DataGrid_EditorFocusDisconnectedRoot",
+        // Parking focus before an editor open destroys the focused element (issue #1288)
+        "DataGrid_EditorFocusParkedFromEditButton",
+        "DataGrid_EditorFocusParkedOnCommitThenBegin",
         // DataGrid row-detail expansion (issue #919)
         "DataGrid_ExpandRowKeepsRealizedRow",
         "DataGrid_LazyStackRootTypeFlip",
@@ -2772,6 +2775,9 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_EditorFocusCustomEditors" => new DataGridEditFixtures.EditorFocusCustomEditors(harness),
         "DataGrid_EditorFocusDebtRepaid" => new DataGridEditFixtures.EditorFocusDebtRepaid(harness),
         "DataGrid_EditorFocusDisconnectedRoot" => new DataGridEditFixtures.EditorFocusDisconnectedRoot(harness),
+        // Parking focus before an editor open destroys the focused element (issue #1288)
+        "DataGrid_EditorFocusParkedFromEditButton" => new DataGridEditFixtures.EditorFocusParkedFromEditButton(harness),
+        "DataGrid_EditorFocusParkedOnCommitThenBegin" => new DataGridEditFixtures.EditorFocusParkedOnCommitThenBegin(harness),
         // DataGrid row-detail expansion (issue #919)
         "DataGrid_ExpandRowKeepsRealizedRow" => new DataGridExpandFixtures.ExpandRowKeepsRealizedRow(harness),
         "DataGrid_LazyStackRootTypeFlip" => new DataGridExpandFixtures.LazyStackRootTypeFlip(harness),

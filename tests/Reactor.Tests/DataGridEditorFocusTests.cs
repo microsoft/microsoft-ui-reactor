@@ -959,4 +959,191 @@ public class DataGridEditorFocusTests
             internal static readonly object Marker = new();
         }
     }
+
+    // ── Parking focus before an edit transition destroys it (#1288) ──
+    //
+    // Opening an editor from inside the grid, or committing the in-flight edit on the first half
+    // of a commit-then-begin click, destroys the element that holds focus (the row's Edit button,
+    // or the previous cell's editor). DataGridComponent parks focus on the grid root through
+    // BeforeEditTransition so that element is never focused when it dies. The park itself is XAML
+    // and is covered by a selftest; what is pure state, and asserted here, is WHEN the hook runs.
+    // That is the part a refactor breaks silently: a hook that fires after the transition (or not
+    // at all) still compiles, and the race it prevents only shows up on a slow CI runner.
+
+    /// <summary>Records each hook call with the state it observed, and each StateChanged.</summary>
+    private sealed class TransitionLog
+    {
+        public readonly List<string> Events = new();
+
+        public void Attach(DataGridState<TestItem> state)
+        {
+            state.BeforeEditTransition = () => Events.Add(
+                $"park(editing={state.IsEditing},row={state.IsRowEditing},col={state.EditingColumnName ?? "-"})");
+            state.StateChanged += () => Events.Add("changed");
+        }
+
+        public int Parks => Events.Count(e => e.StartsWith("park", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task BeginRowEdit_ParksFocusBeforeTheTransition()
+    {
+        var state = await LoadedState();
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        Assert.True(state.BeginRowEdit(1));
+
+        // Exactly one park, FIRST, observing the state before the row edit began. A park after
+        // "changed" would race the re-render that destroys the focused Edit button.
+        Assert.Equal(1, log.Parks);
+        Assert.Equal("park(editing=False,row=False,col=-)", log.Events[0]);
+        Assert.Contains("changed", log.Events.Skip(1));
+    }
+
+    [Fact]
+    public async Task BeginEdit_ParksFocusBeforeTheTransition()
+    {
+        var state = await LoadedState();
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        Assert.True(state.BeginEdit(1, ScoreCol));
+
+        Assert.Equal(1, log.Parks);
+        Assert.Equal("park(editing=False,row=False,col=-)", log.Events[0]);
+        Assert.Contains("changed", log.Events.Skip(1));
+    }
+
+    [Fact]
+    public async Task ACommitThenBeginTap_ParksWhileTheInFlightEditIsStillOpen()
+    {
+        var state = await LoadedState();
+        Assert.True(state.BeginEdit(1, ScoreCol));
+        state.UpdateEditingValue(42.0);
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        state.InvokeCellEditClick(Row(0), "Notes");
+
+        // The first park must see the Score edit STILL OPEN: committing it is what schedules the
+        // removal of its focused editor, so parking after the commit would be too late. The second
+        // park comes from BeginEdit and is a no-op in practice (focus is already on the root).
+        Assert.Equal("park(editing=True,row=False,col=Score)", log.Events[0]);
+        Assert.Equal(2, log.Parks);
+
+        // ...and the tap still did its job: the old edit committed, the new one is open.
+        Assert.Equal(42.0, state.GetItemAt(1)!.Score);
+        Assert.Equal("Notes", state.EditingColumnName);
+        Assert.Equal(Row(0), state.EditingRowKey);
+    }
+
+    [Fact]
+    public async Task ATapWithNothingInFlight_ParksOnce()
+    {
+        var state = await LoadedState();
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        state.InvokeCellEditClick(Row(0), "Notes");
+
+        Assert.Equal(1, log.Parks);
+        Assert.Equal("Notes", state.EditingColumnName);
+    }
+
+    [Fact]
+    public async Task ABeginThatFails_DoesNotPark()
+    {
+        var state = await LoadedState();
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        // An out-of-range row and a read-only column both refuse to open an editor. Parking on a
+        // refused begin would move the user's focus for an edit that never happened.
+        Assert.False(state.BeginRowEdit(99));
+        Assert.False(state.BeginEdit(1, IdCol));
+
+        Assert.Equal(0, log.Parks);
+    }
+
+    [Fact]
+    public async Task RowModeTab_DoesNotPark()
+    {
+        var state = await LoadedState();
+        var el = Grid(EditMode.Row);
+        Assert.True(state.BeginRowEdit(1));
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        // Native Tab has already moved focus by the time the grid handles it, and the one-shot
+        // SuppressNextLostFocusCommit claim owns that focus-out. Parking here would add a focus
+        // hop and a second LostFocus to a path whose ordering the #976/#987 tests pin down.
+        DataGridComponent<TestItem>.HandleKeyDownForTests(state, el, KeyChord.Unmodified(VirtualKey.Tab));
+        Assert.True(state.FocusNextRowEditColumn());
+
+        Assert.Equal(0, log.Parks);
+        Assert.True(state.IsRowEditing); // positive control: the Tabs really ran inside the edit
+    }
+
+    [Fact]
+    public async Task ACrossRowPointerPress_ParksWhileTheInFlightEditIsStillOpen()
+    {
+        var state = await LoadedState();
+        Assert.True(state.BeginEdit(1, ScoreCol));
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        state.InvokeRowPointerClick(Row(0), ctrlKey: false, shiftKey: false);
+
+        // A press on ANOTHER row commits the in-flight edit before the cell's Tapped (on release)
+        // opens the next editor, so on a cross-row tap it is this commit that dooms the focused
+        // editor. This is the path the CI diagnostics showed for the cell-mode failures.
+        Assert.Equal("park(editing=True,row=False,col=Score)", log.Events[0]);
+        Assert.Equal(1, log.Parks);
+        Assert.False(state.IsEditing); // positive control: the press really committed the edit
+    }
+
+    [Fact]
+    public async Task APointerPressOnTheEditingRow_DoesNotPark()
+    {
+        var state = await LoadedState();
+        Assert.True(state.BeginEdit(1, ScoreCol));
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        // Same row: that press is the user positioning the caret. Nothing commits and nothing is
+        // destroyed, so parking would only pull focus out of the editor mid-click.
+        state.InvokeRowPointerClick(Row(1), ctrlKey: false, shiftKey: false);
+
+        Assert.Equal(0, log.Parks);
+        Assert.True(state.IsEditing);
+    }
+
+    [Fact]
+    public async Task APointerPressWithNothingInFlight_DoesNotPark()
+    {
+        var state = await LoadedState();
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        state.InvokeRowPointerClick(Row(0), ctrlKey: false, shiftKey: false);
+
+        Assert.Equal(0, log.Parks);
+    }
+
+    [Fact]
+    public async Task WithoutARenderer_BeginningAnEditStillWorks()
+    {
+        var state = await LoadedState();
+
+        // The hook is null for a state driven headlessly; every call site must tolerate that.
+        Assert.Null(state.BeforeEditTransition);
+        Assert.True(state.BeginRowEdit(1));
+        state.CancelRowEdit();
+        Assert.True(state.BeginEdit(1, ScoreCol));
+        state.InvokeCellEditClick(Row(0), "Notes");
+        Assert.Equal("Notes", state.EditingColumnName);
+        state.InvokeRowPointerClick(Row(2), ctrlKey: false, shiftKey: false);
+        Assert.False(state.IsEditing);
+    }
 }
