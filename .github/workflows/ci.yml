@@ -481,7 +481,7 @@ jobs:
         run: dotnet test tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64 --no-build --filter "$env:E2E_FILTER" --report-trx --report-trx-filename app-tests.trx --results-directory TestResults
 
       - name: Check the shard ran every selected test
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.select.outcome == 'success' }}
         shell: pwsh
         env:
           EXPECTED: ${{ steps.select.outputs.expected }}

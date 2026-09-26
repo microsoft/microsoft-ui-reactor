@@ -146,11 +146,28 @@ jobs:
             exit 1
           }
 
+      # Restore and build only what this job packs. The whole-solution Release build, and the
+      # TreatWarningsAsErrors gate that comes with it, is CI's "Build solution" job. Repeating it
+      # here built ~120 test, sample and tool projects this job never packs, and put that on the
+      # critical path of every PR.
       - name: Restore
-        run: dotnet restore Reactor.slnx
+        shell: pwsh
+        run: |
+          # One restore per project, each checked: pwsh surfaces only the last command's exit
+          # code, so a chained failure would be masked.
+          foreach ($project in @(
+              'src/Reactor/Reactor.csproj',
+              'src/Reactor.Advanced/Reactor.Advanced.csproj',
+              'src/Reactor.Devtools/Reactor.Devtools.csproj',
+              'src/vs-reactor/Reactor.VsExtension/Reactor.VsExtension.csproj')) {
+            dotnet restore $project
+            if ($LASTEXITCODE -ne 0) { throw "Restore failed for $project (exit $LASTEXITCODE)." }
+          }
 
+      # Builds the framework and, through its ProjectReferences, every analyzer and generator it
+      # packs. AnyCPU, so it lands at bin\Release\ where the pack below reads it.
       - name: Build framework + analyzers
-        run: dotnet build Reactor.slnx --no-restore --configuration Release
+        run: dotnet build src/Reactor/Reactor.csproj --no-restore --configuration Release
 
       - name: Pack framework NuGet
         run: >
@@ -160,11 +177,9 @@ jobs:
           -o artifacts/nupkg
 
       - name: Build Advanced (AnyCPU)
-        # The slnx build above produces Reactor.Advanced for ARM64 (its slnx default
-        # platform) but the pack below needs the AnyCPU output. This mirrors how
-        # Reactor.csproj naturally lands at bin\Release\ (an analyzer reference forces
-        # an AnyCPU sub-build). Reactor.Advanced has no such forcing consumer, so it
-        # gets an explicit AnyCPU build step. Same shape as the Templates pack pattern.
+        # The step above builds only src/Reactor, so Reactor.Advanced gets its own AnyCPU
+        # build for the pack below, landing at bin\Release\ the way Reactor.csproj does. Same
+        # shape as the Templates pack pattern.
         run: >
           dotnet build src/Reactor.Advanced/Reactor.Advanced.csproj
           --no-restore --configuration Release
@@ -179,9 +194,8 @@ jobs:
           -o artifacts/nupkg
 
       - name: Build Devtools (AnyCPU)
-        # Reactor.Devtools is a direct slnx member, so the slnx build above produced it
-        # for the solution platform (x64/ARM64 — the slnx declares no AnyCPU config) but
-        # the pack below needs the AnyCPU output. Same shape as the Advanced step above.
+        # Not built by the framework step above, and the pack below needs the AnyCPU output.
+        # Same shape as the Advanced step above.
         run: >
           dotnet build src/Reactor.Devtools/Reactor.Devtools.csproj
           --no-restore --configuration Release

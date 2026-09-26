@@ -45,19 +45,30 @@ $include = ($classes | ForEach-Object { "FullyQualifiedName~.$_." }) -join '|'
 $exclude = ($classes | ForEach-Object { "FullyQualifiedName!~.$_." }) -join '&'
 
 function Get-DiscoveredCount([string]$Filter) {
-    $listArgs = @('test', $Project, '-c', $Configuration, "-p:Platform=$Platform", '--no-build', '--list-tests')
+    $listArgs = @('test', $Project, '-c', $Configuration, "-p:Platform=$Platform", '--no-build', '--list-tests', '--no-ansi', '--no-progress')
     if ($Filter) { $listArgs += @('--filter', $Filter) }
-    $output = & dotnet @listArgs 2>&1 | ForEach-Object { "$_" }
+    # Belt and braces for a CI terminal: colour codes are stripped and carriage-return progress
+    # rewrites are split into their own lines, because an anchored match against a coloured or
+    # overwritten line finds nothing (measured: the first CI run of this script did exactly that).
+    $output = @(& dotnet @listArgs 2>&1 | ForEach-Object { "$_" -replace '\x1b\[[0-9;?]*[A-Za-z]', '' -split "`r" } |
+        ForEach-Object { $_.Trim() })
     $exit = $LASTEXITCODE
     # MTP exits 8 when a filter matches nothing; that is a count of zero, not a broken listing.
     if ($exit -ne 0 -and $exit -ne 8) {
         throw "Test discovery failed (exit $exit) for filter '$Filter':`n$($output -join "`n")"
     }
     $summary = @($output | Select-String -Pattern '^Discovered (\d+) tests?\.$')
-    if ($summary.Count -ne 1) {
-        throw "Expected exactly one discovery summary for filter '$Filter', found $($summary.Count):`n$($output -join "`n")"
+    if ($summary.Count -eq 1) { return [int]$summary[0].Matches[0].Groups[1].Value }
+
+    # No run-level summary: fall back to the per-assembly lines, one per distinct assembly.
+    $perAssembly = @{}
+    foreach ($match in @($output | Select-String -Pattern '^Discovered (\d+) tests? in assembly - (.+)$')) {
+        $perAssembly[$match.Matches[0].Groups[2].Value] = [int]$match.Matches[0].Groups[1].Value
     }
-    return [int]$summary[0].Matches[0].Groups[1].Value
+    if ($perAssembly.Count -eq 0) {
+        throw "Found no discovery summary for filter '$Filter':`n$($output -join "`n")"
+    }
+    return [int](($perAssembly.Values | Measure-Object -Sum).Sum)
 }
 
 $all = Get-DiscoveredCount ''
