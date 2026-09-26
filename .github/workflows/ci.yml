@@ -317,10 +317,10 @@ jobs:
       matrix:
         shard: [1, 2]
     env:
+      # Balanced on measured TRX durations: ~178 s of test time in each shard.
       E2E_SHARD1_CLASSES: >-
         AccessibilityInteractionTests,AccessibilityTests,ChartAccessibilityTests,
-        ChartKeyboardNavTests,DataGridTests,DockingInputTests,DockingTearOffE2ETests,
-        DragDropTests,GestureTests
+        DataGridTests,DockingInputTests,DockingTearOffE2ETests
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
