@@ -332,9 +332,11 @@ jobs:
 
       # The whole-solution Release build, for tag releases only. CI (ci.yml) never runs on a tag,
       # so this keeps a release gated on the same build its "Build solution" job runs. It comes
-      # after the packs on purpose: all five Package runs checked (2026-09) that packed after this
-      # build bundled an ARM64-only Reactor.Wrappers.Abstractions.dll into the AnyCPU framework
-      # package, while both runs that packed from the project builds above bundled an AnyCPU one.
+      # after the packs on purpose: packing after this build bundled an ARM64-only
+      # Reactor.Wrappers.Abstractions.dll into the AnyCPU framework package, in all five Package
+      # runs checked (2026-09) and in the nupkgs attached to the v0.1.0-preview.15 and
+      # v0.1.0-preview.16 GitHub Releases. All three runs that packed from the project builds above
+      # bundled an AnyCPU one.
       - name: Build solution (tag releases only)
         if: steps.version.outputs.is_tag == 'true'
         shell: pwsh

@@ -199,9 +199,8 @@ internal readonly record struct SelfTestShard(int Index, int Count)
                 problems.Add($"shard {label} selects no fixtures beyond the pinned controls.");
         }
 
-        foreach (var fixture in corpus)
+        foreach (var fixture in corpus.Where(f => !pins.Contains(f)))
         {
-            if (pins.Contains(fixture)) continue;
             if (!owners.TryGetValue(fixture, out var list))
                 problems.Add($"'{fixture}' is in no shard, so a sharded run never executes it.");
             else if (list.Distinct().Count() > 1)
@@ -248,9 +247,8 @@ internal readonly record struct SelfTestShard(int Index, int Count)
     public static int? ExtractPlanCount(string tap)
     {
         if (string.IsNullOrEmpty(tap)) return null;
-        foreach (var raw in tap.Split('\n'))
+        foreach (var line in tap.Split('\n').Select(static raw => raw.Trim()))
         {
-            var line = raw.Trim();
             if (line.StartsWith("1..", StringComparison.Ordinal)
                 && int.TryParse(line.AsSpan(3), NumberStyles.None, CultureInfo.InvariantCulture, out var planned))
                 return planned;
