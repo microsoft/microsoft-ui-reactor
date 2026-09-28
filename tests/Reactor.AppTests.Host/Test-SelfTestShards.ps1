@@ -15,10 +15,10 @@
     With -Shard, also prints `expected=<n>` for that shard (and writes it to $GITHUB_OUTPUT when
     set), so the caller can check the run's TAP plan against it.
 
-    The rules are SelfTestShard.FindPartitionProblems', re-checked here on purpose rather than by
-    asking the Host to check itself: an in-process check would only compare SelfTestShard.Select
-    with itself, while this checks what the binary under test (the NativeAOT host, in CI) actually
-    prints for each `--shard`.
+    The rules match SelfTestShard.FindPartitionProblems. They are re-checked here on purpose
+    rather than by asking the Host to check itself: an in-process check would only compare
+    SelfTestShard.Select with itself, while this checks what the binary under test (the NativeAOT
+    host, in CI) actually prints for each `--shard`.
 
     The pinned names are read from tests/_shared/SelfTestShard.cs, which the Host compiles from the
     same checkout in CI. If that declaration changes shape, the match below finds nothing and the
