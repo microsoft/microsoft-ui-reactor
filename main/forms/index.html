@@ -1414,6 +1414,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Validation Context">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-validation-runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How validation runs
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3525,6 +3542,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Validation Context">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-validation-runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How validation runs
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -4128,6 +4162,46 @@ with <code>.Validate()</code>:</p>
 <li><strong><code>ctx.IsValid()</code></strong> returns <code>true</code> when no error-severity messages exist.</li>
 <li><strong><code>ctx.MarkAllTouched()</code></strong> reveals all errors on submit attempt.</li>
 </ul>
+<h3 id="how-validation-runs">How validation runs<a class="headerlink" href="#how-validation-runs" title="Permanent link">&para;</a></h3>
+<p>Four behaviours make the example above work without any extra wiring. They are
+worth knowing because they explain <em>when</em> a result becomes visible.</p>
+<p><strong>Validators run during render, not after it.</strong> The value-carrying
+<code>.Validate(fieldName, value, …)</code> overload evaluates its validators immediately
+and writes the result into the enclosing context. C# evaluates arguments left to
+right, so the <code>.Validate(…)</code> call above produces the verdict that the later
+<code>When(ctx.HasError("email"), …)</code> sibling reads — in the <em>same</em> pass. Put your
+error display after the field it describes and it will never lag a render behind.</p>
+<p><strong>The context is provided to the subtree for you.</strong> When
+<code>UseValidationContext()</code> creates a component-local context (nothing up the tree
+provided one), that context is published to whatever the component returns, so
+<code>FormField</code>, <code>ValidationVisualizer</code>, and nested components find it.</p>
+<p>Writing <code>.Provide(ValidationContexts.Current, ctx)</code> yourself still works, and the
+value you provide is what descendants resolve. It does <strong>not</strong> redirect the
+providing component's own <code>.Validate()</code> calls: those already ran while the
+element tree was being built, against the context <code>UseValidationContext()</code>
+returned — the same reason <code>UseContext</code> can't observe a value the same component
+provides. To collect several components' fields into one context, provide it from
+a parent and let each child call <code>UseValidationContext()</code>.</p>
+<p><strong>Mutating the context repaints the form.</strong> <code>ctx.MarkAllTouched()</code> changes no
+component state, so nothing else would schedule a render; the component that
+called <code>UseValidationContext()</code> re-renders when the context changes. Re-running
+the same validators over an unchanged value is silent, so this does not loop.</p>
+<p><strong><code>FormField</code> marks its field touched on blur.</strong> That is what makes the default
+<code>ShowWhen.WhenTouched</code> work: focus the editor, move away, and the error replaces
+the description. Outside <code>FormField</code> — the hand-rolled example above — decide for
+yourself when a field counts as touched, typically <code>ctx.MarkAllTouched()</code> on a
+failed submit.</p>
+<blockquote>
+<p><strong>Attach-only cases.</strong> <code>.Validate(fieldName, validators…)</code> without a value has
+nothing to check: it records the validators and nothing else. Inside a
+<code>FormField</code> the field is still registered on mount, so <code>MarkAllTouched()</code>
+covers it, but the validators are not run — they would be checking <code>null</code>
+against a control that has a value. On a bare control the attachment is inert:
+no verdict and no registration. A <em>value-carrying</em> attachment built outside a
+render pass — cached in a field, assembled inside an event handler — has no
+context to reach at attach time, and that one <code>FormField</code> does run when it
+mounts. Pass the value if you want validators to run.</p>
+</blockquote>
 <h2 id="formfield-helper">FormField Helper<a class="headerlink" href="#formfield-helper" title="Permanent link">&para;</a></h2>
 <p><code>FormField()</code> wraps a control with a label, required indicator, description
 text, and inline error display:</p>
@@ -4164,6 +4238,12 @@ text, and inline error display:</p>
 its content. Errors appear below the field after the field is touched (focus
 then blur). The <code>ShowWhen</code> parameter controls when errors become visible:
 <code>WhenTouched</code> (default), <code>WhenDirty</code>, <code>AfterFirstSubmit</code>, <code>Always</code>, or <code>Never</code>.</p>
+<p>Two of those need a signal you have to send yourself. <code>WhenDirty</code> compares
+against a baseline, so it stays silent until <code>SetInitialValue(field, value)</code>
+records one. <code>AfterFirstSubmit</code> waits for <code>MarkAllTouched()</code> — the call the
+submit handler above already makes — and <code>ResetAll()</code> puts it back. <code>ShowWhen</code>
+gates display only: <code>IsValid()</code> and <code>GetMessages()</code> are current from the first
+render whichever policy you pick.</p>
 <h2 id="built-in-validators">Built-in Validators<a class="headerlink" href="#built-in-validators" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -4609,32 +4689,125 @@ automatically via <code>onQuerySubmitted</code>. For <code>TextBox</code>, route
 surface.</p>
 <h3 id="validating-async-uniqueness-checks">Validating async (uniqueness checks)<a class="headerlink" href="#validating-async-uniqueness-checks" title="Permanent link">&para;</a></h3>
 <p><code>Validate.MustAsync&lt;T&gt;(...)</code> runs a predicate that returns
-<code>Task&lt;bool&gt;</code>. The <code>ValidationContext</code> tracks the in-flight async work
-and reports <code>IsValidating</code> per field, so the Submit button can disable
-while async validation runs. Pair with <code>.IsDisabledFocusable()</code> so the
-button stays in tab order while validating — same accessibility
-concern as <a href="#keeping-submit-reachable">Keeping Submit Reachable</a>.</p>
+<code>Task&lt;bool&gt;</code>. Unlike the synchronous validators, an async attachment is
+<strong>never run for you</strong>: <code>.ValidateAsync(field, value, …)</code> attaches the
+validators and registers the field, and nothing else. A render pass is
+synchronous, so there is nowhere for it to await them.</p>
+<p>Run them yourself from an effect, through
+<code>ValidationReconciler.ValidateFieldAsync</code>, which carries the generation
+guard that discards a result the user has already typed past:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">AsyncValidationDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="p">{</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="n">Task</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span><span class="w"> </span><span class="n">IsEmailFree</span><span class="p">(</span><span class="kt">string</span><span class="w"> </span><span class="k">value</span><span class="p">)</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">        </span><span class="k">await</span><span class="w"> </span><span class="n">Task</span><span class="p">.</span><span class="n">Delay</span><span class="p">(</span><span class="mi">300</span><span class="p">);</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="k">value</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="s">&quot;taken@example.com&quot;</span><span class="p">;</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">ctx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="n">UseValidationContext</span><span class="p">();</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">email</span><span class="p">,</span><span class="w"> </span><span class="n">setEmail</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">);</span>
+<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>
+<a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a><span class="w">        </span><span class="c1">// Async validators are never run for you: a render pass is synchronous, so</span>
+<a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a><span class="w">        </span><span class="c1">// there is nowhere for it to await them. Drive them from an effect, through</span>
+<a id="__codelineno-14-16" name="__codelineno-14-16" href="#__codelineno-14-16"></a><span class="w">        </span><span class="c1">// ValidateFieldAsync, whose generation guard discards a result the user has</span>
+<a id="__codelineno-14-17" name="__codelineno-14-17" href="#__codelineno-14-17"></a><span class="w">        </span><span class="c1">// already typed past.</span>
+<a id="__codelineno-14-18" name="__codelineno-14-18" href="#__codelineno-14-18"></a><span class="w">        </span><span class="n">UseEffect</span><span class="p">(()</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-14-19" name="__codelineno-14-19" href="#__codelineno-14-19"></a><span class="w">        </span><span class="p">{</span>
+<a id="__codelineno-14-20" name="__codelineno-14-20" href="#__codelineno-14-20"></a><span class="w">            </span><span class="kt">var</span><span class="w"> </span><span class="n">cts</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">CancellationTokenSource</span><span class="p">();</span>
+<a id="__codelineno-14-21" name="__codelineno-14-21" href="#__codelineno-14-21"></a><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">email</span><span class="p">.</span><span class="n">Length</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span>
+<a id="__codelineno-14-22" name="__codelineno-14-22" href="#__codelineno-14-22"></a><span class="w">            </span><span class="p">{</span>
+<a id="__codelineno-14-23" name="__codelineno-14-23" href="#__codelineno-14-23"></a><span class="w">                </span><span class="c1">// Observed, not discarded. `_ = SomeTask()` drops the returned task on</span>
+<a id="__codelineno-14-24" name="__codelineno-14-24" href="#__codelineno-14-24"></a><span class="w">                </span><span class="c1">// the floor, so a uniqueness check that fails for a real reason — the</span>
+<a id="__codelineno-14-25" name="__codelineno-14-25" href="#__codelineno-14-25"></a><span class="w">                </span><span class="c1">// network is down, the service 500s — vanishes silently and the field</span>
+<a id="__codelineno-14-26" name="__codelineno-14-26" href="#__codelineno-14-26"></a><span class="w">                </span><span class="c1">// just never gets a verdict. Await it inside a local async helper and</span>
+<a id="__codelineno-14-27" name="__codelineno-14-27" href="#__codelineno-14-27"></a><span class="w">                </span><span class="c1">// handle the two outcomes separately.</span>
+<a id="__codelineno-14-28" name="__codelineno-14-28" href="#__codelineno-14-28"></a><span class="w">                </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">RunCheckAsync</span><span class="p">(</span><span class="n">cts</span><span class="p">.</span><span class="n">Token</span><span class="p">);</span>
+<a id="__codelineno-14-29" name="__codelineno-14-29" href="#__codelineno-14-29"></a><span class="w">            </span><span class="p">}</span>
+<a id="__codelineno-14-30" name="__codelineno-14-30" href="#__codelineno-14-30"></a><span class="w">            </span><span class="c1">// Cancel on cleanup so the superseded check cannot install its verdict, and</span>
+<a id="__codelineno-14-31" name="__codelineno-14-31" href="#__codelineno-14-31"></a><span class="w">            </span><span class="c1">// dispose the source with it — the effect allocates a fresh one per run.</span>
+<a id="__codelineno-14-32" name="__codelineno-14-32" href="#__codelineno-14-32"></a><span class="w">            </span><span class="c1">// Note this does not interrupt work already in flight: `Validate.MustAsync`</span>
+<a id="__codelineno-14-33" name="__codelineno-14-33" href="#__codelineno-14-33"></a><span class="w">            </span><span class="c1">// awaits your predicate without a token and only observes cancellation once</span>
+<a id="__codelineno-14-34" name="__codelineno-14-34" href="#__codelineno-14-34"></a><span class="w">            </span><span class="c1">// it returns. Take a `CancellationToken` in the predicate itself if you need</span>
+<a id="__codelineno-14-35" name="__codelineno-14-35" href="#__codelineno-14-35"></a><span class="w">            </span><span class="c1">// the request abandoned rather than its result discarded.</span>
+<a id="__codelineno-14-36" name="__codelineno-14-36" href="#__codelineno-14-36"></a><span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-14-37" name="__codelineno-14-37" href="#__codelineno-14-37"></a><span class="w">            </span><span class="p">{</span>
+<a id="__codelineno-14-38" name="__codelineno-14-38" href="#__codelineno-14-38"></a><span class="w">                </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">cts</span><span class="p">.</span><span class="n">Cancel</span><span class="p">();</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-14-39" name="__codelineno-14-39" href="#__codelineno-14-39"></a><span class="w">                </span><span class="k">finally</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">cts</span><span class="p">.</span><span class="n">Dispose</span><span class="p">();</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-14-40" name="__codelineno-14-40" href="#__codelineno-14-40"></a><span class="w">            </span><span class="p">};</span>
+<a id="__codelineno-14-41" name="__codelineno-14-41" href="#__codelineno-14-41"></a>
+<a id="__codelineno-14-42" name="__codelineno-14-42" href="#__codelineno-14-42"></a><span class="w">            </span><span class="k">async</span><span class="w"> </span><span class="n">Task</span><span class="w"> </span><span class="nf">RunCheckAsync</span><span class="p">(</span><span class="n">CancellationToken</span><span class="w"> </span><span class="n">token</span><span class="p">)</span>
+<a id="__codelineno-14-43" name="__codelineno-14-43" href="#__codelineno-14-43"></a><span class="w">            </span><span class="p">{</span>
+<a id="__codelineno-14-44" name="__codelineno-14-44" href="#__codelineno-14-44"></a><span class="w">                </span><span class="k">try</span>
+<a id="__codelineno-14-45" name="__codelineno-14-45" href="#__codelineno-14-45"></a><span class="w">                </span><span class="p">{</span>
+<a id="__codelineno-14-46" name="__codelineno-14-46" href="#__codelineno-14-46"></a><span class="w">                    </span><span class="k">await</span><span class="w"> </span><span class="n">ValidationReconciler</span><span class="p">.</span><span class="n">ValidateFieldAsync</span><span class="p">(</span>
+<a id="__codelineno-14-47" name="__codelineno-14-47" href="#__codelineno-14-47"></a><span class="w">                        </span><span class="n">ctx</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;email&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">email</span><span class="p">,</span>
+<a id="__codelineno-14-48" name="__codelineno-14-48" href="#__codelineno-14-48"></a><span class="w">                        </span><span class="na">[Validate.MustAsync&lt;string&gt;(IsEmailFree, &quot;Email is taken&quot;)]</span><span class="p">,</span>
+<a id="__codelineno-14-49" name="__codelineno-14-49" href="#__codelineno-14-49"></a><span class="w">                        </span><span class="n">token</span><span class="p">);</span>
+<a id="__codelineno-14-50" name="__codelineno-14-50" href="#__codelineno-14-50"></a><span class="w">                </span><span class="p">}</span>
+<a id="__codelineno-14-51" name="__codelineno-14-51" href="#__codelineno-14-51"></a><span class="w">                </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">OperationCanceledException</span><span class="p">)</span>
+<a id="__codelineno-14-52" name="__codelineno-14-52" href="#__codelineno-14-52"></a><span class="w">                </span><span class="p">{</span>
+<a id="__codelineno-14-53" name="__codelineno-14-53" href="#__codelineno-14-53"></a><span class="w">                    </span><span class="c1">// Expected: the user typed again and this check was superseded.</span>
+<a id="__codelineno-14-54" name="__codelineno-14-54" href="#__codelineno-14-54"></a><span class="w">                </span><span class="p">}</span>
+<a id="__codelineno-14-55" name="__codelineno-14-55" href="#__codelineno-14-55"></a><span class="w">                </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">ex</span><span class="p">)</span>
+<a id="__codelineno-14-56" name="__codelineno-14-56" href="#__codelineno-14-56"></a><span class="w">                    </span><span class="k">when</span><span class="w"> </span><span class="p">(</span><span class="n">ex</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="n">OutOfMemoryException</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="n">StackOverflowException</span><span class="p">)</span>
+<a id="__codelineno-14-57" name="__codelineno-14-57" href="#__codelineno-14-57"></a><span class="w">                </span><span class="p">{</span>
+<a id="__codelineno-14-58" name="__codelineno-14-58" href="#__codelineno-14-58"></a><span class="w">                    </span><span class="c1">// Anything else is a real failure — the network is down, the service</span>
+<a id="__codelineno-14-59" name="__codelineno-14-59" href="#__codelineno-14-59"></a><span class="w">                    </span><span class="c1">// erroring. Surface it however your app reports background faults;</span>
+<a id="__codelineno-14-60" name="__codelineno-14-60" href="#__codelineno-14-60"></a><span class="w">                    </span><span class="c1">// here, as a message on the field so it cannot pass silently.</span>
+<a id="__codelineno-14-61" name="__codelineno-14-61" href="#__codelineno-14-61"></a><span class="w">                    </span><span class="c1">//</span>
+<a id="__codelineno-14-62" name="__codelineno-14-62" href="#__codelineno-14-62"></a><span class="w">                    </span><span class="c1">// Deliberately broad rather than a list of expected exception types:</span>
+<a id="__codelineno-14-63" name="__codelineno-14-63" href="#__codelineno-14-63"></a><span class="w">                    </span><span class="c1">// the predicate is yours, so the framework cannot know what it can</span>
+<a id="__codelineno-14-64" name="__codelineno-14-64" href="#__codelineno-14-64"></a><span class="w">                    </span><span class="c1">// throw, and enumerating types means the one you forgot disappears.</span>
+<a id="__codelineno-14-65" name="__codelineno-14-65" href="#__codelineno-14-65"></a><span class="w">                    </span><span class="c1">// The filter excludes only the two that must never be caught. This</span>
+<a id="__codelineno-14-66" name="__codelineno-14-66" href="#__codelineno-14-66"></a><span class="w">                    </span><span class="c1">// is the same shape the framework itself uses for app callbacks</span>
+<a id="__codelineno-14-67" name="__codelineno-14-67" href="#__codelineno-14-67"></a><span class="w">                    </span><span class="c1">// (see CompositeLifecycle.RunAsyncRuleAsync).</span>
+<a id="__codelineno-14-68" name="__codelineno-14-68" href="#__codelineno-14-68"></a><span class="w">                    </span><span class="n">ctx</span><span class="p">.</span><span class="n">AddExternal</span><span class="p">(</span><span class="s">&quot;email&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">$&quot;Could not check availability: {ex.Message}&quot;</span><span class="p">);</span>
+<a id="__codelineno-14-69" name="__codelineno-14-69" href="#__codelineno-14-69"></a><span class="w">                </span><span class="p">}</span>
+<a id="__codelineno-14-70" name="__codelineno-14-70" href="#__codelineno-14-70"></a><span class="w">            </span><span class="p">}</span>
+<a id="__codelineno-14-71" name="__codelineno-14-71" href="#__codelineno-14-71"></a><span class="w">        </span><span class="p">},</span><span class="w"> </span><span class="n">email</span><span class="p">);</span>
+<a id="__codelineno-14-72" name="__codelineno-14-72" href="#__codelineno-14-72"></a>
+<a id="__codelineno-14-73" name="__codelineno-14-73" href="#__codelineno-14-73"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-14-74" name="__codelineno-14-74" href="#__codelineno-14-74"></a><span class="w">            </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;Async Validation&quot;</span><span class="p">),</span>
+<a id="__codelineno-14-75" name="__codelineno-14-75" href="#__codelineno-14-75"></a><span class="w">            </span><span class="n">TextBox</span><span class="p">(</span><span class="n">email</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">setEmail</span><span class="p">(</span><span class="n">v</span><span class="p">);</span><span class="w"> </span><span class="n">ctx</span><span class="p">.</span><span class="n">NotifyValueChanged</span><span class="p">(</span><span class="s">&quot;email&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">);</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-14-76" name="__codelineno-14-76" href="#__codelineno-14-76"></a><span class="w">                </span><span class="n">placeholderText</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;user@example.com&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">header</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Email&quot;</span><span class="p">),</span>
+<a id="__codelineno-14-77" name="__codelineno-14-77" href="#__codelineno-14-77"></a><span class="w">            </span><span class="n">When</span><span class="p">(</span><span class="n">ctx</span><span class="p">.</span><span class="n">HasError</span><span class="p">(</span><span class="s">&quot;email&quot;</span><span class="p">),</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-14-78" name="__codelineno-14-78" href="#__codelineno-14-78"></a><span class="w">                </span><span class="n">TextBlock</span><span class="p">(</span><span class="n">ctx</span><span class="p">.</span><span class="n">GetMessages</span><span class="p">(</span><span class="s">&quot;email&quot;</span><span class="p">).</span><span class="n">First</span><span class="p">().</span><span class="n">Text</span><span class="p">)</span>
+<a id="__codelineno-14-79" name="__codelineno-14-79" href="#__codelineno-14-79"></a><span class="w">                    </span><span class="p">.</span><span class="n">Foreground</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">SystemCritical</span><span class="p">).</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">12</span><span class="p">))</span>
+<a id="__codelineno-14-80" name="__codelineno-14-80" href="#__codelineno-14-80"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-14-81" name="__codelineno-14-81" href="#__codelineno-14-81"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-14-82" name="__codelineno-14-82" href="#__codelineno-14-82"></a><span class="p">}</span>
+</code></pre></div>
+<p>Track the in-flight state with your own <code>UseState</code> flag if the Submit
+button should disable while the check runs — the context does not expose
+one. Pair that with <code>.IsDisabledFocusable()</code> so the button stays in tab
+order while validating — same accessibility concern as
+<a href="#keeping-submit-reachable">Keeping Submit Reachable</a>.</p>
+<p>For a cross-field async check, <code>ValidationRuleAsync</code> <em>is</em> run for you
+when it is placed in the element tree, with cancellation on update and
+unmount.</p>
 <h2 id="common-mistakes">Common Mistakes<a class="headerlink" href="#common-mistakes" title="Permanent link">&para;</a></h2>
 <h3 id="letting-the-control-hold-its-own-state">Letting the control hold its own state<a class="headerlink" href="#letting-the-control-hold-its-own-state" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1">// Don&#39;t — there is no `initial:` parameter. The bare string binds a value</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="c1">// with no `onChanged`, so it seeds the box and then nothing reads it back:</span>
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="c1">// the user&#39;s typing lives only in the native control:</span>
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="n">TextBox</span><span class="p">(</span><span class="s">&quot;default value&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1">// Don&#39;t — there is no `initial:` parameter. The bare string binds a value</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="c1">// with no `onChanged`, so it seeds the box and then nothing reads it back:</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="c1">// the user&#39;s typing lives only in the native control:</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="n">TextBox</span><span class="p">(</span><span class="s">&quot;default value&quot;</span><span class="p">)</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">ControlledInputDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="p">{</span>
-<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
-<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">    </span><span class="p">{</span>
-<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">setName</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">);</span>
-<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>
-<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
-<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">            </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;Controlled Input&quot;</span><span class="p">),</span>
-<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="w">            </span><span class="n">TextBox</span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">setName</span><span class="p">,</span><span class="w"> </span><span class="n">placeholderText</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Type your name&quot;</span><span class="p">,</span>
-<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="w">                </span><span class="n">header</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Name&quot;</span><span class="p">),</span>
-<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">$&quot;You typed: {name}&quot;</span><span class="p">).</span><span class="n">Opacity</span><span class="p">(</span><span class="mf">0.6</span><span class="p">)</span>
-<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
-<a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">ControlledInputDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="p">{</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">setName</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">);</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="w">            </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;Controlled Input&quot;</span><span class="p">),</span>
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="w">            </span><span class="n">TextBox</span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">setName</span><span class="p">,</span><span class="w"> </span><span class="n">placeholderText</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Type your name&quot;</span><span class="p">,</span>
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="w">                </span><span class="n">header</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Name&quot;</span><span class="p">),</span>
+<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a><span class="w">            </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">$&quot;You typed: {name}&quot;</span><span class="p">).</span><span class="n">Opacity</span><span class="p">(</span><span class="mf">0.6</span><span class="p">)</span>
+<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a><span class="p">}</span>
 </code></pre></div>
 <p>The distinction that matters is not "controlled vs. uncontrolled" but
 whether the binding is <em>complete</em>. Omit the value entirely and the
@@ -4652,14 +4825,14 @@ fixed, say so with <code>.IsReadOnly(true)</code>; otherwise supply both halves.
 Reactor inputs take <code>(value, onChanged)</code> together; supply
 both and the control is a passive view of state.</p>
 <h3 id="validating-in-the-click-handler">Validating in the click handler<a class="headerlink" href="#validating-in-the-click-handler" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1">// Don&#39;t:</span>
-<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Submit&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span>
-<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="p">{</span>
-<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="kt">string</span><span class="p">.</span><span class="n">IsNullOrEmpty</span><span class="p">(</span><span class="n">email</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">setError</span><span class="p">(</span><span class="s">&quot;…&quot;</span><span class="p">);</span><span class="w"> </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">email</span><span class="p">.</span><span class="n">Contains</span><span class="p">(</span><span class="sc">&#39;@&#39;</span><span class="p">))</span><span class="w">         </span><span class="p">{</span><span class="w"> </span><span class="n">setError</span><span class="p">(</span><span class="s">&quot;…&quot;</span><span class="p">);</span><span class="w"> </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">age</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">18</span><span class="p">)</span><span class="w">                      </span><span class="p">{</span><span class="w"> </span><span class="n">setError</span><span class="p">(</span><span class="s">&quot;…&quot;</span><span class="p">);</span><span class="w"> </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="w">    </span><span class="c1">// submit…</span>
-<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="p">})</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1">// Don&#39;t:</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Submit&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="p">{</span>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="kt">string</span><span class="p">.</span><span class="n">IsNullOrEmpty</span><span class="p">(</span><span class="n">email</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">setError</span><span class="p">(</span><span class="s">&quot;…&quot;</span><span class="p">);</span><span class="w"> </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">email</span><span class="p">.</span><span class="n">Contains</span><span class="p">(</span><span class="sc">&#39;@&#39;</span><span class="p">))</span><span class="w">         </span><span class="p">{</span><span class="w"> </span><span class="n">setError</span><span class="p">(</span><span class="s">&quot;…&quot;</span><span class="p">);</span><span class="w"> </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">age</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">18</span><span class="p">)</span><span class="w">                      </span><span class="p">{</span><span class="w"> </span><span class="n">setError</span><span class="p">(</span><span class="s">&quot;…&quot;</span><span class="p">);</span><span class="w"> </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="w">    </span><span class="c1">// submit…</span>
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="p">})</span>
 </code></pre></div>
 <p>Imperative checks duplicate every field's validation in the submit
 handler, drift from the inline error display, and fall out of date
