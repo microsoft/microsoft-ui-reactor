@@ -146,7 +146,53 @@ namespace Microsoft.UI.Reactor.VsExtension.Embed
             info.EnvironmentVariables["DOTNET_WATCH_RESTART_ON_RUDE_EDIT"] = "1";
             info.EnvironmentVariables["DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER"] = "1";
             info.EnvironmentVariables["NoDefaultCurrentDirectoryInExePath"] = "1";
+            ApplyPackagedRunDefaults(info);
             return info;
+        }
+
+        /// <summary>
+        /// Lets a packaged (MSIX) project complete the devtools handshake.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A packaged project launched by <c>dotnet watch run</c> goes through the launcher
+        /// that <c>Microsoft.Windows.SDK.BuildTools.WinApp</c> installs, which the Reactor
+        /// templates reference. That launcher activates the app by AUMID, which is brokered
+        /// and therefore has <em>no stdout at all</em> — and stdout is how the child reports
+        /// <c>CAPTURE_PORT</c> / <c>CAPTURE_TOKEN</c>. The app would start and render while
+        /// the preview silently waited out its handshake timeout, with no error anywhere to
+        /// explain it. Setting this property switches the launcher to an execution alias,
+        /// which inherits stdout.
+        /// </para>
+        /// <para>
+        /// A project that does not carry that run support has nothing to consume this
+        /// property and must add the package first — a project converted to MSIX by hand is
+        /// the case in point. See the VS extension guide.
+        /// </para>
+        /// <para>
+        /// Set unconditionally rather than behind a packaged/unpackaged probe: the WinApp
+        /// targets only consume it when their run support is active, so it is inert for an
+        /// unpackaged project (verified — an unpackaged launch is byte-identical with and
+        /// without it), and probing would cost an MSBuild evaluation on every launch.
+        /// </para>
+        /// <para>
+        /// It is passed through the environment, not <c>-p:</c>, for two reasons.
+        /// <c>dotnet watch</c> rejects <c>-p</c> alongside <c>--project</c> as ambiguous, and
+        /// an environment property is the lowest-precedence MSBuild property, so a project
+        /// that explicitly sets <c>&lt;WinAppRunUseExecutionAlias&gt;false&lt;/...&gt;</c>
+        /// still wins and keeps control.
+        /// </para>
+        /// </remarks>
+        private static void ApplyPackagedRunDefaults(ProcessStartInfo info)
+        {
+            info.EnvironmentVariables[WinAppRunUseExecutionAliasVariable] = "true";
+        }
+
+        internal const string WinAppRunUseExecutionAliasVariable = "WinAppRunUseExecutionAlias";
+
+        internal static ProcessStartInfo CreateStartInfoForTest(StartOptions options)
+        {
+            return CreateStartInfo(options);
         }
 
         private static string BuildArguments(StartOptions options)

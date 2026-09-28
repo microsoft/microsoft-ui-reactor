@@ -126,9 +126,25 @@ return VStack(12,
 
 `.Validate(fieldName, value, ...)` resolves the surrounding `ValidationContext`
 through React-style ambient context — you do not pass `validation` explicitly.
-Passing the current value (the second arg) opts in to auto-validation as the
-component re-renders; the validator-only overload `.Validate(fieldName, ...)`
-is for cases where you trigger validation manually.
+Passing the current value (the second arg) runs the validators right there,
+during the render, so a `When(validation.HasError("email"), ...)` placed *after*
+the field reads the result in the same pass rather than one render late. The
+validator-only overload `.Validate(fieldName, ...)` has no value to check, so it
+only records the validators: nothing runs them, and on a bare control nothing
+registers the field either. Inside a `FormField` the field is registered on
+mount, so `MarkAllTouched()` covers it.
+
+You do not need `.Provide(ValidationContexts.Current, validation)`: a
+component-local context is published to the rendered subtree automatically, so
+`FormField`, `ValidationVisualizer`, and nested components find it. Providing one
+explicitly is what *descendants* resolve, but it does not redirect the providing
+component's own `.Validate()` calls — those already ran while the tree was being
+built. To pool several components' fields into one context, provide it from a
+parent and let each child call `UseValidationContext()`.
+
+Mutating the context re-renders the component that created it. That is why
+`MarkAllTouched()` alone reveals the errors on a failed submit, even though no
+component state changed.
 
 ### ValidationContext API
 
@@ -144,6 +160,7 @@ is for cases where you trigger validation manually.
 | `.ClearAll()` | Clear all messages (preserve touched/initial state) |
 | `.GetMessages("field")` | Get error messages for a specific field |
 | `.IsTouched("field")` | Whether the user has interacted with a field |
+| `.Changed` | Event raised when the context's observable state changes |
 
 ## 4. Built-in validators
 
@@ -182,10 +199,18 @@ return FormField(
 ```
 
 `ShowWhen` controls when error messages appear:
-- `WhenTouched` — after the user has interacted with the field (recommended default)
+- `WhenTouched` — after the user has interacted with the field (recommended default).
+  `FormField` marks its own field touched on blur; elsewhere call `MarkTouched`.
 - `Always` — immediately, even before user interaction
-- `WhenDirty` — only after the value has changed
-- `AfterFirstSubmit` — only after the first submit attempt
+- `WhenDirty` — only after the value has changed from its baseline. Requires
+  `SetInitialValue(field, value)`: with no baseline recorded a field is never
+  dirty, so this policy stays silent forever.
+- `AfterFirstSubmit` — only after the first submit attempt, which is
+  `MarkAllTouched()`. `ResetAll()` clears it, so the next reveal waits for a
+  fresh submit.
+
+The verdict itself is unaffected by any of these — `IsValid()` and
+`GetMessages()` are current from the first render. `ShowWhen` only gates display.
 
 ## 6. Masked input
 

@@ -640,8 +640,8 @@ The csproj is the legacy SDK style (`Microsoft.NET.Sdk` + `<UseWPF>true</UseWPF>
 
 Key NuGet packages:
 
-- `Microsoft.VisualStudio.SDK` 17.8+
-- `Microsoft.VSSDK.BuildTools` 17.8+
+- `Microsoft.VisualStudio.SDK` 17.14+
+- `Microsoft.VSSDK.BuildTools` 17.14+
 - `Newtonsoft.Json` (VS already ships it; pin to the version VS 2022 carries to avoid binding redirect headaches) — *or* `System.Text.Json` via the JSON helpers already in the SDK.
 
 ### §6.2 Package + tool window

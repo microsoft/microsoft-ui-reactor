@@ -347,6 +347,52 @@ Key pieces:
 - **`ctx.IsValid()`** returns `true` when no error-severity messages exist.
 - **`ctx.MarkAllTouched()`** reveals all errors on submit attempt.
 
+### How validation runs
+
+Four behaviours make the example above work without any extra wiring. They are
+worth knowing because they explain *when* a result becomes visible.
+
+**Validators run during render, not after it.** The value-carrying
+`.Validate(fieldName, value, …)` overload evaluates its validators immediately
+and writes the result into the enclosing context. C# evaluates arguments left to
+right, so the `.Validate(…)` call above produces the verdict that the later
+`When(ctx.HasError("email"), …)` sibling reads — in the *same* pass. Put your
+error display after the field it describes and it will never lag a render behind.
+
+**The context is provided to the subtree for you.** When
+`UseValidationContext()` creates a component-local context (nothing up the tree
+provided one), that context is published to whatever the component returns, so
+`FormField`, `ValidationVisualizer`, and nested components find it.
+
+Writing `.Provide(ValidationContexts.Current, ctx)` yourself still works, and the
+value you provide is what descendants resolve. It does **not** redirect the
+providing component's own `.Validate()` calls: those already ran while the
+element tree was being built, against the context `UseValidationContext()`
+returned — the same reason `UseContext` can't observe a value the same component
+provides. To collect several components' fields into one context, provide it from
+a parent and let each child call `UseValidationContext()`.
+
+**Mutating the context repaints the form.** `ctx.MarkAllTouched()` changes no
+component state, so nothing else would schedule a render; the component that
+called `UseValidationContext()` re-renders when the context changes. Re-running
+the same validators over an unchanged value is silent, so this does not loop.
+
+**`FormField` marks its field touched on blur.** That is what makes the default
+`ShowWhen.WhenTouched` work: focus the editor, move away, and the error replaces
+the description. Outside `FormField` — the hand-rolled example above — decide for
+yourself when a field counts as touched, typically `ctx.MarkAllTouched()` on a
+failed submit.
+
+> **Attach-only cases.** `.Validate(fieldName, validators…)` without a value has
+> nothing to check: it records the validators and nothing else. Inside a
+> `FormField` the field is still registered on mount, so `MarkAllTouched()`
+> covers it, but the validators are not run — they would be checking `null`
+> against a control that has a value. On a bare control the attachment is inert:
+> no verdict and no registration. A *value-carrying* attachment built outside a
+> render pass — cached in a field, assembled inside an event handler — has no
+> context to reach at attach time, and that one `FormField` does run when it
+> mounts. Pass the value if you want validators to run.
+
 ## FormField Helper
 
 `FormField()` wraps a control with a label, required indicator, description
@@ -388,6 +434,13 @@ class FormFieldDemo : Component
 its content. Errors appear below the field after the field is touched (focus
 then blur). The `ShowWhen` parameter controls when errors become visible:
 `WhenTouched` (default), `WhenDirty`, `AfterFirstSubmit`, `Always`, or `Never`.
+
+Two of those need a signal you have to send yourself. `WhenDirty` compares
+against a baseline, so it stays silent until `SetInitialValue(field, value)`
+records one. `AfterFirstSubmit` waits for `MarkAllTouched()` — the call the
+submit handler above already makes — and `ResetAll()` puts it back. `ShowWhen`
+gates display only: `IsValid()` and `GetMessages()` are current from the first
+render whichever policy you pick.
 
 ## Built-in Validators
 
@@ -733,11 +786,109 @@ surface.
 ### Validating async (uniqueness checks)
 
 `Validate.MustAsync<T>(...)` runs a predicate that returns
-`Task<bool>`. The `ValidationContext` tracks the in-flight async work
-and reports `IsValidating` per field, so the Submit button can disable
-while async validation runs. Pair with `.IsDisabledFocusable()` so the
-button stays in tab order while validating — same accessibility
-concern as [Keeping Submit Reachable](#keeping-submit-reachable).
+`Task<bool>`. Unlike the synchronous validators, an async attachment is
+**never run for you**: `.ValidateAsync(field, value, …)` attaches the
+validators and registers the field, and nothing else. A render pass is
+synchronous, so there is nowhere for it to await them.
+
+Run them yourself from an effect, through
+`ValidationReconciler.ValidateFieldAsync`, which carries the generation
+guard that discards a result the user has already typed past:
+
+```csharp
+class AsyncValidationDemo : Component
+{
+    static async Task<bool> IsEmailFree(string value)
+    {
+        await Task.Delay(300);
+        return value != "taken@example.com";
+    }
+
+    public override Element Render()
+    {
+        var ctx = this.UseValidationContext();
+        var (email, setEmail) = UseState("");
+
+        // Async validators are never run for you: a render pass is synchronous, so
+        // there is nowhere for it to await them. Drive them from an effect, through
+        // ValidateFieldAsync, whose generation guard discards a result the user has
+        // already typed past.
+        UseEffect(() =>
+        {
+            var cts = new CancellationTokenSource();
+            if (email.Length > 0)
+            {
+                // Observed, not discarded. `_ = SomeTask()` drops the returned task on
+                // the floor, so a uniqueness check that fails for a real reason — the
+                // network is down, the service 500s — vanishes silently and the field
+                // just never gets a verdict. Await it inside a local async helper and
+                // handle the two outcomes separately.
+                _ = RunCheckAsync(cts.Token);
+            }
+            // Cancel on cleanup so the superseded check cannot install its verdict, and
+            // dispose the source with it — the effect allocates a fresh one per run.
+            // Note this does not interrupt work already in flight: `Validate.MustAsync`
+            // awaits your predicate without a token and only observes cancellation once
+            // it returns. Take a `CancellationToken` in the predicate itself if you need
+            // the request abandoned rather than its result discarded.
+            return () =>
+            {
+                try { cts.Cancel(); }
+                finally { cts.Dispose(); }
+            };
+
+            async Task RunCheckAsync(CancellationToken token)
+            {
+                try
+                {
+                    await ValidationReconciler.ValidateFieldAsync(
+                        ctx, "email", email,
+                        [Validate.MustAsync<string>(IsEmailFree, "Email is taken")],
+                        token);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected: the user typed again and this check was superseded.
+                }
+                catch (Exception ex)
+                    when (ex is not OutOfMemoryException and not StackOverflowException)
+                {
+                    // Anything else is a real failure — the network is down, the service
+                    // erroring. Surface it however your app reports background faults;
+                    // here, as a message on the field so it cannot pass silently.
+                    //
+                    // Deliberately broad rather than a list of expected exception types:
+                    // the predicate is yours, so the framework cannot know what it can
+                    // throw, and enumerating types means the one you forgot disappears.
+                    // The filter excludes only the two that must never be caught. This
+                    // is the same shape the framework itself uses for app callbacks
+                    // (see CompositeLifecycle.RunAsyncRuleAsync).
+                    ctx.AddExternal("email", $"Could not check availability: {ex.Message}");
+                }
+            }
+        }, email);
+
+        return VStack(12,
+            SubHeading("Async Validation"),
+            TextBox(email, v => { setEmail(v); ctx.NotifyValueChanged("email", v); },
+                placeholderText: "user@example.com", header: "Email"),
+            When(ctx.HasError("email"), () =>
+                TextBlock(ctx.GetMessages("email").First().Text)
+                    .Foreground(Theme.SystemCritical).FontSize(12))
+        ).Padding(24);
+    }
+}
+```
+
+Track the in-flight state with your own `UseState` flag if the Submit
+button should disable while the check runs — the context does not expose
+one. Pair that with `.IsDisabledFocusable()` so the button stays in tab
+order while validating — same accessibility concern as
+[Keeping Submit Reachable](#keeping-submit-reachable).
+
+For a cross-field async check, `ValidationRuleAsync` *is* run for you
+when it is placed in the element tree, with cancellation on update and
+unmount.
 
 ## Common Mistakes
 

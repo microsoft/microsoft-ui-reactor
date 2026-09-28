@@ -63,10 +63,7 @@ internal static class CompositeLifecycle
         // Auto-validate: if Content has attached validators with a Value, run them now
         var attached = ff.Content.GetAttached<ValidationAttached>();
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
-        if (valCtx is not null && attached is not null && attached.Validators.Length > 0)
-        {
-            ValidationReconciler.ValidateAttached(valCtx, attached, attached.Value);
-        }
+        ApplyAttachedValidation(panel, valCtx, attached);
 
         // [0] Label — always present, collapsed when empty
         var displayLabel = FormFieldHelpers.GetDisplayLabel(ff.Label, ff.Required);
@@ -85,6 +82,7 @@ internal static class CompositeLifecycle
         {
             ApplyFormFieldAutomation(contentControl, ff.Label);
             ApplyFormFieldErrorStyling(contentControl, valCtx, fieldName, ff.ShowWhen);
+            WireTouchedOnBlur(panel, contentControl, valCtx, fieldName);
             panel.Children.Add(contentControl);
         }
         else
@@ -102,6 +100,199 @@ internal static class CompositeLifecycle
         return panel;
     }
 
+    /// <summary>
+    /// Tracks the (context, field) a <c>FormField</c>'s attached validators last produced
+    /// a synchronous verdict for, so the contribution can be withdrawn when it moves.
+    /// </summary>
+    private sealed class AttachedValidationBinding : Reconciler.IValidationBindingReset
+    {
+        internal ValidationContext? Context;
+        internal string? Field;
+        internal long Stamp;
+
+        public void Reset()
+        {
+            if (Context is { } ctx && Field is { } field)
+                ctx.RetireProducer(field, ValidationContext.SyncProducer, Stamp);
+            Context = null;
+            Field = null;
+            Stamp = 0;
+        }
+
+        /// <summary>
+        /// Withdraws the recorded contribution unless it is still the one
+        /// <paramref name="nextField"/> under <paramref name="nextCtx"/> will re-install.
+        /// </summary>
+        internal void WithdrawIfMoved(ValidationContext? nextCtx, string? nextField)
+        {
+            if (Context is not { } ctx || Field is not { } field) return;
+            if (ReferenceEquals(ctx, nextCtx) && string.Equals(field, nextField, StringComparison.Ordinal))
+                return;
+
+            ctx.RetireProducer(field, ValidationContext.SyncProducer, Stamp);
+            Context = null;
+            Field = null;
+            Stamp = 0;
+        }
+
+        internal void Record(ValidationContext ctx, string field)
+        {
+            Context = ctx;
+            Field = field;
+            Stamp = ctx.GetProducerStamp(field, ValidationContext.SyncProducer);
+        }
+
+        /// <summary>
+        /// Takes over a claim made elsewhere — the render-time write, whose context and
+        /// stamp are the only accurate description of what it installed.
+        /// </summary>
+        internal void Adopt(ValidationContext ctx, string field, long stamp)
+        {
+            Context = ctx;
+            Field = field;
+            Stamp = stamp;
+        }
+    }
+
+    private static AttachedValidationBinding? TryGetAttachedBinding(UIElement control)
+        => control is FrameworkElement fe
+            && fe.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
+            ? state.ValidationAttachedBinding as AttachedValidationBinding
+            : null;
+
+    private static AttachedValidationBinding GetOrCreateAttachedBinding(UIElement formFieldRoot)
+    {
+        if (formFieldRoot is not FrameworkElement fe) return new AttachedValidationBinding();
+
+        var state = Reconciler.GetOrCreateReactorState(fe);
+        if (state.ValidationAttachedBinding is AttachedValidationBinding existing) return existing;
+
+        var binding = new AttachedValidationBinding();
+        state.ValidationAttachedBinding = binding;
+        return binding;
+    }
+
+    /// <summary>
+    /// Decides whether an attachment contributes a synchronous verdict at all: it needs a
+    /// field, a value to judge, and something to judge it with.
+    /// </summary>
+    private static bool Produces(ValidationAttached? attached)
+        => attached is not null
+            && !string.IsNullOrEmpty(attached.FieldName)
+            && attached.HasValue
+            && attached.Validators.Length > 0;
+
+    /// <summary>
+    /// Ties a plain (non-<c>FormField</c>) validated element's verdict to the lifetime of
+    /// the control it produced.
+    /// <para>
+    /// <c>.Validate(field, value, …)</c> installs its verdict while the owning component
+    /// renders, which is what lets the same <c>Render()</c> read it back. Nothing was
+    /// watching what happened to that verdict afterwards: a control behind a condition
+    /// installed an error on the pass that showed it and then simply stopped being
+    /// rendered, leaving the context invalid over a field with no control, forever. The
+    /// mounted control is the only thing whose lifetime tracks the attachment, so the
+    /// contribution is recorded against it here and withdrawn when the field moves, when
+    /// the attachment stops producing, or when the control is unmounted.
+    /// </para>
+    /// <para>
+    /// This records the render-time verdict rather than re-running the validators:
+    /// reconcile-time evaluation is <c>FormField</c>'s job, and doing it here too would
+    /// start judging elements that were deliberately left declarative — those assembled
+    /// outside a render pass. The stamp makes the recording safe even then, because a
+    /// contribution nobody made matches no live write.
+    /// </para>
+    /// </summary>
+    internal static void TrackElementValidation(FrameworkElement fe, ValidationAttached? attached)
+    {
+        var claimed = false;
+        ValidationRenderScope.Ownership owned = default;
+        if (attached is not null)
+            claimed = ValidationRenderScope.TryTakeOwnership(attached, out owned);
+
+        // Never materialize state for an element that has nothing to withdraw and nothing
+        // to record — every element in the tree reaches this, not just validated ones.
+        var binding = claimed ? GetOrCreateAttachedBinding(fe) : TryGetAttachedBinding(fe);
+        if (binding is null) return;
+
+        binding.WithdrawIfMoved(
+            claimed ? owned.Context : null,
+            claimed ? attached!.FieldName : null);
+
+        if (claimed)
+        {
+            binding.Adopt(owned.Context, attached!.FieldName, owned.Stamp);
+            ValidationRenderScope.MarkAdopted(owned.Context, attached.FieldName);
+        }
+    }
+
+    /// <summary>
+    /// Runs a content element's attached synchronous validators against the context a
+    /// <c>FormField</c> resolved, and makes sure the field exists either way.
+    /// <para>
+    /// Only a value-carrying attachment is validated. The validator-only overload never
+    /// supplies one, and <c>null</c> is a legitimate value, so running it here made
+    /// <c>FormField(TextBox("Alice").Validate("name", Validate.Required()))</c> report a
+    /// required-field error against <c>null</c> for a control that plainly had text
+    /// (issue #1262 review). Such an attachment stays declarative, exactly as it is
+    /// outside a <c>FormField</c>.
+    /// </para>
+    /// <para>
+    /// The verdict is installed under the field's own sync producer, so the previous
+    /// contribution has to be withdrawn whenever it moves — to a different field, to a
+    /// different context, or away entirely because the validators or the value are gone.
+    /// Otherwise its messages stay owned by something nothing validates any more, keeping
+    /// the form invalid or showing an error against a control that has moved on.
+    /// </para>
+    /// <para>
+    /// Registration cannot be left to the validated path alone. An element assembled
+    /// outside a render pass — cached in a field, built in an event handler, produced by
+    /// a memo — never reaches <c>.Validate()</c>'s render scope, so its field would exist
+    /// nowhere: <c>MarkAllTouched()</c> and the validity summary would silently skip it.
+    /// Async validators still are not run here; nothing runs them automatically (see
+    /// <c>ValidateExtensions.ValidateAsync</c>).
+    /// </para>
+    /// </summary>
+    private static void ApplyAttachedValidation(
+        UIElement formFieldRoot, ValidationContext? valCtx, ValidationAttached? attached)
+    {
+        var binding = GetOrCreateAttachedBinding(formFieldRoot);
+
+        var produces = valCtx is not null && Produces(attached);
+        binding.WithdrawIfMoved(valCtx, produces ? attached!.FieldName : null);
+
+        if (valCtx is null || attached is null || string.IsNullOrEmpty(attached.FieldName)) return;
+
+        if (produces)
+        {
+            // Skip when the render pass already judged this exact attachment. `.Validate()`
+            // runs eagerly while the tree is built, and this reconcile-time pass used to
+            // run every validator a second time for an ordinary
+            // `FormField(TextBox(…).Validate(f, v, …))`. The structural diff suppressed the
+            // duplicate *notification* but not the work, so an expensive or custom
+            // validator paid twice on every render (issue #1262 review).
+            //
+            // The claim is left for the content control to take: it is the thing whose
+            // lifetime the verdict is tied to, and it reaches TrackElementValidation
+            // moments later when this method's caller reconciles it. Recording here as
+            // well would have two bindings owning one slot.
+            //
+            // The fallback below still runs for an element assembled outside a render
+            // pass — cached in a field, built in an event handler, produced by a memo —
+            // which is the only chance those ever get to be validated. It also runs when
+            // the claim names a *different* context than the one resolved here, which an
+            // explicit `.Provide(...)` inside a hook-owning component produces.
+            if (ValidationRenderScope.HasOwnership(attached, valCtx)) return;
+
+            ValidationReconciler.ValidateAttached(valCtx, attached, attached.Value);
+            binding.Record(valCtx, attached.FieldName);
+            return;
+        }
+
+        if (attached.Validators.Length > 0 || attached.AsyncValidators.Length > 0)
+            valCtx.RegisterField(attached.FieldName);
+    }
+
     internal static UIElement? UpdateFormField(
         Reconciler reconciler, FormFieldElement oldFf, FormFieldElement newFf,
         WinUI.StackPanel panel, Action requestRerender)
@@ -115,10 +306,9 @@ internal static class CompositeLifecycle
         // Auto-validate
         var attached = newFf.Content.GetAttached<ValidationAttached>();
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
-        if (valCtx is not null && attached is not null && attached.Validators.Length > 0)
-        {
-            ValidationReconciler.ValidateAttached(valCtx, attached, attached.Value);
-        }
+
+        ApplyAttachedValidation(panel, valCtx, attached);
+
 
         // [0] Update label
         if (panel.Children[0] is TextBlock labelTb)
@@ -130,6 +320,7 @@ internal static class CompositeLifecycle
 
         // [1] Patch content in-place (preserves caret position and focus)
         var existingContent = panel.Children[1];
+        var outgoingContent = existingContent;
         if (reconciler.CanUpdate(oldFf.Content, newFf.Content))
         {
             var replacement = reconciler.Update(oldFf.Content, newFf.Content, existingContent, requestRerender);
@@ -154,8 +345,17 @@ internal static class CompositeLifecycle
             existingContent = newContent;
         }
 
+        // An editor that has just been displaced is on its way to the element pool, and
+        // its LostFocus handler is attached once for the control's lifetime and reads a
+        // mutable binding. Neutralize it here rather than through the root mapping: the
+        // root can itself be replaced by a remount, in which case the mapping no longer
+        // names the control that actually left (issue #1262 review).
+        if (!ReferenceEquals(outgoingContent, existingContent))
+            ClearTouchBinding(outgoingContent);
+
         ApplyFormFieldAutomation(existingContent, newFf.Label);
         ApplyFormFieldErrorStyling(existingContent, valCtx, fieldName, newFf.ShowWhen);
+        WireTouchedOnBlur(panel, existingContent, valCtx, fieldName);
 
         // [2] Update description/error text
         if (panel.Children[2] is TextBlock descTb)
@@ -179,7 +379,11 @@ internal static class CompositeLifecycle
         // Collect messages from the validation context
         var allMessages = valCtx?.GetAllMessages() ?? (IReadOnlyList<ValidationMessage>)[];
         var (caught, _) = ErrorBubbling.FilterMessages(allMessages, vv.SeverityFilter);
-        var shouldDisplay = ErrorBubbling.ShouldDisplay(caught, vv.ShowWhen, valCtx);
+        // Same submit-attempt plumbing as FormField: without it a visualizer set to
+        // ShowWhen.AfterFirstSubmit could never display, since nothing else supplies
+        // the flag (issue #1262).
+        var shouldDisplay = ErrorBubbling.ShouldDisplay(
+            caught, vv.ShowWhen, valCtx, valCtx?.SubmitAttempted ?? false);
 
         switch (vv.Style)
         {
@@ -284,24 +488,398 @@ internal static class CompositeLifecycle
 
     internal static UIElement MountValidationRule(Reconciler reconciler, ValidationRuleElement rule)
     {
-        // Evaluate the rule against the nearest ValidationContext
+        // The collapsed placeholder is this rule's durable identity: the reconciler keeps
+        // it across re-renders, so it can name the rule as a message producer even though
+        // the element record itself is rebuilt every pass. Keying on the message instead
+        // would break for an interpolated one and would conflate two rules that happen to
+        // share text (issue #1262 review).
+        var placeholder = new WinUI.StackPanel { Visibility = Visibility.Collapsed };
+        var binding = GetOrCreateRuleBinding(placeholder);
+
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
         if (valCtx is not null)
-            rule.Evaluate(valCtx);
+        {
+            valCtx.RegisterField(rule.Field);
+            EvaluateRuleForBinding(rule, valCtx, binding);
+            binding.Context = valCtx;
+            binding.Field = rule.Field;
+        }
 
-        // Return a collapsed placeholder — validation rules produce no UI
-        var placeholder = new WinUI.StackPanel { Visibility = Visibility.Collapsed };
         Reconciler.SetElementTag(placeholder, rule);
         return placeholder;
     }
 
-    internal static UIElement? UpdateValidationRule(Reconciler reconciler, ValidationRuleElement rule)
+    internal static UIElement? UpdateValidationRule(Reconciler reconciler, ValidationRuleElement rule, UIElement control)
     {
+        var binding = GetOrCreateRuleBinding(control);
         var valCtx = reconciler.ReadContext(ValidationContexts.Current);
+
+        // A rule can move: to a different field, or into a different provider's context.
+        // Its old contribution has to be withdrawn from where it used to live, or that
+        // context stays invalid forever with a message nothing owns any more.
+        if (binding.Context is { } previousCtx && binding.Field is { } previousField
+            && (!ReferenceEquals(previousCtx, valCtx)
+                || !string.Equals(previousField, rule.Field, StringComparison.Ordinal)))
+        {
+            // Cancel first: a pass still running against the old context would otherwise
+            // reinstall the error just withdrawn, for a rule that has moved away.
+            CancelPendingRule(binding);
+            previousCtx.RetireProducer(previousField, binding.Producer);
+            binding.Context = null;
+            binding.Field = null;
+        }
+
         if (valCtx is not null)
-            rule.Evaluate(valCtx);
+        {
+            valCtx.RegisterField(rule.Field);
+            EvaluateRuleForBinding(rule, valCtx, binding);
+            binding.Context = valCtx;
+            binding.Field = rule.Field;
+        }
+
         return null; // keep existing collapsed placeholder
     }
+
+    /// <summary>
+    /// Withdraws a mounted rule's contribution when it leaves the tree — a conditionally
+    /// rendered rule disappearing must not leave the form permanently invalid.
+    /// </summary>
+    internal static void RetractValidationRule(UIElement placeholder)
+    {
+        if (ReadRuleBinding(placeholder) is not { } binding) return;
+
+        // A pass still running would otherwise install a verdict for a rule that has
+        // already left the tree.
+        CancelPendingRule(binding);
+
+        if (binding.Context is { } ctx && binding.Field is { } field)
+            ctx.RetireProducer(field, binding.Producer);
+
+        binding.Context = null;
+        binding.Field = null;
+    }
+
+    private sealed class RuleBinding : Reconciler.IValidationBindingReset
+    {
+        internal string Producer = "";
+        internal ValidationContext? Context;
+        internal string? Field;
+        internal global::System.Threading.CancellationTokenSource? Pending;
+
+        // Called by DetachReactorState when a control is retired outside the normal
+        // unmount path: cancel any pass still out, withdraw whatever this producer
+        // installed — otherwise the error outlives the control forever — and drop the
+        // context so a result that resolves anyway cannot write to it.
+        public void Reset()
+        {
+            CancelPendingRule(this);
+            if (Context is { } ctx && Field is { } field)
+                ctx.RetireProducer(field, Producer);
+            Context = null;
+            Field = null;
+        }
+    }
+
+    /// <summary>
+    /// Runs a mounted rule against its context, dispatching an async rule through the
+    /// generation-guarded async path instead of its synchronous stand-in.
+    /// <para>
+    /// <c>ValidationRuleAsync</c> builds an element whose synchronous predicate is a
+    /// constant <c>true</c>, so evaluating it synchronously recorded a passing verdict
+    /// for every async rule placed in the tree — the predicate never ran at all
+    /// (issue #1262 review).
+    /// </para>
+    /// <para>
+    /// Each pass supersedes the previous one: the old token is cancelled, and the
+    /// context's per-producer generation discards whatever an already-resolved older
+    /// pass tries to install. Unmount cancels the outstanding pass as well, so a rule
+    /// that left the tree cannot write to the context afterwards.
+    /// </para>
+    /// </summary>
+    private static void EvaluateRuleForBinding(ValidationRuleElement rule, ValidationContext valCtx, RuleBinding binding)
+    {
+        if (rule.AsyncPredicate is null)
+        {
+            CancelPendingRule(binding);
+
+            // Evaluate retires the producer's async generation, which matters when the
+            // rule has just stopped being async on this same placeholder.
+            rule.Evaluate(valCtx, binding.Producer);
+            return;
+        }
+
+        CancelPendingRule(binding);
+        var cts = new global::System.Threading.CancellationTokenSource();
+        binding.Pending = cts;
+        _ = RunAsyncRuleAsync(rule, valCtx, binding, cts);
+    }
+
+    private static async Task RunAsyncRuleAsync(
+        ValidationRuleElement rule, ValidationContext valCtx, RuleBinding binding,
+        global::System.Threading.CancellationTokenSource cts)
+    {
+        using var owned = cts;
+        try
+        {
+            await rule.EvaluateAsync(valCtx, binding.Producer, cts.Token);
+        }
+        catch (global::System.OperationCanceledException ex)
+            when (ex.CancellationToken == cts.Token || cts.IsCancellationRequested)
+        {
+            // Our own token: the pass was superseded by a newer one, or the rule left
+            // the tree. Expected, and the caller that cancelled owns what happens next.
+            //
+            // Matched narrowly rather than catching every OperationCanceledException,
+            // because the predicate takes no token of its own — anything it cancels is
+            // the app's own business and a fault we are hiding if we treat it as
+            // lifecycle churn (issue #1262 review). Those fall through to the diagnostic
+            // arm below. `IsCancellationRequested` is checked as well as the token,
+            // since a predicate that observes our token indirectly can surface a
+            // cancellation that carries `CancellationToken.None`.
+        }
+        catch (global::System.Exception ex)
+            when (ex is not global::System.OutOfMemoryException
+                  and not global::System.StackOverflowException)
+        {
+            // An app predicate threw. Surfacing it as an unobserved task exception would
+            // tear the process down later and far from the cause, so report it where the
+            // rest of the framework reports background faults and leave the previous
+            // verdict in place.
+            Diagnostics.DiagnosticLog.SwallowedError(
+                Diagnostics.LogCategory.Reactor, "ValidationRuleAsync.Evaluate", ex);
+        }
+
+        // Compare-exchange, not check-then-assign: an update can install a newer source
+        // between the two, and a plain assignment would then clear *its* slot — leaving
+        // the newer pass uncancellable on the next update or unmount.
+        global::System.Threading.Interlocked.CompareExchange(ref binding.Pending, null, cts);
+    }
+
+    private static void CancelPendingRule(RuleBinding binding)
+    {
+        var pending = global::System.Threading.Interlocked.Exchange(ref binding.Pending, null);
+        if (pending is null) return;
+
+        try
+        {
+            pending.Cancel();
+        }
+        catch (global::System.ObjectDisposedException ex)
+        {
+            // The pass finished and disposed its source between the read above and this
+            // call. There is nothing left to cancel, but record it rather than swallow.
+            Diagnostics.DiagnosticLog.SwallowedError(
+                Diagnostics.LogCategory.Reactor, "ValidationRuleAsync.Cancel", ex);
+        }
+    }
+
+    private static long s_ruleProducerSeed;
+    // Bindings live on the native control's attached state, not in a CWT keyed by the
+    // managed wrapper: WinRT can project two RCWs over one DependencyObject, and a
+    // lookup that landed on the other wrapper would mint a fresh producer while the
+    // old one could never be retired (see ChangeEchoSuppressor.cs, issues #86/#114).
+    private static RuleBinding? ReadRuleBinding(UIElement placeholder) =>
+        placeholder is FrameworkElement fe
+            ? Reconciler.GetOrCreateReactorState(fe).ValidationRuleBinding as RuleBinding
+            : null;
+
+    private static RuleBinding GetOrCreateRuleBinding(UIElement placeholder)
+    {
+        if (ReadRuleBinding(placeholder) is { } existing) return existing;
+
+        var binding = new RuleBinding
+        {
+            Producer = "rule#" + global::System.Threading.Interlocked
+                .Increment(ref s_ruleProducerSeed)
+                .ToString(global::System.Globalization.CultureInfo.InvariantCulture),
+        };
+        if (placeholder is FrameworkElement fe)
+            Reconciler.GetOrCreateReactorState(fe).ValidationRuleBinding = binding;
+        return binding;
+    }
+
+    /// <summary>
+    /// Marks a field touched when its editor loses focus.
+    /// <para>
+    /// <c>FormField</c> defaults to <see cref="ShowWhen.WhenTouched"/> and the guide
+    /// promises "errors appear below the field after the field is touched (focus then
+    /// blur)" — but nothing in the framework ever called
+    /// <see cref="ValidationContext.MarkTouched"/>, so that default could only ever
+    /// reveal an error in apps that marked fields by hand. The documented FormField
+    /// example does not, which left its error display permanently unreachable
+    /// (issue #1262).
+    /// </para>
+    /// <para>
+    /// The handler is attached once per control and reads the field name and context
+    /// from a mutable binding at invocation time, so a control recycled through the
+    /// element pool — or re-targeted at a different field by an update — reports for
+    /// whatever field it currently hosts rather than the one it was mounted with.
+    /// </para>
+    /// </summary>
+    private static void WireTouchedOnBlur(UIElement formFieldRoot, UIElement contentControl, ValidationContext? valCtx, string? fieldName)
+    {
+        if (contentControl is not FrameworkElement fe)
+        {
+            // Nothing to bind to, but the root may still point at the *previous*
+            // content's live binding — and that control is on its way to the pool.
+            ReleaseRootBinding(formFieldRoot);
+            return;
+        }
+
+        // No context or field to report to — neutralize any binding this control still
+        // carries from a previous FormField rather than leaving it pointed at the old one.
+        if (valCtx is null || string.IsNullOrEmpty(fieldName))
+        {
+            // An update can drop the context *and* swap the content control in one pass.
+            // The root still points at the old editor's binding, and that editor is on
+            // its way to the pool with a live context — so neutralize what the root
+            // points at, not just the incoming control.
+            ReleaseRootBinding(formFieldRoot);
+            ClearTouchBinding(fe);
+            return;
+        }
+
+        if (Reconciler.GetOrCreateReactorState(fe).ValidationTouchBinding is TouchBinding existing)
+        {
+            existing.Context = valCtx;
+            existing.FieldName = fieldName;
+            ReplaceRootBinding(formFieldRoot, existing);
+            return;
+        }
+
+        var binding = new TouchBinding { Context = valCtx, FieldName = fieldName };
+        Reconciler.GetOrCreateReactorState(fe).ValidationTouchBinding = binding;
+        ReplaceRootBinding(formFieldRoot, binding);
+        fe.LosingFocus += (_, args) =>
+        {
+            // LosingFocus rather than LostFocus, and filtered by where focus is going.
+            // Both are routed, so both also fire when focus moves *between descendants*
+            // of a composite editor — a NumberBox's text part to one of its spin
+            // buttons, a DatePicker between its three selectors. The field has not been
+            // blurred at all in that case, so marking it touched contradicts the
+            // documented "focus then blur" and can reveal an error while the user is
+            // still inside the control (issue #1262 review). LostFocus cannot make this
+            // distinction: it carries no destination, and the new focus is not yet set
+            // when it fires.
+            //
+            // A null destination — focus leaving the window entirely — is a real blur
+            // and falls through to mark touched.
+            if (args.NewFocusedElement is DependencyObject next && IsDescendantOf(next, fe))
+                return;
+
+            if (binding.Context is { } ctx && binding.FieldName is { Length: > 0 } field)
+                ctx.MarkTouched(field);
+        };
+    }
+
+    /// <summary>
+    /// Points a FormField root at its current content control's binding, neutralizing
+    /// whichever binding it pointed at before.
+    /// <para>
+    /// An update that swaps the content control unmounts the old editor into the pool
+    /// and maps the root to the new one. Without clearing the displaced binding, that
+    /// pooled editor would keep marking the old field when rented out elsewhere — the
+    /// same leak as an unmounted FormField, reached by a different route.
+    /// </para>
+    /// </summary>
+    private static void ReplaceRootBinding(UIElement formFieldRoot, TouchBinding binding)
+    {
+        if (ReadRootBinding(formFieldRoot) is { } previous)
+        {
+            if (ReferenceEquals(previous, binding)) return;
+
+            previous.Context = null;
+            previous.FieldName = null;
+            WriteRootBinding(formFieldRoot, null);
+        }
+
+        WriteRootBinding(formFieldRoot, binding);
+    }
+
+    /// <summary>
+    /// Neutralizes the blur binding on a <c>FormField</c>'s content control when the
+    /// field unmounts.
+    /// <para>
+    /// The <c>LostFocus</c> handler is attached once for the control's lifetime, and
+    /// controls such as <c>TextBox</c> are poolable. Without this, a control rented back
+    /// out for some non-FormField use would still mark the field it used to host on
+    /// every blur, and the pool would keep that <see cref="ValidationContext"/> alive.
+    /// Clearing the live state leaves the one-time handler harmless and lets a later
+    /// mount re-point the same binding.
+    /// </para>
+    /// </summary>
+    internal static void ClearFormFieldTouchBinding(UIElement formFieldRoot)
+    {
+        // Looked up by root rather than by walking Children: unmount runs while the
+        // subtree is being torn down, and reading a panel's visual children at that
+        // point is exactly the kind of teardown-state access worth not doing.
+        if (ReadRootBinding(formFieldRoot) is { } binding)
+        {
+            binding.Context = null;
+            binding.FieldName = null;
+        }
+    }
+
+    private static void ClearTouchBinding(UIElement contentControl)
+    {
+        if (contentControl is FrameworkElement fe
+            && Reconciler.GetOrCreateReactorState(fe).ValidationTouchBinding is TouchBinding binding)
+        {
+            binding.Context = null;
+            binding.FieldName = null;
+        }
+    }
+
+    /// <summary>
+    /// Neutralizes whatever binding a <c>FormField</c> root currently points at and stops
+    /// pointing at it, for the paths where no new binding will take its place.
+    /// </summary>
+    private static void ReleaseRootBinding(UIElement formFieldRoot)
+    {
+        ClearFormFieldTouchBinding(formFieldRoot);
+        WriteRootBinding(formFieldRoot, null);
+    }
+
+    // Test-only accessor (InternalsVisibleTo Reactor.Tests / Reactor.AppTests.Host):
+    // reports whether a control's once-per-lifetime LostFocus handler would still
+    // mark a field. The leak this guards — a displaced editor keeping the old
+    // context alive — is otherwise observable only through element-pool reuse,
+    // which is not deterministic enough to assert on.
+    internal static bool HasLiveTouchBindingForTests(UIElement contentControl) =>
+        contentControl is FrameworkElement fe
+        && Reconciler.GetOrCreateReactorState(fe).ValidationTouchBinding is TouchBinding binding
+        && binding.Context is not null
+        && !string.IsNullOrEmpty(binding.FieldName);
+
+    private sealed class TouchBinding : Reconciler.IValidationBindingReset
+    {
+        internal ValidationContext? Context;
+        internal string? FieldName;
+
+        // The LostFocus handler is attached once for the control's lifetime and reads
+        // this at invocation time, so neutralizing is what makes a retired control
+        // stop marking the field it used to host.
+        public void Reset()
+        {
+            Context = null;
+            FieldName = null;
+        }
+    }
+
+    private static TouchBinding? ReadRootBinding(UIElement formFieldRoot) =>
+        formFieldRoot is FrameworkElement fe
+            ? Reconciler.GetOrCreateReactorState(fe).ValidationRootBinding as TouchBinding
+            : null;
+
+    private static void WriteRootBinding(UIElement formFieldRoot, TouchBinding? binding)
+    {
+        if (formFieldRoot is FrameworkElement fe)
+            Reconciler.GetOrCreateReactorState(fe).ValidationRootBinding = binding;
+    }
+
+    // FormField root -> the binding of its current content control, so unmount can
+    // neutralize it without touching the visual tree mid-teardown.
+
 
     private static void ApplyFormFieldAutomation(UIElement contentControl, string? label)
     {
@@ -319,7 +897,8 @@ internal static class CompositeLifecycle
         if (valCtx is not null && fieldName is not null)
         {
             var severity = valCtx.HighestSeverity(fieldName);
-            if (severity is not null && ErrorStyling.ShouldShowErrors(valCtx, fieldName, showWhen))
+            if (severity is not null
+                && ErrorStyling.ShouldShowErrors(valCtx, fieldName, showWhen, valCtx.SubmitAttempted))
             {
                 var brushKey = ErrorStyling.GetBrushKey(severity.Value);
                 var brush = ThemeRef.Resolve(brushKey, ctrl);
@@ -342,7 +921,7 @@ internal static class CompositeLifecycle
         string? description, ShowWhen showWhen)
     {
         var (descText, isError) = FormFieldHelpers.GetDescriptionOrError(
-            valCtx, fieldName, description, showWhen);
+            valCtx, fieldName, description, showWhen, valCtx?.SubmitAttempted ?? false);
 
         if (descText is null)
         {

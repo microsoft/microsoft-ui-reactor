@@ -87,34 +87,60 @@ var (email, setEmail) = UseState("");
 
 return VStack(12,
     TextBox(name, setName, placeholderText: "Name")
-        .Validate(validation, "name",
+        .Validate("name", name,
             Validate.Required("Name is required"),
             Validate.MinLength(2, "Name too short")),
 
     TextBox(email, setEmail, placeholderText: "Email")
-        .Validate(validation, "email",
+        .Validate("email", email,
             Validate.Required("Email is required"),
             Validate.Email("Invalid email")),
 
     Button("Submit", () =>
     {
-        validation.ValidateAll();
-        if (validation.IsValid)
+        validation.MarkAllTouched();
+        if (validation.IsValid())
             Submit(name, email);
     })
 );
 ```
 
+`.Validate(fieldName, value, ...)` finds the surrounding `ValidationContext`
+itself — you never pass `validation` as an argument. Passing the current value
+runs the validators right away, during the render, so a
+`When(validation.HasError("email"), ...)` placed *after* the field observes the
+result in the same pass. The validator-only overload
+`.Validate(fieldName, validators...)` has no value to check, so it only records
+the validators: nothing runs them, and on a bare control nothing registers the
+field either. Inside a `FormField` the field is registered on mount, so
+`MarkAllTouched()` covers it.
+
+You do not need `.Provide(ValidationContexts.Current, validation)`: a
+component-local context is published to the subtree automatically, so
+`FormField` and the visualizers find it. Providing one explicitly is what
+*descendants* resolve, but it does not redirect the providing component's own
+`.Validate()` calls — those already ran while the tree was being built. To pool
+several components' fields into one context, provide it from a parent and let
+each child call `UseValidationContext()`.
+
+Mutating the context re-renders the component that created it, which is why
+`MarkAllTouched()` on an invalid submit is enough to reveal the errors even
+though no component state changed.
+
 ### ValidationContext API
 
 | Member | Purpose |
 |--------|---------|
-| `.IsValid` | `true` when no field has errors |
-| `.IsDirty` | `true` when any field differs from initial value |
-| `.ValidateAll()` | Force validation on all registered fields |
-| `.Reset()` | Clear all messages and touched/dirty flags |
-| `.GetMessages("field")` | Get error messages for a specific field |
+| `.IsValid()` | `true` when no field has Error-severity messages |
+| `.IsDirty()` | `true` when any registered field differs from initial value |
+| `.MarkAllTouched()` | Mark every registered field touched (typical on submit) |
+| `.MarkTouched("field")` | Mark a single field touched |
+| `.Reset("field")` | Reset one field to its initial value, returns that value |
+| `.ResetAll()` | Reset every field, returns field → initial value |
+| `.ClearAll()` | Drop all messages |
+| `.GetMessages("field")` | Get messages for a specific field |
 | `.IsTouched("field")` | Whether the user has interacted with a field |
+| `.Changed` | Event raised when the context's observable state changes |
 
 ## 4. Built-in validators
 
@@ -142,20 +168,29 @@ text, and error display:
 var validation = this.UseValidationContext();
 var (name, setName) = UseState("");
 
-return FormField("Full Name",
+return FormField(
     TextBox(name, setName, placeholderText: "Enter your name")
-        .Validate(validation, "name", Validate.Required("Required")),
+        .Validate("name", name, Validate.Required("Required")),
+    label: "Full Name",
     required: true,
     description: "As it appears on your ID",
-    showWhen: ShowWhen.WhenTouched  // or Always, WhenDirty, AfterFirstSubmit
+    showWhen: ShowWhen.WhenTouched  // or Always, WhenDirty, AfterFirstSubmit, Never
 );
 ```
 
 `ShowWhen` controls when error messages appear:
-- `WhenTouched` — after the user has interacted with the field (recommended default)
+- `WhenTouched` — after the user has interacted with the field (recommended default).
+  `FormField` marks its own field touched on blur; elsewhere call `MarkTouched`.
 - `Always` — immediately, even before user interaction
-- `WhenDirty` — only after the value has changed
-- `AfterFirstSubmit` — only after the first submit attempt
+- `WhenDirty` — only after the value has changed from its baseline. Requires
+  `SetInitialValue(field, value)`: with no baseline recorded a field is never
+  dirty, so this policy stays silent forever.
+- `AfterFirstSubmit` — only after the first submit attempt, which is
+  `MarkAllTouched()`. `ResetAll()` clears it, so the next reveal waits for a
+  fresh submit.
+
+The verdict itself is unaffected by any of these — `IsValid()` and
+`GetMessages()` are current from the first render. `ShowWhen` only gates display.
 
 ## 6. Masked input
 
@@ -209,9 +244,10 @@ return TextBox(amount,
 
 1. **Always use controlled inputs** — `(value, setter)` pair. There is no
    uncontrolled / two-way binding in Reactor.
-2. **Call `validation.ValidateAll()` before submit** — individual fields
-   validate on blur/change, but you must trigger all-field validation
-   before acting on the form.
+2. **Call `validation.MarkAllTouched()` before submit** — validators run on
+   every render, so the verdict is always current, but errors stay hidden
+   until their field is touched. Marking all fields touched on a failed
+   submit is what reveals them.
 3. **Use `ShowWhen.WhenTouched`** (default) — showing errors immediately on
    page load is hostile UX.
 4. **MaskEngine and InputFormatter are different** — masks restrict what

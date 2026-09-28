@@ -1,6 +1,6 @@
 # Visual Studio Reactor Preview
 
-Live embedded preview pane for Microsoft.UI.Reactor apps in Visual Studio 2022 (17.8+) and Visual Studio 2026 (18.x).
+Live embedded preview pane for Microsoft.UI.Reactor apps in Visual Studio 2022 (17.14+) and Visual Studio 2026 (18.x).
 
 > ⚠️ **Very rough / experimental.** This VSIX is the roughest surface in an already experimental repository. It exists to validate the embedded-preview direction and collect feedback; expect install friction, solution-load races, HWND/DPI quirks, blank-window bugs, and breaking changes while it is hardened.
 
@@ -12,7 +12,7 @@ Build the full VSIX, double-click it, install into the target Visual Studio hive
 pwsh -File src\vs-reactor\Build-Vsix.ps1
 ```
 
-This requires Visual Studio 2022 (17.8+) or Visual Studio 2026 (18.x) with the **Visual Studio extension development** workload. Phase 1 may ship unsigned for dev distribution, so Visual Studio may show an unsigned-extension warning. Treat installs as developer smoke builds, not stable product drops.
+This requires Visual Studio 2022 (17.14+) or Visual Studio 2026 (18.x) with the **Visual Studio extension development** workload. Phase 1 may ship unsigned for dev distribution, so Visual Studio may show an unsigned-extension warning. Treat installs as developer smoke builds, not stable product drops.
 
 ## Debug
 

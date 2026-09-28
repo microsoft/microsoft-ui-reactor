@@ -1,0 +1,255 @@
+#nullable enable
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Xml.Linq;
+using Microsoft.UI.Reactor.VsExtension.Embed;
+using Xunit;
+
+namespace Reactor.VsExtension.Tests
+{
+    /// <summary>
+    /// Guards the assembly-version ceiling on framework libraries that Visual Studio ships as
+    /// <em>shared assemblies</em> and binds on the extension's behalf.
+    /// </summary>
+    public sealed class VsSharedAssemblyBindingTests
+    {
+        // Visual Studio owns the identity of these assemblies inside devenv.exe: it ships one
+        // copy under Common7\IDE\SharedAssemblies and binds every extension to it through a
+        // devenv.exe.config <bindingRedirect>. VS 18 declares:
+        //
+        //   <assemblyIdentity name="System.Text.Json" publicKeyToken="cc7b13ffcd2ddd51" />
+        //   <bindingRedirect oldVersion="0.0.0.0-10.0.0.10" newVersion="10.0.0.10" />
+        //
+        // A redirect unifies UPWARD, and only within its oldVersion range. Compile the
+        // extension against a *higher* assembly version and the request falls outside the
+        // range, so no redirect applies; the VSIX carries no private copy (VS strips
+        // assemblies it provides) and the package registers no BindingPath, so the CLR probes
+        // devenv's base directory, finds nothing, and throws:
+        //
+        //   FileNotFoundException: Could not load file or assembly
+        //   'System.Text.Json, Version=10.0.0.12, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51'
+        //
+        // That is not hypothetical: the repo-wide CPM pin (System.Text.Json 10.0.12 ->
+        // AssemblyVersion 10.0.0.12) flowed into the extension and landed two servicing
+        // revisions past VS 18's ceiling, killing every preview session at the first JSON call.
+        //
+        // The safe ceiling is the version Microsoft.VisualStudio.SDK itself depends on: every
+        // VS release that satisfies the SDK redirects at least that high, and building lower is
+        // always safe because redirects unify upward. Bump these only together with the
+        // Microsoft.VisualStudio.SDK PackageVersion in Directory.Packages.props.
+        //
+        // Only *direct* assembly references are gated, because that is what the CLR resolves
+        // against this assembly's manifest. An entry for something the extension does not
+        // reference directly would never be exercised and would be pure false confidence, so
+        // EveryGatedAssemblyIsActuallyReferenced fails on any such entry rather than letting it
+        // sit dormant. System.Text.Encodings.Web was exactly that: transitive through
+        // System.Text.Json, with no direct reference for this probe to ever see.
+        private static readonly IReadOnlyDictionary<string, Version> Ceilings =
+            new Dictionary<string, Version>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["System.Text.Json"] = new Version(9, 0, 0, 0),
+            };
+
+        private static AssemblyName[] ExtensionReferences()
+        {
+            return typeof(EmbedClient).Assembly.GetReferencedAssemblies();
+        }
+
+        /// <summary>
+        /// The ceiling above is only half the contract. A shared-assembly reference also has
+        /// to be covered by the <em>oldest</em> Visual Studio the VSIX claims to install into,
+        /// and that claim lives in source.extension.vsixmanifest — a different file that
+        /// nothing otherwise ties to this pin.
+        /// </summary>
+        /// <remarks>
+        /// Derived from the central <c>Microsoft.VisualStudio.SDK</c> version rather than
+        /// written down again here. The extension cannot support a host older than the SDK it
+        /// compiles against, and that SDK is what fixes the System.Text.Json baseline: the SDK
+        /// baselines it per VS version (17.8 -> 7.0.3, 17.9 -> 8.0.0, 17.14 -> 9.0.0). A second
+        /// hard-coded literal would let an SDK bump update the pin and the ceiling while
+        /// silently leaving the host minimum behind, keeping every test green while the VSIX
+        /// advertised hosts the new pin cannot load on. One source of truth means that bump
+        /// fails this gate until the manifest is raised deliberately.
+        /// </remarks>
+        private static Version MinimumSupportedVsHost => VisualStudioSdkVersion();
+
+        private static Version VisualStudioSdkVersion()
+        {
+            var props = FindRepoFile("Directory.Packages.props");
+
+            var raw = XDocument.Load(props)
+                .Descendants()
+                .Where(e => e.Name.LocalName == "PackageVersion")
+                .Where(e => string.Equals(
+                    (string?)e.Attribute("Include"),
+                    "Microsoft.VisualStudio.SDK",
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(e => (string?)e.Attribute("Version"))
+                .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+
+            if (raw == null || !Version.TryParse(raw, out var version))
+            {
+                throw new InvalidOperationException(
+                    "Could not read the Microsoft.VisualStudio.SDK PackageVersion from "
+                    + $"'{props}'. The host-minimum gate has no source of truth without it — fix "
+                    + "the lookup rather than reintroducing a hard-coded version.");
+            }
+
+            return new Version(version.Major, version.Minor);
+        }
+
+        [Fact]
+        public void VsixManifest_DoesNotAdvertiseHostsOlderThanThePinnedBaseline()
+        {
+            var manifest = FindRepoFile("src/vs-reactor/Reactor.VsExtension/source.extension.vsixmanifest");
+
+            // Parsed as XML and scoped to the host elements rather than pattern-matched out of
+            // the raw text: a regex over version literals silently skips any shape it did not
+            // anticipate (a patch component such as [17.8.1,19.0) being the obvious one), and a
+            // skipped range reads exactly like a compliant one.
+            var doc = XDocument.Load(manifest);
+            var declarations = doc.Descendants()
+                .Where(e => e.Name.LocalName == "InstallationTarget" || e.Name.LocalName == "Prerequisite")
+                .Select(e => new
+                {
+                    Element = e.Name.LocalName,
+                    Id = (string?)e.Attribute("Id"),
+                    Version = (string?)e.Attribute("Version"),
+                })
+                .Where(d => !string.IsNullOrWhiteSpace(d.Version))
+                .ToArray();
+
+            // Positive control: a manifest we failed to read must not report "no violations".
+            Assert.NotEmpty(declarations);
+
+            var tooOld = new List<string>();
+            foreach (var declaration in declarations)
+            {
+                // Unparseable is a failure, never a skip — that is the hole this replaced.
+                var minimum = ParseRangeMinimum(declaration.Version!);
+                if (minimum < MinimumSupportedVsHost)
+                {
+                    tooOld.Add($"{declaration.Element} {declaration.Id} {declaration.Version}");
+                }
+            }
+
+            Assert.True(
+                tooOld.Count == 0,
+                $"source.extension.vsixmanifest advertises Visual Studio hosts older than {MinimumSupportedVsHost}, "
+                + "the Microsoft.VisualStudio.SDK version the extension compiles against. Those hosts redirect "
+                + "System.Text.Json below the version the extension is pinned to, so the extension would fail to "
+                + "load there with FileNotFoundException. Raise the manifest minimum to match the SDK, or move the "
+                + "SDK, the System.Text.Json pin and the manifest together. Offending declarations: "
+                + string.Join("; ", tooOld));
+        }
+
+        /// <summary>
+        /// Reads the lower bound out of a VSIX version range such as <c>[17.14,19.0)</c>,
+        /// <c>[17.8.1,19.0)</c> or a bare <c>17.14</c>. Throws rather than returning a
+        /// sentinel, so an unrecognised shape fails the gate instead of slipping past it.
+        /// </summary>
+        private static Version ParseRangeMinimum(string range)
+        {
+            var text = range.Trim().TrimStart('[', '(');
+            var comma = text.IndexOf(',');
+            if (comma >= 0)
+            {
+                text = text.Substring(0, comma);
+            }
+
+            text = text.TrimEnd(']', ')').Trim();
+
+            if (!Version.TryParse(text, out var version))
+            {
+                throw new FormatException(
+                    $"Could not read a minimum version out of the manifest range '{range}'. "
+                    + "Teach this parser the new shape — do not let it be skipped.");
+            }
+
+            return version;
+        }
+
+        private static string FindRepoFile(string relativePath)
+        {
+            // A rooted argument would make Path.Combine below discard dir.FullName, so every
+            // iteration would probe the same absolute path and the walk would be meaningless.
+            // Fail loudly rather than let the lookup quietly stop searching.
+            if (Path.IsPathRooted(relativePath))
+            {
+                throw new ArgumentException(
+                    $"Expected a repo-relative path, got the rooted path '{relativePath}'.",
+                    nameof(relativePath));
+            }
+
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir != null)
+            {
+                var candidate = Path.Combine(dir.FullName, relativePath);
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+
+                dir = dir.Parent;
+            }
+
+            throw new FileNotFoundException(
+                $"Could not locate '{relativePath}' walking up from {AppContext.BaseDirectory}. "
+                + "The test cannot pass vacuously — fix the lookup rather than deleting the assertion.");
+        }
+
+        /// <summary>
+        /// Positive control for <see cref="SharedAssemblyReferences_StayWithinVsBindingRedirectCeiling"/>:
+        /// a clean result there is only meaningful if the probe can actually see the references
+        /// it gates. Because that probe reads direct assembly references, a ceiling entry for
+        /// something referenced only transitively would never be evaluated and the gate would
+        /// report success having tested nothing. Asserting every entry is visible makes a
+        /// dormant entry impossible: add one the extension does not reference directly and this
+        /// fails, forcing it to be made real or dropped.
+        /// </summary>
+        [Fact]
+        public void EveryGatedAssemblyIsActuallyReferenced()
+        {
+            var names = ExtensionReferences()
+                .Select(r => r.Name)
+                .Where(n => n != null)
+                .ToArray();
+
+            var dormant = Ceilings.Keys
+                .Where(k => !names.Contains(k, StringComparer.OrdinalIgnoreCase))
+                .ToArray();
+
+            Assert.True(
+                dormant.Length == 0,
+                "These entries in Ceilings are not direct assembly references of Reactor.VsExtension, "
+                + "so the ceiling gate never evaluates them and would stay green no matter what version "
+                + "resolved: " + string.Join(", ", dormant) + ". Either the extension should reference them "
+                + "directly, or they should be removed — a ceiling nothing checks is false confidence. "
+                + "(Transitive dependencies are not covered by this gate; the CLR resolves this assembly's "
+                + "own manifest references, which is what the binding failure this guards against involves.)");
+        }
+
+        [Fact]
+        public void SharedAssemblyReferences_StayWithinVsBindingRedirectCeiling()
+        {
+            var violations = ExtensionReferences()
+                .Where(r => r.Name != null && r.Version != null)
+                .Where(r => Ceilings.TryGetValue(r.Name!, out var ceiling) && r.Version! > ceiling)
+                .Select(r => $"{r.Name} {r.Version} (ceiling {Ceilings[r.Name!]})")
+                .ToArray();
+
+            Assert.True(
+                violations.Length == 0,
+                "Reactor.VsExtension references a Visual Studio shared assembly at a higher version than "
+                + "VS's binding redirect covers. This does not fail the build — it fails at run time "
+                + "inside devenv with FileNotFoundException on the first call that touches the assembly. "
+                + "Pin it with a VersionOverride in Reactor.VsExtension.csproj instead of following the "
+                + "repo-wide Directory.Packages.props version. Offending references: "
+                + string.Join(", ", violations));
+        }
+    }
+}

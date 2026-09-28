@@ -46,7 +46,11 @@ internal sealed class FormFieldHandler : IDecoratorElementHandler<FormFieldEleme
             : ctx.Reconciler.Mount(newEl, ctx.RequestRerender) ?? control;
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, FormFieldElement? element, UIElement control)
-        => V1UnmountDisposition.ContinueDefaultTraversal;
+    {
+        // Issue #1262: drop the blur binding before the content control can be pooled.
+        CompositeLifecycle.ClearFormFieldTouchBinding(control);
+        return V1UnmountDisposition.ContinueDefaultTraversal;
+    }
 }
 
 /// <summary>§14 — ValidationVisualizer (StackPanel; Update always remounts).</summary>
@@ -71,8 +75,13 @@ internal sealed class ValidationRuleHandler : IDecoratorElementHandler<Validatio
         => CompositeLifecycle.MountValidationRule(ctx.Reconciler, el);
 
     public UIElement Update(UpdateContext ctx, ValidationRuleElement oldEl, ValidationRuleElement newEl, UIElement control)
-        => CompositeLifecycle.UpdateValidationRule(ctx.Reconciler, newEl) ?? control;
+        => CompositeLifecycle.UpdateValidationRule(ctx.Reconciler, newEl, control) ?? control;
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, ValidationRuleElement? element, UIElement control)
-        => V1UnmountDisposition.ContinueDefaultTraversal;
+    {
+        // Issue #1262: a conditionally rendered rule leaving the tree must withdraw its
+        // message, or the context stays invalid with a verdict nothing owns.
+        CompositeLifecycle.RetractValidationRule(control);
+        return V1UnmountDisposition.ContinueDefaultTraversal;
+    }
 }

@@ -12,21 +12,53 @@ on:
     paths:
       - 'bootstrap.ps1'
       - 'tools/BootstrapFeedResolver.ps1'
-      - 'src/Reactor.Cli/**'
+      # Default-on for src/, rather than an allowlist of package inputs.
+      #
+      # The scaffolded TestApp is built and launched by this job's packaged
+      # smoke against the source-built 0.0.0-local packages. Its inputs are
+      # wider than they look: the template references Microsoft.UI.Reactor and
+      # Microsoft.UI.Reactor.Devtools, Devtools project-references
+      # Reactor.Advanced, and Reactor.csproj packs six more projects into the
+      # package consumers compile against (Analyzers, Analyzers.Internal, the
+      # Localization/Wrappers/SourceMap generators, Wrappers.Abstractions).
+      # That is 10 of the 14 projects under src/, and an allowlist of them
+      # drifts silently every time one is added — a miss shows up as a
+      # packaged regression nobody caught, not as a red build.
+      #
+      # So: include src/ and subtract the four that cannot affect the
+      # scaffolded app. Negations are order-sensitive and must stay last.
+      #
+      # Narrower than "packaged testing" in general: ci.yml's Packaged Selftests
+      # already run the in-repo host under MSIX identity on every non-md change.
+      # What only this job covers is the *scaffolded template* path — a fresh
+      # app from the external template pack, built against local packages.
+      - 'src/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
       - 'Directory.Packages.props'
       - '.github/workflows/bootstrap.yml'
+      - '!src/Reactor.Compile.Analyzer/**'
+      - '!src/Reactor.Interop.WinForms/**'
+      - '!src/vs-reactor/**'
+      - '!src/vscode-reactor/**'
+      # Nothing markdown should spin a 12-minute bootstrap. A PR touching both
+      # a .cs and a .md under src/ still matches on the .cs and runs.
+      - '!**/*.md'
   push:
     branches: [main]
     paths:
       - 'bootstrap.ps1'
       - 'tools/BootstrapFeedResolver.ps1'
-      - 'src/Reactor.Cli/**'
+      - 'src/**'
       - 'Directory.Build.props'
       - 'Directory.Build.targets'
       - 'Directory.Packages.props'
       - '.github/workflows/bootstrap.yml'
+      - '!src/Reactor.Compile.Analyzer/**'
+      - '!src/Reactor.Interop.WinForms/**'
+      - '!src/vs-reactor/**'
+      - '!src/vscode-reactor/**'
+      - '!**/*.md'
   workflow_dispatch:
 
 # Cancel in-progress runs against the same ref when a new push arrives.

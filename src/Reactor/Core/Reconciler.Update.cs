@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Animation;
+using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.Extensions.Logging;
@@ -127,6 +128,11 @@ public sealed partial class Reconciler
             if ((HasGestureOrDragSlots(modifiers) || HasGestureOrDragSlots(oldModifiers))
                 && control is FrameworkElement gestFeSE)
                 RefreshGestureDragStateOnSkip(gestFeSE, oldModifiers, modifiers);
+            // No validation refresh here, deliberately (issue #1262). A `.Validate()`
+            // verdict is republished only by a component that re-rendered, and that
+            // component's output is on the dirty ancestor path, which this arm declines
+            // — so an element whose claim moved never reaches the skip. Instrumenting
+            // this arm across the whole selftest corpus produced zero validated hits.
             // No _ambientRequestedTheme restore here: the field is written only on the
             // non-skip path inside the try below, never on this early-return arm (which
             // reads the LOCAL effectiveTheme at line ~109), so it cannot leak.
@@ -257,6 +263,16 @@ public sealed partial class Reconciler
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender);
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
+        // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is
+        // consulted too: dropping `.Validate()` from a control that stays mounted has to
+        // retract just as surely as the control going away. Both sides are tested for the
+        // validation attachment specifically rather than for any attached metadata, so a
+        // Grid/Canvas/Flex-positioned element does not pay an attached-state DP read on
+        // every update for a verdict it never had.
+        var newValidation = newEl.GetAttached<ValidationAttached>();
+        if ((newValidation is not null || oldEl.GetAttached<ValidationAttached>() is not null)
+            && target is FrameworkElement valFe)
+            V1Protocol.CompositeLifecycle.TrackElementValidation(valFe, newValidation);
 
         // Re-apply the TitleBar's caption-derived height after modifiers so
         // removing an explicit .Height(...) from a still-tall TitleBar falls

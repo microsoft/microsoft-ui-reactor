@@ -178,8 +178,8 @@ real extension from a clean slate.
 
 - [ ] Create `src/vs-reactor-spike/` (gitignored, **not** part of
       `Reactor.slnx`). Hand-roll a minimal VSIX project on .NET
-      Framework 4.7.2 with `Microsoft.VisualStudio.SDK` 17.8+ and
-      `Microsoft.VSSDK.BuildTools` 17.8+. Single `ToolWindowPane`
+      Framework 4.7.2 with `Microsoft.VisualStudio.SDK` 17.14+ and
+      `Microsoft.VSSDK.BuildTools` 17.14+. Single `ToolWindowPane`
       whose content is a `Grid` containing only a `HwndHostPlaceholder`.
 - [ ] Hand-roll a minimal Reactor target app under `samples/apps/embed-spike/`
       (also gitignored or removed before Phase 1 PR) whose `Program.cs`
@@ -464,12 +464,12 @@ green)
 
 - [ ] Create `src/vs-reactor/Reactor.VsExtension/` with:
   - `Reactor.VsExtension.csproj` (.NET Framework 4.7.2, SDK style,
-    `<UseWPF>true</UseWPF>`, `Microsoft.VisualStudio.SDK` 17.8+
-    PackageReference, `Microsoft.VSSDK.BuildTools` 17.8+,
+    `<UseWPF>true</UseWPF>`, `Microsoft.VisualStudio.SDK` 17.14+
+    PackageReference, `Microsoft.VSSDK.BuildTools` 17.14+,
     `<GeneratePkgDefFile>true</GeneratePkgDefFile>`, VSIX
     properties).
   - `source.extension.vsixmanifest` declaring the Reactor publisher,
-    name, version, dependencies (VS 2022 17.8+), and the
+    name, version, dependencies (VS 2022 17.14+), and the
     `extension.vsixmanifest` Product/Asset entries.
   - Standard VS SDK template files: `Properties/AssemblyInfo.cs`,
     `Resources.resx`, `VSPackage.resx`, `index.html` if needed.

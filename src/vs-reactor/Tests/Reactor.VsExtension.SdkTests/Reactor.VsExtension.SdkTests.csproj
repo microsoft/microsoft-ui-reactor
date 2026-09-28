@@ -25,7 +25,9 @@
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
     <!-- Pin transitive MessagePack (via Microsoft.VisualStudio.SDK → StreamJsonRpc) to a
-         version that includes the GHSA-hv8m-jj95-wg3x LZ4 decompression fix (>= 2.5.301). -->
+         version that includes the GHSA-hv8m-jj95-wg3x LZ4 decompression fix and the
+         v2.5.205 unsafe-gadget disallow-list additions from upstream PR #2269 that
+         v2.5.301 omitted (>= 2.5.302). -->
     <PackageReference Include="MessagePack" />
   </ItemGroup>
 
