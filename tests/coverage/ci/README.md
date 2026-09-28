@@ -42,8 +42,8 @@ direction, so a rise clears as ✅, a fall as ⚠️, and a move below the noise
 |---|---|
 | `CoverageLib.ps1` | **Pure** helpers (no filesystem side effects): the cobertura parser (`Get-CoberturaRates` / `Get-CoberturaRatesFromXml`), percent/delta formatting, `Get-CoverageDelta`, the sticky-comment renderer (`Format-CoverageComment`) + the render-mode selector (`Format-CoverageCommentFromMetrics`), and the render-time security boundary (`ConvertTo-SafeCoverageMetrics`). Unit-testable headless. |
 | `CoverageLib.Tests.ps1` | Dependency-free assertions for the pure lib (parser, delta math, formatting, render-mode selection, sanitizer). Exits non-zero on failure. |
-| `Measure-Coverage.ps1` | Orchestrator: build + instrument + collect (unit + selftest) + merge in one source tree, then aggregate the merged report into a `coverage.json` of numbers. |
-| `Measure-Coverage.Tests.ps1` | AST-extracted tests for the orchestrator's `Invoke-Checked` guard, the report-reading path, and the JSON contract the poster reads. |
+| `Measure-Coverage.ps1` | Orchestrator: build + instrument + collect (unit + selftest) + merge in one source tree, then aggregate the merged report into a `coverage.json` of numbers. `-Part Unit` / `-Part SelfTest [-Shard k/n]` run one CI lane each, and `-Part Merge` unions the lane reports (refusing a missing or unexpected one). The default, `-Part All`, is the local one-tree run. |
+| `Measure-Coverage.Tests.ps1` | AST-extracted tests for the orchestrator's `Invoke-Checked` guard, the lane plan (`Resolve-CoveragePlan`) and lane-set check (`Assert-ExpectedParts`), the report-reading path, and the JSON contract the poster reads. |
 
 ## Baseline model
 
@@ -52,8 +52,8 @@ The base numbers are **cached**, not re-measured on every PR:
 - A **push to `main`** measures main and uploads a `coverage-baseline` artifact
   (numbers only, 90-day retention). Doc-only pushes are skipped — they don't move
   coverage, so the previous baseline stays valid.
-- A **PR** run measures only the head (one instrumented pass) and uploads
-  `coverage-data`.
+- A **PR** run measures only the head (a unit lane plus two selftest shards,
+  merged) and uploads `coverage-data`.
 - The poster reads the head from the triggering run and the base from the **newest
   successful push-to-main `coverage-baseline`** artifact, then renders `base | PR | Δ`.
 
@@ -70,7 +70,7 @@ comment body**:
 
 | Workflow | Trigger | Privilege | Job |
 |---|---|---|---|
-| `.github/workflows/coverage.yml` | `pull_request` + `push` (main) (+ manual `workflow_dispatch`) | read-only | On a PR: builds + instruments + measures the **head** and uploads `coverage-data`. On push to `main`: measures main and uploads the `coverage-baseline`. Runs untrusted PR build code (on PRs). |
+| `.github/workflows/coverage.yml` | `pull_request` + `push` (main) (+ manual `workflow_dispatch`) | read-only | On a PR: builds + instruments + measures the **head** and uploads `coverage-data`. On push to `main`: measures main and uploads the `coverage-baseline`. The measurement runs as three parallel lanes (unit, selftest 1/2, selftest 2/2) and a **Merged coverage** job that unions them. Runs untrusted PR build code (on PRs). |
 | `.github/workflows/coverage-comment.yml` | `workflow_run` | `pull-requests: write` | Checks out **trusted** default-branch code, downloads the head numbers + the cached `coverage-baseline`, validates both via `ConvertTo-SafeCoverageMetrics`, **renders** the comparison comment itself, and posts/updates it. Runs **no** PR code. Resolves the target PR from the trusted `workflow_run` head SHA, never an artifact. |
 | `.github/workflows/coverage-lib-tests.yml` | `pull_request` / `push` on `tests/coverage/ci/**` | read-only | Fast headless run of both `*.Tests.ps1` files. |
 
@@ -129,7 +129,7 @@ Format-CoverageComment -BaseMetrics $base -HeadMetrics $head -HeadSha HEAD -Base
 ## Notes
 
 - The base is a **cached `main` baseline** (measured on push to `main`), so a PR
-  pays for **one** instrumented pass, not two. The trade-off is a small staleness
+  measures only its head, not its base as well. The trade-off is a small staleness
   window versus re-measuring the PR's exact base each run (which the `build-metrics`
   double-build does — see `tests/build_metrics/ci/README.md`).
 - A small noise band (0.1 pp) keeps sub-noise branch-coverage jitter from rendering
