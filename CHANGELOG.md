@@ -30,10 +30,11 @@ Conventions for contributors:
 
 - **Getting Started documents the single-file path.** A Reactor app does not need
   a `.csproj`: .NET 10 runs a lone `.cs` file whose `#:package` / `#:property`
-  header supplies what a project file otherwise would. The guide shows the same
-  four-directive app the blog quick-start uses, run with `winapp run counter.cs`,
-  plus the two directives that let the same file run under plain `dotnet run`
-  (winappCli#794 / #874, shipped in winapp 0.7.0).
+  header supplies what a project file otherwise would. The header also references
+  `Microsoft.Windows.SDK.BuildTools.WinApp`, so `dotnet run counter.cs` launches
+  the app packaged, just like `winapp run counter.cs`; `WindowsPackageType=None`
+  runs it unpackaged (winappCli#794 / #874, shipped in winapp 0.7.0). The
+  agent-kit skills use the same header.
 
 - **Framework mechanics are searchable in the ReactorGallery index (spec 064,
   issue #1275).** `find-ui --source reactor` answered "what is control X" but not
@@ -120,6 +121,13 @@ Conventions for contributors:
   `winapp new --template-version`.
 
 ### Fixed
+
+- **Apps that reference only `Microsoft.UI.Reactor` are framework-dependent
+  again** (regression from #822). The package now depends on
+  `Microsoft.WindowsAppSDK.Runtime`; without it the Windows App SDK silently
+  built such apps self-contained, so a plain `dotnet run` failed with
+  *"WindowsAppSDKSelfContained requires a supported Windows architecture"*. To
+  keep bundling the Windows App Runtime, set `WindowsAppSDKSelfContained=true`.
 
 - **Wrong code and guidance in the shipped agent-kit skills (spec 064 §4, issue
   #1275).** Three gesture snippets in `reactor-input` used WinUI's nested

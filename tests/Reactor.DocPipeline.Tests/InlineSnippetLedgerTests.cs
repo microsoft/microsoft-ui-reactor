@@ -208,6 +208,7 @@ public class InlineSnippetLedgerTests
                 // a missing package rather than a wrong TFM.
                 ["""
                  #:package Microsoft.UI.Reactor@{{reactorVersion}}
+                 #:package Microsoft.Windows.SDK.BuildTools.WinApp@0.7.0
                  #:property OutputType=WinExe
                  #:property TargetFramework=net10.0-windows10.0.22621.0
                  #:property UseWinUI=true
@@ -234,16 +235,14 @@ public class InlineSnippetLedgerTests
                      }
                  }
                  """] =
-                    "File-based app: no .csproj by definition, so it cannot be a doc app. Matches the published blog's quick-start verbatim. Its DSL is covered by the compiled hello-world/usestate-counter/layout-basics snippets on the same page; its TFM by SingleFileGuideHeaderTests.",
+                    "File-based app: no .csproj by definition, so it cannot be a doc app. The published blog's quick-start app, plus the BuildTools package that lets dotnet run launch it packaged. Its DSL is covered by the compiled hello-world/usestate-counter/layout-basics snippets on the same page; its header by SingleFileGuideHeaderTests.",
 
-                // The two directives that let the same file run under plain `dotnet` instead of
-                // `winapp run`. A fragment by design: the point is the delta, not a second copy
-                // of the app.
+                // The one directive that switches the same file to an unpackaged launch. A
+                // fragment by design: the point is the delta, not a second copy of the app.
                 ["""
                  #:property WindowsPackageType=None
-                 #:property RuntimeIdentifier=$(NETCoreSdkPortableRuntimeIdentifier)
                  """] =
-                    "Two-line delta for running the same file under plain dotnet; placement is guarded by SingleFileGuideHeaderTests.",
+                    "One-line delta that runs the same file unpackaged; placement is guarded by SingleFileGuideHeaderTests.",
             },
 
             ["source-mapping"] = new(StringComparer.Ordinal)

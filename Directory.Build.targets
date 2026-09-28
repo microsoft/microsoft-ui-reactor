@@ -52,17 +52,24 @@
     which transitively brings Base + Foundation + InteractiveExperiences + WebView2
     (the bootstrapper, deployment manager, MRT Core and app-lifecycle MSBuild
     targets). The metapackage also aggregates AI / ML / Widgets / DWrite, which the
-    repo never uses — so framework-dependent projects reference only
-    Microsoft.WindowsAppSDK.WinUI and let the machine-wide installed
-    Microsoft.WindowsAppRuntime.2 supply native bits (DWriteCore, etc.) at runtime.
+    repo never uses — so framework-dependent projects reference
+    Microsoft.WindowsAppSDK.WinUI + Microsoft.WindowsAppSDK.Runtime rather than the
+    metapackage, and let the machine-wide installed Microsoft.WindowsAppRuntime.2
+    supply native bits (DWriteCore, etc.) at runtime.
+
+    Runtime is what makes an app framework-dependent: it sets
+    MicrosoftWindowsAppSDKPackageDir, and without it the SDK's
+    Microsoft.WindowsAppSDK.Base.targets silently defaults WindowsAppSDKSelfContained
+    to true (it only errors when a project sets that property to something other
+    than true explicitly). Libraries take it too, even though they don't produce an
+    app, because a library's dependencies become its consumers' dependencies: when
+    the published Microsoft.UI.Reactor carried WinUI alone, every app that
+    referenced only Reactor was silently built self-contained, which also demands a
+    RuntimeIdentifier.
 
     Projects that BUNDLE the native runtime keep the full metapackage, which carries
     the Runtime redist + DWriteCore: WindowsAppSDKSelfContained=true, or
-    framework-dependent MSIX (WindowsPackageType=MSIX). A framework-dependent WinUI
-    *executable* additionally needs Microsoft.WindowsAppSDK.Runtime — the SDK's
-    Microsoft.WindowsAppSDK.Base.targets rejects a framework-dependent app that
-    references neither Runtime nor WindowsAppSDKSelfContained. Libraries don't produce
-    an app, so they take the lean WinUI reference alone.
+    framework-dependent MSIX (WindowsPackageType=MSIX).
 
     Evaluating the conditions here in .targets (a late import) means per-project
     OutputType / WindowsAppSDKSelfContained / WindowsPackageType values are already
@@ -80,14 +87,12 @@
   <PropertyGroup Condition="'$(UseWinUI)' == 'true'">
     <_ReactorWinAppSDKMetapackage>false</_ReactorWinAppSDKMetapackage>
     <_ReactorWinAppSDKMetapackage Condition="'$(WindowsAppSDKSelfContained)' == 'true' or '$(WindowsPackageType)' == 'MSIX'">true</_ReactorWinAppSDKMetapackage>
-    <_ReactorWinAppSDKFrameworkDependentApp>false</_ReactorWinAppSDKFrameworkDependentApp>
-    <_ReactorWinAppSDKFrameworkDependentApp Condition="'$(_ReactorWinAppSDKMetapackage)' != 'true' and ('$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe')">true</_ReactorWinAppSDKFrameworkDependentApp>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(UseWinUI)' == 'true' and '$(ManagePackageVersionsCentrally)' == 'true' and '$(ReactorSkipWinAppSDKInjection)' != 'true'">
     <PackageReference Include="Microsoft.WindowsAppSDK" Condition="'$(_ReactorWinAppSDKMetapackage)' == 'true'" />
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Condition="'$(_ReactorWinAppSDKMetapackage)' != 'true'" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Condition="'$(_ReactorWinAppSDKFrameworkDependentApp)' == 'true'" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Condition="'$(_ReactorWinAppSDKMetapackage)' != 'true'" />
   </ItemGroup>
 
 </Project>

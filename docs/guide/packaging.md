@@ -65,9 +65,10 @@ machines, with ARM64 second for Snapdragon X). The
 sub-package brings the WinUI 3 SDK — reference assemblies plus the MSBuild
 build/props/targets — while the native WinUI runtime is supplied by the
 machine-wide Windows App Runtime install (or bundled into the publish output
-when `WindowsAppSDKSelfContained=true`). That sub-package is what a consumer
-gets transitively from `Microsoft.UI.Reactor`; the scaffolded template adds the
-full
+when `WindowsAppSDKSelfContained=true`). That sub-package, together with
+`Microsoft.WindowsAppSDK.Runtime` (which keeps the app framework-dependent), is
+what a consumer gets transitively from `Microsoft.UI.Reactor`; the scaffolded
+template adds the full
 [`Microsoft.WindowsAppSDK`](https://www.nuget.org/packages/Microsoft.WindowsAppSDK)
 metapackage on top at scaffold time (see below), because the self-contained
 shape needs the Runtime redist the metapackage carries. Inside this repo the
@@ -313,7 +314,8 @@ frozen when the template shipped. The two references then sit
 side-by-side in your CSPROJ, so the SDK version stays an obvious knob —
 edit it there when you need a specific WinUI patch. If you skip the
 template and reference `Microsoft.UI.Reactor` by hand, the SDK still
-arrives transitively as `Microsoft.WindowsAppSDK.WinUI`; add the full
+arrives transitively as `Microsoft.WindowsAppSDK.WinUI` plus
+`Microsoft.WindowsAppSDK.Runtime`, so the app builds framework-dependent; add the full
 metapackage yourself when you want `WindowsAppSDKSelfContained=true` or
 an MSIX, both of which need the Runtime redist. The repo-internal
 `WindowsAppSDKVersion` MSBuild property only governs projects under this
