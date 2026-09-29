@@ -290,7 +290,7 @@ Conventions for contributors:
   `Issue675_TransitionAway_StaleOverrideRemoved` selftest failure; the new
   `Issue675_TransitionAwayAfterWrapperCollected` and
   `Issue675_PooledRenterStripsPreviousRenterKeys` fixtures force the GC and fail without the
-  fix.
+  fix (PR #1294).
 
 ### Security
 
