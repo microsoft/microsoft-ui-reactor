@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Animation;
+using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Hooks;
@@ -151,6 +152,14 @@ public sealed partial class Reconciler
             ApplyModifiers(fe, modifiers, requestRerender);
         if (control is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, element.GetAttached<DragAttached>());
+        // Issue #1262 — bind a `.Validate(field, value, …)` verdict to the control's
+        // lifetime so it is withdrawn when the control leaves the tree. Gated on the
+        // validation attachment specifically, not on `Attached is not null`: every
+        // Grid/Canvas/Flex-positioned element carries attached metadata, and routing
+        // those through here cost an attached-state DP read per mount for nothing.
+        if (element.GetAttached<ValidationAttached>() is { } mountValidation
+            && control is FrameworkElement valFe)
+            V1Protocol.CompositeLifecycle.TrackElementValidation(valFe, mountValidation);
 
         // Re-apply the TitleBar's caption-derived height after modifiers so a
         // .Tall() without an explicit .Height(...) still sizes the control.
@@ -800,7 +809,10 @@ public sealed partial class Reconciler
         try
         {
             component.Context.BeginRender(componentRerender, _contextScope);
-            childElement = component.Render();
+            using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
+            {
+                childElement = ValidationRenderScope.ApplyProvide(component.Render());
+            }
             component.Context.FlushEffects();
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
@@ -836,7 +848,10 @@ public sealed partial class Reconciler
         try
         {
             ctx.BeginRender(componentRerender, _contextScope);
-            childElement = funcElement.RenderFunc(ctx);
+            using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
+            {
+                childElement = ValidationRenderScope.ApplyProvide(funcElement.RenderFunc(ctx));
+            }
             ctx.FlushEffects();
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
@@ -873,7 +888,10 @@ public sealed partial class Reconciler
         try
         {
             ctx.BeginRender(componentRerender, _contextScope);
-            childElement = memoElement.RenderFunc(ctx);
+            using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
+            {
+                childElement = ValidationRenderScope.ApplyProvide(memoElement.RenderFunc(ctx));
+            }
             ctx.FlushEffects();
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)

@@ -988,13 +988,13 @@ Combine validation with accessibility:
 var validation = this.UseValidationContext();
 var (email, setEmail) = UseState("");
 
-return FormField("Email",
+return FormField(
     TextBox(email, setEmail)
-        .Validate(validation, "email", Validators.Required(), Validators.Email())
-        .Required(true)
-        .HelpText("We'll send a confirmation to this address"),
+        .Validate("email", email, Validate.Required(), Validate.Email()),
+    label: "Email",
+    description: "We'll send a confirmation to this address",
     required: true,
-    showErrorWhen: ShowWhen.Touched)
+    showWhen: ShowWhen.WhenTouched)
 .Landmark(AutomationLandmarkType.Form);
 ```
 

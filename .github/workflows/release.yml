@@ -146,11 +146,29 @@ jobs:
             exit 1
           }
 
+      # Restore and build only what this job packs. The whole-solution Release build, and the
+      # TreatWarningsAsErrors gate that comes with it, is CI's "Build solution" job; repeating it
+      # here built more than 100 test, sample and tool projects this job never packs, on the
+      # critical path of every PR. CI does not run on tags, so tag releases run that build at the
+      # end instead (see "Build solution (tag releases only)").
       - name: Restore
-        run: dotnet restore Reactor.slnx
+        shell: pwsh
+        run: |
+          # One restore per project, each checked: pwsh surfaces only the last command's exit
+          # code, so a chained failure would be masked.
+          foreach ($project in @(
+              'src/Reactor/Reactor.csproj',
+              'src/Reactor.Advanced/Reactor.Advanced.csproj',
+              'src/Reactor.Devtools/Reactor.Devtools.csproj',
+              'src/vs-reactor/Reactor.VsExtension/Reactor.VsExtension.csproj')) {
+            dotnet restore $project
+            if ($LASTEXITCODE -ne 0) { throw "Restore failed for $project (exit $LASTEXITCODE)." }
+          }
 
+      # Builds the framework and, through its ProjectReferences, every analyzer and generator it
+      # packs. AnyCPU, so it lands at bin\Release\ where the pack below reads it.
       - name: Build framework + analyzers
-        run: dotnet build Reactor.slnx --no-restore --configuration Release
+        run: dotnet build src/Reactor/Reactor.csproj --no-restore --configuration Release
 
       - name: Pack framework NuGet
         run: >
@@ -160,11 +178,9 @@ jobs:
           -o artifacts/nupkg
 
       - name: Build Advanced (AnyCPU)
-        # The slnx build above produces Reactor.Advanced for ARM64 (its slnx default
-        # platform) but the pack below needs the AnyCPU output. This mirrors how
-        # Reactor.csproj naturally lands at bin\Release\ (an analyzer reference forces
-        # an AnyCPU sub-build). Reactor.Advanced has no such forcing consumer, so it
-        # gets an explicit AnyCPU build step. Same shape as the Templates pack pattern.
+        # The step above builds only src/Reactor, so Reactor.Advanced gets its own AnyCPU
+        # build for the pack below, landing at bin\Release\ the way Reactor.csproj does. Same
+        # shape as the Templates pack pattern.
         run: >
           dotnet build src/Reactor.Advanced/Reactor.Advanced.csproj
           --no-restore --configuration Release
@@ -179,9 +195,8 @@ jobs:
           -o artifacts/nupkg
 
       - name: Build Devtools (AnyCPU)
-        # Reactor.Devtools is a direct slnx member, so the slnx build above produced it
-        # for the solution platform (x64/ARM64 — the slnx declares no AnyCPU config) but
-        # the pack below needs the AnyCPU output. Same shape as the Advanced step above.
+        # Not built by the framework step above, and the pack below needs the AnyCPU output.
+        # Same shape as the Advanced step above.
         run: >
           dotnet build src/Reactor.Devtools/Reactor.Devtools.csproj
           --no-restore --configuration Release
@@ -200,6 +215,53 @@ jobs:
           -p:Platform=AnyCPU
           -p:Version=${{ steps.version.outputs.version }}
           -o artifacts/nupkg
+
+      # The framework package bundles Reactor.Wrappers.Abstractions.dll into lib/ (spec 058 §15.7),
+      # and Reactor.slnx builds that project per platform: packing after a whole-solution build is
+      # what put an ARM64-only copy in the v0.1.0-preview.15 and v0.1.0-preview.16 release assets.
+      # Only build order keeps it out of the packs above, so this checks what they produced: every
+      # managed DLL outside runtimes/ must be platform-neutral IL (I386 machine, IL-only, no 32-bit
+      # requirement).
+      - name: Check packed assemblies are AnyCPU
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $checked = [System.Collections.Generic.List[string]]::new()
+          $problems = [System.Collections.Generic.List[string]]::new()
+          foreach ($nupkg in Get-ChildItem artifacts/nupkg -Filter *.nupkg -File) {
+            $zip = [System.IO.Compression.ZipFile]::OpenRead($nupkg.FullName)
+            try {
+              foreach ($entry in $zip.Entries) {
+                # RID-specific assets under runtimes/ may target one platform on purpose.
+                if ($entry.FullName -notlike '*.dll' -or $entry.FullName -like 'runtimes/*') { continue }
+                $bytes = [System.IO.MemoryStream]::new()
+                $stream = $entry.Open()
+                try { $stream.CopyTo($bytes) } finally { $stream.Dispose() }
+                $bytes.Position = 0
+                $pe = [System.Reflection.PortableExecutable.PEReader]::new($bytes)
+                try {
+                  $machine = $pe.PEHeaders.CoffHeader.Machine
+                  $cor = $pe.PEHeaders.CorHeader
+                  $anyCpu = $null -ne $cor -and
+                    $machine -eq [System.Reflection.PortableExecutable.Machine]::I386 -and
+                    $cor.Flags.HasFlag([System.Reflection.PortableExecutable.CorFlags]::ILOnly) -and
+                    -not $cor.Flags.HasFlag([System.Reflection.PortableExecutable.CorFlags]::Requires32Bit)
+                  $checked.Add("$($nupkg.Name): $($entry.FullName)")
+                  if (-not $anyCpu) {
+                    $flags = if ($cor) { $cor.Flags } else { 'none (not managed)' }
+                    $problems.Add("$($nupkg.Name): $($entry.FullName) has machine $machine, CLR flags $flags.")
+                  }
+                } finally { $pe.Dispose() }
+              }
+            } finally { $zip.Dispose() }
+          }
+          # The assembly this check exists for must be among those checked, or it proves nothing.
+          if (-not ($checked | Where-Object { $_ -like '*/Reactor.Wrappers.Abstractions.dll' })) {
+            throw "No packed Reactor.Wrappers.Abstractions.dll under artifacts/nupkg. Checked: $($checked -join '; ')"
+          }
+          if ($problems.Count -gt 0) { throw "Packed assemblies that are not AnyCPU:`n$($problems -join "`n")" }
+          Write-Host "All $($checked.Count) packed assemblies are AnyCPU:"
+          $checked | ForEach-Object { Write-Host "  $_" }
 
       - name: Build VSIX
         shell: pwsh
@@ -314,6 +376,24 @@ jobs:
             artifacts/kit/*.zip
             artifacts/vsix/*.vsix
           retention-days: 30
+
+      # The whole-solution Release build, for tag releases only. CI (ci.yml) never runs on a tag,
+      # so this keeps a release gated on the same build its "Build solution" job runs. It comes
+      # after the packs on purpose: packing after this build bundled an ARM64-only
+      # Reactor.Wrappers.Abstractions.dll into the AnyCPU framework package, in all five Package
+      # runs checked (2026-09) and in the nupkgs attached to the v0.1.0-preview.15 and
+      # v0.1.0-preview.16 GitHub Releases. All three runs that packed from the project builds above
+      # bundled an AnyCPU one. Coming after the uploads is safe too: if this step fails, a "Re-run
+      # failed jobs" attempt can upload the same artifact names again (measured on
+      # upload-artifact v7.0.1, 2026-09).
+      - name: Build solution (tag releases only)
+        if: steps.version.outputs.is_tag == 'true'
+        shell: pwsh
+        run: |
+          dotnet restore Reactor.slnx
+          if ($LASTEXITCODE -ne 0) { throw "Restore failed (exit $LASTEXITCODE)." }
+          dotnet build Reactor.slnx --no-restore --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Build failed (exit $LASTEXITCODE)." }
 
       - name: Create GitHub Release
         if: steps.version.outputs.is_tag == 'true'

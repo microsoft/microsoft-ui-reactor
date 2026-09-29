@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Controls;
+using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.Data;
 using Xunit;
 using VirtualKey = global::Windows.System.VirtualKey;
@@ -959,4 +960,287 @@ public class DataGridEditorFocusTests
             internal static readonly object Marker = new();
         }
     }
+
+    // ── Parking focus before an edit transition destroys it (#1288) ──
+    //
+    // Opening an editor from inside the grid, or ending the in-flight edit on the first half of a
+    // commit-then-begin click, destroys the element that holds focus (the row's Edit button, or
+    // the previous cell's editor). DataGridComponent parks focus on the grid root through
+    // BeforeEditTransition so that element is never focused when it dies. The park itself is XAML
+    // and is covered by a selftest; what is pure state, and asserted here, is WHEN the hook runs.
+    // That is the part a refactor breaks silently: a hook that fires too late (or not at all), or
+    // one that fires for a commit validation refused, still compiles, and the harm only shows on a
+    // slow CI runner or with an invalid value in the editor.
+
+    /// <summary>Records each hook call with the state it observed, and each StateChanged.</summary>
+    private sealed class TransitionLog
+    {
+        public readonly List<string> Events = new();
+
+        public void Attach(DataGridState<TestItem> state)
+        {
+            state.BeforeEditTransition = () => Events.Add(
+                $"park(editing={state.IsEditing},row={state.IsRowEditing},col={state.EditingColumnName ?? "-"})");
+            state.StateChanged += () => Events.Add("changed");
+        }
+
+        public int Parks => Events.Count(e => e.StartsWith("park", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task BeginRowEdit_ParksFocusBeforeTheTransition()
+    {
+        var state = await LoadedState();
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        Assert.True(state.BeginRowEdit(1));
+
+        // Exactly one park, FIRST, observing the state before the row edit began. A park after
+        // "changed" would race the re-render that destroys the focused Edit button.
+        Assert.Equal(1, log.Parks);
+        Assert.Equal("park(editing=False,row=False,col=-)", log.Events[0]);
+        Assert.Contains("changed", log.Events.Skip(1));
+    }
+
+    [Fact]
+    public async Task BeginEdit_ParksFocusBeforeTheTransition()
+    {
+        var state = await LoadedState();
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        Assert.True(state.BeginEdit(1, ScoreCol));
+
+        Assert.Equal(1, log.Parks);
+        Assert.Equal("park(editing=False,row=False,col=-)", log.Events[0]);
+        Assert.Contains("changed", log.Events.Skip(1));
+    }
+
+    [Fact]
+    public async Task ACommitThenBeginTap_ParksOnceTheCommitHasEndedTheEdit()
+    {
+        var state = await LoadedState();
+        Assert.True(state.BeginEdit(1, ScoreCol));
+        state.UpdateEditingValue(42.0);
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        state.InvokeCellEditClick(Row(0), "Notes");
+
+        // The first park comes right AFTER the commit ended the Score edit: only then is it known
+        // that the commit was not refused, and it is still in time, because the re-render that
+        // removes the editor is deferred (the selftests read focus at exactly that instant). The
+        // second park comes from BeginEdit and is a no-op in practice (focus is already on the root).
+        Assert.Equal("park(editing=False,row=False,col=-)", log.Events[log.Events.IndexOf("changed") + 1]);
+        Assert.Equal(2, log.Parks);
+
+        // ...and the tap still did its job: the old edit committed, the new one is open.
+        Assert.Equal(42.0, state.GetItemAt(1)!.Score);
+        Assert.Equal("Notes", state.EditingColumnName);
+        Assert.Equal(Row(0), state.EditingRowKey);
+    }
+
+    [Fact]
+    public async Task ATapWithNothingInFlight_ParksOnce()
+    {
+        var state = await LoadedState();
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        state.InvokeCellEditClick(Row(0), "Notes");
+
+        Assert.Equal(1, log.Parks);
+        Assert.Equal("Notes", state.EditingColumnName);
+    }
+
+    [Fact]
+    public async Task ABeginThatFails_DoesNotPark()
+    {
+        var state = await LoadedState();
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        // An out-of-range row and a read-only column both refuse to open an editor. Parking on a
+        // refused begin would move the user's focus for an edit that never happened.
+        Assert.False(state.BeginRowEdit(99));
+        Assert.False(state.BeginEdit(1, IdCol));
+
+        Assert.Equal(0, log.Parks);
+    }
+
+    [Fact]
+    public async Task RowModeTab_DoesNotPark()
+    {
+        var state = await LoadedState();
+        var el = Grid(EditMode.Row);
+        Assert.True(state.BeginRowEdit(1));
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        // Native Tab has already moved focus by the time the grid handles it, and the one-shot
+        // SuppressNextLostFocusCommit claim owns that focus-out. Parking here would add a focus
+        // hop and a second LostFocus to a path whose ordering the #976/#987 tests pin down.
+        DataGridComponent<TestItem>.HandleKeyDownForTests(state, el, KeyChord.Unmodified(VirtualKey.Tab));
+        Assert.True(state.FocusNextRowEditColumn());
+
+        Assert.Equal(0, log.Parks);
+        Assert.True(state.IsRowEditing); // positive control: the Tabs really ran inside the edit
+    }
+
+    [Fact]
+    public async Task ACrossRowPointerPress_ParksOnceTheCommitHasEndedTheEdit()
+    {
+        var state = await LoadedState();
+        Assert.True(state.BeginEdit(1, ScoreCol));
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        state.InvokeRowPointerClick(Row(0), ctrlKey: false, shiftKey: false);
+
+        // A press on ANOTHER row commits the in-flight edit before the cell's Tapped (on release)
+        // opens the next editor, so on a cross-row tap it is this commit that dooms the focused
+        // editor. This is the path the CI diagnostics showed for the cell-mode failures. The park
+        // follows the commit's state change and sees the edit already ended.
+        Assert.Equal("park(editing=False,row=False,col=-)", log.Events[log.Events.IndexOf("changed") + 1]);
+        Assert.Equal(1, log.Parks);
+        Assert.False(state.IsEditing); // positive control: the press really committed the edit
+    }
+
+    // A commit that validation refuses leaves the edit open with its editor mounted, so nothing
+    // may move focus off that editor: the user has to be able to keep typing to fix the value.
+
+    private static readonly FieldDescriptor[] ColumnsWithRequiredNotes =
+        Columns.Select(c => c.Name == "Notes" ? c with { Validators = [Validate.Required()] } : c).ToArray();
+
+    private static async Task<DataGridState<TestItem>> LoadedStateWithRequiredNotes()
+    {
+        var state = new DataGridState<TestItem>(new TestDataSource(), ColumnsWithRequiredNotes, SelectionMode.None);
+        await state.LoadDataAsync();
+        return state;
+    }
+
+    [Fact]
+    public async Task ACrossRowPressWhoseCommitValidationRefuses_DoesNotPark()
+    {
+        var state = await LoadedStateWithRequiredNotes();
+        Assert.True(state.BeginEdit(1, NotesCol));
+        state.UpdateEditingValue("");
+        Assert.True(state.HasValidationErrors); // positive control: the commit WILL be refused
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        state.InvokeRowPointerClick(Row(0), ctrlKey: false, shiftKey: false);
+
+        Assert.Equal(0, log.Parks);
+        Assert.True(state.IsEditing);
+        Assert.Equal("Notes", state.EditingColumnName);
+        Assert.Equal(Row(1), state.EditingRowKey);
+    }
+
+    [Fact]
+    public async Task ARowModeCrossRowPressWhoseCommitValidationRefuses_DoesNotPark()
+    {
+        var state = await LoadedStateWithRequiredNotes();
+        Assert.True(state.BeginRowEdit(1));
+        state.UpdateRowEditValue("Notes", "");
+        Assert.True(state.HasValidationErrors); // positive control: the commit WILL be refused
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        state.InvokeRowPointerClick(Row(0), ctrlKey: false, shiftKey: false);
+
+        Assert.Equal(0, log.Parks);
+        Assert.True(state.IsRowEditing);
+        Assert.Equal(Row(1), state.EditingRowKey);
+    }
+
+    [Fact]
+    public async Task ATapWhoseCommitValidationRefuses_ParksOnlyWhenANewEditorOpens()
+    {
+        var state = await LoadedStateWithRequiredNotes();
+        Assert.True(state.BeginEdit(1, NotesCol));
+        state.UpdateEditingValue("");
+        Assert.True(state.HasValidationErrors); // positive control: the commit WILL be refused
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        // A tap on a read-only cell opens nothing, so the refused edit keeps its editor — and focus.
+        state.InvokeCellEditClick(Row(0), "Id");
+        Assert.Equal(0, log.Parks);
+        Assert.Equal("Notes", state.EditingColumnName);
+
+        // A tap on an editable cell replaces that editor (BeginEdit discards the refused value, as
+        // it always has), so it parks exactly once — from BeginEdit, with the refused edit still
+        // open — and never on behalf of the refused commit.
+        state.InvokeCellEditClick(Row(0), "Score");
+        Assert.Equal(1, log.Parks);
+        Assert.Equal("park(editing=True,row=False,col=Notes)", log.Events.Single(e => e.StartsWith("park", StringComparison.Ordinal)));
+        Assert.Equal("Score", state.EditingColumnName);
+        Assert.Equal(Row(0), state.EditingRowKey);
+    }
+
+    [Fact]
+    public async Task APointerPressOnTheEditingRow_DoesNotPark()
+    {
+        var state = await LoadedState();
+        Assert.True(state.BeginEdit(1, ScoreCol));
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        // Same row: that press is the user positioning the caret. Nothing commits and nothing is
+        // destroyed, so parking would only pull focus out of the editor mid-click.
+        state.InvokeRowPointerClick(Row(1), ctrlKey: false, shiftKey: false);
+
+        Assert.Equal(0, log.Parks);
+        Assert.True(state.IsEditing);
+    }
+
+    [Fact]
+    public async Task APointerPressWithNothingInFlight_DoesNotPark()
+    {
+        var state = await LoadedState();
+        var log = new TransitionLog();
+        log.Attach(state);
+
+        state.InvokeRowPointerClick(Row(0), ctrlKey: false, shiftKey: false);
+
+        Assert.Equal(0, log.Parks);
+    }
+
+    [Fact]
+    public async Task WithoutARenderer_BeginningAnEditStillWorks()
+    {
+        var state = await LoadedState();
+
+        // The hook is null for a state driven headlessly; every call site must tolerate that.
+        Assert.Null(state.BeforeEditTransition);
+        Assert.True(state.BeginRowEdit(1));
+        state.CancelRowEdit();
+        Assert.True(state.BeginEdit(1, ScoreCol));
+        state.InvokeCellEditClick(Row(0), "Notes");
+        Assert.Equal("Notes", state.EditingColumnName);
+        state.InvokeRowPointerClick(Row(2), ctrlKey: false, shiftKey: false);
+        Assert.False(state.IsEditing);
+    }
+
+    // ── Which pointer releases the grid root claims (#1288) ──
+    //
+    // The root claims a release only to stop an ancestor ScrollViewer from taking focus, and a
+    // ScrollViewer does that only after a primary-action press: a left mouse button, a touch
+    // contact, or a pen tip. The PointerUpdateKind a touch or pen release reports is not
+    // documented, so every release counts except an explicit release of another button. A guard
+    // narrowed back to LeftButtonReleased would fail the Other case; one that claimed everything
+    // would fail the rest.
+
+    [Theory]
+    [InlineData(global::Microsoft.UI.Input.PointerUpdateKind.LeftButtonReleased, true)]
+    [InlineData(global::Microsoft.UI.Input.PointerUpdateKind.Other, true)]
+    [InlineData(global::Microsoft.UI.Input.PointerUpdateKind.RightButtonReleased, false)]
+    [InlineData(global::Microsoft.UI.Input.PointerUpdateKind.MiddleButtonReleased, false)]
+    [InlineData(global::Microsoft.UI.Input.PointerUpdateKind.XButton1Released, false)]
+    [InlineData(global::Microsoft.UI.Input.PointerUpdateKind.XButton2Released, false)]
+    public void TheRootClaimsEveryReleaseExceptOneOfAnotherButton(
+        global::Microsoft.UI.Input.PointerUpdateKind kind, bool claims)
+        => Assert.Equal(claims, DataGridComponent<TestItem>.IsPrimaryActionRelease(kind));
 }

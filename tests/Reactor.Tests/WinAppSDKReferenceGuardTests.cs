@@ -14,8 +14,9 @@ namespace Microsoft.UI.Reactor.Tests;
 /// Guards the Windows App SDK dependency policy (see <c>Directory.Build.targets</c>).
 /// Repo projects must not reference the full <c>Microsoft.WindowsAppSDK</c>
 /// metapackage directly: the correct package is injected centrally —
-/// <c>Microsoft.WindowsAppSDK.WinUI</c> for framework-dependent libraries, WinUI +
-/// <c>Microsoft.WindowsAppSDK.Runtime</c> for framework-dependent apps, and the full
+/// <c>Microsoft.WindowsAppSDK.WinUI</c> + <c>Microsoft.WindowsAppSDK.Runtime</c> for
+/// framework-dependent projects (libraries included, so Runtime flows to consumer
+/// apps), and the full
 /// metapackage only for self-contained / MSIX projects. A stray direct reference
 /// bypasses that rule and re-drags the unused AI / ML / Widgets / DWrite slices back
 /// into the dependency graph.
@@ -86,21 +87,31 @@ public class WinAppSDKReferenceGuardTests
             offenders.Count == 0,
             "These projects reference the Microsoft.WindowsAppSDK metapackage directly. "
                 + "Remove the reference — Directory.Build.targets injects "
-                + "Microsoft.WindowsAppSDK.WinUI (+ .Runtime for apps) or the metapackage "
+                + "Microsoft.WindowsAppSDK.WinUI + .Runtime or the metapackage "
                 + "(self-contained / MSIX) centrally. Offenders:\n  "
                 + string.Join("\n  ", offenders.OrderBy(x => x, StringComparer.Ordinal)));
     }
 
     /// <summary>
     /// Outcome-level guard: the shipped <c>Microsoft.UI.Reactor</c> library must
-    /// resolve the lean WinUI sub-package and must NOT flow the full metapackage to
-    /// consumers. Reads Reactor's restore graph (present because this test project
-    /// references Reactor), so it catches a central-rule regression wherever it is
-    /// introduced — including in <c>Directory.Build.*</c>, which the source scan above
-    /// does not cover.
+    /// resolve the lean WinUI sub-package plus <c>Microsoft.WindowsAppSDK.Runtime</c>,
+    /// and must NOT flow the full metapackage to consumers. Reads Reactor's restore
+    /// graph (present because this test project references Reactor), so it catches a
+    /// central-rule regression wherever it is introduced — including in
+    /// <c>Directory.Build.*</c>, which the source scan above does not cover.
     /// </summary>
+    /// <remarks>
+    /// Runtime is what keeps a consumer app framework-dependent: it sets
+    /// <c>MicrosoftWindowsAppSDKPackageDir</c>, and an app whose graph lacks it is
+    /// silently built self-contained by the SDK's <c>Base.targets</c>. That is what
+    /// happened to every app referencing only Reactor between #822 and this guard,
+    /// surfacing as "WindowsAppSDKSelfContained requires a supported Windows
+    /// architecture". Being in Reactor's own graph is not enough, so the edge is also
+    /// checked for flowing: a <c>PrivateAssets="all"</c> reference would pass the graph
+    /// check while never reaching the nuspec.
+    /// </remarks>
     [Fact]
-    public void Reactor_library_resolves_WinUI_subpackage_not_the_metapackage()
+    public void Reactor_library_flows_WinUI_and_Runtime_not_the_metapackage()
     {
         var root = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
@@ -116,7 +127,24 @@ public class WinAppSDKReferenceGuardTests
             .ToList();
 
         Assert.Contains(winAppSdk, k => k.StartsWith("Microsoft.WindowsAppSDK.WinUI/", StringComparison.Ordinal));
+        Assert.Contains(winAppSdk, k => k.StartsWith("Microsoft.WindowsAppSDK.Runtime/", StringComparison.Ordinal));
         Assert.DoesNotContain(winAppSdk, k => k.StartsWith("Microsoft.WindowsAppSDK/", StringComparison.Ordinal));
+
+        foreach (var framework in doc.RootElement.GetProperty("project").GetProperty("frameworks").EnumerateObject())
+        {
+            Assert.True(
+                framework.Value.GetProperty("dependencies").TryGetProperty("Microsoft.WindowsAppSDK.Runtime", out var runtime),
+                $"Microsoft.WindowsAppSDK.Runtime is not a direct dependency of Reactor for {framework.Name}, so "
+                    + "nothing guarantees it reaches the nuspec. The Windows App SDK injection in "
+                    + "Directory.Build.targets must give framework-dependent libraries Runtime as well as WinUI.");
+
+            var suppressParent = runtime.TryGetProperty("suppressParent", out var value) ? value.GetString() : null;
+            Assert.False(
+                string.Equals(suppressParent, "All", StringComparison.OrdinalIgnoreCase),
+                $"Microsoft.WindowsAppSDK.Runtime is a private asset of Reactor for {framework.Name} "
+                    + "(suppressParent=All), so it never reaches consumer apps and they fall back to "
+                    + "self-contained. Drop PrivateAssets from that reference.");
+        }
     }
 
     /// <summary>

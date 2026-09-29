@@ -1,0 +1,2744 @@
+using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Controls.Validation;
+using System.Threading.Tasks;
+using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Controls.Validation.ValidationRuleDsl;
+using Xunit;
+
+namespace Microsoft.UI.Reactor.Tests;
+
+/// <summary>
+/// Covers the render-scoped validation path added for issue #1262: <c>.Validate()</c>
+/// running eagerly during a render pass, the context being published to the subtree
+/// automatically, and the change notification that repaints a form when the context is
+/// mutated from an event handler.
+/// </summary>
+public class ValidationRenderScopeTests
+{
+    // ════════════════════════════════════════════════════════════════
+    //  .Validate() eager execution
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Validate_Outside_A_Render_Pass_Only_Attaches()
+    {
+        var ctx = new ValidationContext();
+
+        // No scope open — this is an element assembled in an event handler, a cached
+        // element, or a headless test. Nothing should reach the context.
+        var el = TextBox("").Validate("email", "", Validate.Required());
+
+        Assert.NotNull(el.GetValidation());
+        Assert.Empty(ctx.GetAllMessages());
+        Assert.Empty(ctx.RegisteredFields);
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public void Validate_Inside_A_Render_Pass_Runs_Validators()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            _ = TextBox("").Validate("email", "", Validate.Required(), Validate.Email());
+        }
+
+        // This is the whole bug: before the fix a bare .Validate() produced nothing, so
+        // IsValid() was trivially true and the form submitted.
+        Assert.False(ctx.IsValid());
+        Assert.Contains("email", ctx.RegisteredFields);
+        Assert.Single(ctx.GetMessages("email"));
+        Assert.Equal("REQUIRED", ctx.GetMessages("email")[0].Code);
+    }
+
+    [Fact]
+    public void Validate_Inside_A_Render_Pass_Registers_The_Field_For_MarkAllTouched()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            _ = TextBox("").Validate("email", "", Validate.Required());
+        }
+
+        Assert.False(ctx.IsTouched("email"));
+        ctx.MarkAllTouched();
+        Assert.True(ctx.IsTouched("email"));
+    }
+
+    [Fact]
+    public void Validate_Inside_A_Render_Pass_Clears_Messages_When_The_Value_Becomes_Valid()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "", Validate.Required(), Validate.Email());
+        Assert.False(ctx.IsValid());
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "user@example.com", Validate.Required(), Validate.Email());
+
+        Assert.True(ctx.IsValid());
+        Assert.Empty(ctx.GetMessages("email"));
+    }
+
+    [Fact]
+    public void Validate_Without_A_Value_Stays_Attach_Only_Even_Inside_A_Render_Pass()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            // No value overload — there is nothing to validate against.
+            _ = TextBox("").Validate("email", Validate.Required());
+        }
+
+        Assert.Empty(ctx.GetAllMessages());
+    }
+
+    [Fact]
+    public void Scope_Does_Not_Leak_Past_Its_Frame()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+            Assert.Same(ctx, ValidationRenderScope.Current);
+
+        Assert.Null(ValidationRenderScope.Current);
+        Assert.False(ValidationRenderScope.InRender);
+
+        // And a .Validate() after the frame closed reaches nothing.
+        _ = TextBox("").Validate("late", "", Validate.Required());
+        Assert.Empty(ctx.GetMessages("late"));
+    }
+
+    [Fact]
+    public void Nested_Frames_Restore_The_Enclosing_Context()
+    {
+        var outer = new ValidationContext();
+        var inner = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(outer))
+        {
+            using (ValidationRenderScope.Begin(inner))
+                Assert.Same(inner, ValidationRenderScope.Current);
+
+            Assert.Same(outer, ValidationRenderScope.Current);
+        }
+
+        Assert.Null(ValidationRenderScope.Current);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Idempotence — the guard against a render loop
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Revalidating_An_Unchanged_Value_Neither_Bumps_Version_Nor_Notifies()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "", Validate.Required());
+
+        var versionAfterFirstPass = ctx.Version;
+        var notificationsAfterFirstPass = notifications;
+
+        // Five more render passes over the same value. Because .Validate() now runs on
+        // every pass, a version bump or a notification here would feed the re-render
+        // subscription and loop forever.
+        for (var i = 0; i < 5; i++)
+        {
+            using (ValidationRenderScope.Begin(ctx))
+                _ = TextBox("").Validate("email", "", Validate.Required());
+        }
+
+        Assert.Equal(versionAfterFirstPass, ctx.Version);
+        Assert.Equal(notificationsAfterFirstPass, notifications);
+        Assert.Single(ctx.GetMessages("email")); // and not accumulated
+    }
+
+    [Fact]
+    public void Revalidating_Outside_A_Render_Pass_Notifies_Only_On_A_Real_Change()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        ValidationReconciler.ValidateField(ctx, "email", "", Validate.Required());
+        var afterFirst = notifications;
+        Assert.True(afterFirst > 0);
+
+        ValidationReconciler.ValidateField(ctx, "email", "", Validate.Required());
+        Assert.Equal(afterFirst, notifications);
+
+        ValidationReconciler.ValidateField(ctx, "email", "user@example.com", Validate.Required());
+        Assert.True(notifications > afterFirst);
+    }
+
+    [Fact]
+    public void A_First_Validation_Notifies_Exactly_Once_With_Results_Already_Installed()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        var messagesWhenNotified = -1;
+
+        // Registering the value and installing the verdict used to be three calls, so a
+        // subscriber woke up mid-update and re-rendered against the previous pass's
+        // messages. Observe what the context looks like at notification time.
+        ctx.Changed += () =>
+        {
+            notifications++;
+            messagesWhenNotified = ctx.GetMessages("email").Count;
+        };
+
+        ValidationReconciler.ValidateField(ctx, "email", "", Validate.Required(), Validate.MinLength(3));
+
+        Assert.Equal(1, notifications);
+        Assert.Equal(2, messagesWhenNotified);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Cross-field rules — the other reconcile-time writer
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void A_Failing_Rule_Re_Evaluated_Is_Silent()
+    {
+        var ctx = new ValidationContext();
+        var rule = ValidationRule(() => false, "Passwords must match", "confirm");
+
+        rule.Evaluate(ctx);
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+        var versionAfterFirst = ctx.Version;
+
+        // ValidationRule mounts/updates evaluate during reconcile, outside any render
+        // scope. Clear-then-add raised Changed on every pass, and each notification
+        // drove another render — the reconciler tripped its re-entrancy limit.
+        for (var i = 0; i < 5; i++)
+            rule.Evaluate(ctx);
+
+        Assert.Equal(0, notifications);
+        Assert.Equal(versionAfterFirst, ctx.Version);
+        Assert.Single(ctx.GetMessages("confirm"));
+    }
+
+    [Fact]
+    public void The_Per_Render_Seed_Then_Notify_Pattern_Settles()
+    {
+        // DirtyResetDemo's shape: register, re-seed the baseline and re-notify the
+        // current value on *every* render. SetInitialValue used to rewind the current
+        // value, so once the user had typed, the rewind and the re-notify took turns
+        // and the subscription repainted forever.
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        void RenderPass(string typed)
+        {
+            ctx.RegisterField("name");
+            ctx.SetInitialValue("name", "John Doe");
+            ctx.NotifyValueChanged("name", typed);
+        }
+
+        RenderPass("John Doe");
+        // One notification, for registering "name". Registration is observable state
+        // (RegisteredFields is public and MarkAllTouched iterates it), so the first pass
+        // that introduces a field is a real change — the value and baseline genuinely did
+        // not move (issue #1262 review).
+        Assert.Equal(1, notifications);
+        Assert.False(ctx.IsDirty("name"));
+
+        RenderPass("John Doex");                // user typed
+        var afterEdit = notifications;
+        Assert.Equal(2, afterEdit);
+        Assert.True(ctx.IsDirty("name"));
+
+        // Every subsequent repaint over the same value must be silent.
+        for (var i = 0; i < 5; i++) RenderPass("John Doex");
+
+        Assert.Equal(afterEdit, notifications);
+        Assert.True(ctx.IsDirty("name"));
+    }
+
+    [Fact]
+    public void Re_Seeding_An_Initial_Value_Does_Not_Rewind_The_Current_One()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("name", "John Doe");
+        ctx.NotifyValueChanged("name", "edited");
+
+        ctx.SetInitialValue("name", "John Doe");
+
+        Assert.True(ctx.IsDirty("name"));
+    }
+
+    [Fact]
+    public void Re_Baselining_A_Dirty_Field_Notifies()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("name", "a");
+        ctx.NotifyValueChanged("name", "b");
+        Assert.True(ctx.IsDirty("name"));
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Adopting the edited value as the new baseline flips IsDirty with no message
+        // or touched-state change, so subscribers would otherwise stay stale.
+        ctx.SetInitialValue("name", "b");
+
+        Assert.False(ctx.IsDirty("name"));
+        Assert.Equal(1, notifications);
+
+        // ...and a re-seed that changes nothing observable stays quiet.
+        ctx.SetInitialValue("name", "b");
+        Assert.Equal(1, notifications);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Async validators — one atomic install, no duplicates
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task Async_Validators_Install_As_One_Notification()
+    {
+        var ctx = new ValidationContext();
+        var seen = new List<int>();
+        ctx.Changed += () => seen.Add(ctx.GetMessages("username").Count);
+
+        var validators = new[]
+        {
+            Validate.MustAsync<string>(_ => global::System.Threading.Tasks.Task.FromResult(false), "Reserved"),
+            Validate.MustAsync<string>(_ => global::System.Threading.Tasks.Task.FromResult(false), "Already taken"),
+        };
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "admin", validators, TestContext.Current.CancellationToken);
+
+        // Adding each result as it resolved exposed a partial verdict and repainted
+        // between messages. Recording the value is a separate, legitimate notification
+        // (it moves dirty tracking), so the assertion is about the verdict: it must
+        // never be observed half-installed, and it must land exactly once.
+        Assert.DoesNotContain(1, seen);
+        Assert.Single(seen, count => count == 2);
+        Assert.Equal(2, ctx.GetMessages("username").Count);
+    }
+
+    [Fact]
+    public async Task Repeating_Async_Validation_Replaces_Instead_Of_Appending()
+    {
+        var ctx = new ValidationContext();
+        var validators = new[]
+        {
+            Validate.MustAsync<string>(_ => global::System.Threading.Tasks.Task.FromResult(false), "Reserved"),
+        };
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "admin", validators, TestContext.Current.CancellationToken);
+        Assert.Single(ctx.GetMessages("username"));
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "admin", validators, TestContext.Current.CancellationToken);
+
+        Assert.Single(ctx.GetMessages("username"));
+        Assert.Equal(0, notifications);
+    }
+
+    [Fact]
+    public async Task Repeated_Async_Validation_Stays_Single_Across_Many_Passes()
+    {
+        var ctx = new ValidationContext();
+        var validators = new[]
+        {
+            Validate.MustAsync<string>(_ => global::System.Threading.Tasks.Task.FromResult(false), "Reserved"),
+        };
+
+        // The duplicate only surfaced on the *third* pass: pass two produced an equal
+        // result, so the diff said "unchanged" and left the original instance installed
+        // while ownership had already been repointed at the discarded copy.
+        for (var i = 0; i < 4; i++)
+        {
+            await ValidationReconciler.ValidateFieldAsync(
+                ctx, "username", "admin", validators, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Single(ctx.GetMessages("username"));
+    }
+
+    [Fact]
+    public async Task A_Late_Async_Result_For_An_Older_Value_Is_Discarded()
+    {
+        var ctx = new ValidationContext();
+        var older = new global::System.Threading.Tasks.TaskCompletionSource<bool>();
+        var newer = new global::System.Threading.Tasks.TaskCompletionSource<bool>();
+
+        var staleValidators = new[]
+        {
+            Validate.MustAsync<string>(async _ => await older.Task, "stale verdict"),
+        };
+        var freshValidators = new[]
+        {
+            Validate.MustAsync<string>(async _ => await newer.Task, "fresh verdict"),
+        };
+
+        var stale = ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "old", staleValidators, TestContext.Current.CancellationToken);
+        var fresh = ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "new", freshValidators, TestContext.Current.CancellationToken);
+
+        // The newer value's check resolves first and passes.
+        newer.SetResult(true);
+        await fresh;
+        Assert.True(ctx.IsValid());
+
+        // The older value's check then resolves and fails. Applying it would show an
+        // error that belongs to a value the user has already replaced.
+        older.SetResult(false);
+        await stale;
+
+        Assert.True(ctx.IsValid());
+        Assert.Empty(ctx.GetMessages("username"));
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Several producers on one field
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task A_Pass_Cleared_Mid_Flight_Cannot_Be_Resurrected_By_A_Later_Pass()
+    {
+        var ctx = new ValidationContext();
+        var older = new global::System.Threading.Tasks.TaskCompletionSource<bool>();
+
+        var staleValidators = new[]
+        {
+            Validate.MustAsync<string>(async _ => await older.Task, "stale verdict"),
+        };
+        var freshValidators = new[]
+        {
+            Validate.MustAsync<string>(_ => global::System.Threading.Tasks.Task.FromResult(true), "fresh verdict"),
+        };
+
+        // Pass one is in flight and holds a token.
+        var stale = ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "old", staleValidators, TestContext.Current.CancellationToken);
+
+        // The field is cleared, retiring that token...
+        ctx.Clear("username");
+
+        // ...and a brand new pass opens. With a per-field counter this would have been
+        // handed the same number the in-flight pass is still holding.
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "new", freshValidators, TestContext.Current.CancellationToken);
+
+        older.SetResult(false);
+        await stale;
+
+        Assert.True(ctx.IsValid());
+        Assert.Empty(ctx.GetMessages("username"));
+    }
+
+    [Fact]
+    public void A_Shrinking_Rule_Set_Withdraws_The_Rules_That_Disappeared()
+    {
+        var ctx = new ValidationContext();
+
+        ValidationReconciler.EvaluateRules(ctx, "form-rules",
+            ValidationRule(() => false, "First rule failed", "form"),
+            ValidationRule(() => false, "Second rule failed", "form"));
+        Assert.Equal(2, ctx.GetMessages("form").Count);
+
+        // The second rule is gone this time. Its message would otherwise keep the form
+        // invalid forever, because nothing re-evaluates a rule that no longer exists.
+        ValidationReconciler.EvaluateRules(ctx, "form-rules",
+            ValidationRule(() => false, "First rule failed", "form"));
+
+        var texts = ctx.GetMessages("form").Select(m => m.Text).ToList();
+        Assert.Single(texts);
+        Assert.Contains("First rule failed", texts);
+    }
+
+    [Fact]
+    public void An_Emptied_Rule_Set_Leaves_The_Context_Valid()
+    {
+        var ctx = new ValidationContext();
+
+        ValidationReconciler.EvaluateRules(ctx, "form-rules",
+            ValidationRule(() => false, "Rule failed", "form"));
+        Assert.False(ctx.IsValid());
+
+        ValidationReconciler.EvaluateRules(ctx, "form-rules");
+
+        Assert.True(ctx.IsValid());
+        Assert.Empty(ctx.GetMessages("form"));
+    }
+
+    [Fact]
+    public void A_Rule_That_Moves_Field_Withdraws_From_The_Old_One()
+    {
+        var ctx = new ValidationContext();
+
+        ValidationReconciler.EvaluateRules(ctx, "range-rules",
+            ValidationRule(() => false, "Rule failed", "start"));
+        Assert.Single(ctx.GetMessages("start"));
+
+        ValidationReconciler.EvaluateRules(ctx, "range-rules",
+            ValidationRule(() => false, "Rule failed", "end"));
+
+        Assert.Empty(ctx.GetMessages("start"));
+        Assert.Single(ctx.GetMessages("end"));
+    }
+
+    [Fact]
+    public void Rule_Sets_Do_Not_Disturb_Field_Level_Errors()
+    {
+        var ctx = new ValidationContext();
+        ValidationReconciler.ValidateField(ctx, "form", "", Validate.Required("Field is required"));
+
+        ValidationReconciler.EvaluateRules(ctx, "form-rules",
+            ValidationRule(() => false, "Rule failed", "form"));
+        Assert.Equal(2, ctx.GetMessages("form").Count);
+
+        // Withdrawing the whole rule set must not take the sync verdict with it.
+        ValidationReconciler.EvaluateRules(ctx, "form-rules");
+
+        var texts = ctx.GetMessages("form").Select(m => m.Text).ToList();
+        Assert.Single(texts);
+        Assert.Contains("Field is required", texts);
+    }
+
+    [Fact]
+    public async Task A_Sync_Value_Change_Retires_An_In_Flight_Async_Pass()
+    {
+        var ctx = new ValidationContext();
+        var gate = new global::System.Threading.Tasks.TaskCompletionSource<bool>();
+        var validators = new[]
+        {
+            Validate.MustAsync<string>(async _ => await gate.Task, "stale async verdict"),
+        };
+
+        // An async check opens for the old value...
+        var pending = ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "old", validators, TestContext.Current.CancellationToken);
+
+        // ...then the user types, and the synchronous pass records the new value.
+        ValidationReconciler.ValidateField(ctx, "username", "new", Validate.Required());
+
+        gate.SetResult(false);
+        await pending;
+
+        // The verdict belongs to a value that is no longer on screen.
+        Assert.True(ctx.IsValid());
+        Assert.Empty(ctx.GetMessages("username"));
+    }
+
+    [Fact]
+    public async Task A_Sync_Value_Change_Withdraws_An_Installed_Async_Verdict()
+    {
+        var ctx = new ValidationContext();
+        var validators = new[]
+        {
+            Validate.MustAsync<string>(_ => global::System.Threading.Tasks.Task.FromResult(false), "Reserved"),
+        };
+
+        ValidationReconciler.ValidateField(ctx, "username", "admin", Validate.Required());
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "admin", validators, TestContext.Current.CancellationToken);
+        Assert.Single(ctx.GetMessages("username"));
+
+        // Typing a new value must drop the async error computed for the old one.
+        ValidationReconciler.ValidateField(ctx, "username", "someone-else", Validate.Required());
+
+        Assert.True(ctx.IsValid());
+        Assert.Empty(ctx.GetMessages("username"));
+    }
+
+    [Fact]
+    public void Re_Validating_The_Same_Value_Keeps_The_Async_Verdict()
+    {
+        var ctx = new ValidationContext();
+        ValidationReconciler.ValidateField(ctx, "username", "admin", Validate.Required());
+        ctx.ApplyOwned("username", ValidationContext.AsyncProducer,
+            [new ValidationMessage("username", "Reserved")]);
+        Assert.Single(ctx.GetMessages("username"));
+
+        // A re-render that revalidates the *same* value is not a value change, so the
+        // async verdict still applies and must survive.
+        ValidationReconciler.ValidateField(ctx, "username", "admin", Validate.Required());
+
+        Assert.Single(ctx.GetMessages("username"));
+        Assert.Equal("Reserved", ctx.GetMessages("username")[0].Text);
+    }
+
+    [Fact]
+    public void A_Cross_Field_Rule_Does_Not_Erase_Field_Level_Errors()
+    {
+        var ctx = new ValidationContext();
+        ValidationReconciler.ValidateField(ctx, "confirm", "", Validate.Required("Confirmation is required"));
+        Assert.Single(ctx.GetMessages("confirm"));
+
+        ValidationRule(() => false, "Passwords must match", "confirm").Evaluate(ctx);
+
+        var texts = ctx.GetMessages("confirm").Select(m => m.Text).ToList();
+        Assert.Equal(2, texts.Count);
+        Assert.Contains("Confirmation is required", texts);
+        Assert.Contains("Passwords must match", texts);
+    }
+
+    [Fact]
+    public void A_Passing_Rule_Retracts_Only_Its_Own_Message()
+    {
+        var ctx = new ValidationContext();
+        ValidationReconciler.ValidateField(ctx, "confirm", "", Validate.Required("Confirmation is required"));
+
+        // One rule, re-evaluated from one call site — a rule's identity is its code
+        // location, not its message text.
+        var matches = false;
+        void RunRule() => ValidationRule(() => matches, "Passwords must match", "confirm").Evaluate(ctx);
+
+        RunRule();
+        Assert.Equal(2, ctx.GetMessages("confirm").Count);
+
+        // Whole-field replacement made a passing rule wipe the required error and report
+        // the form valid.
+        matches = true;
+        RunRule();
+
+        var texts = ctx.GetMessages("confirm").Select(m => m.Text).ToList();
+        Assert.Single(texts);
+        Assert.Contains("Confirmation is required", texts);
+        Assert.False(ctx.IsValid());
+    }
+
+    [Fact]
+    public void Interleaved_Producers_On_One_Field_Settle()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Sync runs during render, the rule during reconcile — every pass, forever.
+        // Retract-and-append would swap their order each time, and an order change is a
+        // structural change, which would notify on every pass.
+        for (var i = 0; i < 5; i++)
+        {
+            ValidationReconciler.ValidateField(ctx, "confirm", "", Validate.Required("Confirmation is required"));
+            ValidationRule(() => false, "Passwords must match", "confirm").Evaluate(ctx);
+        }
+
+        Assert.Equal(2, ctx.GetMessages("confirm").Count);
+        Assert.Equal(2, notifications); // one per producer's first real change, then silence
+    }
+
+    [Fact]
+    public async Task Async_Validation_Leaves_Synchronous_Messages_Alone()
+    {
+        var ctx = new ValidationContext();
+        ValidationReconciler.ValidateField(ctx, "username", "", Validate.Required("Username is required"));
+        Assert.Single(ctx.GetMessages("username"));
+
+        var validators = new[]
+        {
+            Validate.MustAsync<string>(_ => global::System.Threading.Tasks.Task.FromResult(false), "Reserved"),
+        };
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "", validators, TestContext.Current.CancellationToken);
+
+        // Retracting the previous async pass must not take the sync verdict with it.
+        var texts = ctx.GetMessages("username").Select(m => m.Text).ToList();
+        Assert.Equal(2, texts.Count);
+        Assert.Contains("Username is required", texts);
+        Assert.Contains("Reserved", texts);
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "username", "", validators, TestContext.Current.CancellationToken);
+
+        texts = [.. ctx.GetMessages("username").Select(m => m.Text)];
+        Assert.Equal(2, texts.Count);
+        Assert.Contains("Username is required", texts);
+    }
+
+    [Fact]
+    public async Task An_Async_Rule_Re_Evaluated_To_The_Same_Verdict_Is_Silent()
+    {
+        var ctx = new ValidationContext();
+        var rule = ValidationRuleAsync(
+            () => global::System.Threading.Tasks.Task.FromResult(false),
+            "Username is taken",
+            "username");
+
+        await rule.EvaluateAsync(ctx, TestContext.Current.CancellationToken);
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+        var version = ctx.Version;
+
+        // Clearing before the await would raise once for the clear and again for the
+        // identical failure, and briefly report the field valid in between.
+        await rule.EvaluateAsync(ctx, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, notifications);
+        Assert.Equal(version, ctx.Version);
+        Assert.Single(ctx.GetMessages("username"));
+    }
+
+    [Fact]
+    public void A_Rule_Flipping_Verdict_Notifies_Each_Way()
+    {
+        var ctx = new ValidationContext();
+        var passing = true;
+        var rule = ValidationRule(() => passing, "Passwords must match", "confirm");
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        rule.Evaluate(ctx);
+        // One notification, for the field being registered — `rule.Evaluate` registers
+        // "confirm" the first time it runs. The verdict itself is passing, so no message
+        // is recorded; registration is the whole of the change (issue #1262 review).
+        Assert.Equal(1, notifications);
+        Assert.True(ctx.IsValid());
+
+        passing = false;
+        rule.Evaluate(ctx);
+        Assert.Equal(2, notifications);
+        Assert.False(ctx.IsValid());
+
+        passing = true;
+        rule.Evaluate(ctx);
+        Assert.Equal(3, notifications);
+        Assert.True(ctx.IsValid());
+
+        // The point of this test: re-evaluating a settled verdict stays silent, so the
+        // count above is not a repaint treadmill.
+        for (var i = 0; i < 5; i++) rule.Evaluate(ctx);
+        Assert.Equal(3, notifications);
+    }
+
+    [Fact]
+    public void Changed_Is_Deferred_Until_The_Render_Pass_Ends()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            ctx.Add("email", "boom");
+            ctx.MarkTouched("email");
+
+            // Nothing is announced mid-pass: the rendering component reads the new
+            // state later in the same pass, and notifying here would re-enter
+            // requestRerender from inside Render().
+            Assert.Equal(0, notifications);
+        }
+
+        // ...but the change is not dropped — other subscribers still need it. Two
+        // mutations, one delivery.
+        Assert.Equal(1, notifications);
+
+        ctx.MarkTouched("password");
+        Assert.Equal(2, notifications);
+    }
+
+    [Fact]
+    public void A_Deferred_Notification_Reaches_A_Subscriber_That_Is_Not_The_Rendering_Component()
+    {
+        // The parent/child shape: a parent renders ctx.IsValid() and provides the
+        // context; the child's eager .Validate() invalidates it during the child's own
+        // render. Dropping that notification left the parent's summary stale forever.
+        var shared = new ValidationContext();
+        var parentRerenders = 0;
+
+        var parent = new RenderContext();
+        parent.BeginRender(() => parentRerenders++);
+        var parentScope = new ContextScope();
+        parentScope.Push(new Dictionary<ContextBase, object?> { [ValidationContexts.Current] = shared });
+        parent.BeginRender(() => parentRerenders++, parentScope);
+        Assert.Same(shared, parent.UseValidationContext());
+        parent.FlushEffects();
+        Assert.True(shared.IsValid());
+
+        var before = parentRerenders;
+
+        using (ValidationRenderScope.Begin(shared))
+        {
+            _ = TextBox("").Validate("email", "", Validate.Required());
+            Assert.Equal(before, parentRerenders); // not mid-pass
+        }
+
+        Assert.False(shared.IsValid());
+        Assert.True(parentRerenders > before);
+    }
+
+    [Fact]
+    public void Nested_Frames_Defer_To_The_Outermost_Exit()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            using (ValidationRenderScope.Begin(ctx))
+            {
+                ctx.Add("email", "boom");
+            }
+            Assert.Equal(0, notifications);
+        }
+
+        Assert.Equal(1, notifications);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Reset — must not notify when there is nothing to reset
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Resetting_An_Untouched_Unknown_Field_Is_Silent()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        ctx.Reset("never-seen");
+
+        // An effect that resets on every render would otherwise repaint forever.
+        Assert.Equal(0, notifications);
+        Assert.Equal(0, ctx.Version);
+    }
+
+    [Fact]
+    public void Resetting_Real_State_Notifies_Once_Then_Goes_Quiet()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("email", "start@example.com");
+        ctx.Add("email", "boom");
+        ctx.MarkTouched("email");
+        ctx.NotifyValueChanged("email", "changed@example.com");
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        ctx.Reset("email");
+        Assert.Equal(1, notifications);
+        Assert.True(ctx.IsValid());
+        Assert.False(ctx.IsTouched("email"));
+
+        ctx.Reset("email");
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
+    public void ResetAll_With_Nothing_To_Reset_Is_Silent()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        ctx.ResetAll();
+
+        Assert.Equal(0, notifications);
+        Assert.Equal(0, ctx.Version);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Change notification
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void MarkAllTouched_Notifies_Once_And_Stays_Quiet_When_Already_Touched()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("email");
+        ctx.RegisterField("password");
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        ctx.MarkAllTouched();
+        Assert.Equal(1, notifications);
+
+        // This is the submit-twice case. Without the real-change gate it would bump the
+        // version and repaint on every click forever.
+        ctx.MarkAllTouched();
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
+    public void MarkAllTouched_With_No_Registered_Fields_Notifies_Once_For_The_Submit_Flag()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Contract change (issue #1262): the touched-set does not move here, but
+        // SubmitAttempted does, and that is observable state — ShowWhen.AfterFirstSubmit
+        // reads it, and a component can render it directly. Staying silent would leave an
+        // AfterFirstSubmit visualizer showing nothing after a submit it was told about.
+        ctx.MarkAllTouched();
+
+        Assert.Equal(1, notifications);
+        Assert.True(ctx.SubmitAttempted);
+
+        // Still bounded: the flag only flips once, so submitting again is silent. This is
+        // the property the original version of this test was protecting.
+        ctx.MarkAllTouched();
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
+    public void ClearAll_Notifies_Only_When_There_Was_Something_To_Clear()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        ctx.ClearAll();
+        Assert.Equal(0, notifications);
+
+        ctx.Add("email", "boom");
+        var afterAdd = notifications;
+        ctx.ClearAll();
+        Assert.Equal(afterAdd + 1, notifications);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  External messages vs. per-render validation
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void External_Messages_Survive_Revalidation_Of_An_Unchanged_Value()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "taken@example.com", Validate.Required());
+
+        ctx.AddExternal("email", "Email already registered");
+
+        // A repaint for any unrelated reason re-runs .Validate(). Before the fix this
+        // called NotifyValueChanged unconditionally and wiped the server's verdict
+        // before the user could read it.
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "taken@example.com", Validate.Required());
+
+        Assert.Single(ctx.GetMessages("email"));
+        Assert.Equal("Email already registered", ctx.GetMessages("email")[0].Text);
+        Assert.False(ctx.IsValid());
+    }
+
+    [Fact]
+    public void External_Messages_Clear_Once_The_Value_Actually_Changes()
+    {
+        var ctx = new ValidationContext();
+
+        ctx.NotifyValueChanged("email", "taken@example.com");
+        ctx.AddExternal("email", "Email already registered");
+        Assert.Single(ctx.GetMessages("email"));
+
+        ctx.NotifyValueChanged("email", "fresh@example.com");
+
+        Assert.Empty(ctx.GetMessages("email"));
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Auto-provide
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void A_Local_Context_Is_Published_To_The_Rendered_Subtree()
+    {
+        var render = new RenderContext();
+        Element rendered;
+        ValidationContext resolved;
+
+        using (ValidationRenderScope.Begin(null))
+        {
+            render.BeginRender(() => { });
+            resolved = render.UseValidationContext();
+            rendered = ValidationRenderScope.ApplyProvide(TextBlock("body"));
+        }
+
+        Assert.NotNull(rendered.ContextValues);
+        Assert.Same(resolved, rendered.ContextValues![ValidationContexts.Current]);
+    }
+
+    [Fact]
+    public void An_Explicit_Provide_Reaches_Descendants_Not_The_Providers_Own_Eager_Validation()
+    {
+        var render = new RenderContext();
+        var mine = new ValidationContext();
+        Element rendered;
+        ValidationContext resolved;
+
+        using (ValidationRenderScope.Begin(null))
+        {
+            render.BeginRender(() => { });
+            resolved = render.UseValidationContext();
+
+            // A bare control — nothing re-validates it later, so where this lands is
+            // observable rather than masked by FormField's reconcile-time pass.
+            var body = TextBox("").Validate("email", "", Validate.Required());
+            rendered = ValidationRenderScope.ApplyProvide(
+                body.Provide(ValidationContexts.Current, mine));
+        }
+
+        // `.Provide` publishes to the SUBTREE. The providing component's own eager
+        // .Validate() already ran while the tree was being built, against the context
+        // its own hook resolved — matching how UseContext cannot see a value the same
+        // component provides.
+        Assert.False(resolved.IsValid());
+        Assert.Single(resolved.GetMessages("email"));
+        Assert.True(mine.IsValid());
+        Assert.Empty(mine.GetAllMessages());
+
+        // ...and the explicit value is what descendants will read.
+        Assert.Same(mine, rendered.ContextValues![ValidationContexts.Current]);
+    }
+
+    [Fact]
+    public void An_Explicit_Provide_Is_What_A_Descendant_Resolves()
+    {
+        var mine = new ValidationContext();
+        var scope = new ContextScope();
+        scope.Push(new Dictionary<ContextBase, object?> { [ValidationContexts.Current] = mine });
+
+        // The descendant renders inside the provided scope, so its hook resolves `mine`
+        // and its eager .Validate() lands there.
+        var child = new RenderContext();
+        using (ValidationRenderScope.Begin(mine))
+        {
+            child.BeginRender(() => { }, scope);
+            Assert.Same(mine, child.UseValidationContext());
+            _ = TextBox("").Validate("email", "", Validate.Required());
+        }
+
+        Assert.False(mine.IsValid());
+        Assert.Single(mine.GetMessages("email"));
+    }
+
+    [Fact]
+    public void An_Inherited_Context_Is_Not_Re_Provided()
+    {
+        var parent = new ValidationContext();
+        var scope = new ContextScope();
+        scope.Push(new Dictionary<ContextBase, object?> { [ValidationContexts.Current] = parent });
+
+        var render = new RenderContext();
+        Element rendered;
+
+        using (ValidationRenderScope.Begin(parent))
+        {
+            render.BeginRender(() => { }, scope);
+            Assert.Same(parent, render.UseValidationContext());
+            rendered = ValidationRenderScope.ApplyProvide(TextBlock("body"));
+        }
+
+        // The ancestor already provides it; re-providing would only add allocation.
+        Assert.Null(rendered.ContextValues);
+    }
+
+    [Fact]
+    public void UseValidationContext_Publishes_Its_Result_To_The_Active_Scope()
+    {
+        var render = new RenderContext();
+
+        using (ValidationRenderScope.Begin(null))
+        {
+            render.BeginRender(() => { });
+            var resolved = render.UseValidationContext();
+
+            Assert.Same(resolved, ValidationRenderScope.Current);
+
+            // And from here on .Validate() in the same pass reaches it.
+            _ = TextBox("").Validate("email", "", Validate.Required());
+            Assert.False(resolved.IsValid());
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Re-render subscription
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Mutating_The_Context_From_Outside_A_Render_Requests_A_Rerender()
+    {
+        var render = new RenderContext();
+        var rerenders = 0;
+
+        render.BeginRender(() => rerenders++);
+        var ctx = render.UseValidationContext();
+        render.FlushEffects();
+        ctx.RegisterField("email");
+
+        var before = rerenders;
+
+        // The submit handler in the docs example does exactly this and nothing else —
+        // no state setter runs, so without the subscription nothing repaints.
+        ctx.MarkAllTouched();
+
+        Assert.True(rerenders > before);
+    }
+
+    [Fact]
+    public void The_Rerender_Subscription_Is_Released_When_The_Component_Unmounts()
+    {
+        var render = new RenderContext();
+        var rerenders = 0;
+
+        render.BeginRender(() => rerenders++);
+        var ctx = render.UseValidationContext();
+        render.FlushEffects();
+        ctx.RegisterField("email");
+
+        render.RunCleanups();
+        var after = rerenders;
+
+        ctx.MarkAllTouched();
+
+        Assert.Equal(after, rerenders);
+    }
+
+    [Fact]
+    public void A_Value_Change_Retracts_The_Async_Verdict_For_The_Old_Value()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("email");
+
+        var generation = ctx.BeginAsyncValidation("email");
+        ctx.ApplyAsyncValidation("email", generation, [new ValidationMessage("email", "Already registered", Severity.Error, "TAKEN")]);
+        Assert.Single(ctx.GetMessages("email"));
+
+        // The verdict was about the old value; it says nothing about the new one.
+        ctx.NotifyValueChanged("email", "someone-else@example.com");
+
+        Assert.Empty(ctx.GetMessages("email"));
+    }
+
+    [Fact]
+    public void A_Value_Change_Retires_An_In_Flight_Async_Pass()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("email");
+
+        // Pass opened against the old value, still running.
+        var stale = ctx.BeginAsyncValidation("email");
+
+        ctx.NotifyValueChanged("email", "someone-else@example.com");
+
+        // It resolves afterwards and must not install a verdict about a value that
+        // is no longer on screen.
+        ctx.ApplyAsyncValidation("email", stale, [new ValidationMessage("email", "Already registered", Severity.Error, "TAKEN")]);
+
+        Assert.Empty(ctx.GetMessages("email"));
+    }
+
+    [Fact]
+    public async Task A_Value_Change_Retracts_An_Async_Rule_Verdict_Too()
+    {
+        var ctx = new ValidationContext();
+
+        var rule = ValidationRuleAsync(() => Task.FromResult(false), "End must follow start", "dates");
+        await rule.EvaluateAsync(ctx, "rule#1", TestContext.Current.CancellationToken);
+        Assert.Single(ctx.GetMessages("dates"));
+
+        // The rule owns its own producer key, not the field's plain async slot.
+        ctx.ApplyValidation("dates", "2026-01-02", []);
+
+        Assert.Empty(ctx.GetMessages("dates"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public async Task NotifyValueChanged_Retracts_An_Async_Rule_Verdict_Too()
+    {
+        var ctx = new ValidationContext();
+
+        var rule = ValidationRuleAsync(() => Task.FromResult(false), "End must follow start", "dates");
+        await rule.EvaluateAsync(ctx, "rule#1", TestContext.Current.CancellationToken);
+        Assert.Single(ctx.GetMessages("dates"));
+
+        ctx.NotifyValueChanged("dates", "2026-01-02");
+
+        Assert.Empty(ctx.GetMessages("dates"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public async Task A_Value_Change_Retires_An_In_Flight_Async_Rule_Pass()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        var rule = ValidationRuleAsync(() => pending.Task, "End must follow start", "dates");
+        var running = rule.EvaluateAsync(ctx, "rule#1", TestContext.Current.CancellationToken);
+
+        ctx.NotifyValueChanged("dates", "2026-01-02");
+
+        pending.SetResult(false);
+        await running;
+
+        Assert.Empty(ctx.GetMessages("dates"));
+    }
+
+    [Fact]
+    public void A_Directly_Evaluated_Rule_Replaces_Its_Own_Message_When_The_Text_Changes()
+    {
+        var ctx = new ValidationContext();
+
+        // The message is interpolated, so it moves on every evaluation — the case that
+        // used to orphan the previous verdict under a message-derived producer key.
+        for (var start = 1; start <= 4; start++)
+        {
+            var rule = ValidationRule(() => false, $"Must be after day {start}", "end");
+            rule.Evaluate(ctx);
+        }
+
+        Assert.Single(ctx.GetMessages("end"));
+        Assert.Equal("Must be after day 4", ctx.GetMessages("end")[0].Text);
+    }
+
+    [Fact]
+    public void A_Directly_Evaluated_Rule_Retracts_Once_It_Passes()
+    {
+        var ctx = new ValidationContext();
+
+        var ordered = false;
+        void RunRule() => ValidationRule(() => ordered, "Must be after start", "end").Evaluate(ctx);
+
+        RunRule();
+        Assert.Single(ctx.GetMessages("end"));
+
+        // Same call site, now passing — it has to withdraw what it installed.
+        ordered = true;
+        RunRule();
+
+        Assert.Empty(ctx.GetMessages("end"));
+    }
+
+    [Fact]
+    public void Two_Distinct_Rules_On_One_Field_Keep_Separate_Slots()
+    {
+        var ctx = new ValidationContext();
+
+        ValidationRule(() => false, "Range is closed", "dates").Evaluate(ctx);
+        ValidationRule(() => false, "Range is too long", "dates").Evaluate(ctx);
+
+        Assert.Equal(2, ctx.GetMessages("dates").Count);
+    }
+
+    [Fact]
+    public void A_Directly_Evaluated_Rule_Leaves_Sync_Field_Messages_Alone()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("end", "", Validate.Required());
+        Assert.Single(ctx.GetMessages("end"));
+
+        ValidationRule(() => false, "Must be after start", "end").Evaluate(ctx);
+
+        // The old whole-field clear took the sync verdict with it.
+        Assert.Equal(2, ctx.GetMessages("end").Count);
+    }
+
+    [Fact]
+    public void Evaluating_An_Async_Rule_Synchronously_Throws_Instead_Of_Passing_It()
+    {
+        var ctx = new ValidationContext();
+        var rule = ValidationRuleAsync(() => Task.FromResult(false), "Name is taken", "name");
+
+        var ex = Assert.Throws<global::System.InvalidOperationException>(() => rule.Evaluate(ctx));
+
+        Assert.Contains("name", ex.Message, StringComparison.Ordinal);
+        // The silent failure mode was recording a passing verdict for a field that
+        // was never checked.
+        Assert.Empty(ctx.GetMessages("name"));
+    }
+
+    [Fact]
+    public void The_Batch_Rule_Path_Rejects_An_Async_Rule_Too()
+    {
+        var ctx = new ValidationContext();
+
+        Assert.Throws<global::System.InvalidOperationException>(() =>
+            ValidationReconciler.EvaluateRules(
+                ctx,
+                ValidationRule(() => false, "Sync rule", "a"),
+                ValidationRuleAsync(() => Task.FromResult(false), "Async rule", "b")));
+    }
+
+    [Fact]
+    public async Task The_Async_Batch_Path_Runs_Both_Kinds_Of_Rule()
+    {
+        var ctx = new ValidationContext();
+
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx,
+            ValidationRule(() => false, "Sync rule", "a"),
+            ValidationRuleAsync(() => Task.FromResult(false), "Async rule", "b"));
+
+        Assert.Single(ctx.GetMessages("a"));
+        Assert.Single(ctx.GetMessages("b"));
+        Assert.Equal("Async rule", ctx.GetMessages("b")[0].Text);
+    }
+
+    [Fact]
+    public async Task Retiring_A_Producer_Stops_Its_In_Flight_Pass_From_Installing()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        var rule = ValidationRuleAsync(() => pending.Task, "Name is taken", "name");
+        var running = rule.EvaluateAsync(ctx, "rule#7", TestContext.Current.CancellationToken);
+
+        // The rule leaves the tree while its check is still out.
+        ctx.RetireProducer("name", "rule#7");
+
+        pending.SetResult(false);
+        await running;
+
+        Assert.Empty(ctx.GetMessages("name"));
+    }
+
+    [Fact]
+    public async Task Retiring_A_Producer_Withdraws_What_It_Already_Installed()
+    {
+        var ctx = new ValidationContext();
+
+        var rule = ValidationRuleAsync(() => Task.FromResult(false), "Name is taken", "name");
+        await rule.EvaluateAsync(ctx, "rule#7", TestContext.Current.CancellationToken);
+        Assert.Single(ctx.GetMessages("name"));
+
+        ctx.RetireProducer("name", "rule#7");
+
+        Assert.Empty(ctx.GetMessages("name"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public void A_Message_Whose_Text_Contains_The_Snapshot_Separators_Is_Still_Distinguished()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "",
+                Validate.Must<string>(_ => false, "a"),
+                Validate.Must<string>(_ => false, "b"));
+
+        var two = ctx.GetMessages("email");
+        Assert.Equal(2, two.Count);
+        Assert.Equal(1, notifications);
+
+        // One message crafted to serialize exactly like those two under a
+        // separator-only encoding: it embeds the record separator and a second
+        // message header. Derived from the real metadata so it cannot drift.
+        var collider = $"a\u0003i\u0001{two[0].Severity}\u0001{two[0].Code}\u0001b";
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "", Validate.Must<string>(_ => false, collider));
+
+        Assert.Single(ctx.GetMessages("email"));
+        Assert.Equal(2, notifications);
+    }
+
+    [Fact]
+    public async Task The_Async_Field_Path_Registers_Its_Field()
+    {
+        var ctx = new ValidationContext();
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "email", "",
+            [Validate.MustAsync<string>(_ => Task.FromResult(false), "Already registered")],
+            TestContext.Current.CancellationToken);
+
+        Assert.Contains("email", ctx.RegisteredFields);
+
+        // The point of registering: MarkAllTouched() has to cover it.
+        ctx.MarkAllTouched();
+        Assert.True(ctx.IsTouched("email"));
+    }
+
+    [Fact]
+    public void The_Batch_Rule_Path_Registers_Every_Rule_Field()
+    {
+        var ctx = new ValidationContext();
+
+        ValidationReconciler.EvaluateRules(
+            ctx,
+            ValidationRule(() => false, "Range is closed", "start"),
+            ValidationRule(() => true, "Range is too long", "end"));
+
+        Assert.Contains("start", ctx.RegisteredFields);
+        Assert.Contains("end", ctx.RegisteredFields);
+    }
+
+    [Fact]
+    public async Task An_Overtaken_Async_Batch_Stands_Down_Instead_Of_Overwriting()
+    {
+        var ctx = new ValidationContext();
+        var slow = new TaskCompletionSource<bool>();
+
+        // Older call for this set: blocks on field "a".
+        var older = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "range-rules", ValidationRuleAsync(() => slow.Task, "Stale verdict", "a"));
+
+        // Newer call for the same set, made while the older one is still out.
+        var newer = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "range-rules", ValidationRuleAsync(() => Task.FromResult(false), "Current verdict", "b"));
+
+        slow.SetResult(false);
+        await older;
+        await newer;
+
+        // The older call stood down: it neither installed its own verdict nor retired
+        // the newer call's producer.
+        Assert.Empty(ctx.GetMessages("a"));
+        Assert.Single(ctx.GetMessages("b"));
+        Assert.Equal("Current verdict", ctx.GetMessages("b")[0].Text);
+    }
+
+    [Fact]
+    public async Task Independent_Rule_Sets_Do_Not_Retract_Each_Other()
+    {
+        var ctx = new ValidationContext();
+
+        // Two unrelated callers sharing one context. Neither owns the other's rules.
+        ValidationReconciler.EvaluateRules(ctx, ValidationRule(() => false, "A failed", "a"));
+        ValidationReconciler.EvaluateRules(ctx, ValidationRule(() => false, "B failed", "b"));
+
+        Assert.Single(ctx.GetMessages("a"));
+        Assert.Single(ctx.GetMessages("b"));
+
+        // Named sets are scoped to their own id, so they are independent too.
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "set-one", ValidationRuleAsync(() => Task.FromResult(false), "C failed", "c"));
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "set-two", ValidationRuleAsync(() => Task.FromResult(false), "D failed", "d"));
+
+        Assert.Single(ctx.GetMessages("c"));
+        Assert.Single(ctx.GetMessages("d"));
+        Assert.Single(ctx.GetMessages("a"));
+    }
+
+    [Fact]
+    public void Two_Producers_With_Identical_Messages_Stay_Independent()
+    {
+        var ctx = new ValidationContext();
+
+        var firstPasses = false;
+        void RunFirst() => ValidationRule(() => firstPasses, "Range is invalid", "dates").Evaluate(ctx);
+        void RunSecond() => ValidationRule(() => false, "Range is invalid", "dates").Evaluate(ctx);
+
+        RunFirst();
+        RunSecond();
+        Assert.Equal(2, ctx.GetMessages("dates").Count);
+
+        // The first rule now passes. The second still fails, and its verdict happens to
+        // be word-for-word identical — retracting one must not take the other with it.
+        firstPasses = true;
+        RunFirst();
+
+        Assert.Single(ctx.GetMessages("dates"));
+        Assert.Equal("Range is invalid", ctx.GetMessages("dates")[0].Text);
+        Assert.False(ctx.IsValid());
+
+        // And the survivor is still owned, so it retracts when *it* passes.
+        RunSecond();
+        Assert.Single(ctx.GetMessages("dates"));
+    }
+
+    [Fact]
+    public async Task A_Sync_Call_Overtakes_A_Running_Async_Call_For_The_Same_Set()
+    {
+        var ctx = new ValidationContext();
+        var slow = new TaskCompletionSource<bool>();
+
+        var older = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "range-rules", ValidationRuleAsync(() => slow.Task, "Stale verdict", "a"));
+
+        // A synchronous call for the same set while the async one is still out. It
+        // advances that set's generation, so the async call must stand down.
+        ValidationReconciler.EvaluateRules(
+            ctx, "range-rules", ValidationRule(() => false, "Current verdict", "b"));
+
+        slow.SetResult(false);
+        await older;
+
+        Assert.Empty(ctx.GetMessages("a"));
+        Assert.Single(ctx.GetMessages("b"));
+        Assert.Equal("Current verdict", ctx.GetMessages("b")[0].Text);
+    }
+
+    [Fact]
+    public async Task A_Never_Completing_Rule_Does_Not_Block_Later_Batches()
+    {
+        var ctx = new ValidationContext();
+        var never = new TaskCompletionSource<bool>();
+
+        // Deliberately never completed: a caller's predicate can hang.
+        var stuck = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "range-rules", ValidationRuleAsync(() => never.Task, "Never resolves", "a"));
+
+        // A later evaluation has to make progress regardless.
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "other-rules", ValidationRuleAsync(() => Task.FromResult(false), "Current verdict", "b"));
+
+        Assert.Single(ctx.GetMessages("b"));
+        Assert.False(stuck.IsCompleted);
+    }
+
+    [Fact]
+    public async Task A_Set_Producer_That_Turns_Synchronous_Keeps_Its_Verdict()
+    {
+        var ctx = new ValidationContext();
+
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "name-rules", ValidationRuleAsync(() => Task.FromResult(false), "Rule failed", "name"));
+        Assert.Single(ctx.GetMessages("name"));
+
+        // Same position in the same set, now a synchronous rule — so the same producer.
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "name-rules", ValidationRule(() => false, "Rule failed", "name"));
+        Assert.Single(ctx.GetMessages("name"));
+
+        // A value change retires async producers; this one is no longer async.
+        ctx.NotifyValueChanged("name", "anything");
+
+        Assert.Single(ctx.GetMessages("name"));
+    }
+
+    [Fact]
+    public void A_Rule_Set_Commits_Atomically_Against_A_Reentrant_Evaluation()
+    {
+        var ctx = new ValidationContext();
+        var reentered = false;
+
+        ctx.Changed += () =>
+        {
+            if (reentered) return;
+            reentered = true;
+
+            // A subscriber woken mid-commit re-evaluates the same set. The outer call
+            // must not go on installing producers it no longer owns.
+            ValidationReconciler.EvaluateRules(
+                ctx, "form-rules", ValidationRule(() => true, "Inner rule", "a"));
+        };
+
+        ValidationReconciler.EvaluateRules(
+            ctx, "form-rules",
+            ValidationRule(() => false, "Outer first", "a"),
+            ValidationRule(() => false, "Outer second", "b"));
+
+        Assert.True(reentered);
+
+        // The inner call is the newest for this set, and it owns the set: nothing from
+        // the outer call may be left orphaned.
+        Assert.Empty(ctx.GetMessages("a"));
+        Assert.Empty(ctx.GetMessages("b"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public async Task The_Async_Field_Helper_Records_The_Value_It_Validated()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("email", "");
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "email", "someone@example.com",
+            [Validate.MustAsync<string>(_ => Task.FromResult(true), "Already registered")],
+            TestContext.Current.CancellationToken);
+
+        // Recording the value is what makes dirty tracking work without a separate
+        // NotifyValueChanged call.
+        Assert.True(ctx.IsDirty("email"));
+    }
+
+    [Fact]
+    public async Task The_Async_Field_Helper_Retires_The_Verdict_For_The_Previous_Value()
+    {
+        var ctx = new ValidationContext();
+
+        await ValidationReconciler.ValidateFieldAsync(
+            ctx, "email", "taken@example.com",
+            [Validate.MustAsync<string>(_ => Task.FromResult(false), "Already registered")],
+            TestContext.Current.CancellationToken);
+        Assert.Single(ctx.GetMessages("email"));
+
+        // Re-invoked on a new value with a check that never resolves: the error about
+        // the old value must not stay on screen while it is pending.
+        var pending = new TaskCompletionSource<bool>();
+        var running = ValidationReconciler.ValidateFieldAsync(
+            ctx, "email", "free@example.com",
+            [Validate.MustAsync<string>(_ => pending.Task, "Already registered")],
+            TestContext.Current.CancellationToken);
+
+        Assert.Empty(ctx.GetMessages("email"));
+
+        pending.SetResult(true);
+        await running;
+        Assert.Empty(ctx.GetMessages("email"));
+    }
+
+    [Fact]
+    public async Task A_Sync_Evaluation_Retires_An_In_Flight_Async_Pass_For_The_Same_Rule()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        var asyncRule = ValidationRuleAsync(() => pending.Task, "Async verdict", "dates");
+        var running = asyncRule.EvaluateAsync(ctx, "rule#3", TestContext.Current.CancellationToken);
+
+        // The same producer is evaluated synchronously while the async pass is out.
+        ValidationRule(() => false, "Sync verdict", "dates").Evaluate(ctx, "rule#3");
+        Assert.Equal("Sync verdict", ctx.GetMessages("dates")[0].Text);
+
+        // The late async result must not overwrite the newer synchronous one.
+        pending.SetResult(false);
+        await running;
+
+        Assert.Single(ctx.GetMessages("dates"));
+        Assert.Equal("Sync verdict", ctx.GetMessages("dates")[0].Text);
+    }
+
+    [Fact]
+    public void Two_Rules_Sharing_A_Predicate_Keep_Separate_Slots()
+    {
+        var ctx = new ValidationContext();
+
+        // Both rules use the *same* predicate method, so a method-only identity would
+        // collapse them into one slot and let one retract the other.
+        static bool RangeValid() => false;
+
+        ValidationReconciler.EvaluateRules(
+            ctx,
+            ValidationRule(RangeValid, "Range is closed", "dates"),
+            ValidationRule(RangeValid, "Range is too long", "dates"));
+
+        Assert.Equal(2, ctx.GetMessages("dates").Count);
+
+        var texts = ctx.GetMessages("dates").Select(m => m.Text).ToList();
+        Assert.Contains("Range is closed", texts);
+        Assert.Contains("Range is too long", texts);
+    }
+
+    [Fact]
+    public async Task A_Hung_Async_Rule_Releases_Its_Evaluation_When_Cancelled()
+    {
+        var ctx = new ValidationContext();
+        var never = new TaskCompletionSource<bool>();
+        using var cts = new global::System.Threading.CancellationTokenSource();
+
+        var rule = ValidationRuleAsync(() => never.Task, "Never resolves", "name");
+        var running = rule.EvaluateAsync(ctx, "rule#9", cts.Token);
+
+        // The predicate takes no token, so only an explicitly cancellation-aware await
+        // can release the evaluation — and with it the context it would otherwise hold.
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<global::System.OperationCanceledException>(() => running);
+        Assert.False(never.Task.IsCompleted);
+        Assert.Empty(ctx.GetMessages("name"));
+    }
+
+    [Fact]
+    public void External_Errors_Survive_Revalidating_The_Same_Value()
+    {
+        var ctx = new ValidationContext();
+
+        ValidationReconciler.ValidateField(ctx, "email", "user@example.com", Validate.Required());
+        ctx.AddExternal("email", "Email already registered");
+
+        // Re-running the same validators over an unchanged value says nothing new about
+        // the server's verdict, so it must not wipe it.
+        ValidationReconciler.ValidateField(ctx, "email", "user@example.com", Validate.Required());
+
+        var texts = ctx.GetMessages("email").Select(m => m.Text).ToList();
+        Assert.Single(texts);
+        Assert.Contains("Email already registered", texts);
+
+        // A real value change does clear it.
+        ValidationReconciler.ValidateField(ctx, "email", "other@example.com", Validate.Required());
+        Assert.Empty(ctx.GetMessages("email"));
+    }
+
+    [Fact]
+    public async Task A_Hung_Batch_Releases_Its_Evaluation_When_Cancelled()
+    {
+        var ctx = new ValidationContext();
+        var never = new TaskCompletionSource<bool>();
+        using var cts = new global::System.Threading.CancellationTokenSource();
+
+        var running = ValidationReconciler.EvaluateRulesAsync(
+            ctx, cts.Token, ValidationRuleAsync(() => never.Task, "Never resolves", "a"));
+
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<global::System.OperationCanceledException>(() => running);
+        Assert.False(never.Task.IsCompleted);
+        Assert.Empty(ctx.GetMessages("a"));
+    }
+
+    [Fact]
+    public async Task A_Hung_Named_Set_Releases_Its_Evaluation_And_Installs_Nothing()
+    {
+        var ctx = new ValidationContext();
+        var never = new TaskCompletionSource<bool>();
+        using var cts = new global::System.Threading.CancellationTokenSource();
+
+        var running = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "range-rules", cts.Token,
+            ValidationRuleAsync(() => Task.FromResult(false), "Resolved verdict", "a"),
+            ValidationRuleAsync(() => never.Task, "Never resolves", "b"));
+
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<global::System.OperationCanceledException>(() => running);
+
+        // Verdicts are computed before any is committed, so a cancelled set installs
+        // nothing at all — not even the rule that had already resolved.
+        Assert.Empty(ctx.GetMessages("a"));
+        Assert.Empty(ctx.GetMessages("b"));
+    }
+
+    [Fact]
+    public void Two_Callers_Sharing_A_Named_Predicate_Need_A_Set_Id()
+    {
+        static bool RangeValid() => false;
+
+        // Same named method, same field, same position: the only caller-derived
+        // component of a direct key is the predicate's method, so these two callers
+        // land in one slot and the second replaces the first.
+        var shared = new ValidationContext();
+        ValidationReconciler.EvaluateRules(shared, ValidationRule(RangeValid, "Caller A", "dates"));
+        ValidationReconciler.EvaluateRules(shared, ValidationRule(RangeValid, "Caller B", "dates"));
+
+        Assert.Single(shared.GetMessages("dates"));
+        Assert.Equal("Caller B", shared.GetMessages("dates")[0].Text);
+
+        // A set id is the documented way to keep them apart.
+        var scoped = new ValidationContext();
+        ValidationReconciler.EvaluateRules(scoped, "caller-a", ValidationRule(RangeValid, "Caller A", "dates"));
+        ValidationReconciler.EvaluateRules(scoped, "caller-b", ValidationRule(RangeValid, "Caller B", "dates"));
+
+        var texts = scoped.GetMessages("dates").Select(m => m.Text).ToList();
+        Assert.Equal(2, texts.Count);
+        Assert.Contains("Caller A", texts);
+        Assert.Contains("Caller B", texts);
+    }
+
+    [Fact]
+    public async Task A_Value_Change_Discards_A_Pending_Rule_Set_Verdict()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        var running = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "range-rules", ValidationRuleAsync(() => pending.Task, "Range is invalid", "dates"));
+
+        // The field moves on while the predicate is still out, so the verdict it is
+        // about to produce describes a value that no longer exists.
+        ctx.NotifyValueChanged("dates", "2026-02-02");
+
+        pending.SetResult(false);
+        await running;
+
+        Assert.Empty(ctx.GetMessages("dates"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public async Task A_Rule_Set_Notification_Can_Re_Enter_Evaluation()
+    {
+        var ctx = new ValidationContext();
+        var reentered = false;
+
+        ctx.Changed += () =>
+        {
+            if (reentered) return;
+            reentered = true;
+
+            // A handler that evaluates another named set must not be blocked by a lock
+            // the committing call is still holding.
+            ValidationReconciler.EvaluateRules(
+                ctx, "other-rules", ValidationRule(() => false, "Other failed", "b"));
+        };
+
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "range-rules", ValidationRuleAsync(() => Task.FromResult(false), "Range failed", "a"));
+
+        Assert.True(reentered);
+        Assert.Single(ctx.GetMessages("a"));
+        Assert.Single(ctx.GetMessages("b"));
+    }
+
+    [Fact]
+    public void A_Validator_Only_Attachment_Is_Not_Validated_Against_Null()
+    {
+        var ctx = new ValidationContext();
+
+        // The validator-only overload never supplies a value, so running it would
+        // validate null and report "required" for a control that has text.
+        var attached = TextBox("Alice").Validate("name", Validate.Required()).GetValidation();
+        Assert.NotNull(attached);
+        Assert.False(attached.HasValue);
+
+        // The value overloads do supply one, including a legitimately null value.
+        var withValue = TextBox("").Validate("name", "", Validate.Required()).GetValidation();
+        Assert.NotNull(withValue);
+        Assert.True(withValue.HasValue);
+
+        var withNull = TextBox("").Validate("name", (object?)null, Validate.Required()).GetValidation();
+        Assert.NotNull(withNull);
+        Assert.True(withNull.HasValue);
+    }
+
+    [Fact]
+    public async Task A_Set_That_Turns_Synchronous_Keeps_Its_Verdict_Across_A_Value_Change()
+    {
+        var ctx = new ValidationContext();
+
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "name-rules", ValidationRuleAsync(() => Task.FromResult(false), "Rule failed", "name"));
+        Assert.Single(ctx.GetMessages("name"));
+
+        // Same set, same position, now evaluated through the synchronous overload.
+        ValidationReconciler.EvaluateRules(
+            ctx, "name-rules", ValidationRule(() => false, "Rule failed", "name"));
+        Assert.Single(ctx.GetMessages("name"));
+
+        // A value change retires async producers; this one is no longer async.
+        ctx.NotifyValueChanged("name", "anything");
+
+        Assert.Single(ctx.GetMessages("name"));
+    }
+
+    [Fact]
+    public void A_Validator_Only_Call_Appended_To_A_Value_Chain_Still_Runs()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            _ = TextBox("ab")
+                .Validate("code", "ab", Validate.Required())
+                .Validate("code", Validate.MinLength(3, "Too short"));
+        }
+
+        // Without re-running the merged set, only the Required verdict would exist and
+        // MinLength would be silently dropped for a bare control.
+        var texts = ctx.GetMessages("code").Select(m => m.Text).ToList();
+        Assert.Single(texts);
+        Assert.Contains("Too short", texts);
+    }
+
+    [Fact]
+    public void A_Standalone_Validator_Only_Call_Stays_Attach_Only()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("code", Validate.Required());
+
+        Assert.Empty(ctx.GetAllMessages());
+    }
+
+    [Fact]
+    public async Task A_Failed_Sync_Evaluation_Leaves_The_Async_Generation_Intact()
+    {
+        var ctx = new ValidationContext();
+
+        // A verdict installed asynchronously under this producer.
+        var rule = ValidationRuleAsync(() => Task.FromResult(false), "Name is taken", "name");
+        await rule.EvaluateAsync(ctx, "rule#5", TestContext.Current.CancellationToken);
+        Assert.Single(ctx.GetMessages("name"));
+
+        // Evaluating the same async rule synchronously is a caller error and throws.
+        Assert.Throws<global::System.InvalidOperationException>(() => rule.Evaluate(ctx, "rule#5"));
+
+        // The throw must not have stripped the generation, or nothing could ever
+        // retract the message it left behind.
+        ctx.NotifyValueChanged("name", "someone-else");
+
+        Assert.Empty(ctx.GetMessages("name"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public async Task Clearing_A_Field_Retires_A_Pending_Set_That_Also_Writes_It()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        // First evaluation records the set's membership over both fields.
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "form-rules",
+            ValidationRuleAsync(() => Task.FromResult(false), "A failed", "a"),
+            ValidationRule(() => false, "B failed", "b"));
+        Assert.Single(ctx.GetMessages("b"));
+
+        // Second evaluation hangs on field "a".
+        var running = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "form-rules",
+            ValidationRuleAsync(() => pending.Task, "A failed", "a"),
+            ValidationRule(() => false, "B failed", "b"));
+
+        // Clearing "b" retires no async token — the only one belongs to "a" — so the
+        // ticket is what has to stop this set reinstalling the verdict just removed.
+        ctx.Clear("b");
+        Assert.Empty(ctx.GetMessages("b"));
+
+        pending.SetResult(false);
+        await running;
+
+        Assert.Empty(ctx.GetMessages("b"));
+    }
+
+    [Fact]
+    public async Task ClearAll_Retires_A_Pending_Rule_Set_Commit()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        var running = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "range-rules",
+            ValidationRuleAsync(() => pending.Task, "Range is invalid", "dates"),
+            ValidationRule(() => false, "Order is wrong", "dates"));
+
+        ctx.ClearAll();
+
+        pending.SetResult(false);
+        await running;
+
+        // The evaluation was in flight when the context was cleared; it must not
+        // reinstall what the clear removed.
+        Assert.Empty(ctx.GetMessages("dates"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public async Task Clearing_One_Field_Retires_Only_The_Sets_That_Write_It()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        // Establish membership for both sets so the field filter has something to read.
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "other-rules", ValidationRuleAsync(() => Task.FromResult(false), "Other failed", "other"));
+
+        var running = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "other-rules", ValidationRuleAsync(() => pending.Task, "Other failed again", "other"));
+
+        // A clear on an unrelated field must not stand this evaluation down.
+        ctx.Clear("unrelated");
+
+        pending.SetResult(false);
+        await running;
+
+        Assert.Single(ctx.GetMessages("other"));
+        Assert.Equal("Other failed again", ctx.GetMessages("other")[0].Text);
+    }
+
+    [Fact]
+    public async Task A_Value_Change_Retires_A_Pending_Set_With_A_Sync_Rule_On_That_Field()
+    {
+        var ctx = new ValidationContext();
+        var pending = new TaskCompletionSource<bool>();
+
+        // Membership first, so the field filter has something to match on.
+        await ValidationReconciler.EvaluateRulesAsync(
+            ctx, "form-rules",
+            ValidationRule(() => false, "B failed (first pass)", "b"),
+            ValidationRuleAsync(() => Task.FromResult(false), "A failed", "a"));
+        Assert.Equal("B failed (first pass)", ctx.GetMessages("b")[0].Text);
+
+        // Sync rule first, blocked async rule second — the sync verdict for "b" is
+        // computed before the await and carries no generation of its own.
+        var running = ValidationReconciler.EvaluateRulesAsync(
+            ctx, "form-rules",
+            ValidationRule(() => false, "B failed (second pass)", "b"),
+            ValidationRuleAsync(() => pending.Task, "A failed", "a"));
+
+        // "b" moves on while the second rule is still out, so the verdict already
+        // computed for it describes a value that no longer exists.
+        ctx.NotifyValueChanged("b", "new value");
+
+        pending.SetResult(false);
+        await running;
+
+        // The set stood down: the second pass's verdict was never installed.
+        Assert.Single(ctx.GetMessages("b"));
+        Assert.Equal("B failed (first pass)", ctx.GetMessages("b")[0].Text);
+    }
+
+    [Fact]
+    public void A_Value_Change_Leaves_Sync_Messages_For_The_New_Value_Intact()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "", Validate.Required());
+
+        Assert.Single(ctx.GetMessages("email"));
+
+        // Retiring the async producer must not take the sync verdict with it.
+        ctx.NotifyValueChanged("email", "");
+        ctx.NotifyValueChanged("email", "  ");
+
+        Assert.Single(ctx.GetMessages("email"));
+        Assert.Equal("REQUIRED", ctx.GetMessages("email")[0].Code);
+    }
+
+    [Fact]
+    public void A_Reconcile_Frame_Defers_Notifications_Raised_Between_Renders()
+    {
+        var ctx = new ValidationContext();
+        var notified = 0;
+        ctx.Changed += () => notified++;
+
+        using (ValidationRenderScope.BeginReconcile())
+        {
+            // No component is rendering, so .Validate() must still be attach-only.
+            Assert.Null(ValidationRenderScope.Current);
+
+            // This is what a rule unmounting mid-reconcile does.
+            ctx.Add("dates", "End must follow start");
+            Assert.Equal(0, notified);
+        }
+
+        Assert.Equal(1, notified);
+    }
+
+    [Fact]
+    public void A_Deferred_Notification_Reaches_A_Subscriber_That_Arrives_After_The_Flush()
+    {
+        var ctx = new ValidationContext();
+        var notified = 0;
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "", Validate.Required());
+
+        // The frame has closed and the deferral already flushed — a host flushes root
+        // effects only after reconciliation, so the parent subscribes at about here.
+        ctx.Changed += () => notified++;
+
+        Assert.Equal(1, notified);
+    }
+
+    [Fact]
+    public void A_Held_Notification_Is_Delivered_Once_Not_Per_Subscriber()
+    {
+        var ctx = new ValidationContext();
+        int first = 0, second = 0;
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "", Validate.Required());
+
+        ctx.Changed += () => first++;
+        ctx.Changed += () => second++;
+
+        Assert.Equal(1, first);
+        Assert.Equal(0, second);
+    }
+
+    [Fact]
+    public async Task Overlapping_Async_Rule_Evaluations_Discard_The_Older_Result()
+    {
+        var ctx = new ValidationContext();
+        var slow = new TaskCompletionSource<bool>();
+        var quick = new TaskCompletionSource<bool>();
+
+        var failing = ValidationRuleAsync(() => slow.Task, "End must follow start", "dates");
+        var passing = failing with { AsyncPredicate = () => quick.Task };
+
+        // Same producer: two evaluations of one mounted rule, overlapping.
+        var older = failing.EvaluateAsync(ctx, "rule#1", TestContext.Current.CancellationToken);
+        var newer = passing.EvaluateAsync(ctx, "rule#1", TestContext.Current.CancellationToken);
+
+        quick.SetResult(true);
+        await newer;
+        Assert.Empty(ctx.GetMessages("dates"));
+
+        // The older run resolves last and must not reinstate its verdict.
+        slow.SetResult(false);
+        await older;
+
+        Assert.Empty(ctx.GetMessages("dates"));
+    }
+
+    [Fact]
+    public async Task An_Async_Rule_Still_Applies_Its_Own_Newest_Result()
+    {
+        var ctx = new ValidationContext();
+
+        var rule = ValidationRuleAsync(() => Task.FromResult(false), "End must follow start", "dates");
+        await rule.EvaluateAsync(ctx, "rule#1", TestContext.Current.CancellationToken);
+
+        Assert.Single(ctx.GetMessages("dates"));
+        Assert.Equal("End must follow start", ctx.GetMessages("dates")[0].Text);
+    }
+
+    [Fact]
+    public void Chained_Value_Overloads_Settle_Instead_Of_Repainting_Forever()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Each call in the chain eagerly applies its own intermediate validator set
+        // under the same producer, so every pass removes the later message and puts it
+        // straight back. The net state never moves, and announcing that churn would
+        // schedule another render that churns identically — forever.
+        for (var pass = 0; pass < 5; pass++)
+        {
+            using (ValidationRenderScope.Begin(ctx))
+            {
+                _ = TextBox("abc")
+                    .Validate("email", "abc", Validate.Email())
+                    .Validate("email", "abc", Validate.MinLength(10));
+            }
+        }
+
+        Assert.Equal(2, ctx.GetMessages("email").Count);
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
+    public void A_Net_Zero_Pass_Leaves_Version_Alone()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            _ = TextBox("abc")
+                .Validate("email", "abc", Validate.Email())
+                .Validate("email", "abc", Validate.MinLength(10));
+        }
+
+        var settled = ctx.Version;
+
+        // Version is documented for change detection in hooks and memos, so a pass that
+        // churns and lands where it started must not read as a change.
+        for (var pass = 0; pass < 4; pass++)
+        {
+            using (ValidationRenderScope.Begin(ctx))
+            {
+                _ = TextBox("abc")
+                    .Validate("email", "abc", Validate.Email())
+                    .Validate("email", "abc", Validate.MinLength(10));
+            }
+        }
+
+        Assert.Equal(settled, ctx.Version);
+    }
+
+    [Fact]
+    public void A_Real_Change_During_A_Render_Still_Moves_Version()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "", Validate.Required());
+        var settled = ctx.Version;
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("a@b.co").Validate("email", "a@b.co", Validate.Required());
+
+        Assert.Empty(ctx.GetMessages("email"));
+        Assert.True(ctx.Version > settled, $"settled={settled} now={ctx.Version}");
+    }
+
+    [Fact]
+    public void Reordering_A_Field_Messages_Is_Announced()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("abc")
+                .Validate("email", "abc", Validate.Email("A"), Validate.MinLength(10, "B"));
+        Assert.Equal(1, notifications);
+        Assert.Equal("A", ctx.GetMessages("email")[0].Text);
+
+        // Same set, different order. GetMessages exposes order and callers read the
+        // first message, so this is a real change.
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("abc")
+                .Validate("email", "abc", Validate.MinLength(10, "B"), Validate.Email("A"));
+
+        Assert.Equal("B", ctx.GetMessages("email")[0].Text);
+        Assert.Equal(2, notifications);
+    }
+
+    [Fact]
+    public void A_Chained_Chain_Still_Announces_A_Real_Change()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            _ = TextBox("abc")
+                .Validate("email", "abc", Validate.Email())
+                .Validate("email", "abc", Validate.MinLength(10));
+        }
+        Assert.Equal(1, notifications);
+
+        // The user fixes the value: the suppression must not swallow this.
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            _ = TextBox("someone@example.com")
+                .Validate("email", "someone@example.com", Validate.Email())
+                .Validate("email", "someone@example.com", Validate.MinLength(10));
+        }
+
+        Assert.Empty(ctx.GetMessages("email"));
+        Assert.Equal(2, notifications);
+    }
+
+    [Fact]
+    public void Suppression_Does_Not_Swallow_A_Touch_Made_During_A_Net_Zero_Pass()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        using (ValidationRenderScope.Begin(ctx))
+            _ = TextBox("").Validate("email", "", Validate.Required());
+        Assert.Equal(1, notifications);
+
+        // Same messages as last time, but a field also became touched — non-message
+        // state, so the pass is not net-zero.
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            _ = TextBox("").Validate("email", "", Validate.Required());
+            ctx.MarkTouched("email");
+        }
+
+        Assert.True(ctx.IsTouched("email"));
+        Assert.Equal(2, notifications);
+    }
+
+    [Fact]
+    public async Task Async_Producers_On_One_Field_Do_Not_Cancel_Each_Other()
+    {
+        var ctx = new ValidationContext();
+        var closed = new TaskCompletionSource<bool>();
+        var tooLong = new TaskCompletionSource<bool>();
+
+        var ruleA = ValidationRuleAsync(() => closed.Task, "Range is closed", "dates");
+        var ruleB = ValidationRuleAsync(() => tooLong.Task, "Range is too long", "dates");
+
+        // Both passes are open before either applies — a token shared across the field
+        // would let B's Begin retire A's still-pending pass.
+        var a = ruleA.EvaluateAsync(ctx, "rule#1", TestContext.Current.CancellationToken);
+        var b = ruleB.EvaluateAsync(ctx, "rule#2", TestContext.Current.CancellationToken);
+
+        closed.SetResult(false);
+        await a;
+        tooLong.SetResult(false);
+        await b;
+
+        Assert.Equal(2, ctx.GetMessages("dates").Count);
+    }
+    // ════════════════════════════════════════════════════════════════
+    //  Producer ownership stamps (issue #1262 review)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void RetiredProducersDoNotAccumulateStamps()
+    {
+        var ctx = new ValidationContext();
+
+        // Every mounted rule gets a fresh identity, so a long-lived context sees an
+        // unbounded number of producers come and go over its lifetime.
+        for (var i = 0; i < 200; i++)
+        {
+            var producer = $"rule#{i}";
+            ctx.ApplyOwned("form", producer,
+                [new ValidationMessage("form", $"failed {i}")]);
+            Assert.Equal(1, ctx.ProducerStampEntryCount);
+
+            ctx.RetireProducer("form", producer);
+            Assert.Equal(0, ctx.ProducerStampEntryCount);
+        }
+
+        Assert.Empty(ctx.GetMessages("form"));
+    }
+
+    [Fact]
+    public void ProducerStampSurvivesAnUnchangedRepublish()
+    {
+        var ctx = new ValidationContext();
+        ValidationMessage Message() => new("form", "failed");
+
+        ctx.ApplyOwned("form", "a", [Message()]);
+        var first = ctx.GetProducerStamp("form", "a");
+
+        // A pass that reproduces the same verdict still makes its writer the current
+        // owner, so the stamp moves even though the messages did not.
+        ctx.ApplyOwned("form", "a", [Message()]);
+        var second = ctx.GetProducerStamp("form", "a");
+
+        Assert.NotEqual(0, first);
+        Assert.True(second > first, $"first={first} second={second}");
+        Assert.Equal(1, ctx.ProducerStampEntryCount);
+    }
+
+    [Fact]
+    public void StampedRetireIsIgnoredOnceAnotherWriterOwnsTheSlot()
+    {
+        var ctx = new ValidationContext();
+
+        ctx.ApplyOwned("form", "sync", [new ValidationMessage("form", "outgoing")]);
+        var outgoing = ctx.GetProducerStamp("form", "sync");
+
+        // The incoming control installs its verdict before the outgoing one is torn
+        // down, and both write the same slot.
+        ctx.ApplyOwned("form", "sync", [new ValidationMessage("form", "incoming")]);
+
+        ctx.RetireProducer("form", "sync", outgoing);
+
+        var remaining = ctx.GetMessages("form");
+        Assert.Single(remaining);
+        Assert.Equal("incoming", remaining[0].Text);
+    }
+    [Fact]
+    public void ReBaseliningDuringRenderStillNotifies()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("f", "a");
+        ctx.NotifyValueChanged("f", "b");
+        Assert.True(ctx.IsDirty("f"));
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Establish a delivered snapshot; net-zero suppression only compares against
+        // one that exists.
+        using (ValidationRenderScope.BeginReconcile())
+        {
+            ctx.AddExternal("f", "seed");
+        }
+        var afterSeed = notifications;
+
+        // Re-baselining an edited field flips IsDirty without touching messages,
+        // touched flags or the current value — the only thing that moves is the
+        // baseline itself, so a snapshot that omits it reports "nothing changed" and
+        // the notification is dropped.
+        using (ValidationRenderScope.BeginReconcile())
+        {
+            ctx.SetInitialValue("f", "b");
+        }
+
+        Assert.False(ctx.IsDirty("f"));
+        Assert.True(notifications > afterSeed, $"afterSeed={afterSeed} now={notifications}");
+    }
+    // ════════════════════════════════════════════════════════════════
+    //  Version stability and batch atomicity (issue #1262 review)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void NetZeroValueChurnDoesNotAdvanceVersion()
+    {
+        var ctx = new ValidationContext();
+
+        // Two links on one field carrying different values: the current value is
+        // rewritten twice per pass and lands where it started. Changed is already
+        // suppressed for this; Version has to be too, or a UseMemo keyed on it re-runs
+        // forever for a context that never moved.
+        void Pass()
+        {
+            using (ValidationRenderScope.BeginReconcile())
+            {
+                ctx.ApplyValidation("f", "", [new ValidationMessage("f", "required")]);
+                ctx.ApplyValidation("f", "bb", []);
+            }
+        }
+
+        Pass();
+        var settled = ctx.Version;
+        for (var i = 0; i < 5; i++) Pass();
+
+        Assert.Equal(settled, ctx.Version);
+    }
+
+    [Fact]
+    public void RealChangeDuringRenderStillAdvancesVersionOnce()
+    {
+        var ctx = new ValidationContext();
+
+        using (ValidationRenderScope.BeginReconcile())
+        {
+            ctx.ApplyValidation("f", "", [new ValidationMessage("f", "required")]);
+        }
+        var afterFirst = ctx.Version;
+
+        // A pass that genuinely moves the state bumps — exactly once, not once per write.
+        using (ValidationRenderScope.BeginReconcile())
+        {
+            ctx.ApplyValidation("f", "abc", []);
+            ctx.MarkTouched("f");
+        }
+
+        Assert.True(ctx.Version > afterFirst, $"before={afterFirst} after={ctx.Version}");
+        Assert.Equal(afterFirst + 1, ctx.Version);
+    }
+
+    [Fact]
+    public void RejectedRuleBatchInstallsNothing()
+    {
+        var ctx = new ValidationContext();
+
+        var syncRule = ValidationRuleDsl.ValidationRule(() => false, "sync failed", "form");
+        var asyncRule = ValidationRuleDsl.ValidationRuleAsync(
+            async () => { await Task.Yield(); return false; }, "async failed", "form");
+
+        // The batch is rejected because it contains an async rule. It must be rejected
+        // whole: evaluating rule by rule left the sync verdict installed by a call that
+        // reported failure.
+        Assert.Throws<global::System.InvalidOperationException>(
+            () => ValidationReconciler.EvaluateRules(ctx, syncRule, asyncRule));
+
+        Assert.Empty(ctx.GetMessages("form"));
+        Assert.True(ctx.IsValid());
+    }
+    // ════════════════════════════════════════════════════════════════
+    //  Baseline moves (issue #1262 review)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void ReBaseliningAStillDirtyFieldIsObservable()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("f", "a");
+        ctx.NotifyValueChanged("f", "b");
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+        var versionBefore = ctx.Version;
+
+        // Dirty before and after — the flag alone cannot see this — but Reset now hands
+        // back "c" instead of "a", which is a real change to observable state.
+        ctx.SetInitialValue("f", "c");
+
+        Assert.True(ctx.IsDirty("f"));
+        Assert.True(ctx.Version > versionBefore, $"before={versionBefore} after={ctx.Version}");
+        Assert.Equal(1, notifications);
+        Assert.Equal("c", ctx.Reset("f"));
+    }
+
+    [Fact]
+    public void IdenticalReBaselineStaysSilent()
+    {
+        var ctx = new ValidationContext();
+        ctx.SetInitialValue("f", "a");
+        ctx.NotifyValueChanged("f", "b");
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+        var versionBefore = ctx.Version;
+
+        // The per-render re-seed a component does on every pass. Announcing this is the
+        // repaint loop SetInitialValue's remarks warn about.
+        for (var i = 0; i < 5; i++) ctx.SetInitialValue("f", "a");
+
+        Assert.Equal(versionBefore, ctx.Version);
+        Assert.Equal(0, notifications);
+    }
+
+    [Fact]
+    public void FirstBaselineSeedStaysSilent()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+        var versionBefore = ctx.Version;
+
+        // Registration is not a change: nothing was dirty before and nothing is now.
+        ctx.SetInitialValue("fresh", "a");
+
+        Assert.Equal(versionBefore, ctx.Version);
+        Assert.Equal(0, notifications);
+        Assert.False(ctx.IsDirty("fresh"));
+    }
+    // ════════════════════════════════════════════════════════════════
+    //  ShowWhen.AfterFirstSubmit reachability (issue #1262)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void AfterFirstSubmitHidesUntilMarkAllTouched()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("f");
+        ctx.Add("f", "required");
+
+        // Before a submit attempt the policy hides, exactly like the guide says.
+        Assert.False(ctx.SubmitAttempted);
+        Assert.False(ErrorStyling.ShouldShowErrors(
+            ctx, "f", ShowWhen.AfterFirstSubmit, ctx.SubmitAttempted));
+
+        // MarkAllTouched is the submit signal the guide tells callers to send.
+        ctx.MarkAllTouched();
+
+        Assert.True(ctx.SubmitAttempted);
+        Assert.True(ErrorStyling.ShouldShowErrors(
+            ctx, "f", ShowWhen.AfterFirstSubmit, ctx.SubmitAttempted));
+    }
+
+    [Fact]
+    public void ResetAllReturnsToThePreSubmitState()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("f");
+        ctx.SetInitialValue("f", "a");
+        ctx.Add("f", "required");
+        ctx.MarkAllTouched();
+        Assert.True(ctx.SubmitAttempted);
+
+        ctx.ResetAll();
+
+        // A reset puts the form back before its submit, so the next reveal waits for a
+        // fresh attempt rather than showing immediately.
+        Assert.False(ctx.SubmitAttempted);
+    }
+
+    [Fact]
+    public void FirstSubmitAttemptNotifiesEvenWhenEveryFieldWasAlreadyTouched()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("f");
+        ctx.MarkTouched("f");
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Every field is touched already, so the touched-set does not move — but the
+        // submit flag does, and an AfterFirstSubmit visualizer has to repaint for it.
+        ctx.MarkAllTouched();
+
+        Assert.True(ctx.SubmitAttempted);
+        Assert.Equal(1, notifications);
+
+        // A second attempt changes nothing and stays silent.
+        ctx.MarkAllTouched();
+        Assert.Equal(1, notifications);
+    }
+    [Fact]
+    public void WhenDirtyStaysSilentWithoutABaseline()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("f");
+        ctx.Add("f", "required");
+        ctx.NotifyValueChanged("f", "typed something");
+
+        // Documented precondition: dirty is measured against a baseline, and only
+        // SetInitialValue records one. Without it the value can change all it likes and
+        // the field is never dirty, so WhenDirty never displays.
+        Assert.False(ctx.IsDirty("f"));
+        Assert.False(ErrorStyling.ShouldShowErrors(ctx, "f", ShowWhen.WhenDirty));
+
+        ctx.SetInitialValue("f", "");
+        Assert.True(ctx.IsDirty("f"));
+        Assert.True(ErrorStyling.ShouldShowErrors(ctx, "f", ShowWhen.WhenDirty));
+    }
+    [Fact]
+    public void SubmitDuringARenderFrameIsNotSuppressedAsNetZero()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("f");
+        ctx.Add("f", "required");
+        ctx.MarkTouched("f");
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Establish a delivered snapshot, so net-zero suppression has something to
+        // compare against — it only suppresses when it knows what subscribers last saw.
+        using (ValidationRenderScope.BeginReconcile())
+        {
+            ctx.AddExternal("f", "seed");
+        }
+        var afterSeed = notifications;
+        var versionAfterSeed = ctx.Version;
+
+        // MarkAllTouched from inside a frame, with every field already touched. The
+        // touched set does not move, the messages do not move, the values do not move —
+        // the submit flag is the entire delta, and a ShowWhen.AfterFirstSubmit field
+        // depends on hearing about it.
+        using (ValidationRenderScope.BeginReconcile())
+        {
+            ctx.MarkAllTouched();
+        }
+
+        Assert.True(ctx.SubmitAttempted);
+        Assert.True(notifications > afterSeed,
+            $"afterSeed={afterSeed} now={notifications}");
+        Assert.True(ctx.Version > versionAfterSeed,
+            $"version {versionAfterSeed} -> {ctx.Version}");
+    }
+
+    [Fact]
+    public void RepeatedSubmitDuringARenderFrameStaysSuppressed()
+    {
+        var ctx = new ValidationContext();
+        ctx.RegisterField("f");
+        ctx.Add("f", "required");
+        ctx.MarkAllTouched();
+
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+        using (ValidationRenderScope.BeginReconcile()) { ctx.AddExternal("f", "seed"); }
+        var afterSeed = notifications;
+        var versionAfterSeed = ctx.Version;
+
+        // The flag is already set, so these frames really are net-zero and must stay
+        // silent — the property the suppression exists for.
+        for (var i = 0; i < 4; i++)
+        {
+            using (ValidationRenderScope.BeginReconcile()) { ctx.MarkAllTouched(); }
+        }
+
+        Assert.Equal(afterSeed, notifications);
+        Assert.Equal(versionAfterSeed, ctx.Version);
+    }
+    // ════════════════════════════════════════════════════════════════
+    //  Registration and per-field producer cleanup (issue #1262 review)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void RegisteringAFieldIsObservable()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+        var versionBefore = ctx.Version;
+
+        ctx.RegisterField("f");
+
+        // RegisteredFields is public, and MarkAllTouched iterates it — a subscriber
+        // rendering the field set has to hear about a new one.
+        Assert.Contains("f", ctx.RegisteredFields);
+        Assert.Equal(1, notifications);
+        Assert.True(ctx.Version > versionBefore);
+
+        // Re-registering the same field changes nothing and stays silent.
+        ctx.RegisterField("f");
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
+    public void RegistrationNotifiesEvenWhenValueAndMessagesAreUnchanged()
+    {
+        var ctx = new ValidationContext();
+        var notifications = 0;
+        ctx.Changed += () => notifications++;
+
+        // Value null, no messages: before the fix nothing here counted as a change, so
+        // the newly registered field was invisible to subscribers.
+        ctx.ApplyValidation("f", null, []);
+
+        Assert.Contains("f", ctx.RegisteredFields);
+        Assert.Equal(1, notifications);
+
+        // Same call again is genuinely net-zero.
+        ctx.ApplyValidation("f", null, []);
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
+    public void ClearingAFieldDropsItsProducerStamps()
+    {
+        var ctx = new ValidationContext();
+
+        // Every per-field clearing path has to drop the stamp with the ownership, or the
+        // documented invariant breaks and the map grows without bound for dynamically
+        // named fields.
+        for (var i = 0; i < 100; i++)
+        {
+            ctx.ApplyOwned($"f{i}", "sync", [new ValidationMessage($"f{i}", "bad")]);
+            Assert.Equal(1, ctx.ProducerStampEntryCount);
+            ctx.Clear($"f{i}");
+            Assert.Equal(0, ctx.ProducerStampEntryCount);
+        }
+
+        ctx.ApplyOwned("r", "sync", [new ValidationMessage("r", "bad")]);
+        ctx.Reset("r");
+        Assert.Equal(0, ctx.ProducerStampEntryCount);
+    }
+    [Fact]
+    public void RetiringAProducerKeepsAnIdenticalMessageInstanceOwnedByAnother()
+    {
+        var ctx = new ValidationContext();
+
+        // A validator may legally cache and return one immutable message instance, and
+        // Add(ValidationMessage) is public — so the same instance can legitimately be in
+        // a field twice, contributed by two different owners.
+        var shared = new ValidationMessage("f", "must not be empty");
+
+        ctx.ApplyOwned("f", "sync", [shared]);
+        ctx.Add(shared);
+        Assert.Equal(2, ctx.GetMessages("f").Count);
+
+        // Retiring one owner must take exactly its own contribution.
+        ctx.RetireProducer("f", "sync");
+
+        var remaining = ctx.GetMessages("f");
+        Assert.Single(remaining);
+        Assert.Same(shared, remaining[0]);
+        Assert.False(ctx.IsValid());
+    }
+    [Fact]
+    public void AbandonedClaimsAreRetiredWithoutWaitingForAnotherRender()
+    {
+        var ctx = new ValidationContext();
+
+        // A render that validates and then throws: the host installs its error fallback
+        // and returns without reconciling, so nothing downstream ever consumes the
+        // claim. Relying on the *next* render to clean up is not enough — for a
+        // terminal fallback there is no next render.
+        using (ValidationRenderScope.Begin(ctx))
+        {
+            _ = TextBox("").Validate("ghost", "", Validate.Required("ghost is required"));
+        }
+
+        Assert.Single(ctx.GetMessages("ghost"));
+
+        // What the host's error path now calls.
+        ValidationRenderScope.AbandonPendingClaims();
+
+        Assert.Empty(ctx.GetMessages("ghost"));
+        Assert.True(ctx.IsValid());
+    }
+
+    [Fact]
+    public void AbandoningClaimsDoesNotDisturbAnAdoptedSlot()
+    {
+        var ctx = new ValidationContext();
+
+        // Guard: abandoning must not retract a verdict a mounted control already owns.
+        // The stamped withdrawal is what makes this safe on any abort path, including
+        // one taken after reconciliation had already started.
+        ctx.ApplyOwned("live", ValidationContext.SyncProducer,
+            [new ValidationMessage("live", "still required")]);
+
+        ValidationRenderScope.AbandonPendingClaims();
+
+        Assert.Single(ctx.GetMessages("live"));
+    }
+}
