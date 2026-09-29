@@ -214,7 +214,7 @@ jobs:
     # must sit above that budget but well below the 360-minute default.
     timeout-minutes: 45
     # Two runners, each running half the fixture corpus (tests/_shared/SelfTestShard.cs). Every
-    # shard also proves the split covers every fixture exactly once
+    # shard also proves the split covers every non-pinned fixture exactly once
     # (SelfTestBatch.Shards_PartitionTheCorpus), so a shard cannot quietly drop part of the suite.
     strategy:
       fail-fast: false

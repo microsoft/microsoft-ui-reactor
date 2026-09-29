@@ -12,7 +12,7 @@ namespace Reactor.Tests.Shared;
 /// </summary>
 /// <remarks>
 /// <para><b>A partition by construction.</b> Fixtures that are not pinned are dealt round-robin in
-/// corpus order: the i-th goes to shard <c>(i mod n) + 1</c>. Every fixture lands in exactly one
+/// corpus order: the i-th goes to shard <c>(i mod n) + 1</c>. Each of them lands in exactly one
 /// shard, and a newly registered fixture is picked up without anyone editing a shard list. Round
 /// robin stays balanced because fixture cost is spread fairly evenly through the registry: on
 /// hosted CI runners (2026-09) the two JIT selftest shards' test steps took 3m01s-3m19s each,

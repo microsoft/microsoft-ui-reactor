@@ -260,7 +260,7 @@ Coverage jobs, one runner per half, with `--shard <k>/<n>`. The split lives in
 `tests/_shared/SelfTestShard.cs`, which both hosts and both wrappers compile.
 
 - **It is a partition by construction.** Non-pinned fixtures are dealt round-robin in registry
-  order, so each fixture lands in exactly one shard and a new fixture needs no list edit.
+  order, so each of them lands in exactly one shard and a new fixture needs no list edit.
 - **Pinned controls run in every shard.** `SelfTestVerdict_OnlySkips_PositiveControl` and
   `Packaged_IdentityGuard` are what the wrappers' suite-level checks assert on.
 - **The shard is selected before `--filter`**, so a fixture's shard does not depend on the filter.
@@ -271,8 +271,9 @@ Coverage jobs, one runner per half, with `--shard <k>/<n>`. The split lives in
 take the shard from `REACTOR_SELFTEST_SHARD=<k>/<n>` and run it with no other change. Two tests
 make sure no shard quietly drops part of the suite:
 
-- `Shards_PartitionTheCorpus` lists every shard and requires each fixture in exactly one of them.
-  Unsharded runs check a 1/2 + 2/2 split, so the mechanism is proven locally too.
+- `Shards_PartitionTheCorpus` lists every shard and requires each non-pinned fixture in exactly one
+  of them and the pinned controls in all of them. Unsharded runs check a 1/2 + 2/2 split, so the
+  mechanism is proven locally too.
 - `Run_CoversExactlyTheDiscoveredFixtures` requires the run's TAP plan to match discovery.
 
 The AOT job and the coverage lanes run the Host directly, so they use

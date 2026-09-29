@@ -263,7 +263,7 @@ Conventions for contributors:
   Release carried an ARM64 copy of that `lib/` DLL, which an x64 process refuses to load. The
   `0.1.0-preview.15` and `0.1.0-preview.16` attachments are affected. The packages on NuGet feeds
   come from a separate build and are not. The workflow now packs from per-project builds, which
-  produce a platform-neutral copy (PR #1293).
+  produce a platform-neutral copy, and fails if any packed assembly is not AnyCPU (PR #1293).
 
 ### Security
 

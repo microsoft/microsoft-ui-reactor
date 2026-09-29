@@ -216,6 +216,53 @@ jobs:
           -p:Version=${{ steps.version.outputs.version }}
           -o artifacts/nupkg
 
+      # The framework package bundles Reactor.Wrappers.Abstractions.dll into lib/ (spec 058 §15.7),
+      # and Reactor.slnx builds that project per platform: packing after a whole-solution build is
+      # what put an ARM64-only copy in the v0.1.0-preview.15 and v0.1.0-preview.16 release assets.
+      # Only build order keeps it out of the packs above, so this checks what they produced: every
+      # managed DLL outside runtimes/ must be platform-neutral IL (I386 machine, IL-only, no 32-bit
+      # requirement).
+      - name: Check packed assemblies are AnyCPU
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $checked = [System.Collections.Generic.List[string]]::new()
+          $problems = [System.Collections.Generic.List[string]]::new()
+          foreach ($nupkg in Get-ChildItem artifacts/nupkg -Filter *.nupkg -File) {
+            $zip = [System.IO.Compression.ZipFile]::OpenRead($nupkg.FullName)
+            try {
+              foreach ($entry in $zip.Entries) {
+                # RID-specific assets under runtimes/ may target one platform on purpose.
+                if ($entry.FullName -notlike '*.dll' -or $entry.FullName -like 'runtimes/*') { continue }
+                $bytes = [System.IO.MemoryStream]::new()
+                $stream = $entry.Open()
+                try { $stream.CopyTo($bytes) } finally { $stream.Dispose() }
+                $bytes.Position = 0
+                $pe = [System.Reflection.PortableExecutable.PEReader]::new($bytes)
+                try {
+                  $machine = $pe.PEHeaders.CoffHeader.Machine
+                  $cor = $pe.PEHeaders.CorHeader
+                  $anyCpu = $null -ne $cor -and
+                    $machine -eq [System.Reflection.PortableExecutable.Machine]::I386 -and
+                    $cor.Flags.HasFlag([System.Reflection.PortableExecutable.CorFlags]::ILOnly) -and
+                    -not $cor.Flags.HasFlag([System.Reflection.PortableExecutable.CorFlags]::Requires32Bit)
+                  $checked.Add("$($nupkg.Name): $($entry.FullName)")
+                  if (-not $anyCpu) {
+                    $flags = if ($cor) { $cor.Flags } else { 'none (not managed)' }
+                    $problems.Add("$($nupkg.Name): $($entry.FullName) has machine $machine, CLR flags $flags.")
+                  }
+                } finally { $pe.Dispose() }
+              }
+            } finally { $zip.Dispose() }
+          }
+          # The assembly this check exists for must be among those checked, or it proves nothing.
+          if (-not ($checked | Where-Object { $_ -like '*/Reactor.Wrappers.Abstractions.dll' })) {
+            throw "No packed Reactor.Wrappers.Abstractions.dll under artifacts/nupkg. Checked: $($checked -join '; ')"
+          }
+          if ($problems.Count -gt 0) { throw "Packed assemblies that are not AnyCPU:`n$($problems -join "`n")" }
+          Write-Host "All $($checked.Count) packed assemblies are AnyCPU:"
+          $checked | ForEach-Object { Write-Host "  $_" }
+
       - name: Build VSIX
         shell: pwsh
         run: |
