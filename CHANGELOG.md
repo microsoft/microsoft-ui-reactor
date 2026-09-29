@@ -308,14 +308,16 @@ Conventions for contributors:
   so `ProjectReference` consumers are unaffected. The core package now also exposes one
   `lib/` folder instead of two for the same target framework.
 
-- **Published unpackaged apps no longer start with an empty resource dictionary
+- **Published self-contained apps no longer start with an empty resource dictionary
   ([WindowsAppSDK#6394](https://github.com/microsoft/WindowsAppSDK/issues/6394)).** The
   Windows App SDK leaves an unpackaged app's own `.pri` and `.xbf` out of the publish
-  output, so the app resolved no theme resources and died at startup with `0xC000027B`
+  output. A self-contained app (`WindowsAppSDKSelfContained=true`) resolves WinUI through
+  that `.pri`, so it resolved no theme resources and died at startup with `0xC000027B`
   inside native XAML. Reactor's targets now copy them, for AOT and non-AOT publishes alike
   — opt out with `<ReactorCopyWinUIResourcesToPublish>false</ReactorCopyWinUIResourcesToPublish>`.
-  Replaces the per-project `_CopyWinUIResourcesForAot` snippet (removed from 11 projects),
-  which only covered `PublishAot=true` builds.
+  Framework-dependent apps, the default since the Windows App Runtime dependency was
+  restored, load WinUI from the installed runtime and were not affected. Replaces the
+  per-project `_CopyWinUIResourcesForAot` snippet (removed from 11 projects).
 
 ### Security
 

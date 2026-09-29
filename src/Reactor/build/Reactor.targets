@@ -178,19 +178,29 @@
     An UNPACKAGED (WindowsPackageType=None) WinUI 3 app generates its resource index
     ($(TargetName).pri) and its compiled XAML (*.xbf) into the BUILD output, but nothing
     copies them into the PUBLISH output — the MakePRI publish stage is gated on
-    AppxPackage=true. The published app then starts with no resource index, so
-    XamlControlsResources loads as an empty dictionary and MRT lookups fail
-    (TabView/NavigationView throw FileNotFoundException out of
-    ResourceAccessor::GetLocalizedStringResource). Measured on the stock `reactorapp`
-    template: the published app dies at startup with 0xC000027B
-    (STATUS_APPLICATION_INTERNAL_EXCEPTION) inside native XAML, and dropping the app's
-    own .pri back into the publish folder makes it run.
+    AppxPackage=true.
 
-    This target lives here, in the targets Reactor SHIPS, rather than in each app,
-    because every Reactor app hits it. It supersedes the per-project
-    `_CopyWinUIResourcesForAot` snippet that samples used to carry: that one was gated on
-    PublishAot=true, but the gap is not AOT-specific — a plain `dotnet publish -c Release`
-    loses the .pri too.
+    Whether that breaks the app depends on where WinUI's resources come from. A
+    SELF-CONTAINED app (WindowsAppSDKSelfContained=true) bundles Microsoft.UI.Xaml.dll
+    and resolves it through its own .pri, so without it XamlControlsResources loads
+    empty and the app dies at startup with 0xC000027B inside native XAML. A
+    FRAMEWORK-DEPENDENT app loads WinUI from the installed Windows App Runtime, so it
+    does not need its own .pri for that and runs fine without it. Measured both on a
+    Reactor-only published app with this target disabled: framework-dependent runs
+    with theme resources resolving; self-contained crashes.
+
+    Framework-dependent became the default when Reactor's Runtime dependency was
+    restored; before that every Reactor-only app was silently self-contained, which is
+    why the crash used to be the default experience. Self-contained remains a supported
+    opt-in for deploying to machines without the runtime, and that path still needs
+    this target. It stays unconditional rather than keyed on WindowsAppSDKSelfContained
+    because copying the .pri into a framework-dependent publish is harmless, and keying
+    on that property would silently skip apps that set it through a path this
+    evaluation cannot see.
+
+    This target lives here, in the targets Reactor SHIPS, rather than in each app. It
+    supersedes the per-project `_CopyWinUIResourcesForAot` snippet that samples used to
+    carry: that one was gated on PublishAot=true, but the gap is not AOT-specific.
 
     Opt out with <ReactorCopyWinUIResourcesToPublish>false</ReactorCopyWinUIResourcesToPublish>.
 
