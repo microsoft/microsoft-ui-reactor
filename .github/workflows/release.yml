@@ -336,7 +336,9 @@ jobs:
       # Reactor.Wrappers.Abstractions.dll into the AnyCPU framework package, in all five Package
       # runs checked (2026-09) and in the nupkgs attached to the v0.1.0-preview.15 and
       # v0.1.0-preview.16 GitHub Releases. All three runs that packed from the project builds above
-      # bundled an AnyCPU one.
+      # bundled an AnyCPU one. Coming after the uploads is safe too: if this step fails, a "Re-run
+      # failed jobs" attempt can upload the same artifact names again (measured on
+      # upload-artifact v7.0.1, 2026-09).
       - name: Build solution (tag releases only)
         if: steps.version.outputs.is_tag == 'true'
         shell: pwsh

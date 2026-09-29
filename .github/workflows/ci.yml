@@ -568,7 +568,9 @@ jobs:
           # printed its success line and still exited 2.
           exit 0
 
-      # Per-test durations, which is what the shard 1 class list is balanced against.
+      # Per-test durations, which is what the shard 1 class list is balanced against. Re-running
+      # a failed shard needs no `overwrite: true`: a re-run attempt can upload the same name again
+      # (measured on upload-artifact v7.0.1, 2026-09).
       - name: Upload TRX
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
