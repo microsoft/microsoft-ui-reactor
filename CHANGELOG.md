@@ -297,6 +297,12 @@ Conventions for contributors:
   `0.1.0-preview.15` and `0.1.0-preview.16` attachments are affected. The packages on NuGet feeds
   come from a separate build and are not. The workflow now packs from per-project builds, which
   produce a platform-neutral copy, and fails if any packed assembly is not AnyCPU (PR #1293).
+- **Keyed `Memo(key, …)` children keep their place when the hand-built list around them grows
+  or reorders** (issue #327). Outside a virtualized list, `Memo(key, factory)` mounts no control
+  of its own; the factory output's control stands in for it. The keyed reconcile could therefore
+  not recognize a `Memo(key, …).WithKey(…)` child that survived a re-render. The child stayed
+  unpatched at its old index while its siblings were placed around it, so a `Grid` gave it
+  another child's row and column. The factory output now carries the wrapper's key.
 
 ### Security
 

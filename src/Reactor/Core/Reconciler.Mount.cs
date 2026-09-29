@@ -113,7 +113,7 @@ public sealed partial class Reconciler
             // factory output) when it changes, so the mounted inner is never re-derived from
             // the old factory. Any modifiers on the wrapper itself are applied by the
             // post-dispatch ApplyModifiers below, exactly like any other element.
-            KeyedMemoElement km => Mount(km.Factory() ?? EmptyElement.Instance, requestRerender),
+            KeyedMemoElement km => Mount(WithWrapperKey(km.Factory() ?? EmptyElement.Instance, km.Key), requestRerender),
             // EmptyElement is a no-op sentinel — callers (Reconcile, panel
             // children loops, ChildReconciler) already filter it before
             // reaching Mount, but MountContext.MountChild does not, so a V1
@@ -247,6 +247,27 @@ public sealed partial class Reconciler
 
         return control;
     }
+
+    /// <summary>
+    /// Gives the factory output of a transparent <see cref="KeyedMemoElement"/> the wrapper's
+    /// <see cref="Element.Key"/>.
+    /// </summary>
+    /// <remarks>
+    /// The wrapper mounts no control of its own, so the inner control stands for it in the
+    /// parent's child list while carrying the inner element's tag.
+    /// <c>ChildReconciler.ReconcileKeyedMiddle</c> finds each surviving child by the key on
+    /// that tag. Without the wrapper's key there, a keyed <c>Memo(key, …)</c> survivor is never
+    /// found, so it stays unpatched at its old index while its siblings are placed around it,
+    /// and a Grid parent then gives it another child's row and column.
+    /// <para>The wrapper's key replaces an explicit key on the inner element. The parent diffs
+    /// on the wrapper's key, and the inner element is never diffed against anything: an
+    /// unchanged <see cref="KeyedMemoElement.MemoKey"/> skips it, and a changed one remounts
+    /// it.</para>
+    /// </remarks>
+    private static Element WithWrapperKey(Element inner, string? wrapperKey) =>
+        wrapperKey is null || inner is EmptyElement || inner.Key == wrapperKey
+            ? inner
+            : inner with { Key = wrapperKey };
 
     /// <summary>
     /// Final dispatch arm: the four resolution arms in <see cref="Mount"/>

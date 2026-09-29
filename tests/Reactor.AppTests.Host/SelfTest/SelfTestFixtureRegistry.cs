@@ -221,6 +221,15 @@ internal static class SelfTestFixtureRegistry
         "KLR_FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity",
         "KLR_FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity",
         "KLR_FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert",
+        // Keyed wrapper children (Component, RenderEachTime, Memo, ErrorBoundary,
+        // Memo(key, …)) must stay findable in the keyed-middle pass when a Grid of
+        // them grows or reorders (Minesweeper Beginner → Expert corruption).
+        "KeyedWrapper_Component_GrowAndReverse",
+        "KeyedWrapper_RenderEachTime_GrowAndReverse",
+        "KeyedWrapper_MemoDeps_GrowAndReverse",
+        "KeyedWrapper_ErrorBoundary_GrowAndReverse",
+        "KeyedWrapper_KeyedMemo_GrowAndReverse",
+        "KeyedWrapper_KeyedMemoInnerKey_GrowAndReverse",
         // Issue #951 — keyed ListView/GridView rows must not announce Reactor's
         // internal row identity, and must honor an author-declared item name.
         "KLIA_NoRowIdentityLeak",
@@ -2177,6 +2186,13 @@ internal static class SelfTestFixtureRegistry
         "KLR_FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity" => new KeyedListReconciliationFixtures.FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity(harness),
         "KLR_FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity" => new KeyedListReconciliationFixtures.FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity(harness),
         "KLR_FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert" => new KeyedListReconciliationFixtures.FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert(harness),
+        // Keyed wrapper children through the keyed-middle pass.
+        "KeyedWrapper_Component_GrowAndReverse" => new KeyedWrapperChildrenFixtures.ComponentChildren(harness),
+        "KeyedWrapper_RenderEachTime_GrowAndReverse" => new KeyedWrapperChildrenFixtures.RenderEachTimeChildren(harness),
+        "KeyedWrapper_MemoDeps_GrowAndReverse" => new KeyedWrapperChildrenFixtures.MemoDepsChildren(harness),
+        "KeyedWrapper_ErrorBoundary_GrowAndReverse" => new KeyedWrapperChildrenFixtures.ErrorBoundaryChildren(harness),
+        "KeyedWrapper_KeyedMemo_GrowAndReverse" => new KeyedWrapperChildrenFixtures.KeyedMemoChildren(harness),
+        "KeyedWrapper_KeyedMemoInnerKey_GrowAndReverse" => new KeyedWrapperChildrenFixtures.KeyedMemoInnerKeyChildren(harness),
         // Issue #951 — keyed list/grid row automation names.
         "KLIA_NoRowIdentityLeak" => new KeyedListItemAutomationNameFixtures.NoRowIdentityLeak(harness),
         "KLIA_MatchesElementArray" => new KeyedListItemAutomationNameFixtures.MatchesElementArray(harness),
