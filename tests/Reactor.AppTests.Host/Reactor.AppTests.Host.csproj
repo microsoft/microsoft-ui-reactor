@@ -63,6 +63,9 @@
          derivation has to compile in both. -->
     <Compile Include="..\_shared\FinalPath.cs" Link="FinalPath.cs" />
     <Compile Include="..\_shared\WorktreeIdentity.cs" Link="WorktreeIdentity.cs" />
+    <!-- The CI shard partition. Linked into both hosts and both wrappers so the host that
+         selects a shard and the wrapper that checks it parse the spec with one implementation. -->
+    <Compile Include="..\_shared\SelfTestShard.cs" Link="SelfTestShard.cs" />
   </ItemGroup>
 
   <!--

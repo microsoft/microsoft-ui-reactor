@@ -34,4 +34,9 @@
     <!-- Build dependency: ensures Host is built before tests, no runtime reference -->
     <ProjectReference Include="..\Reactor.AppTests.Host\Reactor.AppTests.Host.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
+  <!-- The CI shard partition, shared with the hosts so this wrapper and the host it drives
+       parse REACTOR_SELFTEST_SHARD with one implementation. -->
+  <ItemGroup>
+    <Compile Include="..\_shared\SelfTestShard.cs" Link="SelfTestShard.cs" />
+  </ItemGroup>
 </Project>
