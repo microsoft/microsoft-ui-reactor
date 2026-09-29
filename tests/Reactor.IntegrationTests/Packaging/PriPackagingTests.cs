@@ -277,6 +277,16 @@ public sealed class PriPackagingTests : IDisposable
     /// were empty — including the Devtools one with the longest, build-breaking file name —
     /// untested. <paramref name="coreOnly"/> trims that down for the publish test, which does not
     /// need them and is sensitive to how many references the XAML compiler has to resolve.
+    ///
+    /// <para><c>WindowsAppSDKSelfContained=true</c> is deliberate, not incidental. It is the
+    /// deployment in which a missing app <c>.pri</c> actually breaks a published app: a
+    /// self-contained app resolves WinUI through its own <c>.pri</c>, whereas a
+    /// framework-dependent one — the default since Reactor's Windows App Runtime dependency was
+    /// restored — loads WinUI from the installed runtime and runs without it. Measured: with the
+    /// copy target disabled, the framework-dependent publish runs with theme resources resolving
+    /// and the self-contained one crashes with <c>0xC000027B</c>. Do not "simplify" this to the
+    /// framework-dependent default; the publish test would still pass, but it would stop testing
+    /// the case the target exists for.</para>
     /// </summary>
     private void WriteConsumerProject(string appDir, bool coreOnly = false)
     {
