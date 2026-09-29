@@ -3845,7 +3845,9 @@ project and edit the <code>.csproj</code>:</p>
 <p>One package reference is enough — <code>Microsoft.UI.Reactor</code> brings the Windows App
 SDK in transitively, so you only add <code>Microsoft.WindowsAppSDK</code> yourself when you
 want to pin a specific WinUI patch or bundle the runtime with
-<code>WindowsAppSDKSelfContained</code>. See <a href="packaging/">Packaging</a> for the
+<code>WindowsAppSDKSelfContained</code>. Pin WinUI through that full package, not
+<code>Microsoft.WindowsAppSDK.WinUI</code> on its own, which fails the Windows App SDK's
+version check. See <a href="packaging/">Packaging</a> for the
 <code>&lt;Platforms&gt;</code>, ARM64, and self-contained shapes the project template uses.</p>
 <p>Replace <code>App.cs</code> with a component and a <code>ReactorApp.Run&lt;T&gt;()</code> call, and run with
 <code>dotnet run</code>. That's your first Reactor app.</p>

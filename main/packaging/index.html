@@ -3472,9 +3472,10 @@ machines, with ARM64 second for Snapdragon X). The
 sub-package brings the WinUI 3 SDK — reference assemblies plus the MSBuild
 build/props/targets — while the native WinUI runtime is supplied by the
 machine-wide Windows App Runtime install (or bundled into the publish output
-when <code>WindowsAppSDKSelfContained=true</code>). That sub-package is what a consumer
-gets transitively from <code>Microsoft.UI.Reactor</code>; the scaffolded template adds the
-full
+when <code>WindowsAppSDKSelfContained=true</code>). That sub-package, together with
+<code>Microsoft.WindowsAppSDK.Runtime</code> (which keeps the app framework-dependent), is
+what a consumer gets transitively from <code>Microsoft.UI.Reactor</code>; the scaffolded
+template adds the full
 <a href="https://www.nuget.org/packages/Microsoft.WindowsAppSDK"><code>Microsoft.WindowsAppSDK</code></a>
 metapackage on top at scaffold time (see below), because the self-contained
 shape needs the Runtime redist the metapackage carries. Inside this repo the
@@ -3685,9 +3686,15 @@ frozen when the template shipped. The two references then sit
 side-by-side in your CSPROJ, so the SDK version stays an obvious knob —
 edit it there when you need a specific WinUI patch. If you skip the
 template and reference <code>Microsoft.UI.Reactor</code> by hand, the SDK still
-arrives transitively as <code>Microsoft.WindowsAppSDK.WinUI</code>; add the full
+arrives transitively as <code>Microsoft.WindowsAppSDK.WinUI</code> plus
+<code>Microsoft.WindowsAppSDK.Runtime</code>, so the app builds framework-dependent; add the full
 metapackage yourself when you want <code>WindowsAppSDKSelfContained=true</code> or
-an MSIX, both of which need the Runtime redist. The repo-internal
+an MSIX, both of which need the Runtime redist. The metapackage is also
+how you move to a newer WinUI, because it moves Runtime with it: a newer
+<code>Microsoft.WindowsAppSDK.WinUI</code> on its own leaves Runtime behind, and the
+build fails with <em>"One or more referenced Windows App SDK components are
+newer than the versions expected by the Microsoft.WindowsAppSDK.Runtime
+package"</em>. The repo-internal
 <code>WindowsAppSDKVersion</code> MSBuild property only governs projects under this
 clone (<code>Directory.Build.props</code>); consumer projects pick their version
 directly.</p>
