@@ -10,8 +10,17 @@ Run after every non-trivial edit. **Read the output** — `dotnet run` exits wit
 ### Single-file `.cs` (default for new apps)
 
 ```powershell
-dotnet run App.cs -p:Platform=ARM64        # or -p:Platform=x64
+dotnet run App.cs
 ```
+
+The file header needs `#:package Microsoft.Windows.SDK.BuildTools.WinApp@0.7.0`,
+which launches the app packaged (needs Developer Mode), or
+`#:property WindowsPackageType=None`, which runs it unpackaged. With neither,
+the app builds, then dies at startup with `REGDB_E_CLASSNOTREG`. No
+`-p:Platform` is needed — only a self-contained app
+(`#:property WindowsAppSDKSelfContained=true`) needs an architecture. The
+[Getting Started guide](https://microsoft.github.io/microsoft-ui-reactor/getting-started/#one-file-no-project)
+documents the packaged header.
 
 Single-file builds **do not load analyzers**. You'll catch CS errors but not the Reactor-specific `REACTOR_*` warnings.
 
@@ -136,8 +145,9 @@ Additional flags:
 | `CS1061` | error | "'X' does not contain a definition for 'Y'" | A type-specific modifier called on an element type that does not declare it — `.Bold()` / `.FontSize()` / `.TextWrapping()` are `TextBlockElement`-only, so `Button("Go").Bold()` fails. This is **not** an ordering problem: modifiers are generic (`<T> where T : Element`) and preserve the concrete type, so `.Margin(16).Bold()` and `.Bold().Margin(16)` compile alike. Check the receiver's element type against `reactor-dsl/references/reactor.api.txt`. |
 | `CS0117` | error | "'Element' does not contain a definition for X" | You're calling a factory or static member that doesn't exist — confirm the name against `reactor-dsl/references/reactor.api.txt`. (For a missing *instance* modifier see `CS1061` above.) |
 | `CS1955` | error | "Non-invocable member 'Element.Margin' cannot be used like a method" | Missing `using Microsoft.UI.Reactor;`. The element records expose same-named *properties* (`Element.Margin`, `Element.Padding`, plus `CornerRadius`/`BorderThickness` on derived records), and C# only falls back to extension methods when none is in scope — so an absent import reports the property as non-invocable rather than saying the fluent modifier isn't imported. It reads like the API doesn't exist; it does. Add the `using`. (Distinct from `REACTOR_DYM_001` above, which is a genuine property invoked with parens, e.g. `GridSize.Auto()`.) |
-| `MSB4025` | error | "The project file could not be loaded" | Single-file `.cs` build attempted without `-p:Platform=...` on a WinUI project. Add `-p:Platform=ARM64` (or x64). |
+| `MSB4025` | error | "The project file could not be loaded" | Self-contained (`WindowsAppSDKSelfContained=true`) single-file `.cs` build attempted without an architecture. Add `-p:Platform=ARM64` (or x64), or `-r win-arm64` / `-r win-x64`. |
 | `NETSDK1136` | error | "platform required" | Same fix — pass `-p:Platform=ARM64` or `x64`. |
+| — | error | "One or more referenced Windows App SDK components are newer than the versions expected by the Microsoft.WindowsAppSDK.Runtime package" | A newer `Microsoft.WindowsAppSDK.WinUI` (or another Windows App SDK component) was referenced on its own, leaving `Microsoft.WindowsAppSDK.Runtime` at Reactor's version. Reference the full `Microsoft.WindowsAppSDK` package at the version you want instead; it moves Runtime with the components. Don't switch to `WindowsAppSDKSelfContained=true` just to silence it. |
 
 If a `REACTOR_*` ID isn't in this table, the bundled analyzer DLL has more docs. The descriptions ship in the warnings themselves.
 

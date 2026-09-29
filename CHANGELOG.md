@@ -28,6 +28,14 @@ Conventions for contributors:
 
 ### Added
 
+- **Getting Started documents the single-file path.** A Reactor app does not need
+  a `.csproj`: .NET 10 runs a lone `.cs` file whose `#:package` / `#:property`
+  header supplies what a project file otherwise would. The header also references
+  `Microsoft.Windows.SDK.BuildTools.WinApp`, so `dotnet run counter.cs` launches
+  the app packaged, just like `winapp run counter.cs`; `WindowsPackageType=None`
+  runs it unpackaged (winappCli#794 / #874, shipped in winapp 0.7.0). The
+  agent-kit skills use the same header.
+
 - **Validation now works on any control, not only inside `FormField`** — the
   Forms guide's "Validation Context" example needed new surface to work as
   written (issue #1262):
@@ -148,6 +156,16 @@ Conventions for contributors:
   `winapp new --template-version`.
 
 ### Fixed
+
+- **Apps that reference only `Microsoft.UI.Reactor` are framework-dependent
+  again** (regression from #822). The package now depends on
+  `Microsoft.WindowsAppSDK.Runtime`; without it the Windows App SDK silently
+  built such apps self-contained, so a plain `dotnet run` failed with
+  *"WindowsAppSDKSelfContained requires a supported Windows architecture"*. To
+  keep bundling the Windows App Runtime, set `WindowsAppSDKSelfContained=true`.
+  To move to a newer WinUI, bump the full `Microsoft.WindowsAppSDK` package;
+  bumping `Microsoft.WindowsAppSDK.WinUI` on its own now fails the Windows App
+  SDK's version check.
 
 - **The Forms guide's "Validation Context" example now works as written**
   (issue #1262). Clicking **Register** on an empty form submitted successfully
