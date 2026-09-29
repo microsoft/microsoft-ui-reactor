@@ -163,6 +163,9 @@ Conventions for contributors:
   built such apps self-contained, so a plain `dotnet run` failed with
   *"WindowsAppSDKSelfContained requires a supported Windows architecture"*. To
   keep bundling the Windows App Runtime, set `WindowsAppSDKSelfContained=true`.
+  To move to a newer WinUI, bump the full `Microsoft.WindowsAppSDK` package;
+  bumping `Microsoft.WindowsAppSDK.WinUI` on its own now fails the Windows App
+  SDK's version check.
 
 - **The Forms guide's "Validation Context" example now works as written**
   (issue #1262). Clicking **Register** on an empty form submitted successfully

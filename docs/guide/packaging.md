@@ -317,7 +317,12 @@ template and reference `Microsoft.UI.Reactor` by hand, the SDK still
 arrives transitively as `Microsoft.WindowsAppSDK.WinUI` plus
 `Microsoft.WindowsAppSDK.Runtime`, so the app builds framework-dependent; add the full
 metapackage yourself when you want `WindowsAppSDKSelfContained=true` or
-an MSIX, both of which need the Runtime redist. The repo-internal
+an MSIX, both of which need the Runtime redist. The metapackage is also
+how you move to a newer WinUI, because it moves Runtime with it: a newer
+`Microsoft.WindowsAppSDK.WinUI` on its own leaves Runtime behind, and the
+build fails with *"One or more referenced Windows App SDK components are
+newer than the versions expected by the Microsoft.WindowsAppSDK.Runtime
+package"*. The repo-internal
 `WindowsAppSDKVersion` MSBuild property only governs projects under this
 clone (`Directory.Build.props`); consumer projects pick their version
 directly.
