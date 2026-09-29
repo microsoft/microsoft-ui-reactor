@@ -481,30 +481,35 @@ internal static class Issue675ResourceOverrideSkipFixtures
 
     /// <summary>
     /// The pooled-control half of <see cref="TransitionAwayAfterWrapperCollected"/>. A control
-    /// returned to <c>ElementPool</c> keeps its <c>Resources</c>, so the next renter's overrides
-    /// must strip the keys the previous renter's overrides wrote. The pool holds its controls
-    /// through managed references, so a wrapper can only be collected while its control is
-    /// mounted; this fixture collects it then, before the control goes back to the pool. With
-    /// the key record keyed by wrapper, the renter saw none of the previous renter's keys and
-    /// left them in place.
+    /// returned to <c>ElementPool</c> keeps its <c>Resources</c>, so the keys the previous
+    /// renter's overrides wrote must be stripped before anyone rents it again. Two renter
+    /// shapes, because they failed differently: one that declares its own overrides relied on
+    /// its mount's removal gate, which lost track of the keys once the wrapper was collected;
+    /// one that declares none never reaches <c>ApplyResourceOverrides</c> at all, so it
+    /// inherited them outright. The pool holds its controls through managed references, so a
+    /// wrapper can only be collected while its control is mounted; this fixture collects it
+    /// then, before the control goes back to the pool.
     /// </summary>
-    internal sealed class PooledRenterStripsPreviousRenterKeys(Harness h) : SelfTestFixtureBase(h)
+    internal sealed class PooledRenterDoesNotInheritKeys(Harness h, bool renterHasOverrides)
+        : SelfTestFixtureBase(h)
     {
         private const string PreviousKey = "Issue675_PoolPreviousKey";
         private const string RenterKey = "Issue675_PoolRenterKey";
         // Written straight into Resources, so Reactor never manages it. ElementPool.CleanElement
-        // leaves Resources alone and ApplyResourceOverrides strips only its own keys, so the
-        // renter carries this key only if it is the same native control.
+        // strips only the keys Reactor wrote, so the renter carries this key only if it is the
+        // same native control.
         private const string SentinelKey = "Issue675_PoolSentinel";
 
         public override async Task RunAsync()
         {
+            var prefix = renterHasOverrides ? "Issue675_PoolOverrideRenter_" : "Issue675_PoolPlainRenter_";
             Action<int>? setPhase = null;
             var host = H.CreateHost();
             host.Mount(ctx =>
             {
                 var (phase, set) = ctx.UseState(0);
                 setPhase = set;
+                var renter = TextBlock("poolRenter");
                 return phase switch
                 {
                     0 => VStack(TextBlock("poolPrevious")
@@ -512,18 +517,19 @@ internal static class Issue675ResourceOverrideSkipFixtures
                     // Unmounting the TextBlock returns it to the pool...
                     1 => VStack(),
                     // ...and the next TextBlock mount rents it back (the pool is LIFO per type).
-                    _ => VStack(TextBlock("poolRenter")
-                        .Resources(r => r.Set(RenterKey, MakeBrush(40, 50, 60)))),
+                    _ => VStack(renterHasOverrides
+                        ? renter.Resources(r => r.Set(RenterKey, MakeBrush(40, 50, 60)))
+                        : renter),
                 };
             });
 
             await Harness.Render();
 
             var mountWrappers = new ConditionalWeakTable<TextBlock, object>();
-            H.Check("Issue675_Pool_PreviousRenterHasKey", ProbeAndMark(H, mountWrappers));
+            H.Check(prefix + "PreviousRenterHasKey", ProbeAndMark(H, mountWrappers));
 
             CollectGarbage();
-            H.Check("Issue675_Pool_FreshWrapperAfterCollect",
+            H.Check(prefix + "FreshWrapperAfterCollect",
                 IsFreshWrapper(H, mountWrappers, "poolPrevious"));
 
             setPhase!(1);
@@ -531,13 +537,14 @@ internal static class Issue675ResourceOverrideSkipFixtures
             setPhase!(2);
             await Harness.Render();
 
-            var renter = H.FindControl<TextBlock>(t => t.Text == "poolRenter");
-            H.Check("Issue675_Pool_RenterIsPooledControl",
-                renter?.Resources is { } res && res.ContainsKey(SentinelKey));
-            H.Check("Issue675_Pool_RenterKeyApplied",
-                renter is not null && ResourceBrush(renter, RenterKey) is not null);
-            H.Check("Issue675_Pool_PreviousRenterKeyRemoved",
-                renter?.Resources is { } after && !after.ContainsKey(PreviousKey));
+            var rented = H.FindControl<TextBlock>(t => t.Text == "poolRenter");
+            H.Check(prefix + "IsPooledControl",
+                rented?.Resources is { } res && res.ContainsKey(SentinelKey));
+            if (renterHasOverrides)
+                H.Check(prefix + "RenterKeyApplied",
+                    rented is not null && ResourceBrush(rented, RenterKey) is not null);
+            H.Check(prefix + "PreviousRenterKeyRemoved",
+                rented?.Resources is { } after && !after.ContainsKey(PreviousKey));
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]

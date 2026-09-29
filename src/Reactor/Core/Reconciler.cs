@@ -488,8 +488,8 @@ public sealed partial class Reconciler : IDisposable
         /// <see cref="EchoSuppressCount"/>: once a control's managed wrapper is collected,
         /// WinRT projects a new one over the same native object, and a wrapper-keyed table
         /// then reports no managed keys, so a dropped override stays in <c>fe.Resources</c>.
-        /// Survives pool rent/return, so a later renter that applies its own overrides also
-        /// strips the keys a previous renter left.
+        /// <c>ElementPool.CleanElement</c> strips these keys when the control returns to the
+        /// pool, so no renter inherits them.
         /// </summary>
         public HashSet<string>? ManagedResourceKeys;
     }
@@ -5353,6 +5353,14 @@ public sealed partial class Reconciler : IDisposable
     }
 
     // ── Lightweight Styling: per-control resource overrides ────────────────
+
+    /// <summary>
+    /// Removes every <c>Resources</c> key this control's resource overrides wrote, leaving keys
+    /// set outside Reactor in place. <see cref="ElementPool.CleanElement"/> calls it on pool
+    /// return, because mount applies overrides only for an element that declares some.
+    /// </summary>
+    internal static void RemoveManagedResourceKeys(FrameworkElement fe)
+        => ApplyResourceOverrides(fe, null, null);
 
     /// <summary>
     /// Applies per-control resource overrides (lightweight styling) to a
