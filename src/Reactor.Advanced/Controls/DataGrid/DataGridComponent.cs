@@ -43,6 +43,71 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     private static readonly Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs> StableNoopTap = (_, _) => { };
     private static readonly Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs> StableNoopPointer = (_, _) => { };
 
+    /// <summary>
+    /// The grid root's <c>PointerReleased</c> handler: while keyboard focus is on the root itself,
+    /// claim an unhandled release that can complete a primary-action press, so no ancestor
+    /// ScrollViewer takes focus out of the grid (#1288). Static, so the root's modifier stays
+    /// reference-stable across renders.
+    /// </summary>
+    /// <remarks>
+    /// <para>WinUI's <c>ScrollViewer</c> takes focus on an unhandled release of a press whose
+    /// <c>IsLeftButtonPressed</c> was true, unless it is not a tab stop AND focus is already inside
+    /// it (<c>ScrollViewer::OnPointerReleased</c> in microsoft-ui-xaml). The grid's own data-area
+    /// scroller therefore keeps focus that sits in an editor, but not focus on the root, which is
+    /// its ancestor. The release then bubbles to an ancestor scroller — at the very least the
+    /// window's root ScrollViewer, which is a tab stop — and that takes keyboard focus out of the
+    /// grid.</para>
+    ///
+    /// <para>Focus is on the root when the user tabbed onto the grid, or when
+    /// <see cref="DataGridState{T}.BeforeEditTransition"/> parked it there. The second is why this
+    /// is part of #1288: a cross-row press parks focus from a deferred callback, and when the
+    /// button comes up after that callback has run, the steal happened while the tap's new editor
+    /// was opening, so the blur-commit net committed it. Measured on CI before this handler: 1 of
+    /// 120 cross-row taps.</para>
+    ///
+    /// <para>Claiming the release is exactly what the data-area scroller already does for focus
+    /// inside it, and it does not stop the tap the release completes: a cell's <c>Tapped</c> still
+    /// fires, which <c>Interactive_DataGrid_TapWhileGridRootHasFocus_OpensTheTappedEditor</c>
+    /// checks. One consequence app code can see: a <c>PointerReleased</c> handler on an ancestor of
+    /// the grid receives such a release as handled, just as it already does while an editor has
+    /// focus. Which releases count is <see cref="IsPrimaryActionRelease"/>'s call.</para>
+    /// </remarks>
+    private static readonly Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs> HoldRootFocusThroughRelease =
+        (sender, e) =>
+        {
+            if (!e.Handled
+                && sender is FrameworkElement root
+                && IsPrimaryActionRelease(e.GetCurrentPoint(root).Properties.PointerUpdateKind)
+                && IsFocusOnRoot(root))
+            {
+                e.Handled = true;
+            }
+        };
+
+    /// <summary>
+    /// Whether a release can complete a primary-action press: a left mouse button, a touch contact,
+    /// or a pen tip. The ScrollViewer takes focus after no other kind of press. Only an explicit
+    /// release of another button returns false.
+    /// </summary>
+    /// <remarks>
+    /// <para>A touch contact and a pen tip are the pointer's first button. Win32 sets
+    /// <c>POINTER_FLAG_FIRSTBUTTON</c> while a touch pointer is in contact, and a touch pointer
+    /// uses no other button; WinRT's <c>IsLeftButtonPressed</c> documents both as the primary
+    /// action mode. Which <c>PointerUpdateKind</c> their release reports is not documented, though,
+    /// so this does not rely on a mapping: anything that is not an explicit right, middle, or
+    /// X-button release counts, including <c>Other</c>, a release that names no button.</para>
+    ///
+    /// <para>Erring that way is cheap. Claiming a release that did not complete a primary press
+    /// changes nothing for the ScrollViewer, which would not have taken focus for it; the only
+    /// effect is that ancestors see that release as handled. Explicit right, middle, and X-button
+    /// releases are never claimed, so ancestors still receive those unhandled.</para>
+    /// </remarks>
+    internal static bool IsPrimaryActionRelease(Microsoft.UI.Input.PointerUpdateKind kind)
+        => kind is not (Microsoft.UI.Input.PointerUpdateKind.RightButtonReleased
+            or Microsoft.UI.Input.PointerUpdateKind.MiddleButtonReleased
+            or Microsoft.UI.Input.PointerUpdateKind.XButton1Released
+            or Microsoft.UI.Input.PointerUpdateKind.XButton2Released);
+
     public override Element Render()
     {
         var el = Props;
@@ -388,6 +453,15 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // would otherwise change the hook call sequence and throw HookOrderException).
         var lostFocusWired = UseRef(false);
         var lostFocusSetter = UseRef<Action<global::Microsoft.UI.Xaml.Controls.Grid>?>(null);
+
+        // The live root control, captured by the setter below on every mount/update (a pooled
+        // root can change across mounts), and the reference-stable park hook that reads it. Both
+        // declared unconditionally for the same hook-order reason as the refs above (#1288).
+        var gridRootRef = UseRef<FrameworkElement?>(null);
+        var parkFocusHook = UseRef<Action?>(null);
+        parkFocusHook.Current ??= () => ParkFocusOnGridRoot(gridRootRef.Current);
+        state.BeforeEditTransition = parkFocusHook.Current;
+
         if (el.Editable)
         {
             // Cache the LostFocus setter (and its closure) in a ref so the lambda isn't
@@ -398,6 +472,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             lostFocusSetter.Current ??=
                 g =>
                 {
+                    gridRootRef.Current = g;
                     if (lostFocusWired.Current) return;
                     lostFocusWired.Current = true;
                     g.LostFocus += (sender, e) =>
@@ -489,6 +564,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // invocation is a statement expression, which C# converts to a void-returning delegate.
         grid = grid
             .IsTabStop(true)
+            .OnPointerReleased(HoldRootFocusThroughRelease)
             .OnMount(fe => WireGridKeyDown(fe, state, elRef));
 
         return grid;
@@ -1306,6 +1382,60 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
 
         return false;
     }
+
+    /// <summary>
+    /// Move keyboard focus onto the grid root when it currently sits on one of the grid's own
+    /// DESCENDANTS. Returns whether focus was moved. Wired as
+    /// <see cref="DataGridState{T}.BeforeEditTransition"/>, which explains why (#1288).
+    /// </summary>
+    /// <remarks>
+    /// <para>The root is the right place to park: it is a tab stop (<c>IsTabStop(true)</c>), it is
+    /// the element the blur-commit net is wired to, and it survives every re-render, unlike the
+    /// row's Edit button or a previous cell's editor. When an editor opens, its own deferred focus
+    /// request then moves focus from the root into it, entirely inside the grid. When a row click
+    /// only commits (it landed on a read-only cell), focus stays on the grid the user clicked
+    /// rather than jumping to the next tab stop outside it. That second case also needs the root's
+    /// release handler: a press parks from a deferred callback, so the button can come up after the
+    /// park, and without <see cref="HoldRootFocusThroughRelease"/> an ancestor ScrollViewer would
+    /// take focus on that release.</para>
+    ///
+    /// <para>Leaves focus alone in every other case, each for a reason:</para>
+    /// <list type="bullet">
+    /// <item><description>Focus already on the root — nothing the render removes holds it.</description></item>
+    /// <item><description>Focus outside the grid — a programmatic <c>BeginEdit()</c> from a toolbar
+    /// must not steal focus into the grid (the editor's own request decides that, as before).</description></item>
+    /// <item><description>No focus, or no live root — nothing to protect.</description></item>
+    /// </list>
+    ///
+    /// <para>Programmatic focus state, so parking shows no focus visual on the root.</para>
+    /// </remarks>
+    internal static bool ParkFocusOnGridRoot(FrameworkElement? root)
+    {
+        if (root?.XamlRoot is not { } xamlRoot) return false;
+
+        if (Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot) is not DependencyObject focused
+            || ReferenceEquals(focused, root))
+            return false;
+
+        for (var parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(focused); parent is not null;
+             parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
+        {
+            if (ReferenceEquals(parent, root))
+                return root.Focus(FocusState.Programmatic);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether keyboard focus is on <paramref name="root"/> itself — not a descendant, not
+    /// elsewhere. The condition under which <see cref="HoldRootFocusThroughRelease"/> claims a
+    /// pointer release: focus inside the data area is already kept by its own ScrollViewer, and
+    /// focus elsewhere is not the grid's to hold.
+    /// </summary>
+    internal static bool IsFocusOnRoot(FrameworkElement root)
+        => root.XamlRoot is { } xamlRoot
+           && ReferenceEquals(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot), root);
 
     // ── Header rendering ────────────────────────────────────────────
 

@@ -228,6 +228,21 @@ Conventions for contributors:
     `SetInitialValue` records, and `AfterFirstSubmit` waits for
     `MarkAllTouched()`.
 
+- **Opening a DataGrid editor from inside the grid could commit it the moment it opened
+  (issue #1288).** Starting a row edit from the row's own "Edit" button, or tapping a cell
+  while another cell was being edited, removed the element holding keyboard focus in the
+  re-render that opened the new editor. XAML then moved focus to the next element in tab
+  order, which is outside the grid, and when the grid's blur-commit safety net saw that
+  before the new editor had taken focus, it committed the edit the user had just opened. The
+  editor closed as it appeared, and `onRowChanged` fired with unchanged values. It showed on
+  CI runners, not on fast machines. The grid now moves focus onto its own root before any
+  such re-render, so a removed element never holds focus. Focus is moved only when it is
+  already inside the grid. The root also keeps that focus through the mouse or touch release
+  that follows: WinUI's root scroller used to take focus on the release, which reopened the
+  same race when the button came up after the move. For the same reason, clicking a cell
+  while the grid itself holds keyboard focus, after tabbing onto it for example, no longer
+  moves that focus out of the grid.
+
 - **The Visual Studio preview failed to start every session.** The extension was built
   against a newer `System.Text.Json` than Visual Studio binds extensions to, so it failed
   to load at runtime. It now tracks the `Microsoft.VisualStudio.SDK` baseline, with a test

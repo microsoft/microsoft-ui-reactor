@@ -3,6 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Data;
 using Microsoft.UI.Reactor.Data.Providers;
 using Microsoft.UI.Reactor.Controls;
+using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
@@ -46,6 +47,15 @@ internal static class DataGridEditFixtures
             Column<TestProduct>("Price", p => p.Price, editable: true, format: "C2", width: 100),
         };
     }
+
+    /// <summary>
+    /// <see cref="CreateEditableColumns"/> with Name required, so a test can make validation
+    /// refuse a commit by emptying it.
+    /// </summary>
+    private static IReadOnlyList<FieldDescriptor> CreateEditableColumnsWithRequiredName()
+        => CreateEditableColumns()
+            .Select(c => c.Name == "Name" ? c with { Validators = [Validate.Required()] } : c)
+            .ToList();
 
     /// <summary>
     /// Mount an editable DataGrid, programmatically begin editing via state,
@@ -540,6 +550,363 @@ internal static class DataGridEditFixtures
             H.Check("DataGrid_RowEdit_ReturnedToDisplay",
                 H.FindText("cell:Name:Product 0") is not null);
         }
+    }
+
+    /// <summary>
+    /// Issue #1288: opening a row edit from the row's own "Edit" button must move keyboard focus off
+    /// that button BEFORE the re-render destroys it, and must not move focus at all when it sits
+    /// outside the grid.
+    /// </summary>
+    /// <remarks>
+    /// <para>The race this guards only shows on a slow machine — a destroyed focused element
+    /// triggers a focus change that the grid's blur-commit net can read as "focus left the grid"
+    /// before the new editor has claimed focus, committing the edit the user just opened — so an
+    /// end-to-end "no spurious commit" check here would pass with or without the fix. Two checks
+    /// discriminate instead. The instant right after <c>BeginRowEdit</c> returns: renders are
+    /// deferred to a later dispatcher tick, so at that instant the Edit button still exists.
+    /// Unfixed, it still holds focus; fixed, focus is already parked on the grid root. And the
+    /// whole transition, through <see cref="FocusMoveRecorder"/>: unfixed, the destroyed Edit button
+    /// sends focus to the outside anchor on every run, even when the editor then wins the race and
+    /// pulls it back; fixed, every move stays inside the grid.</para>
+    /// </remarks>
+    internal class EditorFocusParkedFromEditButton(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            DataGridState<TestProduct>? state = null;
+            var commits = 0;
+            var anchorRef = new Microsoft.UI.Reactor.Input.ElementRef();
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var source = ctx.UseMemo(() => CreateSource(4));
+                return VStack(
+                    Button("outside anchor", () => { }).Ref(anchorRef),
+                    Component<DataGridComponent<TestProduct>, DataGridElement<TestProduct>>(
+                        new DataGridElement<TestProduct>
+                        {
+                            Source = source,
+                            Columns = CreateEditableColumns(),
+                            Editable = true,
+                            EditMode = EditMode.Row,
+                            RowHeight = 36,
+                            OnRowChanged = (_, _) => { commits++; return Task.CompletedTask; },
+                            OnStateReadyInternal = s => state = s,
+                        }));
+            });
+
+            H.Check("EditorFocusPark_Rendered",
+                await Harness.WaitFor(() => H.FindButton("Edit") is not null, maxPasses: 40, perPassMs: 25));
+            var edit = H.FindButton("Edit");
+            var anchor = anchorRef.Current as Microsoft.UI.Xaml.Controls.Button;
+            if (state is null || edit?.XamlRoot is not { } xamlRoot || anchor is null)
+            {
+                H.Check("EditorFocusPark_Mounted", false);
+                return;
+            }
+
+            object? Focused() => Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot);
+            string Describe(object? o) => o switch
+            {
+                null => "null",
+                Microsoft.UI.Xaml.Controls.ContentControl { Content: string s } cc => $"{cc.GetType().Name}({s})",
+                Microsoft.UI.Xaml.Controls.TextBox tb => $"TextBox({tb.Text})",
+                _ => o.GetType().Name,
+            };
+
+            // Positive control: prove the window can REPORT focus before asserting where it went.
+            edit.Focus(Microsoft.UI.Xaml.FocusState.Pointer);
+            await Harness.Render(60);
+            if (!ReferenceEquals(Focused(), edit))
+            {
+                H.Skip("EditorFocusPark_PositiveControl",
+                    $"window cannot report focus (got '{Describe(Focused())}' right after focusing the Edit button)");
+                return;
+            }
+            H.Check("EditorFocusPark_PositiveControl", true);
+
+            // The first Edit button in tree order is row 0's; its editors are named "Product 0".
+            var gridRoot = GridRootOf(edit);
+            using (var moves = new FocusMoveRecorder(gridRoot, Describe))
+            {
+                var began = state.BeginRowEdit(0);
+                var focusedRightAfter = Focused();
+                H.Check($"EditorFocusPark_RowEdit_FocusLeftTheDoomedEditButton (began={began}, focused={Describe(focusedRightAfter)})",
+                    began && !ReferenceEquals(focusedRightAfter, edit));
+                H.Check($"EditorFocusPark_RowEdit_ParkedOnTheGridRoot (focused={Describe(focusedRightAfter)})",
+                    focusedRightAfter is Microsoft.UI.Xaml.Controls.Grid { IsTabStop: true } root && IsAncestor(root, edit));
+                H.Check("EditorFocusPark_RowEdit_IsFocusOnRootWhileParked",
+                    gridRoot is not null && DataGridComponent<TestProduct>.IsFocusOnRoot(gridRoot));
+
+                // ...and the editor's own request then takes focus from the root, with nothing committed.
+                await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBox, maxPasses: 40, perPassMs: 25);
+                H.Check($"EditorFocusPark_RowEdit_EditorTakesFocus (focused={Describe(Focused())})",
+                    Focused() is Microsoft.UI.Xaml.Controls.TextBox { Text: "Product 0" });
+                H.Check("EditorFocusPark_RowEdit_IsFocusOnRootFalseInAnEditor",
+                    gridRoot is not null && !DataGridComponent<TestProduct>.IsFocusOnRoot(gridRoot));
+                H.Check($"EditorFocusPark_RowEdit_StillEditingWithNoCommit (commits={commits})",
+                    state.IsRowEditing && commits == 0 && H.FindButton("Save") is not null);
+                H.Check($"EditorFocusPark_RowEdit_FocusNeverLeftTheGrid (moves={moves})",
+                    moves.StayedInside);
+            }
+
+            // ── Focus OUTSIDE the grid is never moved by the park ─────────────────────────
+            // A programmatic BeginRowEdit() from a toolbar must not have the park yank focus into
+            // the grid; what happens next is the editor request's call, exactly as before #1288.
+            state.CancelRowEdit();
+            await Harness.Render(60);
+            anchor.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render(60);
+            var anchorHeld = ReferenceEquals(Focused(), anchor);
+            H.Check($"EditorFocusPark_Outside_AnchorHeldFocus (focused={Describe(Focused())})", anchorHeld);
+            H.Check("EditorFocusPark_Outside_IsFocusOnRootFalse",
+                gridRoot is not null && !DataGridComponent<TestProduct>.IsFocusOnRoot(gridRoot));
+            if (anchorHeld)
+            {
+                state.BeginRowEdit(1);
+                H.Check($"EditorFocusPark_Outside_ParkLeftFocusAlone (focused={Describe(Focused())})",
+                    ReferenceEquals(Focused(), anchor));
+            }
+
+            state.CancelRowEdit();
+            await Harness.Render(60);
+        }
+    }
+
+    /// <summary>
+    /// Issue #1288, cell mode: a tap that commits one cell edit and opens another destroys the
+    /// in-flight editor, which holds focus. Focus must be parked on the grid root BEFORE that
+    /// commit schedules the editor's removal. Same two discriminating checks as
+    /// <see cref="EditorFocusParkedFromEditButton"/>.
+    /// </summary>
+    /// <remarks>
+    /// With the park no-oped, focus goes to the outside anchor on every run. Whether the blur-commit
+    /// net then commits the edit the tap just opened is the race: measured locally, it did in four
+    /// runs of seven (<c>commits=[0:Product 0:A 1:Product 1:B]</c>, the #1288 symptom) and not in
+    /// the other three, which is exactly why the move record, not the commit count, is what
+    /// discriminates here.
+    /// </remarks>
+    internal class EditorFocusParkedOnCommitThenBegin(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            DataGridState<TestProduct>? state = null;
+            var commits = new List<string>();
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var source = ctx.UseMemo(() => CreateSource(4));
+
+                // A focusable element OUTSIDE the grid, as any real app has. Without one XAML has
+                // nowhere to send focus from a destroyed editor but the grid root, so the
+                // FocusNeverLeftTheGrid checks below could not fail: measured, they passed with the
+                // park no-oped until this anchor was added.
+                return VStack(
+                    Button("outside anchor", () => { }),
+                    Component<DataGridComponent<TestProduct>, DataGridElement<TestProduct>>(
+                        new DataGridElement<TestProduct>
+                        {
+                            Source = source,
+                            // Name is required so the last phase can make validation refuse a commit.
+                            Columns = CreateEditableColumnsWithRequiredName(),
+                            Editable = true,
+                            EditMode = EditMode.Cell,
+                            RowHeight = 36,
+                            OnRowChanged = (key, item) => { commits.Add($"{key.Value}:{item.Name}:{item.Category}"); return Task.CompletedTask; },
+                            OnStateReadyInternal = s => state = s,
+                        }));
+            });
+
+            H.Check("EditorFocusParkCell_Rendered",
+                await Harness.WaitFor(() => H.FindTextContaining("Product 1") is not null, maxPasses: 40, perPassMs: 25));
+            if (state is null || H.FindTextContaining("Product 1")?.XamlRoot is not { } xamlRoot)
+            {
+                H.Check("EditorFocusParkCell_Mounted", false);
+                return;
+            }
+
+            object? Focused() => Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot);
+            string Describe(object? o) => o switch
+            {
+                null => "null",
+                Microsoft.UI.Xaml.Controls.TextBox tb => $"TextBox({tb.Text})",
+                _ => o.GetType().Name,
+            };
+
+            // Open row 0 / Name. Its editor taking focus doubles as the positive control.
+            state.BeginEdit(0, 1);
+            await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBox, maxPasses: 40, perPassMs: 25);
+            if (Focused() is not Microsoft.UI.Xaml.Controls.TextBox { Text: "Product 0" } firstEditor)
+            {
+                H.Skip("EditorFocusParkCell_PositiveControl",
+                    $"window cannot report focus (got '{Describe(Focused())}' after opening row 0 / Name)");
+                return;
+            }
+            H.Check("EditorFocusParkCell_PositiveControl", true);
+
+            // Tap row 1 / Category while row 0 / Name is being edited: commit-then-begin.
+            var gridRoot = GridRootOf(firstEditor);
+            using (var moves = new FocusMoveRecorder(gridRoot, Describe))
+            {
+                state.InvokeCellEditClick(new RowKey(state.GetRowKeyAt(1)!), "Category");
+                var focusedRightAfter = Focused();
+                H.Check($"EditorFocusParkCell_FocusLeftTheDoomedEditor (focused={Describe(focusedRightAfter)})",
+                    !ReferenceEquals(focusedRightAfter, firstEditor));
+                H.Check($"EditorFocusParkCell_ParkedOnTheGridRoot (focused={Describe(focusedRightAfter)})",
+                    focusedRightAfter is Microsoft.UI.Xaml.Controls.Grid { IsTabStop: true } root && IsAncestor(root, firstEditor));
+
+                // Row 1's Category is "B". Exactly one commit — row 0's — and none for the edit just opened.
+                await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBox { Text: "B" }, maxPasses: 40, perPassMs: 25);
+                H.Check($"EditorFocusParkCell_NewEditorTakesFocus (focused={Describe(Focused())})",
+                    Focused() is Microsoft.UI.Xaml.Controls.TextBox { Text: "B" });
+                H.Check($"EditorFocusParkCell_OnlyTheTappedAwayEditCommitted (commits=[{string.Join(" ", commits)}])",
+                    commits.Count == 1 && commits[0].StartsWith("0:", StringComparison.Ordinal)
+                    && state.IsEditing && state.EditingColumnName == "Category");
+                H.Check($"EditorFocusParkCell_FocusNeverLeftTheGrid (moves={moves})",
+                    moves.StayedInside);
+            }
+
+            // ── Cross-row tap: the row's pointer PRESS commits first ──────────────────────
+            // This is the path the CI diagnostics named. On a cross-row tap the row's PointerPressed
+            // commits the in-flight edit BEFORE the cell's Tapped (on release) opens the next editor,
+            // so it is the press, not the tap, whose commit dooms the focused editor.
+            using (var moves = new FocusMoveRecorder(gridRoot, Describe))
+            {
+                var secondEditor = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
+                state.InvokeRowPointerClick(new RowKey(state.GetRowKeyAt(2)!), ctrlKey: false, shiftKey: false);
+                var focusedAfterPress = Focused();
+                H.Check($"EditorFocusParkCell_CrossRowPress_FocusLeftTheDoomedEditor (focused={Describe(focusedAfterPress)})",
+                    secondEditor is not null && !ReferenceEquals(focusedAfterPress, secondEditor));
+                H.Check($"EditorFocusParkCell_CrossRowPress_ParkedOnTheGridRoot (focused={Describe(focusedAfterPress)})",
+                    secondEditor is not null
+                    && focusedAfterPress is Microsoft.UI.Xaml.Controls.Grid { IsTabStop: true } pressRoot
+                    && IsAncestor(pressRoot, secondEditor));
+
+                // The Tapped that follows opens row 2 / Name. Row 1's Category edit committed on the press;
+                // the edit just opened must not be committed with it.
+                state.InvokeCellEditClick(new RowKey(state.GetRowKeyAt(2)!), "Name");
+                await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBox { Text: "Product 2" }, maxPasses: 40, perPassMs: 25);
+                H.Check($"EditorFocusParkCell_CrossRowPress_NewEditorTakesFocus (focused={Describe(Focused())})",
+                    Focused() is Microsoft.UI.Xaml.Controls.TextBox { Text: "Product 2" });
+                H.Check($"EditorFocusParkCell_CrossRowPress_NoSpuriousCommit (commits=[{string.Join(" ", commits)}])",
+                    commits.Count == 2 && commits[1].StartsWith("1:", StringComparison.Ordinal)
+                    && state.IsEditing && state.EditingColumnName == "Name");
+                H.Check($"EditorFocusParkCell_CrossRowPress_FocusNeverLeftTheGrid (moves={moves})",
+                    moves.StayedInside);
+            }
+
+            // ── A commit that validation refuses moves nothing ────────────────────────────
+            // CommitEdit refuses while the edit has validation errors, so the edit stays open with
+            // its editor mounted for the user to fix. Nothing destroys that editor, so nothing may
+            // move focus off it: a press on another row must leave the caret where the user was
+            // typing, exactly as before #1288. Parking is for a commit that actually ends the edit.
+            if (Focused() is Microsoft.UI.Xaml.Controls.TextBox invalidEditor)
+            {
+                state.UpdateEditingValue("");   // Name is required
+                H.Check($"EditorFocusParkCell_Refused_PositiveControl (errors={state.HasValidationErrors})",
+                    state.HasValidationErrors);
+
+                state.InvokeRowPointerClick(new RowKey(state.GetRowKeyAt(3)!), ctrlKey: false, shiftKey: false);
+                H.Check($"EditorFocusParkCell_Refused_FocusStayedInTheEditor (focused={Describe(Focused())}, editing={state.IsEditing})",
+                    ReferenceEquals(Focused(), invalidEditor) && state.IsEditing && state.EditingColumnName == "Name");
+
+                await Harness.Render(120);
+                H.Check($"EditorFocusParkCell_Refused_EditorStillFocusedAfterRender (focused={Describe(Focused())}, editing={state.IsEditing})",
+                    Focused() is Microsoft.UI.Xaml.Controls.TextBox && state.IsEditing);
+            }
+            else
+            {
+                H.Check($"EditorFocusParkCell_Refused_EditorFocused (focused={Describe(Focused())})", false);
+            }
+
+            state.CancelEdit();
+            await Harness.Render(60);
+        }
+    }
+
+    /// <summary>
+    /// The innermost ancestor of <paramref name="node"/> that is a tab-stop <c>Grid</c>, which in a
+    /// DataGrid is its root: the root is the only element the grid marks <c>IsTabStop(true)</c>.
+    /// </summary>
+    private static Microsoft.UI.Xaml.Controls.Grid? GridRootOf(Microsoft.UI.Xaml.DependencyObject node)
+    {
+        for (var p = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node); p is not null;
+             p = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(p))
+        {
+            if (p is Microsoft.UI.Xaml.Controls.Grid { IsTabStop: true } root) return root;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Records every keyboard-focus move for as long as it is alive, through the static
+    /// <c>FocusManager.LosingFocus</c> event, which reports each move synchronously with both ends.
+    /// </summary>
+    /// <remarks>
+    /// Issue #1288's invariant is about the WHOLE transition: between an edit starting and its editor
+    /// taking focus, keyboard focus must never leave the grid, because a moment outside is all the
+    /// blur-commit net needs. A read of the focused element at any single instant cannot establish
+    /// that. Unlike the "no spurious commit" checks, which only fail when the net happens to win the
+    /// race, this one is deterministic: on unfixed code focus leaves the grid on every transition.
+    /// </remarks>
+    private sealed class FocusMoveRecorder : IDisposable
+    {
+        private readonly Microsoft.UI.Xaml.DependencyObject? _gridRoot;
+        private readonly Func<object?, string> _describe;
+        private readonly List<(string From, string To, bool FromInside, bool ToInside)> _moves = new();
+
+        public FocusMoveRecorder(Microsoft.UI.Xaml.DependencyObject? gridRoot, Func<object?, string> describe)
+        {
+            _gridRoot = gridRoot;
+            _describe = describe;
+            Microsoft.UI.Xaml.Input.FocusManager.LosingFocus += OnLosingFocus;
+        }
+
+        // Classified when the move HAPPENS: the element losing focus is usually the one being
+        // destroyed, and once it has left the tree nothing can say where it used to be.
+        private void OnLosingFocus(object? sender, Microsoft.UI.Xaml.Input.LosingFocusEventArgs e)
+            => _moves.Add((_describe(e.OldFocusedElement), _describe(e.NewFocusedElement),
+                IsInside(e.OldFocusedElement), IsInside(e.NewFocusedElement)));
+
+        /// <summary>
+        /// Whether focus STARTED inside the grid, moved at least once, and every move landed on the
+        /// grid root or inside it.
+        /// </summary>
+        /// <remarks>
+        /// Both extra conditions keep the check from passing vacuously. A transition that destroys
+        /// the focused element always moves focus, so an empty record means the recorder saw nothing,
+        /// not that nothing happened. And a transition that began with focus already outside the
+        /// grid — say, left there by an earlier phase that failed — has nothing to escape from:
+        /// measured, in a run where the park was no-oped and the phase before had committed
+        /// spuriously, the cross-row phase began on the outside anchor and passed without this.
+        /// </remarks>
+        public bool StayedInside
+            => _gridRoot is not null
+               && _moves.Count > 0
+               && _moves[0].FromInside
+               && _moves.All(m => m.ToInside);
+
+        private bool IsInside(Microsoft.UI.Xaml.DependencyObject? node)
+            => _gridRoot is not null && node is not null
+               && (ReferenceEquals(node, _gridRoot) || IsAncestor(_gridRoot, node));
+
+        public override string ToString() => string.Join(" ", _moves.Select(m => $"{m.From}>{m.To}"));
+
+        public void Dispose() => Microsoft.UI.Xaml.Input.FocusManager.LosingFocus -= OnLosingFocus;
+    }
+
+    private static bool IsAncestor(Microsoft.UI.Xaml.DependencyObject ancestor, Microsoft.UI.Xaml.DependencyObject node)
+    {
+        for (var p = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node); p is not null;
+             p = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(p))
+        {
+            if (ReferenceEquals(p, ancestor)) return true;
+        }
+
+        return false;
     }
 
     /// <summary>
