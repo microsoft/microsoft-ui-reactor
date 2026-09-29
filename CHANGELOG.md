@@ -279,6 +279,18 @@ Conventions for contributors:
   `0.1.0-preview.15` and `0.1.0-preview.16` attachments are affected. The packages on NuGet feeds
   come from a separate build and are not. The workflow now packs from per-project builds, which
   produce a platform-neutral copy, and fails if any packed assembly is not AnyCPU (PR #1293).
+- **A resource override dropped from an element could stay applied.** Reactor records which
+  `Resources` keys an element's `.Resources(...)` overrides wrote, so it can remove them once
+  they are dropped, and kept that record in a table keyed by the control's managed wrapper. When
+  the wrapper was garbage-collected, WinRT projected a new one over the same native control and
+  the record came back empty: dropping the override, or changing its keys, after a GC left the
+  old value in the control's `Resources`. A pooled control kept the previous renter's keys the
+  same way. The record now lives in the control's `ReactorState`, which is stored on the native
+  object and so survives a wrapper collection (spec 047 §3). Found through an intermittent
+  `Issue675_TransitionAway_StaleOverrideRemoved` selftest failure; the new
+  `Issue675_TransitionAwayAfterWrapperCollected` and
+  `Issue675_PooledRenterStripsPreviousRenterKeys` fixtures force the GC and fail without the
+  fix.
 
 ### Security
 
