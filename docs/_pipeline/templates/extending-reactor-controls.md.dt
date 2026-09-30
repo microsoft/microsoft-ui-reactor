@@ -536,11 +536,14 @@ back with `Reconciler.GetElementTag`, from an event handler for example,
 keep tagging the control yourself. Return a control your registration
 owns: a control Reactor already mounted for another kind of element
 keeps that element's identity, so to wrap built-in elements write a
-component instead. `unmount` runs when the control leaves the tree,
+component instead. `unmount` runs when Reactor unmounts the control,
 *instead of* Reactor's own walk over the control's children. If your
 delegates mount child elements through the reconciler, unmount them
 there too (`r.UnmountChild(child)`); without an `unmount` delegate,
-Reactor walks the children itself.
+Reactor walks the children itself. One gap remains: a control that
+`update` replaced inside a single-content parent such as `Border` is
+swapped out without `unmount`, so don't rely on it for a control your
+`update` replaces.
 
 A library that wants eager setup ships an ordinary
 `public static void UseAcme(Reconciler reconciler)` over one of these —

@@ -941,12 +941,14 @@ public sealed partial class Reconciler : IDisposable
     /// <c>update</c> returns null after patching the control in place; returning the control
     /// it was handed means the same. Return a different control only when you replaced it.
     ///
-    /// <c>unmount</c> runs when the control leaves the tree, in place of the reconciler's own
-    /// walk over the control's children: a child the callbacks mounted through the reconciler
-    /// has to be torn down there, for example with <see cref="UnmountChild"/>. Calling
+    /// <c>unmount</c> runs when the reconciler unmounts the control, in place of its own walk
+    /// over the control's children: a child the callbacks mounted through the reconciler has to
+    /// be torn down there, for example with <see cref="UnmountChild"/>. Calling
     /// <see cref="UnmountChild"/> on the control itself from <c>unmount</c> walks its children
     /// once rather than calling <c>unmount</c> again. Without an <c>unmount</c> callback the
-    /// reconciler walks the control's children itself.
+    /// reconciler walks the control's children itself. Not every path that drops a control
+    /// unmounts it yet: a control that <c>update</c> replaced inside a single-content parent,
+    /// such as a <c>Border</c>, is swapped out without <c>unmount</c>.
     ///
     /// Not part of the <c>REACTOR_V1_PREVIEW</c> surface — this is the legacy
     /// type-registry path, public since before Spec 047. The §13 Q17 hardening
