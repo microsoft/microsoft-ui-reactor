@@ -206,14 +206,16 @@ public sealed partial class ReactorWindow : IDisposable
     // Issue #1297 — declarative caption theme (AppWindow.TitleBar.PreferredTheme).
     // Same precedence as the height: the spec value wins, a mounted TitleBar(...)
     // element supplies the fallback. _appliedTitleBarTheme records what Reactor
-    // last declared so removing the declaration restores the platform baseline
-    // (captured at construction) — and a value the app set imperatively without
-    // ever declaring one is never touched.
+    // last declared so removing the declaration restores _titleBarThemeBaseline —
+    // the value the caption had just before Reactor's first write, so one an app
+    // set imperatively (a `configure:` callback included) comes back rather than
+    // the platform default. A value the app sets without ever declaring one is
+    // never touched.
     private WindowTitleBarTheme? _specTitleBarTheme;
     private WindowTitleBarTheme? _elementTitleBarTheme;
     private WindowTitleBarTheme? _appliedTitleBarTheme;
     private WeakReference<FrameworkElement>? _titleBarThemeWriter;
-    private readonly TitleBarTheme _titleBarThemeBaseline;
+    private TitleBarTheme _titleBarThemeBaseline;
     private WeakReference<FrameworkElement>? _titleBarControl;
 
     /// <summary>
@@ -466,14 +468,6 @@ public sealed partial class ReactorWindow : IDisposable
         _window = new Window { Title = spec.Title };
         _appWindow = _window.AppWindow;
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
-
-        // Snapshot before ApplyChrome (and any app configure callback) can write it,
-        // so a removed TitleBarTheme declaration restores the true platform default.
-        try { _titleBarThemeBaseline = _appWindow.TitleBar.PreferredTheme; }
-        catch (COMException ex)
-        {
-            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TitleBarTheme.baseline", ex);
-        }
 
         if (spec.Embed is { } embed)
         {
@@ -841,7 +835,7 @@ public sealed partial class ReactorWindow : IDisposable
         }
     }
 
-    private static bool IsTopLevelChromeAllowed(WindowSpec spec)
+    internal static bool IsTopLevelChromeAllowed(WindowSpec spec)
         => spec.Embed?.Style != WindowEmbedStyle.Child;
 
     private void VerifyEmbedDpiAwareness(WindowEmbedStyle style)
@@ -2043,8 +2037,8 @@ public sealed partial class ReactorWindow : IDisposable
     /// <see cref="WindowSpec.TitleBarTheme"/> wins, otherwise the mounted
     /// <c>TitleBar(...)</c> element's declaration applies. With neither declared
     /// Reactor writes nothing — an app that sets <c>PreferredTheme</c> imperatively
-    /// keeps ownership — except to return a value Reactor applied to the baseline
-    /// the window was created with.
+    /// keeps ownership — except to return a value Reactor applied to the one the
+    /// caption had before Reactor first wrote it.
     /// </para>
     /// </summary>
     private void ApplyTitleBarTheme()
@@ -2054,11 +2048,15 @@ public sealed partial class ReactorWindow : IDisposable
 
         var resolved = _specTitleBarTheme ?? _elementTitleBarTheme;
         if (resolved is null && _appliedTitleBarTheme is null) return;
-        var target = resolved is { } declared ? ToNativeTitleBarTheme(declared) : _titleBarThemeBaseline;
 
         try
         {
             var titleBar = _appWindow.TitleBar;
+            // Taking ownership: remember what was there, so withdrawing the
+            // declaration hands back the app's (or the platform's) value.
+            if (_appliedTitleBarTheme is null)
+                _titleBarThemeBaseline = titleBar.PreferredTheme;
+            var target = resolved is { } declared ? ToNativeTitleBarTheme(declared) : _titleBarThemeBaseline;
             if (titleBar.PreferredTheme != target)
                 titleBar.PreferredTheme = target;
             _appliedTitleBarTheme = resolved;

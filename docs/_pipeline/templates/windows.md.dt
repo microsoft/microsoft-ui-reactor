@@ -239,8 +239,9 @@ matching caption theme with `.PreferredTheme(...)`:
 This writes `AppWindow.TitleBar.PreferredTheme` on mount and whenever the value changes.
 No effect is needed. It is opt-in, like WinUI: without a declaration Reactor
 never touches the caption theme, and a value you set on `AppWindow.TitleBar` yourself is
-left alone. Removing the declaration, or unmounting the title bar, restores the platform
-default.
+left alone. Removing the declaration, or unmounting the title bar, restores the value the
+caption had before Reactor first applied one — the platform default, or whatever the app
+had set.
 
 The same knob exists on the spec, for windows without a `TitleBar(...)` element. It wins
 over the element's declaration when both are set, and — unlike the caption height — does

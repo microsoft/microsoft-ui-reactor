@@ -90,7 +90,8 @@ Conventions for contributors:
   an element's `RequestedTheme` through to the caption, so an app that themes its
   content opposite to the system declares the matching caption theme. Opt-in: with
   nothing declared Reactor never writes the property, so an imperatively set value is
-  left alone; removing a declaration restores the window's original value. The spec
+  left alone; removing a declaration restores the value the caption had before
+  Reactor first applied one. The spec
   wins over the element, and — unlike the caption height — no content extension is
   required. ReactorGallery uses it so its caption buttons follow the gallery theme.
 

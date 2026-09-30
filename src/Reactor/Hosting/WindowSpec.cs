@@ -221,9 +221,9 @@ public sealed record WindowSpec
     /// <remarks>
     /// WinUI does not derive the caption theme from the content's
     /// <c>RequestedTheme</c>; an app that themes its content opposite to the
-    /// system sets this to match. Removing a declaration Reactor applied restores
-    /// the platform default; a value set imperatively and never declared is left
-    /// alone.
+    /// system sets this to match. Removing a declaration restores the value the
+    /// caption had before Reactor first applied one; a value set imperatively and
+    /// never declared is left alone.
     /// </remarks>
     public WindowTitleBarTheme? TitleBarTheme { get; init; }
 

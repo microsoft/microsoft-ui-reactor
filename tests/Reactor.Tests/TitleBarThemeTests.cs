@@ -62,4 +62,21 @@ public class TitleBarThemeTests
             _ = ReactorWindow.ToNativeTitleBarTheme(theme);
         Assert.Equal(Enum.GetValues<TitleBarTheme>().Length, Enum.GetValues<WindowTitleBarTheme>().Length);
     }
+
+    [Fact]
+    public void CaptionTheme_IsSkipped_OnlyForChildEmbeddedWindows()
+    {
+        // ApplyTitleBarTheme is gated on this predicate: a Child-embedded window is
+        // parented into a host's chrome and must not have its caption themed.
+        Assert.True(ReactorWindow.IsTopLevelChromeAllowed(new WindowSpec()));
+        Assert.True(ReactorWindow.IsTopLevelChromeAllowed(new WindowSpec
+        {
+            Embed = new EmbedRequest(WindowEmbedStyle.Owner, HostPid: 1234, InitialVisibility: true),
+        }));
+        Assert.False(ReactorWindow.IsTopLevelChromeAllowed(new WindowSpec
+        {
+            TitleBarTheme = WindowTitleBarTheme.Dark,
+            Embed = new EmbedRequest(WindowEmbedStyle.Child, HostPid: 1234, InitialVisibility: true),
+        }));
+    }
 }

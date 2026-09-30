@@ -217,7 +217,7 @@ WinUI does not carry an element's `RequestedTheme` to the system caption buttons
 `.PreferredTheme(WindowTitleBarTheme)` (`Legacy` / `UseDefaultAppMode` / `Light` /
 `Dark`) writes `AppWindow.TitleBar.PreferredTheme` on mount and on change — no
 `UseEffect`. Opt-in: with nothing declared Reactor never writes the property, and
-removing a declaration restores the window's original value.
+removing a declaration restores the value the caption had before Reactor first applied one.
 `WindowSpec.TitleBarTheme` wins over the element. Unlike the height, it does not
 need a content-extended window.
 

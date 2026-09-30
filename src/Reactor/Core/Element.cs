@@ -5072,7 +5072,8 @@ public partial record TitleBarElement(
     /// WinUI does not derive the caption theme from the content's
     /// <c>RequestedTheme</c>, so an app that themes its content opposite to the
     /// system declares the matching caption theme here. Removing the declaration
-    /// (or unmounting the title bar) restores the platform default.
+    /// (or unmounting the title bar) restores the value the caption had before
+    /// Reactor first applied one.
     /// <see cref="WindowSpec.TitleBarTheme"/>, when set, wins over this.
     /// </remarks>
     public WindowTitleBarTheme? PreferredTheme { get; init; }

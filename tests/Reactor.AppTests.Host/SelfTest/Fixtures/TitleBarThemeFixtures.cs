@@ -276,4 +276,145 @@ internal static class TitleBarThemeFixtures
             finally { await CloseAndSettle(win); }
         }
     }
+
+    /// <summary>
+    /// A value the app set imperatively before Reactor's first write — as a
+    /// <c>configure:</c> callback would — is what withdrawing the declaration restores,
+    /// not the platform default.
+    /// </summary>
+    internal class WithdrawRestoresAppValue(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(45);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            var baseline = await MeasureBaseline();
+
+            var comp = new ThemedBarComponent(null);
+            var win = await OpenAndSettle(Spec("Theme app value"), () => comp);
+            try
+            {
+                // Differs from both the platform baseline and the value declared below,
+                // so restoring either of those instead cannot pass.
+                const TitleBarTheme appValue = TitleBarTheme.UseDefaultAppMode;
+                win.AppWindow.TitleBar.PreferredTheme = appValue;
+
+                comp.SetTheme!(WindowTitleBarTheme.Dark);
+                await Settle(win);
+                Report("declaredOverApp", win);
+                H.Check("TitleBarTheme_AppValue_DeclarationApplies", Caption(win) == TitleBarTheme.Dark);
+
+                comp.SetTheme!(null);
+                await Settle(win);
+                Report("withdrawnToApp", win);
+                H.Check("TitleBarTheme_AppValue_WithdrawRestoresIt",
+                    Caption(win) == appValue && baseline != appValue);
+            }
+            finally { await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>Two title bars, only one of which declares a theme.</summary>
+    private sealed class TwoBarsComponent : Component
+    {
+        public Action<bool>? SetShowDeclaring;
+        public Action<bool>? SetShowPlain;
+
+        public override Element Render()
+        {
+            var (showDeclaring, setShowDeclaring) = UseState(true);
+            var (showPlain, setShowPlain) = UseState(true);
+            SetShowDeclaring = setShowDeclaring;
+            SetShowPlain = setShowPlain;
+            return VStack(
+                showDeclaring ? TitleBar("Declaring").PreferredTheme(WindowTitleBarTheme.Dark) : Empty(),
+                showPlain ? TitleBar("Plain") : Empty(),
+                TextBlock("body"));
+        }
+    }
+
+    /// <summary>
+    /// With several title bars mounted, only the bar that declared the theme owns it:
+    /// a bar that declares nothing neither withdraws it on mount nor on unmount, and
+    /// the declaring bar's unmount withdraws it even though another bar remains.
+    /// </summary>
+    internal class MultipleBarsOwnership(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(45);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            var baseline = await MeasureBaseline();
+
+            var comp = new TwoBarsComponent();
+            var win = await OpenAndSettle(Spec("Theme two bars"), () => comp);
+            try
+            {
+                // The plain bar mounts after the declaring one; a null declaration from
+                // it must not withdraw the other bar's theme.
+                Report("bothMounted", win);
+                H.Check("TitleBarTheme_MultiBar_PlainMountKeepsTheme",
+                    Caption(win) == TitleBarTheme.Dark && baseline != TitleBarTheme.Dark);
+
+                comp.SetShowPlain!(false);
+                await Settle(win);
+                Report("plainUnmounted", win);
+                H.Check("TitleBarTheme_MultiBar_PlainUnmountKeepsTheme", Caption(win) == TitleBarTheme.Dark);
+
+                comp.SetShowPlain!(true);
+                await Settle(win);
+                comp.SetShowDeclaring!(false);
+                await Settle(win);
+                Report("declaringUnmounted", win);
+                H.Check("TitleBarTheme_MultiBar_DeclaringUnmountRestores", Caption(win) == baseline);
+            }
+            finally { await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
+    /// A declaring bar replaced by a subtree that contains an equally-declaring bar.
+    /// Changing the child's element TYPE (TitleBar → VStack) selects the reconciler's
+    /// mount-then-unmount branch, so the old bar's unmount arrives after the new bar
+    /// has claimed the theme; that stale unmount must not withdraw it.
+    /// </summary>
+    internal class SurvivesTypeReplacement(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(45);
+
+        private sealed class SwapComponent : Component
+        {
+            public Action<int>? SetPhase;
+
+            public override Element Render()
+            {
+                var (phase, set) = UseState(0);
+                SetPhase = set;
+                var bar = TitleBar("Swap").PreferredTheme(WindowTitleBarTheme.Dark);
+                return VStack(phase == 0 ? bar : VStack(bar), TextBlock("body"));
+            }
+        }
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            var baseline = await MeasureBaseline();
+
+            var comp = new SwapComponent();
+            var win = await OpenAndSettle(Spec("Theme swap"), () => comp);
+            try
+            {
+                H.Check("TitleBarTheme_Swap_AppliedBefore",
+                    Caption(win) == TitleBarTheme.Dark && baseline != TitleBarTheme.Dark);
+
+                comp.SetPhase!(1);
+                await Settle(win);
+                Report("afterTypeSwap", win);
+                H.Check("TitleBarTheme_Swap_ThemeSurvives", Caption(win) == TitleBarTheme.Dark);
+            }
+            finally { await CloseAndSettle(win); }
+        }
+    }
 }
