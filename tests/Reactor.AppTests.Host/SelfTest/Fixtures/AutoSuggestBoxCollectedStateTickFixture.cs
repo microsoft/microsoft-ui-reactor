@@ -29,9 +29,9 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// native side still points at. Without a hold, no attempt's tick reaches managed code alive:
 /// each one either lands on collected state (the crash) or is lost with it. Of the orphaned
 /// arms, the first three are the ways a tick gets armed in practice, and
-/// <see cref="Arm.HeldOnlyByUnloaded"/> leaves only the hold taken on <c>Unloaded</c>. A final
-/// check pins down the WinUI behaviour the design relies on: the timer is not armed while the
-/// box is out of the tree.</para>
+/// <see cref="Arm.HeldOnlyByUnloaded"/> leaves only the hold taken on <c>Unloaded</c>. Two final
+/// checks pin down the WinUI behaviour the design relies on (the timer is not armed while the
+/// box is out of the tree) and that every hold ends.</para>
 /// </summary>
 internal static class AutoSuggestBoxCollectedStateTickFixture
 {
@@ -132,6 +132,31 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
                 $"{Name}_TextSetAfterLeavingArmsNoTick",
                 inTreeTicks > 0 && afterLeavingTicks == 0,
                 $"ticks after setting Text: {inTreeTicks} in the tree (control, expected > 0), {afterLeavingTicks} out of it (expected 0)");
+
+            // Every hold ends. A release that never ran would root every AutoSuggestBox with a
+            // callback for good while every check above still passed. Mounting a box takes a
+            // hold, which shows that the state can be seen; well after the last hold expires,
+            // the table must be empty and the release timer stopped.
+            var whileMounted = await MountAndReadHoldStateAsync();
+            var drained = await Harness.WaitFor(
+                () => AutoSuggestBoxElement.TextChangedTickHoldStateForTests() == (0, false),
+                maxPasses: 60, perPassMs: 100);
+            var afterWait = AutoSuggestBoxElement.TextChangedTickHoldStateForTests();
+            H.Check(
+                $"{Name}_HoldsEnd",
+                whileMounted.Held > 0 && whileMounted.ReleaseTimerRunning && drained,
+                $"while mounted: {whileMounted.Held} held, release timer running: {whileMounted.ReleaseTimerRunning} (control); " +
+                $"after waiting: {afterWait.Held} held, release timer running: {afterWait.ReleaseTimerRunning}");
+        }
+
+        private async Task<(int Held, bool ReleaseTimerRunning)> MountAndReadHoldStateAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(_ => VStack(AutoSuggestBox(Optional<string>.Unset, static _ => { })));
+            await Harness.Render();
+            var state = AutoSuggestBoxElement.TextChangedTickHoldStateForTests();
+            await DisposeHostAsync(host);
+            return state;
         }
 
         private async Task<int> CountTicksAfterTextSetAsync(

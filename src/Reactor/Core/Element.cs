@@ -3777,6 +3777,9 @@ public partial record AutoSuggestBoxElement(
 
         internal static void Release(WinUI.AutoSuggestBox box) => t_heldUntil?.Remove(box);
 
+        internal static (int Held, bool ReleaseTimerRunning) State =>
+            (t_heldUntil?.Count ?? 0, t_release?.IsRunning ?? false);
+
         internal static void Hold(WinUI.AutoSuggestBox box)
         {
             var queue = global::Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
@@ -3808,9 +3811,11 @@ public partial record AutoSuggestBoxElement(
         }
     }
 
-    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host): ends one box's hold early,
-    // so a selftest can show that a later event holds the box again by itself.
+    // Test-only accessors (InternalsVisibleTo Reactor.AppTests.Host). One ends a box's hold early,
+    // so a selftest can show that a later event holds the box again by itself; the other reads
+    // this thread's hold table and release timer, so it can show that every hold ends.
     internal static void ReleaseTextChangedTickHoldForTests(WinUI.AutoSuggestBox box) => PendingTextChangedTick.Release(box);
+    internal static (int Held, bool ReleaseTimerRunning) TextChangedTickHoldStateForTests() => PendingTextChangedTick.State;
 
     // Suggestions BEFORE Text (items in place before any controlled Text echo); all
     // reused verbatim from the hand-written descriptor (shared AutoSuggestBoxEventPayload).
