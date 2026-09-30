@@ -28,6 +28,14 @@ Conventions for contributors:
 
 ### Added
 
+- **Getting Started documents the single-file path.** A Reactor app does not need
+  a `.csproj`: .NET 10 runs a lone `.cs` file whose `#:package` / `#:property`
+  header supplies what a project file otherwise would. The header also references
+  `Microsoft.Windows.SDK.BuildTools.WinApp`, so `dotnet run counter.cs` launches
+  the app packaged, just like `winapp run counter.cs`; `WindowsPackageType=None`
+  runs it unpackaged (winappCli#794 / #874, shipped in winapp 0.7.0). The
+  agent-kit skills use the same header.
+
 - **Validation now works on any control, not only inside `FormField`** — the
   Forms guide's "Validation Context" example needed new surface to work as
   written (issue #1262):
@@ -149,6 +157,24 @@ Conventions for contributors:
 
 ### Fixed
 
+- **ReactorGallery category and search-result pages scroll vertically**
+  (issue #1298). Both views put a bare header and card grid into the
+  `NavigationView` content. The card grid turns off its own scrolling so it can
+  size to its content, and nothing else supplied a scroller, so in a short
+  window the cards below the fold couldn't be reached. Both views now share a
+  page helper that wraps the content in `ScrollView`, matching the control
+  pages and Home.
+
+- **Apps that reference only `Microsoft.UI.Reactor` are framework-dependent
+  again** (regression from #822). The package now depends on
+  `Microsoft.WindowsAppSDK.Runtime`; without it the Windows App SDK silently
+  built such apps self-contained, so a plain `dotnet run` failed with
+  *"WindowsAppSDKSelfContained requires a supported Windows architecture"*. To
+  keep bundling the Windows App Runtime, set `WindowsAppSDKSelfContained=true`.
+  To move to a newer WinUI, bump the full `Microsoft.WindowsAppSDK` package;
+  bumping `Microsoft.WindowsAppSDK.WinUI` on its own now fails the Windows App
+  SDK's version check.
+
 - **The Forms guide's "Validation Context" example now works as written**
   (issue #1262). Clicking **Register** on an empty form submitted successfully
   with no errors, because five defects compounded: `.Validate()` was inert
@@ -243,6 +269,16 @@ Conventions for contributors:
   while the grid itself holds keyboard focus, after tabbing onto it for example, no longer
   moves that focus out of the grid.
 
+- **Compact docking tool tabs are no longer blank, and every docking tab has a UI
+  Automation name (spec 045 §2.2, §2.8, PR #1295).** A `DockTabGroup` with
+  `CompactTabs: true`, or one made up only of `ToolWindow`s (compact by default), used
+  WinUI's `TabViewWidthMode.Compact`, which shows only the icon of an unselected tab.
+  Docking panes have no icon, so every unselected tab rendered as an empty stub with no
+  title. Compact groups now size each tab to its title, and use `Compact` only when every
+  tab has an icon. Tool-window tabs with a pin button also had no UI Automation name,
+  because WinUI names a tab only from a plain-text header; they are now named after their
+  title.
+
 - **The Visual Studio preview failed to start every session.** The extension was built
   against a newer `System.Text.Json` than Visual Studio binds extensions to, so it failed
   to load at runtime. It now tracks the `Microsoft.VisualStudio.SDK` baseline, with a test
@@ -279,6 +315,12 @@ Conventions for contributors:
   `0.1.0-preview.15` and `0.1.0-preview.16` attachments are affected. The packages on NuGet feeds
   come from a separate build and are not. The workflow now packs from per-project builds, which
   produce a platform-neutral copy, and fails if any packed assembly is not AnyCPU (PR #1293).
+- **Keyed `Memo(key, …)` children keep their place when the hand-built list around them grows
+  or reorders** (issue #327). Outside a virtualized list, `Memo(key, factory)` mounts no control
+  of its own; the factory output's control stands in for it. The keyed reconcile could therefore
+  not recognize a `Memo(key, …).WithKey(…)` child that survived a re-render. The child stayed
+  unpatched at its old index while its siblings were placed around it, so a `Grid` gave it
+  another child's row and column. The factory output now carries the wrapper's key.
 - **A resource override dropped from an element could stay applied.** Reactor records which
   `Resources` keys an element's `.Resources(...)` overrides wrote, so it can remove them once
   they are dropped, and kept that record in a table keyed by the control's managed wrapper. When

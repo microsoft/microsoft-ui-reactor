@@ -262,8 +262,12 @@ internal static class NativeDockingCoverageMiscFixtures
                 twRendered is TabViewElement);
             if (twRendered is TabViewElement tve)
             {
+                // The auto-flip still asks for compact tabs; tool windows carry
+                // no icon, so it is realized as SizeToContent rather than
+                // WinUI's icon-only Compact (which blanks unselected tabs).
                 H.Check("TabRenderer_AllToolWindow_CompactTabsAutoFlipped",
-                    tve.TabWidthMode == TabViewWidthMode.Compact);
+                    DockTabGroupRenderer.ResolveCompactTabs(allTw)
+                    && tve.TabWidthMode == TabViewWidthMode.SizeToContent);
             }
 
             // Mixed group — flip is suppressed.

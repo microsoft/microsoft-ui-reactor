@@ -113,7 +113,7 @@ public sealed partial class Reconciler
             // factory output) when it changes, so the mounted inner is never re-derived from
             // the old factory. Any modifiers on the wrapper itself are applied by the
             // post-dispatch ApplyModifiers below, exactly like any other element.
-            KeyedMemoElement km => Mount(km.Factory() ?? EmptyElement.Instance, requestRerender),
+            KeyedMemoElement km => Mount(WithWrapperKey(km.Factory() ?? EmptyElement.Instance, km.Key), requestRerender),
             // EmptyElement is a no-op sentinel — callers (Reconcile, panel
             // children loops, ChildReconciler) already filter it before
             // reaching Mount, but MountContext.MountChild does not, so a V1
@@ -247,6 +247,27 @@ public sealed partial class Reconciler
 
         return control;
     }
+
+    /// <summary>
+    /// Gives the factory output of a transparent <see cref="KeyedMemoElement"/> the wrapper's
+    /// <see cref="Element.Key"/>.
+    /// </summary>
+    /// <remarks>
+    /// The wrapper mounts no control of its own, so the inner control stands for it in the
+    /// parent's child list while carrying the inner element's tag.
+    /// <c>ChildReconciler.ReconcileKeyedMiddle</c> finds each surviving child by the key on
+    /// that tag. Without the wrapper's key there, a keyed <c>Memo(key, …)</c> survivor is never
+    /// found, so it stays unpatched at its old index while its siblings are placed around it,
+    /// and a Grid parent then gives it another child's row and column.
+    /// <para>The wrapper's key replaces an explicit key on the inner element. The parent diffs
+    /// on the wrapper's key, and the inner element is never diffed against anything: an
+    /// unchanged <see cref="KeyedMemoElement.MemoKey"/> skips it, and a changed one remounts
+    /// it.</para>
+    /// </remarks>
+    private static Element WithWrapperKey(Element inner, string? wrapperKey) =>
+        wrapperKey is null || inner is EmptyElement || inner.Key == wrapperKey
+            ? inner
+            : inner with { Key = wrapperKey };
 
     /// <summary>
     /// Final dispatch arm: the four resolution arms in <see cref="Mount"/>
@@ -462,6 +483,8 @@ public sealed partial class Reconciler
     // true the header becomes a StackPanel { TextBlock(title) , pin Button };
     // otherwise the existing string header path is preserved verbatim so
     // tabs without pin affordance are visually identical to baseline.
+    // A composite header costs the tab its accessible name (see
+    // SyncTabAutomationName), so callers pair the two.
     internal static object BuildTabHeader(TabViewItemData tabItem)
     {
         if (!tabItem.IsPinnable) return tabItem.Header;
@@ -478,6 +501,33 @@ public sealed partial class Reconciler
         sp.Children.Add(text);
         sp.Children.Add(BuildPinButton(tabItem));
         return sp;
+    }
+
+    /// <summary>
+    /// Keeps a tab's UI Automation name equal to its title. WinUI's
+    /// <c>TabViewItem</c> automation peer derives a Name only from a string
+    /// <c>Header</c>, so the composite header <see cref="BuildTabHeader"/>
+    /// builds for a pinnable tab would otherwise leave the tab unnamed for
+    /// assistive technology. The title is mirrored onto
+    /// <c>AutomationProperties.Name</c> while the header is composite, and
+    /// the local value is released once the tab reverts to a plain string
+    /// header, from which WinUI derives the name itself. Pass
+    /// <paramref name="oldTab"/> as null for a freshly created container.
+    /// </summary>
+    internal static void SyncTabAutomationName(
+        WinUI.TabViewItem tabViewItem,
+        TabViewItemData? oldTab,
+        TabViewItemData newTab)
+    {
+        if (newTab.IsPinnable)
+        {
+            if (oldTab is not { IsPinnable: true } || oldTab.Header != newTab.Header)
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(tabViewItem, newTab.Header);
+        }
+        else if (oldTab is { IsPinnable: true })
+        {
+            tabViewItem.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.NameProperty);
+        }
     }
 
     /// <summary>
