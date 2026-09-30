@@ -4,6 +4,7 @@ using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Xaml;
 using static Microsoft.UI.Reactor.Factories;
+using ReactorTransition = Microsoft.UI.Reactor.Animation.Transition;
 using WinXC = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
@@ -14,22 +15,24 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// reads it back, without the registration's callbacks calling <c>Reconciler.SetElementTag</c>
 /// themselves. None of the registrations below tag by hand.
 ///
-/// <para>Three readers depend on the tag. <c>ChildReconciler.ReconcileKeyedMiddle</c> finds a
+/// <para>Four readers depend on the tag. <c>ChildReconciler.ReconcileKeyedMiddle</c> finds a
 /// surviving keyed child by the key on its tag; an untagged survivor is neither moved nor
 /// patched, so after a grow or a reorder the control keeps stale content while the Grid assigns
 /// it another child's cell. <c>UnmountRecursive</c> / <c>UnmountAndCollect</c> find a
 /// registration's <c>unmount</c> callback through the tag, so without it the callback never ran.
 /// <c>CleanupReferenceStateForUnmount</c> clears a <c>.Ref(...)</c> through the tag, so without
-/// it the ref kept pointing at the removed control.</para>
+/// it the ref kept pointing at the removed control. <c>RemoveChildWithExitTransition</c> reads a
+/// <c>.Transition(...)</c> exit animation from the tag, so without it the control was removed
+/// without one.</para>
 ///
 /// <para>The reconciler used to tag only the V1 arm and the composition wrappers. The
 /// registered-type arm left tagging to the author, which in-tree only <c>XamlInterop</c> did.
 /// These fixtures cover each reader, both unmount paths, both update outcomes (patched in place
 /// and replaced), and the allocation gate: an unkeyed control whose registration has no
-/// <c>unmount</c> is still not tagged. Two more pin what tagging must not do: clear a ref
-/// that has already moved to a replacement, or retag a control that another element
-/// owns. One more pins that an <c>unmount</c> callback can unmount its own control through
-/// the reconciler without calling itself again.</para>
+/// <c>unmount</c> is still not tagged unless it carries an extra. Others pin what tagging must
+/// not do: clear a ref that has already moved to a replacement, or retag a control that an
+/// element of another type owns. One more pins that an <c>unmount</c> callback can unmount its
+/// own control through the reconciler without calling itself again.</para>
 /// </summary>
 internal static class RegisterTypeElementTagFixtures
 {
@@ -687,6 +690,76 @@ internal static class RegisterTypeElementTagFixtures
             WinXC.Border border => Describe([border], Created),
             var other => other.GetType().Name,
         };
+    }
+
+    // ── Element extras on a registered type ─────────────────────────────
+
+    private sealed record ExitProbeElement(string Label) : Element;
+
+    /// <summary>
+    /// An element extra makes the element need its tag even when it is unkeyed and its
+    /// registration has no <c>unmount</c>: <c>RemoveChildWithExitTransition</c> reads the
+    /// <c>.Transition(...)</c> exit animation back from the tag when the control is removed. The
+    /// transition is exit-only, so nothing touches the control's composition visual before
+    /// removal, and playing the exit animation marks the control compositor-tainted. That taint
+    /// is the oracle for the removal having taken the transition path, and it doesn't depend on
+    /// the animation finishing: completion is <c>ExitTransitionOnRemove</c>'s job, and issue
+    /// #1037 tracks its flake.
+    /// </summary>
+    internal sealed class ExitTransitionReadFromTag(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string Name = "RegisterTypeTag_ExitTransition_ReadFromTag";
+            var exitOnly = ReactorTransition.Exit(ReactorTransition.Fade);
+            WinXC.TextBlock? control = null;
+            Element? rendered = null;
+            var host = H.CreateHost();
+            host.Reconciler.RegisterType<ExitProbeElement, WinXC.TextBlock>(
+                mount: (_, el, _) =>
+                {
+                    var text = new WinXC.TextBlock { Text = el.Label };
+                    control = text;
+                    return text;
+                },
+                update: (_, _, el, text, _) =>
+                {
+                    text.Text = el.Label;
+                    return null;
+                });
+            host.Mount(ctx =>
+            {
+                var (label, setLabel) = ctx.UseState("rtt-exit-a");
+                var (show, setShow) = ctx.UseState(true);
+                var children = new List<Element>
+                {
+                    Button("RTT Rename exit", () => setLabel("rtt-exit-b")),
+                    Button("RTT Remove exit", () => setShow(false)),
+                };
+                if (show) children.Add(rendered = new ExitProbeElement(label).Transition(exitOnly));
+                return VStack(children.ToArray());
+            });
+
+            await Harness.Render();
+            CheckTag($"{Name}_Mount_TaggedWithCurrentElement", control, rendered);
+            H.Check($"{Name}_Mount_VisualUntouched", control is not null && !ElementPool.IsCompositorTainted(control));
+
+            H.ClickButton("RTT Rename exit");
+            H.Check($"{Name}_Renamed", await Harness.WaitFor(() => control?.Text == "rtt-exit-b"));
+            CheckTag($"{Name}_Update_TaggedWithCurrentElement", control, rendered);
+
+            H.ClickButton("RTT Remove exit");
+            await Harness.Render();
+            H.Check($"{Name}_RemovalPlayedExitTransition", control is not null && ElementPool.IsCompositorTainted(control),
+                "the control was removed without its exit transition");
+        }
+
+        private void CheckTag(string check, WinXC.TextBlock? control, Element? expected)
+        {
+            var tag = control is null ? null : Reconciler.GetElementTag(control);
+            H.Check(check, control is not null && expected is not null && ReferenceEquals(tag, expected),
+                control is null ? "control never mounted" : $"tag is {(tag is null ? "null" : tag.GetType().Name)}");
+        }
     }
 
     // ── A control that belongs to another element ───────────────────────
