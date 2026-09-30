@@ -475,7 +475,10 @@ WinUI.Dock wrapper for side-by-side review.
   configurable `CompactTabs`, `ShowWhenEmpty`, `SelectedIndex`.
   `DockTabGroupRenderer.Render` produces a `TabViewElement` keyed off
   `Documents` / `SelectedIndex` / `CanClose`. `CompactTabs` maps to
-  `TabWidthMode.Compact`. **`TabPosition.Bottom` is currently rendered
+  `TabWidthMode.SizeToContent` (WinUI's icon-only `TabWidthMode.Compact`
+  only when every tab has an icon — docking panes carry none, and an
+  icon-less unselected tab in `Compact` mode renders as a blank stub).
+  **`TabPosition.Bottom` is currently rendered
   as top-position** — WinUI `TabView` has no native bottom mode, and
   the upstream `ScaleY=-1` flip requires per-tab-header counter-scales
   inside `TabViewItem` template parts that aren't reachable without a

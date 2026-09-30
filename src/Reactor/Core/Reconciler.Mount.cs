@@ -483,6 +483,8 @@ public sealed partial class Reconciler
     // true the header becomes a StackPanel { TextBlock(title) , pin Button };
     // otherwise the existing string header path is preserved verbatim so
     // tabs without pin affordance are visually identical to baseline.
+    // A composite header costs the tab its accessible name (see
+    // SyncTabAutomationName), so callers pair the two.
     internal static object BuildTabHeader(TabViewItemData tabItem)
     {
         if (!tabItem.IsPinnable) return tabItem.Header;
@@ -499,6 +501,33 @@ public sealed partial class Reconciler
         sp.Children.Add(text);
         sp.Children.Add(BuildPinButton(tabItem));
         return sp;
+    }
+
+    /// <summary>
+    /// Keeps a tab's UI Automation name equal to its title. WinUI's
+    /// <c>TabViewItem</c> automation peer derives a Name only from a string
+    /// <c>Header</c>, so the composite header <see cref="BuildTabHeader"/>
+    /// builds for a pinnable tab would otherwise leave the tab unnamed for
+    /// assistive technology. The title is mirrored onto
+    /// <c>AutomationProperties.Name</c> while the header is composite, and
+    /// the local value is released once the tab reverts to a plain string
+    /// header, from which WinUI derives the name itself. Pass
+    /// <paramref name="oldTab"/> as null for a freshly created container.
+    /// </summary>
+    internal static void SyncTabAutomationName(
+        WinUI.TabViewItem tabViewItem,
+        TabViewItemData? oldTab,
+        TabViewItemData newTab)
+    {
+        if (newTab.IsPinnable)
+        {
+            if (oldTab is not { IsPinnable: true } || oldTab.Header != newTab.Header)
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(tabViewItem, newTab.Header);
+        }
+        else if (oldTab is { IsPinnable: true })
+        {
+            tabViewItem.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.NameProperty);
+        }
     }
 
     /// <summary>

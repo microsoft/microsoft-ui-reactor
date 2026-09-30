@@ -159,11 +159,11 @@ public class AppTestBase
     ///
     /// Resolution is deliberately indirect. The title is an ambiguous text selector — it
     /// substring-matches the caption TextBlock, the pane Group, and (for pinnable docking tabs)
-    /// the pin button, whose AutomationId embeds the pane key (e.g. <c>pin:dock-input:right</c>).
-    /// Worse, a pinnable tab renders a composite (StackPanel) header, so the <c>TabViewItem</c>
-    /// itself has no Name and is NOT returned by a text search for the title — a direct "find the
-    /// TabItem named X" lookup finds nothing, and a plain Invoke(title) toggles the pin button.
-    /// So resolve the tab from its caption's owning <c>TabItem</c>.
+    /// the pin button, whose AutomationId embeds the pane key (e.g. <c>pin:dock-input:right</c>),
+    /// so a plain Invoke(title) can toggle the pin button. Every <c>TabViewItem</c> is named after
+    /// its title (Reactor mirrors the title onto a pinnable tab, whose composite StackPanel header
+    /// WinUI cannot derive a name from), so prefer the exact-name TabItem. Resolving the tab from
+    /// its caption's owning <c>TabItem</c> remains the fallback for a tab that exposes no Name.
     ///
     /// Prefer the <c>invokableAncestor</c> that <c>search</c> already computes in the SAME call:
     /// resolving via a second <c>inspect --ancestors</c> opens a re-render race (selecting the
@@ -175,7 +175,7 @@ public class AppTestBase
     {
         var matches = App.Search(title);
 
-        // A directly-named TabItem (string-header / non-pinnable tabs) can be invoked as-is.
+        // A directly-named TabItem can be invoked as-is.
         var namedTab = matches.FirstOrDefault(m =>
             string.Equals(m.Type, "TabItem", StringComparison.OrdinalIgnoreCase) && m.Name == title);
         if (namedTab is not null)
@@ -184,7 +184,7 @@ public class AppTestBase
             return;
         }
 
-        // Composite/pinnable header: the caption TextBlock (exact Name==title) carries its owning
+        // A TabItem without a Name: the caption TextBlock (exact Name==title) carries its owning
         // TabItem as invokableAncestor — race-free, from this one search call.
         var captionWithTab = matches.FirstOrDefault(m =>
             m.Name == title &&
