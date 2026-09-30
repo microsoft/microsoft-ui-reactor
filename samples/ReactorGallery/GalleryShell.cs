@@ -128,13 +128,9 @@ class GalleryShell : Component
         Element content;
         if (searchResults != null)
         {
-            content = VStack(16,
-                GalleryControls.PageHeader("Search Results",
-                    $"{searchResults.Length} matching \"{searchQuery}\"")
-                    .Margin(36, 24, 36, 0),
-                GalleryControls.ControlCardGrid(searchResults, navigate.Current)
-                    .Margin(36, 0, 0, 36)
-            );
+            content = CardListPage("Search Results",
+                $"{searchResults.Length} matching \"{searchQuery}\"",
+                searchResults, navigate.Current);
         }
         else if (selectedTag == GalleryRoutes.HomeTag)
         {
@@ -152,15 +148,11 @@ class GalleryShell : Component
                 .Where(c => c.Category == categoryName)
                 .ToArray();
 
-            content = VStack(16,
-                GalleryControls.PageHeader(categoryName,
-                    ControlRegistry.IsControlCategory(categoryName)
-                        ? $"{controls.Length} controls in this category"
-                        : $"{controls.Length} topics in this category")
-                    .Margin(36, 24, 36, 0),
-                GalleryControls.ControlCardGrid(controls, navigate.Current)
-                    .Margin(36, 0, 0, 36)
-            );
+            content = CardListPage(categoryName,
+                ControlRegistry.IsControlCategory(categoryName)
+                    ? $"{controls.Length} controls in this category"
+                    : $"{controls.Length} topics in this category",
+                controls, navigate.Current);
         }
         else
         {
@@ -252,6 +244,22 @@ class GalleryShell : Component
             .RequestedTheme(isDark ? ElementTheme.Dark : ElementTheme.Light)
             .Backdrop(BackdropKind.Mica);
     }
+
+    /// <summary>
+    /// Header + card grid page used by category and search-result views. The page owns
+    /// its vertical scroller: <see cref="GalleryControls.ControlCardGrid"/> disables the
+    /// GridView's internal ScrollViewer so it sizes to content, and NavigationView content
+    /// does not scroll on its own (issue #1298).
+    /// </summary>
+    static Element CardListPage(string title, string subtitle, ControlInfo[] controls, Action<string> navigate) =>
+        ScrollView(
+            VStack(16,
+                GalleryControls.PageHeader(title, subtitle)
+                    .Margin(36, 24, 36, 0),
+                GalleryControls.ControlCardGrid(controls, navigate)
+                    .Margin(36, 0, 0, 36)
+            )
+        );
 
     /// <summary>
     /// Search text a route implies. Only a <c>/search?q=</c> link carries one; every
