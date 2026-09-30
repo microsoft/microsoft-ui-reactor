@@ -181,15 +181,15 @@ Conventions for contributors:
   could already have handed to another element. The reconciler now tags these controls
   wherever it reads the tag itself: when the element is keyed or carries callbacks,
   extras or a reference modifier, and always when the registration has an `unmount`
-  callback. A control that already carries another element's tag, such as one the
-  callback got from `Reconciler.Mount`, keeps it. An `update` callback that returns the
-  control it was handed now counts as patching it, where the child reconcilers used to
-  unmount it. Unmounting a replaced control also no longer clears a `.Ref(...)` that has
-  already moved to its replacement. Because `unmount` now runs, it replaces the
-  reconciler's walk over the control's children, as it always has for `XamlInterop`: a
-  registration that mounts children through the reconciler and supplies `unmount` has to
-  unmount them there. Calling `UnmountChild` on the control itself from `unmount` walks
-  its children once rather than calling `unmount` again.
+  callback. A control already tagged for an element of another type, such as one the
+  callback got from `Reconciler.Mount`, keeps that tag. An `update` callback that
+  returns the control it was handed now counts as patching it, where the child
+  reconcilers used to unmount it. Unmounting a replaced control also no longer clears a
+  `.Ref(...)` that has already moved to its replacement. Because `unmount` now runs, it
+  replaces the reconciler's walk over the control's children, as it always has for
+  `XamlInterop`: a registration that mounts children through the reconciler and
+  supplies `unmount` has to unmount them there. Calling `UnmountChild` on the control
+  itself from `unmount` walks its children once rather than calling `unmount` again.
 
 - **Apps that reference only `Microsoft.UI.Reactor` are framework-dependent
   again** (regression from #822). The package now depends on

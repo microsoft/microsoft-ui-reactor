@@ -742,6 +742,71 @@ internal static class RegisterTypeElementTagFixtures
         }
     }
 
+    private record BaseDelegatingElement(string Label) : Element;
+
+    private sealed record DerivedOwnedElement(string Label) : BaseDelegatingElement(Label);
+
+    /// <summary>
+    /// Registration is by exact element type, so a base and a derived element type can be
+    /// registered separately. A base registration that hands back the control it mounted for
+    /// the derived type must leave the derived element's tag alone: that tag is how the derived
+    /// registration's <c>unmount</c> is found, and overwriting it runs the base one instead.
+    /// </summary>
+    internal sealed class DelegatedToDerivedTypeKeepsItsTag(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string Name = "RegisterTypeTag_DelegatedToDerivedType_KeepsItsTag";
+            int baseUnmounts = 0, derivedUnmounts = 0;
+            var host = H.CreateHost();
+            host.Reconciler.RegisterType<DerivedOwnedElement, WinXC.TextBlock>(
+                mount: (_, el, _) => new WinXC.TextBlock { Text = el.Label },
+                update: (_, _, el, text, _) =>
+                {
+                    text.Text = el.Label;
+                    return null;
+                },
+                unmount: (_, _) => derivedUnmounts++);
+            host.Reconciler.RegisterType<BaseDelegatingElement, UIElement>(
+                mount: (r, el, rerender) => r.Mount(new DerivedOwnedElement(el.Label), rerender)!,
+                update: (r, oldEl, newEl, control, rerender) =>
+                    r.UpdateChild(new DerivedOwnedElement(oldEl.Label), new DerivedOwnedElement(newEl.Label), control, rerender),
+                unmount: (_, _) => baseUnmounts++);
+            host.Mount(ctx =>
+            {
+                var (label, setLabel) = ctx.UseState("rtt-derived-a");
+                var (show, setShow) = ctx.UseState(true);
+                var children = new List<Element>
+                {
+                    Button("RTT Rename derived", () => setLabel("rtt-derived-b")),
+                    Button("RTT Remove derived", () => setShow(false)),
+                };
+                if (show) children.Add(new BaseDelegatingElement(label));
+                return VStack(children.ToArray());
+            });
+
+            await Harness.Render();
+            CheckDerivedTag($"{Name}_Mount_KeepsDerivedTag", "rtt-derived-a");
+
+            H.ClickButton("RTT Rename derived");
+            H.Check($"{Name}_Renamed", await Harness.WaitFor(() => H.FindText("rtt-derived-b") is not null));
+            CheckDerivedTag($"{Name}_Update_KeepsDerivedTag", "rtt-derived-b");
+
+            H.ClickButton("RTT Remove derived");
+            H.Check($"{Name}_Removed", await Harness.WaitFor(() => H.FindText("rtt-derived-b") is null));
+            H.Check($"{Name}_OwnerUnmountRan", derivedUnmounts == 1 && baseUnmounts == 0,
+                $"derived unmount ran {derivedUnmounts} times, base unmount {baseUnmounts} times");
+        }
+
+        private void CheckDerivedTag(string check, string label)
+        {
+            var text = H.FindText(label);
+            var tag = text is null ? null : Reconciler.GetElementTag(text);
+            H.Check(check, tag is DerivedOwnedElement derived && derived.Label == label,
+                text is null ? "control not mounted" : $"tag is {tag?.GetType().Name ?? "null"}");
+        }
+    }
+
     // ── Which registered controls carry a tag ───────────────────────────
 
     private sealed record SlotElement(string Slot, int Generation) : Element;
@@ -753,7 +818,10 @@ internal static class RegisterTypeElementTagFixtures
     /// <c>unmount</c> callback are tagged at mount and re-tagged with the new element on update.
     /// An unkeyed, modifier-free element whose registration has no <c>unmount</c> is not tagged:
     /// nothing reads it back, and a <c>ReactorState</c> per leaf is the allocation #468 removed.
-    /// A registration that tags by hand, as <c>XamlInterop</c> does, keeps working.
+    /// That holds whether its <c>update</c> returns null, the control it was handed, or a
+    /// replacement: telling a second wrapper for the same control from a replacement allocates
+    /// only on the control being replaced. A registration that tags by hand, as
+    /// <c>XamlInterop</c> does, keeps working.
     /// </summary>
     internal sealed class TagOnlyWhereRead(Harness h) : SelfTestFixtureBase(h)
     {
@@ -776,8 +844,20 @@ internal static class RegisterTypeElementTagFixtures
                 },
                 update: (_, _, slot, text, _) =>
                 {
-                    text.Text = $"{slot.Slot}@{slot.Generation}";
-                    return null;
+                    var label = $"{slot.Slot}@{slot.Generation}";
+                    switch (slot.Slot)
+                    {
+                        case "same":
+                            text.Text = label;
+                            return text;
+                        case "replaced":
+                            var replacement = new WinXC.TextBlock { Text = label };
+                            _slots[slot.Slot] = replacement;
+                            return replacement;
+                        default:
+                            text.Text = label;
+                            return null;
+                    }
                 });
             host.Reconciler.RegisterType<ProbeElement, WinXC.Border>(
                 mount: (_, probe, _) =>
@@ -813,6 +893,8 @@ internal static class RegisterTypeElementTagFixtures
                 return VStack(
                     Button("RTT Rerender", () => setGeneration(1)),
                     Track("plain", new SlotElement("plain", generation)),
+                    Track("same", new SlotElement("same", generation)),
+                    Track("replaced", new SlotElement("replaced", generation)),
                     Track("keyed", new SlotElement("keyed", generation).WithKey("keyed")),
                     Track("unmount", new ProbeElement($"rtt-with-unmount@{generation}")),
                     Track("manual", new ManualTagElement($"rtt-manual@{generation}")));
@@ -820,11 +902,18 @@ internal static class RegisterTypeElementTagFixtures
 
             await Harness.Render();
             Verify("Mount");
+            var sameAtMount = _slots["same"];
+            var replacedAtMount = _slots["replaced"];
 
             H.ClickButton("RTT Rerender");
             H.Check($"{Name}_Rerendered", await Harness.WaitFor(() =>
-                _slots["plain"].Text == "plain@1" && _slots["keyed"].Text == "keyed@1"
+                _slots["plain"].Text == "plain@1" && _slots["same"].Text == "same@1"
+                && H.FindText("replaced@1") is not null && _slots["keyed"].Text == "keyed@1"
                 && H.FindText("rtt-with-unmount@1") is not null && _manual?.Text == "rtt-manual@1"));
+            H.Check($"{Name}_Update_SameControlKept",
+                ReferenceEquals(_slots["same"], sameAtMount) && ReferenceEquals(H.FindText("same@1"), sameAtMount));
+            H.Check($"{Name}_Update_ReplacementInstalled",
+                !ReferenceEquals(_slots["replaced"], replacedAtMount) && ReferenceEquals(H.FindText("replaced@1"), _slots["replaced"]));
             Verify("Update");
         }
 
@@ -836,13 +925,17 @@ internal static class RegisterTypeElementTagFixtures
 
         private void Verify(string step)
         {
-            H.Check($"{Name}_{step}_UnkeyedWithoutUnmount_NoReactorState",
-                !Reconciler.TryGetReactorState(_slots["plain"], out var state),
-                $"allocated a ReactorState tagged with {state?.Element?.GetType().Name ?? "null"}");
+            CheckNoState($"{Name}_{step}_UnkeyedWithoutUnmount_NoReactorState", _slots["plain"]);
+            CheckNoState($"{Name}_{step}_UnkeyedWithoutUnmount_UpdateReturnsSame_NoReactorState", _slots["same"]);
+            CheckNoState($"{Name}_{step}_UnkeyedWithoutUnmount_UpdateReturnsNew_NoReactorState", _slots["replaced"]);
             CheckTag($"{Name}_{step}_Keyed_TaggedWithCurrentElement", _slots["keyed"], _rendered["keyed"]);
             CheckTag($"{Name}_{step}_WithUnmount_TaggedWithCurrentElement", _probe, _rendered["unmount"]);
             CheckTag($"{Name}_{step}_ManualTag_TaggedWithCurrentElement", _manual, _rendered["manual"]);
         }
+
+        private void CheckNoState(string check, WinXC.TextBlock control) =>
+            H.Check(check, !Reconciler.TryGetReactorState(control, out var state),
+                $"allocated a ReactorState tagged with {state?.Element?.GetType().Name ?? "null"}");
 
         private void CheckTag(string check, FrameworkElement? control, Element expected)
         {

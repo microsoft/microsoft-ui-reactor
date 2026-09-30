@@ -930,9 +930,10 @@ public sealed partial class Reconciler : IDisposable
     /// subclass, so every control a registration returns is tagged the same way.
     ///
     /// <c>mount</c> and <c>update</c> are expected to return a control the registration owns.
-    /// The tag holds one element, so a control that already carries another element's tag, for
-    /// example one <c>mount</c> got from <see cref="Mount"/> for a child element, keeps that
-    /// tag: overwriting it would silence that element's own callbacks (the collision issue #942
+    /// The tag holds one element, so a control that already carries the tag of an element of
+    /// another type (registration is by exact type, so a derived type counts), for example one
+    /// <c>mount</c> got from <see cref="Mount"/> for a child element, keeps that tag:
+    /// overwriting it would silence that element's own callbacks (the collision issue #942
     /// tracks for target-wrapping decorators). The registration's key, ref, transitions and
     /// <c>unmount</c> are not tracked for such a control. To wrap built-in elements, compose
     /// them in a component instead.
@@ -1564,13 +1565,25 @@ public sealed partial class Reconciler : IDisposable
             // replacement and unmount the control they hold, which would run this registration's
             // unmount callback against a control that stays mounted. A second managed wrapper
             // for the same native control counts too.
-            if (ReferenceEquals(result, control)
-                || (result is FrameworkElement resultFe && control is FrameworkElement controlFe
-                    && IsSameNativeElement(resultFe, controlFe)))
+            if (result is not null && IsSameControl(result, control))
                 result = null;
 
             TagControl(result ?? control, newEl);
             return result;
+        }
+
+        // True when an update result is the control it was handed, possibly through a second
+        // managed wrapper. Every wrapper for a native object reads the same ReactorState, so
+        // the handed-in control gets one if it has none and the result is checked for it. That
+        // allocation happens only when the callback returned a different wrapper, which is
+        // almost always a genuine replacement, and it lands on the old control.
+        private static bool IsSameControl(UIElement result, UIElement control)
+        {
+            if (ReferenceEquals(result, control)) return true;
+            if (result is not FrameworkElement resultFe || control is not FrameworkElement controlFe)
+                return false;
+            var state = GetOrCreateReactorState(controlFe);
+            return ReferenceEquals(resultFe.GetValue(ReactorAttached.StateProperty), state);
         }
 
         public void Unmount(UIElement control, Reconciler reconciler)
@@ -1592,10 +1605,11 @@ public sealed partial class Reconciler : IDisposable
             if (control is not FrameworkElement fe) return;
             if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
             {
-                // The callback returned a control the reconciler mounted for another element,
-                // such as a child's. That element's own event trampolines and unmount read
-                // the tag, so it keeps it.
-                if (state.Element is { } owner && owner is not TElement) return;
+                // The callback returned a control the reconciler mounted for an element of
+                // another type, such as a child's. That element's own event trampolines and
+                // unmount read the tag, so it keeps it. Registration is by exact type, so a
+                // derived element type is another type here too.
+                if (state.Element is { } owner && owner.GetType() != typeof(TElement)) return;
                 state.Element = element;
                 return;
             }
