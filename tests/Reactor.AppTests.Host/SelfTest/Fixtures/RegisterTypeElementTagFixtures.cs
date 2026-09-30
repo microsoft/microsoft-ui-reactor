@@ -401,6 +401,54 @@ internal static class RegisterTypeElementTagFixtures
 
     private sealed record ContainerElement : Element;
 
+    private sealed record DeclaredUIElementElement(string Label) : Element;
+
+    /// <summary>
+    /// <c>RegisterType</c> lets <c>TControl</c> be declared as <see cref="UIElement"/>. The tag
+    /// lives on <see cref="FrameworkElement"/>, which in WinUI 3 every UIElement is, so such a
+    /// registration is tagged and gets its <c>unmount</c> like any other.
+    /// </summary>
+    internal sealed class DeclaredUIElementControl(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string Name = "RegisterTypeTag_DeclaredUIElementControl";
+            UIElement? mounted = null;
+            var unmounted = new List<UIElement>();
+            var host = H.CreateHost();
+            host.Reconciler.RegisterType<DeclaredUIElementElement, UIElement>(
+                mount: (_, el, _) =>
+                {
+                    UIElement text = new WinXC.TextBlock { Text = el.Label };
+                    mounted = text;
+                    return text;
+                },
+                update: (_, _, el, control, _) =>
+                {
+                    ((WinXC.TextBlock)control).Text = el.Label;
+                    return null;
+                },
+                unmount: (_, control) => unmounted.Add(control));
+            host.Mount(ctx =>
+            {
+                var (show, setShow) = ctx.UseState(true);
+                var children = new List<Element> { Button("RTT Remove declared", () => setShow(false)) };
+                if (show) children.Add(new DeclaredUIElementElement("rtt-declared-uielement"));
+                return VStack(children.ToArray());
+            });
+
+            await Harness.Render();
+            H.Check($"{Name}_Tagged",
+                mounted is FrameworkElement fe && Reconciler.GetElementTag(fe) is DeclaredUIElementElement,
+                $"mounted {mounted?.GetType().Name ?? "nothing"}, tag {(mounted is FrameworkElement f ? Reconciler.GetElementTag(f)?.GetType().Name ?? "null" : "n/a")}");
+
+            H.ClickButton("RTT Remove declared");
+            H.Check($"{Name}_Removed", await Harness.WaitFor(() => H.FindText("rtt-declared-uielement") is null));
+            H.Check($"{Name}_UnmountCallbackRanOnce", unmounted.Count == 1 && ReferenceEquals(unmounted[0], mounted),
+                $"unmount callback ran {unmounted.Count} times");
+        }
+    }
+
     private sealed class ContainedProbe : Component
     {
         public static int Cleanups;

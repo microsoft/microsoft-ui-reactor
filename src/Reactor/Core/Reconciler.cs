@@ -924,7 +924,10 @@ public sealed partial class Reconciler : IDisposable
     /// reconciliation, the <c>unmount</c> lookup, <c>.Ref(...)</c> cleanup and exit
     /// transitions. The callbacks don't call <see cref="SetElementTag"/> for those. Code of your
     /// own that reads the element back with <see cref="GetElementTag(FrameworkElement)"/>, such
-    /// as an event handler, still tags the control itself.
+    /// as an event handler, still tags the control itself. The tag lives on a
+    /// <see cref="FrameworkElement"/>. <typeparamref name="TControl"/> may be declared as
+    /// <see cref="UIElement"/>, but in WinUI 3 <see cref="FrameworkElement"/> is its only
+    /// subclass, so every control a registration returns is tagged the same way.
     ///
     /// <c>mount</c> and <c>update</c> are expected to return a control the registration owns.
     /// The tag holds one element, so a control that already carries another element's tag, for
@@ -1584,6 +1587,8 @@ public sealed partial class Reconciler : IDisposable
         // that lookup goes through the tag whatever the element carries.
         private void TagControl(UIElement control, Element element)
         {
+            // The tag lives on FrameworkElement, UIElement's only subclass in WinUI 3, so a
+            // TControl declared as UIElement still arrives here as a FrameworkElement.
             if (control is not FrameworkElement fe) return;
             if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
             {
