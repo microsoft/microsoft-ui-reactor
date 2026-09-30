@@ -308,7 +308,7 @@ public sealed record ToolWindow(string Title, ...) : DockableContent(...);
 `Document` is the editor-tab-style center-area pane. `ToolWindow` is the can-be-pinned-to-side dockable utility pane. Differences:
 
 - `ToolWindow.CanPin` defaults to `true`; `Document.CanPin` defaults to `false`.
-- `ToolWindow` tabs at the bottom of a group default to compact mode; `Document` defaults to full tabs.
+- `ToolWindow` tabs at the bottom of a group default to compact mode; `Document` defaults to full tabs. In Reactor, compact tabs are sized to their titles rather than stretched to an equal share of the strip, and unselected tabs keep their titles. WinUI's icon-only `TabViewWidthMode.Compact` is used only when every tab has an icon, which docking panes do not expose, so a compact tab is never an unlabeled stub. (The §3.1 row "Compact / icon-only tabs" rates the upstream WinUI.Dock library, not Reactor.)
 - Drag-pin gesture only offered for `ToolWindow`.
 - Layout serialization distinguishes the two so a `LoadLayout` cross-version migration knows which side-pin defaults to apply.
 
