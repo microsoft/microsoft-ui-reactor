@@ -1,0 +1,148 @@
+<!-- Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT License. See LICENSE in the project root for license information. -->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:primitives="using:Microsoft.UI.Xaml.Controls.Primitives">
+
+    <Style TargetType="primitives:SortIndicator">
+        <!-- Foreground uses TextFillColorPrimaryBrush directly. Bumped from
+             TextFillColorSecondaryBrush (2026-06-03) because the secondary brush
+             is the WinUI light-gray "subtitle" token and the resulting chevron
+             was so subtle against the tabular header band that users on
+             FrozenColumnsPage and MultiColumnSortPage reported the indicator
+             missing even after the underlying sort had clearly fired (rows
+             re-ordered Asc → Desc → None on consecutive clicks). Primary brush
+             matches the header text color so the chevron reads as part of the
+             "this column is sorted" header treatment without re-skinning.
+             Previous notes about TabularSurfaceHeaderForegroundBrush and
+             MUX_SortIndicatorForegroundBrush root-of-XAML resolution issues
+             still apply — system Text* brushes are the safe choice. -->
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Width" Value="{ThemeResource SortIndicatorGlyphSize}" />
+        <Setter Property="Height" Value="{ThemeResource SortIndicatorGlyphSize}" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="UseSystemFocusVisuals" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="primitives:SortIndicator">
+                    <Grid x:Name="LayoutRoot" Opacity="0" Background="Transparent">
+
+                        <VisualStateManager.VisualStateGroups>
+                            <!-- DirectionStates are kept as empty shells so consumer
+                                 theme overrides (Style BasedOn) can still hook into
+                                 these state names. The actual Opacity / Angle changes
+                                 are driven imperatively by SortIndicator::UpdateVisualState
+                                 because the Setter Target="LayoutRoot.Opacity" pattern
+                                 was not reliably flipping the value when transitioning
+                                 from NoSort → Ascending (chevron stuck invisible even
+                                 though SortDirection had changed and rows reordered). -->
+                            <VisualStateGroup x:Name="DirectionStates">
+                                <VisualState x:Name="NoSort" />
+                                <VisualState x:Name="Ascending" />
+                                <VisualState x:Name="Descending" />
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="BadgeStates">
+                                <VisualStateGroup.Transitions>
+                                    <!-- BadgeHidden → BadgeShown: fade in -->
+                                    <VisualTransition From="BadgeHidden" To="BadgeShown" GeneratedDuration="0:0:0.15">
+                                        <Storyboard>
+                                            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="PART_IndexBadge" Storyboard.TargetProperty="Opacity">
+                                                <DiscreteDoubleKeyFrame KeyTime="0" Value="0" />
+                                                <LinearDoubleKeyFrame KeyTime="0:0:0.15" Value="1" />
+                                            </DoubleAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualTransition>
+                                    <!-- BadgeShown → BadgeHidden: fade out -->
+                                    <VisualTransition From="BadgeShown" To="BadgeHidden" GeneratedDuration="0:0:0.12">
+                                        <Storyboard>
+                                            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="PART_IndexBadge" Storyboard.TargetProperty="Opacity">
+                                                <LinearDoubleKeyFrame KeyTime="0:0:0.12" Value="0" />
+                                            </DoubleAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualTransition>
+                                </VisualStateGroup.Transitions>
+                                <VisualState x:Name="BadgeHidden">
+                                    <VisualState.Setters>
+                                        <!-- F:3: animate Opacity, not Visibility. Visibility Setters apply at
+                                             the END of a VisualTransition, so the fade-in Storyboard targeting
+                                             PART_IndexBadge.Opacity had no visible effect (badge was still
+                                             Visibility=Collapsed during the transition and snap-appeared at
+                                             the end). Defaulting the Border to Opacity="0" + IsHitTestVisible="False"
+                                             lets the transitions actually animate the badge in/out. -->
+                                        <Setter Target="PART_IndexBadge.Opacity" Value="0" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="BadgeShown">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_IndexBadge.Opacity" Value="1" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+
+                        <!--
+                            Chevron glyph rendered as a FontIcon (Segoe Fluent Icons). The previous
+                            stroked-Path approach (Stretch=Uniform on a Path with Stroke="{TemplateBinding
+                            Foreground}") was fragile: it rendered to zero visible pixels in production
+                            consumer scopes even when LayoutRoot.Opacity reached 1.0 and Direction
+                            transitioned to Asc/Desc (validated via UIA — bounding-rect non-empty but
+                            pixel capture all-zero). FontIcon mirrors the working FilterIndicator path
+                            (see TableView::AppendFilterIndicatorVisual) which uses the same FontIcon
+                            primitive with Segoe Fluent glyphs and renders reliably on every page.
+                            SortIndicator.cpp's UpdateVisualState sets the Glyph property imperatively
+                            based on Direction: \uE96D=SortUp (ascending), \uE96E=SortDown (descending).
+                            For Direction=None, LayoutRoot.Opacity=0 hides the entire chevron + badge.
+                        -->
+                        <!--
+                            FontFamily MUST be set to literal "Segoe Fluent Icons,Segoe MDL2 Assets".
+                            Previously this used {ThemeResource SymbolThemeFontFamily}, but that
+                            ThemeResource silently fails to resolve when SortIndicator is used inside
+                            a TableView column header (XBF lookup against SortIndicator's own
+                            ThemeDictionaries can't find SymbolThemeFontFamily, the binding falls
+                            back to null/default, and the glyph renders as a missing-glyph blank).
+                            Mirrors the established pattern in TableViewRow.cpp:1341/1888
+                            (chevron.FontFamily(L"Segoe Fluent Icons,Segoe MDL2 Assets")) and
+                            TableView.cpp:7196-7199 (FilterIndicator FontIcon which renders fine
+                            because winrt::FontIcon's implicit default points to the same fonts).
+                            With the explicit literal here, sort + recycle + theme switch all keep
+                            the chevron visible — verified end-to-end on Basic table page 2026-06-04.
+                        -->
+                        <FontIcon x:Name="GlyphIcon"
+                                  Glyph="&#xE96D;"
+                                  FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets"
+                                  FontSize="{ThemeResource SortIndicatorGlyphSize}"
+                                  Foreground="{TemplateBinding Foreground}"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center" />
+
+                        <!--
+                            Numeric priority badge for multi-column sort. The C++ control updates the Text
+                            from Index and toggles visibility via the BadgeStates visual state group when
+                            Index > 0 && Direction != None. Badge metrics and brushes flow through
+                            SortIndicator* theme resources so lightweight styling stays live.
+                        -->
+                        <Border x:Name="PART_IndexBadge"
+                                Opacity="0"
+                                IsHitTestVisible="False"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Bottom"
+                                Background="{ThemeResource SortIndicatorBadgeBackgroundBrush}"
+                                CornerRadius="{ThemeResource SortIndicatorBadgeCornerRadius}"
+                                Padding="{ThemeResource SortIndicatorBadgePadding}">
+                            <TextBlock x:Name="PART_IndexBadgeText"
+                                       Foreground="{ThemeResource SortIndicatorBadgeForegroundBrush}"
+                                       FontSize="{ThemeResource SortIndicatorBadgeFontSize}"
+                                       FontWeight="SemiBold"
+                                       LineHeight="{ThemeResource SortIndicatorBadgeFontSize}"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Center" />
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>
