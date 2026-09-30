@@ -1559,8 +1559,11 @@ public sealed partial class Reconciler : IDisposable
             // Returning the control it was handed means the callback patched it in place, the
             // same as returning null. The child reconcilers read any non-null result as a
             // replacement and unmount the control they hold, which would run this registration's
-            // unmount callback against a control that stays mounted.
-            if (ReferenceEquals(result, control))
+            // unmount callback against a control that stays mounted. A second managed wrapper
+            // for the same native control counts too.
+            if (ReferenceEquals(result, control)
+                || (result is FrameworkElement resultFe && control is FrameworkElement controlFe
+                    && IsSameNativeElement(resultFe, controlFe)))
                 result = null;
 
             TagControl(result ?? control, newEl);
@@ -2350,12 +2353,13 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // Check registered type unmount handlers via the attached element
-        if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl
+        if (control is FrameworkElement fe && TryGetReactorState(fe, out var regState)
+            && regState.Element is Element tagEl
             && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount
-            && TryBeginRegisteredUnmount(control))
+            && TryBeginRegisteredUnmount(regState))
         {
             try { reg.Unmount(control, this); }
-            finally { EndRegisteredUnmount(control); }
+            finally { EndRegisteredUnmount(regState); }
             return;
         }
 
@@ -2384,23 +2388,24 @@ public sealed partial class Reconciler : IDisposable
     }
 
     // Two managed wrappers can front one native element (see ReactorAttached.StateProperty), so
-    // identity falls back to the ReactorState that lives on the native object. Only a tagged
-    // control reaches this, so the unmounting side always has a state to compare.
+    // identity falls back to the ReactorState that lives on the native object. When b carries no
+    // ReactorState there is nothing native to compare, and only the same wrapper matches.
     private static bool IsSameNativeElement(FrameworkElement a, FrameworkElement b) =>
         ReferenceEquals(a, b)
         || (b.GetValue(ReactorAttached.StateProperty) is ReactorState state
             && ReferenceEquals(a.GetValue(ReactorAttached.StateProperty), state));
 
-    // Controls whose RegisterType unmount callback is running. A callback that tears its own
+    // Controls whose RegisterType unmount callback is running, by the ReactorState on the native
+    // control so a second managed wrapper for it is recognized too. A callback that tears its own
     // control down through the reconciler (UnmountChild on the control it was handed, to reach
     // the children it mounted) re-enters the unmount path for that control; the re-entrant call
     // takes the default walk over the children instead of calling the callback again.
-    private HashSet<UIElement>? _registeredUnmountsRunning;
+    private HashSet<ReactorState>? _registeredUnmountsRunning;
 
-    private bool TryBeginRegisteredUnmount(UIElement control) =>
-        (_registeredUnmountsRunning ??= new HashSet<UIElement>(ReferenceEqualityComparer.Instance)).Add(control);
+    private bool TryBeginRegisteredUnmount(ReactorState state) =>
+        (_registeredUnmountsRunning ??= new HashSet<ReactorState>(ReferenceEqualityComparer.Instance)).Add(state);
 
-    private void EndRegisteredUnmount(UIElement control) => _registeredUnmountsRunning?.Remove(control);
+    private void EndRegisteredUnmount(ReactorState state) => _registeredUnmountsRunning?.Remove(state);
 
     private static void ForEachReactorChildControl(UIElement control, Action<UIElement> visit)
         => ForEachReactorChildControl(control, child => { visit(child); return true; });
@@ -2751,12 +2756,13 @@ public sealed partial class Reconciler : IDisposable
             }
         }
 
-        if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl
+        if (control is FrameworkElement fe && TryGetReactorState(fe, out var regState)
+            && regState.Element is Element tagEl
             && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount
-            && TryBeginRegisteredUnmount(control))
+            && TryBeginRegisteredUnmount(regState))
         {
             try { reg.Unmount(control, this); }
-            finally { EndRegisteredUnmount(control); }
+            finally { EndRegisteredUnmount(regState); }
             // Collect this control for pooling, but do NOT recurse into children —
             // they were created outside Reactor's tree and must not be pooled.
             // (Mirrors UnmountRecursive which returns early in this case.)
