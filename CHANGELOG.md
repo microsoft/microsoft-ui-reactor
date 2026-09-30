@@ -261,6 +261,16 @@ Conventions for contributors:
   while the grid itself holds keyboard focus, after tabbing onto it for example, no longer
   moves that focus out of the grid.
 
+- **Compact docking tool tabs are no longer blank, and every docking tab has a UI
+  Automation name (spec 045 §2.2, §2.8, PR #1295).** A `DockTabGroup` with
+  `CompactTabs: true`, or one made up only of `ToolWindow`s (compact by default), used
+  WinUI's `TabViewWidthMode.Compact`, which shows only the icon of an unselected tab.
+  Docking panes have no icon, so every unselected tab rendered as an empty stub with no
+  title. Compact groups now size each tab to its title, and use `Compact` only when every
+  tab has an icon. Tool-window tabs with a pin button also had no UI Automation name,
+  because WinUI names a tab only from a plain-text header; they are now named after their
+  title.
+
 - **The Visual Studio preview failed to start every session.** The extension was built
   against a newer `System.Text.Json` than Visual Studio binds extensions to, so it failed
   to load at runtime. It now tracks the `Microsoft.VisualStudio.SDK` baseline, with a test
