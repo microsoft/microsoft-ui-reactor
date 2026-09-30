@@ -253,7 +253,7 @@ server.Tools.Register(
         Description:
             "Enumerates every live DockManager host in the process. " +
             "Returns { hosts: [{ id, paneCount, activeKey, sideCounts }] }. " +
-            "Host ids are stable for the lifetime of the underlying element; " +
+            "Host ids are stable for as long as the host stays mounted; " +
             "agents pass them to docking.snapshot / docking.dock.",
         InputSchema: Schema.Root()),
     _ => server.OnDispatcher<object>(() => BuildListPayload()));

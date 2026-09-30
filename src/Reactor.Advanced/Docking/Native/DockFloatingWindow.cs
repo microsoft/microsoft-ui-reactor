@@ -21,8 +21,9 @@ namespace Microsoft.UI.Reactor.Docking.Native;
 //      bounds (e.g. (10000, 10000) on a single-display rig) recenter on
 //      primary. Spec §2.25 reliability.
 //    • Per-host tracking via DockFloatingTracker.RegisterFor — the host's
-//      unmount handler closes floating windows associated with its
-//      DockManager element so they don't outlive the host. Spec §2.25.
+//      unmount handler closes the floating windows opened for it, under
+//      any DockManager instance it rendered, so they don't outlive the
+//      host. Spec §2.25.
 //    • Owner forwarding to WindowSpec.Owner — orphan-on-shell-close
 //      respects spec 036 §9 ownership. Spec §2.25.
 // ════════════════════════════════════════════════════════════════════════
@@ -931,9 +932,12 @@ internal sealed class DockFloatingWindowComponent : Component<DockFloatingWindow
 /// <summary>
 /// Tracks the set of floating windows opened by the docking subsystem so
 /// the manager can enumerate / close-on-unmount them. Holds both a global
-/// set (for diagnostic enumeration) and a per-<see cref="DockManager"/>
-/// set (so each host can close its own floating windows on unmount
-/// without affecting other hosts in the process).
+/// set (for diagnostic enumeration) and a per-host set (so each host can
+/// close its own floating windows on unmount without affecting other hosts
+/// in the process). The per-host set is keyed by the host
+/// (<see cref="DockHostIdentity"/>), not by the <see cref="DockManager"/>
+/// instance a window was opened under: apps render a new instance on
+/// almost every render, and the host's unmount only knows the last one.
 /// </summary>
 internal static class DockFloatingTracker
 {
@@ -956,7 +960,7 @@ internal static class DockFloatingTracker
     // The end-to-end ReactorWindow path is covered by the FloatCov_Close
     // selftest. (Issue #417, review M2.)
     private static readonly Dictionary<object, PendingClose> _pendingClose = new();
-    private static readonly ConditionalWeakTable<DockManager, HashSet<ReactorWindow>> _byManager = new();
+    private static readonly ConditionalWeakTable<object, HashSet<ReactorWindow>> _byHost = new();
 
     /// <summary>
     /// Stashed close cause for a floating window, set right before a
@@ -1059,12 +1063,13 @@ internal static class DockFloatingTracker
     {
         ArgumentNullException.ThrowIfNull(manager);
         ArgumentNullException.ThrowIfNull(window);
+        var host = DockHostIdentity.KeyFor(manager);
         lock (_lock)
         {
-            if (!_byManager.TryGetValue(manager, out var set))
+            if (!_byHost.TryGetValue(host, out var set))
             {
                 set = new HashSet<ReactorWindow>();
-                _byManager.Add(manager, set);
+                _byHost.Add(host, set);
             }
             set.Add(window);
         }
@@ -1074,18 +1079,39 @@ internal static class DockFloatingTracker
     {
         ArgumentNullException.ThrowIfNull(manager);
         ArgumentNullException.ThrowIfNull(window);
+        var host = DockHostIdentity.KeyFor(manager);
         lock (_lock)
         {
-            if (_byManager.TryGetValue(manager, out var set)) set.Remove(window);
+            if (_byHost.TryGetValue(host, out var set)) set.Remove(window);
         }
     }
 
+    /// <summary>
+    /// The floating windows opened for <paramref name="manager"/>'s host,
+    /// under any <see cref="DockManager"/> instance that host rendered.
+    /// </summary>
     public static IReadOnlyList<ReactorWindow> SnapshotFor(DockManager manager)
     {
         ArgumentNullException.ThrowIfNull(manager);
+        var host = DockHostIdentity.KeyFor(manager);
         lock (_lock)
         {
-            return _byManager.TryGetValue(manager, out var set) ? set.ToArray() : Array.Empty<ReactorWindow>();
+            return _byHost.TryGetValue(host, out var set) ? set.ToArray() : Array.Empty<ReactorWindow>();
+        }
+    }
+
+    /// <summary>
+    /// Stops tracking the floating windows opened for <paramref name="host"/>
+    /// and returns them, for the host's unmount to close.
+    /// </summary>
+    public static IReadOnlyList<ReactorWindow> TakeAllFor(DockHostIdentity host)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        lock (_lock)
+        {
+            if (!_byHost.TryGetValue(host, out var set)) return Array.Empty<ReactorWindow>();
+            _byHost.Remove(host);
+            return set.ToArray();
         }
     }
 
@@ -1097,9 +1123,10 @@ internal static class DockFloatingTracker
     public static IReadOnlyList<FloatingDockWindow> SnapshotPanesFor(DockManager manager)
     {
         ArgumentNullException.ThrowIfNull(manager);
+        var host = DockHostIdentity.KeyFor(manager);
         lock (_lock)
         {
-            if (!_byManager.TryGetValue(manager, out var set) || set.Count == 0)
+            if (!_byHost.TryGetValue(host, out var set) || set.Count == 0)
                 return Array.Empty<FloatingDockWindow>();
             var list = new List<FloatingDockWindow>(set.Count);
             foreach (var window in set)

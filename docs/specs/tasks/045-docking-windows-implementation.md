@@ -892,8 +892,8 @@ binding) are deferred to a follow-up pass.
 - [x] Live-region announcements via UIA `LiveSetting=Polite` for layout
   state transitions ("MainView.xaml moved to right pane", "Output
   pinned to bottom", "Properties window torn out"). Implementation
-  routes through `DockHostLiveAnnouncer` (a `ConditionalWeakTable<DockManager,
-  FrameworkElement>` bridge paralleling `DockChordBridge` /
+  routes through `DockHostLiveAnnouncer` (a `ConditionalWeakTable`
+  bridge from the host to its Border, paralleling `DockChordBridge` /
   `DockHostModelBridge`). `DockingNativeInterop` registers the host
   Border at mount; the renderer calls `RaiseNotificationEvent` on
   the registered element's `AutomationPeer` (WinUI's supported UIA
@@ -1627,6 +1627,19 @@ integration.*
   `NativeDocking_Reliability_FloatingWindowClosesOnHostUnmount`
   asserts the per-host tracker registration + the explicit close
   contract. P3 decouples — orphan top-levels.
+  The per-host tables (floating windows, `DockHostRegistry`, chord
+  bridge, live announcer, model bridge, drag gate) are keyed by the
+  host (`DockHostIdentity`), not by the `DockManager` element
+  instance: apps build a new instance on almost every render, and a
+  window opened under an earlier one used to survive unmount (the
+  Reactor IDE's View ▸ Reset Layout left a floated pane open next to
+  its re-docked copy). Unmount cleans up through the host's own
+  identity, so a `DockManager` instance handed to a new host (a type
+  change mounts it before the old host unmounts) doesn't make the old
+  host clear the new one's entries. Selftests
+  `NativeDocking_Reliability_FloatingWindowClosesOnHostUnmount_AfterRerender`,
+  `…_FloatingWindowClosesOnResetLayoutRemount` and
+  `…_FloatingWindowClosesWhenElementMovesToNewHost` cover it.
 - [x] Concurrent mutation off UI dispatcher throws — selftest verifies
   the throw.
   Unit-level coverage in
@@ -1651,7 +1664,8 @@ integration.*
 - [x] `docking.snapshot` MCP tool: returns the layout tree of a host.
   P1 introduced; P2 may extend the snapshot schema. P2 ships the
   building blocks: a process-wide `DockHostRegistry`
-  (`WeakReference`-keyed `DockManager` enumeration) populated by
+  (`WeakReference`-keyed `DockManager` enumeration, one record per
+  host whichever element it rendered last) populated by
   `DockingNativeInterop` at mount/update, cleared on unmount;
   `DockSnapshotBuilder.FromRecord` / `.FromManager` shape a
   `DockSnapshot` value (host id + layout tree + side strips +
