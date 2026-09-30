@@ -14,6 +14,12 @@ namespace Microsoft.UI.Reactor.Core;
 /// message + stack + inner exception chain) so users can copy a usable repro
 /// without rerunning under a debugger.
 /// </summary>
+/// <remarks>
+/// This is the built-in default. Apps replace it through <see cref="RenderErrorHandler"/>
+/// (<see cref="ReactorApp.DefaultRenderErrorHandler"/>, <c>WindowSpec.RenderErrorHandler</c>,
+/// or a host's <c>RenderErrorHandler</c>); every call site goes through
+/// <see cref="RenderErrorDispatch"/>. (issue #1291)
+/// </remarks>
 internal static class ErrorFallback
 {
     private const string MonoFontStack = "Consolas, Cascadia Mono, Courier New";

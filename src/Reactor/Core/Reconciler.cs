@@ -61,6 +61,24 @@ public sealed partial class Reconciler : IDisposable
     // resolve their concrete brush against the correct effective theme at mount.
     private ElementTheme _ambientRequestedTheme = ElementTheme.Default;
     private int _errorBoundaryDepth;
+
+    /// <summary>
+    /// Supplies the owning host's effective <see cref="RenderErrorHandler"/> (issue #1291).
+    /// Set by <c>ReactorHost</c> / <c>ReactorHostControl</c>; a reconciler without a host
+    /// falls back to <see cref="ReactorApp.DefaultRenderErrorHandler"/>.
+    /// </summary>
+    internal Func<RenderErrorHandler?>? RenderErrorHandlerProvider { get; set; }
+
+    private RenderErrorHandler? ResolveRenderErrorHandler() =>
+        RenderErrorHandlerProvider is { } provider ? provider() : ReactorApp.DefaultRenderErrorHandler;
+
+    /// <summary>In-tree placeholder for a component whose render or effect flush threw.</summary>
+    private Element BuildInTreeFallback(Exception ex, bool inEffects, string? componentName) =>
+        RenderErrorDispatch.BuildInTreeFallback(
+            ResolveRenderErrorHandler(),
+            new RenderError(ex, inEffects ? RenderErrorSource.Effects : RenderErrorSource.ComponentRender,
+                componentName, isHostLevel: false),
+            _logger);
     /// <summary>
     /// Active rerender-callback depth. Throws past
     /// <see cref="MaxRerenderReentrancy"/> so a component that synchronously
@@ -1917,8 +1935,10 @@ public sealed partial class Reconciler : IDisposable
         // hot-reload pass: reset this context's hook state and re-render once.
         RenderContext? renderCtx = node.Component?.Context ?? node.Context;
         bool hotReloadRetried = false;
+        bool inEffects = false;
         while (true)
         {
+            inEffects = false;
             try
             {
                 if (node.Component is not null)
@@ -1935,6 +1955,7 @@ public sealed partial class Reconciler : IDisposable
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(node.Component.Render());
                     }
+                    inEffects = true;
                     FlushEffectsTraced(node.Component.Context, componentName);
                 }
                 else if (node.Context is not null && newEl is FuncElement func)
@@ -1944,6 +1965,7 @@ public sealed partial class Reconciler : IDisposable
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(func.RenderFunc(node.Context));
                     }
+                    inEffects = true;
                     FlushEffectsTraced(node.Context, componentName);
                 }
                 else if (node.Context is not null && newEl is MemoElement memo)
@@ -1953,6 +1975,7 @@ public sealed partial class Reconciler : IDisposable
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(memo.RenderFunc(node.Context));
                     }
+                    inEffects = true;
                     FlushEffectsTraced(node.Context, componentName);
                 }
                 else
@@ -1990,7 +2013,7 @@ public sealed partial class Reconciler : IDisposable
                     Diagnostics.ReactorEventSource.Log.RenderError(
                         componentName ?? newEl.GetType().Name, ex.GetType().Name, ex.Message);
                 }
-                newChildElement = ErrorFallback.BuildElement(ex);
+                newChildElement = BuildInTreeFallback(ex, inEffects, node.Component?.GetType().Name);
             }
             break;
         }
@@ -5853,10 +5876,30 @@ public sealed partial class Reconciler : IDisposable
 
     public void Dispose()
     {
+        // Issue #1291: with a RenderErrorHandler configured, a throwing effect cleanup is
+        // reported (Source = Cleanup) and the remaining nodes are still torn down. With no
+        // handler, ReportCleanup returns false and the exception escapes as before.
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
+        RenderErrorHandler? cleanupHandler = null;
+        bool cleanupHandlerResolved = false;
         foreach (var node in _componentNodes.Values)
         {
-            node.Context?.RunCleanups();
-            node.Component?.Context?.RunCleanups();
+            try
+            {
+                node.Context?.RunCleanups();
+                node.Component?.Context?.RunCleanups();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+            {
+                if (!cleanupHandlerResolved)
+                {
+                    cleanupHandler = ResolveRenderErrorHandler();
+                    cleanupHandlerResolved = true;
+                }
+                if (!RenderErrorDispatch.ReportCleanup(cleanupHandler, ex, node.Component?.GetType().Name,
+                        isHostLevel: false, _logger, ref pendingPropagation))
+                    throw;
+            }
         }
         _componentNodes.Clear();
         _errorBoundaryNodes.Clear();
@@ -5871,6 +5914,7 @@ public sealed partial class Reconciler : IDisposable
         }
         _navigationHostNodes.Clear();
         _pool.Clear();
+        pendingPropagation?.Throw();
     }
 }
 

@@ -319,6 +319,29 @@ public static partial class ReactorApp
         set => Volatile.Write(ref _appLogger, value);
     }
 
+    private static RenderErrorHandler? _defaultRenderErrorHandler;
+
+    /// <summary>
+    /// App-wide replacement for the built-in render-error fallback, which shows the full
+    /// exception text (type, message, stack trace). <c>null</c> (the default) keeps the
+    /// built-in fallback. (issue #1291)
+    /// </summary>
+    /// <remarks>
+    /// <para>Consulted at error time by every <see cref="Hosting.ReactorHost"/> and
+    /// <see cref="Hosting.ReactorHostControl"/> that has no handler of its own — including
+    /// windows opened after this is set, tray flyouts, and embedded host controls. A host
+    /// overrides it with <see cref="Hosting.ReactorHost.RenderErrorHandler"/>, and a window
+    /// with <see cref="WindowSpec.RenderErrorHandler"/>.</para>
+    /// <para>Covers every place Reactor catches a render-time exception outside an
+    /// <c>ErrorBoundary</c>: the root render, child component renders, the reconcile pass,
+    /// effect flushes, and effect cleanups during dispose. See <see cref="RenderErrorHandler"/>.</para>
+    /// </remarks>
+    public static RenderErrorHandler? DefaultRenderErrorHandler
+    {
+        get => Volatile.Read(ref _defaultRenderErrorHandler);
+        set => Volatile.Write(ref _defaultRenderErrorHandler, value);
+    }
+
     // ── XAML control-assembly registration ─────────────────────────────────
     //
     // The lifted XAML loader resolves `local:` namespaces and Generic.xaml type
@@ -1391,12 +1414,28 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
 
         UnhandledException += (_, e) =>
         {
-            ReactorApp.AppLogger?.LogError(e.Exception, "UnhandledException: {ExceptionType}: {ExceptionMessage}", e.Exception.GetType().Name, e.Exception.Message);
-            if (OnUnhandledException is not null)
-                e.Handled = OnUnhandledException(e.Exception);
+            // A render error the app asked to propagate (RenderError.Propagate) was already
+            // offered to OnUnhandledException, which declined it; don't ask twice.
+            if (RenderErrorDispatch.WasReportedAsUnhandled(e.Exception))
+                return;
             // Don't set e.Handled = true for unknown exceptions — let the app crash
             // with a useful error rather than silently running in a corrupt state.
+            bool handled = ReportUnhandled(e.Exception);
+            if (OnUnhandledException is not null)
+                e.Handled = handled;
         };
+    }
+
+    /// <summary>
+    /// The shared unhandled-exception path: logs through <see cref="ReactorApp.AppLogger"/>
+    /// and asks <see cref="OnUnhandledException"/>. Also used for render errors routed here
+    /// by <see cref="RenderError.Propagate"/>, which WinUI would not surface through
+    /// <see cref="Application.UnhandledException"/> on its own.
+    /// </summary>
+    internal static bool ReportUnhandled(Exception ex)
+    {
+        ReactorApp.AppLogger?.LogError(ex, "UnhandledException: {ExceptionType}: {ExceptionMessage}", ex.GetType().Name, ex.Message);
+        return OnUnhandledException is { } callback && callback(ex);
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)

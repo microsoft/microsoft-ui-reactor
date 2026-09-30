@@ -35,7 +35,7 @@ hatch's scope is fulfilled.
 
 | Tool | When it's the right hammer | When it isn't |
 |---|---|---|
-| `ErrorBoundary` | Wrap a third-party subtree (plugin, marketplace component) that may throw during render. | App-wide error handlers — those belong to host code, not the render tree. |
+| `ErrorBoundary` | Wrap a third-party subtree (plugin, marketplace component) that may throw during render. | App-wide error handling — use [`RenderErrorHandler`](#app-wide-render-error-handling) instead. |
 | `Memo(ctx => ..., deps)` | Skip re-render of an expensive subtree when none of `deps` changed by reference. | Cheap subtrees — Memo's bookkeeping costs more than the render itself. |
 | `UseElementRef<T>()` | Imperative WinUI calls scoped to one element: focus, scroll, animation handles. | Reading state from the control — your component state is the source of truth. |
 | `.Set(control => ...)` | A WinUI property Reactor doesn't expose. | Properties Reactor does expose — `.Set` bypasses reconciliation's property diff. |
@@ -80,6 +80,52 @@ reconciler mounts a fresh subtree on the next render. This is the same
 identity-reset trick used by [navigation](navigation.md) cache
 invalidation and by list-item-identity recovery in
 [collections](collections.md).
+
+### App-wide render error handling
+
+Outside any `ErrorBoundary`, Reactor catches render-time exceptions itself
+and shows a built-in fallback containing the full exception text — type,
+message, stack trace and inner exceptions. That is useful while developing,
+but in a shipped app the text reaches the end user. A `RenderErrorHandler`
+replaces it. Set one app-wide, per window, or per host:
+
+```csharp
+// App-wide default, consulted by every host without its own handler —
+// including windows opened later, tray flyouts and ReactorHostControl embeds.
+ReactorApp.DefaultRenderErrorHandler = error =>
+{
+    MyTelemetry.Record(error.Exception);   // the app decides what is kept, and where
+    return TextBlock("Something went wrong.");
+};
+
+// Per window, applied before the window's first render.
+ReactorApp.OpenWindow(spec with { RenderErrorHandler = error => SettingsErrorView(error) }, ...);
+
+// Per host (ReactorHost or ReactorHostControl).
+host.RenderErrorHandler = error => null;   // null keeps the built-in fallback
+```
+
+A host's own handler wins; otherwise `ReactorApp.DefaultRenderErrorHandler`
+is used, resolved when the error happens. `host.EffectiveRenderErrorHandler`
+reports which one applies. The handler runs on the UI thread and receives a
+`RenderError`:
+
+| Member | Meaning |
+|---|---|
+| `Exception` | The exception Reactor caught. |
+| `Source` | `RootRender`, `ComponentRender`, `Reconcile`, `Effects`, or `Cleanup` (an effect cleanup during host dispose). |
+| `ComponentName` | The failing component's type name, when known. |
+| `IsHostLevel` | `true` when the returned element replaces the whole host content; `false` when it fills only the failing component's slot. |
+| `Propagate()` | Show no fallback and route the exception to `ReactorApplication.OnUnhandledException` instead. If that returns `false` (or is unset) the exception is rethrown and ends the process. |
+
+Return an element to show it instead of the built-in fallback, or `null` to
+keep the built-in one. The handler covers every place Reactor used to show the
+built-in fallback: the root render, child renders, the reconcile pass, and
+effect bodies and cleanups. Exceptions an `ErrorBoundary` catches stay with
+that boundary. If the handler throws, or the element it returns throws while
+rendering, Reactor falls back to the built-in UI rather than calling the
+handler again. For `Cleanup` the window is already going away, so the return
+value is ignored and the handler only reports.
 
 ## Memo
 

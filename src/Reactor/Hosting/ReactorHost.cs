@@ -182,6 +182,28 @@ public sealed class ReactorHost : IDisposable
     /// </summary>
     public WinUI.Border? ContentTarget { get; set; }
 
+    private RenderErrorHandler? _renderErrorHandler;
+
+    /// <summary>
+    /// Replaces the built-in render-error fallback for this host only. <c>null</c> (the
+    /// default) falls through to <see cref="ReactorApp.DefaultRenderErrorHandler"/> at
+    /// error time. A <see cref="ReactorWindow"/> seeds it from
+    /// <see cref="WindowSpec.RenderErrorHandler"/>. See <see cref="Core.RenderErrorHandler"/>.
+    /// (issue #1291)
+    /// </summary>
+    public RenderErrorHandler? RenderErrorHandler
+    {
+        get => Volatile.Read(ref _renderErrorHandler);
+        set => Volatile.Write(ref _renderErrorHandler, value);
+    }
+
+    /// <summary>
+    /// The handler this host would use right now: its own <see cref="RenderErrorHandler"/>,
+    /// else <see cref="ReactorApp.DefaultRenderErrorHandler"/>, else <c>null</c> (built-in
+    /// fallback).
+    /// </summary>
+    public RenderErrorHandler? EffectiveRenderErrorHandler => RenderErrorDispatch.Resolve(RenderErrorHandler);
+
     public ReactorHost(Window window, ILogger? logger = null)
     {
         // Fall back to <see cref="ReactorApp.AppLogger"/> when the caller
@@ -192,6 +214,7 @@ public sealed class ReactorHost : IDisposable
         // Microsoft.Extensions.Logging call paths.
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
+        _reconciler.RenderErrorHandlerProvider = () => EffectiveRenderErrorHandler;
         _window = window;
         _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
@@ -434,10 +457,16 @@ public sealed class ReactorHost : IDisposable
         // _renderPending is 1 here — all concurrent RequestRender calls are
         // blocked from enqueuing duplicates. Render once, then decide.
         _needsRerender = false;
-        Render();
-
-        // Reset the gate so future setState calls can enqueue.
-        Interlocked.Exchange(ref _renderPending, 0);
+        try
+        {
+            Render();
+        }
+        finally
+        {
+            // Reset the gate so future setState calls can enqueue — also when a render
+            // error the app chose to propagate (RenderError.Propagate) escapes Render().
+            Interlocked.Exchange(ref _renderPending, 0);
+        }
 
         // If state changed during render, re-enqueue at LOW priority so WinUI
         // layout/paint/input (normal priority + WM_PAINT) run first. Without this,
@@ -531,6 +560,8 @@ public sealed class ReactorHost : IDisposable
             RequestRender();
         }
 
+        // Which phase the outer catch attributes a failure to (issue #1291).
+        var failurePhase = RenderErrorSource.Reconcile;
         try
         {
             Element? newTree = null;
@@ -573,7 +604,7 @@ public sealed class ReactorHost : IDisposable
                 {
                     Debugger.BreakForUserUnhandledException(ex);
                     _logger?.LogError(ex, "Component Render() threw");
-                    ShowErrorFallback(ex);
+                    ShowErrorFallback(ex, RenderErrorSource.RootRender, _rootComponent.GetType().Name);
                     return;
                 }
             }
@@ -595,7 +626,7 @@ public sealed class ReactorHost : IDisposable
                 catch (Exception ex)
                 {
                     _logger?.LogError(ex, "Function component threw");
-                    ShowErrorFallback(ex);
+                    ShowErrorFallback(ex, RenderErrorSource.RootRender);
                     return;
                 }
             }
@@ -713,10 +744,12 @@ public sealed class ReactorHost : IDisposable
 
             _phaseSw.Restart();
 
+            failurePhase = RenderErrorSource.Effects;
             if (_rootComponent is not null)
                 _rootComponent.Context.FlushEffects();
             else if (_funcContext is not null)
                 _funcContext.FlushEffects();
+            failurePhase = RenderErrorSource.Reconcile;
 
             double effectsMs = _phaseSw.Elapsed.TotalMilliseconds;
 
@@ -783,10 +816,10 @@ public sealed class ReactorHost : IDisposable
                 _reportClock.Restart();
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogError(ex, "Render FAILED");
-            ShowErrorFallback(ex);
+            ShowErrorFallback(ex, failurePhase);
         }
         finally
         {
@@ -968,8 +1001,21 @@ public sealed class ReactorHost : IDisposable
                 _uiSettings.AnimationsEnabledChanged -= OnAnimationsEnabledChanged;
         }
 
-        _rootComponent?.Context.RunCleanups();
-        _funcContext?.RunCleanups();
+        // Issue #1291: with a RenderErrorHandler configured, throwing cleanups are reported
+        // (Source = Cleanup) and disposal carries on; a requested, unhandled propagation is
+        // rethrown once disposal has finished. With no handler, they escape as before.
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
+        try
+        {
+            _rootComponent?.Context.RunCleanups();
+            _funcContext?.RunCleanups();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            if (!RenderErrorDispatch.ReportCleanup(EffectiveRenderErrorHandler, ex, _rootComponent?.GetType().Name,
+                    isHostLevel: true, _logger, ref pendingPropagation))
+                throw;
+        }
 
         // Clear the SystemBackdrop so a window-reuse path returns to the WinUI
         // default. Skip the actual window write when the window has already been
@@ -983,7 +1029,14 @@ public sealed class ReactorHost : IDisposable
             Debug.WriteLine($"[Reactor] backdrop reset on dispose failed (best effort): {ex.GetType().Name}: {ex.Message}");
         }
 
-        _reconciler.Dispose();
+        try
+        {
+            _reconciler.Dispose();
+        }
+        catch (Exception ex) when (RenderErrorDispatch.IsPropagating(ex))
+        {
+            pendingPropagation ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+        }
         _rootComponent = null;
         _rootRenderFunc = null;
         _funcContext = null;
@@ -994,15 +1047,59 @@ public sealed class ReactorHost : IDisposable
         _overlayWiring = null;
 
         ReactorApp.ActiveHostInternal = null;
+        pendingPropagation?.Throw();
     }
 
-    private void ShowErrorFallback(Exception ex)
+    private void ShowErrorFallback(Exception ex, RenderErrorSource source, string? componentName = null)
     {
         // The render that failed never reaches Reconcile, so its validation claims have
         // no consumer. Withdraw them here rather than waiting for a next render that may
         // never come (issue #1262).
         Controls.Validation.ValidationRenderScope.AbandonPendingClaims();
-        var errorPanel = Microsoft.UI.Reactor.Core.ErrorFallback.BuildPanel(ex);
+
+        // Issue #1291 — the app's handler (host override, else the app-wide default) may
+        // replace the built-in panel, or ask to propagate.
+        var error = new RenderError(ex, source, componentName, isHostLevel: true);
+        var appElement = RenderErrorDispatch.InvokeHandler(EffectiveRenderErrorHandler, error, _logger);
+        if (error.IsPropagationRequested)
+        {
+            // Nothing is shown where the failure happened. Returns only when the app's
+            // unhandled-exception callback handled it; otherwise rethrows.
+            SetErrorContent(null, null);
+            RenderErrorDispatch.RaiseUnhandled(ex);
+            return;
+        }
+
+        UIElement? errorPanel = null;
+        Element? errorTree = null;
+        if (appElement is not null)
+        {
+            var guarded = RenderErrorDispatch.Guard(appElement);
+            try
+            {
+                errorPanel = _reconciler.Mount(guarded, _rerenderAction ??= () => RequestRender());
+                errorTree = guarded;
+            }
+            catch (Exception mountEx) when (mountEx is not OutOfMemoryException and not StackOverflowException)
+            {
+                _logger?.LogError(mountEx, "RenderErrorHandler fallback failed to mount; using the built-in fallback");
+                errorPanel = null;
+            }
+            if (errorTree is null)
+                errorPanel = Microsoft.UI.Reactor.Core.ErrorFallback.BuildPanel(ex);
+        }
+        else
+        {
+            errorPanel = Microsoft.UI.Reactor.Core.ErrorFallback.BuildPanel(ex);
+        }
+        SetErrorContent(errorPanel, errorTree);
+    }
+
+    // Installs the error content. A handler-supplied fallback is kept as the current tree
+    // so the next successful render reconciles away from it (running its cleanups); the
+    // built-in panel is a raw control, so the tree is cleared and the next render mounts fresh.
+    private void SetErrorContent(UIElement? errorPanel, Element? errorTree)
+    {
         if (_overlayWiring is not null && _overlayWiring.TryShowErrorInWrapper(errorPanel))
         {
             // shared overlay wrapper took it
@@ -1016,6 +1113,6 @@ public sealed class ReactorHost : IDisposable
             _window.Content = errorPanel;
         }
         _currentControl = errorPanel;
-        _currentTree = null;
+        _currentTree = errorTree;
     }
 }
