@@ -27,10 +27,11 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// box, and runs full GCs around UI ticks: the first GC lets XAML's reference tracker find the
 /// box unreachable, the tick lets XAML run its cleanup, and the next GC reclaims what the box's
 /// native side still points at. Without a hold, no attempt's tick reaches managed code alive:
-/// each one either lands on collected state (the crash) or is lost with it. The first three
-/// arms are the ways a tick gets armed in practice; the last leaves only the hold taken on
-/// <c>Unloaded</c>. A final check pins down the WinUI behaviour the design relies on: the timer
-/// is not armed while the box is out of the tree.</para>
+/// each one either lands on collected state (the crash) or is lost with it. Of the orphaned
+/// arms, the first three are the ways a tick gets armed in practice, and
+/// <see cref="Arm.HeldOnlyByUnloaded"/> leaves only the hold taken on <c>Unloaded</c>. A final
+/// check pins down the WinUI behaviour the design relies on: the timer is not armed while the
+/// box is out of the tree.</para>
 /// </summary>
 internal static class AutoSuggestBoxCollectedStateTickFixture
 {
@@ -46,8 +47,11 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
         /// <summary>As <see cref="MountedWithText"/>, with the hold taken at mount dropped, so
         /// only the hold taken on Unloaded is left.</summary>
         HeldOnlyByUnloaded,
-        /// <summary>Taken out of the tree while still referenced, the hold dropped, then Text set.
-        /// Not orphaned: it checks that this arms no timer at all.</summary>
+        /// <summary>Mounted empty, then Text set while in the tree. Not orphaned: the control
+        /// for <see cref="TextSetAfterLeaving"/>.</summary>
+        TextSetInTree,
+        /// <summary>Taken out of the tree while still referenced, then Text set. Not orphaned:
+        /// it checks that this arms no timer at all.</summary>
         TextSetAfterLeaving,
     }
 
@@ -120,17 +124,28 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
 
             // The design relies on this: a Text change on a box that has left the tree arms no
             // timer, so no tick can be armed after Unloaded. The box stays referenced (by its
-            // host) so that a tick, were one armed, would be counted. A fixed window, because
-            // the claim is that nothing happens.
-            ticksBefore = Volatile.Read(ref _ticks);
-            var detachedHost = await ArmAsync(H, Arm.TextSetAfterLeaving, static () => { }, countTick, orphan: false);
-            await Harness.Render(400);
-            var detachedTicks = Volatile.Read(ref _ticks) - ticksBefore;
+            // host) so that a tick, were one armed, would be counted, and the same probe on a
+            // box in the tree shows that the window is long enough to count one.
+            var inTreeTicks = await CountTicksAfterTextSetAsync(Arm.TextSetInTree, countTick);
+            var afterLeavingTicks = await CountTicksAfterTextSetAsync(Arm.TextSetAfterLeaving, countTick);
             H.Check(
                 $"{Name}_TextSetAfterLeavingArmsNoTick",
-                detachedTicks == 0,
-                $"{detachedTicks} tick(s) after setting Text on a box out of the tree");
-            await DisposeHostAsync(detachedHost);
+                inTreeTicks > 0 && afterLeavingTicks == 0,
+                $"ticks after setting Text: {inTreeTicks} in the tree (control, expected > 0), {afterLeavingTicks} out of it (expected 0)");
+        }
+
+        private async Task<int> CountTicksAfterTextSetAsync(
+            Arm arm,
+            TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs> countTick)
+        {
+            var ticksBefore = Volatile.Read(ref _ticks);
+            var host = await ArmAsync(H, arm, static () => { }, countTick, orphan: false);
+            // A fixed window rather than a wait, because one of the two claims is that nothing
+            // happens.
+            await Harness.Render(400);
+            var ticks = Volatile.Read(ref _ticks) - ticksBefore;
+            await DisposeHostAsync(host);
+            return ticks;
         }
 
         private async Task DisposeHostAsync(ReactorHost? host)
@@ -173,7 +188,9 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
             TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs> countTick,
             bool orphan)
         {
-            var text = arm is Arm.Typed or Arm.TextSetAfterLeaving ? Optional<string>.Unset : Optional<string>.Of("initial");
+            var text = arm is Arm.Typed or Arm.TextSetInTree or Arm.TextSetAfterLeaving
+                ? Optional<string>.Unset
+                : Optional<string>.Of("initial");
             Action? addCallback = null;
             var host = h.CreateHost();
             host.Mount(ctx =>
@@ -212,11 +229,14 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
                     AutoSuggestBoxElement.ReleaseTextChangedTickHoldForTests(box);
                     break;
 
+                case Arm.TextSetInTree:
+                    box.Text = "set-in-tree";
+                    break;
+
                 case Arm.TextSetAfterLeaving:
                     // Out of the tree, but still referenced by the live host.
                     h.SetContent(null);
                     await Harness.Render();
-                    AutoSuggestBoxElement.ReleaseTextChangedTickHoldForTests(box);
                     box.Text = "set-after-leaving";
                     break;
             }
