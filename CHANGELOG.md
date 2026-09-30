@@ -185,7 +185,9 @@ Conventions for contributors:
   control also no longer clears a `.Ref(...)` that has already moved to its
   replacement. Because `unmount` now runs, it replaces the reconciler's walk over the
   control's children, as it always has for `XamlInterop`: a registration that mounts
-  children through the reconciler and supplies `unmount` has to unmount them there.
+  children through the reconciler and supplies `unmount` has to unmount them there. Calling
+  `UnmountChild` on the control itself from `unmount` walks its children once rather than
+  calling `unmount` again.
 
 - **Apps that reference only `Microsoft.UI.Reactor` are framework-dependent
   again** (regression from #822). The package now depends on

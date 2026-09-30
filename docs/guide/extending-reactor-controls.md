@@ -686,11 +686,14 @@ returns wherever Reactor itself reads it back — keyed reordering, the
 `unmount` lookup and `.Ref(...)` cleanup — so the delegates don't call
 `Reconciler.SetElementTag` for those. If your own code reads the element
 back with `Reconciler.GetElementTag`, from an event handler for example,
-keep tagging the control yourself. `unmount` runs when the control
-leaves the tree, *instead of* Reactor's own walk over the control's
-children. If your delegates mount child elements through the reconciler,
-unmount them there too (`r.UnmountChild(child)`); without an `unmount`
-delegate, Reactor walks the children itself.
+keep tagging the control yourself. Return a control your registration
+owns: a control Reactor already mounted for another element keeps that
+element's identity, so to wrap built-in elements write a component
+instead. `unmount` runs when the control leaves the tree, *instead of*
+Reactor's own walk over the control's children. If your delegates mount
+child elements through the reconciler, unmount them there too
+(`r.UnmountChild(child)`); without an `unmount` delegate, Reactor walks
+the children itself.
 
 A library that wants eager setup ships an ordinary
 `public static void UseAcme(Reconciler reconciler)` over one of these —

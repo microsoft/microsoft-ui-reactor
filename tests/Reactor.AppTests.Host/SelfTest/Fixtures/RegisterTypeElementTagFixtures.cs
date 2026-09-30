@@ -28,7 +28,8 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// and replaced), and the allocation gate: an unkeyed control whose registration has no
 /// <c>unmount</c> is still not tagged. Two more pin what tagging must not do: clear a ref
 /// that has already moved to a replacement, or retag a control that another element
-/// owns.</para>
+/// owns. One more pins that an <c>unmount</c> callback can unmount its own control through
+/// the reconciler without calling itself again.</para>
 /// </summary>
 internal static class RegisterTypeElementTagFixtures
 {
@@ -395,6 +396,60 @@ internal static class RegisterTypeElementTagFixtures
             H.Check($"{Name}_UnmountCallbackRanOnce",
                 Unmounted.Count == 1 && ReferenceEquals(Unmounted[0], Created[0]),
                 $"unmount callback saw: {Describe(Unmounted, Created)}; expected #0 exactly once");
+        }
+    }
+
+    private sealed record ContainerElement : Element;
+
+    private sealed class ContainedProbe : Component
+    {
+        public static int Cleanups;
+
+        public override Element Render()
+        {
+            UseEffect(() => { return () => { Cleanups++; }; });
+            return TextBlock("rtt-contained-child");
+        }
+    }
+
+    /// <summary>
+    /// A registration mounts a child through the reconciler into its own Border, and its
+    /// <c>unmount</c> tears that child down by unmounting the Border itself. That re-enters the
+    /// unmount path for the same control, which must walk the Border's children once instead
+    /// of calling <c>unmount</c> again, recursively and without end.
+    /// </summary>
+    internal sealed class UnmountCallbackUnmountsItsControl(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string Name = "RegisterTypeTag_Unmount_CallbackUnmountsItsControl";
+            ContainedProbe.Cleanups = 0;
+            int unmounts = 0;
+            var host = H.CreateHost();
+            host.Reconciler.RegisterType<ContainerElement, WinXC.Border>(
+                mount: (r, _, rerender) => new WinXC.Border { Child = r.Mount(Component<ContainedProbe>(), rerender)! },
+                update: (_, _, _, _, _) => null,
+                unmount: (r, border) =>
+                {
+                    unmounts++;
+                    r.UnmountChild(border);
+                });
+            host.Mount(ctx =>
+            {
+                var (show, setShow) = ctx.UseState(true);
+                var children = new List<Element> { Button("RTT Remove container", () => setShow(false)) };
+                if (show) children.Add(new ContainerElement());
+                return VStack(children.ToArray());
+            });
+
+            await Harness.Render();
+            H.Check($"{Name}_Mounted", H.FindText("rtt-contained-child") is not null);
+
+            H.ClickButton("RTT Remove container");
+            H.Check($"{Name}_Removed", await Harness.WaitFor(() => H.FindText("rtt-contained-child") is null));
+            H.Check($"{Name}_UnmountCallbackRanOnce", unmounts == 1, $"unmount callback ran {unmounts} times");
+            H.Check($"{Name}_ChildCleanedUpOnce", ContainedProbe.Cleanups == 1,
+                $"the contained component's effect cleanup ran {ContainedProbe.Cleanups} times");
         }
     }
 
