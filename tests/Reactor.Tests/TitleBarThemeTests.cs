@@ -66,17 +66,45 @@ public class TitleBarThemeTests
     [Fact]
     public void CaptionTheme_IsSkipped_OnlyForChildEmbeddedWindows()
     {
-        // ApplyTitleBarTheme is gated on this predicate: a Child-embedded window is
-        // parented into a host's chrome and must not have its caption themed.
-        Assert.True(ReactorWindow.IsTopLevelChromeAllowed(new WindowSpec()));
-        Assert.True(ReactorWindow.IsTopLevelChromeAllowed(new WindowSpec
+        // TryResolveCaptionTheme is the only source of ApplyTitleBarTheme's write, so a
+        // Child-embedded window — parented into a host's chrome — is never themed, even
+        // with a declaration and a previous write.
+        var owner = new WindowSpec
         {
             Embed = new EmbedRequest(WindowEmbedStyle.Owner, HostPid: 1234, InitialVisibility: true),
-        }));
-        Assert.False(ReactorWindow.IsTopLevelChromeAllowed(new WindowSpec
+        };
+        var child = new WindowSpec
         {
             TitleBarTheme = WindowTitleBarTheme.Dark,
             Embed = new EmbedRequest(WindowEmbedStyle.Child, HostPid: 1234, InitialVisibility: true),
-        }));
+        };
+
+        Assert.True(Resolve(new WindowSpec(), WindowTitleBarTheme.Dark, null, out _));
+        Assert.True(Resolve(owner, WindowTitleBarTheme.Dark, null, out _));
+        Assert.False(Resolve(child, WindowTitleBarTheme.Dark, null, out _));
+        Assert.False(Resolve(child, null, WindowTitleBarTheme.Dark, out _));
     }
+
+    [Fact]
+    public void CaptionTheme_IsOptIn_AndResolvesTheWrittenValue()
+    {
+        var spec = new WindowSpec();
+        // Nothing declared and nothing applied: an imperatively-set value stays the app's.
+        Assert.False(Resolve(spec, resolved: null, applied: null, out _));
+
+        // A declaration takes ownership and writes the mapped value.
+        Assert.True(Resolve(spec, WindowTitleBarTheme.Light, applied: null, out var declared));
+        Assert.Equal(TitleBarTheme.Light, declared);
+
+        // A withdrawn declaration hands the baseline back.
+        Assert.True(Resolve(spec, resolved: null, WindowTitleBarTheme.Light, out var restored));
+        Assert.Equal(Baseline, restored);
+    }
+
+    // Distinct from every value the tests declare, so a restore cannot pass by coincidence.
+    private const TitleBarTheme Baseline = TitleBarTheme.UseDefaultAppMode;
+
+    private static bool Resolve(
+        WindowSpec spec, WindowTitleBarTheme? resolved, WindowTitleBarTheme? applied, out TitleBarTheme target) =>
+        ReactorWindow.TryResolveCaptionTheme(spec, resolved, applied, Baseline, out target);
 }

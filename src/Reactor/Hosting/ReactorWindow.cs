@@ -847,7 +847,7 @@ public sealed partial class ReactorWindow : IDisposable
         }
     }
 
-    internal static bool IsTopLevelChromeAllowed(WindowSpec spec)
+    private static bool IsTopLevelChromeAllowed(WindowSpec spec)
         => spec.Embed?.Style != WindowEmbedStyle.Child;
 
     private void VerifyEmbedDpiAwareness(WindowEmbedStyle style)
@@ -2076,19 +2076,18 @@ public sealed partial class ReactorWindow : IDisposable
     private void ApplyTitleBarTheme()
     {
         if (_disposed || !_titleBarThemeReady) return;
-        if (!IsTopLevelChromeAllowed(Volatile.Read(ref _spec))) return;
 
         var resolved = _specTitleBarTheme ?? CurrentElementTitleBarTheme();
-        if (resolved is null && _appliedTitleBarTheme is null) return;
 
         try
         {
             var titleBar = _appWindow.TitleBar;
             // Taking ownership: remember what was there, so withdrawing the
             // declaration hands back the app's (or the platform's) value.
-            if (_appliedTitleBarTheme is null)
-                _titleBarThemeBaseline = titleBar.PreferredTheme;
-            var target = resolved is { } declared ? ToNativeTitleBarTheme(declared) : _titleBarThemeBaseline;
+            var baseline = _appliedTitleBarTheme is null ? titleBar.PreferredTheme : _titleBarThemeBaseline;
+            if (!TryResolveCaptionTheme(Volatile.Read(ref _spec), resolved, _appliedTitleBarTheme, baseline, out var target))
+                return;
+            _titleBarThemeBaseline = baseline;
             if (titleBar.PreferredTheme != target)
                 titleBar.PreferredTheme = target;
             _appliedTitleBarTheme = resolved;
@@ -2097,6 +2096,24 @@ public sealed partial class ReactorWindow : IDisposable
         {
             DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TitleBarTheme.set", ex);
         }
+    }
+
+    /// <summary>
+    /// Decides the value Reactor writes to the caption theme, if any; the only source of
+    /// that write. It never writes on a Child-embedded window, whose chrome belongs to the
+    /// host, and never when nothing is declared and nothing Reactor applied needs
+    /// withdrawing — so an app's imperative value is left alone. A withdrawn declaration
+    /// resolves to <paramref name="baseline"/>. (issue #1297)
+    /// </summary>
+    internal static bool TryResolveCaptionTheme(
+        WindowSpec spec,
+        WindowTitleBarTheme? resolved,
+        WindowTitleBarTheme? applied,
+        TitleBarTheme baseline,
+        out TitleBarTheme target)
+    {
+        target = resolved is { } declared ? ToNativeTitleBarTheme(declared) : baseline;
+        return IsTopLevelChromeAllowed(spec) && (resolved is not null || applied is not null);
     }
 
     internal static TitleBarTheme ToNativeTitleBarTheme(WindowTitleBarTheme theme) => theme switch
