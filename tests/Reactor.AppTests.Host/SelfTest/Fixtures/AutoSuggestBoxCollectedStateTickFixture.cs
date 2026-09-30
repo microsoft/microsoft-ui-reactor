@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
@@ -24,30 +25,44 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// <para><b>Forcing the order.</b> Each attempt arms the timer, drops every reference to the
 /// box, and runs full GCs around UI ticks: the first GC lets XAML's reference tracker find the
 /// box unreachable, the tick lets XAML run its cleanup, and the next GC reclaims what the box's
-/// native side still points at. Without the hold, no attempt's tick reaches managed code alive:
-/// each one either lands on collected state (the crash) or is lost with it. The timer is armed
-/// two ways, because they restart it through different paths: typing (a <c>Text</c> change)
-/// and mounting with text (the first layout copies <c>Text</c> into the fresh TextBox without
-/// changing it).</para>
+/// native side still points at. Without a hold, no attempt's tick reaches managed code alive:
+/// each one either lands on collected state (the crash) or is lost with it. Each way a tick can
+/// be pending while Reactor listens has its own arm, and three of them isolate one hold each.</para>
 /// </summary>
 internal static class AutoSuggestBoxCollectedStateTickFixture
 {
+    private enum Arm
+    {
+        /// <summary>Mounted empty, with a callback; typing changes Text (the Text hold).</summary>
+        Typed,
+        /// <summary>Mounted with text and a callback; the first layout copies Text into the TextBox.</summary>
+        MountedWithText,
+        /// <summary>Mounted with text but no callback; an update adds one after the copy (the
+        /// hold taken when the handler is installed).</summary>
+        CallbackAddedLate,
+        /// <summary>Mounted collapsed with text and a callback, the mount's hold dropped, then shown;
+        /// the copy happens in that first layout (the SizeChanged hold).</summary>
+        ShownLate,
+    }
+
     internal class Execution(Harness h) : SelfTestFixtureBase(h)
     {
         private const string Name = "AutoSuggestBoxCollectedStateTick";
-        private const int Attempts = 4;
+        private const int Attempts = 2;
 
-        // Counts TextChanged ticks of any reason. Static, so subscribing it roots nothing.
-        private static int s_ticks;
-        private static readonly TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs> CountTick =
-            static (_, _) => Interlocked.Increment(ref s_ticks);
+        // TextChanged ticks of any reason that reached managed code. The counting handler only
+        // references this fixture, so subscribing it keeps no box alive.
+        private int _ticks;
 
         public override async Task RunAsync()
         {
+            TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs> countTick =
+                (_, _) => Interlocked.Increment(ref _ticks);
+
             // Positive control: typing into the inner TextBox queues a UserInput-reason
             // TextChanged that reaches Reactor while the box is mounted.
             var mountedCallbacks = 0;
-            var mountedHost = await ArmAsync(H, Optional<string>.Unset, type: true, () => mountedCallbacks++, orphan: false);
+            var mountedHost = await ArmAsync(H, Arm.Typed, () => mountedCallbacks++, countTick, orphan: false);
             H.Check(
                 $"{Name}_TickReachesMountedBox",
                 await Harness.WaitFor(() => mountedCallbacks > 0, maxPasses: 40, perPassMs: 20));
@@ -64,12 +79,14 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
             };
 
             var typedCallbacks = 0;
-            int typedTicks, copiedTicks;
+            int typedTicks, mountedTicks, lateTicks, shownTicks;
             Application.Current.UnhandledException += handler;
             try
             {
-                typedTicks = await OrphanAndCollectAsync(Optional<string>.Unset, type: true, () => typedCallbacks++);
-                copiedTicks = await OrphanAndCollectAsync(Optional<string>.Of("initial"), type: false, static () => { });
+                typedTicks = await OrphanAndCollectAsync(Arm.Typed, () => typedCallbacks++, countTick);
+                mountedTicks = await OrphanAndCollectAsync(Arm.MountedWithText, static () => { }, countTick);
+                lateTicks = await OrphanAndCollectAsync(Arm.CallbackAddedLate, static () => { }, countTick);
+                shownTicks = await OrphanAndCollectAsync(Arm.ShownLate, static () => { }, countTick);
             }
             finally
             {
@@ -79,23 +96,34 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
             H.Check(
                 $"{Name}_NoUnhandledException",
                 unhandled.Count == 0,
-                $"{unhandled.Count} of {2 * Attempts} attempt(s) threw into WinUI, first: {(unhandled.Count > 0 ? unhandled[0] : "")}");
+                $"{unhandled.Count} of {4 * Attempts} attempt(s) threw into WinUI, first: {(unhandled.Count > 0 ? unhandled[0] : "")}");
             H.Check(
                 $"{Name}_TypedTickReachesCallback",
                 typedCallbacks == Attempts && typedTicks == Attempts,
                 $"typed: callback reached {typedCallbacks}, tick delivered {typedTicks}, of {Attempts} attempt(s)");
             H.Check(
-                $"{Name}_CopiedTextTickDelivered",
-                copiedTicks == Attempts,
-                $"mounted with text: tick delivered {copiedTicks} of {Attempts} attempt(s)");
+                $"{Name}_MountedWithTextTickDelivered",
+                mountedTicks == Attempts,
+                $"mounted with text: tick delivered {mountedTicks} of {Attempts} attempt(s)");
+            H.Check(
+                $"{Name}_LateSubscriptionTickDelivered",
+                lateTicks == Attempts,
+                $"callback added after the copy: tick delivered {lateTicks} of {Attempts} attempt(s)");
+            H.Check(
+                $"{Name}_ShownLateTickDelivered",
+                shownTicks == Attempts,
+                $"shown after the mount's hold ended: tick delivered {shownTicks} of {Attempts} attempt(s)");
         }
 
-        private async Task<int> OrphanAndCollectAsync(Optional<string> text, bool type, Action onTextChanged)
+        private async Task<int> OrphanAndCollectAsync(
+            Arm arm,
+            Action onTextChanged,
+            TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs> countTick)
         {
-            var ticksBefore = Volatile.Read(ref s_ticks);
+            var ticksBefore = Volatile.Read(ref _ticks);
             for (var attempt = 0; attempt < Attempts; attempt++)
             {
-                await ArmAsync(H, text, type, onTextChanged, orphan: true);
+                await ArmAsync(H, arm, onTextChanged, countTick, orphan: true);
 
                 GC.Collect();
                 await Harness.Render();
@@ -106,29 +134,62 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
                 // Outlast the 150 ms timer.
                 await Harness.Render(250);
             }
-            return Volatile.Read(ref s_ticks) - ticksBefore;
+            return Volatile.Read(ref _ticks) - ticksBefore;
         }
 
         // Kept out of RunAsync's state machine so nothing in the fixture still references
         // the box, its host, or its inner TextBox once the box is orphaned. Returns the host
         // only when the box stays mounted.
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static async Task<ReactorHost?> ArmAsync(Harness h, Optional<string> text, bool type, Action onTextChanged, bool orphan)
+        private static async Task<ReactorHost?> ArmAsync(
+            Harness h,
+            Arm arm,
+            Action onTextChanged,
+            TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs> countTick,
+            bool orphan)
         {
+            var text = arm == Arm.Typed ? Optional<string>.Unset : Optional<string>.Of("initial");
+            Action? addCallback = null;
+            Action? show = null;
             var host = h.CreateHost();
-            host.Mount(_ => VStack(AutoSuggestBox(text, _ => onTextChanged())));
-            // First layout applies the template; with text, the box copies it into the TextBox,
-            // which restarts the timer.
+            host.Mount(ctx =>
+            {
+                var (hasCallback, setHasCallback) = ctx.UseState(arm != Arm.CallbackAddedLate);
+                var (visible, setVisible) = ctx.UseState(arm != Arm.ShownLate);
+                addCallback = () => setHasCallback(true);
+                show = () => setVisible(true);
+                return VStack(AutoSuggestBox(text, hasCallback ? _ => onTextChanged() : null).IsVisible(visible));
+            });
+            // A visible box gets its template in this first layout, and with text it copies the
+            // text into the TextBox, which starts the timer.
             await Harness.Render();
 
-            var box = h.FindControl<WinUI.AutoSuggestBox>(_ => true);
-            var inner = box is null ? null : FindDescendant<WinUI.TextBox>(box);
-            if (box is null || inner is null)
-                throw new InvalidOperationException("AutoSuggestBox or its inner TextBox was not realized");
-            box.TextChanged += CountTick;
+            var box = h.FindControl<WinUI.AutoSuggestBox>(_ => true)
+                ?? throw new InvalidOperationException("AutoSuggestBox was not mounted");
 
-            if (type)
+            switch (arm)
             {
+                case Arm.CallbackAddedLate:
+                    // The update installs Reactor's TextChanged handler while that tick is pending.
+                    addCallback!();
+                    await Harness.Render();
+                    break;
+
+                case Arm.ShownLate:
+                    // Drop the hold taken when the handler was installed at mount, so only the
+                    // first layout can hold the box. Showing it applies the template and copies.
+                    AutoSuggestBoxElement.ReleaseTextChangedTickHoldForTests(box);
+                    show!();
+                    await Harness.Render();
+                    break;
+            }
+
+            box.TextChanged += countTick;
+
+            if (arm == Arm.Typed)
+            {
+                var inner = FindDescendant<WinUI.TextBox>(box)
+                    ?? throw new InvalidOperationException("AutoSuggestBox's inner TextBox was not realized");
                 // A text change the box did not make itself is reported as UserInput. The box
                 // restarts its timer when it sees the TextBox's own, queued, TextChanged, which
                 // the Render below delivers.

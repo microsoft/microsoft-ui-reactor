@@ -3749,10 +3749,14 @@ public partial record AutoSuggestBoxElement(
     // managed side: the TextChanged delegate and the ReactorState that native code reaches only
     // through reference-tracked CCWs. The native box and its timer live on, the tick calls into
     // collected managed state, CsWinRT throws NullReferenceException into WinUI, and WinUI
-    // fail-fasts the process with STATUS_STOWED_EXCEPTION (0xC000027B). The TextBox's text changes
-    // on every Text change, and when the first layout copies Text into the fresh TextBox (which
-    // leaves Text itself unchanged). So both hold the box until well after the tick they lead to,
-    // which keeps the managed side alive for the whole window in which the tick can land.
+    // fail-fasts the process with STATUS_STOWED_EXCEPTION (0xC000027B). So Reactor holds the box
+    // until well after any tick it can still receive, from each moment one can be armed:
+    //   - a Text change, which the box copies into its TextBox (typing updates Text too);
+    //   - its first layout, when the fresh template's TextBox gets a copy of a non-empty Text
+    //     without Text changing. The box gets its first size in that same layout, including a
+    //     box that was collapsed until then, so SizeChanged marks it;
+    //   - installing the handler at all: an update can add the first OnTextChanged after either
+    //     of the above has already armed the timer.
     private static class PendingTextChangedTick
     {
         // Far past the 150 ms timer, so the tick has landed long before the hold is released.
@@ -3767,14 +3771,15 @@ public partial record AutoSuggestBoxElement(
             if (sender is WinUI.AutoSuggestBox box) Hold(box);
         };
 
-        // Loaded follows the first layout, which is when the template is applied and the copy
-        // happens; there is nothing to copy while Text is empty.
-        internal static readonly RoutedEventHandler OnLoaded = static (sender, _) =>
+        // There is nothing to copy while Text is empty.
+        internal static readonly SizeChangedEventHandler OnSizeChanged = static (sender, _) =>
         {
             if (sender is WinUI.AutoSuggestBox box && !string.IsNullOrEmpty(box.Text)) Hold(box);
         };
 
-        private static void Hold(WinUI.AutoSuggestBox box)
+        internal static void Release(WinUI.AutoSuggestBox box) => t_heldUntil?.Remove(box);
+
+        internal static void Hold(WinUI.AutoSuggestBox box)
         {
             var queue = global::Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             if (queue is null) return;
@@ -3797,20 +3802,17 @@ public partial record AutoSuggestBoxElement(
             if (held is not null)
             {
                 var now = global::System.Environment.TickCount64;
-                global::System.Collections.Generic.List<WinUI.AutoSuggestBox>? expired = null;
-                foreach (var entry in held)
-                {
-                    if (entry.Value <= now) (expired ??= new()).Add(entry.Key);
-                }
-                if (expired is not null)
-                {
-                    foreach (var box in expired) held.Remove(box);
-                }
+                foreach (var box in held.Where(entry => entry.Value <= now).Select(entry => entry.Key).ToList())
+                    held.Remove(box);
                 if (held.Count > 0) return;
             }
             timer.Stop();
         }
     }
+
+    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host): ends one box's hold early,
+    // so a selftest can show that a later event holds the box again by itself.
+    internal static void ReleaseTextChangedTickHoldForTests(WinUI.AutoSuggestBox box) => PendingTextChangedTick.Release(box);
 
     // Suggestions BEFORE Text (items in place before any controlled Text echo); all
     // reused verbatim from the hand-written descriptor (shared AutoSuggestBoxEventPayload).
@@ -3829,7 +3831,8 @@ public partial record AutoSuggestBoxElement(
                 {
                     c.TextChanged += h;
                     c.RegisterPropertyChangedCallback(WinUI.AutoSuggestBox.TextProperty, PendingTextChangedTick.OnTextChanged);
-                    c.Loaded += PendingTextChangedTick.OnLoaded;
+                    c.SizeChanged += PendingTextChangedTick.OnSizeChanged;
+                    PendingTextChangedTick.Hold(c);
                 },
                 callback:    static e => e.OnTextChanged,
                 trampoline:  __TextChangedTrampoline,
