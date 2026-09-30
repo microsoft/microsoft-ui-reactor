@@ -167,13 +167,13 @@ Conventions for contributors:
 
 - **Controls registered with `Reconciler.RegisterType` now carry their element tag, so
   keyed lists of them keep their place and their `unmount` callback runs** (spec 047
-  §14). The reconciler records each control's element on the control and reads it back
-  in several places, but it left a registered type's control to its own callbacks, which
-  only `XamlInterop` tagged. A keyed registered-type child that survived a re-render was
-  therefore neither moved nor patched: a `Grid` of them that grew or reordered showed
-  stale content at another child's row and column. The `unmount` callback never ran,
-  keyed or not, so the docking host's cleanup (closing its floating windows,
-  unregistering from `DockHostRegistry`) never ran either, and the guide's
+  §14, PR #1301). The reconciler records each control's element on the control and reads
+  it back in several places, but it left a registered type's control to its own
+  callbacks, which only `XamlInterop` tagged. A keyed registered-type child that survived
+  a re-render was therefore neither moved nor patched: a `Grid` of them that grew or
+  reordered showed stale content at another child's row and column. The `unmount`
+  callback never ran, keyed or not, so the docking host's cleanup (closing its floating
+  windows, unregistering from `DockHostRegistry`) never ran either, and the guide's
   `editor.Dispose()` example never disposed anything. A `.Ref(...)` on a registered type
   kept pointing at the removed control, which the pool could already have handed to
   another element. The reconciler now tags these controls wherever it reads the tag
