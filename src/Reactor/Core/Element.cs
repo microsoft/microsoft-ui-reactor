@@ -5063,6 +5063,19 @@ public partial record TitleBarElement(
     /// 48 DIP. <see cref="WindowSpec.TitleBarHeight"/>, when set, wins over this.
     /// </remarks>
     public WindowTitleBarHeight? HeightOption { get; init; }
+    /// <summary>
+    /// Theme of the hosting window's system caption buttons
+    /// (<c>AppWindow.TitleBar.PreferredTheme</c>). <c>null</c> (the default)
+    /// leaves the caption alone. (issue #1297)
+    /// </summary>
+    /// <remarks>
+    /// WinUI does not derive the caption theme from the content's
+    /// <c>RequestedTheme</c>, so an app that themes its content opposite to the
+    /// system declares the matching caption theme here. Removing the declaration
+    /// (or unmounting the title bar) restores the platform default.
+    /// <see cref="WindowSpec.TitleBarTheme"/>, when set, wins over this.
+    /// </remarks>
+    public WindowTitleBarTheme? PreferredTheme { get; init; }
     public Element? Content { get; init; }
     public Element? RightHeader { get; init; }
     /// <summary>
@@ -5128,7 +5141,11 @@ public partial record TitleBarElement(
                 update: static (c, _, e) => global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Apply(c, e, force: false))
             .Imperative(
                 mount: static (c, e) => RegisterWindowTitleBar(c, e),
-                update: static (c, _, e) => ApplyTitleBarHeightOption(c, e))
+                update: static (c, _, e) =>
+                {
+                    ApplyTitleBarPreferredTheme(c, e);
+                    ApplyTitleBarHeightOption(c, e);
+                })
             .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarEventPayload,
                 global::Windows.Foundation.TypedEventHandler<WinUI.TitleBar, object>>(
                 subscribe:        static (c, h) => c.BackRequested += h,
@@ -5159,6 +5176,9 @@ public partial record TitleBarElement(
             // content-extended mode, so the window flips ExtendsContentIntoTitleBar
             // back to true just before native close. (issue #537)
             owningWindow?.MarkTitleBarControlPresent(titleBar);
+            // The caption theme is legal whether or not the window is content-extended,
+            // so it is applied ahead of the explicit-false early return. (issue #1297)
+            ApplyTitleBarPreferredTheme(titleBar, element);
 
             var explicitValue = owningWindow?.Spec.ExtendsContentIntoTitleBar;
             if (explicitValue == false) return;
@@ -5169,6 +5189,14 @@ public partial record TitleBarElement(
 
         ApplyTitleBarHeightOption(titleBar, element);
     }
+
+    /// <summary>
+    /// Applies <see cref="PreferredTheme"/> to the owning window's caption. A bare
+    /// <c>ReactorHost</c> has no caption to theme, so it is a no-op there. (issue #1297)
+    /// </summary>
+    private static void ApplyTitleBarPreferredTheme(WinUI.TitleBar titleBar, TitleBarElement element) =>
+        global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow
+            ?.SetElementTitleBarTheme(element.PreferredTheme, titleBar);
 
     /// <summary>
     /// Applies <see cref="HeightOption"/>. (issue #917)

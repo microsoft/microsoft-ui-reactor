@@ -202,6 +202,18 @@ public sealed partial class ReactorWindow : IDisposable
     // the write was skipped). The mounted TitleBar control is sized to *this*,
     // not to the declaration, so the two halves never disagree.
     private WindowTitleBarHeight? _effectiveTitleBarHeight;
+
+    // Issue #1297 — declarative caption theme (AppWindow.TitleBar.PreferredTheme).
+    // Same precedence as the height: the spec value wins, a mounted TitleBar(...)
+    // element supplies the fallback. _appliedTitleBarTheme records what Reactor
+    // last declared so removing the declaration restores the platform baseline
+    // (captured at construction) — and a value the app set imperatively without
+    // ever declaring one is never touched.
+    private WindowTitleBarTheme? _specTitleBarTheme;
+    private WindowTitleBarTheme? _elementTitleBarTheme;
+    private WindowTitleBarTheme? _appliedTitleBarTheme;
+    private WeakReference<FrameworkElement>? _titleBarThemeWriter;
+    private TitleBarTheme _titleBarThemeBaseline;
     private WeakReference<FrameworkElement>? _titleBarControl;
 
     /// <summary>
@@ -455,6 +467,14 @@ public sealed partial class ReactorWindow : IDisposable
         _appWindow = _window.AppWindow;
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
 
+        // Snapshot before ApplyChrome (and any app configure callback) can write it,
+        // so a removed TitleBarTheme declaration restores the true platform default.
+        try { _titleBarThemeBaseline = _appWindow.TitleBar.PreferredTheme; }
+        catch (COMException ex)
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TitleBarTheme.baseline", ex);
+        }
+
         if (spec.Embed is { } embed)
         {
             VerifyEmbedDpiAwareness(embed.Style);
@@ -682,6 +702,12 @@ public sealed partial class ReactorWindow : IDisposable
             // ERROR_INVALID_STATE on a non-extended window.
             _specTitleBarHeight = spec.TitleBarHeight;
             ApplyTitleBarHeight(warnWhenNotExtended: spec.TitleBarHeight is not null);
+
+            // Issue #1297 — unlike the height, PreferredTheme is legal on a
+            // non-extended window (it themes the system title bar too), so it is
+            // not gated on the content-extension flip above.
+            _specTitleBarTheme = spec.TitleBarTheme;
+            ApplyTitleBarTheme();
         }
 
         // Sizing — DIP -> physical at the current per-window DPI. (spec 036 §5.1)
@@ -1956,6 +1982,7 @@ public sealed partial class ReactorWindow : IDisposable
             if (_titleBarIconControls.Count > 0)
             {
                 DropHeightContributionIfWrittenBy(unmounting);
+                DropThemeContributionIfWrittenBy(unmounting);
                 return;
             }
         }
@@ -1966,7 +1993,90 @@ public sealed partial class ReactorWindow : IDisposable
         _titleBarControlHeightOwned = false;
         _elementTitleBarHeight = null;
         ApplyTitleBarHeight(warnWhenNotExtended: false);
+        _titleBarThemeWriter = null;
+        _elementTitleBarTheme = null;
+        ApplyTitleBarTheme();
     }
+
+    /// <summary>
+    /// Theme counterpart of <see cref="DropHeightContributionIfWrittenBy"/>: withdraws the
+    /// element's caption-theme contribution when the bar that declared it unmounts while
+    /// other title bars remain. (issue #1297)
+    /// </summary>
+    private void DropThemeContributionIfWrittenBy(Microsoft.UI.Xaml.Controls.TitleBar? unmounting)
+    {
+        if (unmounting is null || _titleBarThemeWriter is null) return;
+        if (_titleBarThemeWriter.TryGetTarget(out var writer) && !ReferenceEquals(writer, unmounting))
+            return;
+
+        _titleBarThemeWriter = null;
+        _elementTitleBarTheme = null;
+        ApplyTitleBarTheme();
+    }
+
+    /// <summary>
+    /// Records the caption theme declared by a mounted <c>TitleBar(...)</c> element and
+    /// applies it, unless <see cref="WindowSpec.TitleBarTheme"/> overrides it. Called from
+    /// the element's mount/update path on every render, so it no-ops when nothing
+    /// changed. (issue #1297)
+    /// </summary>
+    internal void SetElementTitleBarTheme(WindowTitleBarTheme? theme, FrameworkElement control)
+    {
+        var sameWriter = _titleBarThemeWriter is not null
+            && _titleBarThemeWriter.TryGetTarget(out var existing)
+            && ReferenceEquals(existing, control);
+        if (sameWriter && _elementTitleBarTheme == theme) return;
+
+        // A bar that declares nothing must not withdraw another bar's declaration.
+        if (theme is null && !sameWriter) return;
+
+        _elementTitleBarTheme = theme;
+        _titleBarThemeWriter = theme is null ? null : new WeakReference<FrameworkElement>(control);
+        ApplyTitleBarTheme();
+    }
+
+    /// <summary>
+    /// Writes the resolved caption theme onto <c>AppWindow.TitleBar.PreferredTheme</c>.
+    /// (issue #1297)
+    /// <para>
+    /// Resolution mirrors the caption height: an explicit
+    /// <see cref="WindowSpec.TitleBarTheme"/> wins, otherwise the mounted
+    /// <c>TitleBar(...)</c> element's declaration applies. With neither declared
+    /// Reactor writes nothing — an app that sets <c>PreferredTheme</c> imperatively
+    /// keeps ownership — except to return a value Reactor applied to the baseline
+    /// the window was created with.
+    /// </para>
+    /// </summary>
+    private void ApplyTitleBarTheme()
+    {
+        if (_disposed) return;
+        if (!IsTopLevelChromeAllowed(Volatile.Read(ref _spec))) return;
+
+        var resolved = _specTitleBarTheme ?? _elementTitleBarTheme;
+        if (resolved is null && _appliedTitleBarTheme is null) return;
+        var target = resolved is { } declared ? ToNativeTitleBarTheme(declared) : _titleBarThemeBaseline;
+
+        try
+        {
+            var titleBar = _appWindow.TitleBar;
+            if (titleBar.PreferredTheme != target)
+                titleBar.PreferredTheme = target;
+            _appliedTitleBarTheme = resolved;
+        }
+        catch (COMException ex)
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TitleBarTheme.set", ex);
+        }
+    }
+
+    internal static TitleBarTheme ToNativeTitleBarTheme(WindowTitleBarTheme theme) => theme switch
+    {
+        WindowTitleBarTheme.Legacy => TitleBarTheme.Legacy,
+        WindowTitleBarTheme.UseDefaultAppMode => TitleBarTheme.UseDefaultAppMode,
+        WindowTitleBarTheme.Light => TitleBarTheme.Light,
+        WindowTitleBarTheme.Dark => TitleBarTheme.Dark,
+        _ => throw new ArgumentOutOfRangeException(nameof(theme), theme, null),
+    };
 
     /// <summary>
     /// Withdraws the caption-height contribution when the bar that supplied it is the one
