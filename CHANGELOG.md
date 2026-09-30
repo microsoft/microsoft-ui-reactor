@@ -192,7 +192,7 @@ Conventions for contributors:
   itself from `unmount` walks its children once rather than calling `unmount` again.
 
 - **A docking host's floating windows close when the host unmounts, whichever
-  `DockManager` they were opened under** (spec 045 §2.25). Apps build a new
+  `DockManager` they were opened under** (spec 045 §2.25, PR #1305). Apps build a new
   `DockManager` in their render, and every state change renders again, so a host
   sees a new element instance on almost every render. The per-host tables
   (floating windows, `DockHostRegistry`, and the chord, live-announcer, model and
