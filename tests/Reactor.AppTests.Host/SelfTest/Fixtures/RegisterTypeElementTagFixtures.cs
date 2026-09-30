@@ -26,7 +26,9 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// registered-type arm left tagging to the author, which in-tree only <c>XamlInterop</c> did.
 /// These fixtures cover each reader, both unmount paths, both update outcomes (patched in place
 /// and replaced), and the allocation gate: an unkeyed control whose registration has no
-/// <c>unmount</c> is still not tagged.</para>
+/// <c>unmount</c> is still not tagged. Two more pin what tagging must not do: clear a ref
+/// that has already moved to a replacement, or retag a control that another element
+/// owns.</para>
 /// </summary>
 internal static class RegisterTypeElementTagFixtures
 {
@@ -531,6 +533,109 @@ internal static class RegisterTypeElementTagFixtures
             H.Check($"{Name}_Removed", await Harness.WaitFor(() => H.FindText("rtt-ref-target") is null));
             H.Check($"{Name}_RefClearedOnUnmount", target.Current is null,
                 $"ref still points at a {target.Current?.GetType().Name ?? "null"} showing '{(target.Current as WinXC.TextBlock)?.Text}'");
+        }
+    }
+
+    /// <summary>
+    /// When <c>update</c> replaces the control, the reconciler points the element's ref at the
+    /// replacement before the child reconciler unmounts the old control. Now that the old
+    /// control is tagged, its unmount must leave a ref that has already moved on alone.
+    /// </summary>
+    internal sealed class RefFollowsReplacement(Harness h) : UnmountProbeFixture(h)
+    {
+        protected override UpdateResult OnRename => UpdateResult.NewControl;
+
+        public override async Task RunAsync()
+        {
+            const string Name = "RegisterTypeTag_Ref_FollowsReplacement";
+            var target = new ElementRef();
+            var host = CreateHost();
+            host.Mount(ctx =>
+            {
+                var (label, setLabel) = ctx.UseState("rtt-refnew-a");
+                var (show, setShow) = ctx.UseState(true);
+                var children = new List<Element>
+                {
+                    Button("RTT Rename refnew", () => setLabel("rtt-refnew-b")),
+                    Button("RTT Remove refnew", () => setShow(false)),
+                };
+                if (show) children.Add(new ProbeElement(label).Ref(target));
+                return VStack(children.ToArray());
+            });
+
+            await Harness.Render();
+            H.Check($"{Name}_RefSetOnMount", Created.Count == 1 && ReferenceEquals(target.Current, Created[0]),
+                $"ref points at {DescribeRef(target)}");
+
+            H.ClickButton("RTT Rename refnew");
+            H.Check($"{Name}_Renamed", await Harness.WaitFor(() => FindProbe("rtt-refnew-b") is not null));
+            H.Check($"{Name}_RefFollowsReplacement", Created.Count == 2 && ReferenceEquals(target.Current, Created[1]),
+                $"ref points at {DescribeRef(target)}; expected #1");
+
+            H.ClickButton("RTT Remove refnew");
+            H.Check($"{Name}_Removed", await Harness.WaitFor(() => FindProbe("rtt-refnew-b") is null));
+            H.Check($"{Name}_RefClearedOnUnmount", target.Current is null,
+                $"ref points at {DescribeRef(target)}");
+        }
+
+        private string DescribeRef(ElementRef target) => target.Current switch
+        {
+            null => "null",
+            WinXC.Border border => Describe([border], Created),
+            var other => other.GetType().Name,
+        };
+    }
+
+    // ── A control that belongs to another element ───────────────────────
+
+    private sealed record DelegatingElement(string Label, Action OnClick) : Element;
+
+    /// <summary>
+    /// A registration may hand back the control the reconciler mounted for another element,
+    /// here a Button. That control's tag belongs to the <c>ButtonElement</c>: its click
+    /// trampoline resolves the live element through it. Tagging it with the registered
+    /// element would silence the click, so the reconciler leaves the tag alone. The
+    /// registration has an <c>unmount</c> callback, so it would otherwise always tag.
+    /// </summary>
+    internal sealed class DelegatedControlKeepsItsTag(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string Name = "RegisterTypeTag_DelegatedControl_KeepsItsTag";
+            int clicks = 0;
+            static Element Inner(DelegatingElement el) => Button(el.Label, el.OnClick);
+
+            var host = H.CreateHost();
+            host.Reconciler.RegisterType<DelegatingElement, UIElement>(
+                mount: (r, el, rerender) => r.Mount(Inner(el), rerender)!,
+                update: (r, oldEl, newEl, control, rerender) => r.UpdateChild(Inner(oldEl), Inner(newEl), control, rerender),
+                unmount: (_, _) => { });
+            host.Mount(ctx =>
+            {
+                var (label, setLabel) = ctx.UseState("rtt-delegated-a");
+                return VStack(
+                    Button("RTT Rename delegated", () => setLabel("rtt-delegated-b")),
+                    new DelegatingElement(label, () => clicks++));
+            });
+
+            await Harness.Render();
+            CheckButtonTag($"{Name}_Mount_KeepsButtonTag", "rtt-delegated-a");
+            H.ClickButton("rtt-delegated-a");
+            H.Check($"{Name}_Mount_ClickDispatches", await Harness.WaitFor(() => clicks == 1), $"clicks: {clicks}");
+
+            H.ClickButton("RTT Rename delegated");
+            H.Check($"{Name}_Renamed", await Harness.WaitFor(() => H.FindButton("rtt-delegated-b") is not null));
+            CheckButtonTag($"{Name}_Update_KeepsButtonTag", "rtt-delegated-b");
+            H.ClickButton("rtt-delegated-b");
+            H.Check($"{Name}_Update_ClickDispatches", await Harness.WaitFor(() => clicks == 2), $"clicks: {clicks}");
+        }
+
+        private void CheckButtonTag(string check, string label)
+        {
+            var button = H.FindButton(label);
+            var tag = button is null ? null : Reconciler.GetElementTag(button);
+            H.Check(check, tag is ButtonElement,
+                button is null ? "button not mounted" : $"tag is {tag?.GetType().Name ?? "null"}");
         }
     }
 

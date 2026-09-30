@@ -432,6 +432,8 @@ internal static class SelfTestFixtureRegistry
         "RegisterTypeTag_Update_SameControlStaysMounted",
         "RegisterTypeTag_Update_ReplacementUnmountedLater",
         "RegisterTypeTag_Ref_ClearedOnUnmount",
+        "RegisterTypeTag_Ref_FollowsReplacement",
+        "RegisterTypeTag_DelegatedControl_KeepsItsTag",
         "RegisterTypeTag_TagOnlyWhereRead",
         // Control catalog — mount/unmount every control type
         "ControlCatalog_MountUnmountAll",
@@ -2372,6 +2374,8 @@ internal static class SelfTestFixtureRegistry
         "RegisterTypeTag_Update_SameControlStaysMounted" => new RegisterTypeElementTagFixtures.UpdateReturnsSameControl(harness),
         "RegisterTypeTag_Update_ReplacementUnmountedLater" => new RegisterTypeElementTagFixtures.UpdateReturnsReplacement(harness),
         "RegisterTypeTag_Ref_ClearedOnUnmount" => new RegisterTypeElementTagFixtures.RefClearedOnUnmount(harness),
+        "RegisterTypeTag_Ref_FollowsReplacement" => new RegisterTypeElementTagFixtures.RefFollowsReplacement(harness),
+        "RegisterTypeTag_DelegatedControl_KeepsItsTag" => new RegisterTypeElementTagFixtures.DelegatedControlKeepsItsTag(harness),
         "RegisterTypeTag_TagOnlyWhereRead" => new RegisterTypeElementTagFixtures.TagOnlyWhereRead(harness),
         // Control catalog
         "ControlCatalog_MountUnmountAll" => new ControlCatalogFixtures.MountUnmountAllControls(harness),

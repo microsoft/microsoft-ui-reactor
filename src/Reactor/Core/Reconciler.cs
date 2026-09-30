@@ -920,13 +920,16 @@ public sealed partial class Reconciler : IDisposable
     /// recursively mount/update/unmount child elements without capturing external state.
     ///
     /// The reconciler records the element on the control it gets back from <c>mount</c> or
-    /// <c>update</c> (the element tag), so the callbacks never need <see cref="SetElementTag"/>:
-    /// keyed reconciliation, the <c>unmount</c> lookup, <c>.Ref(...)</c> cleanup and exit
-    /// transitions read it back.
+    /// <c>update</c> (the element tag) wherever it reads the tag back itself: keyed
+    /// reconciliation, the <c>unmount</c> lookup, <c>.Ref(...)</c> cleanup and exit
+    /// transitions. The callbacks don't call <see cref="SetElementTag"/> for those. Code of your
+    /// own that reads the element back with <see cref="GetElementTag(FrameworkElement)"/>, such
+    /// as an event handler, still tags the control itself. A control that already carries
+    /// another element's tag, for example one <c>mount</c> got from <see cref="Mount"/> for a
+    /// child element, keeps that tag, so the registration's <c>unmount</c> is not called for it.
     ///
     /// <c>update</c> returns null after patching the control in place; returning the control
-    /// it was handed means the same. Return a different control only to replace it, and the
-    /// reconciler unmounts the old one.
+    /// it was handed means the same. Return a different control only when you replaced it.
     ///
     /// <c>unmount</c> runs when the control leaves the tree, in place of the reconciler's own
     /// walk over the control's children: a child the callbacks mounted through the reconciler
@@ -1565,16 +1568,23 @@ public sealed partial class Reconciler : IDisposable
         // The reconciler tags the control so the callbacks don't have to. The keyed-middle
         // reconcile finds a surviving child by the key on its tag, the unmount path finds this
         // registration's unmount callback through it, and .Ref(...) cleanup reads it too.
-        // SetElementTagIfNeeded covers the element-driven readers without a per-leaf allocation.
-        // An unmount callback is found through the tag whatever the element carries, so a
-        // registration that has one always tags.
+        // Same allocation gate as SetElementTagIfNeeded, so an unkeyed, extras-free leaf gets
+        // no ReactorState, except that a registration with an unmount callback always tags:
+        // that lookup goes through the tag whatever the element carries.
         private void TagControl(UIElement control, Element element)
         {
             if (control is not FrameworkElement fe) return;
-            if (HasUnmount)
-                SetElementTag(fe, element);
-            else
-                SetElementTagIfNeeded(fe, element);
+            if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+            {
+                // The callback returned a control the reconciler mounted for another element,
+                // such as a child's. That element's own event trampolines and unmount read
+                // the tag, so it keeps it.
+                if (state.Element is { } owner && owner is not TElement) return;
+                state.Element = element;
+                return;
+            }
+            if (HasUnmount || NeedsTag(element))
+                fe.SetValue(ReactorAttached.StateProperty, new ReactorState { Element = element });
         }
     }
 
@@ -2354,7 +2364,11 @@ public sealed partial class Reconciler : IDisposable
 
     private static void CleanupReferenceStateForUnmount(FrameworkElement control, Element? element)
     {
-        element?.Modifiers?.Ref?.SetCurrent(null);
+        // Clear the producer ref only while it still names this control. When an update
+        // replaces a control, ApplyModifiers points the element's ref at the replacement
+        // before the caller unmounts the old control, and the ref must keep it.
+        if (element?.Modifiers?.Ref is { } producerRef && ReferenceEquals(producerRef.Current, control))
+            producerRef.SetCurrent(null);
         TeardownReferenceEdges(control);
     }
 

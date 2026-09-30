@@ -682,13 +682,15 @@ instead. This is the shape Reactor's own docking natives and the Monaco
 sample use.
 
 Reactor records the element on the control that `mount` or `update`
-returns, so the delegates never call `Reconciler.SetElementTag`
-themselves: keyed reordering, the `unmount` lookup and `.Ref(...)`
-cleanup all read it back. `unmount` runs when the control leaves the
-tree, *instead of* Reactor's own walk over the control's children. If
-your delegates mount child elements through the reconciler, unmount them
-there too (`r.UnmountChild(child)`); without an `unmount` delegate,
-Reactor walks the children itself.
+returns wherever Reactor itself reads it back — keyed reordering, the
+`unmount` lookup and `.Ref(...)` cleanup — so the delegates don't call
+`Reconciler.SetElementTag` for those. If your own code reads the element
+back with `Reconciler.GetElementTag`, from an event handler for example,
+keep tagging the control yourself. `unmount` runs when the control
+leaves the tree, *instead of* Reactor's own walk over the control's
+children. If your delegates mount child elements through the reconciler,
+unmount them there too (`r.UnmountChild(child)`); without an `unmount`
+delegate, Reactor walks the children itself.
 
 A library that wants eager setup ships an ordinary
 `public static void UseAcme(Reconciler reconciler)` over one of these —
