@@ -183,10 +183,14 @@ internal static class KeyedWrapperChildrenFixtures
         {
             static Dictionary<(int, int), UIElement> ByCell(List<Cell> cells)
             {
+                var shown = cells
+                    .Select(c => (c.Control, Parsed: TryParse(c.Text, out var row, out var column, out _), Row: row, Column: column))
+                    .Where(c => c.Parsed);
+                // Indexer writes, not ToDictionary: two controls showing one cell must not throw
+                // here, because Verify has already failed the step for it.
                 var map = new Dictionary<(int, int), UIElement>();
-                foreach (var cell in cells)
-                    if (TryParse(cell.Text, out var row, out var column, out _))
-                        map[(row, column)] = cell.Control;
+                foreach (var s in shown)
+                    map[(s.Row, s.Column)] = s.Control;
                 return map;
             }
 
