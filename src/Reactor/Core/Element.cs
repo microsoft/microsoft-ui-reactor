@@ -3749,14 +3749,18 @@ public partial record AutoSuggestBoxElement(
     // managed side: the TextChanged delegate and the ReactorState that native code reaches only
     // through reference-tracked CCWs. The native box and its timer live on, the tick calls into
     // collected managed state, CsWinRT throws NullReferenceException into WinUI, and WinUI
-    // fail-fasts the process with STATUS_STOWED_EXCEPTION (0xC000027B). So Reactor holds the box
-    // until well after any tick it can still receive, from each moment one can be armed:
-    //   - a Text change, which the box copies into its TextBox (typing updates Text too);
-    //   - its first layout, when the fresh template's TextBox gets a copy of a non-empty Text
-    //     without Text changing. The box gets its first size in that same layout, including a
-    //     box that was collapsed until then, so SizeChanged marks it;
-    //   - installing the handler at all: an update can add the first OnTextChanged after either
-    //     of the above has already armed the timer.
+    // fail-fasts the process with STATUS_STOWED_EXCEPTION (0xC000027B).
+    //
+    // The timer is only armed while the box is in the tree (a text change on a box that has left
+    // it raises no tick), and the tree keeps the box's managed side alive. So a tick can only be
+    // pending on an unreachable box if it was armed before the box left the tree, and Reactor
+    // holds the box until well after any such tick:
+    //   - from Unloaded. WinUI pegs the box from leaving the tree until Unloaded is delivered,
+    //     so nothing is collected before the hold is taken.
+    //   - from installing the handler. An update can do that after the box left the tree, too
+    //     late for its Unloaded. That needs a tick armed less than 150 ms earlier on a box that
+    //     is out of the tree yet still updated (a hidden tab's content, say), so no selftest can
+    //     force it deterministically; the hold is kept because it costs next to nothing.
     private static class PendingTextChangedTick
     {
         // Far past the 150 ms timer, so the tick has landed long before the hold is released.
@@ -3766,15 +3770,9 @@ public partial record AutoSuggestBoxElement(
         [global::System.ThreadStatic] private static global::System.Collections.Generic.Dictionary<WinUI.AutoSuggestBox, long>? t_heldUntil;
         [global::System.ThreadStatic] private static global::Microsoft.UI.Dispatching.DispatcherQueueTimer? t_release;
 
-        internal static readonly DependencyPropertyChangedCallback OnTextChanged = static (sender, _) =>
+        internal static readonly RoutedEventHandler OnUnloaded = static (sender, _) =>
         {
             if (sender is WinUI.AutoSuggestBox box) Hold(box);
-        };
-
-        // There is nothing to copy while Text is empty.
-        internal static readonly SizeChangedEventHandler OnSizeChanged = static (sender, _) =>
-        {
-            if (sender is WinUI.AutoSuggestBox box && !string.IsNullOrEmpty(box.Text)) Hold(box);
         };
 
         internal static void Release(WinUI.AutoSuggestBox box) => t_heldUntil?.Remove(box);
@@ -3830,8 +3828,7 @@ public partial record AutoSuggestBoxElement(
                 subscribe:   static (c, h) =>
                 {
                     c.TextChanged += h;
-                    c.RegisterPropertyChangedCallback(WinUI.AutoSuggestBox.TextProperty, PendingTextChangedTick.OnTextChanged);
-                    c.SizeChanged += PendingTextChangedTick.OnSizeChanged;
+                    c.Unloaded += PendingTextChangedTick.OnUnloaded;
                     PendingTextChangedTick.Hold(c);
                 },
                 callback:    static e => e.OnTextChanged,
