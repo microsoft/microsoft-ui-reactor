@@ -60,6 +60,19 @@ internal static class KeyedWrapperChildrenFixtures
         /// </summary>
         protected virtual bool RendersGeneration => true;
 
+        private readonly Dictionary<(int Row, int Column), int> _builds = new();
+
+        /// <summary>
+        /// Counts a content build for a <c>Memo(key, …)</c> factory, which runs once per mount.
+        /// Its content is a pooled control, and the pool is LIFO, so a remounted survivor can get
+        /// its own control back and pass the reference check; a second build still gives it away.
+        /// </summary>
+        protected Element CountBuild(int row, int column, Element content)
+        {
+            _builds[(row, column)] = _builds.GetValueOrDefault((row, column)) + 1;
+            return content;
+        }
+
         public override async Task RunAsync()
         {
             var host = H.CreateHost();
@@ -202,7 +215,7 @@ internal static class KeyedWrapperChildrenFixtures
             {
                 if (!now.TryGetValue(cell, out var current)) continue;
                 survivors++;
-                if (!ReferenceEquals(control, current))
+                if (!ReferenceEquals(control, current) || _builds.GetValueOrDefault(cell) > 1)
                     remounted.Add($"({cell.Item1},{cell.Item2})");
             }
 
@@ -253,7 +266,7 @@ internal static class KeyedWrapperChildrenFixtures
         protected override bool RendersGeneration => false;
 
         protected override Element Cell(int row, int column, int generation) =>
-            Memo((row, column), () => TextBlock($"{row},{column}"));
+            Memo((row, column), () => CountBuild(row, column, TextBlock($"{row},{column}")));
     }
 
     // The factory output carries its own key. The parent diffs on the wrapper's key, so that is
@@ -265,6 +278,6 @@ internal static class KeyedWrapperChildrenFixtures
         protected override bool RendersGeneration => false;
 
         protected override Element Cell(int row, int column, int generation) =>
-            Memo((row, column), () => TextBlock($"{row},{column}").WithKey($"inner-{row}-{column}"));
+            Memo((row, column), () => CountBuild(row, column, TextBlock($"{row},{column}").WithKey($"inner-{row}-{column}")));
     }
 }
