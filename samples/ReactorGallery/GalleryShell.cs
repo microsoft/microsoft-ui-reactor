@@ -128,7 +128,7 @@ class GalleryShell : Component
         Element content;
         if (searchResults != null)
         {
-            content = CardListPage("Search Results",
+            content = CardListPage("search:" + searchQuery, "Search Results",
                 $"{searchResults.Length} matching \"{searchQuery}\"",
                 searchResults, navigate.Current);
         }
@@ -148,7 +148,7 @@ class GalleryShell : Component
                 .Where(c => c.Category == categoryName)
                 .ToArray();
 
-            content = CardListPage(categoryName,
+            content = CardListPage("category:" + selectedTag, categoryName,
                 ControlRegistry.IsControlCategory(categoryName)
                     ? $"{controls.Length} controls in this category"
                     : $"{controls.Length} topics in this category",
@@ -249,9 +249,11 @@ class GalleryShell : Component
     /// Header + card grid page used by category and search-result views. The page owns
     /// its vertical scroller: <see cref="GalleryControls.ControlCardGrid"/> disables the
     /// GridView's internal ScrollViewer so it sizes to content, and NavigationView content
-    /// does not scroll on its own (issue #1298).
+    /// does not scroll on its own (issue #1298). <paramref name="pageKey"/> identifies the
+    /// list shown, so switching category or query remounts the scroller at the top instead
+    /// of carrying the previous list's offset over.
     /// </summary>
-    static Element CardListPage(string title, string subtitle, ControlInfo[] controls, Action<string> navigate) =>
+    static Element CardListPage(string pageKey, string title, string subtitle, ControlInfo[] controls, Action<string> navigate) =>
         ScrollView(
             VStack(16,
                 GalleryControls.PageHeader(title, subtitle)
@@ -259,7 +261,7 @@ class GalleryShell : Component
                 GalleryControls.ControlCardGrid(controls, navigate)
                     .Margin(36, 0, 0, 36)
             )
-        );
+        ).WithKey(pageKey);
 
     /// <summary>
     /// Search text a route implies. Only a <c>/search?q=</c> link carries one; every
