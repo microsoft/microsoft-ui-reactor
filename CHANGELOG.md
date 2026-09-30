@@ -157,6 +157,14 @@ Conventions for contributors:
 
 ### Fixed
 
+- **ReactorGallery category and search-result pages scroll vertically**
+  (issue #1298). Both views put a bare header and card grid into the
+  `NavigationView` content. The card grid turns off its own scrolling so it can
+  size to its content, and nothing else supplied a scroller, so in a short
+  window the cards below the fold couldn't be reached. Both views now share a
+  page helper that wraps the content in `ScrollView`, matching the control
+  pages and Home.
+
 - **Apps that reference only `Microsoft.UI.Reactor` are framework-dependent
   again** (regression from #822). The package now depends on
   `Microsoft.WindowsAppSDK.Runtime`; without it the Windows App SDK silently
