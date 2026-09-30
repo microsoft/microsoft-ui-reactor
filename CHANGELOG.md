@@ -165,6 +165,26 @@ Conventions for contributors:
   page helper that wraps the content in `ScrollView`, matching the control
   pages and Home.
 
+- **Controls registered with `Reconciler.RegisterType` now carry their element tag, so
+  keyed lists of them keep their place and their `unmount` callback runs** (spec 047
+  §14). The reconciler records each control's element on the control and reads it back
+  in several places, but it left a registered type's control to its own callbacks, which
+  only `XamlInterop` tagged. A keyed registered-type child that survived a re-render was
+  therefore neither moved nor patched: a `Grid` of them that grew or reordered showed
+  stale content at another child's row and column. The `unmount` callback never ran,
+  keyed or not, so the docking host's cleanup (closing its floating windows,
+  unregistering from `DockHostRegistry`) never ran either, and the guide's
+  `editor.Dispose()` example never disposed anything. A `.Ref(...)` on a registered type
+  kept pointing at the removed control, which the pool could already have handed to
+  another element. The reconciler now tags these controls whenever something reads the
+  tag: when the element is keyed or carries callbacks, extras or a reference modifier,
+  and always when the registration has an `unmount` callback. An `update` callback that
+  returns the control it was handed now counts as patching it, where the child
+  reconcilers used to unmount it. Because `unmount` now runs, it replaces the
+  reconciler's walk over the control's children, as it always has for `XamlInterop`: a
+  registration that mounts children through the reconciler and supplies `unmount` has
+  to unmount them there.
+
 - **Apps that reference only `Microsoft.UI.Reactor` are framework-dependent
   again** (regression from #822). The package now depends on
   `Microsoft.WindowsAppSDK.Runtime`; without it the Windows App SDK silently

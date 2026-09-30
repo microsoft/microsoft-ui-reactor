@@ -919,6 +919,20 @@ public sealed partial class Reconciler : IDisposable
     /// The mount and update handlers receive the Reconciler instance so they can
     /// recursively mount/update/unmount child elements without capturing external state.
     ///
+    /// The reconciler records the element on the control it gets back from <c>mount</c> or
+    /// <c>update</c> (the element tag), so the callbacks never need <see cref="SetElementTag"/>:
+    /// keyed reconciliation, the <c>unmount</c> lookup, <c>.Ref(...)</c> cleanup and exit
+    /// transitions read it back.
+    ///
+    /// <c>update</c> returns null after patching the control in place; returning the control
+    /// it was handed means the same. Return a different control only to replace it, and the
+    /// reconciler unmounts the old one.
+    ///
+    /// <c>unmount</c> runs when the control leaves the tree, in place of the reconciler's own
+    /// walk over the control's children: a child the callbacks mounted through the reconciler
+    /// has to be torn down there, for example with <see cref="UnmountChild"/>. Without an
+    /// <c>unmount</c> callback the reconciler walks the control's children itself.
+    ///
     /// Not part of the <c>REACTOR_V1_PREVIEW</c> surface — this is the legacy
     /// type-registry path, public since before Spec 047. The §13 Q17 hardening
     /// (throw on duplicate, no base-class fallback, no open generics) tightens
@@ -1517,22 +1531,50 @@ public sealed partial class Reconciler : IDisposable
         public bool HasUnmount => _unmount is not null;
 
         public UIElement Mount(Element element, Action requestRerender, Reconciler reconciler)
-            => _mount(reconciler, (TElement)element, requestRerender);
+        {
+            var control = _mount(reconciler, (TElement)element, requestRerender);
+            TagControl(control, element);
+            return control;
+        }
 
         public UIElement? Update(Element oldEl, Element newEl, UIElement control, Action requestRerender, Reconciler reconciler)
         {
             // Guard against control type mismatch (e.g., recycled from pool or element type changed at this position).
             // If the existing control isn't our expected type, force a fresh mount instead of crashing.
-            if (control is not TControl typedControl || oldEl is not TElement typedOldEl)
-                return _mount(reconciler, (TElement)newEl, requestRerender);
+            var result = control is not TControl typedControl || oldEl is not TElement typedOldEl
+                ? _mount(reconciler, (TElement)newEl, requestRerender)
+                : _update(reconciler, typedOldEl, (TElement)newEl, typedControl, requestRerender);
 
-            return _update(reconciler, typedOldEl, (TElement)newEl, typedControl, requestRerender);
+            // Returning the control it was handed means the callback patched it in place, the
+            // same as returning null. The child reconcilers read any non-null result as a
+            // replacement and unmount the control they hold, which would run this registration's
+            // unmount callback against a control that stays mounted.
+            if (ReferenceEquals(result, control))
+                result = null;
+
+            TagControl(result ?? control, newEl);
+            return result;
         }
 
         public void Unmount(UIElement control, Reconciler reconciler)
         {
             if (control is TControl typedControl)
                 _unmount?.Invoke(reconciler, typedControl);
+        }
+
+        // The reconciler tags the control so the callbacks don't have to. The keyed-middle
+        // reconcile finds a surviving child by the key on its tag, the unmount path finds this
+        // registration's unmount callback through it, and .Ref(...) cleanup reads it too.
+        // SetElementTagIfNeeded covers the element-driven readers without a per-leaf allocation.
+        // An unmount callback is found through the tag whatever the element carries, so a
+        // registration that has one always tags.
+        private void TagControl(UIElement control, Element element)
+        {
+            if (control is not FrameworkElement fe) return;
+            if (HasUnmount)
+                SetElementTag(fe, element);
+            else
+                SetElementTagIfNeeded(fe, element);
         }
     }
 

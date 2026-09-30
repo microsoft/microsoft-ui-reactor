@@ -422,6 +422,17 @@ internal static class SelfTestFixtureRegistry
         // TypeRegistration mismatch regression
         "Reconciler_TypeMismatch_UpdateFallback",
         "Reconciler_TypeMismatch_UnmountSkip",
+        // RegisterType controls carry their element tag without the callbacks setting it:
+        // keyed identity, the unmount callback, and .Ref(...) cleanup all read it back.
+        "RegisterTypeTag_KeyedGrid_GrowAndReverse",
+        "RegisterTypeTag_Unmount_UnkeyedRemoved",
+        "RegisterTypeTag_Unmount_KeyedRemoved",
+        "RegisterTypeTag_Unmount_ReplacedByOtherType",
+        "RegisterTypeTag_Unmount_RootReplaced",
+        "RegisterTypeTag_Update_SameControlStaysMounted",
+        "RegisterTypeTag_Update_ReplacementUnmountedLater",
+        "RegisterTypeTag_Ref_ClearedOnUnmount",
+        "RegisterTypeTag_TagOnlyWhereRead",
         // Control catalog — mount/unmount every control type
         "ControlCatalog_MountUnmountAll",
         // Reconciler stress tests — target uncovered branches
@@ -2352,6 +2363,16 @@ internal static class SelfTestFixtureRegistry
         // TypeRegistration mismatch regression
         "Reconciler_TypeMismatch_UpdateFallback" => new TypeRegistrationMismatchFixtures.UpdateControlTypeMismatch(harness),
         "Reconciler_TypeMismatch_UnmountSkip" => new TypeRegistrationMismatchFixtures.UnmountControlTypeMismatch(harness),
+        // RegisterType controls carry their element tag
+        "RegisterTypeTag_KeyedGrid_GrowAndReverse" => new RegisterTypeElementTagFixtures.KeyedGridGrowAndReverse(harness),
+        "RegisterTypeTag_Unmount_UnkeyedRemoved" => new RegisterTypeElementTagFixtures.UnkeyedRemoved(harness),
+        "RegisterTypeTag_Unmount_KeyedRemoved" => new RegisterTypeElementTagFixtures.KeyedRemoved(harness),
+        "RegisterTypeTag_Unmount_ReplacedByOtherType" => new RegisterTypeElementTagFixtures.ReplacedByOtherType(harness),
+        "RegisterTypeTag_Unmount_RootReplaced" => new RegisterTypeElementTagFixtures.RootReplaced(harness),
+        "RegisterTypeTag_Update_SameControlStaysMounted" => new RegisterTypeElementTagFixtures.UpdateReturnsSameControl(harness),
+        "RegisterTypeTag_Update_ReplacementUnmountedLater" => new RegisterTypeElementTagFixtures.UpdateReturnsReplacement(harness),
+        "RegisterTypeTag_Ref_ClearedOnUnmount" => new RegisterTypeElementTagFixtures.RefClearedOnUnmount(harness),
+        "RegisterTypeTag_TagOnlyWhereRead" => new RegisterTypeElementTagFixtures.TagOnlyWhereRead(harness),
         // Control catalog
         "ControlCatalog_MountUnmountAll" => new ControlCatalogFixtures.MountUnmountAllControls(harness),
         // Reconciler stress tests
