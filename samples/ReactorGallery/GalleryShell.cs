@@ -152,15 +152,21 @@ class GalleryShell : Component
                 .Where(c => c.Category == categoryName)
                 .ToArray();
 
-            content = VStack(16,
-                GalleryControls.PageHeader(categoryName,
-                    ControlRegistry.IsControlCategory(categoryName)
-                        ? $"{controls.Length} controls in this category"
-                        : $"{controls.Length} topics in this category")
-                    .Margin(36, 24, 36, 0),
-                GalleryControls.ControlCardGrid(controls, navigate.Current)
-                    .Margin(36, 0, 0, 36)
-            );
+            content = (ScrollViewer(
+                VStack(16,
+                    GalleryControls.PageHeader(categoryName,
+                        ControlRegistry.IsControlCategory(categoryName)
+                            ? $"{controls.Length} controls in this category"
+                            : $"{controls.Length} topics in this category")
+                        .Margin(36, 24, 36, 0),
+                    GalleryControls.ControlCardGrid(controls, navigate.Current)
+                        .Margin(36, 0, 0, 36)
+                )
+            ) with
+            {
+                HorizontalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Disabled,
+                HorizontalScrollMode = Microsoft.UI.Xaml.Controls.ScrollMode.Disabled,
+            });
         }
         else
         {
