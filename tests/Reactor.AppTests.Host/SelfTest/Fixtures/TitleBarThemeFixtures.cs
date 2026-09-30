@@ -48,9 +48,10 @@ internal static class TitleBarThemeFixtures
 
     private static WindowSpec Spec(string title) => new() { Title = title, Width = 420, Height = 260 };
 
-    private static async Task<ReactorWindow> OpenAndSettle(WindowSpec spec, Func<Component> root)
+    private static async Task<ReactorWindow> OpenAndSettle(
+        WindowSpec spec, Func<Component> root, Action<Microsoft.UI.Reactor.Hosting.ReactorHost>? configure = null)
     {
-        var win = ReactorApp.OpenWindow(spec, root);
+        var win = ReactorApp.OpenWindow(spec, root, configure);
         await win.Host.WaitForIdleAsync();
         await Harness.Render(150);
         return win;
@@ -413,6 +414,97 @@ internal static class TitleBarThemeFixtures
                 await Settle(win);
                 Report("afterTypeSwap", win);
                 H.Check("TitleBarTheme_Swap_ThemeSurvives", Caption(win) == TitleBarTheme.Dark);
+            }
+            finally { await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
+    /// A <c>configure:</c> callback runs after the window is constructed but before the
+    /// root mounts. A declared spec theme must still win over a value the callback sets,
+    /// and withdrawing the declaration must hand the callback's value back.
+    /// </summary>
+    internal class ConfigureCallbackValue(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(45);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            var baseline = await MeasureBaseline();
+
+            // Differs from the platform baseline and from the declared value, so neither
+            // "callback wins" nor "restores the platform default" can pass.
+            const TitleBarTheme configured = TitleBarTheme.UseDefaultAppMode;
+            var spec = Spec("Theme configure") with { TitleBarTheme = WindowTitleBarTheme.Dark };
+            var win = await OpenAndSettle(spec, () => new PlainBodyComponent(),
+                configure: host => host.Window.AppWindow.TitleBar.PreferredTheme = configured);
+            try
+            {
+                Report("specOverConfigure", win);
+                H.Check("TitleBarTheme_Configure_DeclarationWins", Caption(win) == TitleBarTheme.Dark);
+
+                win.Update(spec with { TitleBarTheme = null });
+                await Settle(win);
+                Report("withdrawnToConfigure", win);
+                H.Check("TitleBarTheme_Configure_WithdrawRestoresCallbackValue",
+                    Caption(win) == configured && baseline != configured);
+            }
+            finally { await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>Two title bars that both declare a theme.</summary>
+    private sealed class TwoDeclaringBarsComponent : Component
+    {
+        public Action<bool>? SetShowSecond;
+        public Action<bool>? SetShowFirst;
+
+        public override Element Render()
+        {
+            var (showFirst, setShowFirst) = UseState(true);
+            var (showSecond, setShowSecond) = UseState(true);
+            SetShowFirst = setShowFirst;
+            SetShowSecond = setShowSecond;
+            return VStack(
+                showFirst ? TitleBar("First").PreferredTheme(WindowTitleBarTheme.Dark) : Empty(),
+                showSecond ? TitleBar("Second").PreferredTheme(WindowTitleBarTheme.Light) : Empty(),
+                TextBlock("body"));
+        }
+    }
+
+    /// <summary>
+    /// With two declaring bars, the most recent declaration wins; unmounting it hands the
+    /// caption to the other bar's still-live declaration rather than to the baseline.
+    /// The unchanged first bar is skipped by reconciliation, so only per-control
+    /// tracking can recover its declaration.
+    /// </summary>
+    internal class TwoDeclaringBars(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(45);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            var baseline = await MeasureBaseline();
+
+            var comp = new TwoDeclaringBarsComponent();
+            var win = await OpenAndSettle(Spec("Theme two declaring"), () => comp);
+            try
+            {
+                Report("bothDeclaring", win);
+                H.Check("TitleBarTheme_TwoDeclaring_LatestWins", Caption(win) == TitleBarTheme.Light);
+
+                comp.SetShowSecond!(false);
+                await Settle(win);
+                Report("secondUnmounted", win);
+                H.Check("TitleBarTheme_TwoDeclaring_FallsBackToRemainingDeclaration",
+                    Caption(win) == TitleBarTheme.Dark && baseline != TitleBarTheme.Dark);
+
+                comp.SetShowFirst!(false);
+                await Settle(win);
+                Report("bothUnmounted", win);
+                H.Check("TitleBarTheme_TwoDeclaring_LastUnmountRestoresBaseline", Caption(win) == baseline);
             }
             finally { await CloseAndSettle(win); }
         }

@@ -212,9 +212,16 @@ public sealed partial class ReactorWindow : IDisposable
     // the platform default. A value the app sets without ever declaring one is
     // never touched.
     private WindowTitleBarTheme? _specTitleBarTheme;
-    private WindowTitleBarTheme? _elementTitleBarTheme;
+    // One entry per mounted TitleBar that declares a theme, in declaration order; the
+    // most recent live one supplies the element fallback. Per-control, so unmounting
+    // one declaring bar hands the caption to another that still declares, instead of
+    // dropping every element declaration.
+    private readonly List<(WeakReference<FrameworkElement> Control, WindowTitleBarTheme Theme)> _titleBarThemeDeclarations = new();
     private WindowTitleBarTheme? _appliedTitleBarTheme;
-    private WeakReference<FrameworkElement>? _titleBarThemeWriter;
+    // False until MountAndActivate: the ctor's ApplyChrome runs before the app's
+    // `configure:` callback, and writing (or capturing the baseline) then would let
+    // that callback silently overwrite a declared theme and be lost on withdrawal.
+    private bool _titleBarThemeReady;
     private TitleBarTheme _titleBarThemeBaseline;
     private WeakReference<FrameworkElement>? _titleBarControl;
 
@@ -605,6 +612,11 @@ public sealed partial class ReactorWindow : IDisposable
         if ((rootFactory is null) == (renderFunc is null))
             throw new ArgumentException(
                 "Exactly one of rootFactory / renderFunc must be supplied.", nameof(rootFactory));
+
+        // The configure: callback has run by now, so the caption holds whatever the
+        // app set there; take ownership of a declared spec theme on top of it.
+        _titleBarThemeReady = true;
+        ApplyTitleBarTheme();
 
         if (rootFactory is not null)
             _host.Mount(rootFactory());
@@ -1976,7 +1988,7 @@ public sealed partial class ReactorWindow : IDisposable
             if (_titleBarIconControls.Count > 0)
             {
                 DropHeightContributionIfWrittenBy(unmounting);
-                DropThemeContributionIfWrittenBy(unmounting);
+                DropThemeDeclaration(unmounting);
                 return;
             }
         }
@@ -1987,45 +1999,65 @@ public sealed partial class ReactorWindow : IDisposable
         _titleBarControlHeightOwned = false;
         _elementTitleBarHeight = null;
         ApplyTitleBarHeight(warnWhenNotExtended: false);
-        _titleBarThemeWriter = null;
-        _elementTitleBarTheme = null;
+        _titleBarThemeDeclarations.Clear();
         ApplyTitleBarTheme();
     }
 
     /// <summary>
-    /// Theme counterpart of <see cref="DropHeightContributionIfWrittenBy"/>: withdraws the
-    /// element's caption-theme contribution when the bar that declared it unmounts while
-    /// other title bars remain. (issue #1297)
+    /// Withdraws the caption-theme declaration of a title bar that unmounts while other
+    /// title bars remain; the most recent remaining declaration, if any, takes over.
+    /// (issue #1297)
     /// </summary>
-    private void DropThemeContributionIfWrittenBy(Microsoft.UI.Xaml.Controls.TitleBar? unmounting)
+    private void DropThemeDeclaration(Microsoft.UI.Xaml.Controls.TitleBar? unmounting)
     {
-        if (unmounting is null || _titleBarThemeWriter is null) return;
-        if (_titleBarThemeWriter.TryGetTarget(out var writer) && !ReferenceEquals(writer, unmounting))
-            return;
+        if (unmounting is null) return;
+        var index = IndexOfThemeDeclaration(unmounting);
+        if (index < 0) return;
 
-        _titleBarThemeWriter = null;
-        _elementTitleBarTheme = null;
+        _titleBarThemeDeclarations.RemoveAt(index);
         ApplyTitleBarTheme();
+    }
+
+    private int IndexOfThemeDeclaration(FrameworkElement control)
+    {
+        for (var i = 0; i < _titleBarThemeDeclarations.Count; i++)
+        {
+            if (_titleBarThemeDeclarations[i].Control.TryGetTarget(out var existing)
+                && ReferenceEquals(existing, control))
+                return i;
+        }
+        return -1;
+    }
+
+    /// <summary>The most recent declaration from a title bar that is still alive.</summary>
+    private WindowTitleBarTheme? CurrentElementTitleBarTheme()
+    {
+        for (var i = _titleBarThemeDeclarations.Count - 1; i >= 0; i--)
+        {
+            if (_titleBarThemeDeclarations[i].Control.TryGetTarget(out _))
+                return _titleBarThemeDeclarations[i].Theme;
+            _titleBarThemeDeclarations.RemoveAt(i);
+        }
+        return null;
     }
 
     /// <summary>
     /// Records the caption theme declared by a mounted <c>TitleBar(...)</c> element and
     /// applies it, unless <see cref="WindowSpec.TitleBarTheme"/> overrides it. Called from
     /// the element's mount/update path on every render, so it no-ops when nothing
-    /// changed. (issue #1297)
+    /// changed. A bar that changes its declaration becomes the most recent one; a bar
+    /// that declares nothing withdraws only its own. (issue #1297)
     /// </summary>
     internal void SetElementTitleBarTheme(WindowTitleBarTheme? theme, FrameworkElement control)
     {
-        var sameWriter = _titleBarThemeWriter is not null
-            && _titleBarThemeWriter.TryGetTarget(out var existing)
-            && ReferenceEquals(existing, control);
-        if (sameWriter && _elementTitleBarTheme == theme) return;
+        var index = IndexOfThemeDeclaration(control);
+        if (index >= 0 && _titleBarThemeDeclarations[index].Theme == theme) return;
+        if (index < 0 && theme is null) return;
 
-        // A bar that declares nothing must not withdraw another bar's declaration.
-        if (theme is null && !sameWriter) return;
-
-        _elementTitleBarTheme = theme;
-        _titleBarThemeWriter = theme is null ? null : new WeakReference<FrameworkElement>(control);
+        if (index >= 0)
+            _titleBarThemeDeclarations.RemoveAt(index);
+        if (theme is { } declared)
+            _titleBarThemeDeclarations.Add((new WeakReference<FrameworkElement>(control), declared));
         ApplyTitleBarTheme();
     }
 
@@ -2043,10 +2075,10 @@ public sealed partial class ReactorWindow : IDisposable
     /// </summary>
     private void ApplyTitleBarTheme()
     {
-        if (_disposed) return;
+        if (_disposed || !_titleBarThemeReady) return;
         if (!IsTopLevelChromeAllowed(Volatile.Read(ref _spec))) return;
 
-        var resolved = _specTitleBarTheme ?? _elementTitleBarTheme;
+        var resolved = _specTitleBarTheme ?? CurrentElementTitleBarTheme();
         if (resolved is null && _appliedTitleBarTheme is null) return;
 
         try
@@ -3415,6 +3447,7 @@ public sealed partial class ReactorWindow : IDisposable
         // keeps a reference to a closed ReactorWindow would otherwise keep every TitleBar
         // wrapper and its applied-icon record alive with it.
         _titleBarIconControls.Clear();
+        _titleBarThemeDeclarations.Clear();
 
         _embedWatchdog?.Stop();
         DetachBackgroundDragRoot();

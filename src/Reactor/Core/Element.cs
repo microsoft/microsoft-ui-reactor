@@ -5073,7 +5073,8 @@ public partial record TitleBarElement(
     /// <c>RequestedTheme</c>, so an app that themes its content opposite to the
     /// system declares the matching caption theme here. Removing the declaration
     /// (or unmounting the title bar) restores the value the caption had before
-    /// Reactor first applied one.
+    /// Reactor first applied one. With several declaring title bars mounted, the most
+    /// recent declaration wins and the others take over as it goes away.
     /// <see cref="WindowSpec.TitleBarTheme"/>, when set, wins over this.
     /// </remarks>
     public WindowTitleBarTheme? PreferredTheme { get; init; }
