@@ -321,6 +321,22 @@ Conventions for contributors:
   not recognize a `Memo(key, …).WithKey(…)` child that survived a re-render. The child stayed
   unpatched at its old index while its siblings were placed around it, so a `Grid` gave it
   another child's row and column. The factory output now carries the wrapper's key.
+- **A resource override dropped from an element could stay applied.** Reactor records which
+  `Resources` keys an element's `.Resources(...)` overrides wrote, so it can remove them once
+  they are dropped, and kept that record in a table keyed by the control's managed wrapper. When
+  the wrapper was garbage-collected, WinRT projected a new one over the same native control and
+  the record came back empty: dropping the override, or changing its keys, after a GC left the
+  old value in the control's `Resources`. The record now lives in the control's `ReactorState`,
+  which is stored on the native object and so survives a wrapper collection (spec 047 §3).
+  Pooled controls leaked the keys too: `ElementPool` recycled a control without them, so the
+  next element to rent it inherited the previous renter's overrides. That happened after a GC
+  for a renter with overrides of its own, and always for one without, because mount only
+  applies overrides an element declares. Returning a control to the pool now strips the keys
+  Reactor wrote. Found through an intermittent `Issue675_TransitionAway_StaleOverrideRemoved`
+  selftest failure; the new `Issue675_TransitionAwayAfterWrapperCollected`,
+  `Issue675_PooledOverrideRenterDoesNotInheritKeys` and
+  `Issue675_PooledPlainRenterDoesNotInheritKeys` fixtures force the GC and fail without the fix
+  (PR #1294).
 
 ### Security
 

@@ -479,6 +479,19 @@ public sealed partial class Reconciler : IDisposable
         /// return; they are not preserved across rent/return cycles.
         /// </summary>
         public ReferenceEdgeBag? ReferenceEdges;
+
+        /// <summary>
+        /// The <c>Resources</c> keys this control's <c>ResourceOverrides</c> wrote, so an
+        /// update that drops a key can strip it (see <c>ApplyResourceOverrides</c>).
+        /// Stored here rather than in a <c>ConditionalWeakTable</c> keyed by
+        /// <see cref="FrameworkElement"/> for the same reason as
+        /// <see cref="EchoSuppressCount"/>: once a control's managed wrapper is collected,
+        /// WinRT projects a new one over the same native object, and a wrapper-keyed table
+        /// then reports no managed keys, so a dropped override stays in <c>fe.Resources</c>.
+        /// <c>ElementPool.CleanElement</c> strips these keys when the control returns to the
+        /// pool, so no renter inherits them.
+        /// </summary>
+        public HashSet<string>? ManagedResourceKeys;
     }
 
     internal static class ReactorAttached
@@ -5342,12 +5355,12 @@ public sealed partial class Reconciler : IDisposable
     // ── Lightweight Styling: per-control resource overrides ────────────────
 
     /// <summary>
-    /// Tracks which resource keys in <see cref="FrameworkElement.Resources"/> were
-    /// set by Reactor (vs. keys set by XAML or other sources). On update, only
-    /// Reactor-managed keys are removed when overrides change.
+    /// Removes every <c>Resources</c> key this control's resource overrides wrote, leaving keys
+    /// set outside Reactor in place. <see cref="ElementPool.CleanElement"/> calls it on pool
+    /// return, because mount applies overrides only for an element that declares some.
     /// </summary>
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, HashSet<string>>
-        _managedResourceKeys = new();
+    internal static void RemoveManagedResourceKeys(FrameworkElement fe)
+        => ApplyResourceOverrides(fe, null, null);
 
     /// <summary>
     /// Applies per-control resource overrides (lightweight styling) to a
@@ -5392,8 +5405,18 @@ public sealed partial class Reconciler : IDisposable
         Microsoft.UI.Reactor.Elements.ResourceOverrides? newOverrides,
         ElementTheme effectiveTheme)
     {
-        // Track which keys Reactor has set on this element
-        var managed = _managedResourceKeys.GetOrCreateValue(fe);
+        // Keys Reactor has set on this element, as opposed to keys set by XAML or other
+        // sources: only these are removed when the overrides change. They live on the
+        // native object (ReactorState.ManagedResourceKeys), because the managed wrapper can
+        // be collected and re-projected between renders. A removal-only call on a control
+        // that never got state has nothing of ours to strip, so it skips creating one.
+        HashSet<string> managed;
+        if (newOverrides is not null)
+            managed = GetOrCreateReactorState(fe).ManagedResourceKeys ??= new HashSet<string>();
+        else if (TryGetReactorState(fe, out var existing) && existing.ManagedResourceKeys is { } keys)
+            managed = keys;
+        else
+            return;
 
         // Remove managed keys that are no longer present in the new overrides.
         // Issue #675 — drive removal off `managed` vs `newOverrides`, independent of
