@@ -365,8 +365,8 @@ return Border(VStack(titleBar, ToggleSwitch(isDark, setIsDark, header: "Dark mod
     .RequestedTheme(isDark ? ElementTheme.Dark : ElementTheme.Light);
 ```
 
-This writes `AppWindow.TitleBar.PreferredTheme` on mount and whenever the value changes,
-so there is no effect to write. It is opt-in, like WinUI: without a declaration Reactor
+This writes `AppWindow.TitleBar.PreferredTheme` on mount and whenever the value changes.
+No effect is needed. It is opt-in, like WinUI: without a declaration Reactor
 never touches the caption theme, and a value you set on `AppWindow.TitleBar` yourself is
 left alone. Removing the declaration, or unmounting the title bar, restores the platform
 default.

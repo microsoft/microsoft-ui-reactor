@@ -205,6 +205,22 @@ wins over the implied 48; `WindowSpec.TitleBarHeight` wins over the element.
 > content-extension flip and warns instead of throwing, so prefer this over
 > setting `PreferredHeightOption` from a `UseEffect`.
 
+### Caption button theme
+
+```csharp
+TitleBar("My App").PreferredTheme(isDark ? WindowTitleBarTheme.Dark : WindowTitleBarTheme.Light);
+new WindowSpec { TitleBarTheme = WindowTitleBarTheme.Dark };
+```
+
+WinUI does not carry an element's `RequestedTheme` to the system caption buttons
+(min/max/close), so a root themed opposite to the system keeps system-themed buttons.
+`.PreferredTheme(WindowTitleBarTheme)` (`Legacy` / `UseDefaultAppMode` / `Light` /
+`Dark`) writes `AppWindow.TitleBar.PreferredTheme` on mount and on change — no
+`UseEffect`. Opt-in: with nothing declared Reactor never writes the property, and
+removing a declaration restores the window's original value.
+`WindowSpec.TitleBarTheme` wins over the element. Unlike the height, it does not
+need a content-extended window.
+
 ### Custom title-bar content and drag regions
 
 `TitleBar(...)` accepts custom `Content`. Interactive controls are excluded from

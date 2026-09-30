@@ -213,7 +213,7 @@ public sealed partial class ReactorWindow : IDisposable
     private WindowTitleBarTheme? _elementTitleBarTheme;
     private WindowTitleBarTheme? _appliedTitleBarTheme;
     private WeakReference<FrameworkElement>? _titleBarThemeWriter;
-    private TitleBarTheme _titleBarThemeBaseline;
+    private readonly TitleBarTheme _titleBarThemeBaseline;
     private WeakReference<FrameworkElement>? _titleBarControl;
 
     /// <summary>

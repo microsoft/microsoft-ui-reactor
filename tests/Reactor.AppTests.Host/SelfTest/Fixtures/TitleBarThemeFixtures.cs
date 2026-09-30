@@ -1,4 +1,5 @@
 using Microsoft.UI.Dispatching;
+using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Windowing;
@@ -63,8 +64,10 @@ internal static class TitleBarThemeFixtures
 
     private static async Task CloseAndSettle(ReactorWindow win)
     {
+        // The WinUI TitleBar control can throw teardown-reentry COMExceptions on close
+        // (issue #537); a window may also already be closing or disposed.
         try { win.Close(); }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is COMException or InvalidOperationException or ObjectDisposedException)
         {
             DiagnosticLog.SwallowedError(LogCategory.Hosting, "SelfTest.TitleBarTheme.CloseAndSettle", ex);
         }
@@ -194,6 +197,81 @@ internal static class TitleBarThemeFixtures
                 Report("afterRerenders", win);
 
                 H.Check("TitleBarTheme_Undeclared_AppValuePreserved", Caption(win) == appValue);
+            }
+            finally { await CloseAndSettle(win); }
+        }
+    }
+
+    private sealed class PlainBodyComponent : Component
+    {
+        public override Element Render() => VStack(TextBlock("body"));
+    }
+
+    /// <summary>
+    /// <c>WindowSpec.TitleBarTheme</c> on a window with no <c>TitleBar(...)</c> element:
+    /// applied at open, follows <c>Update</c>, and withdrawing it restores the baseline.
+    /// No element mount path runs here, so only the spec path can satisfy the checks.
+    /// </summary>
+    internal class SpecOnlyWithoutElement(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(45);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            var baseline = await MeasureBaseline();
+
+            var spec = Spec("Theme spec only") with { TitleBarTheme = WindowTitleBarTheme.Dark };
+            var win = await OpenAndSettle(spec, () => new PlainBodyComponent());
+            try
+            {
+                Report("specOnlyDark", win);
+                H.Check("TitleBarTheme_SpecOnly_AppliedAtOpen",
+                    Caption(win) == TitleBarTheme.Dark && baseline != TitleBarTheme.Dark);
+
+                win.Update(spec with { TitleBarTheme = WindowTitleBarTheme.Light });
+                await Settle(win);
+                Report("specOnlyLight", win);
+                H.Check("TitleBarTheme_SpecOnly_FollowsUpdate",
+                    Caption(win) == TitleBarTheme.Light && baseline != TitleBarTheme.Light);
+
+                win.Update(spec with { TitleBarTheme = null });
+                await Settle(win);
+                Report("specOnlyWithdrawn", win);
+                H.Check("TitleBarTheme_SpecOnly_WithdrawRestoresBaseline", Caption(win) == baseline);
+            }
+            finally { await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
+    /// An element declaration applies on a window whose spec explicitly sets
+    /// <c>ExtendsContentIntoTitleBar = false</c>, where the mount path returns before
+    /// <c>SetTitleBar</c> — so the theme must be applied ahead of that early return.
+    /// </summary>
+    internal class ElementWithoutContentExtension(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(30);
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var spec = Spec("Theme not extended") with { ExtendsContentIntoTitleBar = false };
+            var comp = new ThemedBarComponent(WindowTitleBarTheme.Dark);
+            var win = await OpenAndSettle(spec, () => comp);
+            try
+            {
+                Report("notExtendedDark", win);
+                // Positive control: the scenario really is a non-extended window.
+                H.Check("TitleBarTheme_NotExtended_WindowNotExtended",
+                    !win.NativeWindow.ExtendsContentIntoTitleBar);
+                H.Check("TitleBarTheme_NotExtended_ElementApplied", Caption(win) == TitleBarTheme.Dark);
+
+                comp.SetTheme!(WindowTitleBarTheme.Light);
+                await Settle(win);
+                Report("notExtendedLight", win);
+                H.Check("TitleBarTheme_NotExtended_FollowsUpdate", Caption(win) == TitleBarTheme.Light);
             }
             finally { await CloseAndSettle(win); }
         }
