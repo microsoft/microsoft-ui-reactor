@@ -351,6 +351,26 @@ internal static class SelfTestRunner
         return false;
     }
 
+    /// <summary>
+    /// Names an exception that escaped into WinUI, as TAP comments, before WinUI decides the
+    /// process's fate. Left unhandled it ends the run with <c>STATUS_STOWED_EXCEPTION</c>
+    /// (0xC000027B), and nothing in the log said where it came from: no <c>not ok</c>, no
+    /// trailer, and the managed stack only in a crash dump. This puts the type, HRESULT, the
+    /// fixture in flight and the managed stack at the end of the log instead. Diagnostic only:
+    /// it does not mark the exception handled.
+    /// </summary>
+    private static void WriteUnhandledException(Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+    {
+        var fixture = Volatile.Read(ref _currentFixture)?.Name ?? "(between fixtures)";
+        var ex = e.Exception;
+        Console.WriteLine(
+            $"# Unhandled exception in fixture {fixture}: {ex?.GetType().FullName} 0x{(ex?.HResult ?? 0):X8}: " +
+            (e.Message ?? "").ReplaceLineEndings(" "));
+        foreach (var line in (ex?.ToString() ?? "").Split('\n'))
+            Console.WriteLine("#   " + line.TrimEnd('\r'));
+        Console.Out.Flush();
+    }
+
     private static Task YieldLowPriorityAsync(DispatcherQueue dq)
     {
         // RunContinuationsAsynchronously: don't let the awaiting continuation
@@ -374,7 +394,8 @@ internal static class SelfTestRunner
         {
             var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
             SynchronizationContext.SetSynchronizationContext(context);
-            new ReactorApplication();
+            var app = new ReactorApplication();
+            app.UnhandledException += (_, e) => WriteUnhandledException(e);
             var dispatcher = DispatcherQueue.GetForCurrentThread();
 
             var window = new Window { Title = "Reactor Self-Test" };

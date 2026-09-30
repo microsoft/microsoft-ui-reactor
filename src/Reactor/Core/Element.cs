@@ -3742,6 +3742,76 @@ public partial record AutoSuggestBoxElement(
         __SuggestionChosenTrampoline = (s, args) =>
             (global::Microsoft.UI.Reactor.Core.Reconciler.GetElementTag((WinUI.AutoSuggestBox)s!) as AutoSuggestBoxElement)?.OnSuggestionChosen?.Invoke(args.SelectedItem?.ToString() ?? "");
 
+    // WinUI's AutoSuggestBox raises TextChanged from an internal DispatcherTimer, 150 ms after
+    // the text in its template TextBox last changed. The timer keeps running after the box leaves
+    // the tree, and it does not keep the box reachable. So if the box is dropped inside that
+    // window (unmounted, or a disposed host's content replaced), a full GC can collect the box's
+    // managed side: the TextChanged delegate and the ReactorState that native code reaches only
+    // through reference-tracked CCWs. The native box and its timer live on, the tick calls into
+    // collected managed state, CsWinRT throws NullReferenceException into WinUI, and WinUI
+    // fail-fasts the process with STATUS_STOWED_EXCEPTION (0xC000027B). The TextBox's text changes
+    // on every Text change, and when the first layout copies Text into the fresh TextBox (which
+    // leaves Text itself unchanged). So both hold the box until well after the tick they lead to,
+    // which keeps the managed side alive for the whole window in which the tick can land.
+    private static class PendingTextChangedTick
+    {
+        // Far past the 150 ms timer, so the tick has landed long before the hold is released.
+        private const long HoldMilliseconds = 1000;
+
+        // Per UI thread: a box's callbacks, and the timer that releases it, run on its thread.
+        [global::System.ThreadStatic] private static global::System.Collections.Generic.Dictionary<WinUI.AutoSuggestBox, long>? t_heldUntil;
+        [global::System.ThreadStatic] private static global::Microsoft.UI.Dispatching.DispatcherQueueTimer? t_release;
+
+        internal static readonly DependencyPropertyChangedCallback OnTextChanged = static (sender, _) =>
+        {
+            if (sender is WinUI.AutoSuggestBox box) Hold(box);
+        };
+
+        // Loaded follows the first layout, which is when the template is applied and the copy
+        // happens; there is nothing to copy while Text is empty.
+        internal static readonly RoutedEventHandler OnLoaded = static (sender, _) =>
+        {
+            if (sender is WinUI.AutoSuggestBox box && !string.IsNullOrEmpty(box.Text)) Hold(box);
+        };
+
+        private static void Hold(WinUI.AutoSuggestBox box)
+        {
+            var queue = global::Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            if (queue is null) return;
+
+            var held = t_heldUntil ??= new(global::System.Collections.Generic.ReferenceEqualityComparer.Instance);
+            held[box] = global::System.Environment.TickCount64 + HoldMilliseconds;
+
+            if (t_release is null)
+            {
+                t_release = queue.CreateTimer();
+                t_release.Interval = global::System.TimeSpan.FromMilliseconds(HoldMilliseconds);
+                t_release.Tick += ReleaseExpired;
+            }
+            if (!t_release.IsRunning) t_release.Start();
+        }
+
+        private static void ReleaseExpired(global::Microsoft.UI.Dispatching.DispatcherQueueTimer timer, object _)
+        {
+            var held = t_heldUntil;
+            if (held is not null)
+            {
+                var now = global::System.Environment.TickCount64;
+                global::System.Collections.Generic.List<WinUI.AutoSuggestBox>? expired = null;
+                foreach (var entry in held)
+                {
+                    if (entry.Value <= now) (expired ??= new()).Add(entry.Key);
+                }
+                if (expired is not null)
+                {
+                    foreach (var box in expired) held.Remove(box);
+                }
+                if (held.Count > 0) return;
+            }
+            timer.Stop();
+        }
+    }
+
     // Suggestions BEFORE Text (items in place before any controlled Text echo); all
     // reused verbatim from the hand-written descriptor (shared AutoSuggestBoxEventPayload).
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<AutoSuggestBoxElement, WinUI.AutoSuggestBox> Customize(
@@ -3755,7 +3825,12 @@ public partial record AutoSuggestBoxElement(
                 get:         static e => e.Text,
                 set:         static (c, v) => c.Text = v,
                 readBack:    static c => c.Text,
-                subscribe:   static (c, h) => c.TextChanged += h,
+                subscribe:   static (c, h) =>
+                {
+                    c.TextChanged += h;
+                    c.RegisterPropertyChangedCallback(WinUI.AutoSuggestBox.TextProperty, PendingTextChangedTick.OnTextChanged);
+                    c.Loaded += PendingTextChangedTick.OnLoaded;
+                },
                 callback:    static e => e.OnTextChanged,
                 trampoline:  __TextChangedTrampoline,
                 slotIsNull:  static p => p.TextChangedTrampoline is null,

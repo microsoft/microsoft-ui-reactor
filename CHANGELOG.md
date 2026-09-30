@@ -157,6 +157,18 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Dropping an `AutoSuggestBox` right after typing can no longer crash the app.**
+  WinUI raises the box's `TextChanged` from an internal timer 150 ms after the
+  last text change, keeps that timer running after the box leaves the tree, and
+  does not keep the box alive for it. When the box was unmounted (or its host
+  disposed) inside that window and full GCs ran, the tick called into managed
+  state the GC had already collected, and WinUI fail-fasted the process with
+  `STATUS_STOWED_EXCEPTION` (`0xC000027B`). Reactor now holds the box from each
+  text change, and from the first layout of a box mounted with text, until well
+  after the tick. This was the intermittent selftest-host crash in the Optional
+  fixtures (`ControlledOptionalTextInputFamily`, `OptionalEchoStrandRegression`,
+  and whichever fixture ran next).
+
 - **ReactorGallery category and search-result pages scroll vertically**
   (issue #1298). Both views put a bare header and card grid into the
   `NavigationView` content. The card grid turns off its own scrolling so it can
