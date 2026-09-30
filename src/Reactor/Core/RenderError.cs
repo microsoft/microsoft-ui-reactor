@@ -14,12 +14,15 @@ namespace Microsoft.UI.Reactor.Core;
 /// <see cref="RenderError.Propagate"/> was called.
 /// </returns>
 /// <remarks>
-/// Set it app-wide with <see cref="ReactorApp.DefaultRenderErrorHandler"/>, per window
+/// <para>Set it app-wide with <see cref="ReactorApp.DefaultRenderErrorHandler"/>, per window
 /// with <see cref="WindowSpec.RenderErrorHandler"/>, or per host with
 /// <see cref="Hosting.ReactorHost.RenderErrorHandler"/> /
 /// <see cref="Hosting.ReactorHostControl.RenderErrorHandler"/>. A host's own handler
 /// wins; otherwise the app-wide default is used. Exceptions caught by an
-/// <c>ErrorBoundary</c> are handled by that boundary and never reach this handler.
+/// <c>ErrorBoundary</c> are handled by that boundary and never reach this handler.</para>
+/// <para>Failure is closed, not open: if the handler throws, or the element it returns
+/// throws while rendering, Reactor shows a neutral "Something went wrong." message
+/// without exception details, and does not call the handler again for that failure.</para>
 /// </remarks>
 public delegate Element? RenderErrorHandler(RenderError error);
 
@@ -39,9 +42,9 @@ public enum RenderErrorSource
     Effects,
 
     /// <summary>
-    /// An effect cleanup threw while the host was being disposed (for example, when its
-    /// window closed). Nothing can be displayed at that point, so the handler's return
-    /// value is ignored; it is a report-only notification.
+    /// An effect cleanup threw while the host was being disposed (window closed, host
+    /// control disposed). Nothing can be displayed at that point, so the handler's return
+    /// value is ignored; it is a report-only notification. Remaining cleanups still run.
     /// </summary>
     Cleanup,
 }
@@ -78,13 +81,18 @@ public sealed class RenderError
     /// <summary>Whether <see cref="Propagate"/> has been called.</summary>
     public bool IsPropagationRequested { get; private set; }
 
+    // A handler that throws after calling Propagate() did not complete its decision;
+    // Reactor then uses its safe fallback instead of propagating.
+    internal void CancelPropagation() => IsPropagationRequested = false;
+
     /// <summary>
     /// Show no fallback and route the exception to the app's unhandled-exception path
     /// instead: <see cref="ReactorApp.AppLogger"/> and
     /// <see cref="ReactorApplication.OnUnhandledException"/>. When that callback marks it
     /// handled, nothing is shown where the failure happened and the app keeps running;
-    /// otherwise the exception is rethrown (stack preserved) and ends the process like
-    /// any unhandled exception. The handler's return value is ignored.
+    /// otherwise the exception is rethrown out of the render pass (stack preserved), where
+    /// it follows the dispatcher's normal unhandled-exception behavior. The handler's
+    /// return value is ignored. Has no effect if the handler throws afterwards.
     /// </summary>
     public void Propagate() => IsPropagationRequested = true;
 }

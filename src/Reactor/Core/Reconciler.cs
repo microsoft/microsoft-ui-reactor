@@ -5876,30 +5876,16 @@ public sealed partial class Reconciler : IDisposable
 
     public void Dispose()
     {
-        // Issue #1291: with a RenderErrorHandler configured, a throwing effect cleanup is
-        // reported (Source = Cleanup) and the remaining nodes are still torn down. With no
-        // handler, ReportCleanup returns false and the exception escapes as before.
+        // Issue #1291: with a RenderErrorHandler configured, every effect cleanup runs and
+        // each failure is reported (Source = Cleanup). With no handler the first throwing
+        // cleanup escapes as before.
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
-        RenderErrorHandler? cleanupHandler = null;
-        bool cleanupHandlerResolved = false;
+        var cleanupHandler = ResolveRenderErrorHandler();
         foreach (var node in _componentNodes.Values)
         {
-            try
-            {
-                node.Context?.RunCleanups();
-                node.Component?.Context?.RunCleanups();
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
-            {
-                if (!cleanupHandlerResolved)
-                {
-                    cleanupHandler = ResolveRenderErrorHandler();
-                    cleanupHandlerResolved = true;
-                }
-                if (!RenderErrorDispatch.ReportCleanup(cleanupHandler, ex, node.Component?.GetType().Name,
-                        isHostLevel: false, _logger, ref pendingPropagation))
-                    throw;
-            }
+            var name = node.Component?.GetType().Name;
+            RenderErrorDispatch.RunCleanups(node.Context, cleanupHandler, name, isHostLevel: false, _logger, ref pendingPropagation);
+            RenderErrorDispatch.RunCleanups(node.Component?.Context, cleanupHandler, name, isHostLevel: false, _logger, ref pendingPropagation);
         }
         _componentNodes.Clear();
         _errorBoundaryNodes.Clear();

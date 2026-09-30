@@ -2405,7 +2405,15 @@ public sealed class RenderContext
         }
     }
 
-    internal void RunCleanups()
+    internal void RunCleanups() => RunCleanups(onCleanupError: null);
+
+    /// <param name="onCleanupError">
+    /// When set (a <see cref="RenderErrorHandler"/> is configured, issue #1291), each
+    /// cleanup is isolated: a throwing cleanup is reported here and the remaining
+    /// cleanups still run. When null, the first throwing cleanup escapes (pre-#1291
+    /// behavior).
+    /// </param>
+    internal void RunCleanups(Action<Exception>? onCleanupError)
     {
         // Phase 1: Run effect cleanups. Drain BOTH the committed cleanup and any
         // staged-but-not-yet-flushed cleanup: when a render changes an effect's
@@ -2418,10 +2426,20 @@ public sealed class RenderContext
         {
             if (_hooks[i] is EffectHookState hook)
             {
-                hook.PendingCleanup?.Invoke();
+                if (onCleanupError is null)
+                {
+                    hook.PendingCleanup?.Invoke();
+                    hook.PendingCleanup = null;
+                    hook.Cleanup?.Invoke();
+                    hook.Cleanup = null;
+                    continue;
+                }
+                var pending = hook.PendingCleanup;
                 hook.PendingCleanup = null;
-                hook.Cleanup?.Invoke();
+                var committed = hook.Cleanup;
                 hook.Cleanup = null;
+                InvokeIsolated(pending, onCleanupError);
+                InvokeIsolated(committed, onCleanupError);
             }
         }
 
@@ -2432,6 +2450,19 @@ public sealed class RenderContext
             {
                 persisted.SaveToCache();
             }
+        }
+    }
+
+    private static void InvokeIsolated(Action? cleanup, Action<Exception> onError)
+    {
+        if (cleanup is null) return;
+        try
+        {
+            cleanup();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            onError(ex);
         }
     }
 

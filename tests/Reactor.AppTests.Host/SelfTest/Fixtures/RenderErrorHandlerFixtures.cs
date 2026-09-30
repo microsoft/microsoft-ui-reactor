@@ -120,7 +120,7 @@ internal static class RenderErrorHandlerFixtures
         }
     }
 
-    internal class ThrowingHandler_KeepsBuiltIn(Harness h) : SelfTestFixtureBase(h)
+    internal class ThrowingHandler_FailsClosed(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
@@ -129,26 +129,133 @@ internal static class RenderErrorHandlerFixtures
             host.Mount(_ => VStack(Component<ThrowingComponent>()));
             await Harness.Render();
 
-            H.Check("RenderErrorHandler_ThrowingHandler_BuiltInShown",
-                H.FindTextContaining("\u26A0 Render error") is not null);
+            // A configured handler means "keep exception text off screen": its failure must
+            // not fall back to the detailed built-in placeholder.
+            H.Check("RenderErrorHandler_ThrowingHandler_NeutralShown", H.FindText(ErrorFallback.SafeMessage) is not null);
+            H.Check("RenderErrorHandler_ThrowingHandler_NoDetails",
+                H.FindTextContaining(BuiltInMarker) is null && H.FindTextContaining("child render boom") is null);
+
+            var root = H.CreateHost();
+            root.RenderErrorHandler = e => { e.Propagate(); throw new InvalidOperationException("handler bug"); };
+            root.Mount(_ => throw new InvalidOperationException("root boom"));
+            await Harness.Render();
+
+            // Propagate() followed by a throw is cancelled: neutral panel, no crash.
+            H.Check("RenderErrorHandler_ThrowingHandler_Root_NeutralShown", H.FindText(ErrorFallback.SafeMessage) is not null);
+            H.Check("RenderErrorHandler_ThrowingHandler_Root_NoDetails",
+                H.FindTextContaining(BuiltInMarker) is null && H.FindTextContaining("root boom") is null);
         }
     }
 
-    internal class ThrowingFallback_DegradesToBuiltIn(Harness h) : SelfTestFixtureBase(h)
+    internal class ThrowingFallback_FailsClosed(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
             var log = new List<RenderError>();
             var host = H.CreateHost();
-            // The app's fallback itself throws: it must degrade to the built-in placeholder
-            // instead of re-entering the handler (which would loop).
+            // The app's fallback itself throws: it must degrade to the neutral placeholder
+            // instead of re-entering the handler (which would loop) or showing details.
             host.RenderErrorHandler = Recording(log, _ => Component<ThrowingComponent>());
             host.Mount(_ => VStack(Component<ThrowingComponent>()));
             await Harness.Render();
 
-            H.Check("RenderErrorHandler_ThrowingFallback_BuiltInShown",
-                H.FindTextContaining("\u26A0 Render error") is not null);
+            H.Check("RenderErrorHandler_ThrowingFallback_NeutralShown", H.FindText(ErrorFallback.SafeMessage) is not null);
+            H.Check("RenderErrorHandler_ThrowingFallback_NoDetails", H.FindTextContaining(BuiltInMarker) is null);
             H.Check("RenderErrorHandler_ThrowingFallback_HandlerCalledOnce", log.Count == 1, Sources(log));
+
+            log.Clear();
+            var root = H.CreateHost();
+            root.RenderErrorHandler = Recording(log, _ => Component<ThrowingComponent>());
+            root.Mount(_ => throw new InvalidOperationException("root boom"));
+            await Harness.Render();
+
+            H.Check("RenderErrorHandler_ThrowingFallback_Root_NeutralShown", H.FindText(ErrorFallback.SafeMessage) is not null);
+            H.Check("RenderErrorHandler_ThrowingFallback_Root_NoDetails", H.FindTextContaining(BuiltInMarker) is null);
+            H.Check("RenderErrorHandler_ThrowingFallback_Root_HandlerCalledOnce", log.Count == 1, Sources(log));
+        }
+    }
+
+    // ── In-tree: RenderEachTime / Memo children (their own mount catch sites) ──
+
+    internal class FuncAndMemoChildren(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var log = new List<RenderError>();
+            var host = H.CreateHost();
+            host.RenderErrorHandler = Recording(log, e => TextBlock($"Custom:{e.Source}:{e.Exception.Message}"));
+            host.Mount(_ => VStack(
+                RenderEachTime(_ => throw new InvalidOperationException("func boom")),
+                Memo(_ => throw new InvalidOperationException("memo boom"), "dep"),
+                RenderEachTime(ctx =>
+                {
+                    ctx.UseEffect(() => throw new InvalidOperationException("func effect boom"));
+                    return TextBlock("FuncEffectRendered");
+                })));
+            await Harness.Render();
+
+            H.Check("RenderErrorHandler_FuncChild_CustomShown",
+                H.FindText("Custom:ComponentRender:func boom") is not null, Sources(log));
+            H.Check("RenderErrorHandler_MemoChild_CustomShown",
+                H.FindText("Custom:ComponentRender:memo boom") is not null, Sources(log));
+            H.Check("RenderErrorHandler_FuncChildEffect_CustomShown",
+                H.FindText("Custom:Effects:func effect boom") is not null, Sources(log));
+            H.Check("RenderErrorHandler_FuncMemo_NoBuiltIn", H.FindTextContaining(BuiltInMarker) is null);
+        }
+    }
+
+    // ── Host level: reconcile phase ─────────────────────────────────────────
+
+    internal class Reconcile_SourceReconcile(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var log = new List<RenderError>();
+            var host = H.CreateHost();
+            host.RenderErrorHandler = Recording(log, e => TextBlock($"Custom:{e.Source}"));
+            // The root render succeeds; mounting its element throws inside Reconcile.
+            host.Mount(_ => TextBlock("NeverShown").Set(_ => throw new InvalidOperationException("reconcile boom")));
+            await Harness.Render();
+
+            H.Check("RenderErrorHandler_Reconcile_CustomShown",
+                H.FindText("Custom:Reconcile") is not null, Sources(log));
+            H.Check("RenderErrorHandler_Reconcile_HostLevel",
+                log.Count >= 1 && log[0].IsHostLevel && log[0].Exception.Message == "reconcile boom", Sources(log));
+            H.Check("RenderErrorHandler_Reconcile_NoBuiltIn", H.FindTextContaining(BuiltInMarker) is null);
+        }
+    }
+
+    // ── Host level: overlay wrapper path ────────────────────────────────────
+
+    internal class OverlayWrapper_TakesFallback(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var prev = ReactorFeatureFlags.HighlightReconcileChanges;
+            try
+            {
+                ReactorFeatureFlags.HighlightReconcileChanges = true;
+                bool shouldThrow = false;
+                var host = H.CreateHost();
+                host.RenderErrorHandler = e => TextBlock($"Custom:{e.Source}");
+                host.Mount(_ => shouldThrow ? throw new InvalidOperationException("overlay boom") : TextBlock("OverlayHealthy"));
+                await Harness.Render();
+                H.Check("RenderErrorHandler_Overlay_WrapperInstalled", host.ContentTarget?.Child is WinUI.Grid,
+                    host.ContentTarget?.Child?.GetType().Name ?? "null");
+
+                shouldThrow = true;
+                host.RequestRender();
+                await Harness.Render();
+
+                H.Check("RenderErrorHandler_Overlay_CustomShown", H.FindText("Custom:RootRender") is not null);
+                // The fallback went into the wrapper's content slot, not over the wrapper.
+                H.Check("RenderErrorHandler_Overlay_WrapperKept", host.ContentTarget?.Child is WinUI.Grid,
+                    host.ContentTarget?.Child?.GetType().Name ?? "null");
+            }
+            finally
+            {
+                ReactorFeatureFlags.HighlightReconcileChanges = prev;
+            }
         }
     }
 
@@ -303,6 +410,39 @@ internal static class RenderErrorHandlerFixtures
             H.Check("RenderErrorHandler_HostControl_FallsBackToDefault", H.FindText("FromDefault") is not null);
             H.SetContent(null);
             control.Dispose();
+
+            // Root effect (host-level Effects source) and dispose cleanups on the control.
+            var log = new List<RenderError>();
+            var effectControl = new ReactorHostControl { RenderErrorHandler = Recording(log, e => TextBlock($"FromControl:{e.Source}")) };
+            H.SetContent(effectControl);
+            effectControl.Mount(ctx =>
+            {
+                ctx.UseEffect(() => throw new InvalidOperationException("control effect boom"));
+                return TextBlock("ControlEffectRendered");
+            });
+            await Harness.Render(50);
+            H.Check("RenderErrorHandler_HostControl_RootEffect",
+                H.FindText("FromControl:Effects") is not null && log.Count >= 1 && log[0].IsHostLevel, Sources(log));
+            H.SetContent(null);
+            effectControl.Dispose();
+
+            log.Clear();
+            var cleanupControl = new ReactorHostControl { RenderErrorHandler = Recording(log, _ => null) };
+            H.SetContent(cleanupControl);
+            cleanupControl.Mount(ctx =>
+            {
+                ctx.UseEffect(() => () => throw new InvalidOperationException("control cleanup boom"));
+                return VStack(Component<ThrowingCleanupComponent>());
+            });
+            await Harness.Render(50);
+            H.SetContent(null);
+            Exception? escaped = null;
+            try { cleanupControl.Dispose(); } catch (Exception ex) { escaped = ex; }
+            H.Check("RenderErrorHandler_HostControl_Dispose_NoThrow", escaped is null, escaped?.Message ?? "");
+            H.Check("RenderErrorHandler_HostControl_Dispose_BothReported",
+                log.Any(e => e.Source == RenderErrorSource.Cleanup && e.IsHostLevel && e.Exception.Message == "control cleanup boom")
+                && log.Any(e => e.Source == RenderErrorSource.Cleanup && !e.IsHostLevel && e.Exception.Message == "child cleanup boom"),
+                Sources(log));
         });
     }
 
@@ -423,8 +563,17 @@ internal static class RenderErrorHandlerFixtures
                     FindTextIn(win.NativeWindow.Content, BuiltInMarker) is null);
 
                 // Update() re-seeds the handler on the host (and clearing it restores fall-through).
+                win.NativeWindow.Title = "Changed natively";
                 win.Update(win.Spec with { RenderErrorHandler = null });
                 H.Check("RenderErrorHandler_WindowSpec_UpdateClears", win.Host.RenderErrorHandler is null);
+                // A handler-only update must not re-apply chrome (which rewrites the title) ...
+                H.Check("RenderErrorHandler_WindowSpec_HandlerOnlyUpdate_NoChrome",
+                    win.NativeWindow.Title == "Changed natively", win.NativeWindow.Title);
+                // ... while a real chrome change still does (differential control).
+                win.Update(win.Spec with { Title = "RenderErrorHandler Spec 2", RenderErrorHandler = handler });
+                H.Check("RenderErrorHandler_WindowSpec_ChromeUpdate_Applies",
+                    win.NativeWindow.Title == "RenderErrorHandler Spec 2" && ReferenceEquals(win.Host.RenderErrorHandler, handler),
+                    win.NativeWindow.Title);
             }
             finally
             {

@@ -672,37 +672,12 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
         // Issue #1291 — see ReactorHost.ShowErrorFallback.
         var error = new RenderError(ex, source, componentName, isHostLevel: true);
-        var appElement = RenderErrorDispatch.InvokeHandler(EffectiveRenderErrorHandler, error, _logger);
-        if (error.IsPropagationRequested)
-        {
-            SetErrorContent(null, null);
+        var (content, tree, propagate) = RenderErrorDispatch.BuildHostFallback(
+            EffectiveRenderErrorHandler, error, _logger,
+            element => _reconciler.Mount(element, _requestRenderAction ??= RequestRender));
+        SetErrorContent(content, tree);
+        if (propagate)
             RenderErrorDispatch.RaiseUnhandled(ex);
-            return;
-        }
-
-        UIElement? errorPanel = null;
-        Element? errorTree = null;
-        if (appElement is not null)
-        {
-            var guarded = RenderErrorDispatch.Guard(appElement);
-            try
-            {
-                errorPanel = _reconciler.Mount(guarded, _requestRenderAction ??= RequestRender);
-                errorTree = guarded;
-            }
-            catch (Exception mountEx) when (mountEx is not OutOfMemoryException and not StackOverflowException)
-            {
-                _logger?.LogError(mountEx, "RenderErrorHandler fallback failed to mount; using the built-in fallback");
-                errorPanel = null;
-            }
-            if (errorTree is null)
-                errorPanel = Microsoft.UI.Reactor.Core.ErrorFallback.BuildPanel(ex);
-        }
-        else
-        {
-            errorPanel = Microsoft.UI.Reactor.Core.ErrorFallback.BuildPanel(ex);
-        }
-        SetErrorContent(errorPanel, errorTree);
     }
 
     private void SetErrorContent(UIElement? errorPanel, Element? errorTree)
@@ -717,6 +692,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         }
         _currentControl = errorPanel;
         _currentTree = errorTree;
+        // See ReactorHost.SetErrorContent. This control subscribes once, to its first
+        // content element; an app fallback that is the first content needs it too.
+        if (errorTree is not null)
+            AttachThemeListener(errorPanel);
     }
 
     public void Dispose()
@@ -735,17 +714,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
         // Issue #1291 — see ReactorHost.Dispose.
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
-        try
-        {
-            _rootComponent?.Context.RunCleanups();
-            _funcContext?.RunCleanups();
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
-        {
-            if (!RenderErrorDispatch.ReportCleanup(EffectiveRenderErrorHandler, ex, _rootComponent?.GetType().Name,
-                    isHostLevel: true, _logger, ref pendingPropagation))
-                throw;
-        }
+        var cleanupHandler = EffectiveRenderErrorHandler;
+        RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
+            isHostLevel: true, _logger, ref pendingPropagation);
+        RenderErrorDispatch.RunCleanups(_funcContext, cleanupHandler, componentName: null,
+            isHostLevel: true, _logger, ref pendingPropagation);
         try
         {
             _reconciler.Dispose();

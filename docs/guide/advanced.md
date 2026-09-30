@@ -159,19 +159,27 @@ reports which one applies. The handler runs on the UI thread and receives a
 | Member | Meaning |
 |---|---|
 | `Exception` | The exception Reactor caught. |
-| `Source` | `RootRender`, `ComponentRender`, `Reconcile`, `Effects`, or `Cleanup` (an effect cleanup during host dispose). |
+| `Source` | `RootRender`, `ComponentRender`, `Reconcile`, `Effects`, or `Cleanup` (an effect cleanup during host disposal). |
 | `ComponentName` | The failing component's type name, when known. |
 | `IsHostLevel` | `true` when the returned element replaces the whole host content; `false` when it fills only the failing component's slot. |
-| `Propagate()` | Show no fallback and route the exception to `ReactorApplication.OnUnhandledException` instead. If that returns `false` (or is unset) the exception is rethrown and ends the process. |
+| `Propagate()` | Show no fallback and route the exception to `ReactorApplication.OnUnhandledException` instead. If that returns `true` the app keeps running; otherwise the exception is rethrown out of the render pass and follows the dispatcher's normal unhandled-exception behavior. |
 
 Return an element to show it instead of the built-in fallback, or `null` to
 keep the built-in one. The handler covers every place Reactor used to show the
 built-in fallback: the root render, child renders, the reconcile pass, and
 effect bodies and cleanups. Exceptions an `ErrorBoundary` catches stay with
-that boundary. If the handler throws, or the element it returns throws while
-rendering, Reactor falls back to the built-in UI rather than calling the
-handler again. For `Cleanup` the window is already going away, so the return
-value is ignored and the handler only reports.
+that boundary.
+
+Failure is closed, not open: once a handler is configured, the detailed
+fallback appears only when the handler returns `null`. If the handler throws,
+or the element it returns throws while rendering, Reactor shows a neutral
+"Something went wrong." message without exception details, and does not call
+the handler again for that failure.
+
+`Cleanup` reports an effect cleanup that threw while a host was being
+disposed — a window closing, or a `ReactorHostControl` being disposed. There
+is nothing left to display, so the return value is ignored and the handler only
+reports. Every other cleanup still runs.
 
 ## Memo
 

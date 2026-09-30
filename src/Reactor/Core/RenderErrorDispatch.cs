@@ -2,6 +2,7 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Xaml;
 
 namespace Microsoft.UI.Reactor.Core;
 
@@ -11,6 +12,13 @@ namespace Microsoft.UI.Reactor.Core;
 /// to the unhandled-exception path. Every site that used to go straight to
 /// <see cref="ErrorFallback"/> goes through here instead.
 /// </summary>
+/// <remarks>
+/// Outcome table — the detailed built-in fallback appears only when no handler is set or
+/// the handler explicitly returned <c>null</c>. Once an app configured a handler it asked
+/// for the exception text to stay off screen, so every failure of the handler path (the
+/// handler throws, or its element throws while rendering) fails closed to the neutral
+/// <see cref="ErrorFallback.SafeMessage"/>.
+/// </remarks>
 internal static class RenderErrorDispatch
 {
     // Exceptions that are on their way out to the unhandled-exception path. Reactor's own
@@ -25,6 +33,19 @@ internal static class RenderErrorDispatch
 
     private static readonly object s_marker = new();
 
+    /// <summary>What the handler decided.</summary>
+    internal enum Outcome
+    {
+        /// <summary>No handler, or it returned null: detailed built-in fallback.</summary>
+        BuiltIn,
+        /// <summary>The handler returned an element.</summary>
+        AppElement,
+        /// <summary>The handler threw: neutral fallback, no exception detail.</summary>
+        HandlerFailed,
+        /// <summary>The handler called <see cref="RenderError.Propagate"/>.</summary>
+        Propagate,
+    }
+
     /// <summary>A host's own handler wins; otherwise the app-wide default.</summary>
     internal static RenderErrorHandler? Resolve(RenderErrorHandler? hostHandler) =>
         hostHandler ?? ReactorApp.DefaultRenderErrorHandler;
@@ -34,25 +55,30 @@ internal static class RenderErrorDispatch
     internal static bool WasReportedAsUnhandled(Exception ex) => s_reported.TryGetValue(ex, out _);
 
     /// <summary>
-    /// Invokes <paramref name="handler"/>. Returns the app's element, or <c>null</c> for the
-    /// built-in fallback. A handler that throws is logged and treated as returning <c>null</c>
-    /// — a broken error handler must not hide the original failure.
+    /// Invokes <paramref name="handler"/> and classifies the result. A handler that throws is
+    /// logged, any <see cref="RenderError.Propagate"/> it requested is cancelled, and the
+    /// outcome is <see cref="Outcome.HandlerFailed"/>.
     /// </summary>
-    internal static Element? InvokeHandler(RenderErrorHandler? handler, RenderError error, ILogger? logger)
+    internal static Outcome InvokeHandler(RenderErrorHandler? handler, RenderError error, ILogger? logger, out Element? appElement)
     {
-        if (handler is null) return null;
+        appElement = null;
+        if (handler is null) return Outcome.BuiltIn;
         try
         {
-            return handler(error);
+            appElement = handler(error);
         }
         catch (Exception hx) when (hx is not OutOfMemoryException and not StackOverflowException)
         {
-            logger?.LogError(hx, "RenderErrorHandler threw while handling {ExceptionType}; using the built-in fallback",
+            error.CancelPropagation();
+            appElement = null;
+            logger?.LogError(hx, "RenderErrorHandler threw while handling {ExceptionType}; showing the neutral fallback",
                 error.Exception.GetType().Name);
             global::System.Diagnostics.Debug.WriteLine(
-                $"[Reactor] RenderErrorHandler threw ({hx.GetType().Name}: {hx.Message}); using the built-in fallback.");
-            return null;
+                $"[Reactor] RenderErrorHandler threw ({hx.GetType().Name}: {hx.Message}); showing the neutral fallback.");
+            return Outcome.HandlerFailed;
         }
+        if (error.IsPropagationRequested) return Outcome.Propagate;
+        return appElement is null ? Outcome.BuiltIn : Outcome.AppElement;
     }
 
     /// <summary>
@@ -61,45 +87,96 @@ internal static class RenderErrorDispatch
     /// </summary>
     internal static Element BuildInTreeFallback(RenderErrorHandler? handler, RenderError error, ILogger? logger)
     {
-        var appElement = InvokeHandler(handler, error, logger);
-        if (error.IsPropagationRequested)
+        switch (InvokeHandler(handler, error, logger, out var appElement))
         {
-            RaiseUnhandled(error.Exception);
-            return EmptyElement.Instance;
+            case Outcome.AppElement:
+                return Guard(appElement!);
+            case Outcome.HandlerFailed:
+                return ErrorFallback.BuildSafeElement(error.Exception);
+            case Outcome.Propagate:
+                RaiseUnhandled(error.Exception);
+                return EmptyElement.Instance;
+            default:
+                return ErrorFallback.BuildElement(error.Exception);
         }
-        return appElement is null ? ErrorFallback.BuildElement(error.Exception) : Guard(appElement);
     }
 
     /// <summary>
     /// Wraps an app-supplied fallback in an internal error boundary whose own fallback is
-    /// the built-in placeholder, so a fallback that itself throws degrades to the built-in
-    /// UI instead of re-entering the handler (and looping).
+    /// the neutral placeholder, so a fallback that itself throws degrades without exception
+    /// detail instead of re-entering the handler (and looping).
     /// </summary>
     internal static Element Guard(Element appElement) =>
-        new ErrorBoundaryElement(appElement, ErrorFallback.BuildElement);
+        new ErrorBoundaryElement(appElement, ErrorFallback.BuildSafeElement);
 
     /// <summary>
-    /// Reports a cleanup exception thrown during host/reconciler disposal. Returns
-    /// <c>false</c> when no handler is configured — the caller must then rethrow, which
-    /// keeps the pre-#1291 behavior. Otherwise the handler is notified (return ignored);
-    /// if it asked to propagate and the unhandled-exception path did not handle it,
-    /// <paramref name="pending"/> captures the exception for the caller to rethrow once
-    /// disposal has finished.
+    /// Host-level counterpart of <see cref="BuildInTreeFallback"/>. Returns the content to
+    /// install and, for an app element, the element tree it was mounted from (kept as the
+    /// host's current tree so the next good render reconciles away from it). When the
+    /// outcome is <see cref="Outcome.Propagate"/>, the content is null and the caller must
+    /// install it before calling <see cref="RaiseUnhandled"/>.
     /// </summary>
-    internal static bool ReportCleanup(
-        RenderErrorHandler? handler, Exception ex, string? componentName, bool isHostLevel,
-        ILogger? logger, ref ExceptionDispatchInfo? pending)
+    internal static (UIElement? Content, Element? Tree, bool Propagate) BuildHostFallback(
+        RenderErrorHandler? handler, RenderError error, ILogger? logger, Func<Element, UIElement?> mount)
     {
-        if (handler is null) return false;
+        switch (InvokeHandler(handler, error, logger, out var appElement))
+        {
+            case Outcome.AppElement:
+                var guarded = Guard(appElement!);
+                try
+                {
+                    return (mount(guarded), guarded, false);
+                }
+                catch (Exception mountEx) when (mountEx is not OutOfMemoryException and not StackOverflowException)
+                {
+                    logger?.LogError(mountEx, "RenderErrorHandler fallback failed to mount; showing the neutral fallback");
+                    return (ErrorFallback.BuildSafePanel(), null, false);
+                }
+            case Outcome.HandlerFailed:
+                return (ErrorFallback.BuildSafePanel(), null, false);
+            case Outcome.Propagate:
+                return (null, null, true);
+            default:
+                return (ErrorFallback.BuildPanel(error.Exception), null, false);
+        }
+    }
+
+    /// <summary>
+    /// Reports one cleanup exception thrown during host/reconciler disposal (the handler is
+    /// notified with <see cref="RenderErrorSource.Cleanup"/>; its return value is ignored).
+    /// Returns the exception to rethrow once disposal has finished when the handler asked to
+    /// propagate and the unhandled-exception path did not handle it; otherwise null.
+    /// </summary>
+    internal static ExceptionDispatchInfo? ReportCleanup(
+        RenderErrorHandler handler, Exception ex, string? componentName, bool isHostLevel, ILogger? logger)
+    {
         logger?.LogError(ex, "Effect cleanup threw during dispose: {ComponentName}", componentName ?? "(root)");
         var error = new RenderError(ex, RenderErrorSource.Cleanup, componentName, isHostLevel);
-        InvokeHandler(handler, error, logger);
-        if (error.IsPropagationRequested && !TryReportUnhandled(ex))
+        if (InvokeHandler(handler, error, logger, out _) != Outcome.Propagate || TryReportUnhandled(ex))
+            return null;
+        s_propagating.AddOrUpdate(ex, s_marker);
+        return ExceptionDispatchInfo.Capture(ex);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="context"/>'s cleanups. With no handler this is the unchanged
+    /// <see cref="RenderContext.RunCleanups()"/> (the first throw escapes). With a handler
+    /// every cleanup runs, each failure is reported, and the first unhandled propagation is
+    /// kept in <paramref name="pending"/> for the caller to rethrow after disposal.
+    /// </summary>
+    internal static void RunCleanups(
+        RenderContext? context, RenderErrorHandler? handler, string? componentName, bool isHostLevel,
+        ILogger? logger, ref ExceptionDispatchInfo? pending)
+    {
+        if (context is null) return;
+        if (handler is null)
         {
-            s_propagating.AddOrUpdate(ex, s_marker);
-            pending ??= ExceptionDispatchInfo.Capture(ex);
+            context.RunCleanups();
+            return;
         }
-        return true;
+        ExceptionDispatchInfo? first = null;
+        context.RunCleanups(ex => first ??= ReportCleanup(handler, ex, componentName, isHostLevel, logger));
+        pending ??= first;
     }
 
     /// <summary>

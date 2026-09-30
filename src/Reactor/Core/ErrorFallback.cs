@@ -87,4 +87,23 @@ internal static class ErrorFallback
                 IsTextSelectionEnabled = true,
                 FontFamily = WinRTCache.GetFontFamily(MonoFontStack),
             });
+
+    /// <summary>
+    /// Neutral text used when an app-configured <see cref="RenderErrorHandler"/> itself
+    /// fails. An app that configured a handler asked for the exception text to stay off
+    /// screen, so its failure must not fall back to the detailed fallback (issue #1291).
+    /// </summary>
+    internal const string SafeMessage = "Something went wrong.";
+
+    /// <summary>In-tree placeholder with no exception detail. See <see cref="SafeMessage"/>.</summary>
+    public static Element BuildSafeElement(Exception _) =>
+        TextBlock(SafeMessage) with { TextWrapping = TextWrapping.Wrap };
+
+    /// <summary>Host-level panel with no exception detail. See <see cref="SafeMessage"/>.</summary>
+    public static UIElement BuildSafePanel() =>
+        new WinUI.Border
+        {
+            Padding = new Thickness(16),
+            Child = new TextBlock { Text = SafeMessage, TextWrapping = TextWrapping.Wrap },
+        };
 }

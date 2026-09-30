@@ -1001,21 +1001,15 @@ public sealed class ReactorHost : IDisposable
                 _uiSettings.AnimationsEnabledChanged -= OnAnimationsEnabledChanged;
         }
 
-        // Issue #1291: with a RenderErrorHandler configured, throwing cleanups are reported
-        // (Source = Cleanup) and disposal carries on; a requested, unhandled propagation is
-        // rethrown once disposal has finished. With no handler, they escape as before.
+        // Issue #1291: with a RenderErrorHandler configured, every cleanup runs and each
+        // failure is reported (Source = Cleanup); a requested, unhandled propagation is
+        // rethrown once disposal has finished. With no handler they escape as before.
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
-        try
-        {
-            _rootComponent?.Context.RunCleanups();
-            _funcContext?.RunCleanups();
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
-        {
-            if (!RenderErrorDispatch.ReportCleanup(EffectiveRenderErrorHandler, ex, _rootComponent?.GetType().Name,
-                    isHostLevel: true, _logger, ref pendingPropagation))
-                throw;
-        }
+        var cleanupHandler = EffectiveRenderErrorHandler;
+        RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
+            isHostLevel: true, _logger, ref pendingPropagation);
+        RenderErrorDispatch.RunCleanups(_funcContext, cleanupHandler, componentName: null,
+            isHostLevel: true, _logger, ref pendingPropagation);
 
         // Clear the SystemBackdrop so a window-reuse path returns to the WinUI
         // default. Skip the actual window write when the window has already been
@@ -1060,39 +1054,14 @@ public sealed class ReactorHost : IDisposable
         // Issue #1291 — the app's handler (host override, else the app-wide default) may
         // replace the built-in panel, or ask to propagate.
         var error = new RenderError(ex, source, componentName, isHostLevel: true);
-        var appElement = RenderErrorDispatch.InvokeHandler(EffectiveRenderErrorHandler, error, _logger);
-        if (error.IsPropagationRequested)
-        {
-            // Nothing is shown where the failure happened. Returns only when the app's
-            // unhandled-exception callback handled it; otherwise rethrows.
-            SetErrorContent(null, null);
+        var (content, tree, propagate) = RenderErrorDispatch.BuildHostFallback(
+            EffectiveRenderErrorHandler, error, _logger,
+            element => _reconciler.Mount(element, _rerenderAction ??= () => RequestRender()));
+        SetErrorContent(content, tree);
+        // Nothing is shown where the failure happened. Returns only when the app's
+        // unhandled-exception callback handled it; otherwise rethrows.
+        if (propagate)
             RenderErrorDispatch.RaiseUnhandled(ex);
-            return;
-        }
-
-        UIElement? errorPanel = null;
-        Element? errorTree = null;
-        if (appElement is not null)
-        {
-            var guarded = RenderErrorDispatch.Guard(appElement);
-            try
-            {
-                errorPanel = _reconciler.Mount(guarded, _rerenderAction ??= () => RequestRender());
-                errorTree = guarded;
-            }
-            catch (Exception mountEx) when (mountEx is not OutOfMemoryException and not StackOverflowException)
-            {
-                _logger?.LogError(mountEx, "RenderErrorHandler fallback failed to mount; using the built-in fallback");
-                errorPanel = null;
-            }
-            if (errorTree is null)
-                errorPanel = Microsoft.UI.Reactor.Core.ErrorFallback.BuildPanel(ex);
-        }
-        else
-        {
-            errorPanel = Microsoft.UI.Reactor.Core.ErrorFallback.BuildPanel(ex);
-        }
-        SetErrorContent(errorPanel, errorTree);
     }
 
     // Installs the error content. A handler-supplied fallback is kept as the current tree
@@ -1114,5 +1083,10 @@ public sealed class ReactorHost : IDisposable
         }
         _currentControl = errorPanel;
         _currentTree = errorTree;
+        // An app fallback is a live Reactor tree that may use ThemeRef, so it takes over
+        // the theme listener like any content swap. The built-in panels use fixed colors
+        // and keep the pre-#1291 behavior.
+        if (errorTree is not null)
+            AttachThemeListener(errorPanel);
     }
 }
