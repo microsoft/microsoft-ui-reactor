@@ -1367,11 +1367,9 @@ internal static class ReconcilerBigCoverageFixtures
             H.ClickButton("CustomPhase");
             await Harness.Render();
             H.Check("CustomReg_Replaced", H.FindText("custom-replaced") is not null);
-            // The unmount callback is invoked through the registered TypeRegistration's
-            // Unmount path; if the framework chose a different teardown (e.g. unmount
-            // via parent), the variable may not increment — keep the test green.
-            _ = unmountCount;
-            H.Check("CustomReg_TypeRegistered", true);
+            // Swapping the slot to a TextBlock unmounts the widget through UnmountRecursive,
+            // which finds the registration's unmount callback through the element tag.
+            H.Check("CustomReg_UnmountCallbackRan", unmountCount == 1);
         }
     }
 

@@ -460,44 +460,22 @@ internal static class NativeDockingReliabilityFixtures
                 // contract: DockingNativeInterop's unmount lambda
                 // iterates DockFloatingTracker.SnapshotFor(managerEl)
                 // and calls Close + UnregisterFor on each floating
-                // window. In the headless self-test harness this path
-                // is intermittently observable — the reconcile-driven
-                // unmount lambda does not always fire when
-                // host.Mount(Func) replaces the root (ReactorHost.Mount
-                // resets the func context per spec §F#15). We poll the
-                // tracker for several render cycles to give the unmount
-                // path a chance, then fall back to an explicit close.
-                // Either path is sufficient to exercise the
-                // Closed → UnregisterFor wire; the spec-§2.25 contract
-                // proper is verified by the Appium-tier self-tests.
+                // window. This used to be skipped as "intermittently
+                // observable in the headless harness", but the lambda
+                // never ran at all: the reconciler did not tag controls
+                // mounted through RegisterType, so the unmount path could
+                // not find the registration. It is deterministic now.
                 host.Mount(_ => TextBlock("host-unmounted"));
-                await Harness.Render();
+                bool unmountClearedTracker = await Harness.WaitFor(
+                    () => DockFloatingTracker.SnapshotFor(managerEl).Count == 0, maxPasses: 8);
+                H.Check("Reliability_FloatOutlive_TrackerClearedByUnmount", unmountClearedTracker);
 
-                bool unmountClearedTracker = false;
-                for (int i = 0; i < 8; i++)
-                {
-                    if (DockFloatingTracker.SnapshotFor(managerEl).Count == 0)
-                    {
-                        unmountClearedTracker = true;
-                        break;
-                    }
-                    await Harness.Render();
-                }
-
-                if (unmountClearedTracker)
-                {
-                    H.Check("Reliability_FloatOutlive_TrackerClearedByUnmount", true);
-                }
-                else
-                {
-                    H.Skip("Reliability_FloatOutlive_TrackerClearedByUnmount",
-                        "Host swap did not drain the docking unmount lambda in the headless harness " +
-                        "(see ReactorHost.Mount(Func) review finding). " +
-                        "Falling back to explicit close to exercise the rest of the chain.");
+                // Close it by hand if the host did not, so a failure here
+                // doesn't leak the window into later fixtures.
+                if (!unmountClearedTracker)
                     floating?.Close();
-                    for (int i = 0; i < 8 && !closedFired; i++)
-                        await Harness.Render();
-                }
+                for (int i = 0; i < 8 && !closedFired; i++)
+                    await Harness.Render();
 
                 H.Check("Reliability_FloatOutlive_PerHostTrackerClearedEventually",
                     DockFloatingTracker.SnapshotFor(managerEl).Count == 0);
