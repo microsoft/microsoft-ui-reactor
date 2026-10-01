@@ -44,6 +44,16 @@ internal static class RenderErrorHandlerFixtures
         }
     }
 
+    private sealed class TwoThrowingCleanupsComponent : Component
+    {
+        public override Element Render()
+        {
+            UseEffect(() => () => throw new InvalidOperationException("child cleanup 1"));
+            UseEffect(() => () => throw new InvalidOperationException("child cleanup 2"));
+            return TextBlock("TwoCleanups");
+        }
+    }
+
     private static RenderErrorHandler Recording(List<RenderError> log, Func<RenderError, Element?> reply) =>
         e => { log.Add(e); return reply(e); };
 
@@ -593,6 +603,46 @@ internal static class RenderErrorHandlerFixtures
             await Harness.Render();
             H.Check("RenderErrorHandler_Dispose_NewHostWorks", H.FindText("AfterRenderErrorDispose") is not null);
         }
+    }
+
+    // ── WindowSpec seeding ──────────────────────────────────────────────────
+
+    // Two cleanups in one child both propagate and the app declines both. Disposal must leave
+    // with the first one *and* finish tearing the host down: the in-flight marker has to name
+    // the exception the reconciler rethrows, or the host's filtered catch misses it and the
+    // rest of Dispose is skipped.
+    internal class Dispose_TwoPropagatingCleanups(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithUnhandledCallback(_ => false, async () =>
+        {
+            var window = new Window { Title = "RenderErrorHandler Two Cleanups" };
+            window.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(300, 200));
+            window.Activate();
+            var reported = new List<string>();
+            var host = new ReactorHost(window)
+            {
+                RenderErrorHandler = e => { reported.Add(e.Exception.Message); e.Propagate(); return null; },
+            };
+            host.Mount(_ => VStack(Component<TwoThrowingCleanupsComponent>()));
+            await Task.Delay(150);
+            await Harness.Render();
+
+            Exception? escaped = null;
+            try { host.Dispose(); } catch (InvalidOperationException ex) { escaped = ex; }
+            window.Close();
+
+            H.Check("RenderErrorHandler_TwoCleanups_BothReported",
+                reported.SequenceEqual(new[] { "child cleanup 1", "child cleanup 2" }), string.Join(",", reported));
+            H.Check("RenderErrorHandler_TwoCleanups_FirstRethrown", escaped?.Message == "child cleanup 1",
+                escaped?.Message ?? "(nothing escaped)");
+            H.Check("RenderErrorHandler_TwoCleanups_TeardownCompleted", host.CurrentControl is null,
+                host.CurrentControl?.GetType().Name ?? "null");
+
+            var next = H.CreateHost();
+            next.Mount(_ => TextBlock("AfterTwoCleanups"));
+            await Harness.Render();
+            H.Check("RenderErrorHandler_TwoCleanups_NewHostWorks", H.FindText("AfterTwoCleanups") is not null);
+        });
     }
 
     // ── WindowSpec seeding ──────────────────────────────────────────────────

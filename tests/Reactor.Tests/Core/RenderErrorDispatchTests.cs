@@ -294,16 +294,43 @@ public class RenderErrorDispatchTests
             () => lastRan = true);
         var reported = new List<string>();
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pending = null;
+        bool markerOnRethrown = false;
 
         WithUnhandledCallback(_ => false, () =>
+        {
             RenderErrorDispatch.RunCleanups(ctx, e => { reported.Add(e.Exception.Message); e.Propagate(); return null; }, "Probe",
-                isHostLevel: true, logger: null, ref pending));
+                isHostLevel: true, logger: null, ref pending);
+            // The in-flight marker names the exception that will be rethrown, not the last
+            // one that asked to propagate.
+            markerOnRethrown = pending is not null && RenderErrorDispatch.IsPropagating(pending.SourceException);
+        });
 
         Assert.True(lastRan);
         Assert.NotNull(pending);
         Assert.Equal("first", pending!.SourceException.Message);
         // Every failure reaches the handler, including those after the first propagation.
         Assert.Equal(new[] { "first", "second" }, reported);
+        Assert.True(markerOnRethrown);
+    }
+
+    [Fact]
+    public void ReportCleanup_A_Second_Propagation_Does_Not_Displace_The_One_In_Flight()
+    {
+        var first = new InvalidOperationException("first");
+        var second = new InvalidOperationException("second");
+        RenderErrorHandler propagate = e => { e.Propagate(); return null; };
+        WithUnhandledCallback(_ => false, () =>
+        {
+            var pendingFirst = RenderErrorDispatch.ReportCleanup(propagate, first, "Root", isHostLevel: true, logger: null);
+            // e.g. the reconciler's child cleanups, disposed after the host's root cleanups.
+            var pendingSecond = RenderErrorDispatch.ReportCleanup(propagate, second, "Child", isHostLevel: false, logger: null);
+
+            Assert.Same(first, pendingFirst!.SourceException);
+            Assert.Null(pendingSecond);
+            Assert.True(RenderErrorDispatch.IsPropagating(first));
+            Assert.False(RenderErrorDispatch.IsPropagating(second));
+            Assert.False(RenderErrorDispatch.TryConsumeDeclined(second));
+        });
     }
 
     [Fact]

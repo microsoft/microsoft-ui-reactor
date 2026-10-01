@@ -171,6 +171,12 @@ internal static class RenderErrorDispatch
         var error = new RenderError(ex, RenderErrorSource.Cleanup, componentName, isHostLevel);
         if (InvokeHandler(handler, error, logger, out _) != Outcome.Propagate || TryReportUnhandled(ex))
             return null;
+        // Only one exception can leave disposal. If a propagation is already in flight on
+        // this thread (an earlier cleanup of this context, or of the root before the
+        // reconciler's), this one has been reported and offered to the app but is not
+        // rethrown, so the in-flight marker keeps naming the exception that will be.
+        if (t_propagating is not null)
+            return null;
         return BeginPropagation(ex);
     }
 
