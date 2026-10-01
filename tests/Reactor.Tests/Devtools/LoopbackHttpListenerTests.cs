@@ -29,7 +29,8 @@ public sealed class LoopbackHttpListenerTests
         using (listener)
         {
             Assert.NotEqual(thief.Port, port);
-            Assert.Equal(1, probes);
+            // At least one re-probe; more only if another process also took a probed port.
+            Assert.True(probes >= 1, $"expected a re-probe after the taken port, got {probes}");
             Assert.Equal(HttpStatusCode.NoContent, await RoundTripAsync(listener, port));
         }
     }
@@ -90,7 +91,7 @@ public sealed class LoopbackHttpListenerTests
     }
 
     [Fact]
-    public void Configure_RunsOnEveryAttempt()
+    public void Configure_RunsOnEveryAttempt_IncludingTheOneThatBinds()
     {
         using var thief = PortThief.HoldWithSocket();
         var configured = new List<HttpListener>();
@@ -99,7 +100,8 @@ public sealed class LoopbackHttpListenerTests
 
         using (listener)
         {
-            Assert.Equal(2, configured.Count);
+            Assert.True(configured.Count >= 2, $"expected the taken port's attempt and a retry, got {configured.Count}");
+            Assert.NotSame(listener, configured[0]);
             Assert.Same(listener, configured[^1]);
         }
     }

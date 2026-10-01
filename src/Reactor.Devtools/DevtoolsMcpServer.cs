@@ -21,6 +21,8 @@ internal sealed class DevtoolsMcpServer : IDisposable
     private HttpListener? _listener;
     /// <summary>Guards the hand-off of <see cref="_listener"/> between <see cref="Start"/> and <see cref="Dispose"/>.</summary>
     private readonly object _listenerGate = new();
+    /// <summary>Set (under <see cref="_listenerGate"/>) by the <see cref="Start"/> call that binds the HTTP listener.</summary>
+    private bool _httpStarted;
     /// <summary>True when the caller pinned <see cref="Port"/>; a pinned port is never moved.</summary>
     private readonly bool _portPinned;
     private readonly Func<int> _probePort;
@@ -121,6 +123,10 @@ internal sealed class DevtoolsMcpServer : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// HTTP transport: binds the listener (see <see cref="Port"/>) and starts serving.
+    /// A repeated call is a no-op, as <see cref="HttpListener.Start"/> is.
+    /// </summary>
     /// <exception cref="LoopbackPortUnavailableException">
     /// HTTP transport only: the pinned port is in use, or (practically never) every
     /// probed port was taken before it could be bound.
@@ -129,10 +135,25 @@ internal sealed class DevtoolsMcpServer : IDisposable
     {
         if (_transport == McpTransport.Http)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            lock (_listenerGate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (_httpStarted) return;
+                _httpStarted = true;
+            }
             // Bind-and-retry rather than probe-then-bind: another process can take
             // a probed port before HttpListener binds it. A pinned port is never moved.
-            var (listener, port) = LoopbackHttpListener.Start(Port, _portPinned, ConfigureTimeouts, _probePort);
+            HttpListener listener;
+            int port;
+            try
+            {
+                (listener, port) = LoopbackHttpListener.Start(Port, _portPinned, ConfigureTimeouts, _probePort);
+            }
+            catch
+            {
+                lock (_listenerGate) _httpStarted = false;
+                throw;
+            }
             lock (_listenerGate)
             {
                 if (_disposed)

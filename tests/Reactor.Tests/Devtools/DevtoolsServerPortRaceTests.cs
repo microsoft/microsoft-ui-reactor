@@ -82,6 +82,45 @@ public sealed class DevtoolsServerPortRaceTests
     }
 
     [Fact]
+    public void McpServer_SecondStart_IsANoOpAndDisposeReleasesThePort()
+    {
+        int port;
+        using (var server = new DevtoolsMcpServer(null!, null!))
+        {
+            server.Start();
+            port = server.Port;
+            server.Start();
+            Assert.Equal(port, server.Port);
+        }
+
+        AssertPortIsFree(port);
+    }
+
+    [Fact]
+    public void CaptureServer_SecondStart_IsANoOpAndDisposeReleasesThePort()
+    {
+        int port;
+#pragma warning disable IL2026
+        using (var server = PreviewCaptureServer.CreateForTests("test-token"))
+#pragma warning restore IL2026
+        {
+            server.Start();
+            port = server.Port;
+            server.Start();
+            Assert.Equal(port, server.Port);
+        }
+
+        AssertPortIsFree(port);
+    }
+
+    /// <summary>Pins <paramref name="port"/>: fails if any listener the server bound is still open.</summary>
+    private static void AssertPortIsFree(int port)
+    {
+        var (listener, _) = LoopbackHttpListener.Start(port, pinned: true);
+        listener.Close();
+    }
+
+    [Fact]
     public async Task CaptureServer_ProbedPortTakenBeforeStart_ServesOnAFreshPort()
     {
         const string token = "test-token";

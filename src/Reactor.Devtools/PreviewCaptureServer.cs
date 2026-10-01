@@ -36,6 +36,8 @@ internal sealed class PreviewCaptureServer : IDisposable
     private HttpListener? _listener;
     /// <summary>Guards the hand-off of <see cref="_listener"/> between <see cref="Start"/> and <see cref="Dispose"/>.</summary>
     private readonly object _listenerGate = new();
+    /// <summary>Set (under <see cref="_listenerGate"/>) by the <see cref="Start"/> call that binds the listener.</summary>
+    private bool _started;
     private readonly Func<int> _probePort;
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly Window _window;
@@ -148,17 +150,36 @@ internal sealed class PreviewCaptureServer : IDisposable
             .TrimEnd('=');
     }
 
+    /// <summary>
+    /// Binds the listener (see <see cref="Port"/>), starts serving, and announces
+    /// <c>CAPTURE_PORT</c>. A repeated call is a no-op, as <see cref="HttpListener.Start"/> is.
+    /// </summary>
     /// <exception cref="LoopbackPortUnavailableException">
     /// Practically never: every probed port was taken before it could be bound.
     /// </exception>
     public void Start()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        lock (_listenerGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_started) return;
+            _started = true;
+        }
         // SECURITY (TASK-026): a local process can take a probed port before
         // HttpListener binds it. A placeholder socket can't be held across the
         // bind (HTTP.sys refuses a port another socket owns), so bind-and-retry
         // instead. CAPTURE_PORT is announced only for the port actually bound.
-        var (listener, port) = LoopbackHttpListener.Start(Port, pinned: false, ConfigureTimeouts, _probePort);
+        HttpListener listener;
+        int port;
+        try
+        {
+            (listener, port) = LoopbackHttpListener.Start(Port, pinned: false, ConfigureTimeouts, _probePort);
+        }
+        catch
+        {
+            lock (_listenerGate) _started = false;
+            throw;
+        }
         lock (_listenerGate)
         {
             if (_disposed)
