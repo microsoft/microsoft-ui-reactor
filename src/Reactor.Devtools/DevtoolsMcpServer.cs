@@ -276,7 +276,8 @@ internal sealed class DevtoolsMcpServer : IDisposable
         _disposed = true;
         _shutdownCts.Cancel();
         // Close also stops the listener; HTTP.sys failures surface as HttpListenerException.
-        try { _listener?.Close(); } catch (HttpListenerException) { }
+        try { _listener?.Close(); }
+        catch (HttpListenerException ex) { Console.Error.WriteLine($"[devtools:mcp] Closing the listener failed: {ex.Message}"); }
         try { _stdioLoop?.Dispose(); } catch { }
         try { _logger?.Dispose(); } catch { }
         if (!string.IsNullOrEmpty(_lockfilePath))

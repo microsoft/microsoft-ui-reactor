@@ -197,7 +197,8 @@ internal sealed class PreviewCaptureServer : IDisposable
         _disposed = true;
         _captureTimer?.Stop();
         // Close also stops the listener; HTTP.sys failures surface as HttpListenerException.
-        try { _listener?.Close(); } catch (HttpListenerException) { }
+        try { _listener?.Close(); }
+        catch (HttpListenerException ex) { Console.Error.WriteLine($"[devtools:capture] Closing the listener failed: {ex.Message}"); }
     }
 
     /// <summary>SECURITY (TASK-006 equivalent): bound the IO timers. Runs on every bind attempt's listener.</summary>

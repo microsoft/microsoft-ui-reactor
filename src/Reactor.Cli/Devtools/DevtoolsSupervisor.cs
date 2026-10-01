@@ -150,8 +150,10 @@ internal static class DevtoolsSupervisor
 
     /// <summary>
     /// The respawn loop: launches the child on the pinned MCP port, rebuilds and
-    /// relaunches on <see cref="ReloadExitCode"/>, and propagates any other exit
-    /// code. Takes the process plumbing as delegates so it can be unit-tested.
+    /// relaunches on <see cref="ReloadExitCode"/>, picks a new port and relaunches
+    /// on <see cref="McpPortUnavailableExitCode"/> when the supervisor chose the
+    /// port, and propagates any other exit code. Takes the process plumbing as
+    /// delegates so it can be unit-tested.
     /// </summary>
     internal static int Supervise(
         int? userPinnedPort,
@@ -316,11 +318,12 @@ internal static class DevtoolsSupervisor
         Console.WriteLine("mur devtools --print-config [--mcp-port N]");
         Console.WriteLine();
         Console.WriteLine("  Launches the target project with --devtools run and respawns on reload.");
-        Console.WriteLine("  When the child exits with code 42, rebuilds and relaunches. Any other");
-        Console.WriteLine("  exit code propagates. The MCP port is pinned across respawns so an");
-        Console.WriteLine("  agent can reconnect at the same endpoint. If another process holds the");
-        Console.WriteLine("  port when the app starts (exit code 43), an auto-picked port is replaced");
-        Console.WriteLine("  with a new one; a port pinned with --mcp-port fails instead.");
+        Console.WriteLine("  When the child exits with code 42, rebuilds and relaunches. The MCP port");
+        Console.WriteLine("  is pinned across respawns so an agent can reconnect at the same endpoint.");
+        Console.WriteLine("  If another process holds the port when the app starts, the child exits");
+        Console.WriteLine("  with code 43: an auto-picked port is then replaced with a new one, while");
+        Console.WriteLine("  a port pinned with --mcp-port fails with code 43. Any other exit code");
+        Console.WriteLine("  propagates.");
         Console.WriteLine();
         Console.WriteLine("  --print-config   Emit MCP config fragments (Claude Code, Copilot, VS Code)");
         Console.WriteLine("                   wired to the given --mcp-port; prints to stdout only.");
