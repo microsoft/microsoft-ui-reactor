@@ -93,13 +93,14 @@ public class DirtyChildIndicesTests
     [Fact]
     public void Several_Resolved_Indices_Each_Match_Without_Reading_Controls()
     {
-        var children = new CountingChildCollection(5, throwOnRead: true);
-        var dirty = DirtyChildIndices.AtAll(new[] { 1, 3 });
+        var children = new CountingChildCollection(6, throwOnRead: true);
+        // Given out of order on purpose: membership is a binary search, so AtAll must sort.
+        var dirty = DirtyChildIndices.AtAll(new[] { 4, 1, 3 });
 
         Assert.False(dirty.IsEmpty);
-        Assert.Equal(new[] { false, true, false, true, false }, Enumerable.Range(0, 5).Select(i => Contains(dirty, i, children)));
+        Assert.Equal(new[] { false, true, false, true, true, false }, Enumerable.Range(0, 6).Select(i => Contains(dirty, i, children)));
         Assert.Equal(0, children.Reads);
-        Assert.Equal("AtAll(1,3)", dirty.ToString());
+        Assert.Equal("AtAll(1,3,4)", dirty.ToString());
     }
 
     [Fact]

@@ -253,7 +253,6 @@ public sealed partial class Reconciler : IDisposable
                 return DirtyChildIndices.ProbeEachChild;
             indices[k] = index;
         }
-        Array.Sort(indices);
         return DirtyChildIndices.AtAll(indices);
     }
 

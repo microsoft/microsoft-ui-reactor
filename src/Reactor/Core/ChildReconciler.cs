@@ -1032,7 +1032,13 @@ internal readonly struct DirtyChildIndices
 
     internal static DirtyChildIndices At(int index) => new(index + 1, null, probeEachChild: false);
 
-    internal static DirtyChildIndices AtAll(int[] indices) => new(0, indices, probeEachChild: false);
+    /// <summary>Several dirty children. Sorts <paramref name="indices"/> in place so
+    /// <see cref="Contains"/> can binary-search them.</summary>
+    internal static DirtyChildIndices AtAll(int[] indices)
+    {
+        Array.Sort(indices);
+        return new(0, indices, probeEachChild: false);
+    }
 
     /// <summary>True when no child of the container leads to pending work.</summary>
     internal bool IsEmpty => _indexPlusOne == 0 && _indices is null && !_probeEachChild;
@@ -1047,7 +1053,7 @@ internal readonly struct DirtyChildIndices
         if (_indexPlusOne != 0)
             return panelIndex == _indexPlusOne - 1;
         if (_indices is not null)
-            return Array.IndexOf(_indices, panelIndex) >= 0;
+            return Array.BinarySearch(_indices, panelIndex) >= 0;
         if (!_probeEachChild || (uint)panelIndex >= (uint)children.Count)
             return false;
         return reconciler.IsOnDirtyAncestorPath(control ??= children.Get(panelIndex));
