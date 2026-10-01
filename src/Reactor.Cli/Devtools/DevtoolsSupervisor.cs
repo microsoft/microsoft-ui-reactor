@@ -305,16 +305,9 @@ internal static class DevtoolsSupervisor
     /// </summary>
     internal static int ProbeFreePort()
     {
-        var probe = new TcpListener(IPAddress.Loopback, 0);
+        using var probe = new TcpListener(IPAddress.Loopback, 0);
         probe.Start();
-        try
-        {
-            return ((IPEndPoint)probe.LocalEndpoint).Port;
-        }
-        finally
-        {
-            probe.Stop();
-        }
+        return ((IPEndPoint)probe.LocalEndpoint).Port;
     }
 
     private static void PrintHelp()

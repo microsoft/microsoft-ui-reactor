@@ -200,8 +200,8 @@ internal sealed class PreviewCaptureServer : IDisposable
             listener = _listener;
         }
         _captureTimer?.Stop();
-        try { listener?.Stop(); } catch { }
-        try { listener?.Close(); } catch { }
+        // Close also stops the listener; HTTP.sys failures surface as HttpListenerException.
+        try { listener?.Close(); } catch (HttpListenerException) { }
     }
 
     /// <summary>SECURITY (TASK-006 equivalent): bound the IO timers. Runs on every bind attempt's listener.</summary>
@@ -215,7 +215,8 @@ internal sealed class PreviewCaptureServer : IDisposable
             tm.IdleConnection = TimeSpan.FromSeconds(15);
             tm.RequestQueue = TimeSpan.FromSeconds(10);
         }
-        catch { /* not all hosts expose TimeoutManager */ }
+        catch (HttpListenerException) { /* HTTP.sys rejected a timeout property */ }
+        catch (PlatformNotSupportedException) { /* not all hosts expose TimeoutManager */ }
     }
 
     // -- Frame Capture (UI thread) -----------------------------------------------

@@ -690,12 +690,18 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
 
     private static void ExitDevtoolsHost(DevtoolsMcpServer mcp, ReactorHost host, int exitCode)
     {
-        try { mcp.Dispose(); } catch { }
-        host.Window.DispatcherQueue.TryEnqueue(() =>
+        try
         {
-            try { host.Window.Close(); } catch { }
-            Environment.Exit(exitCode);
-        });
+            mcp.Dispose();
+        }
+        finally
+        {
+            host.Window.DispatcherQueue.TryEnqueue(() =>
+            {
+                try { host.Window.Close(); }
+                finally { Environment.Exit(exitCode); }
+            });
+        }
     }
 
     private static void RequestDevtoolsReload(DevtoolsMcpServer mcp, ReactorHost host)

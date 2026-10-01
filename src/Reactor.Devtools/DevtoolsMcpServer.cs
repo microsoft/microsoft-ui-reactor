@@ -279,8 +279,8 @@ internal sealed class DevtoolsMcpServer : IDisposable
             listener = _listener;
         }
         _shutdownCts.Cancel();
-        try { listener?.Stop(); } catch { }
-        try { listener?.Close(); } catch { }
+        // Close also stops the listener; HTTP.sys failures surface as HttpListenerException.
+        try { listener?.Close(); } catch (HttpListenerException) { }
         try { _stdioLoop?.Dispose(); } catch { }
         try { _logger?.Dispose(); } catch { }
         if (!string.IsNullOrEmpty(_lockfilePath))
@@ -305,10 +305,14 @@ internal sealed class DevtoolsMcpServer : IDisposable
             tm.IdleConnection = TimeSpan.FromSeconds(15);
             tm.RequestQueue = TimeSpan.FromSeconds(10);
         }
-        catch
+        catch (HttpListenerException)
         {
-            // TimeoutManager is unavailable on some hosts; the body cap in
-            // HandleRequest is the load-bearing protection.
+            // HTTP.sys rejected a timeout property; the body cap in HandleRequest
+            // is the load-bearing protection.
+        }
+        catch (PlatformNotSupportedException)
+        {
+            // TimeoutManager is unavailable on non-HTTP.sys hosts.
         }
     }
 
