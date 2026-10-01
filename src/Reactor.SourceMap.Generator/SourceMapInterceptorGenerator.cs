@@ -20,7 +20,7 @@ namespace Microsoft.UI.Reactor.SourceMap.Generator;
 /// <para>The generator runs in the <em>consumer's</em> compilation and, for each
 /// <c>Microsoft.UI.Reactor.Factories.*</c> invocation that returns an
 /// <c>Element</c>, emits a same-signature interceptor that calls the original
-/// factory and then stamps the call site's file + line. No factory signature
+/// factory and then stamps the call site's file, line and column. No factory signature
 /// changes and no call site is edited — which is the whole point of this route,
 /// and the only way to cover the 39 <c>params Element?[] children</c> factories
 /// (C# forbids a trailing optional parameter after <c>params</c>, so
@@ -314,8 +314,48 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             attribute: location.GetInterceptsLocationAttributeSyntax(),
             filePath: ResolveMappedPath(lineSpan, invocation.SyntaxTree.FilePath),
             line: lineSpan.StartLinePosition.Line + 1,
+            column: CallSiteColumn(invocation, lineSpan, ct),
             signature: Signature.From(method, elementSymbol, compilation.GetTypeByMetadataName(EmptyElementMetadataName)),
             argumentStamps: DescribeArgumentStamps(ctx, invocation, method, elementSymbol, ct));
+    }
+
+    /// <summary>
+    /// The 1-based column to stamp alongside the paren-derived line: the first character
+    /// of the invoked method's NAME, because that is what tells <c>Button("a")</c> and
+    /// <c>Button("b")</c> apart on one line and is where a reader's eye (and an editor's
+    /// "go to") lands. It is the same token <c>[InterceptsLocation]</c> anchors on.
+    ///
+    /// <para>The line is NOT moved to the name: it follows the open paren for
+    /// <c>[CallerLineNumber]</c> parity (see the comment above). So when the name and
+    /// the paren are on different mapped lines — <c>Fact.TextBlock\n    ("y")</c> — the
+    /// paren's own column is reported instead, keeping (line, column) a position that
+    /// actually exists on the reported line rather than a column borrowed from another
+    /// line.</para>
+    /// </summary>
+    private static int CallSiteColumn(
+        InvocationExpressionSyntax invocation,
+        FileLinePositionSpan parenLineSpan,
+        System.Threading.CancellationToken ct)
+    {
+        SyntaxToken? name = invocation.Expression switch
+        {
+            MemberAccessExpressionSyntax member => member.Name.Identifier,
+            MemberBindingExpressionSyntax binding => binding.Name.Identifier,
+            SimpleNameSyntax simple => simple.Identifier,
+            _ => null,
+        };
+
+        if (name is { } token)
+        {
+            var nameSpan = invocation.SyntaxTree.GetMappedLineSpan(token.Span, ct);
+            if (nameSpan.StartLinePosition.Line == parenLineSpan.StartLinePosition.Line
+                && nameSpan.Path == parenLineSpan.Path)
+            {
+                return nameSpan.StartLinePosition.Character + 1;
+            }
+        }
+
+        return parenLineSpan.StartLinePosition.Character + 1;
     }
 
     // ── Mechanism 2: argument-position stamping ───────────────────────────
@@ -467,7 +507,8 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             parameterOrdinal,
             arrayIndex,
             ResolveMappedPath(lineSpan, tree.FilePath),
-            lineSpan.StartLinePosition.Line + 1);
+            lineSpan.StartLinePosition.Line + 1,
+            lineSpan.StartLinePosition.Character + 1);
     }
 
     /// <summary>
@@ -733,7 +774,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                         : $"__a{stamp.ParameterOrdinal}[{stamp.ArrayIndex}]";
                     var stampPath = ApplyPathMap(stamp.FilePath, pathMap);
                     sb.AppendLine(
-                        $"                {target} = __ReactorStampArgument({target}, {Literal(stampPath)}, {stamp.Line})!;");
+                        $"                {target} = __ReactorStampArgument({target}, {Literal(stampPath)}, {stamp.Line}, {stamp.Column})!;");
                 }
                 sb.AppendLine("            }");
                 sb.AppendLine($"            var __e = {sig.OwnerType}.{sig.MethodName}{sig.TypeArgumentList}({sig.ArgumentList});");
@@ -773,7 +814,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             }
             sb.AppendLine("            return __e with");
             sb.AppendLine("            {");
-            sb.AppendLine($"                CallSite = new global::Microsoft.UI.Reactor.Core.SourceLocation({Literal(mapped)}, {site.Line})");
+            sb.AppendLine($"                CallSite = new global::Microsoft.UI.Reactor.Core.SourceLocation({Literal(mapped)}, {site.Line}, {site.Column})");
             sb.AppendLine("            };");
             sb.AppendLine("        }");
             sb.AppendLine();
@@ -786,7 +827,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             // conversions in argument position gets a byte-identical file to before.
             sb.AppendLine("        /// <summary>Stamps an argument that reached its Element parameter through an implicit user-defined conversion.</summary>");
             sb.AppendLine("        private static global::Microsoft.UI.Reactor.Core.Element? __ReactorStampArgument(");
-            sb.AppendLine("            global::Microsoft.UI.Reactor.Core.Element? __value, string __file, int __line)");
+            sb.AppendLine("            global::Microsoft.UI.Reactor.Core.Element? __value, string __file, int __line, int __column)");
             sb.AppendLine("        {");
             sb.AppendLine("            if (__value is null) return __value;");
             // First stamp wins, exactly as on the return path: an argument that already
@@ -799,7 +840,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             sb.AppendLine("            if (__value is global::Microsoft.UI.Reactor.Core.EmptyElement) return __value;");
             sb.AppendLine("            return __value with");
             sb.AppendLine("            {");
-            sb.AppendLine("                CallSite = new global::Microsoft.UI.Reactor.Core.SourceLocation(__file, __line)");
+            sb.AppendLine("                CallSite = new global::Microsoft.UI.Reactor.Core.SourceLocation(__file, __line, __column)");
             sb.AppendLine("            };");
             sb.AppendLine("        }");
             sb.AppendLine();
@@ -853,12 +894,13 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
 
     private sealed class CallSite : IEquatable<CallSite>
     {
-        public CallSite(string attribute, string filePath, int line, Signature signature,
+        public CallSite(string attribute, string filePath, int line, int column, Signature signature,
                         ImmutableArray<ArgumentStamp> argumentStamps)
         {
             Attribute = attribute;
             FilePath = filePath;
             Line = line;
+            Column = column;
             Signature = signature;
             ArgumentStamps = argumentStamps;
         }
@@ -866,6 +908,12 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         public string Attribute { get; }
         public string FilePath { get; }
         public int Line { get; }
+
+        /// <summary>
+        /// 1-based column; see <c>CallSiteColumn</c>. Part of equality so an edit that only
+        /// shifts a call sideways still regenerates the stamped literal.
+        /// </summary>
+        public int Column { get; }
         public Signature Signature { get; }
 
         /// <summary>
@@ -879,6 +927,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                && Attribute == other.Attribute
                && FilePath == other.FilePath
                && Line == other.Line
+               && Column == other.Column
                && Signature.Equals(other.Signature)
                && ArgumentStamps.SequenceEqual(other.ArgumentStamps);
 
@@ -891,6 +940,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                 int h = Attribute.GetHashCode();
                 h = (h * 397) ^ FilePath.GetHashCode();
                 h = (h * 397) ^ Line;
+                h = (h * 397) ^ Column;
                 h = (h * 397) ^ Signature.GetHashCode();
                 foreach (var stamp in ArgumentStamps) h = (h * 397) ^ stamp.GetHashCode();
                 return h;
@@ -908,12 +958,13 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
     /// </summary>
     private sealed class ArgumentStamp : IEquatable<ArgumentStamp>
     {
-        public ArgumentStamp(int parameterOrdinal, int arrayIndex, string filePath, int line)
+        public ArgumentStamp(int parameterOrdinal, int arrayIndex, string filePath, int line, int column)
         {
             ParameterOrdinal = parameterOrdinal;
             ArrayIndex = arrayIndex;
             FilePath = filePath;
             Line = line;
+            Column = column;
         }
 
         public int ParameterOrdinal { get; }
@@ -921,12 +972,16 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         public string FilePath { get; }
         public int Line { get; }
 
+        /// <summary>1-based column of the argument expression's first character.</summary>
+        public int Column { get; }
+
         public bool Equals(ArgumentStamp? other)
             => other is not null
                && ParameterOrdinal == other.ParameterOrdinal
                && ArrayIndex == other.ArrayIndex
                && FilePath == other.FilePath
-               && Line == other.Line;
+               && Line == other.Line
+               && Column == other.Column;
 
         public override bool Equals(object? obj) => Equals(obj as ArgumentStamp);
 
@@ -937,7 +992,8 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                 int h = ParameterOrdinal;
                 h = (h * 397) ^ ArrayIndex;
                 h = (h * 397) ^ FilePath.GetHashCode();
-                return (h * 397) ^ Line;
+                h = (h * 397) ^ Line;
+                return (h * 397) ^ Column;
             }
         }
     }

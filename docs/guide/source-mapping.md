@@ -6,7 +6,7 @@ an ETW event, a `--preview` overlay highlight, a thrown exception —
 back to the C# source that produced it. Two granularities ship today:
 *component* attribution, where every render emits an ETW event carrying
 the component's type name, and *per-element* attribution, where each DSL
-call site carries the file and line that produced it. This page covers
+call site carries the file, line and column that produced it. This page covers
 both.
 
 > **Status.** Per-element source tagging ships as `Element.CallSite` plus
@@ -142,8 +142,8 @@ and is added to your compilation only when `ReactorSourceMap` is true.
 is loaded into every build: this generator inspects every invocation in your
 project, so a Release build should not load it at all.) For each DSL factory
 call site in *your* project it
-emits an interceptor that calls the real factory and stamps the file and
-line onto the returned element. No factory signature changes and no call
+emits an interceptor that calls the real factory and stamps the file,
+line and column onto the returned element. No factory signature changes and no call
 site is edited, which is what lets it cover the `params Element?[]
 children` family (`VStack`, `HStack`, `Grid`, …) that `[CallerFilePath]`
 structurally cannot reach.
@@ -196,6 +196,12 @@ string label = src is null
 already stores -> `Element.CallSite`. It returns `null` when the control
 was not produced by Reactor, when the assembly was built without source
 mapping, or when nothing stamped that element.
+
+`SourceLocation.ColumnNumber` is the 1-based column of the factory's name
+(the `B` of `Button` in `Row(Button("a"), Button("b"))`), which is what tells
+several calls on one line apart. It is `0` for a location built without one
+(`new SourceLocation(path, line)`). `ToString()` keeps the `file:line` shape,
+so read the column from the property.
 
 ### Helper methods and `[ReactorSourceTransparent]`
 

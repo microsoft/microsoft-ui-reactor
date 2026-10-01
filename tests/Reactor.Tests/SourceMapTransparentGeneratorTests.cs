@@ -57,7 +57,12 @@ public sealed class SourceMapTransparentGeneratorTests
             }
             public record TextBlockElement(string Content) : Element;
             public record EmptyElement : Element;
-            public readonly record struct SourceLocation(string FilePath, int LineNumber);
+            public readonly record struct SourceLocation(string FilePath, int LineNumber)
+            {
+                public SourceLocation(string FilePath, int LineNumber, int ColumnNumber)
+                    : this(FilePath, LineNumber) => this.ColumnNumber = ColumnNumber;
+                public int ColumnNumber { get; init; }
+            }
         }
         namespace Microsoft.UI.Reactor
         {
@@ -104,7 +109,7 @@ public sealed class SourceMapTransparentGeneratorTests
     /// forms differ, a `params` slot written with the wrong type — shows up as a compile
     /// error in the emitted file rather than as a wrong string in it.</para>
     /// </summary>
-    private static (ImmutableArray<Diagnostic> Diagnostics, string GeneratedSource) Run(
+    internal static (ImmutableArray<Diagnostic> Diagnostics, string GeneratedSource) Run(
         string userCode, bool enabled = true)
     {
         // Interceptors are opt-in per namespace; without this the emitted

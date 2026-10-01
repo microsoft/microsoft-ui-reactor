@@ -400,6 +400,15 @@ instead of a custom compiler.
 > in `ElementFactory.cs` (the keyed-memo and component-compare arms) while the flag
 > is on.
 
+> **Amended (2026-10-01): column.** With Route A retired, the "greatest common
+> denominator" argument for omitting a column no longer holds. `SourceLocation`
+> gained a purely additive, non-positional `int ColumnNumber { get; init; }`
+> (1-based, `0` = unknown) plus a `(FilePath, LineNumber, ColumnNumber)`
+> constructor; the generator stamps the column of the invoked method's name (the
+> open paren's when name and paren are on different lines, since the line follows
+> the paren). The two-argument constructor, `Deconstruct`, `ToString` and
+> `ToShortString` are unchanged, and the struct stays 16 bytes.
+
 **As shipped** (`src/Reactor/Core/SourceLocation.cs`, abridged — see the file for
 the full doc comments):
 
@@ -408,12 +417,16 @@ the full doc comments):
 
 /// <summary>
 /// Spec 010 — the C# source location that produced an Element.
-/// Deliberately (FilePath, LineNumber) and nothing more: the greatest common
-/// denominator of the two candidate providers, since CallerInfo cannot supply a
-/// column. An interceptor provider knows the column and may add it additively.
+/// Positionally (FilePath, LineNumber); the column is an additive, non-positional
+/// member (1-based, 0 = unknown) the interceptor generator stamps.
 /// </summary>
 public readonly record struct SourceLocation(string FilePath, int LineNumber)
 {
+    public SourceLocation(string FilePath, int LineNumber, int ColumnNumber)
+        : this(FilePath, LineNumber) => this.ColumnNumber = ColumnNumber;
+
+    public int ColumnNumber { get; init; }
+
     public override string ToString() => $"{FilePath}:{LineNumber}";
 
     public string ToShortString()

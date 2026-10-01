@@ -5319,6 +5319,8 @@ ToString() → string
 
 ### struct SourceLocation
 new(string FilePath, int LineNumber)
+new(string FilePath, int LineNumber, int ColumnNumber)
+int ColumnNumber { get; init; }
 int LineNumber { get; init; }
 string FilePath { get; init; }
 Deconstruct(ref string FilePath, ref int LineNumber) → void
