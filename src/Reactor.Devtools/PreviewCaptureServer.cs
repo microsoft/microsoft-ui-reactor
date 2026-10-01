@@ -34,10 +34,12 @@ internal sealed class PreviewCaptureServer : IDisposable
 {
     /// <summary>Created and bound by <see cref="Start"/>; null until then.</summary>
     private HttpListener? _listener;
-    /// <summary>Guards the hand-off of <see cref="_listener"/> between <see cref="Start"/> and <see cref="Dispose"/>.</summary>
-    private readonly object _listenerGate = new();
-    /// <summary>Set (under <see cref="_listenerGate"/>) by the <see cref="Start"/> call that binds the listener.</summary>
-    private bool _started;
+    /// <summary>
+    /// Serializes <see cref="Start"/> (bind, publish, announce) with
+    /// <see cref="Dispose"/>: a concurrent Start waits for the first one's result,
+    /// and once Dispose returns nothing is bound or announced.
+    /// </summary>
+    private readonly object _lifecycleGate = new();
     private readonly Func<int> _probePort;
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly Window _window;
@@ -152,63 +154,46 @@ internal sealed class PreviewCaptureServer : IDisposable
 
     /// <summary>
     /// Binds the listener (see <see cref="Port"/>), starts serving, and announces
-    /// <c>CAPTURE_PORT</c>. A repeated call is a no-op, as <see cref="HttpListener.Start"/> is.
+    /// <c>CAPTURE_PORT</c>. A repeated call is a no-op, as <see cref="HttpListener.Start"/> is;
+    /// a concurrent call waits for the first one's result.
     /// </summary>
     /// <exception cref="LoopbackPortUnavailableException">
     /// Practically never: every probed port was taken before it could be bound.
     /// </exception>
     public void Start()
     {
-        lock (_listenerGate)
+        lock (_lifecycleGate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (_started) return;
-            _started = true;
-        }
-        // SECURITY (TASK-026): a local process can take a probed port before
-        // HttpListener binds it. A placeholder socket can't be held across the
-        // bind (HTTP.sys refuses a port another socket owns), so bind-and-retry
-        // instead. CAPTURE_PORT is announced only for the port actually bound.
-        HttpListener listener;
-        int port;
-        try
-        {
-            (listener, port) = LoopbackHttpListener.Start(Port, pinned: false, ConfigureTimeouts, _probePort);
-        }
-        catch
-        {
-            lock (_listenerGate) _started = false;
-            throw;
-        }
-        lock (_listenerGate)
-        {
-            if (_disposed)
-            {
-                listener.Close();
-                throw new ObjectDisposedException(nameof(PreviewCaptureServer));
-            }
+            if (_listener is not null) return;
+
+            // SECURITY (TASK-026): a local process can take a probed port before
+            // HttpListener binds it. A placeholder socket can't be held across the
+            // bind (HTTP.sys refuses a port another socket owns), so bind-and-retry
+            // instead. CAPTURE_PORT is announced only for the port actually bound.
+            var (listener, port) = LoopbackHttpListener.Start(Port, pinned: false, ConfigureTimeouts, _probePort);
             _listener = listener;
             Port = port;
-        }
-        // TASK-025: don't start the capture timer until a reader attaches.
-        // _captureTimer.Start();
-        _ = ListenAsync(listener).ContinueWith(
-            t => Console.Error.WriteLine($"[devtools:capture] Listener loop failed: {t.Exception!.GetBaseException()}"),
-            TaskContinuationOptions.OnlyOnFaulted);
+            // TASK-025: don't start the capture timer until a reader attaches.
+            // _captureTimer.Start();
+            _ = ListenAsync(listener).ContinueWith(
+                t => Console.Error.WriteLine($"[devtools:capture] Listener loop failed: {t.Exception!.GetBaseException()}"),
+                TaskContinuationOptions.OnlyOnFaulted);
 
-        Console.WriteLine($"[devtools:capture] Serving on http://127.0.0.1:{Port}");
-        Console.WriteLine($"CAPTURE_PORT={Port}");
-        // TASK-018: emit the token for clients on stdout. The vscode-reactor
-        // extension reads this line; same-machine attackers without stdout
-        // access cannot read it.
-        Console.WriteLine($"CAPTURE_TOKEN={_authToken}");
-        Console.Out.Flush();
+            Console.WriteLine($"[devtools:capture] Serving on http://127.0.0.1:{Port}");
+            Console.WriteLine($"CAPTURE_PORT={Port}");
+            // TASK-018: emit the token for clients on stdout. The vscode-reactor
+            // extension reads this line; same-machine attackers without stdout
+            // access cannot read it.
+            Console.WriteLine($"CAPTURE_TOKEN={_authToken}");
+            Console.Out.Flush();
+        }
     }
 
     public void Dispose()
     {
         HttpListener? listener;
-        lock (_listenerGate)
+        lock (_lifecycleGate)
         {
             if (_disposed) return;
             _disposed = true;

@@ -121,6 +121,99 @@ public sealed class DevtoolsServerPortRaceTests
     }
 
     [Fact]
+    public async Task McpServer_ConcurrentStart_WaitsForTheFirstStartToBind()
+    {
+        using var thief = PortThief.HoldWithSocket();
+        using var probe = new BlockingProbe(thief.Port);
+        using var server = new DevtoolsMcpServer(null!, null!, probePort: probe.Next);
+
+        await AssertSecondCallWaitsForTheBind(server.Start, server.Start, probe);
+
+        Assert.NotEqual(thief.Port, server.Port);
+    }
+
+    [Fact]
+    public async Task McpServer_DisposeDuringStart_WaitsThenReleasesThePort()
+    {
+        using var thief = PortThief.HoldWithSocket();
+        using var probe = new BlockingProbe(thief.Port);
+        var server = new DevtoolsMcpServer(null!, null!, probePort: probe.Next);
+
+        await AssertSecondCallWaitsForTheBind(server.Start, server.Dispose, probe);
+
+        AssertPortIsFree(server.Port);
+    }
+
+    [Fact]
+    public async Task CaptureServer_ConcurrentStart_WaitsForTheFirstStartToBind()
+    {
+        using var thief = PortThief.HoldWithSocket();
+        using var probe = new BlockingProbe(thief.Port);
+#pragma warning disable IL2026
+        using var server = PreviewCaptureServer.CreateForTests("test-token", probe.Next);
+#pragma warning restore IL2026
+
+        await AssertSecondCallWaitsForTheBind(server.Start, server.Start, probe);
+
+        Assert.NotEqual(thief.Port, server.Port);
+    }
+
+    [Fact]
+    public async Task CaptureServer_DisposeDuringStart_WaitsThenReleasesThePort()
+    {
+        using var thief = PortThief.HoldWithSocket();
+        using var probe = new BlockingProbe(thief.Port);
+#pragma warning disable IL2026
+        var server = PreviewCaptureServer.CreateForTests("test-token", probe.Next);
+#pragma warning restore IL2026
+
+        await AssertSecondCallWaitsForTheBind(server.Start, server.Dispose, probe);
+
+        AssertPortIsFree(server.Port);
+    }
+
+    /// <summary>
+    /// Parks <paramref name="start"/> inside its bind (the probe blocks while it
+    /// retries past the held port), runs <paramref name="other"/> concurrently, and
+    /// asserts <paramref name="other"/> doesn't return until the bind completes.
+    /// </summary>
+    private static async Task AssertSecondCallWaitsForTheBind(Action start, Action other, BlockingProbe probe)
+    {
+        var first = Task.Factory.StartNew(start, TaskCreationOptions.LongRunning);
+        Assert.True(probe.Entered.Wait(TimeSpan.FromSeconds(30)), "Start never reached its retry");
+
+        var second = Task.Factory.StartNew(other, TaskCreationOptions.LongRunning);
+        await Task.Delay(TimeSpan.FromMilliseconds(300), TestContext.Current.CancellationToken);
+        Assert.False(second.IsCompleted, "returned while Start was still binding");
+
+        probe.Release.Set();
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(30));
+    }
+
+    /// <summary>
+    /// The constructor's probe gets <c>first</c> (a held port); the retry's probe
+    /// blocks until <see cref="Release"/> is set, then returns a real free port.
+    /// </summary>
+    private sealed class BlockingProbe(int first) : IDisposable
+    {
+        private int _calls;
+
+        public ManualResetEventSlim Entered { get; } = new();
+        public ManualResetEventSlim Release { get; } = new();
+
+        public int Next()
+        {
+            if (Interlocked.Increment(ref _calls) == 1) return first;
+            Entered.Set();
+            Release.Wait(TimeSpan.FromSeconds(30));
+            return LoopbackHttpListener.ProbeFreePort();
+        }
+
+        // Unblocks a parked Start if an assertion failed before Release was set.
+        public void Dispose() => Release.Set();
+    }
+
+    [Fact]
     public async Task CaptureServer_ProbedPortTakenBeforeStart_ServesOnAFreshPort()
     {
         const string token = "test-token";

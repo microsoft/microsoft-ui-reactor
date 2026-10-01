@@ -19,10 +19,12 @@ internal sealed class DevtoolsMcpServer : IDisposable
 {
     /// <summary>Created and bound by <see cref="Start"/>; null until then and in stdio mode.</summary>
     private HttpListener? _listener;
-    /// <summary>Guards the hand-off of <see cref="_listener"/> between <see cref="Start"/> and <see cref="Dispose"/>.</summary>
-    private readonly object _listenerGate = new();
-    /// <summary>Set (under <see cref="_listenerGate"/>) by the <see cref="Start"/> call that binds the HTTP listener.</summary>
-    private bool _httpStarted;
+    /// <summary>
+    /// Serializes the HTTP <see cref="Start"/> (bind, publish, announce) with
+    /// <see cref="Dispose"/>: a concurrent Start waits for the first one's result,
+    /// and once Dispose returns nothing is bound or announced.
+    /// </summary>
+    private readonly object _lifecycleGate = new();
     /// <summary>True when the caller pinned <see cref="Port"/>; a pinned port is never moved.</summary>
     private readonly bool _portPinned;
     private readonly Func<int> _probePort;
@@ -125,7 +127,8 @@ internal sealed class DevtoolsMcpServer : IDisposable
 
     /// <summary>
     /// HTTP transport: binds the listener (see <see cref="Port"/>) and starts serving.
-    /// A repeated call is a no-op, as <see cref="HttpListener.Start"/> is.
+    /// A repeated call is a no-op, as <see cref="HttpListener.Start"/> is; a concurrent
+    /// call waits for the first one's result.
     /// </summary>
     /// <exception cref="LoopbackPortUnavailableException">
     /// HTTP transport only: the pinned port is in use, or (practically never) every
@@ -135,43 +138,26 @@ internal sealed class DevtoolsMcpServer : IDisposable
     {
         if (_transport == McpTransport.Http)
         {
-            lock (_listenerGate)
+            lock (_lifecycleGate)
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
-                if (_httpStarted) return;
-                _httpStarted = true;
-            }
-            // Bind-and-retry rather than probe-then-bind: another process can take
-            // a probed port before HttpListener binds it. A pinned port is never moved.
-            HttpListener listener;
-            int port;
-            try
-            {
-                (listener, port) = LoopbackHttpListener.Start(Port, _portPinned, ConfigureTimeouts, _probePort);
-            }
-            catch
-            {
-                lock (_listenerGate) _httpStarted = false;
-                throw;
-            }
-            lock (_listenerGate)
-            {
-                if (_disposed)
-                {
-                    listener.Close();
-                    throw new ObjectDisposedException(nameof(DevtoolsMcpServer));
-                }
+                if (_listener is not null) return;
+
+                // Bind-and-retry rather than probe-then-bind: another process can take
+                // a probed port before HttpListener binds it. A pinned port is never moved.
+                var (listener, port) = LoopbackHttpListener.Start(Port, _portPinned, ConfigureTimeouts, _probePort);
                 _listener = listener;
                 Port = port;
-            }
-            _ = ListenAsync(listener).ContinueWith(
-                t => Console.Error.WriteLine($"[devtools:mcp] Listener loop failed: {t.Exception!.GetBaseException()}"),
-                TaskContinuationOptions.OnlyOnFaulted);
+                _ = ListenAsync(listener).ContinueWith(
+                    t => Console.Error.WriteLine($"[devtools:mcp] Listener loop failed: {t.Exception!.GetBaseException()}"),
+                    TaskContinuationOptions.OnlyOnFaulted);
 
-            BannerWriter.WriteLine($"[devtools] MCP serving on http://127.0.0.1:{Port}/mcp");
-            BannerWriter.WriteLine($"MCP_TRANSPORT=http");
-            BannerWriter.WriteLine($"MCP_ENDPOINT=http://127.0.0.1:{Port}/mcp");
-            BannerWriter.WriteLine($"MCP_PORT={Port}");
+                BannerWriter.WriteLine($"[devtools] MCP serving on http://127.0.0.1:{Port}/mcp");
+                BannerWriter.WriteLine($"MCP_TRANSPORT=http");
+                BannerWriter.WriteLine($"MCP_ENDPOINT=http://127.0.0.1:{Port}/mcp");
+                BannerWriter.WriteLine($"MCP_PORT={Port}");
+                BannerWriter.Flush();
+            }
         }
         else // Stdio
         {
@@ -286,7 +272,7 @@ internal sealed class DevtoolsMcpServer : IDisposable
     public void Dispose()
     {
         HttpListener? listener;
-        lock (_listenerGate)
+        lock (_lifecycleGate)
         {
             if (_disposed) return;
             _disposed = true;
