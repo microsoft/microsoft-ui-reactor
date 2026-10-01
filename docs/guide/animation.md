@@ -320,9 +320,10 @@ WinUI takes that snapshot in its next frame. Preparing the same key again before
 then would cancel the first animation, which crashes WinUI, so Reactor
 snapshots a key at most once per rendered frame: if two renders land in the
 same frame and both unmount an element with the key, only the first transition
-animates. Separate interactions, such as two clicks, are not affected; it takes
-renders that follow each other within one frame, such as a state change made
-while the previous one is still rendering.
+animates. Transitions with a rendered frame between them are not affected, which
+covers interactions paced by a person. Renders land in one frame when they
+follow each other within a few milliseconds, such as clicks driven by a test or
+a state change made while the previous one is still rendering.
 
 Reactor snapshots *every* outgoing element that carries a key, because it cannot
 know which sibling you activated. Collapsing a list of keyed rows to one detail
