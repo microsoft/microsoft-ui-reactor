@@ -48,10 +48,16 @@ internal static class ChildReconciler
         var ambient = AnimationAmbient.Current;
         AnimationKind? ambientKind = ambient is { HasEffect: true } ? ambient.Kind : null;
 
+        // Children that lead to a component which updated its own state. Their elements can be
+        // unchanged — a reused instance, a memoized wrapper, a reused children array — and the
+        // skip arms below must still descend into them, or the pass never reaches the
+        // component. Resolved once here (default when nothing in the pass self-triggered).
+        var dirty = reconciler.ResolveDirtyChildIndices(parentControl, children);
+
         if (hasKeys)
-            ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind);
+            ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
         else
-            ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl);
+            ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
     }
     // </snippet:child-diff>
 
@@ -66,7 +72,8 @@ internal static class ChildReconciler
         Reconciler reconciler,
         Action requestRerender,
         AnimationKind? ambientKind,
-        UIElement? parentControl)
+        UIElement? parentControl,
+        in DirtyChildIndices dirty)
     {
         int childCount = children.Count; // cache to avoid repeated COM calls
         int common = Math.Min(oldChildren.Length, newChildren.Length);
@@ -95,19 +102,16 @@ internal static class ChildReconciler
         //     could still need ApplyThemeBindings / ApplyResourceOverrides
         //     re-resolved against an effective theme that a parent RequestedTheme
         //     toggle changed without touching the element tree;
-        //   • the container is not on #681's dirty-ancestor path — conservative
-        //     defense-in-depth for a self-triggered descendant (e.g. a stateful
-        //     memoized cell). NOTE: given the gates above this is behaviorally
-        //     redundant — an untouched index is reference-equal old↔new, and a
-        //     reference-equal cell is skipped IDENTICALLY by the full walk (via
-        //     Element.CanSkipUpdate in UpdateCommonChild) and this fast path, so a
-        //     self-triggered reused cell re-renders (or not) through the SAME
-        //     top-level dirty descent either way. The gate is retained as cheap
-        //     insurance so the fast path's early return can never short-circuit a
-        //     dirty subtree if CanSkipUpdate's contract changes. It costs nothing on
-        //     the target workload: a memoized grid's cell panel is a DESCENDANT of
-        //     the self-triggered grid component, not an ancestor, so it is not on the
-        //     ancestor-only dirty path and the fast path still engages.
+        //   • no child of the container leads to a component that updated its own state
+        //     (the reconciler's dirty-ancestor path). Load-bearing: an untouched,
+        //     reference-equal cell holding such a component (e.g. a stateful memoized
+        //     cell) must be descended into, and only the full walk does that —
+        //     UpdateCommonChild declines its CanSkipUpdate skip for exactly the dirty
+        //     indices, while this fast path would skip the cell wholesale. It costs
+        //     nothing on the target workload: a memoized grid's cell panel is a
+        //     DESCENDANT of the self-triggered grid component, not an ancestor, so none
+        //     of its cells is on the ancestor-only dirty path and the fast path still
+        //     engages.
         if (ambientKind is null
             && oldChildren.Length == newChildren.Length
             && childCount == newChildren.Length
@@ -116,7 +120,7 @@ internal static class ChildReconciler
             && !hint.AnyThemeSensitive
             && hint.PreviousChildren.TryGetTarget(out var hintPrev)
             && ReferenceEquals(oldChildren, hintPrev)
-            && !reconciler.IsOnDirtyAncestorPath(parentControl)
+            && dirty.IsEmpty
             && (parentControl is null || !reconciler.ShouldDeclineSkip(parentControl)))
         {
             var changed = hint.ChangedIndices;
@@ -125,7 +129,7 @@ internal static class ChildReconciler
             {
                 int idx = changed[k];
                 if ((uint)idx >= (uint)common) continue; // defensive against a bad hint
-                UpdateCommonChild(idx, oldChildren, newChildren, children, reconciler, requestRerender);
+                UpdateCommonChild(idx, oldChildren, newChildren, children, reconciler, requestRerender, dirty);
                 visited++;
             }
             // Untouched indices are reference-equal and skipped wholesale. Base the
@@ -147,7 +151,7 @@ internal static class ChildReconciler
         for (int i = 0; i < common; i++)
         {
             if (i >= childCount) break;
-            UpdateCommonChild(i, oldChildren, newChildren, children, reconciler, requestRerender);
+            UpdateCommonChild(i, oldChildren, newChildren, children, reconciler, requestRerender, dirty);
         }
 
         // Remove excess old children (from end to start to keep indices stable).
@@ -182,7 +186,8 @@ internal static class ChildReconciler
         Element[] newChildren,
         IChildCollection children,
         Reconciler reconciler,
-        Action requestRerender)
+        Action requestRerender,
+        in DirtyChildIndices dirty)
     {
         // Early skip: if the element is structurally identical (and carries no
         // theme-reactive resources that need re-evaluation), we can avoid the
@@ -196,27 +201,26 @@ internal static class ChildReconciler
         // element-level shallow-skip re-resolves the themed value. Reconciler.Update
         // is therefore the single place that performs skip-path theme re-resolution.
         //
-        // We deliberately do NOT also gate this arm on IsOnDirtyAncestorPath (the
-        // element-level skip in Update.cs does). For non-explicitly-memoized trees this
-        // is unnecessary: every container arm in Element.ShallowEquals compares its
-        // children/child BY REFERENCE, and Component/Memo/Func wrappers return false — so
-        // a CanSkipUpdate-eligible element is a leaf or a reference-equal-children
-        // container, and a parent that re-rendered to reach a self-triggered descendant
-        // would carry a NEW children reference and fail ShallowEquals (so it wouldn't be
-        // skip-eligible here). The one residual (pre-existing, LOW) edge is an EXPLICITLY
-        // memoized wrapper — e.g. UseMemo(() => Border(Counter()), []) yields a
-        // reference-equal Border whose Counter self-triggers; this arm (lacking the
-        // IsOnDirtyAncestorPath check) could in principle swallow that re-render. That is
-        // a pre-existing property of the child-skip path, orthogonal to #675 (a ThemeRef
-        // child inherits the dirty-ancestor check via the Update fall-through), and the
-        // bulk array-fast-path (ReconcilePositional, ~line 119) retains the
-        // IsOnDirtyAncestorPath gate as cheap insurance. We keep this per-child arm free
-        // of the COM fetch a membership check would cost on the hot skip-floor.
+        // A component that updated its own state is reached by a pass that starts at the
+        // root, so every child above it must be descended into. A parent that re-rendered
+        // hands its children fresh elements, which fail CanSkipUpdate on their own (every
+        // container arm of ShallowEquals compares children BY REFERENCE, and
+        // Component/Memo/Func wrappers return false). A child that is reference-equal across
+        // renders does not — a reused element instance, an explicitly memoized wrapper such
+        // as UseMemo(() => Border(Counter()), []), a reused children array — and skipping it
+        // would swallow the update (the component stayed self-triggered and its new state
+        // never rendered). The shared skip arms therefore decline for the children that
+        // lead to a self-triggered component: `dirty` names them, resolved once for the
+        // whole container from the reconciler's dirty-ancestor path. That keeps the skip floor free of
+        // a per-child COM read: membership is an integer compare, and when nothing in the
+        // pass self-triggered `dirty` is empty. A declined child goes through Update, whose
+        // own skip gate (IsOnDirtyAncestorPath) lets it descend the rest of the way.
         var oldEl = oldChildren[i];
         var newEl = newChildren[i];
         UIElement? existingControl = null;
         if (Element.CanSkipUpdate(oldEl, newEl)
-            && !reconciler.ForceRenderThroughWrapper(newEl))
+            && !reconciler.ForceRenderThroughWrapper(newEl)
+            && !dirty.Contains(i, children, reconciler, ref existingControl))
         {
             if (!reconciler.HasActiveContextValues
                 || !reconciler.ShouldDeclineSkip(existingControl ??= children.Get(i)))
@@ -279,7 +283,8 @@ internal static class ChildReconciler
         IChildCollection children,
         Reconciler reconciler,
         Action requestRerender,
-        AnimationKind? ambientKind)
+        AnimationKind? ambientKind,
+        in DirtyChildIndices dirty)
     {
         int oldLen = oldChildren.Length;
         int newLen = newChildren.Length;
@@ -308,9 +313,11 @@ internal static class ChildReconciler
             // Issue #675 — shares Element.CanSkipUpdate with the positional arm, so a
             // ThemeBindings/ResourceOverrides.ThemeRefs child likewise declines the
             // skip and re-resolves through Update (see UpdateCommonChild's contract note).
+            // So does a child leading to a self-triggered component (`dirty`; same note).
             UIElement? existingControl = null;
             if (Element.CanSkipUpdate(oldEl, newEl)
                 && !reconciler.ForceRenderThroughWrapper(newEl)
+                && !dirty.Contains(prefixLen, children, reconciler, ref existingControl)
                 && (!reconciler.HasActiveContextValues
                     || prefixLen >= childCount
                     || !reconciler.ShouldDeclineSkip(existingControl ??= children.Get(prefixLen))))
@@ -367,6 +374,7 @@ internal static class ChildReconciler
             UIElement? existingControl = null;
             if (Element.CanSkipUpdate(oldEl, newEl)
                 && !reconciler.ForceRenderThroughWrapper(newEl)
+                && !dirty.Contains(panelIdx, children, reconciler, ref existingControl)
                 && (!reconciler.HasActiveContextValues
                     || panelIdx < 0
                     || panelIdx >= childCount
@@ -993,4 +1001,61 @@ internal static class ChildReconciler
             // Animation is non-critical — correctness is preserved.
         }
     }
+}
+
+/// <summary>
+/// The panel indices of a container's children that lead to a component which updated its own
+/// state, resolved once per container reconcile by
+/// <see cref="Reconciler.ResolveDirtyChildIndices"/>. The child-skip arms in
+/// <see cref="ChildReconciler"/> must descend into these even when their elements are unchanged.
+/// <c>default</c> is the common case: no such child.
+/// </summary>
+internal readonly struct DirtyChildIndices
+{
+    // The single dirty index plus one, so that default(DirtyChildIndices) names no index.
+    private readonly int _indexPlusOne;
+    private readonly int[]? _indices;
+    private readonly bool _probeEachChild;
+
+    private DirtyChildIndices(int indexPlusOne, int[]? indices, bool probeEachChild)
+    {
+        _indexPlusOne = indexPlusOne;
+        _indices = indices;
+        _probeEachChild = probeEachChild;
+    }
+
+    /// <summary>
+    /// The dirty children could not be located by index, so each skip-eligible child's control
+    /// has to be checked against the dirty-ancestor path instead.
+    /// </summary>
+    internal static DirtyChildIndices ProbeEachChild => new(0, null, probeEachChild: true);
+
+    internal static DirtyChildIndices At(int index) => new(index + 1, null, probeEachChild: false);
+
+    internal static DirtyChildIndices AtAll(int[] indices) => new(0, indices, probeEachChild: false);
+
+    /// <summary>True when no child of the container leads to pending work.</summary>
+    internal bool IsEmpty => _indexPlusOne == 0 && _indices is null && !_probeEachChild;
+
+    /// <summary>
+    /// Whether the child at <paramref name="panelIndex"/> leads to a self-triggered component.
+    /// Only <see cref="ProbeEachChild"/> reads the child's control; it stores it in
+    /// <paramref name="control"/> so the caller does not read it twice.
+    /// </summary>
+    internal bool Contains(int panelIndex, IChildCollection children, Reconciler reconciler, ref UIElement? control)
+    {
+        if (_indexPlusOne != 0)
+            return panelIndex == _indexPlusOne - 1;
+        if (_indices is not null)
+            return Array.IndexOf(_indices, panelIndex) >= 0;
+        if (!_probeEachChild || (uint)panelIndex >= (uint)children.Count)
+            return false;
+        return reconciler.IsOnDirtyAncestorPath(control ??= children.Get(panelIndex));
+    }
+
+    public override string ToString() =>
+        _indexPlusOne != 0 ? $"At({_indexPlusOne - 1})"
+        : _indices is not null ? $"AtAll({string.Join(",", _indices)})"
+        : _probeEachChild ? nameof(ProbeEachChild)
+        : "None";
 }

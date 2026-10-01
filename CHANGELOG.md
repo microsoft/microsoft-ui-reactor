@@ -175,6 +175,20 @@ Conventions for contributors:
   bumping `Microsoft.WindowsAppSDK.WinUI` on its own now fails the Windows App
   SDK's version check.
 
+- **A component's own state change is no longer lost under a reused or memoized
+  element** (extends the dirty-ancestor path from #377). When a panel child
+  was the same element instance on every render — one element reused across
+  renders, such as a single `DockManager`, an explicitly memoized wrapper such as
+  `UseMemo(() => Border(Counter()), [])`, or a reused children array — or was a
+  `Memo(key, …)` used as a plain child, a component inside it that set its own
+  state was marked for re-render but never re-rendered: the reconciler skipped
+  the unchanged child without descending to it. A reused `DockManager`, for
+  example, never applied a queued `model.PinToSide` or `Float`. The child skips
+  now descend into exactly the children that lead to such a component; their
+  siblings still skip without reading a control. A same-key `Memo(key, …)` is
+  still a no-op, except that its factory runs again when a component inside it
+  updates itself.
+
 - **The Forms guide's "Validation Context" example now works as written**
   (issue #1262). Clicking **Register** on an empty form submitted successfully
   with no errors, because five defects compounded: `.Validate()` was inert

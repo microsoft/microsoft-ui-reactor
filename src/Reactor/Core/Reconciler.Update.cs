@@ -233,6 +233,10 @@ public sealed partial class Reconciler
             // time to reconstruct the old tree (which would diff against the wrong "old" if the
             // factory reads mutable state by reference). Wrapper modifiers are still applied by
             // the post-dispatch ApplyModifiers below.
+            // The one exception is a component inside the subtree that updated its own state:
+            // returning null would leave it un-rendered, so the pass walks down to it instead.
+            (KeyedMemoElement, KeyedMemoElement memo, _) when IsOnDirtyAncestorPath(control)
+                => UpdateKeyedMemoTowardDirtyDescendant(memo, control, requestRerender),
             (KeyedMemoElement, KeyedMemoElement, _) => null,
             _ => Mount(newEl, requestRerender),
         };
@@ -1543,6 +1547,20 @@ public sealed partial class Reconciler
         if (control is FrameworkElement fe)
             SetElementTagIfNeeded(fe, newEl);
         return null;
+    }
+
+    /// <summary>
+    /// A same-key <c>Memo(key, …)</c> whose subtree holds a component that updated its own
+    /// state. The mounted inner element is not kept, so re-run the factory — pure by contract,
+    /// so its output describes what is mounted — and reconcile that output against itself.
+    /// Old and new are the same instances all the way down, so every branch skips by reference
+    /// except the dirty-ancestor path, which descends to the component. Nothing is compared
+    /// against a different key's output, and nothing off the path is touched.
+    /// </summary>
+    private UIElement? UpdateKeyedMemoTowardDirtyDescendant(KeyedMemoElement memo, UIElement control, Action requestRerender)
+    {
+        var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
+        return inner is EmptyElement ? null : Update(inner, inner, control, requestRerender);
     }
 
     private static string Truncate(string s, int maxLen) =>
