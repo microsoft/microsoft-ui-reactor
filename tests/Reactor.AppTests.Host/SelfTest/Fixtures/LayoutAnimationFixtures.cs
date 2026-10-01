@@ -236,7 +236,6 @@ internal static class LayoutAnimationFixtures
 
             int baseline = host.Reconciler.ConnectedAnimationStartCount;
 
-            var forwardFrame = new RenderedFrame();
             H.ClickButton("CaGo");
             await host.WaitForIdleAsync();
 
@@ -252,15 +251,15 @@ internal static class LayoutAnimationFixtures
 
             // The return trip prepares the same key from the hero. Reactor does not prepare a
             // key again until WinUI has rendered a frame since its last preparation (issue
-            // #1152), so without this frame the reverse start would depend on whether WinUI
+            // #1152), so without that frame the reverse start would depend on whether WinUI
             // happened to render between the two clicks.
-            H.Check("ConnectedAnimReplace_ForwardFrameRendered", await forwardFrame.WaitAsync());
+            H.Check("ConnectedAnimReplace_ForwardFrameRendered",
+                await PreparationRenderedAsync("ca-replace-hero"));
 
             // The reverse trip (destination unmounts, source re-mounts) starts one too.
             // Pinned to `baseline` rather than `afterForward` on purpose: the pre-fix
             // build orphans the forward snapshot and then consumes it on the way back,
             // so a delta-from-afterForward oracle would pass on the broken build.
-            var returnFrame = new RenderedFrame();
             H.ClickButton("CaBack");
             await host.WaitForIdleAsync();
 
@@ -270,7 +269,8 @@ internal static class LayoutAnimationFixtures
             // The hero left the tree by itself and the return animation has started. If the
             // next fixture's mount removed the destination before WinUI rendered that
             // animation, WinUI would cancel it and fault in the next commit, so let it render.
-            H.Check("ConnectedAnimReplace_ReturnFrameRendered", await returnFrame.WaitAsync());
+            H.Check("ConnectedAnimReplace_ReturnFrameRendered",
+                await PreparationRenderedAsync("ca-replace-hero"));
         }
     }
 
@@ -448,6 +448,23 @@ internal static class LayoutAnimationFixtures
             H.Check("ConnectedAnimRepreparedBeforeFrame_HeroFrameRendered", await heroFrame.WaitAsync());
             H.SetContent(null);
         }
+    }
+
+    /// <summary>
+    /// True once WinUI has rendered a frame since <paramref name="key"/> was last prepared,
+    /// which is what Reactor waits for before it prepares the key again. False if no frame
+    /// rendered within 5 s.
+    /// </summary>
+    /// <remarks>
+    /// Read from <see cref="ConnectedAnimationFrameGate"/> rather than from a frame counted
+    /// before the click: a host renders from the dispatcher queue, so a frame can land between
+    /// a click and the pass it schedules, and that frame says nothing about the preparation.
+    /// </remarks>
+    private static async Task<bool> PreparationRenderedAsync(string key)
+    {
+        if (ConnectedAnimationFrameGate.IsAwaitingFrame(key))
+            await new RenderedFrame().WaitAsync();
+        return !ConnectedAnimationFrameGate.IsAwaitingFrame(key);
     }
 
     /// <summary>
