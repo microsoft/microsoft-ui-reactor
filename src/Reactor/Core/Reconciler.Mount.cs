@@ -867,7 +867,7 @@ public sealed partial class Reconciler
             inEffects = true;
             component.Context.FlushEffects();
         }
-        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
+        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogError(ex, "Component Render() threw during mount: {ComponentName}", compElement.GetType().Name);
             childElement = BuildInTreeFallback(ex, inEffects, component.GetType().Name);
@@ -908,7 +908,7 @@ public sealed partial class Reconciler
             inEffects = true;
             ctx.FlushEffects();
         }
-        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
+        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogError(ex, "FuncComponent Render() threw during mount");
             childElement = BuildInTreeFallback(ex, inEffects, componentName: null);
@@ -950,7 +950,7 @@ public sealed partial class Reconciler
             inEffects = true;
             ctx.FlushEffects();
         }
-        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
+        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogError(ex, "MemoComponent Render() threw during mount");
             childElement = BuildInTreeFallback(ex, inEffects, componentName: null);

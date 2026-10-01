@@ -432,7 +432,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                     RecoverFromHookOrder(ex, _rootComponent.Context, "component");
                     return;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
                 {
                     _logger?.LogError(ex, "Component Render() threw");
                     ShowErrorFallback(ex, RenderErrorSource.RootRender, _rootComponent.GetType().Name);
@@ -454,7 +454,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                     RecoverFromHookOrder(ex, _funcContext, "function-component");
                     return;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
                 {
                     _logger?.LogError(ex, "Function component threw");
                     ShowErrorFallback(ex, RenderErrorSource.RootRender);
@@ -691,7 +691,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         var error = new RenderError(ex, source, componentName, isHostLevel: true);
         var (content, tree, propagate) = RenderErrorDispatch.BuildHostFallback(
             EffectiveRenderErrorHandler, error, _logger,
-            element => _reconciler.Mount(element, _requestRenderAction ??= RequestRender));
+            element => _reconciler.Reconcile(_currentTree, element, _currentControl, _requestRenderAction ??= RequestRender));
         SetErrorContent(content, tree);
         if (propagate)
             RenderErrorDispatch.RaiseUnhandled(ex);
@@ -736,7 +736,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
         // Issue #1291 — see ReactorHost.Dispose.
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
-        var cleanupHandler = EffectiveRenderErrorHandler;
+        // Resolved per failure (a cleanup may change the handler), not once per batch.
+        Func<RenderErrorHandler?> cleanupHandler = () => EffectiveRenderErrorHandler;
         using (RenderErrorDispatch.EnterPropagationScope())
         {
             RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,

@@ -256,7 +256,7 @@ public class RenderErrorDispatchTests
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pending = null;
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            RenderErrorDispatch.RunCleanups(ctx, handler: null, "Probe", isHostLevel: false, logger: null, ref pending));
+            RenderErrorDispatch.RunCleanups(ctx, () => null, "Probe", isHostLevel: false, logger: null, ref pending));
 
         Assert.Equal("first", ex.Message);
         Assert.False(secondRan);
@@ -273,7 +273,8 @@ public class RenderErrorDispatchTests
         var log = new List<RenderError>();
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pending = null;
 
-        RenderErrorDispatch.RunCleanups(ctx, e => { log.Add(e); return null; }, "Probe", isHostLevel: true, logger: null, ref pending);
+        RenderErrorHandler handler = e => { log.Add(e); return null; };
+        RenderErrorDispatch.RunCleanups(ctx, () => handler, "Probe", isHostLevel: true, logger: null, ref pending);
 
         Assert.True(lastRan);
         Assert.Null(pending);
@@ -295,7 +296,8 @@ public class RenderErrorDispatchTests
 
         WithUnhandledCallback(_ => false, () =>
         {
-            RenderErrorDispatch.RunCleanups(ctx, e => { reported.Add(e.Exception.Message); e.Propagate(); return null; }, "Probe",
+            RenderErrorHandler handler = e => { reported.Add(e.Exception.Message); e.Propagate(); return null; };
+            RenderErrorDispatch.RunCleanups(ctx, () => handler, "Probe",
                 isHostLevel: true, logger: null, ref pending);
             // The in-flight marker names the exception that will be rethrown, not the last
             // one that asked to propagate.
@@ -344,9 +346,13 @@ public class RenderErrorDispatchTests
                 Assert.True(RenderErrorDispatch.IsPropagating(ex));
             }
 
-            // Once the outermost frame's scope ends, a later throw of the same instance is an
-            // ordinary error again.
-            Assert.False(RenderErrorDispatch.IsPropagating(ex));
+            // The next top-level dispatch starts clean: a later throw of the same instance is
+            // an ordinary error again.
+            using (RenderErrorDispatch.EnterPropagationScope())
+            {
+                Assert.False(RenderErrorDispatch.IsPropagating(ex));
+                Assert.False(RenderErrorDispatch.TryConsumeDeclined(ex));
+            }
         }
         finally
         {
@@ -367,18 +373,87 @@ public class RenderErrorDispatchTests
             Assert.True(RenderErrorDispatch.IsPropagating(outer));
 
             // App cleanup code synchronously starts another frame (e.g. a new host's first
-            // render), which propagates and ends on its own.
+            // render), which propagates its own failure and ends.
             using (RenderErrorDispatch.EnterPropagationScope())
             {
-                Assert.False(RenderErrorDispatch.IsPropagating(outer));
+                // A fresh frame: its own first propagation is not blocked by the outer one.
                 Assert.NotNull(RenderErrorDispatch.ReportCleanup(propagate, inner, "Nested", isHostLevel: true, logger: null));
                 Assert.True(RenderErrorDispatch.IsPropagating(inner));
             }
 
-            // Back in the outer frame: its marker is intact.
+            // Back in the outer frame: its in-flight marker is intact, so a further outer
+            // propagation is still not begun (one exception leaves disposal) ...
+            Assert.Null(RenderErrorDispatch.ReportCleanup(propagate, new InvalidOperationException("third"),
+                "Root", isHostLevel: true, logger: null));
             Assert.True(RenderErrorDispatch.IsPropagating(outer));
-            Assert.False(RenderErrorDispatch.IsPropagating(inner));
+            // ... and the nested frame's declined exception, still unwinding through the outer
+            // frame, is recognised so outer catch sites let it pass instead of handling it again.
+            Assert.True(RenderErrorDispatch.IsPropagating(inner));
         });
+    }
+
+    [Fact]
+    public void RunCleanups_A_Nested_Declined_Exception_Is_Not_Reported_Again_And_Still_Escapes()
+    {
+        var nested = new InvalidOperationException("declined in a nested frame");
+        var log = new List<RenderError>();
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pending = null;
+        WithUnhandledCallback(_ => false, () =>
+        {
+            var ctx = ContextWithCleanups(() =>
+            {
+                // App cleanup code that synchronously runs another Reactor frame, whose
+                // propagated render error the app declines.
+                using (RenderErrorDispatch.EnterPropagationScope())
+                    RenderErrorDispatch.RaiseUnhandled(nested);
+            });
+            RenderErrorHandler handler = e => { log.Add(e); return null; };
+            RenderErrorDispatch.RunCleanups(ctx, () => handler, "Outer", isHostLevel: true, logger: null, ref pending);
+        });
+
+        Assert.Empty(log);
+        Assert.Same(nested, pending?.SourceException);
+    }
+
+    [Fact]
+    public void RunCleanups_Resolves_The_Handler_For_Each_Failure()
+    {
+        var first = new List<string>();
+        var second = new List<string>();
+        RenderErrorHandler secondHandler = e => { second.Add(e.Exception.Message); return null; };
+        RenderErrorHandler? current = null;
+        RenderErrorHandler firstHandler = e => { first.Add(e.Exception.Message); current = secondHandler; return null; };
+        current = firstHandler;
+        var ctx = ContextWithCleanups(
+            () => throw new InvalidOperationException("a"),
+            () => throw new InvalidOperationException("b"));
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pending = null;
+
+        RenderErrorDispatch.RunCleanups(ctx, () => current, "Probe", isHostLevel: true, logger: null, ref pending);
+
+        Assert.Equal(new[] { "a" }, first);
+        Assert.Equal(new[] { "b" }, second);
+        Assert.Null(pending);
+    }
+
+    [Fact]
+    public void RunCleanups_A_Handler_Removed_Mid_Disposal_Lets_The_Failure_Escape_After_Draining()
+    {
+        bool lastRan = false;
+        RenderErrorHandler? current = null;
+        RenderErrorHandler clearing = _ => { current = null; return null; };
+        current = clearing;
+        var ctx = ContextWithCleanups(
+            () => throw new InvalidOperationException("reported"),
+            () => throw new InvalidOperationException("after removal"),
+            () => lastRan = true);
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pending = null;
+
+        using (RenderErrorDispatch.EnterPropagationScope())
+            RenderErrorDispatch.RunCleanups(ctx, () => current, "Probe", isHostLevel: true, logger: null, ref pending);
+
+        Assert.True(lastRan);
+        Assert.Equal("after removal", pending?.SourceException.Message);
     }
 
     // ── WindowSpec ───────────────────────────────────────────────────────────

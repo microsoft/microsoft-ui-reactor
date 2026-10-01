@@ -2003,7 +2003,7 @@ public sealed partial class Reconciler : IDisposable
                 renderCtx.ResetForHotReload();
                 continue;
             }
-            catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
+            catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
             {
                 _logger?.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
                 if (Diagnostics.ReactorEventSource.Log.IsEnabled(
@@ -5895,7 +5895,8 @@ public sealed partial class Reconciler : IDisposable
         // each failure is reported (Source = Cleanup). With no handler the first throwing
         // cleanup escapes as before.
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
-        var cleanupHandler = ResolveRenderErrorHandler();
+        // Resolved per failure (a cleanup may change the handler), not once per batch.
+        Func<RenderErrorHandler?> cleanupHandler = ResolveRenderErrorHandler;
         foreach (var node in _componentNodes.Values)
         {
             var name = node.Component?.GetType().Name;

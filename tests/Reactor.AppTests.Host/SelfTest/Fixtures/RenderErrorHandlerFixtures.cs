@@ -65,6 +65,36 @@ internal static class RenderErrorHandlerFixtures
         }
     }
 
+    // Counts live instances via mount/unmount effects.
+    private sealed class CountingFallback : Component
+    {
+        public static int Mounts, Unmounts;
+
+        public override Element Render()
+        {
+            UseEffect(() => { Mounts++; return () => Unmounts++; }, Array.Empty<object>());
+            return TextBlock("CountingFallback");
+        }
+    }
+
+    // Cleanup is app code that synchronously mounts another host whose first render fails
+    // and whose handler propagates; the app declines it.
+    private sealed class NestedPropagatingHostCleanupComponent : Component<Window>
+    {
+        public static ReactorHost? NestedHost;
+
+        public override Element Render()
+        {
+            UseEffect(() => () =>
+            {
+                var nested = new ReactorHost(Props) { RenderErrorHandler = e => { e.Propagate(); return null; } };
+                NestedHost = nested;
+                nested.Mount(_ => throw new InvalidOperationException("nested render declined"));
+            });
+            return TextBlock("NestedPropagatingCleanup");
+        }
+    }
+
     // First cleanup propagates; second is app code that synchronously mounts another host,
     // whose first render runs the render loop inline (a nested Reactor frame).
     private sealed class NestedHostCleanupComponent : Component<Window>
@@ -724,6 +754,88 @@ internal static class RenderErrorHandlerFixtures
             await Harness.Render();
             H.Check("RenderErrorHandler_RootPropagation_NewHostWorks", H.FindText("AfterRootPropagation") is not null);
         });
+    }
+
+    // A declined exception from a nested frame started by an outer cleanup is not caught by
+    // the outer host's cleanup isolation and re-reported as its own; it still escapes Dispose.
+    internal class Dispose_NestedDeclinedPassesOuterIsolation(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithUnhandledCallback(_ => false, async () =>
+        {
+            var window = new Window { Title = "RenderErrorHandler Nested Declined Outer" };
+            window.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(300, 200));
+            window.Activate();
+            var nestedWindow = new Window { Title = "RenderErrorHandler Nested Declined Inner" };
+            nestedWindow.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(300, 200));
+            nestedWindow.Activate();
+            NestedPropagatingHostCleanupComponent.NestedHost = null;
+            var outerLog = new List<string>();
+            // Report-only outer handler: it would swallow a cleanup failure it is handed.
+            var host = new ReactorHost(window) { RenderErrorHandler = e => { outerLog.Add(e.Exception.Message); return null; } };
+            host.Mount(_ => VStack(Component<NestedPropagatingHostCleanupComponent, Window>(nestedWindow)));
+            await Task.Delay(150);
+            await Harness.Render();
+
+            Exception? escaped = null;
+            try { host.Dispose(); } catch (InvalidOperationException ex) { escaped = ex; }
+
+            H.Check("RenderErrorHandler_NestedDeclined_NotReportedByOuter", outerLog.Count == 0, string.Join(",", outerLog));
+            H.Check("RenderErrorHandler_NestedDeclined_Escapes", escaped?.Message == "nested render declined",
+                escaped?.Message ?? "(nothing escaped)");
+            H.Check("RenderErrorHandler_NestedDeclined_TeardownCompleted", host.CurrentControl is null,
+                host.CurrentControl?.GetType().Name ?? "null");
+
+            NestedPropagatingHostCleanupComponent.NestedHost?.Dispose();
+            NestedPropagatingHostCleanupComponent.NestedHost = null;
+            window.Close();
+            nestedWindow.Close();
+
+            var next = H.CreateHost();
+            next.Mount(_ => TextBlock("AfterNestedDeclined"));
+            await Harness.Render();
+            H.Check("RenderErrorHandler_NestedDeclined_NewHostWorks", H.FindText("AfterNestedDeclined") is not null);
+        });
+    }
+
+    // ── Host fallback lifecycle ─────────────────────────────────────────────
+
+    // Repeated host-level failures reuse the fallback (reconciled in place) instead of
+    // mounting a fresh one each time, and the good tree it replaces is unmounted, not leaked.
+    internal class HostFallback_ReconciledNotAccumulated(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            CountingFallback.Mounts = CountingFallback.Unmounts = 0;
+            CleanupFlagComponent.CleanupRuns = 0;
+            bool shouldThrow = false;
+            var host = H.CreateHost();
+            host.RenderErrorHandler = _ => Component<CountingFallback>();
+            host.Mount(_ => shouldThrow ? throw new InvalidOperationException("repeated root boom") : VStack(Component<CleanupFlagComponent>()));
+            await Harness.Render();
+
+            shouldThrow = true;
+            host.RequestRender();
+            await Harness.Render();
+            H.Check("RenderErrorHandler_FallbackLifecycle_GoodTreeUnmounted", CleanupFlagComponent.CleanupRuns == 1,
+                $"cleanups={CleanupFlagComponent.CleanupRuns}");
+
+            for (int i = 0; i < 3; i++)
+            {
+                host.RequestRender();
+                await Harness.Render();
+            }
+            H.Check("RenderErrorHandler_FallbackLifecycle_NotAccumulated",
+                CountingFallback.Mounts == 1 && CountingFallback.Unmounts == 0,
+                $"mounts={CountingFallback.Mounts} unmounts={CountingFallback.Unmounts}");
+            H.Check("RenderErrorHandler_FallbackLifecycle_Shown", H.FindText("CountingFallback") is not null);
+
+            shouldThrow = false;
+            host.RequestRender();
+            await Harness.Render();
+            H.Check("RenderErrorHandler_FallbackLifecycle_RecoveryUnmountsFallback",
+                CountingFallback.Unmounts == 1 && H.FindText("CleanupFlagChild") is not null,
+                $"mounts={CountingFallback.Mounts} unmounts={CountingFallback.Unmounts}");
+        }
     }
 
     // Reentrancy: a nested Reactor frame started from app cleanup code (a new host's inline

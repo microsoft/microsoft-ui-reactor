@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
@@ -21,24 +20,29 @@ namespace Microsoft.UI.Reactor.Core;
 /// </remarks>
 internal static class RenderErrorDispatch
 {
-    // The exception currently on its way out to the unhandled-exception path. Reactor's own
-    // catch sites filter on this so a propagated in-tree exception is not re-caught by the
-    // host's outer catch and fed to the handler a second time; disposal uses it to rethrow
-    // only one propagated cleanup failure. Scoped, not permanent: each outermost Reactor
-    // frame (render loop, host Dispose, Reconciler.Dispose) opens a PropagationScope that
-    // saves the outer value and restores it on exit. Frames nest (app cleanup code can
-    // synchronously render or dispose another host), so a nested frame can never clear an
-    // outer frame's marker, and an exception the app swallows is handled normally if thrown
-    // again later. Thread-static because rendering and disposal are UI-thread synchronous.
+    // Propagation state is thread-static (rendering and disposal are UI-thread synchronous)
+    // and scoped to Reactor frames. Each outermost frame (render loop, host Dispose,
+    // Reconciler.Dispose) opens a PropagationScope. Frames nest, because app code run by a
+    // frame (a cleanup, a Render) can synchronously render or dispose another host, so every
+    // piece of state is either saved/restored by the scope or reset only when a new
+    // top-level dispatch begins.
+
+    // The exception this frame is propagating. Disposal uses it to rethrow only one
+    // propagated cleanup failure. Saved and restored by each scope, so a nested frame can
+    // never clear an outer frame's marker.
     [ThreadStatic] private static Exception? t_propagating;
 
-    // Exceptions rethrown after ReactorApplication.OnUnhandledException declined them, so
-    // the Application.UnhandledException handler does not ask the app a second time if the
-    // rethrow reaches it. Consumed on that check; only ever set for exceptions that are
-    // genuinely rethrown, never for ones the app handled.
-    private static readonly ConditionalWeakTable<Exception, object> s_declined = new();
+    // Exceptions ReactorApplication.OnUnhandledException declined during the current
+    // top-level dispatch. They are on their way out, so every Reactor catch site lets them
+    // pass (IsPropagating), including those of outer frames after a nested frame has ended,
+    // and Application.UnhandledException does not ask the app a second time. Cleared when the
+    // next top-level dispatch begins, so a later, unrelated throw of the same instance is an
+    // ordinary error again.
+    [ThreadStatic] private static List<Exception>? t_declined;
 
-    private static readonly object s_marker = new();
+    // Open PropagationScopes on this thread; 0 means the next scope starts a new top-level
+    // dispatch.
+    [ThreadStatic] private static int t_scopeDepth;
 
     /// <summary>What the handler decided.</summary>
     internal enum Outcome
@@ -57,7 +61,22 @@ internal static class RenderErrorDispatch
     internal static RenderErrorHandler? Resolve(RenderErrorHandler? hostHandler) =>
         hostHandler ?? ReactorApp.DefaultRenderErrorHandler;
 
-    internal static bool IsPropagating(Exception ex) => ReferenceEquals(t_propagating, ex);
+    /// <summary>
+    /// Whether <paramref name="ex"/> is on its way out to the unhandled-exception path and
+    /// must not be caught and handled again: this frame's propagation, or any exception the
+    /// app declined during the current dispatch (for example in a nested frame).
+    /// </summary>
+    internal static bool IsPropagating(Exception ex) =>
+        ReferenceEquals(t_propagating, ex) || IndexOfDeclined(ex) >= 0;
+
+    private static int IndexOfDeclined(Exception ex)
+    {
+        var declined = t_declined;
+        if (declined is null) return -1;
+        for (int i = 0; i < declined.Count; i++)
+            if (ReferenceEquals(declined[i], ex)) return i;
+        return -1;
+    }
 
     /// <summary>
     /// Saves the current propagation marker and starts a fresh one; disposing restores the
@@ -69,15 +88,24 @@ internal static class RenderErrorDispatch
 
         internal PropagationScope(Exception? outer) => _outer = outer;
 
-        public void Dispose() => t_propagating = _outer;
+        public void Dispose()
+        {
+            t_propagating = _outer;
+            t_scopeDepth--;
+        }
     }
 
     /// <summary>
     /// Opens a propagation scope for an outermost Reactor frame — the render loop, host
-    /// <c>Dispose</c>, or <c>Reconciler.Dispose</c>. Dispose the result in a <c>finally</c>.
+    /// <c>Dispose</c>, or <c>Reconciler.Dispose</c>. Dispose the result in a <c>finally</c>
+    /// (or a <c>using</c>).
     /// </summary>
     internal static PropagationScope EnterPropagationScope()
     {
+        // A new top-level dispatch: whatever was declined in an earlier one has already
+        // left Reactor (and, if WinUI surfaced it, reached Application.UnhandledException).
+        if (t_scopeDepth++ == 0)
+            t_declined?.Clear();
         var scope = new PropagationScope(t_propagating);
         t_propagating = null;
         return scope;
@@ -85,10 +113,16 @@ internal static class RenderErrorDispatch
 
     /// <summary>
     /// Whether <paramref name="ex"/> was already offered to
-    /// <see cref="ReactorApplication.OnUnhandledException"/> and declined. Consumes the mark,
-    /// so a later, unrelated throw of the same instance is reported normally.
+    /// <see cref="ReactorApplication.OnUnhandledException"/> and declined in this dispatch.
+    /// Consumes the mark, so it suppresses at most one duplicate report.
     /// </summary>
-    internal static bool TryConsumeDeclined(Exception ex) => s_declined.Remove(ex);
+    internal static bool TryConsumeDeclined(Exception ex)
+    {
+        int index = IndexOfDeclined(ex);
+        if (index < 0) return false;
+        t_declined!.RemoveAt(index);
+        return true;
+    }
 
     /// <summary>
     /// Invokes <paramref name="handler"/> and classifies the result. A handler that throws is
@@ -147,13 +181,16 @@ internal static class RenderErrorDispatch
 
     /// <summary>
     /// Host-level counterpart of <see cref="BuildInTreeFallback"/>. Returns the content to
-    /// install and, for an app element, the element tree it was mounted from (kept as the
-    /// host's current tree so the next good render reconciles away from it). When the
-    /// outcome is <see cref="Outcome.Propagate"/>, the content is null and the caller must
-    /// install it before calling <see cref="RaiseUnhandled"/>.
+    /// install and, for an app element, the element tree it came from (kept as the host's
+    /// current tree so the next render reconciles away from it). <paramref name="install"/>
+    /// reconciles the guarded fallback against the host's current tree, so a fallback shown
+    /// for a repeated failure updates the previous one in place, and the replaced tree is
+    /// unmounted (running its cleanups) rather than leaked. When the outcome is
+    /// <see cref="Outcome.Propagate"/>, the content is null and the caller must install it
+    /// before calling <see cref="RaiseUnhandled"/>.
     /// </summary>
     internal static (UIElement? Content, Element? Tree, bool Propagate) BuildHostFallback(
-        RenderErrorHandler? handler, RenderError error, ILogger? logger, Func<Element, UIElement?> mount)
+        RenderErrorHandler? handler, RenderError error, ILogger? logger, Func<Element, UIElement?> install)
     {
         switch (InvokeHandler(handler, error, logger, out var appElement))
         {
@@ -161,7 +198,7 @@ internal static class RenderErrorDispatch
                 var guarded = Guard(appElement!);
                 try
                 {
-                    return (mount(guarded), guarded, false);
+                    return (install(guarded), guarded, false);
                 }
                 catch (Exception mountEx) when (mountEx is not OutOfMemoryException and not StackOverflowException)
                 {
@@ -200,17 +237,18 @@ internal static class RenderErrorDispatch
     }
 
     /// <summary>
-    /// Runs <paramref name="context"/>'s cleanups. With no handler this is the unchanged
-    /// <see cref="RenderContext.RunCleanups()"/> (the first throw escapes). With a handler
-    /// every cleanup runs, every failure is reported, and the first unhandled propagation is
-    /// kept in <paramref name="pending"/> for the caller to rethrow after disposal.
+    /// Runs <paramref name="context"/>'s cleanups. With no handler when disposal reaches this
+    /// context, this is the unchanged <see cref="RenderContext.RunCleanups()"/> (the first
+    /// throw escapes). Otherwise every cleanup runs and the first propagation is kept in
+    /// <paramref name="pending"/> for the caller to rethrow after disposal. The handler is
+    /// resolved for each failure, so a cleanup that sets or clears it affects later ones.
     /// </summary>
     internal static void RunCleanups(
-        RenderContext? context, RenderErrorHandler? handler, string? componentName, bool isHostLevel,
+        RenderContext? context, Func<RenderErrorHandler?> resolveHandler, string? componentName, bool isHostLevel,
         ILogger? logger, ref ExceptionDispatchInfo? pending)
     {
         if (context is null) return;
-        if (handler is null)
+        if (resolveHandler() is null)
         {
             context.RunCleanups();
             return;
@@ -218,8 +256,18 @@ internal static class RenderErrorDispatch
         ExceptionDispatchInfo? first = null;
         context.RunCleanupsIsolated(ex =>
         {
-            // Report every failure; keep only the first propagation to rethrow.
-            var propagation = ReportCleanup(handler, ex, componentName, isHostLevel, logger);
+            ExceptionDispatchInfo? propagation;
+            if (IsPropagating(ex))
+                // Already declined by the app in a nested frame the cleanup started: keep it
+                // going out instead of reporting it again as this cleanup's own failure.
+                propagation = ContinuePropagation(ex);
+            else if (resolveHandler() is { } handler)
+                // Report every failure; only the first propagation is rethrown.
+                propagation = ReportCleanup(handler, ex, componentName, isHostLevel, logger);
+            else
+                // The handler was removed mid-disposal: no-handler outcome, the exception
+                // escapes, after the remaining cleanups have run.
+                propagation = ContinuePropagation(ex);
             first ??= propagation;
         });
         pending ??= first;
@@ -232,12 +280,23 @@ internal static class RenderErrorDispatch
     /// </summary>
     internal static bool TryReportUnhandled(Exception ex) => ReactorApplication.ReportUnhandled(ex);
 
-    // The app declined the exception: mark it as the in-flight propagation (so Reactor's
-    // catch sites let it pass) and as already offered (so Application.UnhandledException
+    // The app declined the exception: mark it as this frame's propagation and as declined in
+    // this dispatch (so every Reactor catch site lets it pass and Application.UnhandledException
     // does not ask again).
     private static ExceptionDispatchInfo BeginPropagation(Exception ex)
     {
-        s_declined.AddOrUpdate(ex, s_marker);
+        if (IndexOfDeclined(ex) < 0)
+            (t_declined ??= new List<Exception>()).Add(ex);
+        t_propagating = ex;
+        return ExceptionDispatchInfo.Capture(ex);
+    }
+
+    // An exception that must leave disposal but was not (or not again) offered to the app.
+    // Becomes this frame's propagation unless another one is already in flight.
+    private static ExceptionDispatchInfo? ContinuePropagation(Exception ex)
+    {
+        if (t_propagating is not null && !ReferenceEquals(t_propagating, ex))
+            return null;
         t_propagating = ex;
         return ExceptionDispatchInfo.Capture(ex);
     }

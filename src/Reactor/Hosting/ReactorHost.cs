@@ -606,7 +606,7 @@ public sealed class ReactorHost : IDisposable
                     RecoverFromHookOrder(ex, _rootComponent.Context, "component");
                     return;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
                 {
                     Debugger.BreakForUserUnhandledException(ex);
                     _logger?.LogError(ex, "Component Render() threw");
@@ -629,7 +629,7 @@ public sealed class ReactorHost : IDisposable
                     RecoverFromHookOrder(ex, _funcContext, "function-component");
                     return;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
                 {
                     _logger?.LogError(ex, "Function component threw");
                     ShowErrorFallback(ex, RenderErrorSource.RootRender);
@@ -1014,7 +1014,8 @@ public sealed class ReactorHost : IDisposable
         // the first propagated failure is rethrown, and a nested frame started by app
         // cleanup code cannot disturb it.
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
-        var cleanupHandler = EffectiveRenderErrorHandler;
+        // Resolved per failure (a cleanup may change the handler), not once per batch.
+        Func<RenderErrorHandler?> cleanupHandler = () => EffectiveRenderErrorHandler;
         using (RenderErrorDispatch.EnterPropagationScope())
         {
             RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
@@ -1064,7 +1065,7 @@ public sealed class ReactorHost : IDisposable
         var error = new RenderError(ex, source, componentName, isHostLevel: true);
         var (content, tree, propagate) = RenderErrorDispatch.BuildHostFallback(
             EffectiveRenderErrorHandler, error, _logger,
-            element => _reconciler.Mount(element, _rerenderAction ??= () => RequestRender()));
+            element => _reconciler.Reconcile(_currentTree, element, _currentControl, _rerenderAction ??= () => RequestRender()));
         SetErrorContent(content, tree);
         // Nothing is shown where the failure happened. Returns only when the app's
         // unhandled-exception callback handled it; otherwise rethrows.
