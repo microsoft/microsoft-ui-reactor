@@ -34,7 +34,8 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// <para>The <c>RegisterType</c> fixtures check that a registration's <c>unmount</c> callback runs
 /// exactly once for a control its <c>update</c> replaced, and never for one it patched in place.
 /// The flyout fixture covers an update that unmounts the control it replaces by itself: the slot
-/// must not unmount that control a second time.</para>
+/// must not unmount that control a second time. The nested-slot fixtures cover the same while
+/// the update also runs a slot reconcile of its own, before or after unmounting its control.</para>
 /// </summary>
 internal static class SlotReplacementFixtures
 {
@@ -418,5 +419,110 @@ internal static class SlotReplacementFixtures
                 && registration.Counts.Cleanups == 1,
                 registration.Describe());
         }
+    }
+
+    private sealed record NestedHostElement(int Generation) : Element;
+
+    /// <summary>
+    /// A <c>RegisterType</c> control in a <c>Border</c> whose <c>update</c> unmounts the control it
+    /// was handed and returns a new one, and also runs a nested slot reconcile: it updates a
+    /// <c>Border</c> it mounted through the reconciler, which reconciles that <c>Border</c>'s child
+    /// through <c>ReconcileV1Child</c> while the outer slot's update is still running. The outer
+    /// slot must still see the self-unmount and not unmount the control again, so the
+    /// registration's <c>unmount</c> callback runs exactly once. Run in both orders: the nested
+    /// reconcile has to hand back the outer slot's control, and the record that it was unmounted.
+    /// </summary>
+    internal abstract class NestedSlotFixture(Harness h) : SelfTestFixtureBase(h)
+    {
+        protected abstract string Name { get; }
+
+        /// <summary>True when <c>update</c> unmounts its control before the nested reconcile.</summary>
+        protected abstract bool UnmountFirst { get; }
+
+        private readonly List<WinXC.Border> _controls = new();
+        private readonly List<WinXC.Border> _unmounted = new();
+        private readonly List<FrameworkElement> _parents = new();
+        private string? _nestedText;
+        private int _updates;
+
+        private static string InnerText(int generation) => $"nested-inner@{generation}";
+
+        private static Element Inner(int generation) => Border(TextBlock(InnerText(generation)));
+
+        private WinXC.Border Build(Reconciler reconciler, int generation, Action requestRerender)
+        {
+            var control = new WinXC.Border { Child = reconciler.Mount(Inner(generation), requestRerender) };
+            _controls.Add(control);
+            return control;
+        }
+
+        private void NestedSlotUpdate(Reconciler reconciler, WinXC.Border control, int from, int to, Action requestRerender)
+        {
+            _ = reconciler.UpdateChild(Inner(from), Inner(to), control.Child, requestRerender);
+            _nestedText = ((control.Child as WinXC.Border)?.Child as WinXC.TextBlock)?.Text;
+        }
+
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Reconciler.RegisterType<NestedHostElement, WinXC.Border>(
+                mount: (r, element, requestRerender) => Build(r, element.Generation, requestRerender),
+                update: (r, oldEl, newEl, control, requestRerender) =>
+                {
+                    _updates++;
+                    if (!UnmountFirst)
+                        NestedSlotUpdate(r, control, oldEl.Generation, newEl.Generation, requestRerender);
+                    r.UnmountChild(control);
+                    var replacement = Build(r, UnmountFirst ? oldEl.Generation : newEl.Generation, requestRerender);
+                    if (UnmountFirst)
+                        NestedSlotUpdate(r, replacement, oldEl.Generation, newEl.Generation, requestRerender);
+                    return replacement;
+                },
+                unmount: (r, control) =>
+                {
+                    _unmounted.Add(control);
+                    if (control.Child is { } child) r.UnmountChild(child);
+                });
+
+            var label = $"{Name} rerender";
+            host.Mount(ctx =>
+            {
+                var (generation, setGeneration) = ctx.UseState(0);
+                return VStack(
+                    Button(label, () => setGeneration(generation + 1)),
+                    Border(new NestedHostElement(generation)).OnMount(_parents.Add));
+            });
+
+            H.Check($"{Name}_Mounted",
+                await Harness.WaitFor(() => _parents.Count == 1 && H.FindText(InnerText(0)) is not null));
+            if (_parents.Count != 1 || _controls.Count != 1) return;
+            var parent = (WinXC.Border)_parents[0];
+
+            H.ClickButton(label);
+            H.Check($"{Name}_Updated", await Harness.WaitFor(() => _updates == 1), $"update ran {_updates} times");
+            // Exact counts below: give a second unmount a pass to show up.
+            await Harness.Render();
+
+            H.Check($"{Name}_NestedSlotReconciled", _nestedText == InnerText(1), $"nested child reads '{_nestedText}'");
+            H.Check($"{Name}_ReplacementInSlot",
+                _parents.Count == 1 && _controls.Count == 2 && ReferenceEquals(parent.Child, _controls[1]),
+                $"parent mounted {_parents.Count} times, {_controls.Count} controls built");
+            H.Check($"{Name}_OldControlUnmountedOnce",
+                _unmounted.Count == 1 && ReferenceEquals(_unmounted[0], _controls[0]),
+                $"unmount callback ran for "
+                + (_unmounted.Count == 0 ? "none" : string.Join(", ", _unmounted.Select(c => $"#{_controls.IndexOf(c)}"))));
+        }
+    }
+
+    internal sealed class NestedSlotThenSelfUnmount(Harness h) : NestedSlotFixture(h)
+    {
+        protected override string Name => "SlotReplace_NestedSlotThenSelfUnmount";
+        protected override bool UnmountFirst => false;
+    }
+
+    internal sealed class SelfUnmountThenNestedSlot(Harness h) : NestedSlotFixture(h)
+    {
+        protected override string Name => "SlotReplace_SelfUnmountThenNestedSlot";
+        protected override bool UnmountFirst => true;
     }
 }
