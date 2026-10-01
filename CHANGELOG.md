@@ -214,6 +214,24 @@ Conventions for contributors:
   supplies `unmount` has to unmount them there. Calling `UnmountChild` on the control
   itself from `unmount` walks its children once rather than calling `unmount` again.
 
+- **A docking host's floating windows close when the host unmounts, whichever
+  `DockManager` they were opened under** (spec 045 §2.25, PR #1305). Apps build a new
+  `DockManager` in their render, and every state change renders again, so a host
+  sees a new element instance on almost every render. The per-host tables
+  (floating windows, `DockHostRegistry`, and the chord, live-announcer, model and
+  drag-gate bridges) were keyed by that instance, and unmount cleaned up only the
+  last one. A pane floated under an earlier instance kept its window open after the
+  host was gone: in the Reactor IDE sample, View ▸ Reset Layout left the floated
+  pane open next to its re-docked copy, and devtools still listed the old host. The
+  tables are now keyed by the host, so unmount closes every window the host opened
+  and clears every table, including the model and drag-gate bridges it never
+  cleared before. Unmount goes through the host itself rather than the element it
+  rendered last, so when an app hands one `DockManager` instance to a new host (a
+  type change mounts the new host first), the old host no longer clears the new
+  host's entries or unlists it. While the host is mounted, `DockHostModel.Floating`
+  no longer drops a floating pane on the next render, and `docking.list` shows the
+  host once, under an id that stays stable, instead of once per render.
+
 - **Apps that reference only `Microsoft.UI.Reactor` are framework-dependent
   again** (regression from #822). The package now depends on
   `Microsoft.WindowsAppSDK.Runtime`; without it the Windows App SDK silently

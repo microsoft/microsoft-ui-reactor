@@ -10,7 +10,8 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 //
 //  Backs onto the building blocks shipped earlier in P2:
 //    • DockHostRegistry — process-wide WeakReference-keyed enumeration
-//      of live DockManager elements with stable "dh:{n}" ids.
+//      of live DockManager hosts with stable "dh:{n}" ids (one per
+//      mounted host, whichever DockManager element it rendered last).
 //    • DockSnapshotBuilder — pure-function transform from a DockManager
 //      to a content-ref-free DockSnapshot (layout tree + sides + active
 //      key + identity + role + permissions per pane).
@@ -41,7 +42,7 @@ internal static class DevtoolsDockingTools
                 Description:
                     "Enumerates every live DockManager host in the process. " +
                     "Returns { hosts: [{ id, paneCount, activeKey, sideCounts }] }. " +
-                    "Host ids are stable for the lifetime of the underlying element; " +
+                    "Host ids are stable for as long as the host stays mounted; " +
                     "agents pass them to docking.snapshot / docking.dock.",
                 InputSchema: Schema.Root()),
             _ => server.OnDispatcher<object>(() => BuildListPayload()));

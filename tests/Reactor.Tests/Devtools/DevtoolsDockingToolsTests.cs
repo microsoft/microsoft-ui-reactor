@@ -48,6 +48,34 @@ public class DevtoolsDockingToolsTests : IDisposable
         Assert.Equal(2, props["PaneCount"]);
     }
 
+    /// <summary>
+    /// Spec 045 §2.25. An app that builds a new <see cref="DockManager"/> every
+    /// render hands its host a new element each time; the host used to register
+    /// each one, so <c>docking.list</c> showed one host per render and the id an
+    /// agent had just read went stale.
+    /// </summary>
+    [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects public properties of the concrete docking-host payload record the tool returns. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
+    public void BuildListPayload_HostThatRenderedSeveralElements_IsListedOnceUnderItsFirstId()
+    {
+        var host = new DockHostIdentity();
+        var rendered = new List<DockManager>();
+        for (int i = 0; i < 3; i++)
+        {
+            var manager = new DockManager { Layout = new DockTabGroup(new DockableContent[] { new("A", Key: "a") }) };
+            host.Bind(manager);
+            DockHostRegistry.Register(manager);
+            rendered.Add(manager);
+        }
+
+        var hosts = HostsArray(DevtoolsDockingTools.BuildListPayload());
+
+        var only = Assert.Single(hosts);
+        var props = only.GetType().GetProperties().ToDictionary(p => p.Name, p => p.GetValue(only));
+        Assert.Equal("dh:1", props["Id"]);
+        Assert.Same(rendered[^1], DockHostRegistry.Get("dh:1")?.Manager);
+    }
+
     [Fact]
     public void BuildSnapshotPayload_UnknownHost_Throws()
     {

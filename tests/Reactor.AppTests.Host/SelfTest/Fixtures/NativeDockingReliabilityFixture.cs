@@ -488,6 +488,303 @@ internal static class NativeDockingReliabilityFixtures
         }
     }
 
+    // ── §2.25 floating window outliving host — a new DockManager per render
+
+    /// <summary>
+    /// <see cref="FloatingWindowClosesOnHostUnmount"/> keeps one
+    /// <see cref="DockManager"/> instance for the host's whole life. Apps
+    /// build a new one in every render instead, the Reactor IDE sample among
+    /// them, and any state change renders the app, the float's own included.
+    /// This floats a pane through the host model, renders the app again so
+    /// the host has moved past the instance the window opened under, then
+    /// unmounts the host. The floating window must close, and no per-host
+    /// table may still answer for any instance the host rendered. The tables
+    /// used to be keyed by element instance while unmount cleaned up only the
+    /// last one, so the window, and every entry made under an earlier
+    /// instance, outlived the host.
+    /// </summary>
+    internal class FloatingWindowClosesOnHostUnmount_AfterRerender(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+            var app = new RerenderingDockApp("rerender-unmount");
+
+            var savedPolicy = ReactorApp.ShutdownPolicy;
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            ReactorWindow? floating = null;
+            try
+            {
+                host.Mount(_ => app.Render());
+                await Harness.Render();
+                var first = app.Rendered[0];
+                var firstRecordId = DockHostRegistry.Snapshot()
+                    .FirstOrDefault(r => ReferenceEquals(r.Manager, first))?.Id;
+
+                floating = await app.FloatOutput();
+                H.Check("Reliability_RerenderUnmount_FloatOpenedWindow", floating is not null);
+                if (floating is null) return;
+                bool closed = false;
+                floating.Closed += (_, _) => closed = true;
+                int instancesAtFloat = app.Rendered.Count;
+
+                // Any state change renders the app again, so the float has
+                // already handed the host newer instances; so does an update.
+                host.Mount(_ => app.Render());
+                await Harness.Render();
+                var current = app.Rendered[^1];
+                H.Check("Reliability_RerenderUnmount_HostMovedPastFloatInstance",
+                    app.Rendered.Count > instancesAtFloat && DockHostModelBridge.Get(current) is not null,
+                    $"instances at float={instancesAtFloat} now={app.Rendered.Count}");
+
+                // While mounted it is one host, whichever instance it rendered last.
+                var records = DockHostRegistry.Snapshot()
+                    .Where(r => app.Rendered.Any(m => ReferenceEquals(m, r.Manager)))
+                    .ToArray();
+                H.Check("Reliability_RerenderUnmount_RegistryListsHostOnceUnderStableId",
+                    records.Length == 1 && records[0].Id == firstRecordId && ReferenceEquals(records[0].Manager, current),
+                    $"records=[{string.Join(",", records.Select(r => r.Id))}] firstId={firstRecordId}");
+                H.Check("Reliability_RerenderUnmount_ModelStillListsFloatingPane",
+                    DockHostModelBridge.Get(current)?.Floating
+                        .Any(f => f.Contents.Any(c => ReferenceEquals(c, app.Output))) == true);
+
+                host.Mount(_ => TextBlock("rerender-unmount-done"));
+                H.Check("Reliability_RerenderUnmount_FloatingWindowClosed",
+                    await Harness.WaitFor(() => closed, maxPasses: 8));
+                CheckNothingLeft(H, "Reliability_RerenderUnmount", app.Rendered);
+            }
+            finally
+            {
+                // A failed close must not leak the window into later fixtures.
+                if (floating is not null && DockFloatingTracker.Snapshot().Contains(floating))
+                    floating.Close();
+                ReactorApp.ShutdownPolicy = savedPolicy;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The IDE's View &gt; Reset Layout: the app bumps the
+    /// <see cref="DockManager"/>'s key, so the reconciler unmounts the old
+    /// host and mounts a new one that docks every pane again. A pane floated
+    /// before the reset must not stay open next to its re-docked copy, and
+    /// the host registry must list only the new host.
+    /// </summary>
+    internal class FloatingWindowClosesOnResetLayoutRemount(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+            var app = new RerenderingDockApp("reset-remount");
+
+            var savedPolicy = ReactorApp.ShutdownPolicy;
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            ReactorWindow? floating = null;
+            try
+            {
+                host.Mount(_ => app.Render());
+                await Harness.Render();
+
+                floating = await app.FloatOutput();
+                H.Check("Reliability_ResetRemount_FloatOpenedWindow", floating is not null);
+                if (floating is null) return;
+                bool closed = false;
+                floating.Closed += (_, _) => closed = true;
+
+                host.Mount(_ => app.Render());
+                await Harness.Render();
+                var oldHost = app.Rendered.ToArray();
+                var oldModel = DockHostModelBridge.Get(oldHost[^1]);
+
+                app.Epoch++;
+                host.Mount(_ => app.Render());
+                H.Check("Reliability_ResetRemount_FloatingWindowClosed",
+                    await Harness.WaitFor(() => closed, maxPasses: 8));
+
+                var newHost = app.Rendered[^1];
+                var newModel = DockHostModelBridge.Get(newHost);
+                H.Check("Reliability_ResetRemount_NewHostMountedWithFreshModel",
+                    newModel is not null && oldModel is not null && !ReferenceEquals(newModel, oldModel));
+                var records = DockHostRegistry.Snapshot()
+                    .Where(r => app.Rendered.Any(m => ReferenceEquals(m, r.Manager)))
+                    .ToArray();
+                H.Check("Reliability_ResetRemount_RegistryListsOnlyNewHost",
+                    records.Length == 1 && ReferenceEquals(records[0].Manager, newHost),
+                    $"records=[{string.Join(",", records.Select(r => r.Id))}]");
+                CheckNothingLeft(H, "Reliability_ResetRemount", oldHost);
+
+                host.Mount(_ => TextBlock("reset-remount-done"));
+                await Harness.Render();
+            }
+            finally
+            {
+                if (floating is not null && DockFloatingTracker.Snapshot().Contains(floating))
+                    floating.Close();
+                ReactorApp.ShutdownPolicy = savedPolicy;
+            }
+        }
+    }
+
+    /// <summary>
+    /// An app can keep one <see cref="DockManager"/> instance and move it to
+    /// another container, which mounts a new host for the same element. A type
+    /// change mounts the new child before it unmounts the old one, so the
+    /// element already belongs to the new host when the old host unmounts. The
+    /// old host must still close the floating window it opened, and must leave
+    /// the new host's entries alone.
+    /// </summary>
+    internal class FloatingWindowClosesWhenElementMovesToNewHost(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            var output = new ToolWindow { Title = "Output", Key = "moved:output", Content = TextBlock("body-moved-output") };
+            var dock = new DockManager
+            {
+                Layout = new DockSplit(Orientation.Vertical, new DockNode[]
+                {
+                    new DockTabGroup(new DockableContent[]
+                    {
+                        new Document { Title = "Doc", Key = "moved:doc", Content = TextBlock("body-moved-doc") },
+                    }),
+                    new DockTabGroup(new DockableContent[] { output }),
+                }),
+            };
+            bool moved = false;
+            // The container is a panel's child: that is where a type change
+            // mounts the replacement before it unmounts the old child.
+            var star = new[] { GridSize.Star(1) };
+            Element Render() => Grid(star, star, moved ? Grid(star, star, dock) : Border(dock));
+
+            var savedPolicy = ReactorApp.ShutdownPolicy;
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            ReactorWindow? floating = null;
+            try
+            {
+                host.Mount(_ => Render());
+                await Harness.Render();
+                var oldModel = DockHostModelBridge.Get(dock);
+                var oldHostBorder = DockHostLiveAnnouncer.GetHost(dock);
+
+                // Opened directly, as the tear-off does, rather than through
+                // model.Float: the float drains in a re-render of the host's
+                // component, and the reconciler skips a reference-equal panel
+                // child without checking for a self-triggered descendant (the
+                // edge ChildReconciler.UpdateCommonChild documents), so a
+                // reused DockManager instance never drains it.
+                floating = DockFloatingWindow.Open(output, manager: dock);
+                bool closed = false;
+                floating.Closed += (_, _) => closed = true;
+                H.Check("Reliability_ElementMoved_WindowFiledUnderOldHost",
+                    DockFloatingTracker.SnapshotFor(dock).Contains(floating));
+
+                moved = true;
+                host.Mount(_ => Render());
+                H.Check("Reliability_ElementMoved_OldHostsWindowClosed",
+                    await Harness.WaitFor(() => closed, maxPasses: 8));
+
+                var newModel = DockHostModelBridge.Get(dock);
+                var newHostBorder = DockHostLiveAnnouncer.GetHost(dock);
+                H.Check("Reliability_ElementMoved_NewHostKeepsItsModel",
+                    newModel is not null && oldModel is not null && !ReferenceEquals(newModel, oldModel));
+                H.Check("Reliability_ElementMoved_NewHostKeepsItsAnnouncer",
+                    newHostBorder is not null && oldHostBorder is not null && !ReferenceEquals(newHostBorder, oldHostBorder));
+                H.Check("Reliability_ElementMoved_NewHostKeepsItsChords", DockChordBridge.Get(dock) is not null);
+                H.Check("Reliability_ElementMoved_NewHostKeepsItsDragGate", DockDragGateBridge.Get(dock) is not null);
+                var records = DockHostRegistry.Snapshot().Count(r => ReferenceEquals(r.Manager, dock));
+                H.Check("Reliability_ElementMoved_RegistryListsNewHostOnce", records == 1, $"records={records}");
+
+                host.Mount(_ => TextBlock("element-moved-done"));
+                await Harness.Render();
+                CheckNothingLeft(H, "Reliability_ElementMoved", new[] { dock });
+            }
+            finally
+            {
+                if (floating is not null && DockFloatingTracker.Snapshot().Contains(floating))
+                    floating.Close();
+                ReactorApp.ShutdownPolicy = savedPolicy;
+            }
+        }
+    }
+
+    /// <summary>
+    /// One check per per-host table: none may still answer for any of
+    /// <paramref name="instances"/>, the elements an unmounted host rendered.
+    /// </summary>
+    private static void CheckNothingLeft(Harness h, string prefix, IReadOnlyList<DockManager> instances)
+    {
+        var records = DockHostRegistry.Snapshot();
+        void CheckTable(string table, Func<DockManager, bool> answers)
+        {
+            var stale = Enumerable.Range(0, instances.Count).Where(i => answers(instances[i])).ToArray();
+            h.Check($"{prefix}_{table}Cleared", stale.Length == 0,
+                $"still answers for render(s) [{string.Join(",", stale)}] of {instances.Count}");
+        }
+        CheckTable("HostRegistry", m => records.Any(r => ReferenceEquals(r.Manager, m)));
+        CheckTable("ChordBridge", m => DockChordBridge.Get(m) is not null);
+        CheckTable("LiveAnnouncer", m => DockHostLiveAnnouncer.GetHost(m) is not null);
+        CheckTable("ModelBridge", m => DockHostModelBridge.Get(m) is not null);
+        CheckTable("DragGate", m => DockDragGateBridge.Get(m) is not null);
+        CheckTable("FloatingTracker", m => DockFloatingTracker.SnapshotFor(m).Count > 0);
+    }
+
+    /// <summary>
+    /// Builds its <see cref="DockManager"/> the way the Reactor IDE sample
+    /// does: a new element around a freshly built layout on every render,
+    /// keyed by an epoch that a layout reset bumps. Keeps every element it
+    /// hands out so a fixture can ask the per-host tables about each one.
+    /// </summary>
+    private sealed class RerenderingDockApp(string prefix)
+    {
+        public Document Doc { get; } = new() { Title = "Doc", Key = $"{prefix}:doc", Content = TextBlock($"body-{prefix}-doc") };
+
+        public ToolWindow Output { get; } = new() { Title = "Output", Key = $"{prefix}:output", Content = TextBlock($"body-{prefix}-output") };
+
+        public List<DockManager> Rendered { get; } = new();
+
+        public int Epoch { get; set; }
+
+        public DockManager Render()
+        {
+            // The layout is rebuilt inline like the IDE's, so every element
+            // is a distinct record and reaches the host through update.
+            var manager = new DockManager
+            {
+                Layout = new DockSplit(Orientation.Vertical, new DockNode[]
+                {
+                    new DockTabGroup(new DockableContent[] { Doc }),
+                    new DockTabGroup(new DockableContent[] { Output }),
+                }),
+            }.WithKey($"{prefix}-dock-{Epoch}");
+            Rendered.Add(manager);
+            return manager;
+        }
+
+        /// <summary>
+        /// Floats <see cref="Output"/> through the model of the host's
+        /// current element (the path devtools' <c>docking.dock</c> float
+        /// takes) and returns the window the drain opened.
+        /// </summary>
+        public async Task<ReactorWindow?> FloatOutput()
+        {
+            var model = DockHostModelBridge.Get(Rendered[^1]);
+            if (model is null) return null;
+            var before = DockFloatingTracker.Snapshot();
+            model.Float(Output);
+            ReactorWindow? opened = null;
+            await Harness.WaitFor(() =>
+            {
+                opened = DockFloatingTracker.Snapshot().FirstOrDefault(w => !before.Contains(w));
+                return opened is not null;
+            }, maxPasses: 8);
+            return opened;
+        }
+    }
+
     // ── §2.25 event-subscription leak baseline ──────────────────────────
 
     /// <summary>

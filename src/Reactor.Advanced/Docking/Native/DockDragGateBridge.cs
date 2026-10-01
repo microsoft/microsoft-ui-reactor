@@ -28,19 +28,19 @@ internal static class DockDragGateBridge
     /// </summary>
     public delegate bool TryStartDrag(DockableContent pane, int sourceTabIndex);
 
-    private static readonly ConditionalWeakTable<DockManager, TryStartDrag> _table = new();
+    private static readonly ConditionalWeakTable<object, TryStartDrag> _table = new();
 
-    public static void Set(DockManager element, TryStartDrag handler)
-    {
-        _table.Remove(element);
-        _table.Add(element, handler);
-    }
+    // Keyed by the host (DockHostIdentity) like the other per-host bridges.
+    public static void Set(DockManager element, TryStartDrag handler) =>
+        _table.AddOrUpdate(DockHostIdentity.KeyFor(element), handler);
 
     public static TryStartDrag? Get(DockManager? element)
     {
         if (element is null) return null;
-        return _table.TryGetValue(element, out var h) ? h : null;
+        return _table.TryGetValue(DockHostIdentity.KeyFor(element), out var h) ? h : null;
     }
 
-    public static void Clear(DockManager element) => _table.Remove(element);
+    public static void Clear(DockManager element) => _table.Remove(DockHostIdentity.KeyFor(element));
+
+    public static void Clear(DockHostIdentity host) => _table.Remove(host);
 }
