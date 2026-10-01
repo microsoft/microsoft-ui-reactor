@@ -1646,7 +1646,10 @@ public record MemoElement(Func<RenderContext, Element> RenderFunc, object?[]? De
 /// the mounted inner, so there is nothing to diff), and a CHANGED key replaces the inner
 /// (unmount + fresh mount of the new <see cref="Factory"/> output). The old factory is never
 /// re-invoked at update time, so it is always safe to drop a <c>Memo(key, …)</c> anywhere a
-/// normal element is expected. The cross-recycle cache benefit only applies on the
+/// normal element is expected. The one exception to the no-op: when a component inside the
+/// mounted subtree updates its own state, the reconciler runs the current
+/// <see cref="Factory"/> again and walks that output against itself to reach the component, so
+/// the update renders. The cross-recycle cache benefit only applies on the
 /// <see cref="ElementFactory{T}"/> recycle path.</para>
 ///
 /// <para>The positional parameter is named <c>MemoKey</c> (not <c>Key</c>) so it does not clash

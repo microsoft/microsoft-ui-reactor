@@ -204,6 +204,80 @@ public sealed partial class Reconciler : IDisposable
     internal bool IsOnDirtyAncestorPath(UIElement? control) =>
         control is not null && _dirtyAncestorPath is { } set && set.Contains(control);
 
+    // For each control on the dirty-ancestor path, the child (a UIElement) or children (a
+    // List<UIElement>, when two self-triggered nodes share an ancestor) the path continues
+    // through. Built by the same walk as _dirtyAncestorPath and cleared with it. It lets
+    // ChildReconciler find which of a panel's children lead to pending work with one IndexOf
+    // per dirty child, so its skip arms never have to read every skipped sibling to ask.
+    private Dictionary<UIElement, object>? _dirtyPathChildren;
+
+    /// <summary>
+    /// Which children of <paramref name="parentControl"/>, held in
+    /// <paramref name="children"/>, lie on the dirty-ancestor path — the children a reconcile of
+    /// this container must descend into even when their elements are unchanged, because a
+    /// component below them updated its own state.
+    /// </summary>
+    /// <remarks>
+    /// Costs one field check when nothing in the pass self-triggered, and one hash lookup when
+    /// something did but this container is not above it. Otherwise each dirty child is located
+    /// with a single <see cref="IChildCollection.IndexOf"/>. When a dirty child can't be located
+    /// in <paramref name="children"/> (a descriptor whose collection is not the parent's own
+    /// <c>Children</c>), or the parent is unknown, the result asks the caller to test each
+    /// skip-eligible child's control instead: slower, but it never skips a pending component.
+    /// </remarks>
+    internal DirtyChildIndices ResolveDirtyChildIndices(UIElement? parentControl, IChildCollection children)
+    {
+        if (_dirtyAncestorPath is not { Count: > 0 } path)
+            return default;
+        if (parentControl is null)
+            return DirtyChildIndices.ProbeEachChild;
+        if (!path.Contains(parentControl))
+            return default;
+        // On the path with no recorded child: the parent is itself a self-triggered control,
+        // and nothing below it is pending.
+        if (_dirtyPathChildren is null || !_dirtyPathChildren.TryGetValue(parentControl, out var recorded))
+            return default;
+
+        if (recorded is UIElement single)
+        {
+            int index = children.IndexOf(single);
+            return index >= 0 ? DirtyChildIndices.At(index) : DirtyChildIndices.ProbeEachChild;
+        }
+
+        var many = (List<UIElement>)recorded;
+        var indices = new int[many.Count];
+        for (int k = 0; k < many.Count; k++)
+        {
+            int index = children.IndexOf(many[k]);
+            if (index < 0)
+                return DirtyChildIndices.ProbeEachChild;
+            indices[k] = index;
+        }
+        return DirtyChildIndices.AtAll(indices);
+    }
+
+    private static void AddDirtyPathChild(Dictionary<UIElement, object> edges, UIElement parent, UIElement child)
+    {
+        if (!edges.TryGetValue(parent, out var existing))
+        {
+            edges[parent] = child;
+            return;
+        }
+        if (existing is UIElement single)
+        {
+            if (!ReferenceEquals(single, child))
+                edges[parent] = new List<UIElement>(2) { single, child };
+            return;
+        }
+        var list = (List<UIElement>)existing;
+        foreach (var known in list)
+        {
+            if (ReferenceEquals(known, child))
+                return;
+        }
+        list.Add(child);
+    }
+
     // ── Reconcile-highlight capture (gated by ReactorFeatureFlags.HighlightReconcileChanges) ──
     private List<UIElement>? _highlightMounted;
     private List<UIElement>? _highlightModified;
@@ -1734,6 +1808,7 @@ public sealed partial class Reconciler : IDisposable
             {
                 _forceFullRenderActive = false;
                 _dirtyAncestorPath?.Clear();
+                _dirtyPathChildren?.Clear();
             }
         }
         }
@@ -1749,22 +1824,30 @@ public sealed partial class Reconciler : IDisposable
         // pass was triggered by a prop change higher up). Avoid the
         // HashSet allocation entirely until we find one.
         HashSet<UIElement>? set = null;
+        Dictionary<UIElement, object>? edges = null;
         foreach (var (control, node) in _componentNodes)
         {
             if (!node.SelfTriggered) continue;
             set ??= _dirtyAncestorPath ?? new HashSet<UIElement>();
+            edges ??= _dirtyPathChildren ?? new Dictionary<UIElement, object>();
             // Add the control itself first — Update on the wrapper
             // element that owns this control needs to bypass too so it
             // reaches the Component's UpdateComponent path.
             set.Add(control);
+            var child = control;
             var cursor = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(control) as UIElement;
             while (cursor is not null)
             {
+                // Record the edge before the early-out: a second self-triggered node joining
+                // an already-walked path still enters it through a child of its own.
+                AddDirtyPathChild(edges, cursor, child);
                 if (!set.Add(cursor)) break; // already on a previously-walked path
+                child = cursor;
                 cursor = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(cursor) as UIElement;
             }
         }
         _dirtyAncestorPath = set;
+        _dirtyPathChildren = edges;
     }
 
     // Tracks top-level Reconcile() entries so trace start/stop only fires once
