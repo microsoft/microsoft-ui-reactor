@@ -281,6 +281,20 @@ Conventions for contributors:
   still a no-op, except that its factory runs again when a component inside it
   updates itself.
 
+- **A child that its update replaces is unmounted in a single-child slot too**
+  (spec 047 §14). When an update handed back a new control for the one child of
+  a `Border`, a named slot such as `SplitView.Pane`, a tab's content, a generated
+  element slot such as `TabView.TabStripHeader`, or a `RichTextBlock`
+  `InlineUI(...)` child, Reactor swapped the new control in without unmounting
+  the old one, as a panel does. The old subtree's effect cleanups and
+  `.OnUnmount` actions never ran, a `ValidationRule` in it kept its message, and
+  a ref to a control in it kept pointing at the detached control. A
+  `ValidationVisualizer` in such a slot did this on every re-render, because its
+  update remounts it, and so did a `RegisterType` `update` that returns a new
+  control. A ref that the update has already moved to the new control now also
+  survives the old control's unmount, in a panel as well, where it used to be
+  cleared.
+
 - **The Forms guide's "Validation Context" example now works as written**
   (issue #1262). Clicking **Register** on an empty form submitted successfully
   with no errors, because five defects compounded: `.Validate()` was inert
