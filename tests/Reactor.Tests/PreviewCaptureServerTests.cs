@@ -1,8 +1,6 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using System.Net;
-using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.Serialization;
 using System.Text;
@@ -180,37 +178,6 @@ public class PreviewCaptureServerTests
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  AcquireFreePortHolding — loopback port reservation
-    // ══════════════════════════════════════════════════════════════
-
-    [Fact]
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects the Item1/Item2 fields of the concrete ValueTuple the invoked method returns. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
-    public void AcquireFreePortHolding_Returns_Bound_Loopback_Port()
-    {
-        var mi = ServerType.GetMethod("AcquireFreePortHolding",
-            BindingFlags.Static | BindingFlags.NonPublic)!;
-        var result = mi.Invoke(null, null)!;
-
-        // ValueTuple (int Port, TcpListener Holder)
-        var port = (int)result.GetType().GetField("Item1")!.GetValue(result)!;
-        var holder = (TcpListener)result.GetType().GetField("Item2")!.GetValue(result)!;
-
-        try
-        {
-            Assert.True(port > 0);
-            Assert.True(port <= 65535);
-            // Holder must be listening on loopback at that port.
-            var ep = (IPEndPoint)holder.LocalEndpoint;
-            Assert.Equal(port, ep.Port);
-            Assert.Equal(IPAddress.Loopback, ep.Address);
-        }
-        finally
-        {
-            try { holder.Stop(); } catch { }
-        }
-    }
-
-    // ══════════════════════════════════════════════════════════════
     //  BearerMatches — constant-time token comparison
     //
     //  The instance method reads _authToken. Bypass the ctor so we don't
@@ -301,8 +268,8 @@ public class PreviewCaptureServerTests
     {
         var instance = (PreviewCaptureServer)global::System.Runtime.CompilerServices.RuntimeHelpers
             .GetUninitializedObject(ServerType);
-        // `Port` is `{ get; }` auto-property — backed by a compiler-generated
-        // private field with `<Port>k__BackingField` name.
+        // `Port` is a `{ get; private set; }` auto-property — backed by a
+        // compiler-generated private field with `<Port>k__BackingField` name.
         var field = ServerType.GetField("<Port>k__BackingField",
             BindingFlags.Instance | BindingFlags.NonPublic)!;
         field.SetValue(instance, port);

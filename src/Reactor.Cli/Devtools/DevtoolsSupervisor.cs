@@ -24,7 +24,20 @@ internal sealed record McpServersAltConfig(Dictionary<string, McpServerEntry> se
 
 internal static class DevtoolsSupervisor
 {
-    private const int ReloadExitCode = 42;
+    /// <summary>Mirrors <c>DevtoolsHost.DevtoolsReloadExitCode</c> in the devtools child.</summary>
+    internal const int ReloadExitCode = 42;
+
+    /// <summary>
+    /// The child exits with this when the MCP port it was given is in use by
+    /// another process. Mirrors <c>DevtoolsHost.McpPortUnavailableExitCode</c>.
+    /// </summary>
+    internal const int McpPortUnavailableExitCode = 43;
+
+    /// <summary>
+    /// How many consecutive launches may find an auto-picked MCP port taken
+    /// before the supervisor gives up.
+    /// </summary>
+    internal const int MaxConsecutivePortConflicts = 5;
 
     internal static SupervisorArgs ParseArgs(string[] args)
     {
@@ -113,40 +126,91 @@ internal static class DevtoolsSupervisor
         }
         if (parsed.PrintConfig)
         {
-            var port = parsed.McpPort ?? FindFreePort();
+            var port = parsed.McpPort ?? ProbeFreePort();
             Console.Write(BuildPrintConfigPayload(port));
             return 0;
         }
 
         var project = parsed.Project ?? FindDefaultProject(Directory.GetCurrentDirectory());
         var component = parsed.Component;
-        var mcpPort = parsed.McpPort;
         if (project is null)
         {
             Console.Error.WriteLine("[mur devtools] No .csproj found in the current directory.");
             return 1;
         }
 
+        return Supervise(
+            parsed.McpPort,
+            port => LaunchChild(project, component, port),
+            () => RunDotnetBuild(project),
+            ProbeFreePort,
+            Console.Out,
+            Console.Error);
+    }
+
+    /// <summary>
+    /// The respawn loop: launches the child on the pinned MCP port, rebuilds and
+    /// relaunches on <see cref="ReloadExitCode"/>, and propagates any other exit
+    /// code. Takes the process plumbing as delegates so it can be unit-tested.
+    /// </summary>
+    internal static int Supervise(
+        int? userPinnedPort,
+        Func<int, int> launchChild,
+        Func<bool> rebuild,
+        Func<int> probePort,
+        TextWriter output,
+        TextWriter error)
+    {
         // Pin an MCP port across respawns so the agent keeps a stable endpoint.
-        var pinnedPort = mcpPort ?? FindFreePort();
-        Console.WriteLine($"[mur devtools] Using MCP port {pinnedPort} across reloads.");
+        // An auto-picked port is only a probe: the child binds it after
+        // `dotnet run` builds, and on reload it stays unbound while the project
+        // rebuilds (spec 024), so another process can take it first. The child
+        // then exits with McpPortUnavailableExitCode and a new port is picked.
+        // A port the user pinned with --mcp-port is never moved.
+        var port = userPinnedPort ?? probePort();
+        var portConflicts = 0;
+        output.WriteLine($"[mur devtools] Using MCP port {port} across reloads.");
 
         while (true)
         {
-            var exitCode = LaunchChild(project, component, pinnedPort);
+            var exitCode = launchChild(port);
             if (exitCode == ReloadExitCode)
             {
-                Console.WriteLine("[mur devtools] Reload requested — rebuilding...");
-                var buildOk = RunDotnetBuild(project);
+                portConflicts = 0;
+                output.WriteLine("[mur devtools] Reload requested — rebuilding...");
+                var buildOk = rebuild();
                 if (!buildOk)
                 {
-                    Console.Error.WriteLine("[mur devtools] Build failed. Waiting — fix the error and request reload again.");
+                    error.WriteLine("[mur devtools] Build failed. Waiting — fix the error and request reload again.");
                     // Deliberately do NOT respawn: the spec says the MCP port
                     // stays unbound on build failure so the agent sees a transport
                     // error. We exit the supervisor with the build-fail code; the
                     // user re-runs `mur devtools` when they're ready.
                     return 2;
                 }
+                continue;
+            }
+            if (exitCode == McpPortUnavailableExitCode)
+            {
+                if (userPinnedPort is not null)
+                {
+                    error.WriteLine(
+                        $"[mur devtools] MCP port {port} (--mcp-port) is in use by another process. " +
+                        "Free it, or pass a different --mcp-port.");
+                    return exitCode;
+                }
+                if (++portConflicts >= MaxConsecutivePortConflicts)
+                {
+                    error.WriteLine(
+                        $"[mur devtools] Another process took the MCP port before the app could bind it " +
+                        $"{portConflicts} times in a row (last port {port}). Giving up.");
+                    return exitCode;
+                }
+                var taken = port;
+                port = probePort();
+                output.WriteLine(
+                    $"[mur devtools] MCP port {taken} was taken by another process before the app could bind it; " +
+                    $"using MCP port {port} across reloads instead.");
                 continue;
             }
             return exitCode;
@@ -232,13 +296,25 @@ internal static class DevtoolsSupervisor
         }
     }
 
-    private static int FindFreePort()
+    /// <summary>
+    /// Returns a loopback port that was free when probed. A hint, not a
+    /// reservation: the child binds it later and exits with
+    /// <see cref="McpPortUnavailableExitCode"/> if another process took it first.
+    /// Mirrors <c>LoopbackHttpListener.ProbeFreePort</c> in Reactor.Devtools,
+    /// which the CLI can't reference (it would pull in WinUI).
+    /// </summary>
+    internal static int ProbeFreePort()
     {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
+        var probe = new TcpListener(IPAddress.Loopback, 0);
+        probe.Start();
+        try
+        {
+            return ((IPEndPoint)probe.LocalEndpoint).Port;
+        }
+        finally
+        {
+            probe.Stop();
+        }
     }
 
     private static void PrintHelp()
@@ -249,7 +325,9 @@ internal static class DevtoolsSupervisor
         Console.WriteLine("  Launches the target project with --devtools run and respawns on reload.");
         Console.WriteLine("  When the child exits with code 42, rebuilds and relaunches. Any other");
         Console.WriteLine("  exit code propagates. The MCP port is pinned across respawns so an");
-        Console.WriteLine("  agent can reconnect at the same endpoint.");
+        Console.WriteLine("  agent can reconnect at the same endpoint. If another process holds the");
+        Console.WriteLine("  port when the app starts (exit code 43), an auto-picked port is replaced");
+        Console.WriteLine("  with a new one; a port pinned with --mcp-port fails instead.");
         Console.WriteLine();
         Console.WriteLine("  --print-config   Emit MCP config fragments (Claude Code, Copilot, VS Code)");
         Console.WriteLine("                   wired to the given --mcp-port; prints to stdout only.");

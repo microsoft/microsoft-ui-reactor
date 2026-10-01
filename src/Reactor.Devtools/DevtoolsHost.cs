@@ -9,7 +9,16 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 
 internal sealed class DevtoolsHost : IReactorDevtoolsHost
 {
-    private const int DevtoolsReloadExitCode = 42;
+    /// <summary>Mirrors <c>DevtoolsSupervisor.ReloadExitCode</c> in <c>mur devtools</c>.</summary>
+    internal const int DevtoolsReloadExitCode = 42;
+
+    /// <summary>
+    /// Exit code when the MCP port pinned with <c>--mcp-port</c> is in use by
+    /// another process. <c>mur devtools</c> picks a new port when it chose the
+    /// port itself and fails clearly when the user pinned it. Mirrors
+    /// <c>DevtoolsSupervisor.McpPortUnavailableExitCode</c>.
+    /// </summary>
+    internal const int McpPortUnavailableExitCode = 43;
 
     private readonly int _embedGeneration = 1;
     private readonly object _embedResizeLock = new();
@@ -366,6 +375,13 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                             mcp.AnnounceReady();
                         });
                     }
+                    catch (LoopbackPortUnavailableException ex) when (ExitCodeForMcpStartFailure(ex) is { } exitCode)
+                    {
+                        Console.Error.WriteLine(
+                            $"[devtools] MCP port {ex.Port} is already in use by another process. " +
+                            "Pass a different --mcp-port, or omit it to let the app pick a free port.");
+                        ExitDevtoolsHost(mcp, host, exitCode);
+                    }
                     catch (Exception ex)
                     {
                         Console.Error.WriteLine($"[devtools:mcp] Start failed: {ex}");
@@ -658,6 +674,26 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
         }
         catch { }
         return null;
+    }
+
+    /// <summary>
+    /// Maps an MCP <see cref="DevtoolsMcpServer.Start"/> failure to the exit code
+    /// the devtools child exits with, or null to keep running without MCP (the
+    /// long-standing behavior for other failures). Only a pinned port that is in
+    /// use exits: the user (or <c>mur devtools</c>) asked for exactly that port,
+    /// and a devtools session without its endpoint fails silently for the agent.
+    /// </summary>
+    internal static int? ExitCodeForMcpStartFailure(Exception ex) =>
+        ex is LoopbackPortUnavailableException { Pinned: true } ? McpPortUnavailableExitCode : null;
+
+    private static void ExitDevtoolsHost(DevtoolsMcpServer mcp, ReactorHost host, int exitCode)
+    {
+        try { mcp.Dispose(); } catch { }
+        host.Window.DispatcherQueue.TryEnqueue(() =>
+        {
+            try { host.Window.Close(); } catch { }
+            Environment.Exit(exitCode);
+        });
     }
 
     private static void RequestDevtoolsReload(DevtoolsMcpServer mcp, ReactorHost host)
