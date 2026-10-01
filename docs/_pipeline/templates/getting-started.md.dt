@@ -44,6 +44,11 @@ Reactor is a declarative UI framework for building native Windows apps in pure C
 No XAML, no data binding, no view models. You describe your UI as a function of
 state and Reactor keeps the screen in sync.
 
+> **Prefer Rust?** The same declarative WinUI idea is available in Rust through
+> [windows-reactor](https://github.com/microsoft/windows-rs/blob/master/docs/crates/windows-reactor.md),
+> a separate library in [windows-rs](https://github.com/microsoft/windows-rs) built
+> around components and typed messages. This guide covers the C# library.
+
 ## Setup
 
 If you just want to build an app, scaffold one and go — you do not need to
