@@ -35,6 +35,7 @@
     <Compile Include="..\_shared\FinalPath.cs" Link="FinalPath.cs" />
     <Compile Include="..\_shared\FileContention.cs" Link="FileContention.cs" />
     <Compile Include="..\_shared\WorktreeIdentity.cs" Link="WorktreeIdentity.cs" />
+    <Compile Include="..\_shared\SelfTestShard.cs" Link="SelfTestShard.cs" />
   </ItemGroup>
 
   <!-- The host's output path carries the configuration and TFM. Stamping in the values

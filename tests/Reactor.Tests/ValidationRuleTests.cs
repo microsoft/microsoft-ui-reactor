@@ -162,7 +162,9 @@ public class ValidationRuleTests
             "msg",
             "f");
 
-        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+        // Cancellation surfaces as an OperationCanceledException; the exact subclass
+        // depends on how the wait was cancelled, so don't pin it.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             rule.EvaluateAsync(ctx, cts.Token));
     }
 

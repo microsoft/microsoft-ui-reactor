@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Elements;
@@ -391,6 +392,188 @@ internal static class Issue675ResourceOverrideSkipFixtures
                 Application.Current.Resources.MergedDictionaries.Remove(srcDict);
             }
         }
+    }
+
+    /// <summary>
+    /// <see cref="TransitionAwayRemovesStaleOverride"/> with the cell's managed wrapper
+    /// garbage-collected between the two renders. Once that wrapper is collected, WinRT
+    /// projects a new one over the same native control, so anything keyed by wrapper
+    /// identity (a <c>ConditionalWeakTable</c>, an instance field) no longer finds what it
+    /// recorded at mount (spec 047 §3, issues #86 / #114 / #1262). The record of which
+    /// <c>Resources</c> keys Reactor manages lived in exactly such a table, so after a GC
+    /// the removal gate saw no managed keys and left the dropped override in place. The
+    /// fixture above hits that only when a GC lands between the mount and its first
+    /// <c>FindControl</c>: the wrapper it captures there is then already a fresh one, and its
+    /// local keeps that one alive, which is why the control still looks reused in place. This
+    /// fixture forces the GC, so the failure is deterministic.
+    /// </summary>
+    internal sealed class TransitionAwayAfterWrapperCollected(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const string Marker = "issue675-wrapper-gc";
+
+        public override async Task RunAsync()
+        {
+            var red = MakeBrush(180, 30, 30);
+            var srcDict = InstallSourceDict(SrcKey, red);
+            try
+            {
+                Action<int>? bump = null;
+                var host = H.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (n, setN) = ctx.UseState(0);
+                    bump = setN;
+                    // n==0: carries the ThemeRef override; n>=1: drops it (otherwise identical).
+                    var cell = TextBlock("gcCell");
+                    if (n == 0)
+                        cell = cell.Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey)));
+                    return VStack(cell);
+                });
+
+                await Harness.Render();
+
+                // Wrappers seen at mount, compared by reference: the same lookup the
+                // reconciler's bookkeeping relied on. A WeakReference can't answer this: for a
+                // WinRT object it resolves through the native weak reference and returns a new
+                // wrapper whenever the control is still alive.
+                var mountWrappers = new ConditionalWeakTable<TextBlock, object>();
+                // The mount-time wrapper must never become a local of this async method: its
+                // locals live on the state machine, which would keep the wrapper alive
+                // through the collection below.
+                H.Check("Issue675_WrapperGc_MountHasOverride", ProbeAndMark(H, mountWrappers));
+
+                CollectGarbage();
+                // Precondition: without it, a pass could just mean the wrapper survived and
+                // the fixture never exercised a fresh one.
+                H.Check("Issue675_WrapperGc_FreshWrapperAfterCollect",
+                    IsFreshWrapper(H, mountWrappers, "gcCell"));
+
+                // Drop the override while the cell is otherwise shallow-equal.
+                bump!(1);
+                await Harness.Render();
+
+                var cell = H.FindControl<TextBlock>(t => t.Text == "gcCell");
+                // The wrappers differ by construction here, so reuse is shown by a marker on
+                // the native control: a remount would drop the override for the wrong reason
+                // (and a pooled control comes back with Tag cleared).
+                H.Check("Issue675_WrapperGc_ControlReusedInPlace",
+                    cell?.Tag is string tag && tag == Marker);
+                H.Check("Issue675_WrapperGc_StaleOverrideRemoved",
+                    cell is not null && ResourceBrush(cell, TargetKey) is null);
+            }
+            finally
+            {
+                Application.Current.Resources.MergedDictionaries.Remove(srcDict);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static bool ProbeAndMark(Harness h, ConditionalWeakTable<TextBlock, object> seen)
+        {
+            var cell = h.FindControl<TextBlock>(t => t.Text == "gcCell");
+            if (cell is null)
+                return false;
+            cell.Tag = Marker;
+            seen.Add(cell, Marker);
+            return ResourceBrush(cell, TargetKey) is not null;
+        }
+    }
+
+    /// <summary>
+    /// The pooled-control half of <see cref="TransitionAwayAfterWrapperCollected"/>. A control
+    /// returned to <c>ElementPool</c> keeps its <c>Resources</c>, so the keys the previous
+    /// renter's overrides wrote must be stripped before anyone rents it again. Two renter
+    /// shapes, because they failed differently: one that declares its own overrides relied on
+    /// its mount's removal gate, which lost track of the keys once the wrapper was collected;
+    /// one that declares none never reaches <c>ApplyResourceOverrides</c> at all, so it
+    /// inherited them outright. The pool holds its controls through managed references, so a
+    /// wrapper can only be collected while its control is mounted; this fixture collects it
+    /// then, before the control goes back to the pool.
+    /// </summary>
+    internal sealed class PooledRenterDoesNotInheritKeys(Harness h, bool renterHasOverrides)
+        : SelfTestFixtureBase(h)
+    {
+        private const string PreviousKey = "Issue675_PoolPreviousKey";
+        private const string RenterKey = "Issue675_PoolRenterKey";
+        // Written straight into Resources, so Reactor never manages it. ElementPool.CleanElement
+        // strips only the keys Reactor wrote, so the renter carries this key only if it is the
+        // same native control.
+        private const string SentinelKey = "Issue675_PoolSentinel";
+
+        public override async Task RunAsync()
+        {
+            var prefix = renterHasOverrides ? "Issue675_PoolOverrideRenter_" : "Issue675_PoolPlainRenter_";
+            Action<int>? setPhase = null;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                setPhase = set;
+                var renter = TextBlock("poolRenter");
+                return phase switch
+                {
+                    0 => VStack(TextBlock("poolPrevious")
+                        .Resources(r => r.Set(PreviousKey, MakeBrush(10, 20, 30)))),
+                    // Unmounting the TextBlock returns it to the pool...
+                    1 => VStack(),
+                    // ...and the next TextBlock mount rents it back (the pool is LIFO per type).
+                    _ => VStack(renterHasOverrides
+                        ? renter.Resources(r => r.Set(RenterKey, MakeBrush(40, 50, 60)))
+                        : renter),
+                };
+            });
+
+            await Harness.Render();
+
+            var mountWrappers = new ConditionalWeakTable<TextBlock, object>();
+            H.Check(prefix + "PreviousRenterHasKey", ProbeAndMark(H, mountWrappers));
+
+            CollectGarbage();
+            H.Check(prefix + "FreshWrapperAfterCollect",
+                IsFreshWrapper(H, mountWrappers, "poolPrevious"));
+
+            setPhase!(1);
+            await Harness.Render();
+            setPhase!(2);
+            await Harness.Render();
+
+            var rented = H.FindControl<TextBlock>(t => t.Text == "poolRenter");
+            H.Check(prefix + "IsPooledControl",
+                rented?.Resources is { } res && res.ContainsKey(SentinelKey));
+            if (renterHasOverrides)
+                H.Check(prefix + "RenterKeyApplied",
+                    rented is not null && ResourceBrush(rented, RenterKey) is not null);
+            H.Check(prefix + "PreviousRenterKeyRemoved",
+                rented?.Resources is { } after && !after.ContainsKey(PreviousKey));
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static bool ProbeAndMark(Harness h, ConditionalWeakTable<TextBlock, object> seen)
+        {
+            var cell = h.FindControl<TextBlock>(t => t.Text == "poolPrevious");
+            if (cell?.Resources is null)
+                return false;
+            cell.Resources[SentinelKey] = MakeBrush(70, 80, 90);
+            seen.Add(cell, SentinelKey);
+            return ResourceBrush(cell, PreviousKey) is not null;
+        }
+    }
+
+    // Kept out of the async fixtures, whose locals live on the state machine: a wrapper held
+    // there would survive the collection these helpers are for.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool IsFreshWrapper(Harness h, ConditionalWeakTable<TextBlock, object> seen, string text)
+    {
+        var cell = h.FindControl<TextBlock>(t => t.Text == text);
+        return cell is not null && !seen.TryGetValue(cell, out _);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void CollectGarbage()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
     }
 
     // ════════════════════════════════════════════════════════════════════

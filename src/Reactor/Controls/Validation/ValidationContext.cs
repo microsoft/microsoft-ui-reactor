@@ -9,6 +9,28 @@ public sealed class ValidationContext
     private readonly object _lock = new();
     private readonly Dictionary<string, List<ValidationMessage>> _messages = new();
     private readonly Dictionary<string, List<ValidationMessage>> _externalMessages = new();
+    // field -> producer -> the exact instances that producer last contributed, so each
+    // producer can retract its own messages without disturbing the others on that field.
+    // field -> the owner of each entry in _messages[field], same length and order.
+    // A null entry was added directly via Add(...) and belongs to no producer.
+    //
+    // Positional rather than by instance: ValidationMessage is immutable, so a validator
+    // may legitimately cache and return one instance, and Add(...) is public — the same
+    // instance can therefore appear twice under two different owners. Matching by
+    // reference could not tell those apart, so retiring one producer removed the other's
+    // message too and the field went spuriously valid (issue #1262 review).
+    private readonly Dictionary<string, List<string?>> _messageOwners = new();
+    // field -> newest async pass token; older passes that resolve late are discarded.
+    private readonly Dictionary<string, Dictionary<string, int>> _asyncGeneration = new();
+    // field -> producer -> the token issued the last time anything wrote that slot.
+    // A mounted control records the token its own contribution got, and retracts on
+    // unmount only while it still matches — so a control leaving the tree withdraws its
+    // own verdict but never one a later writer installed in the same slot.
+    private readonly Dictionary<string, Dictionary<string, long>> _producerStamp = new(StringComparer.Ordinal);
+    private long _producerTicket;
+    // Context-wide token source. Never reset, so a token retired by a clear can never be
+    // handed out again while the pass holding it is still in flight.
+    private int _asyncTicket;
     private readonly HashSet<string> _registeredFields = new();
     private readonly HashSet<string> _touchedFields = new();
     private readonly Dictionary<string, object?> _initialValues = new();
@@ -17,12 +39,316 @@ public sealed class ValidationContext
     private int _version;
 
     /// <summary>
+    /// Raised after any mutation that actually changed observable state — a message
+    /// appearing or disappearing, a field becoming touched, a reset.
+    /// <para>
+    /// <c>UseValidationContext()</c> subscribes to this so that mutating the context
+    /// from an event handler (the canonical case being <see cref="MarkAllTouched"/> on a
+    /// submit attempt) repaints the form. Without it, an invalid submit changes nothing
+    /// the user can see.
+    /// </para>
+    /// <para>
+    /// Two rules keep this from driving a render loop. First, re-running the same
+    /// validators over an unchanged value is silent: results are applied with a
+    /// structural diff, so an idempotent re-validation raises nothing. Second,
+    /// mutations made while a render is in flight are not announced <i>inline</i> —
+    /// the rendering component reads the new state later in the same pass, and
+    /// notifying there would re-enter the reconciler's re-render path from inside
+    /// <c>Render()</c>. They are held and delivered once the pass finishes, so other
+    /// subscribers — a parent rendering <c>IsValid()</c>, say — still hear about them;
+    /// a pass that ends with the state it started with is dropped rather than
+    /// delivered, since there is nothing to announce.
+    /// </para>
+    /// </summary>
+    public event Action? Changed
+    {
+        add
+        {
+            if (value is null) return;
+            bool deliverNow;
+            lock (_lock)
+            {
+                _changed += value;
+                deliverNow = _notificationPending;
+                _notificationPending = false;
+            }
+
+            // A deferred notification that found no subscriber is held rather than
+            // dropped: during an initial root render the reconciler flushes the
+            // deferral before root effects run, so a parent that is about to
+            // subscribe would otherwise never hear that a child invalidated the
+            // shared context, and its rendered IsValid()/summary would stay stale.
+            if (deliverNow) value();
+        }
+        remove
+        {
+            if (value is null) return;
+            lock (_lock) _changed -= value;
+        }
+    }
+
+    private Action? _changed;
+    private bool _notificationPending;
+
+    /// <summary>
     /// Monotonically increasing version number, bumped on every mutation.
     /// Useful for change detection in hooks/memos.
     /// </summary>
     public int Version
     {
         get { lock (_lock) return _version; }
+    }
+
+    /// <summary>
+    /// Announces a real change. Must be called *outside* <see cref="_lock"/> — a
+    /// subscriber re-entering the context (for example a re-render that immediately
+    /// re-reads messages) would otherwise take the lock recursively from the handler.
+    /// <para>
+    /// A change made while a render is in flight is deferred rather than dropped. The
+    /// component doing the rendering needs no notification — it observes the new state
+    /// later in the same pass — but other subscribers do: a parent that renders
+    /// <c>ctx.IsValid()</c> and provides the context would otherwise never learn that a
+    /// child's eager <c>.Validate()</c> invalidated it, leaving its summary or submit
+    /// state stale.
+    /// </para>
+    /// </summary>
+    private void RaiseChanged(bool messagesOnly = false)
+    {
+        if (ValidationRenderScope.InRender)
+        {
+            if (!messagesOnly)
+            {
+                lock (_lock) _frameTouchedNonMessageState = true;
+            }
+            ValidationRenderScope.DeferNotification(this);
+            return;
+        }
+
+        // Outside a render the snapshot can no longer be trusted as "what subscribers
+        // were last told", so stop suppressing against it.
+        lock (_lock)
+        {
+            _lastNotifiedMessages = null;
+            _lastNotifiedValues = null;
+            _lastNotifiedInitials = null;
+            _lastNotifiedTouched = null;
+        }
+        _changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Delivers a notification that was deferred because it happened mid-render.
+    /// Posted through the UI dispatcher when one is available so it lands after the
+    /// in-flight reconcile rather than re-entering it; falls back to an inline raise in
+    /// headless hosts, which keeps unit tests deterministic.
+    /// <para>
+    /// The subscriber list is read when the callback runs, not when it is queued. A
+    /// host flushes root effects after reconciliation, so a parent's
+    /// <c>UseValidationContext()</c> subscription may not exist yet at queue time;
+    /// snapshotting there dropped the notification the parent was waiting for. If
+    /// there is still no subscriber at delivery time the notification is held for the
+    /// first one to arrive.
+    /// </para>
+    /// </summary>
+    internal void NotifyDeferred()
+    {
+        var dispatcher = global::Microsoft.UI.Reactor.ReactorApp.UIDispatcher;
+        if (dispatcher is not null && dispatcher.TryEnqueue(DeliverDeferred))
+            return;
+
+        DeliverDeferred();
+    }
+
+    private void DeliverDeferred()
+    {
+        Action? handler;
+        lock (_lock)
+        {
+            // A render can churn a field's messages and land exactly where it started:
+            // chaining two value overloads applies the first call's partial verdict and
+            // then the second call's full one, both under the sync producer. Each write
+            // is a real change, so the frame defers a notification, which repaints, which
+            // churns again — an endless loop from a net-zero pass. Announce only when the
+            // messages actually ended up different from what subscribers were last told.
+            var snapshot = MessageSnapshotLocked();
+            if ((!_frameTouchedNonMessageState || NonMessageStateUnchangedLocked())
+                && _lastNotifiedMessages is not null
+                && string.Equals(_lastNotifiedMessages, snapshot, StringComparison.Ordinal))
+            {
+                _frameTouchedNonMessageState = false;
+                _frameVersionPending = false;
+                return;
+            }
+
+            if (_frameVersionPending)
+            {
+                _version++;
+                _frameVersionPending = false;
+            }
+
+            _lastNotifiedMessages = snapshot;
+            CaptureNonMessageStateLocked();
+            _frameTouchedNonMessageState = false;
+
+            handler = _changed;
+            if (handler is null)
+            {
+                _notificationPending = true;
+                return;
+            }
+            _notificationPending = false;
+        }
+        handler.Invoke();
+    }
+
+    /// <summary>
+    /// A deterministic rendering of every message the context currently holds, used to
+    /// tell a net-zero render pass from a real one. Field names are sorted so dictionary
+    /// iteration order cannot matter, but each field's list keeps its own order:
+    /// <see cref="GetMessages"/> exposes that order and callers read the first message,
+    /// so a reordering is a real change subscribers have to hear about.
+    /// <para>
+    /// Every value is length-prefixed rather than delimiter-separated. Field names, codes
+    /// and message text are arbitrary strings, so a separator-only encoding lets one
+    /// message whose text happens to contain the separators serialize identically to two
+    /// — and a real change would then be mistaken for net-zero and suppressed.
+    /// </para>
+    /// </summary>
+    private string MessageSnapshotLocked()
+    {
+        var fields = new List<string>(_messages.Keys);
+        fields.AddRange(_externalMessages.Keys.Where(field => !_messages.ContainsKey(field)));
+        fields.Sort(StringComparer.Ordinal);
+
+        var sb = new global::System.Text.StringBuilder();
+        foreach (var field in fields)
+        {
+            AppendCounted(sb, field);
+            _messages.TryGetValue(field, out var owned);
+            _externalMessages.TryGetValue(field, out var external);
+            sb.Append(owned?.Count ?? 0).Append('/').Append(external?.Count ?? 0).Append('|');
+
+            if (owned is not null)
+            {
+                foreach (var m in owned) AppendMessage(sb, 'i', m);
+            }
+            if (external is not null)
+            {
+                foreach (var m in external) AppendMessage(sb, 'e', m);
+            }
+        }
+        return sb.ToString();
+    }
+
+    private static void AppendMessage(global::System.Text.StringBuilder sb, char kind, ValidationMessage message)
+    {
+        sb.Append(kind).Append((int)message.Severity).Append(':');
+        AppendCounted(sb, message.Code);
+        AppendCounted(sb, message.Text);
+    }
+
+    private static void AppendCounted(global::System.Text.StringBuilder sb, string? value)
+    {
+        if (value is null)
+        {
+            sb.Append("n|");
+            return;
+        }
+        sb.Append(value.Length).Append('|').Append(value);
+    }
+
+    private string? _lastNotifiedMessages;
+    private Dictionary<string, object?>? _lastNotifiedValues;
+    private Dictionary<string, object?>? _lastNotifiedInitials;
+    private HashSet<string>? _lastNotifiedTouched;
+    private bool _lastNotifiedSubmitAttempted;
+    private int _lastNotifiedRegistered;
+    private bool _frameTouchedNonMessageState;
+    private bool _frameVersionPending;
+
+    /// <summary>
+    /// Whether the state a message snapshot cannot see — field values, touched flags,
+    /// the registered set — ended the frame where it started.
+    /// <para>
+    /// A flag alone is not enough, because a render can churn that state and land back
+    /// where it began. Chaining two value overloads on one field is the case that bites:
+    /// each link records its own value, so <c>_currentValues</c> flips to the first
+    /// link's value and back to the second's on every pass. Both writes are real value
+    /// changes, so the frame announced one every time, which repainted, which churned
+    /// again. Only the net result is a change subscribers need to hear about.
+    /// </para>
+    /// </summary>
+    private bool NonMessageStateUnchangedLocked()
+    {
+        if (_lastNotifiedValues is null || _lastNotifiedInitials is null || _lastNotifiedTouched is null)
+            return false;
+        if (_lastNotifiedRegistered != _registeredFields.Count) return false;
+        if (_lastNotifiedValues.Count != _currentValues.Count) return false;
+        if (_lastNotifiedInitials.Count != _initialValues.Count) return false;
+        if (!_lastNotifiedTouched.SetEquals(_touchedFields)) return false;
+        // The submit flag is the whole of what MarkAllTouched() changes once every field
+        // is already touched. Omitting it let a MarkAllTouched() raised from an effect
+        // during reconciliation look net-zero: the notification was dropped and the held
+        // Version bump cancelled, so a ShowWhen.AfterFirstSubmit field stayed hidden
+        // after the submit it was told about (issue #1262 review).
+        if (_lastNotifiedSubmitAttempted != _submitAttempted) return false;
+
+        foreach (var (field, value) in _currentValues)
+        {
+            if (!_lastNotifiedValues.TryGetValue(field, out var previous)) return false;
+            if (!Equals(previous, value)) return false;
+        }
+
+        // Baselines, not just current values: re-baselining an edited field with
+        // SetInitialValue flips IsDirty without touching _currentValues, and a
+        // subscriber rendering dirty state has to hear about that (issue #1262 review).
+        foreach (var (field, initial) in _initialValues)
+        {
+            if (!_lastNotifiedInitials.TryGetValue(field, out var previous)) return false;
+            if (!Equals(previous, initial)) return false;
+        }
+        return true;
+    }
+
+    private void CaptureNonMessageStateLocked()
+    {
+        _lastNotifiedValues = new Dictionary<string, object?>(_currentValues);
+        _lastNotifiedInitials = new Dictionary<string, object?>(_initialValues);
+        _lastNotifiedTouched = new HashSet<string>(_touchedFields, StringComparer.Ordinal);
+        _lastNotifiedRegistered = _registeredFields.Count;
+        _lastNotifiedSubmitAttempted = _submitAttempted;
+    }
+
+    /// <summary>
+    /// Bumps <see cref="Version"/>, except during a render: those are held until the
+    /// frame closes and bumped once, and only if the frame ended with different state
+    /// than it started with.
+    /// <para>
+    /// Bumping eagerly made a net-zero pass — the chained value overloads above —
+    /// increment <c>Version</c> on every render forever, so a <c>UseMemo</c> or
+    /// <c>UseEffect</c> keyed on it re-ran for a context that had not actually moved.
+    /// </para>
+    /// <para>
+    /// Value changes are held too, not just message-only ones. A chain such as
+    /// <c>.Validate("f", "", …).Validate("f", "bb", …)</c> rewrites the current value
+    /// twice per render and lands where it started, so <see cref="Changed"/> was
+    /// correctly silent while <c>Version</c> grew without bound — the same defect the
+    /// suppression exists to prevent, surviving in the one signal a memo is most likely
+    /// to be keyed on (issue #1262 review).
+    /// </para>
+    /// </summary>
+    private void BumpVersionLocked()
+    {
+        if (ValidationRenderScope.InRender)
+        {
+            _frameVersionPending = true;
+            // Guarantee the held bump is settled. Not every bump is paired with a
+            // notification — BeginAsyncValidation bumps and stays quiet — and a pending
+            // bump that no deliver ever reaches would leave Version silently lagging.
+            ValidationRenderScope.DeferNotification(this);
+            return;
+        }
+        _version++;
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -35,11 +361,27 @@ public sealed class ValidationContext
     /// </summary>
     public void RegisterField(string field)
     {
+        bool changed;
         lock (_lock)
         {
-            _registeredFields.Add(field);
+            changed = RegisterFieldLocked(field);
+            if (changed) BumpVersionLocked();
         }
+        if (changed) RaiseChanged();
     }
+
+    /// <summary>
+    /// Adds a field to the registered set, reporting whether it was actually new.
+    /// <para>
+    /// Registration is observable: <see cref="RegisteredFields"/> is public, and
+    /// <see cref="MarkAllTouched"/> and the validity summary both iterate it. Every
+    /// registration path therefore has to fold this into its change decision, or a
+    /// subscriber rendering the field set goes stale — which is what happened while five
+    /// separate call sites each added to the set directly and none of them counted it
+    /// (issue #1262 review).
+    /// </para>
+    /// </summary>
+    private bool RegisterFieldLocked(string field) => _registeredFields.Add(field);
 
     /// <summary>
     /// Returns all registered field names.
@@ -74,8 +416,14 @@ public sealed class ValidationContext
                 _messages[message.Field] = list;
             }
             list.Add(message);
-            _version++;
+            // Owned by no producer, so it is never substituted or retracted by one.
+            if (!_messageOwners.TryGetValue(message.Field, out var owners))
+                _messageOwners[message.Field] = owners = new List<string?>(list.Count);
+            while (owners.Count < list.Count - 1) owners.Add(null);
+            owners.Add(null);
+            BumpVersionLocked();
         }
+        RaiseChanged(messagesOnly: true);
     }
 
     /// <summary>
@@ -100,8 +448,9 @@ public sealed class ValidationContext
                 _externalMessages[message.Field] = list;
             }
             list.Add(message);
-            _version++;
+            BumpVersionLocked();
         }
+        RaiseChanged(messagesOnly: true);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -109,17 +458,41 @@ public sealed class ValidationContext
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>
+    /// Drops every piece of per-field producer bookkeeping in one place: owned messages,
+    /// ownership stamps, in-flight async tokens, and rule-set membership.
+    /// <para>
+    /// A helper rather than four lines repeated at each call site, because they have to
+    /// move together and did not: <c>_producerStamp</c> was added later and the clearing
+    /// paths kept dropping only the other three, which both broke the documented
+    /// invariant that a stamp exists exactly while its producer owns messages and grew
+    /// the map without bound for dynamically named fields (issue #1262 review).
+    /// </para>
+    /// </summary>
+    private void DropFieldProducerStateLocked(string field)
+    {
+        _messageOwners.Remove(field);
+        _producerStamp.Remove(field);
+        // An async pass still in flight would otherwise repopulate what the caller just
+        // cleared: dropping the token makes its result stale on arrival.
+        _asyncGeneration.Remove(field);
+        InvalidateRuleSetsLocked(field);
+    }
+
+    /// <summary>
     /// Clears all validation messages (both internal and external) for the specified field.
     /// </summary>
     public void Clear(string field)
     {
+        bool changed;
         lock (_lock)
         {
-            var changed = false;
+            changed = false;
             if (_messages.Remove(field)) changed = true;
             if (_externalMessages.Remove(field)) changed = true;
-            if (changed) _version++;
+            DropFieldProducerStateLocked(field);
+            if (changed) BumpVersionLocked();
         }
+        if (changed) RaiseChanged(messagesOnly: true);
     }
 
     /// <summary>
@@ -128,11 +501,338 @@ public sealed class ValidationContext
     /// </summary>
     internal void ClearInternal(string field)
     {
+        bool changed;
         lock (_lock)
         {
-            if (_messages.Remove(field))
-                _version++;
+            changed = _messages.Remove(field);
+            DropFieldProducerStateLocked(field);
+            if (changed) BumpVersionLocked();
         }
+        if (changed) RaiseChanged(messagesOnly: true);
+    }
+
+
+    /// <summary>
+    /// Installs one producer's contribution to a field's internal messages, leaving
+    /// every other producer's messages on that field untouched.
+    /// <para>
+    /// A field is written by several independent producers: the synchronous
+    /// <c>.Validate()</c> chain, each cross-field <c>ValidationRule</c>, and the async
+    /// validator pass. Replacing the whole field — which the original clear-then-add
+    /// did — means the last writer wins, so a passing rule could erase a required-field
+    /// error and make
+    /// <see cref="IsValid"/> true. Each producer now retracts only the exact instances
+    /// it contributed last time.
+    /// </para>
+    /// <para>
+    /// Replacements happen in place rather than by removing and appending, which keeps
+    /// message order stable across passes. Appending would let two producers on the same
+    /// field swap positions every render — a structural difference on every pass, and so
+    /// a notification on every pass, which is precisely the loop this design exists to
+    /// avoid.
+    /// </para>
+    /// </summary>
+    internal void ApplyOwned(string field, string producer, List<ValidationMessage> messages)
+    {
+        bool changed;
+        lock (_lock)
+        {
+            changed = ApplyOwnedLocked(field, producer, messages);
+            if (changed) BumpVersionLocked();
+        }
+        if (changed) RaiseChanged(messagesOnly: true);
+    }
+
+    private bool ApplyOwnedLocked(string field, string producer, List<ValidationMessage> messages)
+    {
+        _messages.TryGetValue(field, out var current);
+        _messageOwners.TryGetValue(field, out var owners);
+
+        var capacity = (current?.Count ?? 0) + messages.Count;
+        var next = new List<ValidationMessage>(capacity);
+        var nextOwners = new List<string?>(capacity);
+        var taken = 0;
+
+        if (current is not null)
+        {
+            for (var i = 0; i < current.Count; i++)
+            {
+                // Positional, not by instance: two entries can be the same immutable
+                // ValidationMessage under different owners, and only the index tells
+                // them apart.
+                var owner = owners is not null && i < owners.Count ? owners[i] : null;
+                if (string.Equals(owner, producer, StringComparison.Ordinal))
+                {
+                    // Substitute this producer's next message at the same position.
+                    if (taken < messages.Count)
+                    {
+                        next.Add(messages[taken++]);
+                        nextOwners.Add(producer);
+                    }
+                    continue;
+                }
+                next.Add(current[i]);
+                nextOwners.Add(owner);
+            }
+        }
+
+        for (; taken < messages.Count; taken++)
+        {
+            next.Add(messages[taken]);
+            nextOwners.Add(producer);
+        }
+
+        var changed = !SameMessages(current, next);
+        if (changed)
+        {
+            if (next.Count == 0)
+                _messages.Remove(field);
+            else
+                _messages[field] = next;
+        }
+
+        // Ownership is rewritten whether or not the values changed. It is positional and
+        // was built alongside `next`, which is same-length and same-order as whatever is
+        // installed, so it describes the live list either way. (The old instance-keyed
+        // map had to skip this case to avoid naming freshly allocated equal-but-distinct
+        // instances that were never installed; positions have no such hazard.)
+        if (next.Count == 0)
+            _messageOwners.Remove(field);
+        else
+            _messageOwners[field] = nextOwners;
+
+        // A stamp exists exactly while the producer owns something. Writing one while
+        // dropping the ownership would leave an entry behind on every retraction, and
+        // every mounted rule gets a fresh `rule#N` identity — so a long-lived context
+        // that sees rules mount and unmount would accumulate them without bound.
+        if (messages.Count == 0) RemoveProducerStampLocked(field, producer);
+        else StampProducerLocked(field, producer);
+
+        return changed;
+    }
+
+    private void StampProducerLocked(string field, string producer)
+    {
+        var token = unchecked(++_producerTicket);
+        if (!_producerStamp.TryGetValue(field, out var byProducer))
+            _producerStamp[field] = byProducer = new Dictionary<string, long>(StringComparer.Ordinal);
+        byProducer[producer] = token;
+    }
+
+    private void RemoveProducerStampLocked(string field, string producer)
+    {
+        if (!_producerStamp.TryGetValue(field, out var byProducer)) return;
+        byProducer.Remove(producer);
+        if (byProducer.Count == 0) _producerStamp.Remove(field);
+    }
+
+    /// <summary>
+    /// The number of producer slots currently carrying an ownership stamp. Exposed for
+    /// tests: a stamp must exist exactly while its producer owns messages, so a context
+    /// that has seen producers come and go must not accumulate them.
+    /// </summary>
+    internal int ProducerStampEntryCount
+    {
+        get
+        {
+            lock (_lock)
+            {
+                var total = 0;
+                foreach (var byProducer in _producerStamp.Values) total += byProducer.Count;
+                return total;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The token issued by the most recent write to a producer slot. Callers hold it to
+    /// make a later retraction conditional on still owning the slot.
+    /// </summary>
+    internal long GetProducerStamp(string field, string producer)
+    {
+        lock (_lock)
+        {
+            return _producerStamp.TryGetValue(field, out var byProducer)
+                && byProducer.TryGetValue(producer, out var stamp) ? stamp : 0;
+        }
+    }
+
+    private static bool SameMessages(List<ValidationMessage>? a, List<ValidationMessage> b)
+    {
+        var countA = a?.Count ?? 0;
+        if (countA != b.Count) return false;
+        for (var i = 0; i < b.Count; i++)
+        {
+            if (a![i] != b[i]) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Installs the complete result of an async validation pass for a field in one step.
+    /// <para>
+    /// <paramref name="generation"/> is the token handed out by
+    /// <see cref="BeginAsyncValidation(string, object?)"/> when the pass started. Passes
+    /// for successive values race — an older value's checks can resolve after a newer
+    /// value's — so a result that is no longer the newest is discarded rather than
+    /// overwriting the current verdict with a stale one.
+    /// </para>
+    /// </summary>
+    internal void ApplyAsyncValidation(string field, int generation, List<ValidationMessage> messages)
+        => ApplyAsyncOwned(field, AsyncProducer, generation, messages);
+
+    /// <summary>
+    /// Installs an async producer's result for a field, but only if it is still the
+    /// newest pass that producer opened. Generations are tracked per producer because
+    /// several can write the same field — an async <c>ValidationRule</c> alongside the
+    /// field's own <c>.ValidateAsync(...)</c> — and a shared token would let whichever
+    /// finished last cancel the other.
+    /// </summary>
+    internal void ApplyAsyncOwned(string field, string producer, int generation, List<ValidationMessage> messages)
+    {
+        bool changed;
+        lock (_lock)
+        {
+            if (!_asyncGeneration.TryGetValue(field, out var byProducer)
+                || !byProducer.TryGetValue(producer, out var newest)
+                || newest != generation)
+                return;
+
+            changed = ApplyOwnedLocked(field, producer, messages);
+            if (changed) BumpVersionLocked();
+        }
+        if (changed) RaiseChanged(messagesOnly: true);
+    }
+
+    /// <summary>
+    /// Opens an async validation pass for a field and returns the token that identifies
+    /// it. Only the most recently opened pass is allowed to install a result.
+    /// <para>
+    /// Tokens come from a context-wide counter rather than a per-field one. The clearing
+    /// operations drop a field's entry so a pending pass can't repopulate what they just
+    /// removed — with a per-field counter that also reset the sequence, so a pass opened
+    /// after a clear could be handed the same number an older in-flight pass was still
+    /// holding, and the stale result would pass the equality check.
+    /// </para>
+    /// </summary>
+    internal int BeginAsyncValidation(string field) => BeginAsyncProducer(field, AsyncProducer);
+
+    /// <summary>
+    /// Records the value a field is about to be validated against and opens the async
+    /// pass for it, under one lock.
+    /// <para>
+    /// Doing the two as separate calls let concurrent callers interleave as
+    /// <c>old.record</c>, <c>new.record + new.open</c>, <c>old.open</c> — leaving the
+    /// *older* value's pass holding the newest token, free to install a verdict about a
+    /// value that had already been replaced.
+    /// </para>
+    /// </summary>
+    internal int BeginAsyncValidation(string field, object? value)
+    {
+        bool changed;
+        int token;
+        lock (_lock)
+        {
+            var newField = RegisterFieldLocked(field);
+
+            var known = _currentValues.TryGetValue(field, out var previous);
+            changed = !known || !Equals(previous, value);
+            if (changed)
+            {
+                _currentValues[field] = value;
+                _externalMessages.Remove(field);
+                RetractAsyncProducersLocked(field);
+                InvalidateRuleSetsLocked(field);
+                BumpVersionLocked();
+            }
+            else if (newField)
+            {
+                // The value is unchanged, but the field set is not — and that is
+                // observable on its own.
+                changed = true;
+                BumpVersionLocked();
+            }
+
+            token = unchecked(++_asyncTicket);
+            if (!_asyncGeneration.TryGetValue(field, out var byProducer))
+                _asyncGeneration[field] = byProducer = new Dictionary<string, int>(StringComparer.Ordinal);
+            byProducer[AsyncProducer] = token;
+        }
+        if (changed) RaiseChanged();
+        return token;
+    }
+
+    /// <summary>
+    /// Opens an async pass for one producer on a field. Overlapping evaluations of the
+    /// same producer are ordered by this token: an older one that resolves last is
+    /// discarded instead of reinstating a verdict about a value or predicate input that
+    /// has already been superseded.
+    /// </summary>
+    internal int BeginAsyncProducer(string field, string producer)
+    {
+        lock (_lock)
+        {
+            var token = unchecked(++_asyncTicket);
+            if (!_asyncGeneration.TryGetValue(field, out var byProducer))
+                _asyncGeneration[field] = byProducer = new Dictionary<string, int>(StringComparer.Ordinal);
+            byProducer[producer] = token;
+            return token;
+        }
+    }
+
+    internal const string SyncProducer = "sync";
+    internal const string AsyncProducer = "async";
+
+    /// <summary>
+    /// Registers a field, records its value, and installs its validator results as one
+    /// atomic step — a single lock, a single version bump, and at most one
+    /// <see cref="Changed"/> notification raised only after everything is in place.
+    /// <para>
+    /// Doing this as three calls let a subscriber observe the context mid-update: on a
+    /// first mount, <see cref="NotifyValueChanged"/> would see an unknown field, raise,
+    /// and synchronously drive a re-render that read the *previous* pass's messages
+    /// because the replacement had not happened yet. The reconcile-time <c>FormField</c>
+    /// path reaches this code after the render scope has closed, so that notification
+    /// was not suppressed.
+    /// </para>
+    /// </summary>
+    internal void ApplyValidation(string field, object? value, List<ValidationMessage> messages)
+    {
+        bool changed;
+        bool valueChangedForNotify;
+        lock (_lock)
+        {
+            var newField = RegisterFieldLocked(field);
+
+            var known = _currentValues.TryGetValue(field, out var previous);
+            var valueChanged = !known || !Equals(previous, value);
+            var messagesChanged = false;
+
+            if (valueChanged)
+            {
+                _currentValues[field] = value;
+                // A server verdict about the old value says nothing about the new one.
+                _externalMessages.Remove(field);
+                // Nor does a named rule set still being evaluated: its verdicts were
+                // computed from the value that has just been replaced.
+                InvalidateRuleSetsLocked(field);
+
+                // Neither does an async verdict. Retire the in-flight passes so their
+                // results are discarded on arrival, and withdraw whatever the last ones
+                // installed — otherwise an error computed for a value the user has
+                // already replaced stays on screen indefinitely.
+                if (RetractAsyncProducersLocked(field)) messagesChanged = true;
+            }
+
+            // Owned rather than wholesale: a cross-field ValidationRule may also be
+            // writing this field, and it must survive the sync pass.
+            if (ApplyOwnedLocked(field, SyncProducer, messages)) messagesChanged = true;
+
+            changed = valueChanged || messagesChanged || newField;
+            valueChangedForNotify = valueChanged || newField;
+            if (changed) BumpVersionLocked();
+        }
+        if (changed) RaiseChanged(messagesOnly: !valueChangedForNotify);
     }
 
     /// <summary>
@@ -140,11 +840,13 @@ public sealed class ValidationContext
     /// </summary>
     public void ClearExternal(string field)
     {
+        bool changed;
         lock (_lock)
         {
-            if (_externalMessages.Remove(field))
-                _version++;
+            changed = _externalMessages.Remove(field);
+            if (changed) BumpVersionLocked();
         }
+        if (changed) RaiseChanged(messagesOnly: true);
     }
 
     /// <summary>
@@ -152,12 +854,19 @@ public sealed class ValidationContext
     /// </summary>
     public void ClearAll()
     {
+        bool changed;
         lock (_lock)
         {
+            changed = _messages.Count > 0 || _externalMessages.Count > 0;
             _messages.Clear();
             _externalMessages.Clear();
-            _version++;
+            _messageOwners.Clear();
+            _producerStamp.Clear();
+            _asyncGeneration.Clear();
+            InvalidateRuleSetsLocked(null);
+            if (changed) BumpVersionLocked();
         }
+        if (changed) RaiseChanged(messagesOnly: true);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -295,24 +1004,56 @@ public sealed class ValidationContext
     /// </summary>
     public void MarkTouched(string field)
     {
+        bool changed;
         lock (_lock)
         {
-            if (_touchedFields.Add(field))
-                _version++;
+            changed = _touchedFields.Add(field);
+            if (changed) BumpVersionLocked();
         }
+        if (changed) RaiseChanged();
     }
 
     /// <summary>
     /// Marks all registered fields as touched. Typically called on form submit.
+    /// <para>
+    /// Also records that a submit was attempted, which is what
+    /// <see cref="ShowWhen.AfterFirstSubmit"/> waits for. The framework has no other
+    /// notion of "submit": this is the call the guide tells you to make on a submit
+    /// attempt, so tying the two together is what makes that policy reachable on a
+    /// <c>FormField</c> at all — before this it could never show an error, behaving
+    /// identically to <see cref="ShowWhen.Never"/> (issue #1262).
+    /// </para>
     /// </summary>
     public void MarkAllTouched()
     {
+        bool changed;
         lock (_lock)
         {
+            // Add unconditionally and compare the set size rather than branching per
+            // field: HashSet.Add already de-duplicates, so a filtered loop would only
+            // add a second hash lookup per field (and, via LINQ, an allocation) inside
+            // this lock to reach the same answer.
+            var touchedBefore = _touchedFields.Count;
             foreach (var field in _registeredFields)
                 _touchedFields.Add(field);
-            _version++;
+
+            changed = _touchedFields.Count != touchedBefore || !_submitAttempted;
+            _submitAttempted = true;
+            if (changed) BumpVersionLocked();
         }
+        if (changed) RaiseChanged();
+    }
+
+    private bool _submitAttempted;
+
+    /// <summary>
+    /// Whether <see cref="MarkAllTouched"/> has been called since the last reset — the
+    /// context's record of a submit attempt, read by
+    /// <see cref="ShowWhen.AfterFirstSubmit"/>.
+    /// </summary>
+    public bool SubmitAttempted
+    {
+        get { lock (_lock) return _submitAttempted; }
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -321,28 +1062,365 @@ public sealed class ValidationContext
 
     /// <summary>
     /// Stores the initial value for a field. Called at field registration time.
+    /// <para>
+    /// The current value is seeded only the first time the field is seen. Re-seeding it
+    /// on every call would rewind whatever the user has since typed — harmless while
+    /// nothing watched the context, but with change notification it becomes a permanent
+    /// repaint loop for the common <c>SetInitialValue(...)</c> +
+    /// <c>NotifyValueChanged(...)</c> pair that components run on each render: the
+    /// rewind and the re-notify would take turns forever. Use <see cref="Reset(string)"/>
+    /// to deliberately return a field to its baseline.
+    /// </para>
     /// </summary>
     public void SetInitialValue(string field, object? value)
     {
+        bool changed;
         lock (_lock)
         {
+            var wasDirty = IsDirtyLocked(field);
+            var hadBaseline = _initialValues.TryGetValue(field, out var previousBaseline);
             _initialValues[field] = value;
+            if (!_currentValues.ContainsKey(field))
+                _currentValues[field] = value;
+
+            // Two ways this is observable, and the dirty flag only catches one of them.
+            // Re-baselining an edited field can flip IsDirty without touching messages or
+            // touched state. It can also leave IsDirty alone — baseline `a`, current `b`,
+            // new baseline `c` stays dirty throughout — while still changing what
+            // Reset(field) will hand back, so the move itself counts (issue #1262 review).
+            //
+            // Scoped to a baseline that already existed and actually moved. Seeding a
+            // field for the first time stays silent, as does the identical re-seed that
+            // components run on every render — the loop this method's remarks warn about.
+            var baselineMoved = hadBaseline && !Equals(previousBaseline, value);
+            changed = baselineMoved || IsDirtyLocked(field) != wasDirty;
+            if (changed) BumpVersionLocked();
+        }
+        if (changed) RaiseChanged();
+    }
+
+    private bool IsDirtyLocked(string field)
+    {
+        if (!_initialValues.TryGetValue(field, out var initial)) return false;
+        if (!_currentValues.TryGetValue(field, out var current)) return false;
+        return !Equals(initial, current);
+    }
+
+    /// <summary>
+    /// Notifies the context of a field value change. Clears external messages for the
+    /// field, because a server-side verdict about the old value says nothing about the
+    /// new one.
+    /// <para>
+    /// The clear is conditional on the value actually having moved. It used to be
+    /// unconditional, which was survivable only while validation ran rarely: now that
+    /// validators run on every render, an unconditional clear here would destroy any
+    /// <see cref="AddExternal(string, string, Severity)"/> message on the very next
+    /// repaint, before the user could read it.
+    /// </para>
+    /// <para>
+    /// An async verdict is retired for the same reason, mirroring
+    /// <see cref="ApplyValidation"/>. A field validated only through
+    /// <c>.ValidateAsync(...)</c> never reaches that method, so without this an error
+    /// computed for a value the user has already replaced would stay on screen, and a
+    /// pass opened against the old value could still install its result afterwards.
+    /// </para>
+    /// </summary>
+    public void NotifyValueChanged(string field, object? value)
+    {
+        bool changed;
+        lock (_lock)
+        {
+            var known = _currentValues.TryGetValue(field, out var previous);
+            changed = !known || !Equals(previous, value);
+            if (!changed) return;
+
             _currentValues[field] = value;
+            _externalMessages.Remove(field);
+            RetractAsyncProducersLocked(field);
+            InvalidateRuleSetsLocked(field);
+            BumpVersionLocked();
+        }
+        RaiseChanged();
+    }
+
+    /// <summary>
+    /// Installs a whole rule set — every producer's verdict plus the retirement of
+    /// producers that have disappeared — as one transaction: one lock, one version bump,
+    /// and at most one <see cref="Changed"/> notification raised only after everything is
+    /// in place.
+    /// <para>
+    /// Committing producer by producer was observable mid-set: the first verdict's
+    /// notification could drive a subscriber straight back into a new evaluation, and the
+    /// outer call would carry on installing the rest of a set it no longer owned, leaving
+    /// orphaned messages that nothing would ever retract (issue #1262 review).
+    /// </para>
+    /// </summary>
+    internal void ApplyRuleSet(
+        List<(string Field, string Producer, List<ValidationMessage> Messages)> verdicts,
+        List<(string Field, string Producer)> retired)
+    {
+        var changed = false;
+        lock (_lock)
+        {
+            foreach (var (field, producer) in retired)
+            {
+                if (_asyncGeneration.TryGetValue(field, out var byProducer))
+                {
+                    byProducer.Remove(producer);
+                    if (byProducer.Count == 0) _asyncGeneration.Remove(field);
+                }
+                if (ApplyOwnedLocked(field, producer, [])) changed = true;
+            }
+
+            foreach (var (field, producer, messages) in verdicts)
+            {
+                if (RegisterFieldLocked(field)) changed = true;
+                if (ApplyOwnedLocked(field, producer, messages)) changed = true;
+            }
+
+            if (changed) BumpVersionLocked();
+        }
+        if (changed) RaiseChanged(messagesOnly: true);
+    }
+
+    /// <summary>
+    /// Opens a named rule set's evaluation and returns the generation identifying it.
+    /// The bookkeeping lives on the context, under the same lock as the messages, so a
+    /// set's generation, its membership and its verdicts are all decided together —
+    /// and so no second lock is held while <see cref="Changed"/> is raised.
+    /// </summary>
+    internal int BeginRuleSet(string setId)
+    {
+        lock (_lock)
+        {
+            if (!_ruleSetTickets.TryGetValue(setId, out var generation)) generation = 0;
+            generation = unchecked(generation + 1);
+            _ruleSetTickets[setId] = generation;
+            return generation;
         }
     }
 
     /// <summary>
-    /// Notifies the context of a field value change. Clears external messages for this field.
+    /// Installs a named rule set's verdicts, retires the producers that disappeared from
+    /// it, and records the new membership — as one transaction, and only if this
+    /// evaluation still owns the set.
+    /// <para>
+    /// <paramref name="asyncTokens"/> carries the per-producer async generation each rule
+    /// opened before its predicate ran. They are verified here, at the moment of
+    /// application: a field's value changing in the meantime retires those tokens, so a
+    /// verdict computed from the superseded value is discarded instead of installed.
+    /// The whole set stands down together, because a partially-applied set is exactly
+    /// the state this transaction exists to prevent.
+    /// </para>
     /// </summary>
-    public void NotifyValueChanged(string field, object? value)
+    internal void CommitRuleSet(
+        string setId,
+        int generation,
+        List<(string Field, string Producer, List<ValidationMessage> Messages)> verdicts,
+        List<(string Field, string Producer, int Token)>? asyncTokens,
+        List<(string Field, string Producer)>? clearAsync = null)
     {
+        var changed = false;
         lock (_lock)
         {
-            _currentValues[field] = value;
-            // External messages clear on field value change
-            if (_externalMessages.Remove(field))
-                _version++;
+            if (!_ruleSetTickets.TryGetValue(setId, out var newest) || newest != generation) return;
+
+            if (asyncTokens is not null)
+            {
+                foreach (var (field, producer, token) in asyncTokens)
+                {
+                    if (!_asyncGeneration.TryGetValue(field, out var byProducer)
+                        || !byProducer.TryGetValue(producer, out var current)
+                        || current != token)
+                        return;
+                }
+            }
+
+            // Retiring a producer's async token destroys state a *newer* call may own, so
+            // it happens here, past the ownership check, rather than before the predicates
+            // run (issue #1262 review).
+            if (clearAsync is not null)
+            {
+                foreach (var (field, producer) in clearAsync)
+                    ClearAsyncGenerationLocked(field, producer);
+            }
+
+            var applied = new List<(string Field, string Producer)>(verdicts.Count);
+            foreach (var verdict in verdicts)
+                applied.Add((verdict.Field, verdict.Producer));
+
+            if (_ruleSetMembership.TryGetValue(setId, out var previous))
+            {
+                foreach (var entry in previous.Where(entry => !applied.Contains(entry)))
+                {
+                    if (_asyncGeneration.TryGetValue(entry.Field, out var byProducer))
+                    {
+                        byProducer.Remove(entry.Producer);
+                        if (byProducer.Count == 0) _asyncGeneration.Remove(entry.Field);
+                    }
+                    if (ApplyOwnedLocked(entry.Field, entry.Producer, [])) changed = true;
+                }
+            }
+            _ruleSetMembership[setId] = applied;
+
+            foreach (var (field, producer, messages) in verdicts)
+            {
+                if (RegisterFieldLocked(field)) changed = true;
+                if (ApplyOwnedLocked(field, producer, messages)) changed = true;
+            }
+
+            if (changed) BumpVersionLocked();
         }
+        if (changed) RaiseChanged(messagesOnly: true);
+    }
+
+    private readonly Dictionary<string, int> _ruleSetTickets = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<(string Field, string Producer)>> _ruleSetMembership = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Retires the evaluations of every named rule set that could still write to
+    /// <paramref name="field"/> — or of every set when it is <c>null</c>.
+    /// <para>
+    /// Clearing or resetting state has to invalidate them, or an evaluation that was
+    /// already in flight passes its ticket check afterwards and reinstalls verdicts the
+    /// clear had just removed. A set whose membership is not yet recorded is treated as
+    /// affected: its first evaluation is exactly the one most likely to be in flight
+    /// (issue #1262 review).
+    /// </para>
+    /// </summary>
+    private void InvalidateRuleSetsLocked(string? field)
+    {
+        if (_ruleSetTickets.Count == 0) return;
+
+        // Materialized because the loop below writes back into the dictionary.
+        var affected = _ruleSetTickets.Keys
+            .Where(setId => field is null
+                || !_ruleSetMembership.TryGetValue(setId, out var members)
+                || members.Any(m => string.Equals(m.Field, field, StringComparison.Ordinal)))
+            .ToList();
+
+        foreach (var setId in affected)
+            _ruleSetTickets[setId] = unchecked(_ruleSetTickets[setId] + 1);
+    }
+
+    /// <summary>
+    /// Drops a producer's async generation entry without touching its messages, for a
+    /// producer that has stopped being asynchronous.
+    /// <para>
+    /// A mounted rule keeps its identity across a swap from <c>ValidationRuleAsync</c> to
+    /// <c>ValidationRule</c>. Leaving the stale entry behind would make the next value
+    /// change treat that producer as async and retract a synchronous verdict that is
+    /// still current.
+    /// </para>
+    /// </summary>
+    internal void ClearAsyncGeneration(string field, string producer)
+    {
+        lock (_lock) ClearAsyncGenerationLocked(field, producer);
+    }
+
+    private void ClearAsyncGenerationLocked(string field, string producer)
+    {
+        if (!_asyncGeneration.TryGetValue(field, out var byProducer)) return;
+        byProducer.Remove(producer);
+        if (byProducer.Count == 0) _asyncGeneration.Remove(field);
+    }
+
+    /// <summary>
+    /// Withdraws a producer's contribution to a field *and* retires any async pass it has
+    /// open, in one step.
+    /// <para>
+    /// Withdrawing the messages alone leaves the producer's generation entry behind.
+    /// Every mounted rule gets a fresh <c>rule#N</c> identity, so a long-lived context
+    /// that sees rules mount and unmount would accumulate stale entries without bound —
+    /// and an already-running pass could still install a verdict for a producer that no
+    /// longer exists.
+    /// </para>
+    /// </summary>
+    internal void RetireProducer(string field, string producer)
+    {
+        bool changed;
+        lock (_lock)
+        {
+            changed = RetireProducerLocked(field, producer);
+            if (changed) BumpVersionLocked();
+        }
+        if (changed) RaiseChanged(messagesOnly: true);
+    }
+
+    private bool RetireProducerLocked(string field, string producer)
+    {
+        if (_asyncGeneration.TryGetValue(field, out var byProducer))
+        {
+            byProducer.Remove(producer);
+            if (byProducer.Count == 0) _asyncGeneration.Remove(field);
+        }
+
+        return ApplyOwnedLocked(field, producer, []);
+    }
+
+    /// <summary>
+    /// Withdraws a producer's contribution only while <paramref name="expectedStamp"/> is
+    /// still the token of the last write to that slot.
+    /// <para>
+    /// A control that leaves the tree has to take its verdict with it, but it is not
+    /// necessarily the last thing to have written the slot it wrote. Replacing a
+    /// <c>FormField</c>'s content installs the incoming control's verdict before the
+    /// outgoing one is unmounted, and both write the same field under the same producer;
+    /// an unconditional retraction on the way out would erase the verdict that had just
+    /// replaced it, leaving the form spuriously valid. Comparing stamps makes "withdraw
+    /// what I installed" exact without comparing message instances, which
+    /// <see cref="ApplyOwnedLocked"/> deliberately keeps stable across an unchanged pass.
+    /// </para>
+    /// <para>
+    /// The comparison and the withdrawal share one lock acquisition. Split across two, a
+    /// writer that installed a newer verdict in the window between them would have it
+    /// deleted by the very check meant to protect it (issue #1262 review).
+    /// </para>
+    /// </summary>
+    internal void RetireProducer(string field, string producer, long expectedStamp)
+    {
+        bool changed;
+        lock (_lock)
+        {
+            var current = _producerStamp.TryGetValue(field, out var stamps)
+                && stamps.TryGetValue(producer, out var stamp) ? stamp : 0;
+            if (current != expectedStamp) return;
+
+            changed = RetireProducerLocked(field, producer);
+            if (changed) BumpVersionLocked();
+        }
+        if (changed) RaiseChanged(messagesOnly: true);
+    }
+
+    /// <summary>
+    /// Withdraws every async contribution to a field and retires its in-flight passes.
+    /// <para>
+    /// Producer-aware rather than just <see cref="AsyncProducer"/>: an async
+    /// <c>ValidationRule</c> installs under its own key — <c>rule#N</c> when mounted, or
+    /// the message-derived fallback when evaluated by hand — so clearing only the field's
+    /// own async slot left a rule's verdict about the previous value on screen, keeping
+    /// <see cref="IsValid"/> false for a value it never examined. The generation map's
+    /// keys are exactly the producers that have run asynchronously on this field.
+    /// </para>
+    /// </summary>
+    private bool RetractAsyncProducersLocked(string field)
+    {
+        var changed = false;
+
+        if (_asyncGeneration.TryGetValue(field, out var byProducer))
+        {
+            foreach (var producer in byProducer.Keys)
+            {
+                if (ApplyOwnedLocked(field, producer, [])) changed = true;
+            }
+            _asyncGeneration.Remove(field);
+        }
+
+        // A verdict can outlive its generation entry — a previous retraction drops the
+        // entry but a later pass may have installed under the plain async slot.
+        if (ApplyOwnedLocked(field, AsyncProducer, [])) changed = true;
+
+        return changed;
     }
 
     /// <summary>
@@ -388,16 +1466,30 @@ public sealed class ValidationContext
     /// </summary>
     public object? Reset(string field)
     {
+        object? initial;
+        bool changed;
         lock (_lock)
         {
-            _touchedFields.Remove(field);
-            _messages.Remove(field);
-            _externalMessages.Remove(field);
-            _initialValues.TryGetValue(field, out var initial);
-            _currentValues[field] = initial;
-            _version++;
-            return initial;
+            changed = _touchedFields.Remove(field);
+            if (_messages.Remove(field)) changed = true;
+            if (_externalMessages.Remove(field)) changed = true;
+            DropFieldProducerStateLocked(field);
+
+            _initialValues.TryGetValue(field, out initial);
+            // Only rewind a value the context is actually tracking. Creating an entry
+            // for a field it has never seen is not observable (IsDirty needs both an
+            // initial and a current value) but would make Reset("unknown") look like a
+            // change and notify.
+            if (_currentValues.TryGetValue(field, out var current) && !Equals(current, initial))
+            {
+                _currentValues[field] = initial;
+                changed = true;
+            }
+
+            if (changed) BumpVersionLocked();
         }
+        if (changed) RaiseChanged();
+        return initial;
     }
 
     /// <summary>
@@ -406,20 +1498,38 @@ public sealed class ValidationContext
     /// </summary>
     public IReadOnlyDictionary<string, object?> ResetAll()
     {
+        Dictionary<string, object?> result;
+        bool changed;
         lock (_lock)
         {
+            changed = _touchedFields.Count > 0 || _messages.Count > 0
+                || _externalMessages.Count > 0 || _submitAttempted;
             _touchedFields.Clear();
+            // A reset returns the form to its pre-submit state, so the next
+            // AfterFirstSubmit reveal waits for a fresh submit attempt.
+            _submitAttempted = false;
             _messages.Clear();
             _externalMessages.Clear();
-            var result = new Dictionary<string, object?>();
+            _messageOwners.Clear();
+            _producerStamp.Clear();
+            _asyncGeneration.Clear();
+            InvalidateRuleSetsLocked(null);
+
+            result = new Dictionary<string, object?>();
             foreach (var (field, initial) in _initialValues)
             {
-                _currentValues[field] = initial;
+                if (_currentValues.TryGetValue(field, out var current) && !Equals(current, initial))
+                {
+                    _currentValues[field] = initial;
+                    changed = true;
+                }
                 result[field] = initial;
             }
-            _version++;
-            return result;
+
+            if (changed) BumpVersionLocked();
         }
+        if (changed) RaiseChanged();
+        return result;
     }
 
     // ════════════════════════════════════════════════════════════════

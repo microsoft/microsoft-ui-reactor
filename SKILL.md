@@ -541,11 +541,10 @@ For lightweight demos, skip the `.csproj` entirely. Add a file-level header:
 
 ```csharp
 #:package Microsoft.UI.Reactor@0.0.0-local
-#:package Microsoft.WindowsAppSDK@2.2.0
+#:package Microsoft.Windows.SDK.BuildTools.WinApp@0.7.0
 #:property OutputType=WinExe
 #:property TargetFramework=net10.0-windows10.0.22621.0
 #:property UseWinUI=true
-#:property WindowsPackageType=None
 
 using Microsoft.UI.Reactor;
 using static Microsoft.UI.Reactor.Factories;
@@ -557,9 +556,19 @@ ReactorApp.Run("Hello", ctx =>
 });
 ```
 
-Run with `dotnet run MyApp.cs -p:Platform=ARM64` (or `x64`). In selfhost
-the version is `0.0.0-local` — run `mur pack-local` first if the package
-isn't found. Outside the clone, replace the version with the published
+Run with `dotnet run MyApp.cs` — no architecture flag. This is the header the
+[Getting Started guide](https://microsoft.github.io/microsoft-ui-reactor/getting-started/#one-file-no-project)
+documents: `Microsoft.Windows.SDK.BuildTools.WinApp` makes `dotnet run` launch
+the app packaged, with package identity, which needs Developer Mode. If
+Developer Mode is off, or you don't need identity, add
+`#:property WindowsPackageType=None` to run it as a plain unpackaged `.exe`.
+With neither, the app builds, then dies at startup with `REGDB_E_CLASSNOTREG`.
+Either way the app uses the Windows App Runtime installed on the machine. To
+bundle it instead, add `#:property WindowsAppSDKSelfContained=true`; that mode
+also needs an architecture (`-r win-x64` or `-r win-arm64`), and `-r` alone
+bundles nothing.
+In selfhost the version is `0.0.0-local` — run `mur pack-local` first if the
+package isn't found. Outside the clone, replace the version with the published
 release you depend on.
 
 > **Always capture `dotnet run` output.** Build errors exit with code 1.

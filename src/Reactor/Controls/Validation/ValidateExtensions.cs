@@ -13,9 +13,22 @@ public sealed record ValidationAttached(
 {
     /// <summary>
     /// The current field value, used for automatic validation when the element is
-    /// mounted inside a FormFieldElement or ValidationVisualizerElement.
+    /// mounted inside a <c>FormFieldElement</c>. The visualizers are display-only: they
+    /// render what a context already holds and never run attached validators.
     /// </summary>
     public object? Value { get; init; }
+
+    /// <summary>
+    /// True when a value overload of <c>.Validate()</c>/<c>.ValidateAsync()</c> supplied
+    /// <see cref="Value"/>.
+    /// <para>
+    /// <c>null</c> is a legitimate value, so the property alone cannot distinguish "the
+    /// field is empty" from "no value was ever attached". Without that distinction
+    /// <c>FormField</c> validated <c>null</c> for the validator-only overload and
+    /// reported a required-field error for a control that plainly had text in it.
+    /// </para>
+    /// </summary>
+    public bool HasValue { get; init; }
 
     public static readonly ValidationAttached Empty = new("", [], []);
 }
@@ -42,13 +55,35 @@ public static class ValidateExtensions
                 Validators = [.. existing.Validators, .. validators]
             }
             : new ValidationAttached(fieldName, validators, []);
+
+        // Attach-only on its own — there is no value to check. But appended to a chain
+        // that already carries one, the merged set has to be re-run: eager validation
+        // happens at each link, so `.Validate(f, v, Required()).Validate(f, MinLength(3))`
+        // would otherwise install only the Required verdict and silently drop the second
+        // validator for a bare control (issue #1262 review).
+        SupersedeEarlierLink(existing, fieldName);
+        if (merged.HasValue) RunDuringRender(merged, merged.Value);
+
         return (T)el.SetAttached(merged);
     }
 
     /// <summary>
-    /// Attaches validators to this element along with the current field value.
-    /// When placed inside a FormFieldElement, validators run automatically — no manual
-    /// ValidationReconciler.ValidateField() call needed.
+    /// Attaches validators to this element along with the current field value, and —
+    /// when called from inside a component's <c>Render()</c> — runs them immediately
+    /// against the enclosing <see cref="ValidationContext"/>.
+    /// <para>
+    /// Running during render rather than during reconcile is what makes the results
+    /// readable by the same <c>Render()</c> that produced them, so
+    /// <c>When(ctx.IsTouched(f) &amp;&amp; ctx.HasError(f), …)</c> placed after this call
+    /// sees the current verdict instead of the previous pass's.
+    /// </para>
+    /// <para>
+    /// The validators are still attached, so <c>FormField</c> keeps working for
+    /// elements built outside a render pass. Re-running them is harmless: results are
+    /// applied with a structural diff. The visualizers only *display* what a context
+    /// already holds — they never run attached validators — so an element that reaches
+    /// neither a render pass nor a <c>FormField</c> contributes no verdict.
+    /// </para>
     /// </summary>
     public static T Validate<T>(this T el, string fieldName, object? value, params IValidator[] validators) where T : Element
     {
@@ -58,9 +93,13 @@ public static class ValidateExtensions
             {
                 FieldName = fieldName,
                 Value = value,
+                HasValue = true,
                 Validators = [.. existing.Validators, .. validators]
             }
-            : new ValidationAttached(fieldName, validators, []) { Value = value };
+            : new ValidationAttached(fieldName, validators, []) { Value = value, HasValue = true };
+
+        SupersedeEarlierLink(existing, fieldName);
+        RunDuringRender(merged, value);
         return (T)el.SetAttached(merged);
     }
 
@@ -77,11 +116,37 @@ public static class ValidateExtensions
                 AsyncValidators = [.. existing.AsyncValidators, .. asyncValidators]
             }
             : new ValidationAttached(fieldName, [], asyncValidators);
+        SupersedeEarlierLink(existing, fieldName);
+
+        // Attach-only for the async validators themselves — nothing runs those during a
+        // synchronous render. But a chain that already carries a value has a *sync*
+        // verdict in flight whose claim this link just superseded, so the merged
+        // attachment has to re-run those validators and take the claim over. Without it
+        // `.Validate(f, v, …).ValidateAsync(f, …)` published a verdict that no mounted
+        // control owned, and a bare control left it behind on unmount
+        // (issue #1262 review). RunDuringRender is a no-op when there are no sync
+        // validators, so a purely async attachment is unaffected.
+        if (merged.HasValue) RunDuringRender(merged, merged.Value);
+
         return (T)el.SetAttached(merged);
     }
 
     /// <summary>
-    /// Attaches async validators with the current field value for automatic validation.
+    /// Attaches async validators to this element along with the current field value, and
+    /// registers the field so <c>MarkAllTouched()</c> covers it.
+    /// <para>
+    /// This overload is <b>attach-only</b>: it does not run the validators. Nothing
+    /// consumes <see cref="ValidationAttached.AsyncValidators"/> automatically — not the
+    /// render scope, which must stay synchronous, and not <c>FormField</c>. Run them
+    /// yourself from an effect via
+    /// <see cref="ValidationReconciler.ValidateFieldAsync"/>, which carries the
+    /// generation guard that discards a result superseded by a newer value.
+    /// </para>
+    /// <para>
+    /// Registration happens here for an element built during a render, and again when
+    /// <c>FormField</c> mounts or updates it, which is the only chance an element
+    /// assembled outside a render pass gets.
+    /// </para>
     /// </summary>
     public static T ValidateAsync<T>(this T el, string fieldName, object? value, params IAsyncValidator[] asyncValidators) where T : Element
     {
@@ -91,10 +156,60 @@ public static class ValidateExtensions
             {
                 FieldName = fieldName,
                 Value = value,
+                HasValue = true,
                 AsyncValidators = [.. existing.AsyncValidators, .. asyncValidators]
             }
-            : new ValidationAttached(fieldName, [], asyncValidators) { Value = value };
+            : new ValidationAttached(fieldName, [], asyncValidators) { Value = value, HasValue = true };
+
+        // Async validators cannot resolve inside a synchronous render, but the field
+        // still has to be registered or MarkAllTouched() would skip it.
+        SupersedeEarlierLink(existing, fieldName);
+        ValidationRenderScope.Current?.RegisterField(fieldName);
+
+        // Re-runs only the sync validators a preceding `.Validate(f, v, …)` link
+        // contributed, so the surviving attachment owns their verdict — see the
+        // validator-only overload above. A no-op when the chain carries none.
+        RunDuringRender(merged, value);
+
         return (T)el.SetAttached(merged);
+    }
+
+    /// <summary>
+    /// Pushes a freshly-attached field's verdict into the context that is rendering, if
+    /// any. Outside a render pass — an element assembled in an event handler, a cached
+    /// element, a headless unit test — there is no context to reach and this is a no-op,
+    /// leaving <c>.Validate()</c> purely declarative as it has always been.
+    /// </summary>
+    private static void RunDuringRender(ValidationAttached attached, object? value)
+    {
+        if (attached.Validators.Length == 0) return;
+        var ctx = ValidationRenderScope.Current;
+        if (ctx is null) return;
+        ValidationReconciler.ValidateAttached(ctx, attached, value);
+        ValidationRenderScope.RecordOwnership(
+            attached, ctx, ctx.GetProducerStamp(attached.FieldName, ValidationContext.SyncProducer));
+    }
+
+    /// <summary>
+    /// Withdraws the verdict an earlier link of the same chain already wrote, when this
+    /// link moves the attachment to a different field.
+    /// <para>
+    /// Every link evaluates eagerly, because a chain that only ran at its end would drop
+    /// the earlier links' validators for a bare control. The attachment that survives
+    /// carries only the final <c>FieldName</c> though, so
+    /// <c>.Validate("a", x, …).Validate("b", y, …)</c> left field <c>a</c> holding a
+    /// verdict nothing would ever revisit — permanently invalid, and invisible, since no
+    /// control is associated with it. The earlier link's own claim is what identifies
+    /// that write, so only what this chain actually installed is withdrawn.
+    /// </para>
+    /// </summary>
+    private static void SupersedeEarlierLink(ValidationAttached? existing, string nextField)
+    {
+        if (existing is null) return;
+        if (!ValidationRenderScope.TryTakeOwnership(existing, out var owned)) return;
+        if (string.Equals(existing.FieldName, nextField, StringComparison.Ordinal)) return;
+
+        owned.Context.RetireProducer(existing.FieldName, ValidationContext.SyncProducer, owned.Stamp);
     }
 
     /// <summary>
