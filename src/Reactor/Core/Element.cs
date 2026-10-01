@@ -3742,6 +3742,81 @@ public partial record AutoSuggestBoxElement(
         __SuggestionChosenTrampoline = (s, args) =>
             (global::Microsoft.UI.Reactor.Core.Reconciler.GetElementTag((WinUI.AutoSuggestBox)s!) as AutoSuggestBoxElement)?.OnSuggestionChosen?.Invoke(args.SelectedItem?.ToString() ?? "");
 
+    // WinUI's AutoSuggestBox raises TextChanged from an internal DispatcherTimer, 150 ms after
+    // the text in its template TextBox last changed. The timer keeps running after the box leaves
+    // the tree, and it does not keep the box reachable. So if the box is dropped inside that
+    // window (unmounted, or a disposed host's content replaced), a full GC can collect the box's
+    // managed side: the TextChanged delegate and the ReactorState that native code reaches only
+    // through reference-tracked CCWs. The native box and its timer live on, the tick calls into
+    // collected managed state, CsWinRT throws NullReferenceException into WinUI, and WinUI
+    // fail-fasts the process with STATUS_STOWED_EXCEPTION (0xC000027B).
+    //
+    // The timer is only armed while the box is in the tree (a text change on a box that has left
+    // it raises no tick), and the tree keeps the box's managed side alive. So a tick can only be
+    // pending on an unreachable box if it was armed before the box left the tree, and Reactor
+    // holds the box until well after any such tick:
+    //   - from Unloaded. WinUI pegs the box from leaving the tree until Unloaded is delivered,
+    //     so nothing is collected before the hold is taken.
+    //   - from installing the handler. An update can do that after the box left the tree, too
+    //     late for its Unloaded. That needs a tick armed less than 150 ms earlier on a box that
+    //     is out of the tree yet still updated (a hidden tab's content, say), so no selftest can
+    //     force it deterministically; the hold is kept because it costs next to nothing.
+    private static class PendingTextChangedTick
+    {
+        // Far past the 150 ms timer, so the tick has landed long before the hold is released.
+        private const long HoldMilliseconds = 1000;
+
+        // Per UI thread: a box's callbacks, and the timer that releases it, run on its thread.
+        [global::System.ThreadStatic] private static global::System.Collections.Generic.Dictionary<WinUI.AutoSuggestBox, long>? t_heldUntil;
+        [global::System.ThreadStatic] private static global::Microsoft.UI.Dispatching.DispatcherQueueTimer? t_release;
+
+        internal static readonly RoutedEventHandler OnUnloaded = static (sender, _) =>
+        {
+            if (sender is WinUI.AutoSuggestBox box) Hold(box);
+        };
+
+        internal static void Release(WinUI.AutoSuggestBox box) => t_heldUntil?.Remove(box);
+
+        internal static (int Held, bool ReleaseTimerRunning) State =>
+            (t_heldUntil?.Count ?? 0, t_release?.IsRunning ?? false);
+
+        internal static void Hold(WinUI.AutoSuggestBox box)
+        {
+            var queue = global::Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            if (queue is null) return;
+
+            var held = t_heldUntil ??= new(global::System.Collections.Generic.ReferenceEqualityComparer.Instance);
+            held[box] = global::System.Environment.TickCount64 + HoldMilliseconds;
+
+            if (t_release is null)
+            {
+                t_release = queue.CreateTimer();
+                t_release.Interval = global::System.TimeSpan.FromMilliseconds(HoldMilliseconds);
+                t_release.Tick += ReleaseExpired;
+            }
+            if (!t_release.IsRunning) t_release.Start();
+        }
+
+        private static void ReleaseExpired(global::Microsoft.UI.Dispatching.DispatcherQueueTimer timer, object _)
+        {
+            var held = t_heldUntil;
+            if (held is not null)
+            {
+                var now = global::System.Environment.TickCount64;
+                foreach (var box in held.Where(entry => entry.Value <= now).Select(entry => entry.Key).ToList())
+                    held.Remove(box);
+                if (held.Count > 0) return;
+            }
+            timer.Stop();
+        }
+    }
+
+    // Test-only accessors (InternalsVisibleTo Reactor.AppTests.Host). One ends a box's hold early,
+    // so a selftest can show that a later event holds the box again by itself; the other reads
+    // this thread's hold table and release timer, so it can show that every hold ends.
+    internal static void ReleaseTextChangedTickHoldForTests(WinUI.AutoSuggestBox box) => PendingTextChangedTick.Release(box);
+    internal static (int Held, bool ReleaseTimerRunning) TextChangedTickHoldStateForTests() => PendingTextChangedTick.State;
+
     // Suggestions BEFORE Text (items in place before any controlled Text echo); all
     // reused verbatim from the hand-written descriptor (shared AutoSuggestBoxEventPayload).
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<AutoSuggestBoxElement, WinUI.AutoSuggestBox> Customize(
@@ -3755,7 +3830,12 @@ public partial record AutoSuggestBoxElement(
                 get:         static e => e.Text,
                 set:         static (c, v) => c.Text = v,
                 readBack:    static c => c.Text,
-                subscribe:   static (c, h) => c.TextChanged += h,
+                subscribe:   static (c, h) =>
+                {
+                    c.TextChanged += h;
+                    c.Unloaded += PendingTextChangedTick.OnUnloaded;
+                    PendingTextChangedTick.Hold(c);
+                },
                 callback:    static e => e.OnTextChanged,
                 trampoline:  __TextChangedTrampoline,
                 slotIsNull:  static p => p.TextChangedTrampoline is null,
