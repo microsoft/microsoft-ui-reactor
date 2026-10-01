@@ -316,14 +316,8 @@ Source and destination must appear in the **same render** — the reconciler
 publishes the outgoing element's snapshot during the reconcile pass and plays
 it into the incoming element at the end of that same pass.
 
-WinUI takes that snapshot in its next frame. Preparing the same key again before
-then would cancel the first animation, which crashes WinUI, so Reactor
-snapshots a key at most once per rendered frame: if two renders land in the
-same frame and both unmount an element with the key, only the first transition
-animates. Transitions with a rendered frame between them are not affected, which
-covers interactions paced by a person. Renders land in one frame when they
-follow each other within a few milliseconds, such as clicks driven by a test or
-a state change made while the previous one is still rendering.
+If two renders in the same frame unmount elements with the same key, only the
+first one animates.
 
 Reactor snapshots *every* outgoing element that carries a key, because it cannot
 know which sibling you activated. Collapsing a list of keyed rows to one detail
