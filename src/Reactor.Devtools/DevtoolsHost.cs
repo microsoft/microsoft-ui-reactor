@@ -377,9 +377,11 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                     }
                     catch (LoopbackPortUnavailableException ex) when (ExitCodeForMcpStartFailure(ex) is { } exitCode)
                     {
+                        // Neutral on purpose: under `mur devtools` the port may be one the
+                        // supervisor chose, and the supervisor prints the guidance.
                         Console.Error.WriteLine(
-                            $"[devtools] MCP port {ex.Port} is already in use by another process. " +
-                            "Pass a different --mcp-port, or omit it to let the app pick a free port.");
+                            $"[devtools] MCP port {ex.Port} (--mcp-port) is already in use by another process; " +
+                            $"exiting with code {exitCode}.");
                         ExitDevtoolsHost(mcp, host, exitCode);
                     }
                     catch (Exception ex)
