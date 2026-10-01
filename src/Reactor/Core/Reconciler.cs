@@ -3848,6 +3848,11 @@ public sealed partial class Reconciler : IDisposable
     // start count is the only non-vacuous oracle available to an automated test.
     internal int ConnectedAnimationStartCount;
 
+    // Test-only seam, same visibility: counts unmounting sources that were NOT prepared
+    // because WinUI had not yet rendered a frame since their key was last prepared (see
+    // PrepareConnectedAnimationSource). The settled tree is the same either way.
+    internal int ConnectedAnimationPreparationsSkipped;
+
     // Keys this reconcile pass actually published a snapshot for. The flush resolves
     // queued destinations only against these, because ConnectedAnimationService is
     // view-wide and unclaimed preparations are deliberately left to expire on their own
@@ -3862,8 +3867,8 @@ public sealed partial class Reconciler : IDisposable
     // cause one) and costs a hash lookup, so it stays; but it is NOT test-proven, and a
     // future change here should not assume a test would catch a regression.
     //
-    // Bookkeeping only. Nothing is invoked on the service, which is what made the
-    // withdrawn Cancel()-based cleanup crash.
+    // Bookkeeping only. Nothing is invoked on the service, so an unclaimed preparation is
+    // never cancelled; see PrepareConnectedAnimationSource for why a cancel can crash.
     private readonly HashSet<string> _preparedConnectedAnimationKeys = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -3878,20 +3883,42 @@ public sealed partial class Reconciler : IDisposable
     /// those composited at its source's old position until it times out — roughly a
     /// second of the old list ghosting over the new view.
     ///
-    /// <para>That is a known cosmetic wart, deliberately left alone. Withdrawing an
-    /// unclaimed preparation with <c>ConnectedAnimation.Cancel()</c> faults WinUI natively
-    /// (0xC0000005 in Microsoft.UI.Xaml.dll 3.2.3.0): by flush time the source has been
-    /// unmounted and returned to <see cref="ElementPool"/>, so the animation is holding a
-    /// visual that <c>CleanElement</c> has already reset. A crash is strictly worse than a
-    /// ghost, so the ghosts stay until there is a safe way to withdraw a preparation.
-    /// <c>ConnectedAnimation_OrphanOnlyPassDoesNotCrash</c> pins the no-crash behaviour.</para>
+    /// <para>That is a known cosmetic wart, deliberately left alone, because WinUI faults
+    /// (0xC0000005 at <c>CConnectedAnimationService::PreCommit</c>) when a preparation is
+    /// cancelled before it has rendered a frame and its source left the tree by itself.
+    /// The source is removed in the same pass it is prepared in, so WinUI retains it for
+    /// that frame's commit, and only the preparation gives it a composition node; a cancel
+    /// takes the node away and the commit dereferences null (issue #1152). An earlier
+    /// revision withdrew unclaimed preparations with <c>ConnectedAnimation.Cancel()</c> at
+    /// flush time and crashed this way; <c>ConnectedAnimation_OrphanOnlyPassDoesNotCrash</c>
+    /// pins the no-crash behaviour.</para>
+    ///
+    /// <para>Preparing a key that is still in use cancels its earlier animation the same way.
+    /// That happens when two passes run before WinUI renders a frame and both unmount an
+    /// element with the key, so a key is not prepared again until WinUI has rendered a frame
+    /// since its last preparation (<see cref="ConnectedAnimationFrameGate"/>). The skipped
+    /// source does not animate, and the earlier preparation stands. In the round trip that
+    /// reaches this (Go, Back, Go before one frame), the skipped source was mounted after
+    /// the last frame, so it never reached the screen.
+    /// <c>ConnectedAnimation_RepreparedBeforeFrameDoesNotCrash</c> pins this.</para>
+    ///
+    /// <para>Not covered: WinUI also cancels a started animation when its destination leaves
+    /// the tree. A pass that removes a destination before WinUI has rendered a frame since
+    /// its animation started can still fault.</para>
     /// </remarks>
     private void PrepareConnectedAnimationSource(string key, UIElement control)
     {
+        if (ConnectedAnimationFrameGate.IsAwaitingFrame(key))
+        {
+            ConnectedAnimationPreparationsSkipped++;
+            return;
+        }
+
         try
         {
             ConnectedAnimationService.GetForCurrentView().PrepareToAnimate(key, control);
             _preparedConnectedAnimationKeys.Add(key);
+            ConnectedAnimationFrameGate.Prepared(key);
         }
         catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
         {
