@@ -230,6 +230,16 @@ internal static class SelfTestFixtureRegistry
         "KeyedWrapper_ErrorBoundary_GrowAndReverse",
         "KeyedWrapper_KeyedMemo_GrowAndReverse",
         "KeyedWrapper_KeyedMemoInnerKey_GrowAndReverse",
+        // A child whose update returns a new control is unmounted when it leaves a
+        // single-child slot, as it is when it leaves a panel (SlotReplacementFixtures).
+        "SlotReplace_Border",
+        "SlotReplace_SplitViewPane",
+        "SlotReplace_TabViewItem",
+        "SlotReplace_TabStripHeader",
+        "SlotReplace_InlineUIContainer",
+        "SlotReplace_Panel",
+        "SlotReplace_RegisteredSameControl",
+        "SlotReplace_RegisteredNewControl",
         // Issue #951 — keyed ListView/GridView rows must not announce Reactor's
         // internal row identity, and must honor an author-declared item name.
         "KLIA_NoRowIdentityLeak",
@@ -2240,6 +2250,14 @@ internal static class SelfTestFixtureRegistry
         "KeyedWrapper_ErrorBoundary_GrowAndReverse" => new KeyedWrapperChildrenFixtures.ErrorBoundaryChildren(harness),
         "KeyedWrapper_KeyedMemo_GrowAndReverse" => new KeyedWrapperChildrenFixtures.KeyedMemoChildren(harness),
         "KeyedWrapper_KeyedMemoInnerKey_GrowAndReverse" => new KeyedWrapperChildrenFixtures.KeyedMemoInnerKeyChildren(harness),
+        "SlotReplace_Border" => new SlotReplacementFixtures.InBorder(harness),
+        "SlotReplace_SplitViewPane" => new SlotReplacementFixtures.InSplitViewPane(harness),
+        "SlotReplace_TabViewItem" => new SlotReplacementFixtures.InTabViewItem(harness),
+        "SlotReplace_TabStripHeader" => new SlotReplacementFixtures.InTabStripHeader(harness),
+        "SlotReplace_InlineUIContainer" => new SlotReplacementFixtures.InInlineUIContainer(harness),
+        "SlotReplace_Panel" => new SlotReplacementFixtures.InPanel(harness),
+        "SlotReplace_RegisteredSameControl" => new SlotReplacementFixtures.RegisteredUpdateReturnsSameControl(harness),
+        "SlotReplace_RegisteredNewControl" => new SlotReplacementFixtures.RegisteredUpdateReturnsNewControl(harness),
         // Issue #951 — keyed list/grid row automation names.
         "KLIA_NoRowIdentityLeak" => new KeyedListItemAutomationNameFixtures.NoRowIdentityLeak(harness),
         "KLIA_MatchesElementArray" => new KeyedListItemAutomationNameFixtures.MatchesElementArray(harness),

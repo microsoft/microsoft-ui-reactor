@@ -3061,6 +3061,13 @@ public sealed partial class Reconciler : IDisposable
     /// <see cref="UIElement"/> the caller should write back into the slot
     /// (or null when the slot should be cleared).
     ///
+    /// <para>When the update returns a new control for the slot, the control it
+    /// replaced is unmounted here, as a panel's <c>ChildReconciler</c> and the
+    /// component path (<see cref="ReconcileImperative"/>) do. The caller only swaps
+    /// the slot, so without this the old subtree's effect cleanups, refs,
+    /// <c>.OnUnmount</c> actions and handler unmounts never ran. An update that
+    /// returns the control it was handed patched it in place.</para>
+    ///
     /// <para>This exists because the naive replace in early Phase 1
     /// (<c>MountChild</c> + <c>SetChild</c> without comparing old vs new)
     /// destroys descendant state slots on every parent re-render — see the
@@ -3078,7 +3085,10 @@ public sealed partial class Reconciler : IDisposable
         if (oldChild is not null && existing is not null && CanUpdate(oldChild, newChild))
         {
             var replacement = Update(oldChild, newChild, existing, requestRerender);
-            return replacement ?? existing;
+            if (replacement is null || IsSameControl(replacement, existing))
+                return existing;
+            Unmount(existing);
+            return replacement;
         }
         // Hot Reload component-identity migration (spec 049 §7) — preserve the
         // child subtree's state across an edit instead of unmount/mount.
@@ -3088,6 +3098,20 @@ public sealed partial class Reconciler : IDisposable
             return existing;
         if (existing is not null) Unmount(existing);
         return Mount(newChild, requestRerender);
+    }
+
+    // True when an update result is the control it was handed, possibly through a second
+    // managed wrapper. Every wrapper for a native object reads the same ReactorState, so the
+    // handed-in control gets one if it has none before the result is checked for it. That
+    // allocation happens only when the result is a different wrapper, which is almost always
+    // a genuine replacement, and it lands on the control being replaced.
+    private static bool IsSameControl(UIElement result, UIElement control)
+    {
+        if (ReferenceEquals(result, control)) return true;
+        if (result is not FrameworkElement resultFe || control is not FrameworkElement controlFe)
+            return false;
+        GetOrCreateReactorState(controlFe);
+        return IsSameNativeElement(resultFe, controlFe);
     }
 
     // ════════════════════════════════════════════════════════════════════
