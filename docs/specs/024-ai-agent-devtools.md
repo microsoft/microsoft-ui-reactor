@@ -187,7 +187,7 @@ CAPTURE_PORT=54932
 
 When the child exits with the reload sentinel code (`42`, emitted by `reactor.reload`), the launcher rebuilds and respawns the child on the same `MCP_PORT`. Each ready line carries a new `build` tag so the agent can confirm its view of the world is post-reload. If the child exits with any other code, the launcher exits too — it's a supervisor for reload, not a crash-loop restart manager.
 
-The one other code the launcher acts on is `43`: the child exits with it when the `--mcp-port` it was given is held by another process. A port the launcher picked itself is only a probe — the child binds it after `dotnet run` builds, and on reload it stays unbound while the project rebuilds — so another process can take it first. The launcher then picks a new port, prints it, and relaunches. A port the user pinned with `--mcp-port` is never moved: the launcher reports it and exits `43`. Inside the app, an unpinned MCP or capture port never fails this way — the listener binds and, if another process won the port first, binds a newly probed one.
+The one other code the launcher acts on is `43`: the child exits with it when the `--mcp-port` it was given is held by another process. A port the launcher picked itself is only a probe — the child binds it after `dotnet run` builds, and on reload it stays unbound while the project rebuilds — so another process can take it first. The launcher then picks a new port, prints it, and relaunches. A port the user pinned with `--mcp-port` is never moved: the launcher reports it and exits `43`. Inside the app, an unpinned MCP or capture port does not fail this way: if another process takes the probed port first, the listener probes and binds a new one (up to 16 attempts).
 
 ### Migration from `--preview`
 
