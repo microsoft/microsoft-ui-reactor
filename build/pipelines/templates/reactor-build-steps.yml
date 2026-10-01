@@ -84,9 +84,8 @@ steps:
   # public registry.npmjs.org so external contributors can restore. We cannot commit an
   # internal-only .npmrc without breaking them. Instead, write the internal registry to
   # the repo-root .npmrc at build time (the CI working tree is disposable) so transitive
-  # npm downloads (e.g. GitHub.Copilot.SDK pulling copilot-win32-x64-*.tgz) resolve from
-  # the internal feed -- which proxies npmjs.org -- instead of the public registry the
-  # build environment may not reach.
+  # npm downloads resolve from the internal feed -- which proxies npmjs.org -- instead of
+  # the public registry the build environment may not reach.
   - pwsh: |
       $dest = Join-Path "$(Build.SourcesDirectory)" '.npmrc'
       @(
@@ -203,7 +202,7 @@ steps:
   # -p:CI=true is passed as an explicit MSBuild global property (not the pipeline env
   # var of the same name, which did not reliably reach MSBuild in CI). CI=true gates off
   # Reactor.Cli's RunSignaturesGen target AND (via Directory.Build.props) sets
-  # CopilotSkipCliDownload=true so the GitHub.Copilot.SDK npmjs.org download is skipped
+  # CopilotSkipCliDownload=true so the GitHub.Copilot.SDK native CLI download is skipped
   # in CI. NOTE: passing -p:CopilotSkipCliDownload=true as a global property did NOT take
   # effect (Copilot still downloaded for DemoScriptTool + Reactor.Cli -> MSB3923) even
   # though -p:CI=true in the same project did; we therefore derive the skip from $(CI) in

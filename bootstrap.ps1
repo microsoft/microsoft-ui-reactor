@@ -51,12 +51,6 @@
     suite or manage the CLI yourself. The install is best-effort either way —
     a missing winget only warns, it never fails the bootstrap.
 
-.PARAMETER NpmRegistry
-    Override the npm registry used by GitHub.Copilot.SDK to acquire its native
-    CLI. When omitted, bootstrap uses a packagefeedproxy.microsoft.io registry
-    already configured in NPM_CONFIG_REGISTRY or ~/.npmrc; otherwise the SDK's
-    public registry default is unchanged.
-
 .PARAMETER NuGetConfig
     Use an explicit NuGet.Config for bootstrap restores. When omitted, bootstrap
     uses a packagefeedproxy.microsoft.io source already present in the user's
@@ -115,7 +109,6 @@ param(
     [switch]$InstallWinAppSdk,
     [switch]$NoWinAppSdk,
     [switch]$SkipWinAppCli,
-    [string]$NpmRegistry,
     [string]$NuGetConfig,
     [string]$WinAppSdkTemplatesVersion,
     [switch]$SkipTemplates
@@ -223,22 +216,6 @@ if (-not (Test-DotnetSdk10)) {
 Write-Ok ".NET SDK present"
 
 $hostArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
-$copilotPlatform = if ($hostArch -eq 'ARM64') { 'win32-arm64' } else { 'win32-x64' }
-
-$npmSelection = Resolve-ReactorNpmRegistry -ExplicitRegistry $NpmRegistry
-if ($npmSelection -and -not $npmSelection.Explicit) {
-    Write-Dbg "Testing unauthenticated npm tarball access: $($npmSelection.Registry) ($copilotPlatform)"
-    if (-not (Test-ReactorNpmRegistryAccess -Registry $npmSelection.Registry -Platform $copilotPlatform)) {
-        Write-Host "    [warn] Configured npm proxy is not reachable; falling back to GitHub.Copilot.SDK's public registry." -ForegroundColor Yellow
-        $npmSelection = $null
-    }
-}
-if ($npmSelection) {
-    $npmSelectionKind = if ($npmSelection.Explicit) { 'explicit override' } else { 'user configuration' }
-    Write-Ok "npm registry selected from ${npmSelectionKind}: $($npmSelection.Registry)"
-} else {
-    Write-Dbg 'No reachable configured npm proxy detected; GitHub.Copilot.SDK will use its public registry default'
-}
 
 $nugetSelection = Resolve-ReactorNuGetFeed -ExplicitConfig $NuGetConfig
 if ($nugetSelection -and -not $nugetSelection.Explicit) {
@@ -526,8 +503,7 @@ $cliPackArgs = @(
 )
 $cliPackArgs += Get-ReactorRestoreArguments `
     -NuGetConfig $effectiveNuGetConfig `
-    -NuGetSource $effectiveNuGetSource `
-    -NpmRegistry $(if ($npmSelection) { $npmSelection.Registry } else { $null })
+    -NuGetSource $effectiveNuGetSource
 Write-Dbg "dotnet $($cliPackArgs -join ' ')"
 $cliPackExit = 0
 Invoke-ReactorWithRestoreEnvironment `
@@ -653,8 +629,7 @@ Invoke-ReactorWithRestoreEnvironment `
         Write-Dbg "mur not on PATH; falling back to 'dotnet run' against Reactor.Cli source"
         $murRestoreArgs = Get-ReactorRestoreArguments `
             -NuGetConfig $effectiveNuGetConfig `
-            -NuGetSource $effectiveNuGetSource `
-            -NpmRegistry $(if ($npmSelection) { $npmSelection.Registry } else { $null })
+            -NuGetSource $effectiveNuGetSource
         & dotnet run `
             --project (Join-Path $repoRoot 'src\Reactor.Cli\Reactor.Cli.csproj') `
             -c $Configuration `

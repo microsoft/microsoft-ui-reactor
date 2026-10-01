@@ -121,9 +121,9 @@
 
   <!--
     In CI we never need the GitHub.Copilot.SDK native CLI (copilot.exe), which the
-    SDK's build targets fetch from registry.npmjs.org via an unauthenticated MSBuild
-    DownloadFile task. That download can fail in restricted CI environments and cannot
-    use an authenticated package feed. The binary is purely a RUNTIME artifact: it is
+    SDK's build targets fetch from the github/copilot-cli GitHub releases via an
+    unauthenticated MSBuild DownloadFile task. That download can fail in restricted CI
+    environments and cannot use an authenticated feed. The binary is purely a RUNTIME artifact: it is
     not needed to compile the framework, pack the NuGets, or run unit tests, and CI
     never executes a code path that starts it. Deriving the skip from $(CI) is reliable
     because $(CI) is set as an explicit MSBuild global property by the build pipeline
@@ -143,21 +143,14 @@
     Skipping the download locally therefore makes `mur loc translate` and both samples
     fail at run time, with an error that points at the missing binary rather than at the
     property that removed it. When the download itself is what is failing, redirect it
-    instead: see tools/CopilotNpmRegistry.props, imported below. Anyone can still
-    override CopilotSkipCliDownload explicitly when they genuinely only need a compile.
+    instead with the SDK's CopilotCliReleaseBaseUrl property (or the
+    COPILOT_CLI_DOWNLOAD_BASE_URL environment variable), or point CopilotCliBinaryPath
+    at a pre-downloaded binary. Anyone can still override CopilotSkipCliDownload
+    explicitly when they genuinely only need a compile.
   -->
   <PropertyGroup Condition="'$(CopilotSkipCliDownload)' == '' and '$(CI)' == 'true'">
     <CopilotSkipCliDownload>true</CopilotSkipCliDownload>
   </PropertyGroup>
-
-  <!--
-    Outside CI the download DOES happen, and on a network that blocks
-    registry.npmjs.org it fails the build. Imported after the block above
-    because it reads $(CopilotSkipCliDownload) to stay inert in CI, where no
-    download is attempted at all. See the file for the full rationale.
-  -->
-  <Import Project="$(MSBuildThisFileDirectory)tools\CopilotNpmRegistry.props"
-          Condition="Exists('$(MSBuildThisFileDirectory)tools\CopilotNpmRegistry.props')" />
 
   <Import Project="$(MSBuildThisFileDirectory)src\Reactor\build\Reactor.targets"
           Condition="Exists('$(MSBuildThisFileDirectory)src\Reactor\build\Reactor.targets')" />
