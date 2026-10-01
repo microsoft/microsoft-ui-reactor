@@ -246,9 +246,9 @@ internal static class SlotReplacementFixtures
     /// <summary>
     /// A <c>RegisterType</c> registration for <see cref="HostedElement"/>: a <c>Border</c> hosting
     /// an <see cref="EffectProbe"/> mounted through the reconciler, with an <c>unmount</c> callback
-    /// that records the control and tears the probe down. The registration tags its controls
-    /// itself, as <c>XamlInterop</c> does: the reconciler finds the <c>unmount</c> callback through
-    /// the tag, and it tags registered controls on its own only once #1301 lands.
+    /// that records the control and tears the probe down. The reconciler finds that callback
+    /// through the element tag it records on registered controls (#1301), so the registration
+    /// does not tag its controls itself.
     /// </summary>
     private sealed class HostedRegistration
     {
@@ -262,13 +262,11 @@ internal static class SlotReplacementFixtures
 
         public void Register(Reconciler reconciler) =>
             reconciler.RegisterType<HostedElement, WinXC.Border>(
-                mount: (r, element, requestRerender) => Build(r, element, requestRerender),
-                update: (r, _, element, control, requestRerender) =>
+                mount: (r, _, requestRerender) => Build(r, requestRerender),
+                update: (r, _, _, control, requestRerender) =>
                 {
                     Updates++;
-                    if (Replaces) return Build(r, element, requestRerender);
-                    Reconciler.SetElementTag(control, element);
-                    return control;
+                    return Replaces ? Build(r, requestRerender) : control;
                 },
                 unmount: (r, control) =>
                 {
@@ -276,13 +274,12 @@ internal static class SlotReplacementFixtures
                     if (control.Child is { } child) r.UnmountChild(child);
                 });
 
-        private WinXC.Border Build(Reconciler reconciler, HostedElement element, Action requestRerender)
+        private WinXC.Border Build(Reconciler reconciler, Action requestRerender)
         {
             var control = new WinXC.Border
             {
                 Child = reconciler.Mount(Component<EffectProbe, ProbeProps>(new ProbeProps(Counts)), requestRerender),
             };
-            Reconciler.SetElementTag(control, element);
             Controls.Add(control);
             return control;
         }
