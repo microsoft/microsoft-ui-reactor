@@ -70,24 +70,18 @@ public sealed class LoopbackHttpListenerTests
     [Fact]
     public void Unpinned_EveryPortHeld_GivesUpAfterMaxAttempts()
     {
-        var thieves = Enumerable.Range(0, LoopbackHttpListener.MaxAttempts).Select(_ => PortThief.HoldWithSocket()).ToList();
-        try
-        {
-            var next = 1;
-            var ex = Assert.Throws<LoopbackPortUnavailableException>(() => LoopbackHttpListener.Start(
-                thieves[0].Port,
-                pinned: false,
-                probePort: () => thieves[next++].Port));
+        using var thieves = PortThief.HoldWithSockets(LoopbackHttpListener.MaxAttempts);
+        var next = 1;
 
-            Assert.False(ex.Pinned);
-            Assert.Equal(LoopbackHttpListener.MaxAttempts, ex.Attempts);
-            Assert.Equal(thieves[^1].Port, ex.Port);
-            Assert.Equal(LoopbackHttpListener.MaxAttempts, next);
-        }
-        finally
-        {
-            foreach (var thief in thieves) thief.Dispose();
-        }
+        var ex = Assert.Throws<LoopbackPortUnavailableException>(() => LoopbackHttpListener.Start(
+            thieves.Ports[0],
+            pinned: false,
+            probePort: () => thieves.Ports[next++]));
+
+        Assert.False(ex.Pinned);
+        Assert.Equal(LoopbackHttpListener.MaxAttempts, ex.Attempts);
+        Assert.Equal(thieves.Ports[^1], ex.Port);
+        Assert.Equal(LoopbackHttpListener.MaxAttempts, next);
     }
 
     [Fact]
@@ -132,41 +126,51 @@ public sealed class LoopbackHttpListenerTests
 }
 
 /// <summary>
-/// Holds a loopback port the way another process would: a listening socket
+/// Holds loopback ports the way another process would: listening sockets
 /// (HttpListener fails with ERROR_SHARING_VIOLATION) or another HttpListener
 /// registration (ERROR_ALREADY_EXISTS).
 /// </summary>
 internal sealed class PortThief : IDisposable
 {
-    private readonly Socket? _socket;
+    private readonly List<Socket> _sockets;
     private readonly HttpListener? _listener;
 
-    private PortThief(int port, Socket? socket, HttpListener? listener)
+    private PortThief(IReadOnlyList<int> ports, List<Socket> sockets, HttpListener? listener)
     {
-        Port = port;
-        _socket = socket;
+        Ports = ports;
+        _sockets = sockets;
         _listener = listener;
     }
 
-    public int Port { get; }
+    /// <summary>The first (usually only) held port.</summary>
+    public int Port => Ports[0];
 
-    public static PortThief HoldWithSocket()
+    public IReadOnlyList<int> Ports { get; }
+
+    public static PortThief HoldWithSocket() => HoldWithSockets(1);
+
+    public static PortThief HoldWithSockets(int count)
     {
-        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
-        socket.Listen();
-        return new PortThief(((IPEndPoint)socket.LocalEndPoint!).Port, socket, null);
+        var sockets = new List<Socket>(count);
+        for (int i = 0; i < count; i++)
+        {
+            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            sockets.Add(socket);
+            socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+            socket.Listen();
+        }
+        return new PortThief([.. sockets.Select(s => ((IPEndPoint)s.LocalEndPoint!).Port)], sockets, null);
     }
 
     public static PortThief HoldWithHttpListener()
     {
         var (listener, port) = LoopbackHttpListener.Start(LoopbackHttpListener.ProbeFreePort(), pinned: false);
-        return new PortThief(port, null, listener);
+        return new PortThief([port], [], listener);
     }
 
     public void Dispose()
     {
-        _socket?.Dispose();
+        foreach (var socket in _sockets) socket.Dispose();
         _listener?.Close();
     }
 }
