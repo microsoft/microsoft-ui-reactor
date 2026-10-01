@@ -3114,39 +3114,51 @@ public sealed partial class Reconciler : IDisposable
         return Mount(newChild, requestRerender);
     }
 
-    // The control a ReconcileV1Child update is running against, and whether that update has
-    // already unmounted it. A target-wrapping flyout whose Target changes element type unmounts
-    // the old Target itself before it returns the new one (OverlayLifecycle.UpdateFlyoutElement
-    // and its MenuFlyout / CommandBarFlyout twins), and a second unmount would run the old
-    // subtree's handler and registered unmount callbacks again. Saved and restored around each
-    // update because slot updates nest.
-    private UIElement? _slotUpdateControl;
-    private bool _slotUpdateControlUnmounted;
+    // The controls the ReconcileV1Child updates now running are working on, outermost first, and
+    // whether each has been unmounted while its update ran. A target-wrapping flyout whose Target
+    // changes element type unmounts the old Target itself before it returns the new one
+    // (OverlayLifecycle.UpdateFlyoutElement and its MenuFlyout / CommandBarFlyout twins), and a
+    // second unmount would run the old subtree's handler and registered unmount callbacks again.
+    // Slot updates nest, and a handler deep inside one can unmount a control an outer slot is
+    // updating, so every frame watching the unmounted control is marked, not just the innermost.
+    private UIElement?[] _slotUpdateControls = Array.Empty<UIElement?>();
+    private bool[] _slotUpdateUnmounted = Array.Empty<bool>();
+    private int _slotUpdateDepth;
 
     private UIElement? UpdateSlotChild(Element oldChild, Element newChild, UIElement existing,
         Action requestRerender, out bool unmountedByUpdate)
     {
-        var outerControl = _slotUpdateControl;
-        var outerUnmounted = _slotUpdateControlUnmounted;
-        _slotUpdateControl = existing;
-        _slotUpdateControlUnmounted = false;
+        // Every access goes through the fields: a nested frame may grow the arrays.
+        int frame = _slotUpdateDepth;
+        if (frame == _slotUpdateControls.Length)
+        {
+            int size = frame == 0 ? 8 : frame * 2;
+            Array.Resize(ref _slotUpdateControls, size);
+            Array.Resize(ref _slotUpdateUnmounted, size);
+        }
+        _slotUpdateControls[frame] = existing;
+        _slotUpdateUnmounted[frame] = false;
+        _slotUpdateDepth = frame + 1;
         try
         {
             var replacement = Update(oldChild, newChild, existing, requestRerender);
-            unmountedByUpdate = _slotUpdateControlUnmounted;
+            unmountedByUpdate = _slotUpdateUnmounted[frame];
             return replacement;
         }
         finally
         {
-            _slotUpdateControl = outerControl;
-            _slotUpdateControlUnmounted = outerUnmounted;
+            _slotUpdateControls[frame] = null;
+            _slotUpdateDepth = frame;
         }
     }
 
     private void NoteUnmountDuringSlotUpdate(UIElement control)
     {
-        if (ReferenceEquals(control, _slotUpdateControl))
-            _slotUpdateControlUnmounted = true;
+        for (int i = 0; i < _slotUpdateDepth; i++)
+        {
+            if (ReferenceEquals(_slotUpdateControls[i], control))
+                _slotUpdateUnmounted[i] = true;
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════

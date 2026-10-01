@@ -35,7 +35,10 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// exactly once for a control its <c>update</c> replaced, and never for one it patched in place.
 /// The flyout fixture covers an update that unmounts the control it replaces by itself: the slot
 /// must not unmount that control a second time. The nested-slot fixtures cover the same while
-/// the update also runs a slot reconcile of its own, before or after unmounting its control.</para>
+/// the update also runs a slot reconcile of its own, before or after unmounting its control, or
+/// while a handler inside that nested reconcile unmounts the outer control. The last fixture
+/// checks that a slot updated after such a self-unmount still unmounts its own replaced
+/// control.</para>
 /// </summary>
 internal static class SlotReplacementFixtures
 {
@@ -524,5 +527,162 @@ internal static class SlotReplacementFixtures
     {
         protected override string Name => "SlotReplace_SelfUnmountThenNestedSlot";
         protected override bool UnmountFirst => true;
+    }
+
+    private sealed record OuterHostElement(int Generation) : Element;
+
+    private sealed record InnerProbeElement(int Generation) : Element;
+
+    /// <summary>
+    /// The outer control is unmounted from inside a nested slot update rather than by its own
+    /// <c>update</c>. A <c>RegisterType</c> control in a <c>Border</c> updates a <c>Border</c> it
+    /// mounted, whose child is a second registered element; that child's <c>update</c>, running in
+    /// the nested <c>ReconcileV1Child</c>, unmounts the outer control. The outer update then returns
+    /// a replacement. The outer slot must see that its control was already unmounted, so the outer
+    /// registration's <c>unmount</c> callback runs exactly once.
+    /// </summary>
+    internal sealed class NestedHandlerUnmountsOuter(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const string Name = "SlotReplace_NestedHandlerUnmountsOuter";
+
+        private readonly List<WinXC.Border> _outerControls = new();
+        private readonly List<WinXC.Border> _outerUnmounted = new();
+        private readonly List<FrameworkElement> _parents = new();
+        private WinXC.Border? _updatingOuter;
+        private int _innerUnmountsOfOuter;
+        private int _outerUpdates;
+
+        private static Element Inner(int generation) => Border(new InnerProbeElement(generation));
+
+        private WinXC.Border BuildOuter(Reconciler reconciler, int generation, Action requestRerender)
+        {
+            var control = new WinXC.Border { Child = reconciler.Mount(Inner(generation), requestRerender) };
+            _outerControls.Add(control);
+            return control;
+        }
+
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Reconciler.RegisterType<OuterHostElement, WinXC.Border>(
+                mount: (r, element, requestRerender) => BuildOuter(r, element.Generation, requestRerender),
+                update: (r, oldEl, newEl, control, requestRerender) =>
+                {
+                    _outerUpdates++;
+                    _updatingOuter = control;
+                    try
+                    {
+                        _ = r.UpdateChild(Inner(oldEl.Generation), Inner(newEl.Generation), control.Child, requestRerender);
+                    }
+                    finally { _updatingOuter = null; }
+                    return BuildOuter(r, newEl.Generation, requestRerender);
+                },
+                unmount: (r, control) =>
+                {
+                    _outerUnmounted.Add(control);
+                    if (control.Child is { } child) r.UnmountChild(child);
+                });
+            host.Reconciler.RegisterType<InnerProbeElement, WinXC.TextBlock>(
+                mount: (_, element, _) => new WinXC.TextBlock { Text = $"nested-probe@{element.Generation}" },
+                update: (r, _, element, text, _) =>
+                {
+                    text.Text = $"nested-probe@{element.Generation}";
+                    if (_updatingOuter is { } outer)
+                    {
+                        _innerUnmountsOfOuter++;
+                        r.UnmountChild(outer);
+                    }
+                    return null;
+                });
+
+            var label = $"{Name} rerender";
+            host.Mount(ctx =>
+            {
+                var (generation, setGeneration) = ctx.UseState(0);
+                return VStack(
+                    Button(label, () => setGeneration(generation + 1)),
+                    Border(new OuterHostElement(generation)).OnMount(_parents.Add));
+            });
+
+            H.Check($"{Name}_Mounted",
+                await Harness.WaitFor(() => _parents.Count == 1 && H.FindText("nested-probe@0") is not null));
+            if (_parents.Count != 1 || _outerControls.Count != 1) return;
+            var parent = (WinXC.Border)_parents[0];
+
+            H.ClickButton(label);
+            H.Check($"{Name}_Updated", await Harness.WaitFor(() => _outerUpdates == 1), $"outer update ran {_outerUpdates} times");
+            // Exact counts below: give a second unmount a pass to show up.
+            await Harness.Render();
+
+            H.Check($"{Name}_NestedHandlerUnmountedOuter", _innerUnmountsOfOuter == 1,
+                $"the nested update unmounted the outer control {_innerUnmountsOfOuter} times");
+            H.Check($"{Name}_ReplacementInSlot",
+                _parents.Count == 1 && _outerControls.Count == 2 && ReferenceEquals(parent.Child, _outerControls[1]),
+                $"parent mounted {_parents.Count} times, {_outerControls.Count} outer controls built");
+            H.Check($"{Name}_OuterUnmountedOnce",
+                _outerUnmounted.Count == 1 && ReferenceEquals(_outerUnmounted[0], _outerControls[0]),
+                "outer unmount callback ran for "
+                + (_outerUnmounted.Count == 0 ? "none" : string.Join(", ", _outerUnmounted.Select(c => $"#{_outerControls.IndexOf(c)}"))));
+        }
+    }
+
+    /// <summary>
+    /// Two sibling slots reconciled one after the other use the same frame of the slot-update
+    /// watch. In the first, a <c>Flyout</c>'s Target changes element type and the flyout's update
+    /// unmounts the old Target itself. In the second, a registered control's <c>update</c> returns
+    /// a new control, which only the slot unmounts. The second slot must not inherit the first's
+    /// record of an unmount, so each old registered control gets its <c>unmount</c> exactly once.
+    /// </summary>
+    internal sealed class FrameReusedAfterSelfUnmount(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const string Name = "SlotReplace_FrameReusedAfterSelfUnmount";
+
+        private readonly HostedRegistration _registration = new() { Replaces = true };
+        private readonly List<FrameworkElement> _parents = new();
+
+        public override async Task RunAsync()
+        {
+            var registration = _registration;
+            var host = H.CreateHost();
+            registration.Register(host.Reconciler);
+
+            var label = $"{Name} rerender";
+            var newTarget = $"{Name}-new-target";
+            host.Mount(ctx =>
+            {
+                var (generation, setGeneration) = ctx.UseState(0);
+                Element target = generation == 0
+                    ? VStack(new HostedElement(generation))
+                    : TextBlock(newTarget);
+                return VStack(
+                    Button(label, () => setGeneration(generation + 1)),
+                    Border(Flyout(target, TextBlock($"{Name}-content"))),
+                    Border(new HostedElement(generation)).OnMount(_parents.Add));
+            });
+
+            H.Check($"{Name}_Mounted",
+                await Harness.WaitFor(() => _parents.Count == 1 && registration.Controls.Count == 2),
+                registration.Describe());
+            if (_parents.Count != 1 || registration.Controls.Count != 2) return;
+            var parent = (WinXC.Border)_parents[0];
+            var siblingOld = (WinXC.Border)parent.Child;
+            var targetOld = registration.Controls.Single(c => !ReferenceEquals(c, siblingOld));
+
+            H.ClickButton(label);
+            H.Check($"{Name}_Updated",
+                await Harness.WaitFor(() => H.FindText(newTarget) is not null && registration.Updates == 1),
+                registration.Describe());
+            // Exact counts below: give a second unmount a pass to show up.
+            await Harness.Render();
+
+            H.Check($"{Name}_SiblingReplaced",
+                registration.Controls.Count == 3 && ReferenceEquals(parent.Child, registration.Controls[2]),
+                registration.Describe());
+            H.Check($"{Name}_EachOldControlUnmountedOnce",
+                registration.Unmounted.Count == 2
+                && registration.Unmounted.Count(c => ReferenceEquals(c, targetOld)) == 1
+                && registration.Unmounted.Count(c => ReferenceEquals(c, siblingOld)) == 1,
+                registration.Describe());
+        }
     }
 }
