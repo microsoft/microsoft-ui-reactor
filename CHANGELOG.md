@@ -286,14 +286,17 @@ Conventions for contributors:
   child of a `Border`, a named slot such as `SplitView.Pane`, a tab's content, a
   generated element slot such as `TabView.TabStripHeader`, or a `RichTextBlock`
   `InlineUI(...)` child, Reactor swapped the new control in but, unlike a panel,
-  never unmounted the old one. The old subtree's effect cleanups and
-  `.OnUnmount` actions never ran, a `ValidationRule` in it kept its message, and
-  a ref to a control in it kept pointing at the detached control. A
-  `ValidationVisualizer` in such a slot did this on every re-render, because its
-  update remounts it, and so did a `RegisterType` `update` that returns a new
-  control. A ref that the update has already moved to the new control now also
-  survives the old control's unmount, in a panel as well, where it used to be
-  cleared.
+  never unmounted the old one. The old subtree's effect cleanups, `.OnUnmount`
+  actions and `RegisterType` `unmount` callbacks never ran, a `ValidationRule`
+  in it kept its message, and a ref to a control in it kept pointing at the
+  detached control. A `ValidationVisualizer` in such a slot did this on every
+  re-render, because its update remounts it, and so did a `RegisterType`
+  `update` that returns a new control. Slots that a control fills by hand still
+  swap a replaced control out without unmounting it: `CommandBar` content,
+  `Expander` content and header template, `ContentDialog`, `Flyout` and `Popup`
+  content, `.WithFlyout`, `.WithContextFlyout` and `.WithToolTip(element)`
+  content, and realized item content in `ListView`, `GridView`, `TreeView<T>`
+  and templated `FlipView`.
 
 - **The Forms guide's "Validation Context" example now works as written**
   (issue #1262). Clicking **Register** on an empty form submitted successfully

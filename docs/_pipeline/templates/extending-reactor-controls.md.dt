@@ -540,10 +540,16 @@ component instead. `unmount` runs when Reactor unmounts the control,
 *instead of* Reactor's own walk over the control's children. If your
 delegates mount child elements through the reconciler, unmount them
 there too (`r.UnmountChild(child)`); without an `unmount` delegate,
-Reactor walks the children itself. One gap remains: a control that
-`update` replaced inside a single-content parent such as `Border` is
-swapped out without `unmount`, so don't rely on it for a control your
-`update` replaces.
+Reactor walks the children itself. A control your `update` replaced is
+unmounted, and gets `unmount`, wherever Reactor reconciles the slot that
+holds it: a panel, a `Border`, a named slot such as `SplitView.Pane`, a
+tab's content. A few slots that a control fills by hand still swap it out
+without `unmount`, so don't rely on `unmount` for a control your `update`
+replaces inside one of them: `CommandBar` content, `Expander` content and
+header template, `ContentDialog`, `Flyout` and `Popup` content, content
+attached with `.WithFlyout`, `.WithContextFlyout` or
+`.WithToolTip(element)`, and the realized item content of `ListView`,
+`GridView`, `TreeView<T>` and templated `FlipView`.
 
 A library that wants eager setup ships an ordinary
 `public static void UseAcme(Reconciler reconciler)` over one of these —

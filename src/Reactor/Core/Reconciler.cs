@@ -1033,9 +1033,15 @@ public sealed partial class Reconciler : IDisposable
     /// be torn down there, for example with <see cref="UnmountChild"/>. Calling
     /// <see cref="UnmountChild"/> on the control itself from <c>unmount</c> walks its children
     /// once rather than calling <c>unmount</c> again. Without an <c>unmount</c> callback the
-    /// reconciler walks the control's children itself. Not every path that drops a control
-    /// unmounts it yet: a control that <c>update</c> replaced inside a single-content parent,
-    /// such as a <c>Border</c>, is swapped out without <c>unmount</c>.
+    /// reconciler walks the control's children itself. A control that <c>update</c> replaced is
+    /// unmounted wherever the reconciler reconciles the slot that holds it: a panel, a
+    /// <c>Border</c>, a named slot such as <c>SplitView.Pane</c>, a tab's content. A few slots
+    /// that a control fills by hand still swap a replaced control out without <c>unmount</c>:
+    /// <c>CommandBar</c> content, <c>Expander</c> content and header template,
+    /// <c>ContentDialog</c>, <c>Flyout</c> and <c>Popup</c> content, content attached with
+    /// <c>.WithFlyout</c>, <c>.WithContextFlyout</c> or <c>.WithToolTip(element)</c>, and the
+    /// realized item content of <c>ListView</c>, <c>GridView</c>, <c>TreeView&lt;T&gt;</c> and
+    /// templated <c>FlipView</c>.
     ///
     /// Not part of the <c>REACTOR_V1_PREVIEW</c> surface — this is the legacy
     /// type-registry path, public since before Spec 047. The §13 Q17 hardening
