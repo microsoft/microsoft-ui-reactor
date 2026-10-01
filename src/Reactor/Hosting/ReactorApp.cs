@@ -439,12 +439,14 @@ public static partial class ReactorApp
             // Spec 010 — source mapping is a devtools-session capability, so it
             // one-way-follows this flag: turning devtools off turns it off too.
             //
-            // It does NOT change how controls are tagged. Reconciler.NeedsTag has no
-            // arm for this flag, deliberately: a stamped element carries its CallSite
-            // in the Extensions bucket, which already satisfies NeedsTag's existing
-            // `Extensions is not null` test. An arm here would only tag UNstamped
-            // elements — which have no location to hand back — while re-introducing
-            // the per-leaf ReactorState allocation PR #468 removed.
+            // It does NOT change how leaf controls are tagged. Reconciler.NeedsTag has no
+            // arm for this flag on ordinary elements, deliberately: a stamped element carries
+            // its CallSite in the Extensions bucket, which already satisfies NeedsTag's
+            // existing `Extensions is not null` test. An arm there would only tag UNstamped
+            // leaves — which have no location to hand back — while re-introducing the
+            // per-leaf ReactorState allocation PR #468 removed. Component boundaries are the
+            // one exception: their Border wrappers are tagged while the flag is on, so an
+            // inspector can find every component (one allocation per component).
             Diagnostics.ReactorSourceMap.Enabled = value;
         }
     }

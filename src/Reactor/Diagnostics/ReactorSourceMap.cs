@@ -13,17 +13,20 @@ namespace Microsoft.UI.Reactor.Diagnostics;
 /// checks before writing a location, so an un-inspected Debug session allocates
 /// nothing extra.</para>
 ///
-/// <para><b>It does not change control tagging.</b> The reconciler attaches a
+/// <para><b>It does not change control tagging for leaves.</b> The reconciler attaches a
 /// <c>ReactorState</c> (the control → element back-pointer) only to controls that
 /// something will read back — callbacks, a key, extras, or reference modifiers
 /// (see <c>Reconciler.NeedsTag</c>), which is the allocation win PR #468 landed.
-/// <c>NeedsTag</c> has no arm for this flag: a stamped element carries its
+/// <c>NeedsTag</c> has no arm for this flag on ordinary elements: a stamped element carries its
 /// <c>CallSite</c> in the <c>Extensions</c> bucket and so already satisfies the
 /// existing <c>Extensions is not null</c> test. Adding one would only tag
 /// <em>unstamped</em> elements, which have no location to return, while
 /// re-introducing the per-leaf allocation. Elements the generator does not reach
 /// (wrapper factories, bare-string children) therefore stay untagged and report
-/// no location rather than a wrong one.</para>
+/// no location rather than a wrong one. The one exception is component boundaries:
+/// while this flag is on, every component's Border wrapper is tagged so an inspector
+/// can find where each component starts — one allocation per component, never per
+/// leaf.</para>
 ///
 /// <para><b>Who turns it on.</b> The devtools session switch. <c>ReactorApp</c>
 /// sets <see cref="Enabled"/> when the process was launched with
@@ -31,7 +34,7 @@ namespace Microsoft.UI.Reactor.Diagnostics;
 /// pays. It is public-settable so a host that embeds its own inspector (or a
 /// test) can opt in without going through the CLI.</para>
 /// </summary>
-public static class ReactorSourceMap
+public static partial class ReactorSourceMap
 {
     /// <summary>
     /// Seeded from the <c>REACTOR_SOURCEMAP</c> environment variable so a

@@ -300,6 +300,48 @@ your own types declare — not just `string`. Two limits are worth knowing:
   an array you own, whose elements were converted where the array was built, so
   nothing is stamped and your array is never written to.
 
+### Roots, hosts and component boundaries
+
+An inspector needs more than per-control locations: it has to know which Reactor
+trees exist and where each one starts. Three pieces cover that.
+
+**Every live host is enumerable.** `ReactorDiagnostics.GetHosts()`
+(`Microsoft.UI.Reactor.Core.Diagnostics`) returns a snapshot of each live host —
+windows opened through `ReactorApp.Run` / `ReactorApp.OpenWindow`, a
+`new ReactorHost(window)` on any window, and every `ReactorHostControl` island:
+
+```csharp
+foreach (var host in ReactorDiagnostics.GetHosts())
+{
+    var root = host.RootComponentType?.Name ?? "render function";
+    Console.WriteLine($"{host.Kind} {host.ReactorWindow?.Key} <{root}> at {host.MountSite}");
+}
+```
+
+Each `ReactorHostInfo` carries the owning `Window` (window hosts), the host element
+(the `ReactorHostControl`, or a window host's `ContentTarget`), the host's
+`Reconciler`, the control the root currently renders as (`RootControl`), the root
+`RootComponent` / `RootComponentType` or `RootRenderFunction`, and `MountSite`. The
+registry holds hosts weakly and drops them on dispose, so it never keeps a window
+alive; it costs one small allocation per host and nothing per render.
+
+**Root mount sites.** A root is not an element, so it has no `CallSite`. When
+source mapping is on, the generator also intercepts `ReactorApp.Run`,
+`ReactorApp.OpenWindow`, `ReactorHost.Mount` and `ReactorHostControl.Mount` and
+records the line that called them; the host claims it at mount and reports it as
+`ReactorHostInfo.MountSite`. `Run(Action<ReactorAppContext>)` is left alone — it
+mounts no root itself, and each `OpenWindow` in its startup callback reports its
+own line. A root created from `ReactorHostControl.ComponentFactory` (set in XAML)
+has no call site and reports `null`.
+
+**Component boundaries are always tagged while mapping is on.** Every
+`Component<T>()`, `Func(...)` and `Memo(...)` mounts behind a `Border` wrapper. With
+`ReactorSourceMap.Enabled` true, that wrapper always carries the element
+back-pointer — even when the element has no location — so
+`Reconciler.GetElementTag(wrapper)` names the component (`ComponentElement.ComponentType`,
+or the render function) and an inspector can find every boundary. This adds one
+small allocation per *component*, never per leaf, and nothing while the flag is off.
+
 ### Known limitations
 
 - **Unannotated helper methods attribute to themselves.** A helper `MyHeader()`

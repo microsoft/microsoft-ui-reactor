@@ -39,7 +39,7 @@ namespace Microsoft.UI.Reactor.Hosting;
 ///   - Error boundary with fallback UI
 ///   - Clean lifecycle via Loaded/Unloaded
 /// </summary>
-public sealed partial class ReactorHostControl : ContentControl, IDisposable
+public sealed partial class ReactorHostControl : ContentControl, IDisposable, Core.Diagnostics.IReactorDiagnosticHost
 {
 #pragma warning disable CS0414 // Design constant for render-loop limiting; wiring pending
     private static readonly int MaxRenderIterations = 50;
@@ -58,6 +58,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private Component? _rootComponent;
     private Func<RenderContext, Element>? _rootRenderFunc;
     private RenderContext? _funcContext;
+
+    // Where app code mounted the root, when source mapping was on. Diagnostics only.
+    private SourceLocation? _mountSite;
 
     private Element? _currentTree;
     private UIElement? _currentControl;
@@ -163,8 +166,27 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
 
+        Core.Diagnostics.ReactorHostRegistry.Register(this);
+
         if (component is not null)
             Mount(component);
+    }
+
+    Core.Diagnostics.ReactorHostInfo? Core.Diagnostics.IReactorDiagnosticHost.CaptureDiagnosticInfo()
+    {
+        if (_disposed) return null;
+        return new Core.Diagnostics.ReactorHostInfo(
+            Core.Diagnostics.ReactorHostKind.HostControl,
+            host: null,
+            hostControl: this,
+            reactorWindow: null,
+            window: null,
+            hostElement: this,
+            reconciler: _reconciler,
+            rootControl: _currentControl,
+            rootComponent: _rootComponent,
+            rootRenderFunction: _rootRenderFunc,
+            mountSite: _mountSite);
     }
 
     private bool AnyOverlayFlagOn => ReactorFeatureFlags.HighlightReconcileChanges;
@@ -177,6 +199,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _rootRenderFunc = null;
         _funcContext = null;
         _rootComponent = component;
+        _mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         RequestRender();
     }
 
@@ -188,6 +211,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _rootComponent = null;
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
+        _mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         RequestRender();
     }
 
@@ -655,6 +679,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+
+        Core.Diagnostics.ReactorHostRegistry.Unregister(this);
 
         Loaded -= OnLoaded;
         Unloaded -= OnUnloaded;

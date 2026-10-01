@@ -15,7 +15,7 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// Manages the render loop: when state changes, re-renders the component
 /// and reconciles the virtual tree against the real WinUI control tree.
 /// </summary>
-public sealed class ReactorHost : IDisposable
+public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnosticHost
 {
 #pragma warning disable CS0414 // Design constant for render-loop limiting; wiring pending
     private static readonly int MaxRenderIterations = 50;
@@ -33,6 +33,10 @@ public sealed class ReactorHost : IDisposable
     private Component? _rootComponent;
     private Func<RenderContext, Element>? _rootRenderFunc;
     private RenderContext? _funcContext;
+
+    // Where app code mounted the root (Run / OpenWindow / Mount), when source mapping
+    // was on. Diagnostics only — see ReactorDiagnostics.GetHosts.
+    private SourceLocation? _mountSite;
 
     private Element? _currentTree;
     private UIElement? _currentControl;
@@ -258,6 +262,26 @@ public sealed class ReactorHost : IDisposable
             Dispose();
         };
         _window.Closed += _closedHandler;
+
+        Core.Diagnostics.ReactorHostRegistry.Register(this);
+    }
+
+    Core.Diagnostics.ReactorHostInfo? Core.Diagnostics.IReactorDiagnosticHost.CaptureDiagnosticInfo()
+    {
+        if (_disposed) return null;
+        var contentTarget = ContentTarget;
+        return new Core.Diagnostics.ReactorHostInfo(
+            Core.Diagnostics.ReactorHostKind.WindowHost,
+            host: this,
+            hostControl: null,
+            reactorWindow: OwningWindow,
+            window: _window,
+            hostElement: contentTarget,
+            reconciler: _reconciler,
+            rootControl: _currentControl,
+            rootComponent: _rootComponent,
+            rootRenderFunction: _rootRenderFunc,
+            mountSite: _mountSite);
     }
 
     /// <summary>Ensure the overlay wrapper exists whenever any dev overlay flag is on.</summary>
@@ -343,6 +367,7 @@ public sealed class ReactorHost : IDisposable
     public void Mount(Component component)
     {
         _rootComponent = component;
+        _mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         RequestRender();
     }
 
@@ -350,6 +375,7 @@ public sealed class ReactorHost : IDisposable
     {
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
+        _mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         RequestRender();
     }
 
@@ -949,6 +975,8 @@ public sealed class ReactorHost : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+
+        Core.Diagnostics.ReactorHostRegistry.Unregister(this);
 
         _window.Closed -= _closedHandler;
 
