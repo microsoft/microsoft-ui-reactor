@@ -1661,20 +1661,6 @@ public sealed partial class Reconciler : IDisposable
             return result;
         }
 
-        // True when an update result is the control it was handed, possibly through a second
-        // managed wrapper. Every wrapper for a native object reads the same ReactorState, so
-        // the handed-in control gets one if it has none and the result is checked for it. That
-        // allocation happens only when the callback returned a different wrapper, which is
-        // almost always a genuine replacement, and it lands on the old control.
-        private static bool IsSameControl(UIElement result, UIElement control)
-        {
-            if (ReferenceEquals(result, control)) return true;
-            if (result is not FrameworkElement resultFe || control is not FrameworkElement controlFe)
-                return false;
-            var state = GetOrCreateReactorState(controlFe);
-            return ReferenceEquals(resultFe.GetValue(ReactorAttached.StateProperty), state);
-        }
-
         public void Unmount(UIElement control, Reconciler reconciler)
         {
             if (control is TControl typedControl)
@@ -2514,6 +2500,21 @@ public sealed partial class Reconciler : IDisposable
         || (b.GetValue(ReactorAttached.StateProperty) is ReactorState state
             && ReferenceEquals(a.GetValue(ReactorAttached.StateProperty), state));
 
+    // True when an update result is the control it was handed, possibly through a second managed
+    // wrapper, which means the update patched it in place. TypeRegistration.Update and
+    // ReconcileV1Child both decide this here. Every wrapper for a native object reads the same
+    // ReactorState, so the handed-in control gets one if it has none and the result is checked
+    // for it. That allocation happens only when the result is a different wrapper, which is
+    // almost always a genuine replacement, and it lands on the control being replaced.
+    private static bool IsSameControl(UIElement result, UIElement control)
+    {
+        if (ReferenceEquals(result, control)) return true;
+        if (result is not FrameworkElement resultFe || control is not FrameworkElement controlFe)
+            return false;
+        var state = GetOrCreateReactorState(controlFe);
+        return ReferenceEquals(resultFe.GetValue(ReactorAttached.StateProperty), state);
+    }
+
     // Controls whose RegisterType unmount callback is running, by the ReactorState on the native
     // control so a second managed wrapper for it is recognized too. A callback that tears its own
     // control down through the reconciler (UnmountChild on the control it was handed, to reach
@@ -3140,20 +3141,6 @@ public sealed partial class Reconciler : IDisposable
     {
         if (ReferenceEquals(control, _slotUpdateControl))
             _slotUpdateControlUnmounted = true;
-    }
-
-    // True when an update result is the control it was handed, possibly through a second
-    // managed wrapper. Every wrapper for a native object reads the same ReactorState, so the
-    // handed-in control gets one if it has none before the result is checked for it. That
-    // allocation happens only when the result is a different wrapper, which is almost always
-    // a genuine replacement, and it lands on the control being replaced.
-    private static bool IsSameControl(UIElement result, UIElement control)
-    {
-        if (ReferenceEquals(result, control)) return true;
-        if (result is not FrameworkElement resultFe || control is not FrameworkElement controlFe)
-            return false;
-        GetOrCreateReactorState(controlFe);
-        return IsSameNativeElement(resultFe, controlFe);
     }
 
     // ════════════════════════════════════════════════════════════════════
