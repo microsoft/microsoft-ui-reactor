@@ -1,0 +1,22 @@
+<Project>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.1" />
+    <PackageReference Include="Microsoft.UI.Reactor" Version="MS_UI_REACTOR_VERSION" />
+  </ItemGroup>
+
+  <!--
+        Debug-only: enable the Reactor devtools surface so the *devtools* flag
+        (from Properties/launchSettings.json's default F5 args) lights up the
+        devtools menu, and so the Visual Studio embedded-preview extension's
+        embed-host activation (which requires devtools support) succeeds.
+        Release / Publish builds drop both the package and the host-config
+        switch so the trim / AOT analyzers stay happy (see
+        docs/guide/packaging.md, section "Keep Reactor.DevtoolsSupport out of
+        retail"). To enable devtools in Release as well, move these into the
+        unconditioned ItemGroup above.
+    -->
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <PackageReference Include="Microsoft.UI.Reactor.Devtools" Version="MS_UI_REACTOR_VERSION" />
+    <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />
+  </ItemGroup>
+</Project>
