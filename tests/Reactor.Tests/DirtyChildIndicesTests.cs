@@ -105,6 +105,9 @@ public class DirtyChildIndicesTests
     [Fact]
     public void The_Probe_Fallback_Reads_Each_InRange_Child_And_Nothing_Else()
     {
+        // This pins the fallback's cost only. Headless code has no dirty path to put a child on,
+        // so the positive half (a dirty child behind the fallback is descended into) is the
+        // selftest SelfTrigReuse_InnerPanelCollectionUsesFallback.
         var children = new CountingChildCollection(3, throwOnRead: false);
         var dirty = DirtyChildIndices.ProbeEachChild;
 

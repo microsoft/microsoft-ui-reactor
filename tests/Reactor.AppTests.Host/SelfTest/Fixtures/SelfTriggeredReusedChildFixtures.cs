@@ -1,5 +1,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
+using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Reactor.Docking;
 using Microsoft.UI.Reactor.Docking.Native;
@@ -25,7 +27,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// the component's OWN button, so the root's state never changes and only the self-triggered
 /// path can deliver the update.</para>
 /// </summary>
-internal static class SelfTriggeredReusedChildFixtures
+internal static partial class SelfTriggeredReusedChildFixtures
 {
     private sealed class Probe
     {
@@ -304,6 +306,73 @@ internal static class SelfTriggeredReusedChildFixtures
             // Outside a pass there is no dirty path, so nothing resolves.
             H.Check("SelfTrigReuse_Index_NoneBetweenPasses",
                 host.Reconciler.ResolveDirtyChildIndices(panel, new PanelChildCollection(panel)).IsEmpty);
+        }
+    }
+
+    /// <summary>A control that keeps its children in an inner panel rather than in itself.</summary>
+    private sealed partial class InnerPanelHost : UserControl
+    {
+        public InnerPanelHost() => Content = Inner;
+
+        public StackPanel Inner { get; } = new();
+    }
+
+    private sealed record InnerPanelHostElement(Element[] Items) : Element;
+
+    /// <summary>
+    /// A descriptor whose <c>Panel&lt;&gt;</c> collection is the inner panel's, as a third-party
+    /// control might declare it. The child reconciler is handed the outer control as the parent.
+    /// </summary>
+    private sealed class InnerPanelHostHandler : DescriptorHandler<InnerPanelHostElement, InnerPanelHost>
+    {
+        public InnerPanelHostHandler() : base(HostDescriptor) { }
+
+        private static readonly ControlDescriptor<InnerPanelHostElement, InnerPanelHost> HostDescriptor = new()
+        {
+            Children = new Panel<InnerPanelHostElement, InnerPanelHost>(
+                GetChildren: static e => e.Items,
+                GetCollection: static c => c.Inner.Children),
+        };
+    }
+
+    /// <summary>
+    /// The fallback path. When the parent handed to the child reconciler does not own the
+    /// collection, the dirty path continues from the parent through the inner panel, which is not
+    /// a member of the collection, so no index can be resolved. The reconciler then tests each
+    /// skip-eligible child's control against the dirty path instead, and the reused counter must
+    /// still update. The resolution is captured mid-pass to prove this fixture takes the fallback
+    /// rather than the index path.
+    /// </summary>
+    internal sealed class InnerPanelCollectionUsesFallback(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            ControlRegistry.Register<InnerPanelHostElement, InnerPanelHost>(static () => new InnerPanelHostHandler());
+
+            var probe = new Probe();
+            var stable = Counter("innerHost", probe);
+
+            var host = H.CreateHost();
+            host.Mount(ctx => VStack(
+                TextBlock("innerHost-header"),
+                new InnerPanelHostElement(new Element[] { TextBlock("innerHost-label"), stable })));
+            await Harness.Render();
+
+            var hostControl = H.FindControl<InnerPanelHost>(_ => true);
+            H.Check("SelfTrigReuse_InnerHost_Mounted",
+                hostControl is not null && hostControl.Inner.Children.Count == 2,
+                $"children={hostControl?.Inner.Children.Count}");
+            if (hostControl is null)
+                return;
+
+            string? resolved = null;
+            probe.OnRender = () => resolved = host.Reconciler
+                .ResolveDirtyChildIndices(hostControl, new PanelChildCollection(hostControl.Inner.Children))
+                .ToString();
+
+            await ClickTwiceAndCheck(H, "SelfTrigReuse_InnerHost", "innerHost", probe);
+            H.Check("SelfTrigReuse_InnerHost_ResolvedByFallback", resolved == "ProbeEachChild",
+                $"resolved={resolved}");
         }
     }
 
