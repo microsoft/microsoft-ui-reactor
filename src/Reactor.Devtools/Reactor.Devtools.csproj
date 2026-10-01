@@ -34,6 +34,13 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591;CA2255;REACTOR_DOC_001</NoWarn>
+    <!-- Keep Microsoft.UI.Reactor.Devtools.pri OUT of lib/ (issue #1271). This
+         library's generated .pri is EMPTY — `makepri dump` shows a resource map with
+         no NamedResource at all — yet it has the longest file name of the three, so
+         its `makepri.exe Dump` output (…\Microsoft.UI.Reactor.Devtools.pri.xml) is
+         the one that tips a borderline build past MAX_PATH and fails it. See the
+         matching comment in src/Reactor/Reactor.csproj. -->
+    <DefaultAllowedOutputExtensionsInPackageBuildOutputFolder>.dll; .exe; .winmd; .json; .xml</DefaultAllowedOutputExtensionsInPackageBuildOutputFolder>
   </PropertyGroup>
 
   <ItemGroup>
