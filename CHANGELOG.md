@@ -157,17 +157,6 @@ Conventions for contributors:
 
 ### Fixed
 
-- **Devtools servers no longer lose their port to another process between
-  choosing and binding it** (spec 024 §7). `DevtoolsMcpServer` and
-  `PreviewCaptureServer` probed a free loopback port and bound `HttpListener` to
-  it later, so another process could take it in between and `Start` failed with
-  `HttpListenerException` (32). With several selftest hosts on one machine, the
-  `Devtools_*` fixtures failed intermittently. Both servers now bind and, if
-  another process holds the probed port, probe and bind a new one. A port pinned
-  with `--mcp-port` is never moved: the app exits with code 43, and
-  `mur devtools` picks a new port if it chose the port itself, or reports the
-  conflict if the user pinned it.
-
 - **ReactorGallery category and search-result pages scroll vertically**
   (issue #1298). Both views put a bare header and card grid into the
   `NavigationView` content. The card grid turns off its own scrolling so it can
@@ -185,6 +174,17 @@ Conventions for contributors:
   To move to a newer WinUI, bump the full `Microsoft.WindowsAppSDK` package;
   bumping `Microsoft.WindowsAppSDK.WinUI` on its own now fails the Windows App
   SDK's version check.
+
+- **Devtools servers no longer lose their port to another process between
+  choosing and binding it** (spec 024 §7). `DevtoolsMcpServer` and
+  `PreviewCaptureServer` probed a free loopback port and bound `HttpListener` to
+  it later, so another process could take it in between and `Start` failed with
+  `HttpListenerException` (32). With several selftest hosts on one machine, the
+  `Devtools_*` fixtures failed intermittently. Both servers now bind and, if
+  another process holds the probed port, probe and bind a new one. A port pinned
+  with `--mcp-port` is never moved: the app exits with code 43, and
+  `mur devtools` picks a new port if it chose the port itself, or reports the
+  conflict if the user pinned it.
 
 - **The Forms guide's "Validation Context" example now works as written**
   (issue #1262). Clicking **Register** on an empty form submitted successfully
