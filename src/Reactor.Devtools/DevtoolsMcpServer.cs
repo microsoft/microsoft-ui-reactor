@@ -21,10 +21,10 @@ internal sealed class DevtoolsMcpServer : IDisposable
     private HttpListener? _listener;
     /// <summary>
     /// Serializes the HTTP <see cref="Start"/> (bind, publish, announce) with
-    /// <see cref="Dispose"/>: a concurrent Start waits for the first one's result,
-    /// and once Dispose returns nothing is bound or announced.
+    /// <see cref="Dispose"/> (all of its cleanup): a concurrent Start waits for the
+    /// first one's result, and once Dispose returns nothing is bound or announced.
     /// </summary>
-    private readonly object _lifecycleGate = new();
+    private readonly Lock _lifecycleGate = new();
     /// <summary>True when the caller pinned <see cref="Port"/>; a pinned port is never moved.</summary>
     private readonly bool _portPinned;
     private readonly Func<int> _probePort;
@@ -271,16 +271,12 @@ internal sealed class DevtoolsMcpServer : IDisposable
 
     public void Dispose()
     {
-        HttpListener? listener;
-        lock (_lifecycleGate)
-        {
-            if (_disposed) return;
-            _disposed = true;
-            listener = _listener;
-        }
+        using var gate = _lifecycleGate.EnterScope();
+        if (_disposed) return;
+        _disposed = true;
         _shutdownCts.Cancel();
         // Close also stops the listener; HTTP.sys failures surface as HttpListenerException.
-        try { listener?.Close(); } catch (HttpListenerException) { }
+        try { _listener?.Close(); } catch (HttpListenerException) { }
         try { _stdioLoop?.Dispose(); } catch { }
         try { _logger?.Dispose(); } catch { }
         if (!string.IsNullOrEmpty(_lockfilePath))

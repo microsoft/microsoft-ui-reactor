@@ -36,10 +36,10 @@ internal sealed class PreviewCaptureServer : IDisposable
     private HttpListener? _listener;
     /// <summary>
     /// Serializes <see cref="Start"/> (bind, publish, announce) with
-    /// <see cref="Dispose"/>: a concurrent Start waits for the first one's result,
-    /// and once Dispose returns nothing is bound or announced.
+    /// <see cref="Dispose"/> (all of its cleanup): a concurrent Start waits for the
+    /// first one's result, and once Dispose returns nothing is bound or announced.
     /// </summary>
-    private readonly object _lifecycleGate = new();
+    private readonly Lock _lifecycleGate = new();
     private readonly Func<int> _probePort;
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly Window _window;
@@ -192,16 +192,12 @@ internal sealed class PreviewCaptureServer : IDisposable
 
     public void Dispose()
     {
-        HttpListener? listener;
-        lock (_lifecycleGate)
-        {
-            if (_disposed) return;
-            _disposed = true;
-            listener = _listener;
-        }
+        using var gate = _lifecycleGate.EnterScope();
+        if (_disposed) return;
+        _disposed = true;
         _captureTimer?.Stop();
         // Close also stops the listener; HTTP.sys failures surface as HttpListenerException.
-        try { listener?.Close(); } catch (HttpListenerException) { }
+        try { _listener?.Close(); } catch (HttpListenerException) { }
     }
 
     /// <summary>SECURITY (TASK-006 equivalent): bound the IO timers. Runs on every bind attempt's listener.</summary>
