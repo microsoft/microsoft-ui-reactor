@@ -240,6 +240,7 @@ internal static class SelfTestFixtureRegistry
         "SlotReplace_Panel",
         "SlotReplace_RegisteredSameControl",
         "SlotReplace_RegisteredNewControl",
+        "SlotReplace_FlyoutTargetTypeChange",
         // Issue #951 — keyed ListView/GridView rows must not announce Reactor's
         // internal row identity, and must honor an author-declared item name.
         "KLIA_NoRowIdentityLeak",
@@ -2258,6 +2259,7 @@ internal static class SelfTestFixtureRegistry
         "SlotReplace_Panel" => new SlotReplacementFixtures.InPanel(harness),
         "SlotReplace_RegisteredSameControl" => new SlotReplacementFixtures.RegisteredUpdateReturnsSameControl(harness),
         "SlotReplace_RegisteredNewControl" => new SlotReplacementFixtures.RegisteredUpdateReturnsNewControl(harness),
+        "SlotReplace_FlyoutTargetTypeChange" => new SlotReplacementFixtures.FlyoutTargetTypeChange(harness),
         // Issue #951 — keyed list/grid row automation names.
         "KLIA_NoRowIdentityLeak" => new KeyedListItemAutomationNameFixtures.NoRowIdentityLeak(harness),
         "KLIA_MatchesElementArray" => new KeyedListItemAutomationNameFixtures.MatchesElementArray(harness),

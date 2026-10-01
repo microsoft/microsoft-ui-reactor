@@ -30,6 +30,11 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// <para>Each fixture also checks that the parent kept its control, and the TabViewItem or
 /// InlineUIContainer that holds the slot. A parent that rebuilt its children would unmount the
 /// old child itself, and the checks would pass without testing the slot.</para>
+///
+/// <para>The <c>RegisterType</c> fixtures check that a registration's <c>unmount</c> callback runs
+/// exactly once for a control its <c>update</c> replaced, and never for one it patched in place.
+/// The flyout fixture covers an update that unmounts the control it replaces by itself: the slot
+/// must not unmount that control a second time.</para>
 /// </summary>
 internal static class SlotReplacementFixtures
 {
@@ -239,10 +244,60 @@ internal static class SlotReplacementFixtures
     private sealed record HostedElement(int Generation) : Element;
 
     /// <summary>
+    /// A <c>RegisterType</c> registration for <see cref="HostedElement"/>: a <c>Border</c> hosting
+    /// an <see cref="EffectProbe"/> mounted through the reconciler, with an <c>unmount</c> callback
+    /// that records the control and tears the probe down. The registration tags its controls
+    /// itself, as <c>XamlInterop</c> does: the reconciler finds the <c>unmount</c> callback through
+    /// the tag, and it tags registered controls on its own only once #1301 lands.
+    /// </summary>
+    private sealed class HostedRegistration
+    {
+        public readonly Counts Counts = new();
+        public readonly List<WinXC.Border> Controls = new();
+        public readonly List<WinXC.Border> Unmounted = new();
+        public int Updates;
+
+        /// <summary>True when <c>update</c> returns a new control, false when it patches the one it got.</summary>
+        public bool Replaces;
+
+        public void Register(Reconciler reconciler) =>
+            reconciler.RegisterType<HostedElement, WinXC.Border>(
+                mount: (r, element, requestRerender) => Build(r, element, requestRerender),
+                update: (r, _, element, control, requestRerender) =>
+                {
+                    Updates++;
+                    if (Replaces) return Build(r, element, requestRerender);
+                    Reconciler.SetElementTag(control, element);
+                    return control;
+                },
+                unmount: (r, control) =>
+                {
+                    Unmounted.Add(control);
+                    if (control.Child is { } child) r.UnmountChild(child);
+                });
+
+        private WinXC.Border Build(Reconciler reconciler, HostedElement element, Action requestRerender)
+        {
+            var control = new WinXC.Border
+            {
+                Child = reconciler.Mount(Component<EffectProbe, ProbeProps>(new ProbeProps(Counts)), requestRerender),
+            };
+            Reconciler.SetElementTag(control, element);
+            Controls.Add(control);
+            return control;
+        }
+
+        public string Describe() =>
+            $"{Controls.Count} controls built, update ran {Updates} times, unmount callback ran for "
+            + (Unmounted.Count == 0 ? "none" : string.Join(", ", Unmounted.Select(c => $"#{Controls.IndexOf(c)}")))
+            + $"; effect mounts {Counts.Mounts}, cleanups {Counts.Cleanups}";
+    }
+
+    /// <summary>
     /// A <c>RegisterType</c> control in a <c>Border</c>. Its <c>update</c> either hands back the
     /// control it was given, which means it patched it in place, or returns a new control. The
-    /// registered control hosts a component mounted through the reconciler, so unmounting the
-    /// control runs that component's effect cleanup.
+    /// registration's <c>unmount</c> callback must run for the replaced control, exactly once, and
+    /// never for a control that stays mounted.
     /// </summary>
     internal abstract class RegisteredTypeFixture(Harness h) : SelfTestFixtureBase(h)
     {
@@ -251,31 +306,15 @@ internal static class SlotReplacementFixtures
         /// <summary>True when <c>update</c> returns a new control, false when it returns the one it got.</summary>
         protected abstract bool Replaces { get; }
 
-        private readonly Counts _counts = new();
+        private readonly HostedRegistration _registration = new();
         private readonly List<FrameworkElement> _parents = new();
-        private readonly List<WinXC.Border> _controls = new();
-        private int _updates;
-
-        private WinXC.Border Build(Reconciler reconciler, Action requestRerender)
-        {
-            var control = new WinXC.Border
-            {
-                Child = reconciler.Mount(Component<EffectProbe, ProbeProps>(new ProbeProps(_counts)), requestRerender),
-            };
-            _controls.Add(control);
-            return control;
-        }
 
         public override async Task RunAsync()
         {
+            var registration = _registration;
+            registration.Replaces = Replaces;
             var host = H.CreateHost();
-            host.Reconciler.RegisterType<HostedElement, WinXC.Border>(
-                mount: (reconciler, _, requestRerender) => Build(reconciler, requestRerender),
-                update: (reconciler, _, _, control, requestRerender) =>
-                {
-                    _updates++;
-                    return Replaces ? Build(reconciler, requestRerender) : control;
-                });
+            registration.Register(host.Reconciler);
 
             var label = $"{Name} rerender";
             host.Mount(ctx =>
@@ -286,25 +325,34 @@ internal static class SlotReplacementFixtures
                     Border(new HostedElement(generation)).OnMount(_parents.Add));
             });
 
-            H.Check($"{Name}_Mounted", await Harness.WaitFor(() => _parents.Count == 1 && _counts.Mounts == 1));
-            if (_parents.Count != 1 || _controls.Count != 1) return;
+            H.Check($"{Name}_Mounted",
+                await Harness.WaitFor(() => _parents.Count == 1 && registration.Counts.Mounts == 1),
+                registration.Describe());
+            if (_parents.Count != 1 || registration.Controls.Count != 1) return;
             var parent = (WinXC.Border)_parents[0];
-            H.Check($"{Name}_Mount_ControlInSlot", ReferenceEquals(parent.Child, _controls[0]));
+            H.Check($"{Name}_Mount_ControlInSlot", ReferenceEquals(parent.Child, registration.Controls[0]));
 
             H.ClickButton(label);
-            H.Check($"{Name}_Updated", await Harness.WaitFor(() => _updates == 1), $"update ran {_updates} times");
+            H.Check($"{Name}_Updated", await Harness.WaitFor(() => registration.Updates == 1), registration.Describe());
+            // Exact counts below: give a second unmount a pass to show up.
             await Harness.Render();
 
-            var expectedControl = _controls[^1];
             H.Check($"{Name}_ParentKept", _parents.Count == 1);
             H.Check($"{Name}_ExpectedControlInSlot",
-                _controls.Count == (Replaces ? 2 : 1) && ReferenceEquals(parent.Child, expectedControl),
-                $"{_controls.Count} controls built");
-            var detail = $"effect mounts {_counts.Mounts}, cleanups {_counts.Cleanups}";
+                registration.Controls.Count == (Replaces ? 2 : 1)
+                && ReferenceEquals(parent.Child, registration.Controls[^1]),
+                registration.Describe());
             if (Replaces)
-                H.Check($"{Name}_OldControlUnmounted", _counts.Mounts == 2 && _counts.Cleanups == 1, detail);
+                H.Check($"{Name}_OldControlUnmountedOnce",
+                    registration.Unmounted.Count == 1
+                    && ReferenceEquals(registration.Unmounted[0], registration.Controls[0])
+                    && registration.Counts.Mounts == 2 && registration.Counts.Cleanups == 1,
+                    registration.Describe());
             else
-                H.Check($"{Name}_PatchedControlStaysMounted", _counts.Mounts == 1 && _counts.Cleanups == 0, detail);
+                H.Check($"{Name}_PatchedControlStaysMounted",
+                    registration.Unmounted.Count == 0
+                    && registration.Counts.Mounts == 1 && registration.Counts.Cleanups == 0,
+                    registration.Describe());
         }
     }
 
@@ -318,5 +366,60 @@ internal static class SlotReplacementFixtures
     {
         protected override string Name => "SlotReplace_RegisteredNewControl";
         protected override bool Replaces => true;
+    }
+
+    /// <summary>
+    /// A <c>Flyout</c> in a <c>Border</c> whose Target changes element type. The flyout's update
+    /// unmounts the old Target itself before it returns the new one
+    /// (<c>OverlayLifecycle.UpdateFlyoutElement</c>), so the slot must not unmount it again: a
+    /// second pass would run the <c>unmount</c> callback of the registered control inside the old
+    /// Target twice.
+    /// </summary>
+    internal sealed class FlyoutTargetTypeChange(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const string Name = "SlotReplace_FlyoutTargetTypeChange";
+
+        private readonly HostedRegistration _registration = new();
+        private readonly List<FrameworkElement> _parents = new();
+
+        public override async Task RunAsync()
+        {
+            var registration = _registration;
+            var host = H.CreateHost();
+            registration.Register(host.Reconciler);
+
+            var label = $"{Name} rerender";
+            var newTarget = $"{Name}-new-target";
+            host.Mount(ctx =>
+            {
+                var (generation, setGeneration) = ctx.UseState(0);
+                Element target = generation == 0
+                    ? VStack(new HostedElement(generation))
+                    : TextBlock(newTarget);
+                return VStack(
+                    Button(label, () => setGeneration(generation + 1)),
+                    Border(Flyout(target, TextBlock($"{Name}-content"))).OnMount(_parents.Add));
+            });
+
+            H.Check($"{Name}_Mounted",
+                await Harness.WaitFor(() => _parents.Count == 1 && registration.Counts.Mounts == 1),
+                registration.Describe());
+            if (_parents.Count != 1 || registration.Controls.Count != 1) return;
+            var parent = (WinXC.Border)_parents[0];
+            H.Check($"{Name}_Mount_TargetInSlot", parent.Child is WinXC.Panel);
+
+            H.ClickButton(label);
+            H.Check($"{Name}_TargetReplaced",
+                await Harness.WaitFor(() => parent.Child is WinXC.TextBlock { Text: var text } && text == newTarget),
+                $"slot holds {parent.Child?.GetType().Name ?? "null"}");
+            // Exact counts below: give a second unmount a pass to show up.
+            await Harness.Render();
+
+            H.Check($"{Name}_ParentKept", _parents.Count == 1);
+            H.Check($"{Name}_OldTargetUnmountedOnce",
+                registration.Unmounted.Count == 1 && ReferenceEquals(registration.Unmounted[0], registration.Controls[0])
+                && registration.Counts.Cleanups == 1,
+                registration.Describe());
+        }
     }
 }

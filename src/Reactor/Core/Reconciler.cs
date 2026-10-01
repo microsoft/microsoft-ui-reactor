@@ -2394,6 +2394,8 @@ public sealed partial class Reconciler : IDisposable
 
     private void UnmountRecursive(UIElement control)
     {
+        NoteUnmountDuringSlotUpdate(control);
+
         // Capture connected animation snapshot while element is still in the visual tree
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
             && caEl.ConnectedAnimationKey is not null)
@@ -2801,6 +2803,8 @@ public sealed partial class Reconciler : IDisposable
 
     private void UnmountAndCollect(UIElement control, List<FrameworkElement> toPool)
     {
+        NoteUnmountDuringSlotUpdate(control);
+
         // Capture connected animation snapshot while element is still in the visual tree
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
             && caEl.ConnectedAnimationKey is not null)
@@ -3066,7 +3070,9 @@ public sealed partial class Reconciler : IDisposable
     /// component path (<see cref="ReconcileImperative"/>) do. The caller only swaps
     /// the slot, so without this the old subtree's effect cleanups, refs,
     /// <c>.OnUnmount</c> actions and handler unmounts never ran. An update that
-    /// returns the control it was handed patched it in place.</para>
+    /// returns the control it was handed patched it in place, and an update that
+    /// already unmounted the control it replaced is not followed by a second
+    /// unmount.</para>
     ///
     /// <para>This exists because the naive replace in early Phase 1
     /// (<c>MountChild</c> + <c>SetChild</c> without comparing old vs new)
@@ -3084,10 +3090,11 @@ public sealed partial class Reconciler : IDisposable
         }
         if (oldChild is not null && existing is not null && CanUpdate(oldChild, newChild))
         {
-            var replacement = Update(oldChild, newChild, existing, requestRerender);
+            var replacement = UpdateSlotChild(oldChild, newChild, existing, requestRerender, out var unmountedByUpdate);
             if (replacement is null || IsSameControl(replacement, existing))
                 return existing;
-            Unmount(existing);
+            if (!unmountedByUpdate)
+                Unmount(existing);
             return replacement;
         }
         // Hot Reload component-identity migration (spec 049 §7) — preserve the
@@ -3098,6 +3105,41 @@ public sealed partial class Reconciler : IDisposable
             return existing;
         if (existing is not null) Unmount(existing);
         return Mount(newChild, requestRerender);
+    }
+
+    // The control a ReconcileV1Child update is running against, and whether that update has
+    // already unmounted it. A target-wrapping flyout whose Target changes element type unmounts
+    // the old Target itself before it returns the new one (OverlayLifecycle.UpdateFlyoutElement
+    // and its MenuFlyout / CommandBarFlyout twins), and a second unmount would run the old
+    // subtree's handler and registered unmount callbacks again. Saved and restored around each
+    // update because slot updates nest.
+    private UIElement? _slotUpdateControl;
+    private bool _slotUpdateControlUnmounted;
+
+    private UIElement? UpdateSlotChild(Element oldChild, Element newChild, UIElement existing,
+        Action requestRerender, out bool unmountedByUpdate)
+    {
+        var outerControl = _slotUpdateControl;
+        var outerUnmounted = _slotUpdateControlUnmounted;
+        _slotUpdateControl = existing;
+        _slotUpdateControlUnmounted = false;
+        try
+        {
+            var replacement = Update(oldChild, newChild, existing, requestRerender);
+            unmountedByUpdate = _slotUpdateControlUnmounted;
+            return replacement;
+        }
+        finally
+        {
+            _slotUpdateControl = outerControl;
+            _slotUpdateControlUnmounted = outerUnmounted;
+        }
+    }
+
+    private void NoteUnmountDuringSlotUpdate(UIElement control)
+    {
+        if (ReferenceEquals(control, _slotUpdateControl))
+            _slotUpdateControlUnmounted = true;
     }
 
     // True when an update result is the control it was handed, possibly through a second
