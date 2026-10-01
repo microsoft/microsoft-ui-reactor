@@ -11,23 +11,22 @@ namespace Microsoft.UI.Reactor.Core;
 /// <remarks>
 /// <para>WinUI does not take a preparation's snapshot when <c>PrepareToAnimate</c> returns. It
 /// does so in the next frame's commit. When the source leaves the tree before that frame, which
-/// is every source Reactor prepares, WinUI keeps the element in its parent's unloading storage
-/// for that commit and lists it in <c>CConnectedAnimationService::m_retainedElements</c>.
-/// <c>PreCommit</c> then hides each retained element's composition node, assuming it has one;
-/// <c>PostCommit</c> releases them.</para>
+/// is every source Reactor prepares, WinUI keeps the removed element (the source itself, or the
+/// container it left with) in its parent's unloading storage for that commit and lists it in
+/// <c>CConnectedAnimationService::m_retainedElements</c>. <c>PreCommit</c> then hides each
+/// retained element's composition node, assuming it has one; <c>PostCommit</c> releases them.</para>
 ///
-/// <para>A source that left the tree <i>itself</i>, rather than inside a removed container,
-/// owes its composition node to the preparation alone. Cancelling the preparation before that
-/// frame clears the requirement, so the frame renders no node for it, and <c>PreCommit</c>
-/// dereferences null: <c>0xC0000005</c> at <c>Microsoft.UI.Xaml.dll</c>
-/// <c>CConnectedAnimationService::PreCommit+0x81</c> (issue #1152). <c>PrepareToAnimate</c> with
-/// a key that is still in use is such a cancel: WinUI cancels the earlier animation before it
-/// creates the new one.</para>
+/// <para>A source that left the tree itself usually has a composition node only because of the
+/// preparation. Cancelling the preparation before that frame clears the requirement, so the frame
+/// renders no node for it, and <c>PreCommit</c> dereferences null: <c>0xC0000005</c> at
+/// <c>Microsoft.UI.Xaml.dll</c> <c>CConnectedAnimationService::PreCommit+0x81</c> (issue #1152).
+/// <c>PrepareToAnimate</c> with a key that is still in use is such a cancel: WinUI cancels the
+/// earlier animation before it creates the new one.</para>
 ///
 /// <para>A key therefore stays here from a successful <c>PrepareToAnimate</c> until the next
 /// <c>CompositionTarget.Rendered</c>, which WinUI raises only after a frame's
-/// <c>PostCommit</c>. A window that renders no frames, minimized for example, keeps its keys
-/// until it renders again; until then no commit can fault either.</para>
+/// <c>PostCommit</c>. While WinUI renders no frames the keys stay, and no commit can fault
+/// either.</para>
 /// </remarks>
 internal static class ConnectedAnimationFrameGate
 {
