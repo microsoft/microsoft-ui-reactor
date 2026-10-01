@@ -168,7 +168,7 @@ Same shape as Boundary A: loopback-only HTTP (`http://127.0.0.1:<port>/mcp`) wit
 | Slow-loris / connection exhaustion | `HeaderWait`, `EntityBody`, `IdleConnection`, `RequestQueue` all bounded at 10–15 s | `Start` lines 95–103 |
 | Threadpool exhaustion | 16-way dispatch gate; over-quota requests get HTTP 503 with `Retry-After: 1` | `_dispatchGate` line 34, `ListenAsync` lines 203–215 |
 | Body-bomb | 4 MiB hard cap; over-cap requests get HTTP 413 before the body is read fully | `MaxBodyBytes` line 38, `HandleSwitchComponent` lines 451–456 |
-| Port TOCTOU steal between `FindFreePort` and `HttpListener.Start` | `TcpListener` kept alive across the handoff; placeholder released only after `HttpListener` binds | `AcquireFreePortHolding` line 518, `Start` lines 109–110 |
+| Port TOCTOU steal between probing a free port and `HttpListener.Start` | Bind-and-retry: a placeholder socket can't be held across the bind (HTTP.sys refuses a port any other socket owns), so if another process takes the probed port first, `Start` probes a new one and binds again (bounded). `CAPTURE_PORT` is announced only after the bind succeeds | `LoopbackHttpListener.Start`, `PreviewCaptureServer.Start` |
 
 **Residual risk:**
 
@@ -186,6 +186,7 @@ Same shape as Boundary A: loopback-only HTTP (`http://127.0.0.1:<port>/mcp`) wit
 **Mitigations:** identical shape to [§7.1](#71-preview-capture-server) — per-launch bearer (line 80), 1 MiB body cap (`MaxRequestBodyBytes` line 55), 16-way dispatch gate (line 43), 10 s I/O timeouts (lines 115–122), loopback bind (line 84). Plus:
 
 - **Single-instance lockfile** per project (`LockfileRegistry.PathFor(projectIdentifier)` — per-user tempdir) prevents two dev sessions racing on the same MCP endpoint and provides the channel by which the bearer token reaches the client (`IsAnotherSessionActive` lines 94–106).
+- **Port TOCTOU** handled as in §7.1: an unpinned port is bound with bind-and-retry, and the endpoint (banner, `devtools-ready` line, lockfile) is announced only after the bind. A port pinned with `--mcp-port` is never moved; if another process holds it, `Start` throws `LoopbackPortUnavailableException` and the app exits with code 43.
 - **Stdio transport** uses raw `Console.OpenStandardInput / Output` so the JSON-RPC framing isn't corrupted by app log writes (lines 145–146). Trust derives from the parent process owning the pipe.
 
 **Residual risk:** same as [§7.1](#71-preview-capture-server) — bearer token is a same-user-same-machine secret. The MCP tools can drive the running app: inspect state, synthesize input, switch components. **An attacker who has the token has full control of the dev app's UI thread.** This is by design — that's what devtools are for — and is no worse than the same attacker already having `OpenProcess(PROCESS_VM_READ)` rights on the dev process they share a user with.
