@@ -830,6 +830,7 @@ TitleBarElement.Icon(string imageUri) → TitleBarElement
 TitleBarElement.NoIcon() → TitleBarElement
 TitleBarElement.PaneToggleButtonVisible(bool visible) → TitleBarElement
 TitleBarElement.PaneToggleRequested(Action handler) → TitleBarElement
+TitleBarElement.PreferredTheme(WindowTitleBarTheme theme) → TitleBarElement
 TitleBarElement.RightHeader(Element rightHeader) → TitleBarElement
 TitleBarElement.Set(Action<TitleBar> configure) → TitleBarElement
 TitleBarElement.Subtitle(string subtitle) → TitleBarElement
@@ -1053,6 +1054,7 @@ WindowStartPosition { Default, CenterOnPrimary, CenterOnOwner, Manual, CenterOnC
 WindowState { Normal, Minimized, Maximized, FullScreen, CompactOverlay }
 WindowStyle { Default, None, ToolWindow }
 WindowTitleBarHeight { Standard, Tall, Collapsed }
+WindowTitleBarTheme { Legacy, UseDefaultAppMode, Light, Dark }
 
 ## Public types (ctors / properties / methods / events)
 # Every public type not already covered above. Members alphabetized within
@@ -5881,6 +5883,7 @@ Element Content { get; init; }
 Element RightHeader { get; init; }
 IconData Icon { get; init; }
 WindowTitleBarHeight? HeightOption { get; init; }
+WindowTitleBarTheme? PreferredTheme { get; init; }
 bool AutoRefreshDragRegions { get; init; }
 bool IsBackButtonEnabled { get; init; }
 bool IsBackButtonVisible { get; init; }
@@ -6322,6 +6325,7 @@ WindowStartPosition PersistenceFallback { get; init; }
 WindowStartPosition StartPosition { get; init; }
 WindowStyle Style { get; init; }
 WindowTitleBarHeight? TitleBarHeight { get; init; }
+WindowTitleBarTheme? TitleBarTheme { get; init; }
 bool ActivateOnOpen { get; init; }
 bool IgnorePointerInput { get; init; }
 bool IsMaximizable { get; init; }

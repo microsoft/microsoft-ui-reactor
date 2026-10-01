@@ -84,6 +84,17 @@ Conventions for contributors:
   but too old, `3` pack not installed. It backs `mur doctor` and `bootstrap.ps1`'s verification
   step, which give different remediation for each.
 
+- **Declarative caption-button theme (issue #1297).** `WindowSpec.TitleBarTheme` and
+  `TitleBar(...).PreferredTheme(WindowTitleBarTheme)` set the theme of the window's
+  system caption buttons (`AppWindow.TitleBar.PreferredTheme`). WinUI does not carry
+  an element's `RequestedTheme` through to the caption, so an app that themes its
+  content opposite to the system declares the matching caption theme. Opt-in: with
+  nothing declared Reactor never writes the property, so an imperatively set value is
+  left alone; removing a declaration restores the value the caption had before
+  Reactor first applied one. The spec
+  wins over the element, and — unlike the caption height — no content extension is
+  required. ReactorGallery uses it so its caption buttons follow the gallery theme.
+
 ### Changed
 
 - **`.Validate(fieldName, value, validators…)` now runs its validators during the
