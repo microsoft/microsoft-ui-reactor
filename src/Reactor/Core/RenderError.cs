@@ -35,7 +35,11 @@ public enum RenderErrorSource
     /// <summary>A child component's <c>Render()</c> threw (in-tree placeholder).</summary>
     ComponentRender,
 
-    /// <summary>The reconcile pass (mount/update/unmount of native controls) threw.</summary>
+    /// <summary>
+    /// The commit phase threw: reconciling the element tree into native controls
+    /// (mount/update/unmount), installing the result in the host, or a host callback run
+    /// after the render pass such as <c>OnRenderComplete</c>.
+    /// </summary>
     Reconcile,
 
     /// <summary>An effect body, or an effect cleanup run while flushing effects, threw.</summary>
@@ -72,9 +76,12 @@ public sealed class RenderError
     public string? ComponentName { get; }
 
     /// <summary>
-    /// <c>true</c> when the returned element replaces the host's whole content (root
-    /// render, reconcile, root effects, dispose cleanup); <c>false</c> when it replaces
-    /// only the failing component's slot in the tree.
+    /// Where the failure sits. For a displayable error: <c>true</c> when the returned
+    /// element replaces the host's whole content (root render, reconcile, root effects);
+    /// <c>false</c> when it replaces only the failing component's slot in the tree. For
+    /// <see cref="RenderErrorSource.Cleanup"/>, where no element is shown: <c>true</c> for
+    /// a cleanup registered by the host's root component, <c>false</c> for one registered
+    /// by a child component.
     /// </summary>
     public bool IsHostLevel { get; }
 

@@ -21,7 +21,12 @@ public class RenderErrorDispatchTests
         var previous = ReactorApplication.OnUnhandledException;
         ReactorApplication.OnUnhandledException = callback;
         try { body(); }
-        finally { ReactorApplication.OnUnhandledException = previous; }
+        finally
+        {
+            ReactorApplication.OnUnhandledException = previous;
+            // The in-flight marker is thread-static; don't leak it into the next test.
+            RenderErrorDispatch.EndPropagation();
+        }
     }
 
     // ── RenderError ──────────────────────────────────────────────────────────
@@ -162,8 +167,9 @@ public class RenderErrorDispatchTests
             RenderErrorDispatch.RaiseUnhandled(ex);
 
             Assert.Same(ex, seen);
-            Assert.True(RenderErrorDispatch.WasReportedAsUnhandled(ex));
+            // Handled: nothing is rethrown, so nothing is marked in flight or declined.
             Assert.False(RenderErrorDispatch.IsPropagating(ex));
+            Assert.False(RenderErrorDispatch.TryConsumeDeclined(ex));
         });
     }
 
@@ -177,7 +183,9 @@ public class RenderErrorDispatchTests
 
             Assert.Same(ex, thrown);
             Assert.True(RenderErrorDispatch.IsPropagating(ex));
-            Assert.True(RenderErrorDispatch.WasReportedAsUnhandled(ex));
+            // The declined mark is consumed by the first check (Application.UnhandledException).
+            Assert.True(RenderErrorDispatch.TryConsumeDeclined(ex));
+            Assert.False(RenderErrorDispatch.TryConsumeDeclined(ex));
         });
     }
 
@@ -284,15 +292,35 @@ public class RenderErrorDispatchTests
             () => throw new InvalidOperationException("first"),
             () => throw new InvalidOperationException("second"),
             () => lastRan = true);
+        var reported = new List<string>();
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pending = null;
 
         WithUnhandledCallback(_ => false, () =>
-            RenderErrorDispatch.RunCleanups(ctx, e => { e.Propagate(); return null; }, "Probe",
+            RenderErrorDispatch.RunCleanups(ctx, e => { reported.Add(e.Exception.Message); e.Propagate(); return null; }, "Probe",
                 isHostLevel: true, logger: null, ref pending));
 
         Assert.True(lastRan);
         Assert.NotNull(pending);
         Assert.Equal("first", pending!.SourceException.Message);
+        // Every failure reaches the handler, including those after the first propagation.
+        Assert.Equal(new[] { "first", "second" }, reported);
+    }
+
+    [Fact]
+    public void Propagation_Marker_Is_Scoped_Not_Permanent()
+    {
+        var ex = new InvalidOperationException("swallowed by the app");
+        WithUnhandledCallback(_ => false, () =>
+        {
+            Assert.Throws<InvalidOperationException>(() => RenderErrorDispatch.RaiseUnhandled(ex));
+            Assert.True(RenderErrorDispatch.IsPropagating(ex));
+
+            // The outermost Reactor frame ends the scope once the exception has left.
+            RenderErrorDispatch.EndPropagation();
+
+            // A later throw of the same instance is an ordinary error again.
+            Assert.False(RenderErrorDispatch.IsPropagating(ex));
+        });
     }
 
     // ── WindowSpec ───────────────────────────────────────────────────────────

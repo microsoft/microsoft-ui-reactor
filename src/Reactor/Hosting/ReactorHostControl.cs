@@ -64,7 +64,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private int _renderPending;      // 0 or 1 — Interlocked for thread-safe access
     private volatile bool _isRendering;       // only touched on UI thread
     private volatile bool _needsRerender;     // only touched on UI thread
-    private bool _themeListenerAttached;
+    private bool _themeListenerAttached;   // UISettings subscribed (once per control)
+    private FrameworkElement? _themeListenerElement;   // current content root listened to
     private volatile bool _disposed;
     private Curve? _pendingAnimationCurve;
     // Snapshot of AnimationAmbient.Current at setter dispatch time
@@ -306,6 +307,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             // Reset the gate so future setState calls can enqueue — also when a render
             // error the app chose to propagate (RenderError.Propagate) escapes Render().
             Interlocked.Exchange(ref _renderPending, 0);
+            // Outermost frame: a propagated exception has now left Reactor.
+            RenderErrorDispatch.EndPropagation();
         }
 
         // If state changed during render, re-enqueue at LOW priority so WinUI
@@ -633,17 +636,18 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// </summary>
     private void AttachThemeListener(UIElement? control)
     {
-        if (_themeListenerAttached || control is not FrameworkElement fe) return;
-        _themeListenerAttached = true;
+        if (control is not FrameworkElement fe || ReferenceEquals(fe, _themeListenerElement)) return;
 
-        fe.ActualThemeChanged += (_, _) =>
-        {
-            _logger?.LogDebug("Theme changed to {Theme} — re-rendering", fe.ActualTheme);
-            // Issue #660 (#86): drop the (key,theme)->Brush cache so ThemeRef
-            // resolves re-read the now-current ThemeDictionaries.
-            Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
-            RequestRender();
-        };
+        // Follow the current content root (issue #1291): an app-supplied error fallback
+        // replaces the root after a successful render, and a listener left on the
+        // detached old root would never see ActualThemeChanged again.
+        if (_themeListenerElement is not null)
+            _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
+        _themeListenerElement = fe;
+        fe.ActualThemeChanged += OnActualThemeChanged;
+
+        if (_themeListenerAttached) return;
+        _themeListenerAttached = true;
 
         // Issue #660 (#86): also invalidate on high-contrast / accent / palette
         // changes, which don't raise ActualThemeChanged but can change a resolved
@@ -655,6 +659,15 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             _uiSettings.ColorValuesChanged += OnColorValuesChanged;
         }
         catch { /* headless / no UISettings projection — nothing to invalidate */ }
+    }
+
+    private void OnActualThemeChanged(FrameworkElement sender, object args)
+    {
+        _logger?.LogDebug("Theme changed to {Theme} — re-rendering", sender.ActualTheme);
+        // Issue #660 (#86): drop the (key,theme)->Brush cache so ThemeRef
+        // resolves re-read the now-current ThemeDictionaries.
+        Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
+        RequestRender();
     }
 
     private void OnColorValuesChanged(global::Windows.UI.ViewManagement.UISettings sender, object args)
@@ -692,8 +705,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         }
         _currentControl = errorPanel;
         _currentTree = errorTree;
-        // See ReactorHost.SetErrorContent. This control subscribes once, to its first
-        // content element; an app fallback that is the first content needs it too.
+        // See ReactorHost.SetErrorContent: an app fallback is a live Reactor tree that
+        // may use ThemeRef, so it takes over the theme listener from the replaced root.
         if (errorTree is not null)
             AttachThemeListener(errorPanel);
     }
@@ -710,6 +723,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         {
             _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
             _uiSettings = null;
+        }
+        if (_themeListenerElement is not null)
+        {
+            _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
+            _themeListenerElement = null;
         }
 
         // Issue #1291 — see ReactorHost.Dispose.
@@ -736,6 +754,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _overlayWiring = null;
 
         Content = null;
+        // Outermost frame: the propagated exception leaves Reactor here.
+        RenderErrorDispatch.EndPropagation();
         pendingPropagation?.Throw();
     }
 }

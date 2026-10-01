@@ -1416,7 +1416,7 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
         {
             // A render error the app asked to propagate (RenderError.Propagate) was already
             // offered to OnUnhandledException, which declined it; don't ask twice.
-            if (RenderErrorDispatch.WasReportedAsUnhandled(e.Exception))
+            if (RenderErrorDispatch.TryConsumeDeclined(e.Exception))
                 return;
             // Don't set e.Handled = true for unknown exceptions — let the app crash
             // with a useful error rather than silently running in a corrupt state.

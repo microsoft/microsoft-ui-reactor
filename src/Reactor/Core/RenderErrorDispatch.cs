@@ -21,15 +21,20 @@ namespace Microsoft.UI.Reactor.Core;
 /// </remarks>
 internal static class RenderErrorDispatch
 {
-    // Exceptions that are on their way out to the unhandled-exception path. Reactor's own
+    // The exception currently on its way out to the unhandled-exception path. Reactor's own
     // catch sites filter on this so a propagated in-tree exception is not re-caught by the
-    // host's outer catch and fed to the handler a second time.
-    private static readonly ConditionalWeakTable<Exception, object> s_propagating = new();
+    // host's outer catch and fed to the handler a second time. Scoped, not permanent: the
+    // outermost Reactor frame (render loop, Dispose) calls EndPropagation once the exception
+    // has left Reactor, so if the app swallows it and the same instance is thrown again
+    // later, it is handled normally. Thread-static because rendering and disposal are
+    // UI-thread synchronous and each UI thread has its own unwind.
+    [ThreadStatic] private static Exception? t_propagating;
 
-    // Exceptions already delivered to ReactorApplication.OnUnhandledException, so the
-    // Application.UnhandledException handler does not deliver them twice when the rethrow
-    // happens to reach it.
-    private static readonly ConditionalWeakTable<Exception, object> s_reported = new();
+    // Exceptions rethrown after ReactorApplication.OnUnhandledException declined them, so
+    // the Application.UnhandledException handler does not ask the app a second time if the
+    // rethrow reaches it. Consumed on that check; only ever set for exceptions that are
+    // genuinely rethrown, never for ones the app handled.
+    private static readonly ConditionalWeakTable<Exception, object> s_declined = new();
 
     private static readonly object s_marker = new();
 
@@ -50,9 +55,21 @@ internal static class RenderErrorDispatch
     internal static RenderErrorHandler? Resolve(RenderErrorHandler? hostHandler) =>
         hostHandler ?? ReactorApp.DefaultRenderErrorHandler;
 
-    internal static bool IsPropagating(Exception ex) => s_propagating.TryGetValue(ex, out _);
+    internal static bool IsPropagating(Exception ex) => ReferenceEquals(t_propagating, ex);
 
-    internal static bool WasReportedAsUnhandled(Exception ex) => s_reported.TryGetValue(ex, out _);
+    /// <summary>
+    /// Ends the current propagation scope. Called by the outermost Reactor frames — the
+    /// render loop and host <c>Dispose</c> — once a propagated exception has left (or is
+    /// about to leave) Reactor.
+    /// </summary>
+    internal static void EndPropagation() => t_propagating = null;
+
+    /// <summary>
+    /// Whether <paramref name="ex"/> was already offered to
+    /// <see cref="ReactorApplication.OnUnhandledException"/> and declined. Consumes the mark,
+    /// so a later, unrelated throw of the same instance is reported normally.
+    /// </summary>
+    internal static bool TryConsumeDeclined(Exception ex) => s_declined.Remove(ex);
 
     /// <summary>
     /// Invokes <paramref name="handler"/> and classifies the result. A handler that throws is
@@ -154,14 +171,13 @@ internal static class RenderErrorDispatch
         var error = new RenderError(ex, RenderErrorSource.Cleanup, componentName, isHostLevel);
         if (InvokeHandler(handler, error, logger, out _) != Outcome.Propagate || TryReportUnhandled(ex))
             return null;
-        s_propagating.AddOrUpdate(ex, s_marker);
-        return ExceptionDispatchInfo.Capture(ex);
+        return BeginPropagation(ex);
     }
 
     /// <summary>
     /// Runs <paramref name="context"/>'s cleanups. With no handler this is the unchanged
     /// <see cref="RenderContext.RunCleanups()"/> (the first throw escapes). With a handler
-    /// every cleanup runs, each failure is reported, and the first unhandled propagation is
+    /// every cleanup runs, every failure is reported, and the first unhandled propagation is
     /// kept in <paramref name="pending"/> for the caller to rethrow after disposal.
     /// </summary>
     internal static void RunCleanups(
@@ -175,7 +191,12 @@ internal static class RenderErrorDispatch
             return;
         }
         ExceptionDispatchInfo? first = null;
-        context.RunCleanupsIsolated(ex => first ??= ReportCleanup(handler, ex, componentName, isHostLevel, logger));
+        context.RunCleanupsIsolated(ex =>
+        {
+            // Report every failure; keep only the first propagation to rethrow.
+            var propagation = ReportCleanup(handler, ex, componentName, isHostLevel, logger);
+            first ??= propagation;
+        });
         pending ??= first;
     }
 
@@ -184,10 +205,16 @@ internal static class RenderErrorDispatch
     /// (logging through <see cref="ReactorApp.AppLogger"/>). Returns whether the app marked
     /// it handled.
     /// </summary>
-    internal static bool TryReportUnhandled(Exception ex)
+    internal static bool TryReportUnhandled(Exception ex) => ReactorApplication.ReportUnhandled(ex);
+
+    // The app declined the exception: mark it as the in-flight propagation (so Reactor's
+    // catch sites let it pass) and as already offered (so Application.UnhandledException
+    // does not ask again).
+    private static ExceptionDispatchInfo BeginPropagation(Exception ex)
     {
-        s_reported.AddOrUpdate(ex, s_marker);
-        return ReactorApplication.ReportUnhandled(ex);
+        s_declined.AddOrUpdate(ex, s_marker);
+        t_propagating = ex;
+        return ExceptionDispatchInfo.Capture(ex);
     }
 
     /// <summary>
@@ -203,7 +230,6 @@ internal static class RenderErrorDispatch
     internal static void RaiseUnhandled(Exception ex)
     {
         if (TryReportUnhandled(ex)) return;
-        s_propagating.AddOrUpdate(ex, s_marker);
-        ExceptionDispatchInfo.Capture(ex).Throw();
+        BeginPropagation(ex).Throw();
     }
 }

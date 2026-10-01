@@ -466,6 +466,8 @@ public sealed class ReactorHost : IDisposable
             // Reset the gate so future setState calls can enqueue — also when a render
             // error the app chose to propagate (RenderError.Propagate) escapes Render().
             Interlocked.Exchange(ref _renderPending, 0);
+            // Outermost frame: a propagated exception has now left Reactor.
+            RenderErrorDispatch.EndPropagation();
         }
 
         // If state changed during render, re-enqueue at LOW priority so WinUI
@@ -1041,6 +1043,8 @@ public sealed class ReactorHost : IDisposable
         _overlayWiring = null;
 
         ReactorApp.ActiveHostInternal = null;
+        // Outermost frame: the propagated exception leaves Reactor here.
+        RenderErrorDispatch.EndPropagation();
         pendingPropagation?.Throw();
     }
 

@@ -479,6 +479,67 @@ internal static class RenderErrorHandlerFixtures
         }
     }
 
+    // ── Theme listener follows the fallback ─────────────────────────────────
+
+    // A ThemeRef-bound fallback must re-render on theme changes, so the fallback that replaces
+    // a successfully rendered root has to take over the ActualThemeChanged subscription. Each
+    // re-render re-runs the throwing root, so the handler's call count is the oracle: with the
+    // listener left on the detached old root, flipping the theme re-renders nothing.
+    internal class FallbackTakesThemeListener(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static ElementTheme Opposite(FrameworkElement fe) =>
+            fe.ActualTheme == ElementTheme.Dark ? ElementTheme.Light : ElementTheme.Dark;
+
+        public override async Task RunAsync()
+        {
+            // ReactorHostControl
+            int controlCalls = 0;
+            var control = new ReactorHostControl { RenderErrorHandler = _ => { controlCalls++; return TextBlock("ControlThemedFallback"); } };
+            H.SetContent(control);
+            control.Mount(_ => TextBlock("ControlThemeHealthy"));
+            await Harness.Render(50);
+            control.Mount(_ => throw new InvalidOperationException("control theme boom"));
+            await Harness.Render(50);
+            H.Check("RenderErrorHandler_Theme_HostControl_FallbackShown",
+                H.FindText("ControlThemedFallback") is not null && controlCalls == 1, $"calls={controlCalls}");
+
+            control.RequestedTheme = Opposite(control);
+            await Harness.Render(100);
+            H.Check("RenderErrorHandler_Theme_HostControl_Rerendered", controlCalls >= 2, $"calls={controlCalls}");
+            H.SetContent(null);
+            control.Dispose();
+
+            // ReactorHost (renders into the harness's shared ContentTarget; restore its theme)
+            var target = H.CreateHost().ContentTarget;
+            var previousTheme = target?.RequestedTheme ?? ElementTheme.Default;
+            try
+            {
+                int hostCalls = 0;
+                bool shouldThrow = false;
+                var host = H.CreateHost();
+                host.RenderErrorHandler = _ => { hostCalls++; return TextBlock("HostThemedFallback"); };
+                host.Mount(_ => shouldThrow ? throw new InvalidOperationException("host theme boom") : TextBlock("HostThemeHealthy"));
+                await Harness.Render();
+                shouldThrow = true;
+                host.RequestRender();
+                await Harness.Render();
+                H.Check("RenderErrorHandler_Theme_Host_FallbackShown",
+                    H.FindText("HostThemedFallback") is not null && hostCalls == 1, $"calls={hostCalls}");
+
+                if (target is not null)
+                {
+                    target.RequestedTheme = Opposite(target);
+                    await Harness.Render(100);
+                }
+                H.Check("RenderErrorHandler_Theme_Host_Rerendered", hostCalls >= 2, $"calls={hostCalls}");
+            }
+            finally
+            {
+                if (target is not null) target.RequestedTheme = previousTheme;
+            }
+        }
+    }
+
     // ── Dispose cleanups ────────────────────────────────────────────────────
 
     internal class DisposeCleanup_Reported(Harness h) : SelfTestFixtureBase(h)
