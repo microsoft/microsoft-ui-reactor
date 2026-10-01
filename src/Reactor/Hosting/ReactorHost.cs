@@ -457,6 +457,10 @@ public sealed class ReactorHost : IDisposable
         // _renderPending is 1 here — all concurrent RequestRender calls are
         // blocked from enqueuing duplicates. Render once, then decide.
         _needsRerender = false;
+        // Outermost frame for a propagated render error (issue #1291). Scoped, so a first
+        // render started synchronously from inside another frame (e.g. app cleanup code
+        // mounting a new host) restores that frame's marker instead of clearing it.
+        var propagationScope = RenderErrorDispatch.EnterPropagationScope();
         try
         {
             Render();
@@ -466,8 +470,7 @@ public sealed class ReactorHost : IDisposable
             // Reset the gate so future setState calls can enqueue — also when a render
             // error the app chose to propagate (RenderError.Propagate) escapes Render().
             Interlocked.Exchange(ref _renderPending, 0);
-            // Outermost frame: a propagated exception has now left Reactor.
-            RenderErrorDispatch.EndPropagation();
+            propagationScope.Dispose();
         }
 
         // If state changed during render, re-enqueue at LOW priority so WinUI
@@ -1006,32 +1009,36 @@ public sealed class ReactorHost : IDisposable
         // Issue #1291: with a RenderErrorHandler configured, every cleanup runs and each
         // failure is reported (Source = Cleanup); a requested, unhandled propagation is
         // rethrown once disposal has finished. With no handler they escape as before.
+        // The root's and the reconciler's cleanups share one propagation scope, so only
+        // the first propagated failure is rethrown, and a nested frame started by app
+        // cleanup code cannot disturb it.
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
         var cleanupHandler = EffectiveRenderErrorHandler;
-        RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
-            isHostLevel: true, _logger, ref pendingPropagation);
-        RenderErrorDispatch.RunCleanups(_funcContext, cleanupHandler, componentName: null,
-            isHostLevel: true, _logger, ref pendingPropagation);
-
-        // Clear the SystemBackdrop so a window-reuse path returns to the WinUI
-        // default. Skip the actual window write when the window has already been
-        // closed/destroyed — touching set_SystemBackdrop on a torn-down window
-        // AVs (0xC0000005) and corrupts the backdrop interop for later windows.
-        // Best effort either way. (issue #647)
-        try { _backdropApplier.Reset(_windowClosed); }
-        catch (global::System.Exception ex)
-            when (ex is not global::System.OutOfMemoryException and not global::System.StackOverflowException)
-        {
-            Debug.WriteLine($"[Reactor] backdrop reset on dispose failed (best effort): {ex.GetType().Name}: {ex.Message}");
-        }
-
+        var propagationScope = RenderErrorDispatch.EnterPropagationScope();
         try
         {
-            _reconciler.Dispose();
+            RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
+                isHostLevel: true, _logger, ref pendingPropagation);
+            RenderErrorDispatch.RunCleanups(_funcContext, cleanupHandler, componentName: null,
+                isHostLevel: true, _logger, ref pendingPropagation);
+
+            // Clear the SystemBackdrop so a window-reuse path returns to the WinUI
+            // default. Skip the actual window write when the window has already been
+            // closed/destroyed — touching set_SystemBackdrop on a torn-down window
+            // AVs (0xC0000005) and corrupts the backdrop interop for later windows.
+            // Best effort either way. (issue #647)
+            try { _backdropApplier.Reset(_windowClosed); }
+            catch (global::System.Exception ex)
+                when (ex is not global::System.OutOfMemoryException and not global::System.StackOverflowException)
+            {
+                Debug.WriteLine($"[Reactor] backdrop reset on dispose failed (best effort): {ex.GetType().Name}: {ex.Message}");
+            }
+
+            pendingPropagation ??= _reconciler.DisposeCollectingPropagation();
         }
-        catch (Exception ex) when (RenderErrorDispatch.IsPropagating(ex))
+        finally
         {
-            pendingPropagation ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+            propagationScope.Dispose();
         }
         _rootComponent = null;
         _rootRenderFunc = null;
@@ -1043,8 +1050,6 @@ public sealed class ReactorHost : IDisposable
         _overlayWiring = null;
 
         ReactorApp.ActiveHostInternal = null;
-        // Outermost frame: the propagated exception leaves Reactor here.
-        RenderErrorDispatch.EndPropagation();
         pendingPropagation?.Throw();
     }
 

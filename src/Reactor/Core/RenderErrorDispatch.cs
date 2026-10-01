@@ -23,11 +23,13 @@ internal static class RenderErrorDispatch
 {
     // The exception currently on its way out to the unhandled-exception path. Reactor's own
     // catch sites filter on this so a propagated in-tree exception is not re-caught by the
-    // host's outer catch and fed to the handler a second time. Scoped, not permanent: the
-    // outermost Reactor frame (render loop, Dispose) calls EndPropagation once the exception
-    // has left Reactor, so if the app swallows it and the same instance is thrown again
-    // later, it is handled normally. Thread-static because rendering and disposal are
-    // UI-thread synchronous and each UI thread has its own unwind.
+    // host's outer catch and fed to the handler a second time; disposal uses it to rethrow
+    // only one propagated cleanup failure. Scoped, not permanent: each outermost Reactor
+    // frame (render loop, host Dispose, Reconciler.Dispose) opens a PropagationScope that
+    // saves the outer value and restores it on exit. Frames nest (app cleanup code can
+    // synchronously render or dispose another host), so a nested frame can never clear an
+    // outer frame's marker, and an exception the app swallows is handled normally if thrown
+    // again later. Thread-static because rendering and disposal are UI-thread synchronous.
     [ThreadStatic] private static Exception? t_propagating;
 
     // Exceptions rethrown after ReactorApplication.OnUnhandledException declined them, so
@@ -58,11 +60,28 @@ internal static class RenderErrorDispatch
     internal static bool IsPropagating(Exception ex) => ReferenceEquals(t_propagating, ex);
 
     /// <summary>
-    /// Ends the current propagation scope. Called by the outermost Reactor frames — the
-    /// render loop and host <c>Dispose</c> — once a propagated exception has left (or is
-    /// about to leave) Reactor.
+    /// Saves the current propagation marker and starts a fresh one; disposing restores the
+    /// saved marker. See <see cref="t_propagating"/>.
     /// </summary>
-    internal static void EndPropagation() => t_propagating = null;
+    internal readonly struct PropagationScope : IDisposable
+    {
+        private readonly Exception? _outer;
+
+        internal PropagationScope(Exception? outer) => _outer = outer;
+
+        public void Dispose() => t_propagating = _outer;
+    }
+
+    /// <summary>
+    /// Opens a propagation scope for an outermost Reactor frame — the render loop, host
+    /// <c>Dispose</c>, or <c>Reconciler.Dispose</c>. Dispose the result in a <c>finally</c>.
+    /// </summary>
+    internal static PropagationScope EnterPropagationScope()
+    {
+        var scope = new PropagationScope(t_propagating);
+        t_propagating = null;
+        return scope;
+    }
 
     /// <summary>
     /// Whether <paramref name="ex"/> was already offered to

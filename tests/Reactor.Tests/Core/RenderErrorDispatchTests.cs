@@ -20,12 +20,13 @@ public class RenderErrorDispatchTests
     {
         var previous = ReactorApplication.OnUnhandledException;
         ReactorApplication.OnUnhandledException = callback;
+        // The in-flight marker is thread-static; scope it so it can't leak into the next test.
+        var scope = RenderErrorDispatch.EnterPropagationScope();
         try { body(); }
         finally
         {
             ReactorApplication.OnUnhandledException = previous;
-            // The in-flight marker is thread-static; don't leak it into the next test.
-            RenderErrorDispatch.EndPropagation();
+            scope.Dispose();
         }
     }
 
@@ -337,16 +338,50 @@ public class RenderErrorDispatchTests
     public void Propagation_Marker_Is_Scoped_Not_Permanent()
     {
         var ex = new InvalidOperationException("swallowed by the app");
+        var previous = ReactorApplication.OnUnhandledException;
+        ReactorApplication.OnUnhandledException = _ => false;
+        try
+        {
+            using (RenderErrorDispatch.EnterPropagationScope())
+            {
+                Assert.Throws<InvalidOperationException>(() => RenderErrorDispatch.RaiseUnhandled(ex));
+                Assert.True(RenderErrorDispatch.IsPropagating(ex));
+            }
+
+            // Once the outermost frame's scope ends, a later throw of the same instance is an
+            // ordinary error again.
+            Assert.False(RenderErrorDispatch.IsPropagating(ex));
+        }
+        finally
+        {
+            ReactorApplication.OnUnhandledException = previous;
+        }
+    }
+
+    [Fact]
+    public void Propagation_Scopes_Nest_So_An_Inner_Frame_Cannot_Clear_An_Outer_Marker()
+    {
+        var outer = new InvalidOperationException("outer");
+        var inner = new InvalidOperationException("inner");
+        RenderErrorHandler propagate = e => { e.Propagate(); return null; };
         WithUnhandledCallback(_ => false, () =>
         {
-            Assert.Throws<InvalidOperationException>(() => RenderErrorDispatch.RaiseUnhandled(ex));
-            Assert.True(RenderErrorDispatch.IsPropagating(ex));
+            // Outer frame: a dispose cleanup's propagation is in flight.
+            Assert.NotNull(RenderErrorDispatch.ReportCleanup(propagate, outer, "Root", isHostLevel: true, logger: null));
+            Assert.True(RenderErrorDispatch.IsPropagating(outer));
 
-            // The outermost Reactor frame ends the scope once the exception has left.
-            RenderErrorDispatch.EndPropagation();
+            // App cleanup code synchronously starts another frame (e.g. a new host's first
+            // render), which propagates and ends on its own.
+            using (RenderErrorDispatch.EnterPropagationScope())
+            {
+                Assert.False(RenderErrorDispatch.IsPropagating(outer));
+                Assert.NotNull(RenderErrorDispatch.ReportCleanup(propagate, inner, "Nested", isHostLevel: true, logger: null));
+                Assert.True(RenderErrorDispatch.IsPropagating(inner));
+            }
 
-            // A later throw of the same instance is an ordinary error again.
-            Assert.False(RenderErrorDispatch.IsPropagating(ex));
+            // Back in the outer frame: its marker is intact.
+            Assert.True(RenderErrorDispatch.IsPropagating(outer));
+            Assert.False(RenderErrorDispatch.IsPropagating(inner));
         });
     }
 

@@ -54,6 +54,25 @@ internal static class RenderErrorHandlerFixtures
         }
     }
 
+    // First cleanup propagates; second is app code that synchronously mounts another host,
+    // whose first render runs the render loop inline (a nested Reactor frame).
+    private sealed class NestedHostCleanupComponent : Component<Window>
+    {
+        public static ReactorHost? NestedHost;
+
+        public override Element Render()
+        {
+            UseEffect(() => () => throw new InvalidOperationException("cleanup before nested host"));
+            UseEffect(() => () =>
+            {
+                var nested = new ReactorHost(Props);
+                nested.Mount(_ => TextBlock("NestedHostContent"));
+                NestedHost = nested;
+            });
+            return TextBlock("NestedCleanups");
+        }
+    }
+
     private static RenderErrorHandler Recording(List<RenderError> log, Func<RenderError, Element?> reply) =>
         e => { log.Add(e); return reply(e); };
 
@@ -605,12 +624,11 @@ internal static class RenderErrorHandlerFixtures
         }
     }
 
-    // ── WindowSpec seeding ──────────────────────────────────────────────────
+    // ── Dispose: several propagating cleanups ───────────────────────────────
 
     // Two cleanups in one child both propagate and the app declines both. Disposal must leave
-    // with the first one *and* finish tearing the host down: the in-flight marker has to name
-    // the exception the reconciler rethrows, or the host's filtered catch misses it and the
-    // rest of Dispose is skipped.
+    // with the first one *and* finish tearing the host down: only one exception is rethrown,
+    // and the rest of Dispose must still run.
     internal class Dispose_TwoPropagatingCleanups(Harness h) : SelfTestFixtureBase(h)
     {
         public override Task RunAsync() => WithUnhandledCallback(_ => false, async () =>
@@ -642,6 +660,57 @@ internal static class RenderErrorHandlerFixtures
             next.Mount(_ => TextBlock("AfterTwoCleanups"));
             await Harness.Render();
             H.Check("RenderErrorHandler_TwoCleanups_NewHostWorks", H.FindText("AfterTwoCleanups") is not null);
+        });
+    }
+
+    // Reentrancy: a nested Reactor frame started from app cleanup code (a new host's inline
+    // first render) must not disturb the disposing host's pending propagation.
+    internal class Dispose_NestedFrameInCleanup(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static Window NewWindow(string title)
+        {
+            var window = new Window { Title = title };
+            window.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(300, 200));
+            window.Activate();
+            return window;
+        }
+
+        public override Task RunAsync() => WithUnhandledCallback(_ => false, async () =>
+        {
+            var window = NewWindow("RenderErrorHandler Nested Outer");
+            var nestedWindow = NewWindow("RenderErrorHandler Nested Inner");
+            NestedHostCleanupComponent.NestedHost = null;
+            var reported = new List<string>();
+            var host = new ReactorHost(window)
+            {
+                RenderErrorHandler = e => { reported.Add(e.Exception.Message); e.Propagate(); return null; },
+            };
+            host.Mount(_ => VStack(Component<NestedHostCleanupComponent, Window>(nestedWindow)));
+            await Task.Delay(150);
+            await Harness.Render();
+
+            Exception? escaped = null;
+            try { host.Dispose(); } catch (InvalidOperationException ex) { escaped = ex; }
+            var nested = NestedHostCleanupComponent.NestedHost;
+
+            H.Check("RenderErrorHandler_NestedFrame_NestedHostRendered",
+                nested?.CurrentControl is not null, nested?.CurrentControl?.GetType().Name ?? "null");
+            H.Check("RenderErrorHandler_NestedFrame_PendingRethrown", escaped?.Message == "cleanup before nested host",
+                escaped?.Message ?? "(nothing escaped)");
+            H.Check("RenderErrorHandler_NestedFrame_TeardownCompleted", host.CurrentControl is null,
+                host.CurrentControl?.GetType().Name ?? "null");
+            H.Check("RenderErrorHandler_NestedFrame_Reported",
+                reported.SequenceEqual(new[] { "cleanup before nested host" }), string.Join(",", reported));
+
+            nested?.Dispose();
+            NestedHostCleanupComponent.NestedHost = null;
+            window.Close();
+            nestedWindow.Close();
+
+            var next = H.CreateHost();
+            next.Mount(_ => TextBlock("AfterNestedFrame"));
+            await Harness.Render();
+            H.Check("RenderErrorHandler_NestedFrame_NewHostWorks", H.FindText("AfterNestedFrame") is not null);
         });
     }
 

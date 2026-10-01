@@ -5876,6 +5876,21 @@ public sealed partial class Reconciler : IDisposable
 
     public void Dispose()
     {
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation;
+        // Standalone disposal is its own outermost frame (issue #1291).
+        using (RenderErrorDispatch.EnterPropagationScope())
+            pendingPropagation = DisposeCollectingPropagation();
+        pendingPropagation?.Throw();
+    }
+
+    /// <summary>
+    /// Disposes and returns, rather than throws, a cleanup exception the app asked to
+    /// propagate. Hosts call this inside their own propagation scope so the root's and the
+    /// reconciler's cleanups share one "only the first propagation is rethrown" decision,
+    /// and the host finishes its own teardown before rethrowing.
+    /// </summary>
+    internal global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? DisposeCollectingPropagation()
+    {
         // Issue #1291: with a RenderErrorHandler configured, every effect cleanup runs and
         // each failure is reported (Source = Cleanup). With no handler the first throwing
         // cleanup escapes as before.
@@ -5900,7 +5915,7 @@ public sealed partial class Reconciler : IDisposable
         }
         _navigationHostNodes.Clear();
         _pool.Clear();
-        pendingPropagation?.Throw();
+        return pendingPropagation;
     }
 }
 

@@ -298,6 +298,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // _renderPending is 1 here — all concurrent RequestRender calls are
         // blocked from enqueuing duplicates. Render once, then decide.
         _needsRerender = false;
+        // Outermost frame for a propagated render error (issue #1291). Scoped, so a first
+        // render started synchronously from inside another frame (e.g. app cleanup code
+        // mounting a new host) restores that frame's marker instead of clearing it.
+        var propagationScope = RenderErrorDispatch.EnterPropagationScope();
         try
         {
             Render();
@@ -307,8 +311,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             // Reset the gate so future setState calls can enqueue — also when a render
             // error the app chose to propagate (RenderError.Propagate) escapes Render().
             Interlocked.Exchange(ref _renderPending, 0);
-            // Outermost frame: a propagated exception has now left Reactor.
-            RenderErrorDispatch.EndPropagation();
+            propagationScope.Dispose();
         }
 
         // If state changed during render, re-enqueue at LOW priority so WinUI
@@ -733,17 +736,18 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // Issue #1291 — see ReactorHost.Dispose.
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
         var cleanupHandler = EffectiveRenderErrorHandler;
-        RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
-            isHostLevel: true, _logger, ref pendingPropagation);
-        RenderErrorDispatch.RunCleanups(_funcContext, cleanupHandler, componentName: null,
-            isHostLevel: true, _logger, ref pendingPropagation);
+        var propagationScope = RenderErrorDispatch.EnterPropagationScope();
         try
         {
-            _reconciler.Dispose();
+            RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
+                isHostLevel: true, _logger, ref pendingPropagation);
+            RenderErrorDispatch.RunCleanups(_funcContext, cleanupHandler, componentName: null,
+                isHostLevel: true, _logger, ref pendingPropagation);
+            pendingPropagation ??= _reconciler.DisposeCollectingPropagation();
         }
-        catch (Exception ex) when (RenderErrorDispatch.IsPropagating(ex))
+        finally
         {
-            pendingPropagation ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+            propagationScope.Dispose();
         }
         _rootComponent = null;
         _rootRenderFunc = null;
@@ -754,8 +758,6 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _overlayWiring = null;
 
         Content = null;
-        // Outermost frame: the propagated exception leaves Reactor here.
-        RenderErrorDispatch.EndPropagation();
         pendingPropagation?.Throw();
     }
 }
