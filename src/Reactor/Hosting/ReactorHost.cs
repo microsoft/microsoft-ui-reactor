@@ -460,17 +460,18 @@ public sealed class ReactorHost : IDisposable
         // Outermost frame for a propagated render error (issue #1291). Scoped, so a first
         // render started synchronously from inside another frame (e.g. app cleanup code
         // mounting a new host) restores that frame's marker instead of clearing it.
-        var propagationScope = RenderErrorDispatch.EnterPropagationScope();
-        try
+        using (RenderErrorDispatch.EnterPropagationScope())
         {
-            Render();
-        }
-        finally
-        {
-            // Reset the gate so future setState calls can enqueue — also when a render
-            // error the app chose to propagate (RenderError.Propagate) escapes Render().
-            Interlocked.Exchange(ref _renderPending, 0);
-            propagationScope.Dispose();
+            try
+            {
+                Render();
+            }
+            finally
+            {
+                // Reset the gate so future setState calls can enqueue — also when a render
+                // error the app chose to propagate (RenderError.Propagate) escapes Render().
+                Interlocked.Exchange(ref _renderPending, 0);
+            }
         }
 
         // If state changed during render, re-enqueue at LOW priority so WinUI
@@ -1014,8 +1015,7 @@ public sealed class ReactorHost : IDisposable
         // cleanup code cannot disturb it.
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
         var cleanupHandler = EffectiveRenderErrorHandler;
-        var propagationScope = RenderErrorDispatch.EnterPropagationScope();
-        try
+        using (RenderErrorDispatch.EnterPropagationScope())
         {
             RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
                 isHostLevel: true, _logger, ref pendingPropagation);
@@ -1034,11 +1034,10 @@ public sealed class ReactorHost : IDisposable
                 Debug.WriteLine($"[Reactor] backdrop reset on dispose failed (best effort): {ex.GetType().Name}: {ex.Message}");
             }
 
-            pendingPropagation ??= _reconciler.DisposeCollectingPropagation();
-        }
-        finally
-        {
-            propagationScope.Dispose();
+            // Always dispose the reconciler (it runs every child cleanup), even when a root
+            // cleanup already holds the propagation; only then keep the first propagation.
+            var reconcilerPropagation = _reconciler.DisposeCollectingPropagation();
+            pendingPropagation ??= reconcilerPropagation;
         }
         _rootComponent = null;
         _rootRenderFunc = null;

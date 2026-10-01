@@ -21,13 +21,9 @@ public class RenderErrorDispatchTests
         var previous = ReactorApplication.OnUnhandledException;
         ReactorApplication.OnUnhandledException = callback;
         // The in-flight marker is thread-static; scope it so it can't leak into the next test.
-        var scope = RenderErrorDispatch.EnterPropagationScope();
+        using var scope = RenderErrorDispatch.EnterPropagationScope();
         try { body(); }
-        finally
-        {
-            ReactorApplication.OnUnhandledException = previous;
-            scope.Dispose();
-        }
+        finally { ReactorApplication.OnUnhandledException = previous; }
     }
 
     // ── RenderError ──────────────────────────────────────────────────────────

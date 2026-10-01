@@ -54,6 +54,17 @@ internal static class RenderErrorHandlerFixtures
         }
     }
 
+    private sealed class CleanupFlagComponent : Component
+    {
+        public static int CleanupRuns;
+
+        public override Element Render()
+        {
+            UseEffect(() => () => CleanupRuns++);
+            return TextBlock("CleanupFlagChild");
+        }
+    }
+
     // First cleanup propagates; second is app code that synchronously mounts another host,
     // whose first render runs the render loop inline (a nested Reactor frame).
     private sealed class NestedHostCleanupComponent : Component<Window>
@@ -660,6 +671,58 @@ internal static class RenderErrorHandlerFixtures
             next.Mount(_ => TextBlock("AfterTwoCleanups"));
             await Harness.Render();
             H.Check("RenderErrorHandler_TwoCleanups_NewHostWorks", H.FindText("AfterTwoCleanups") is not null);
+        });
+    }
+
+    // A root cleanup propagates (the app declines it). The reconciler must still be disposed,
+    // so every child cleanup runs, before the host rethrows. Both host kinds.
+    internal class Dispose_RootPropagationStillRunsChildCleanups(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static Element Root(RenderContext ctx)
+        {
+            ctx.UseEffect(() => () => throw new InvalidOperationException("root cleanup propagates"));
+            return VStack(Component<CleanupFlagComponent>());
+        }
+
+        public override Task RunAsync() => WithUnhandledCallback(_ => false, async () =>
+        {
+            RenderErrorHandler propagate = e => { e.Propagate(); return null; };
+
+            // ReactorHost
+            var window = new Window { Title = "RenderErrorHandler Root Propagation" };
+            window.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(300, 200));
+            window.Activate();
+            CleanupFlagComponent.CleanupRuns = 0;
+            var host = new ReactorHost(window) { RenderErrorHandler = propagate };
+            host.Mount(Root);
+            await Task.Delay(150);
+            await Harness.Render();
+            Exception? escaped = null;
+            try { host.Dispose(); } catch (InvalidOperationException ex) { escaped = ex; }
+            window.Close();
+            H.Check("RenderErrorHandler_RootPropagation_Host_Rethrown", escaped?.Message == "root cleanup propagates",
+                escaped?.Message ?? "(nothing escaped)");
+            H.Check("RenderErrorHandler_RootPropagation_Host_ChildCleanupRan", CleanupFlagComponent.CleanupRuns == 1,
+                $"runs={CleanupFlagComponent.CleanupRuns}");
+
+            // ReactorHostControl
+            CleanupFlagComponent.CleanupRuns = 0;
+            var control = new ReactorHostControl { RenderErrorHandler = propagate };
+            H.SetContent(control);
+            control.Mount(Root);
+            await Harness.Render(50);
+            H.SetContent(null);
+            Exception? escaped2 = null;
+            try { control.Dispose(); } catch (InvalidOperationException ex) { escaped2 = ex; }
+            H.Check("RenderErrorHandler_RootPropagation_Control_Rethrown", escaped2?.Message == "root cleanup propagates",
+                escaped2?.Message ?? "(nothing escaped)");
+            H.Check("RenderErrorHandler_RootPropagation_Control_ChildCleanupRan", CleanupFlagComponent.CleanupRuns == 1,
+                $"runs={CleanupFlagComponent.CleanupRuns}");
+
+            var next = H.CreateHost();
+            next.Mount(_ => TextBlock("AfterRootPropagation"));
+            await Harness.Render();
+            H.Check("RenderErrorHandler_RootPropagation_NewHostWorks", H.FindText("AfterRootPropagation") is not null);
         });
     }
 
