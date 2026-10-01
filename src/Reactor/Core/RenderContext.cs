@@ -2405,15 +2405,18 @@ public sealed class RenderContext
         }
     }
 
-    internal void RunCleanups() => RunCleanups(onCleanupError: null);
+    internal void RunCleanups() => RunCleanupsCore(onCleanupError: null);
 
-    /// <param name="onCleanupError">
-    /// When set (a <see cref="RenderErrorHandler"/> is configured, issue #1291), each
-    /// cleanup is isolated: a throwing cleanup is reported here and the remaining
-    /// cleanups still run. When null, the first throwing cleanup escapes (pre-#1291
-    /// behavior).
-    /// </param>
-    internal void RunCleanups(Action<Exception>? onCleanupError)
+    /// <summary>
+    /// <see cref="RunCleanups()"/>, but every cleanup is isolated: a throwing cleanup is
+    /// reported to <paramref name="onCleanupError"/> and the remaining cleanups still run.
+    /// Used during disposal when a <see cref="RenderErrorHandler"/> is configured (issue #1291).
+    /// A distinct name rather than an overload keeps reflection lookups of
+    /// <c>RunCleanups</c> (test hosts) unambiguous.
+    /// </summary>
+    internal void RunCleanupsIsolated(Action<Exception> onCleanupError) => RunCleanupsCore(onCleanupError);
+
+    private void RunCleanupsCore(Action<Exception>? onCleanupError)
     {
         // Phase 1: Run effect cleanups. Drain BOTH the committed cleanup and any
         // staged-but-not-yet-flushed cleanup: when a render changes an effect's

@@ -175,7 +175,7 @@ internal static class RenderErrorDispatch
             return;
         }
         ExceptionDispatchInfo? first = null;
-        context.RunCleanups(ex => first ??= ReportCleanup(handler, ex, componentName, isHostLevel, logger));
+        context.RunCleanupsIsolated(ex => first ??= ReportCleanup(handler, ex, componentName, isHostLevel, logger));
         pending ??= first;
     }
 

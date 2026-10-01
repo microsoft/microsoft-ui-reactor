@@ -89,20 +89,7 @@ message, stack trace and inner exceptions. That is useful while developing,
 but in a shipped app the text reaches the end user. A `RenderErrorHandler`
 replaces it. Set one app-wide, per window, or per host:
 
-```csharp
-// App-wide default, consulted by every host without its own handler —
-// including windows opened later, tray flyouts and ReactorHostControl embeds.
-ReactorApp.DefaultRenderErrorHandler = error =>
-{
-    MyTelemetry.Record(error.Exception);   // the app decides what is kept, and where
-    return TextBlock("Something went wrong.");
-};
-
-// Per window, applied before the window's first render.
-ReactorApp.OpenWindow(spec with { RenderErrorHandler = error => SettingsErrorView(error) }, ...);
-
-// Per host (ReactorHost or ReactorHostControl).
-host.RenderErrorHandler = error => null;   // null keeps the built-in fallback
+```csharp snippet="advanced/render-error-handler"
 ```
 
 A host's own handler wins; otherwise `ReactorApp.DefaultRenderErrorHandler`

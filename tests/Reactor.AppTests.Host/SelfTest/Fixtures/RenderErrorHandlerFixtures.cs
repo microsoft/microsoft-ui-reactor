@@ -437,7 +437,7 @@ internal static class RenderErrorHandlerFixtures
             await Harness.Render(50);
             H.SetContent(null);
             Exception? escaped = null;
-            try { cleanupControl.Dispose(); } catch (Exception ex) { escaped = ex; }
+            try { cleanupControl.Dispose(); } catch (InvalidOperationException ex) { escaped = ex; }
             H.Check("RenderErrorHandler_HostControl_Dispose_NoThrow", escaped is null, escaped?.Message ?? "");
             H.Check("RenderErrorHandler_HostControl_Dispose_BothReported",
                 log.Any(e => e.Source == RenderErrorSource.Cleanup && e.IsHostLevel && e.Exception.Message == "control cleanup boom")
@@ -505,7 +505,7 @@ internal static class RenderErrorHandlerFixtures
             var log = new List<RenderError>();
             var (window, host) = await MountOnOwnWindow(Recording(log, _ => TextBlock("ignored")));
             Exception? escaped = null;
-            try { host.Dispose(); } catch (Exception ex) { escaped = ex; }
+            try { host.Dispose(); } catch (InvalidOperationException ex) { escaped = ex; }
             window.Close();
 
             H.Check("RenderErrorHandler_Dispose_NoThrow", escaped is null, escaped?.Message ?? "");
@@ -521,7 +521,7 @@ internal static class RenderErrorHandlerFixtures
             {
                 var (window2, host2) = await MountOnOwnWindow(null);
                 Exception? escaped2 = null;
-                try { host2.Dispose(); } catch (Exception ex) { escaped2 = ex; }
+                try { host2.Dispose(); } catch (InvalidOperationException ex) { escaped2 = ex; }
                 window2.Close();
                 H.Check("RenderErrorHandler_Dispose_NoHandler_Escapes", escaped2?.Message == "root cleanup boom",
                     escaped2?.Message ?? "(nothing escaped)");
@@ -577,7 +577,11 @@ internal static class RenderErrorHandlerFixtures
             }
             finally
             {
-                try { win.Close(); } catch { }
+                // Best-effort teardown: a window the fixture already lost must not mask the
+                // assertion that failed, but the reason is still logged.
+                try { win.Close(); }
+                catch (global::System.Runtime.InteropServices.COMException ex) { global::System.Diagnostics.Debug.WriteLine($"[RenderErrorHandler] window close failed: {ex.Message}"); }
+                catch (ObjectDisposedException ex) { global::System.Diagnostics.Debug.WriteLine($"[RenderErrorHandler] window close failed: {ex.Message}"); }
                 await Task.Delay(80);
             }
         }

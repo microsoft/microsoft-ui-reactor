@@ -136,19 +136,32 @@ but in a shipped app the text reaches the end user. A `RenderErrorHandler`
 replaces it. Set one app-wide, per window, or per host:
 
 ```csharp
-// App-wide default, consulted by every host without its own handler —
-// including windows opened later, tray flyouts and ReactorHostControl embeds.
-ReactorApp.DefaultRenderErrorHandler = error =>
+static class RenderErrorHandlerSetup
 {
-    MyTelemetry.Record(error.Exception);   // the app decides what is kept, and where
-    return TextBlock("Something went wrong.");
-};
+    public static void Configure(WindowSpec settingsSpec, ReactorHost host)
+    {
+        // App-wide default, consulted by every host without its own handler,
+        // including windows opened later, tray flyouts and ReactorHostControl embeds.
+        ReactorApp.DefaultRenderErrorHandler = error =>
+        {
+            Telemetry.Record(error.Exception);   // the app decides what is kept, and where
+            return TextBlock("Something went wrong.");
+        };
 
-// Per window, applied before the window's first render.
-ReactorApp.OpenWindow(spec with { RenderErrorHandler = error => SettingsErrorView(error) }, ...);
+        // Per window, applied before the window's first render.
+        ReactorApp.OpenWindow(
+            settingsSpec with { RenderErrorHandler = error => TextBlock($"Settings could not load ({error.Source}).") },
+            _ => TextBlock("Settings"));
 
-// Per host (ReactorHost or ReactorHostControl).
-host.RenderErrorHandler = error => null;   // null keeps the built-in fallback
+        // Per host (ReactorHost or ReactorHostControl).
+        host.RenderErrorHandler = _ => null;   // null keeps the built-in fallback
+    }
+}
+
+static class Telemetry
+{
+    public static void Record(Exception exception) => System.Diagnostics.Debug.WriteLine(exception);
+}
 ```
 
 A host's own handler wins; otherwise `ReactorApp.DefaultRenderErrorHandler`
