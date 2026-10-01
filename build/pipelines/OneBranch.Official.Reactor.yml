@@ -58,8 +58,8 @@ variables:
   CI: true
 
   # Skip the GitHub.Copilot.SDK native CLI download in CI.
-  # The SDK's GitHub.Copilot.SDK.targets downloads copilot-<rid>.tgz via an MSBuild
-  # DownloadFile task hardcoded to registry.npmjs.org, which can fail in a restricted
+  # The SDK's GitHub.Copilot.SDK.targets downloads the CLI bundle via an MSBuild
+  # DownloadFile task from the github/copilot-cli GitHub releases, which can fail in a restricted
   # CI environment and cannot use an authenticated package feed. The native copilot.exe
   # is purely a RUNTIME artifact: it is not needed to compile the framework, pack the
   # NuGets, or run unit tests, and CI never executes a code path that starts it. It is

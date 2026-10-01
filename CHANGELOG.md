@@ -133,7 +133,21 @@ Conventions for contributors:
   `dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>` — since it is
   prerelease-only and a bare `dotnet new install` resolves stable versions.
 
+- **`bootstrap.ps1 -NpmRegistry` is deprecated and ignored.** `GitHub.Copilot.SDK` 1.0.14 no
+  longer downloads its native CLI from npm, so the parameter has nothing to redirect; bootstrap
+  now prints a warning and continues. To redirect the CLI download, set the SDK's
+  `CopilotCliReleaseBaseUrl` MSBuild property or the `COPILOT_CLI_DOWNLOAD_BASE_URL` environment
+  variable, or point `CopilotCliBinaryPath` at a pre-downloaded binary (issue #1292).
+
 ### Removed
+
+- **Removed automatic npm-mirror detection for the Copilot CLI download**
+  (`tools/CopilotNpmRegistry.props` and bootstrap's `~/.npmrc` / `NPM_CONFIG_REGISTRY` probe).
+  `GitHub.Copilot.SDK` 1.0.14 dropped the `CopilotNpmRegistryUrl` property it set and now fetches
+  a SHA-256-verified CLI bundle from the github/copilot-cli GitHub releases, so a configured npm
+  mirror no longer affects `dotnet build`. Builds on networks that block GitHub release downloads
+  should use `CopilotCliReleaseBaseUrl`, `COPILOT_CLI_DOWNLOAD_BASE_URL`, or
+  `CopilotCliBinaryPath` instead (issue #1292).
 
 - **Removed the in-repo `Microsoft.UI.Reactor.ProjectTemplates` package and its
   `dotnet new reactorapp` template** (`tools/Templates/`). Reactor's project templates now ship in
