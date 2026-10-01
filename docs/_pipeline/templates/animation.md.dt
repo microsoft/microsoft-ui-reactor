@@ -164,6 +164,14 @@ Source and destination must appear in the **same render** — the reconciler
 publishes the outgoing element's snapshot during the reconcile pass and plays
 it into the incoming element at the end of that same pass.
 
+WinUI takes that snapshot in its next frame. Preparing the same key again before
+then would cancel the first animation, which crashes WinUI, so Reactor
+snapshots a key at most once per rendered frame: if two renders land in the
+same frame and both unmount an element with the key, only the first transition
+animates. Separate interactions, such as two clicks, are not affected; it takes
+renders that follow each other within one frame, such as a state change made
+while the previous one is still rendering.
+
 Reactor snapshots *every* outgoing element that carries a key, because it cannot
 know which sibling you activated. Collapsing a list of keyed rows to one detail
 element therefore leaves the unpicked rows' snapshots behind, and WinUI keeps
