@@ -51,6 +51,13 @@
     suite or manage the CLI yourself. The install is best-effort either way —
     a missing winget only warns, it never fails the bootstrap.
 
+.PARAMETER NpmRegistry
+    Deprecated; ignored. GitHub.Copilot.SDK no longer downloads its native CLI
+    from npm. Bootstrap warns and continues when this is passed. To redirect the
+    CLI download, set the CopilotCliReleaseBaseUrl MSBuild property or the
+    COPILOT_CLI_DOWNLOAD_BASE_URL environment variable, or point
+    CopilotCliBinaryPath at a pre-downloaded binary.
+
 .PARAMETER NuGetConfig
     Use an explicit NuGet.Config for bootstrap restores. When omitted, bootstrap
     uses a packagefeedproxy.microsoft.io source already present in the user's
@@ -109,6 +116,7 @@ param(
     [switch]$InstallWinAppSdk,
     [switch]$NoWinAppSdk,
     [switch]$SkipWinAppCli,
+    [string]$NpmRegistry,
     [string]$NuGetConfig,
     [string]$WinAppSdkTemplatesVersion,
     [switch]$SkipTemplates
@@ -216,6 +224,10 @@ if (-not (Test-DotnetSdk10)) {
 Write-Ok ".NET SDK present"
 
 $hostArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
+
+if ($PSBoundParameters.ContainsKey('NpmRegistry')) {
+    Write-Host "    [warn] -NpmRegistry is deprecated and ignored: GitHub.Copilot.SDK now downloads its native CLI from GitHub releases, not npm. To redirect it, set CopilotCliReleaseBaseUrl or COPILOT_CLI_DOWNLOAD_BASE_URL, or point CopilotCliBinaryPath at a pre-downloaded binary." -ForegroundColor Yellow
+}
 
 $nugetSelection = Resolve-ReactorNuGetFeed -ExplicitConfig $NuGetConfig
 if ($nugetSelection -and -not $nugetSelection.Explicit) {
