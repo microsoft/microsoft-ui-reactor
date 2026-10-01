@@ -1006,6 +1006,37 @@ public sealed partial class Reconciler : IDisposable
     /// The mount and update handlers receive the Reconciler instance so they can
     /// recursively mount/update/unmount child elements without capturing external state.
     ///
+    /// The reconciler records the element on the control it gets back from <c>mount</c> or
+    /// <c>update</c> (the element tag) wherever it reads the tag back itself: keyed
+    /// reconciliation, the <c>unmount</c> lookup, <c>.Ref(...)</c> cleanup and exit
+    /// transitions. The callbacks don't call <see cref="SetElementTag"/> for those. Code of your
+    /// own that reads the element back with <see cref="GetElementTag(FrameworkElement)"/>, such
+    /// as an event handler, still tags the control itself. The tag lives on a
+    /// <see cref="FrameworkElement"/>. <typeparamref name="TControl"/> may be declared as
+    /// <see cref="UIElement"/>, but in WinUI 3 <see cref="FrameworkElement"/> is its only
+    /// subclass, so every control a registration returns is tagged the same way.
+    ///
+    /// <c>mount</c> and <c>update</c> are expected to return a control the registration owns.
+    /// The tag holds one element, so a control that already carries the tag of an element of
+    /// another type (registration is by exact type, so a derived type counts), for example one
+    /// <c>mount</c> got from <see cref="Mount"/> for a child element, keeps that tag:
+    /// overwriting it would silence that element's own callbacks (the collision issue #942
+    /// tracks for target-wrapping decorators). The registration's key, ref, transitions and
+    /// <c>unmount</c> are not tracked for such a control. To wrap built-in elements, compose
+    /// them in a component instead.
+    ///
+    /// <c>update</c> returns null after patching the control in place; returning the control
+    /// it was handed means the same. Return a different control only when you replaced it.
+    ///
+    /// <c>unmount</c> runs when the reconciler unmounts the control, in place of its own walk
+    /// over the control's children: a child the callbacks mounted through the reconciler has to
+    /// be torn down there, for example with <see cref="UnmountChild"/>. Calling
+    /// <see cref="UnmountChild"/> on the control itself from <c>unmount</c> walks its children
+    /// once rather than calling <c>unmount</c> again. Without an <c>unmount</c> callback the
+    /// reconciler walks the control's children itself. Not every path that drops a control
+    /// unmounts it yet: a control that <c>update</c> replaced inside a single-content parent,
+    /// such as a <c>Border</c>, is swapped out without <c>unmount</c>.
+    ///
     /// Not part of the <c>REACTOR_V1_PREVIEW</c> surface — this is the legacy
     /// type-registry path, public since before Spec 047. The §13 Q17 hardening
     /// (throw on duplicate, no base-class fallback, no open generics) tightens
@@ -1604,22 +1635,75 @@ public sealed partial class Reconciler : IDisposable
         public bool HasUnmount => _unmount is not null;
 
         public UIElement Mount(Element element, Action requestRerender, Reconciler reconciler)
-            => _mount(reconciler, (TElement)element, requestRerender);
+        {
+            var control = _mount(reconciler, (TElement)element, requestRerender);
+            TagControl(control, element);
+            return control;
+        }
 
         public UIElement? Update(Element oldEl, Element newEl, UIElement control, Action requestRerender, Reconciler reconciler)
         {
             // Guard against control type mismatch (e.g., recycled from pool or element type changed at this position).
             // If the existing control isn't our expected type, force a fresh mount instead of crashing.
-            if (control is not TControl typedControl || oldEl is not TElement typedOldEl)
-                return _mount(reconciler, (TElement)newEl, requestRerender);
+            var result = control is not TControl typedControl || oldEl is not TElement typedOldEl
+                ? _mount(reconciler, (TElement)newEl, requestRerender)
+                : _update(reconciler, typedOldEl, (TElement)newEl, typedControl, requestRerender);
 
-            return _update(reconciler, typedOldEl, (TElement)newEl, typedControl, requestRerender);
+            // Returning the control it was handed means the callback patched it in place, the
+            // same as returning null. The child reconcilers read any non-null result as a
+            // replacement and unmount the control they hold, which would run this registration's
+            // unmount callback against a control that stays mounted. A second managed wrapper
+            // for the same native control counts too.
+            if (result is not null && IsSameControl(result, control))
+                result = null;
+
+            TagControl(result ?? control, newEl);
+            return result;
+        }
+
+        // True when an update result is the control it was handed, possibly through a second
+        // managed wrapper. Every wrapper for a native object reads the same ReactorState, so
+        // the handed-in control gets one if it has none and the result is checked for it. That
+        // allocation happens only when the callback returned a different wrapper, which is
+        // almost always a genuine replacement, and it lands on the old control.
+        private static bool IsSameControl(UIElement result, UIElement control)
+        {
+            if (ReferenceEquals(result, control)) return true;
+            if (result is not FrameworkElement resultFe || control is not FrameworkElement controlFe)
+                return false;
+            var state = GetOrCreateReactorState(controlFe);
+            return ReferenceEquals(resultFe.GetValue(ReactorAttached.StateProperty), state);
         }
 
         public void Unmount(UIElement control, Reconciler reconciler)
         {
             if (control is TControl typedControl)
                 _unmount?.Invoke(reconciler, typedControl);
+        }
+
+        // The reconciler tags the control so the callbacks don't have to. The keyed-middle
+        // reconcile finds a surviving child by the key on its tag, the unmount path finds this
+        // registration's unmount callback through it, and .Ref(...) cleanup reads it too.
+        // Same allocation gate as SetElementTagIfNeeded, so an unkeyed, extras-free leaf gets
+        // no ReactorState, except that a registration with an unmount callback always tags:
+        // that lookup goes through the tag whatever the element carries.
+        private void TagControl(UIElement control, Element element)
+        {
+            // The tag lives on FrameworkElement, UIElement's only subclass in WinUI 3, so a
+            // TControl declared as UIElement still arrives here as a FrameworkElement.
+            if (control is not FrameworkElement fe) return;
+            if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+            {
+                // The callback returned a control the reconciler mounted for an element of
+                // another type, such as a child's. That element's own event trampolines and
+                // unmount read the tag, so it keeps it. Registration is by exact type, so a
+                // derived element type is another type here too.
+                if (state.Element is { } owner && owner.GetType() != typeof(TElement)) return;
+                state.Element = element;
+                return;
+            }
+            if (HasUnmount || NeedsTag(element))
+                fe.SetValue(ReactorAttached.StateProperty, new ReactorState { Element = element });
         }
     }
 
@@ -2386,10 +2470,13 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // Check registered type unmount handlers via the attached element
-        if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl
-            && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount)
+        if (control is FrameworkElement fe && TryGetReactorState(fe, out var regState)
+            && regState.Element is Element tagEl
+            && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount
+            && TryBeginRegisteredUnmount(regState))
         {
-            reg.Unmount(control, this);
+            try { reg.Unmount(control, this); }
+            finally { EndRegisteredUnmount(regState); }
             return;
         }
 
@@ -2408,9 +2495,34 @@ public sealed partial class Reconciler : IDisposable
 
     private static void CleanupReferenceStateForUnmount(FrameworkElement control, Element? element)
     {
-        element?.Modifiers?.Ref?.SetCurrent(null);
+        // Clear the producer ref only while it still names this control. When an update
+        // replaces a control, ApplyModifiers points the element's ref at the replacement
+        // before the caller unmounts the old control, and the ref must keep it.
+        if (element?.Modifiers?.Ref is { } producerRef && producerRef.Current is { } current
+            && IsSameNativeElement(current, control))
+            producerRef.SetCurrent(null);
         TeardownReferenceEdges(control);
     }
+
+    // Two managed wrappers can front one native element (see ReactorAttached.StateProperty), so
+    // identity falls back to the ReactorState that lives on the native object. When b carries no
+    // ReactorState there is nothing native to compare, and only the same wrapper matches.
+    private static bool IsSameNativeElement(FrameworkElement a, FrameworkElement b) =>
+        ReferenceEquals(a, b)
+        || (b.GetValue(ReactorAttached.StateProperty) is ReactorState state
+            && ReferenceEquals(a.GetValue(ReactorAttached.StateProperty), state));
+
+    // Controls whose RegisterType unmount callback is running, by the ReactorState on the native
+    // control so a second managed wrapper for it is recognized too. A callback that tears its own
+    // control down through the reconciler (UnmountChild on the control it was handed, to reach
+    // the children it mounted) re-enters the unmount path for that control; the re-entrant call
+    // takes the default walk over the children instead of calling the callback again.
+    private HashSet<ReactorState>? _registeredUnmountsRunning;
+
+    private bool TryBeginRegisteredUnmount(ReactorState state) =>
+        (_registeredUnmountsRunning ??= new HashSet<ReactorState>(ReferenceEqualityComparer.Instance)).Add(state);
+
+    private void EndRegisteredUnmount(ReactorState state) => _registeredUnmountsRunning?.Remove(state);
 
     private static void ForEachReactorChildControl(UIElement control, Action<UIElement> visit)
         => ForEachReactorChildControl(control, child => { visit(child); return true; });
@@ -2761,10 +2873,13 @@ public sealed partial class Reconciler : IDisposable
             }
         }
 
-        if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl
-            && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount)
+        if (control is FrameworkElement fe && TryGetReactorState(fe, out var regState)
+            && regState.Element is Element tagEl
+            && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount
+            && TryBeginRegisteredUnmount(regState))
         {
-            reg.Unmount(control, this);
+            try { reg.Unmount(control, this); }
+            finally { EndRegisteredUnmount(regState); }
             // Collect this control for pooling, but do NOT recurse into children —
             // they were created outside Reactor's tree and must not be pooled.
             // (Mirrors UnmountRecursive which returns early in this case.)
