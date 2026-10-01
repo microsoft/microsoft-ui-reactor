@@ -4270,9 +4270,11 @@ instance the old one built.</p>
 <p><strong>Outside a virtualized list,</strong> <code>Memo(key, factory)</code> is a transparent but <em>keyed</em>
 wrapper: a re-render with the same key is a no-op (the factory is not re-invoked
 and the subtree is not diffed), and a changed key replaces the inner (unmount +
-fresh mount of a new <code>factory()</code> result). The cross-recycle cache only happens
-when a virtualized list's factory owns the cache; as a plain child (say, a
-<code>VStack</code> child) it is a safe, keyed no-op.</p>
+fresh mount of a new <code>factory()</code> result). The one exception is a component
+inside the subtree that updates its own state: the factory runs again so the
+reconciler can walk down to that component, which is why it has to stay pure.
+The cross-recycle cache only happens when a virtualized list's factory owns the
+cache; as a plain child (say, a <code>VStack</code> child) it is a safe, keyed no-op.</p>
 <h3 id="escape-hatch-without-the-api">Escape hatch without the API<a class="headerlink" href="#escape-hatch-without-the-api" title="Permanent link">&para;</a></h3>
 <p><code>Memo&lt;TKey&gt;</code> is the supported path, but the same idea works today with a plain
 dictionary you own — handy on a Reactor build without the API, or when you
