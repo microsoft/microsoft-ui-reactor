@@ -696,11 +696,13 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
         }
         finally
         {
-            host.Window.DispatcherQueue.TryEnqueue(() =>
+            // If the dispatcher is already shutting down, exit here so 43 still reaches the supervisor.
+            var enqueued = host.Window.DispatcherQueue.TryEnqueue(() =>
             {
                 try { host.Window.Close(); }
                 finally { Environment.Exit(exitCode); }
             });
+            if (!enqueued) Environment.Exit(exitCode);
         }
     }
 
