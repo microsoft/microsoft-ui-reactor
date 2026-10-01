@@ -3,6 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
+using Microsoft.UI.Xaml.Media;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
@@ -247,6 +248,14 @@ internal static class LayoutAnimationFixtures
             // Core assertion: the transition actually STARTED a connected animation.
             // Measured against the pre-fix build this reads baseline+0, i.e. red.
             H.Check("ConnectedAnimReplace_AnimationStarted", afterForward == baseline + 1);
+
+            // The return trip prepares the same key from the hero. Reactor does not prepare a
+            // key again until WinUI has rendered a frame since its last preparation (issue
+            // #1152), so without that frame the reverse start would depend on whether WinUI
+            // happened to render between the two clicks.
+            H.Check("ConnectedAnimReplace_ForwardFrameRendered",
+                await PreparationRenderedAsync("ca-replace-hero"));
+
             // The reverse trip (destination unmounts, source re-mounts) starts one too.
             // Pinned to `baseline` rather than `afterForward` on purpose: the pre-fix
             // build orphans the forward snapshot and then consumes it on the way back,
@@ -256,6 +265,12 @@ internal static class LayoutAnimationFixtures
 
             H.Check("ConnectedAnimReplace_AnimationStartedOnReturn",
                 host.Reconciler.ConnectedAnimationStartCount == baseline + 2);
+
+            // The hero left the tree by itself and the return animation has started. If the
+            // next fixture's mount removed the destination before WinUI rendered that
+            // animation, WinUI would cancel it and fault in the next commit, so let it render.
+            H.Check("ConnectedAnimReplace_ReturnFrameRendered",
+                await PreparationRenderedAsync("ca-replace-hero"));
         }
     }
 
@@ -291,9 +306,15 @@ internal static class LayoutAnimationFixtures
     /// toggle the destination key off, then activate the source. That is the shape where
     /// a pass prepares a snapshot and NOTHING claims it — no destination carries the key
     /// at all. An earlier revision withdrew those unclaimed preparations with
-    /// <c>ConnectedAnimation.Cancel()</c> to stop them ghosting; by then the source has
-    /// been pooled and reset, and cancelling faulted the process. This pins the no-crash
-    /// behaviour: the unclaimed snapshot is left to time out on its own.
+    /// <c>ConnectedAnimation.Cancel()</c> to stop them ghosting, and cancelling faulted the
+    /// process. This pins the no-crash behaviour: the unclaimed snapshot is left to time out
+    /// on its own.
+    ///
+    /// <para>The round trips below fault the same way through a second path (issue #1152): the
+    /// second Go prepares the key again, which makes WinUI cancel the first preparation. That
+    /// faults only when WinUI has rendered no frame between the two Go passes, which made this
+    /// fixture crash in about 5% of runs. <see cref="ConnectedAnimationRepreparedBeforeFrameDoesNotCrash"/>
+    /// drives the same passes with no frame in between, deterministically.</para>
     /// </summary>
     internal class ConnectedAnimationOrphanOnlyPassDoesNotCrash(Harness h) : SelfTestFixtureBase(h)
     {
@@ -342,6 +363,137 @@ internal static class LayoutAnimationFixtures
 
             H.Check("ConnectedAnimOrphanOnly_SurvivesRepeatedRoundTrips",
                 H.FindText("Open the detail view") is not null);
+        }
+    }
+
+    /// <summary>
+    /// Issue #1152: the selftest host died with 0xC0000005 at
+    /// <c>CConnectedAnimationService::PreCommit+0x81</c> in Microsoft.UI.Xaml.dll during
+    /// <c>ConnectedAnimation_OrphanOnlyPassDoesNotCrash</c>. WinUI processes a preparation in
+    /// the next frame's commit. The first Go prepares the key and removes its button, so
+    /// WinUI holds that button for the commit, and only the preparation gives it a
+    /// composition node. When a second Go prepared the key again before that frame, WinUI
+    /// cancelled the first preparation, which took the node away, and the commit
+    /// dereferenced null.
+    ///
+    /// <para>This drives the orphan fixture's Go, Back, Go through a bare
+    /// <see cref="Reconciler"/> in one synchronous block, so WinUI cannot render a frame
+    /// between the passes. Without <c>ConnectedAnimationFrameGate</c> the process dies at
+    /// the next frame, every run.</para>
+    /// </summary>
+    internal class ConnectedAnimationRepreparedBeforeFrameDoesNotCrash(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string key = "reprepared-before-frame-key";
+            var reconciler = new Reconciler();
+            Action noop = static () => { };
+            Element List() => VStack(12,
+                TextBlock("Reprepare list"),
+                Button("ReprepareGo", noop).ConnectedAnimation(key));
+            Element Detail() => VStack(12,
+                Button("ReprepareBack", noop),
+                TextBlock("Reprepare detail"));
+            Element DetailWithHero() => VStack(12,
+                Button("ReprepareBack", noop),
+                TextBlock("Reprepare hero").ConnectedAnimation(key));
+
+            var list = List();
+            var root = reconciler.Reconcile(null, list, null, noop)!;
+            H.SetContent(root);
+            await Harness.Render();
+
+            // Go, Back, Go with no frame in between. Only the first Go prepares the key.
+            var riskyFrame = new RenderedFrame();
+            int skippedBefore = reconciler.ConnectedAnimationPreparationsSkipped;
+            var detail = Detail();
+            reconciler.Reconcile(list, detail, root, noop);
+            reconciler.FlushConnectedAnimations();
+            int skippedByFirstGo = reconciler.ConnectedAnimationPreparationsSkipped - skippedBefore;
+            var list2 = List();
+            reconciler.Reconcile(detail, list2, root, noop);
+            reconciler.FlushConnectedAnimations();
+            var detail2 = Detail();
+            reconciler.Reconcile(list2, detail2, root, noop);
+            reconciler.FlushConnectedAnimations();
+            int skippedBySecondGo = reconciler.ConnectedAnimationPreparationsSkipped - skippedBefore - skippedByFirstGo;
+
+            H.Check("ConnectedAnimRepreparedBeforeFrame_FirstGoPrepared", skippedByFirstGo == 0,
+                $"skipped={skippedByFirstGo}");
+            H.Check("ConnectedAnimRepreparedBeforeFrame_SecondGoSkipped", skippedBySecondGo == 1,
+                $"skipped={skippedBySecondGo}");
+
+            // Positive control: the commit that used to fault ran. Surviving it is the regression.
+            H.Check("ConnectedAnimRepreparedBeforeFrame_FrameRendered", await riskyFrame.WaitAsync());
+            H.Check("ConnectedAnimRepreparedBeforeFrame_Survived", H.FindText("Reprepare detail") is not null);
+
+            // The gate opens with that frame: the key prepares again and reaches a destination.
+            var listFrame = new RenderedFrame();
+            var list3 = List();
+            reconciler.Reconcile(detail2, list3, root, noop);
+            reconciler.FlushConnectedAnimations();
+            H.Check("ConnectedAnimRepreparedBeforeFrame_ListFrameRendered", await listFrame.WaitAsync());
+
+            int startsBefore = reconciler.ConnectedAnimationStartCount;
+            var heroFrame = new RenderedFrame();
+            var hero = DetailWithHero();
+            reconciler.Reconcile(list3, hero, root, noop);
+            reconciler.FlushConnectedAnimations();
+            H.Check("ConnectedAnimRepreparedBeforeFrame_KeyAnimatesAfterFrame",
+                reconciler.ConnectedAnimationStartCount == startsBefore + 1,
+                $"starts={reconciler.ConnectedAnimationStartCount - startsBefore}");
+
+            // Removing the hero before WinUI renders its animation would cancel it and fault
+            // the same way, so let it render before the content goes.
+            H.Check("ConnectedAnimRepreparedBeforeFrame_HeroFrameRendered", await heroFrame.WaitAsync());
+            H.SetContent(null);
+        }
+    }
+
+    /// <summary>
+    /// True once WinUI has rendered a frame since <paramref name="key"/> was last prepared,
+    /// which is what Reactor waits for before it prepares the key again. False if no frame
+    /// rendered within 5 s.
+    /// </summary>
+    /// <remarks>
+    /// Read from <see cref="ConnectedAnimationFrameGate"/> rather than from a frame counted
+    /// before the click: a host renders from the dispatcher queue, so a frame can land between
+    /// a click and the pass it schedules, and that frame says nothing about the preparation.
+    /// </remarks>
+    private static async Task<bool> PreparationRenderedAsync(string key)
+    {
+        if (ConnectedAnimationFrameGate.IsAwaitingFrame(key))
+            await new RenderedFrame().WaitAsync();
+        return !ConnectedAnimationFrameGate.IsAwaitingFrame(key);
+    }
+
+    /// <summary>
+    /// Completes on the first <see cref="CompositionTarget.Rendered"/> raised after it is
+    /// created. WinUI raises it after a frame's commit, which is where it processes connected
+    /// animations, so create it before the change the frame must follow.
+    /// </summary>
+    private sealed class RenderedFrame
+    {
+        private readonly TaskCompletionSource _rendered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly EventHandler<RenderedEventArgs> _onRendered;
+
+        public RenderedFrame()
+        {
+            _onRendered = (_, _) =>
+            {
+                CompositionTarget.Rendered -= _onRendered;
+                _rendered.TrySetResult();
+            };
+            CompositionTarget.Rendered += _onRendered;
+        }
+
+        /// <summary>True once the frame has rendered; false if none rendered within 5 s.</summary>
+        public async Task<bool> WaitAsync()
+        {
+            if (await Task.WhenAny(_rendered.Task, Task.Delay(5000)) == _rendered.Task)
+                return true;
+            CompositionTarget.Rendered -= _onRendered;
+            return false;
         }
     }
 }

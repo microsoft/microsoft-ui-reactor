@@ -429,6 +429,21 @@ Conventions for contributors:
   `Issue675_PooledOverrideRenterDoesNotInheritKeys` and
   `Issue675_PooledPlainRenterDoesNotInheritKeys` fixtures force the GC and fail without the fix
   (PR #1294).
+- **Two transitions with the same `.ConnectedAnimation(key)` within one frame no longer crash
+  the app** (issue #1152). WinUI takes a connected animation's snapshot in its next frame. A
+  source that has already left the tree stays in its parent's unloading storage until that
+  frame's commit, and only the preparation gives it a composition node. Preparing the same key
+  again before that frame cancels the first animation, so the commit dereferences the node the
+  cancel took away: `0xC0000005` at `CConnectedAnimationService::PreCommit` in
+  `Microsoft.UI.Xaml.dll`. Reactor prepares every keyed element it unmounts, so any two passes
+  that both unmounted the key before WinUI rendered a frame could crash. In CI the selftest host
+  died this way in `ConnectedAnimation_OrphanOnlyPassDoesNotCrash`, in about 5% of runs and in
+  every selftest lane. Reactor now does not prepare a key again until WinUI has rendered a frame
+  since its last preparation, so the second element does not animate. The new
+  `ConnectedAnimation_RepreparedBeforeFrameDoesNotCrash` fixture runs both passes with no frame
+  in between and crashed on every run before the fix. The earlier explanation for the withdrawn
+  `Cancel()` cleanup (PR #1124), that the source had been pooled and reset, was wrong: that crash
+  was this same fault.
 
 ### Security
 

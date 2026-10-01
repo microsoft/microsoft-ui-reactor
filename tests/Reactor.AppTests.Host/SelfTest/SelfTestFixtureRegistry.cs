@@ -621,6 +621,7 @@ internal static class SelfTestFixtureRegistry
         "ConnectedAnimation_StartsAcrossReplace",
         "ConnectedAnimation_NoSourceDoesNotStart",
         "ConnectedAnimation_OrphanOnlyPassDoesNotCrash",
+        "ConnectedAnimation_RepreparedBeforeFrameDoesNotCrash",
         // Thread-safe hook stress tests — real WinUI rendering + background threads
         "ThreadSafe_RapidBackgroundSetState",
         "ThreadSafe_MultipleHooksConcurrent",
@@ -2582,6 +2583,7 @@ internal static class SelfTestFixtureRegistry
         "ConnectedAnimation_StartsAcrossReplace" => new LayoutAnimationFixtures.ConnectedAnimationStartsAcrossReplace(harness),
         "ConnectedAnimation_NoSourceDoesNotStart" => new LayoutAnimationFixtures.ConnectedAnimationNoSourceDoesNotStart(harness),
         "ConnectedAnimation_OrphanOnlyPassDoesNotCrash" => new LayoutAnimationFixtures.ConnectedAnimationOrphanOnlyPassDoesNotCrash(harness),
+        "ConnectedAnimation_RepreparedBeforeFrameDoesNotCrash" => new LayoutAnimationFixtures.ConnectedAnimationRepreparedBeforeFrameDoesNotCrash(harness),
         // Thread-safe hook stress tests
         "ThreadSafe_RapidBackgroundSetState" => new ThreadSafeHookFixtures.RapidBackgroundSetState(harness),
         "ThreadSafe_MultipleHooksConcurrent" => new ThreadSafeHookFixtures.MultipleHooksConcurrent(harness),

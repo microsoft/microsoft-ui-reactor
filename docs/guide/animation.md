@@ -316,6 +316,9 @@ Source and destination must appear in the **same render** — the reconciler
 publishes the outgoing element's snapshot during the reconcile pass and plays
 it into the incoming element at the end of that same pass.
 
+If two renders in the same frame unmount elements with the same key, only the
+first one animates.
+
 Reactor snapshots *every* outgoing element that carries a key, because it cannot
 know which sibling you activated. Collapsing a list of keyed rows to one detail
 element therefore leaves the unpicked rows' snapshots behind, and WinUI keeps
