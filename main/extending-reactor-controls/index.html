@@ -4370,10 +4370,27 @@ callback that runs before the first render:</p>
 <p><code>RegisterType</code> takes <strong>inline</strong> mount/update/unmount delegates, so a
 one-off control needs no <code>IElementHandler</code> class at all; <code>unmount</code> is
 optional. Returning <code>null</code> from <code>update</code> means "I patched the existing
-control" — return a different <code>UIElement</code> only when you genuinely
-replaced it. If you <em>do</em> have a handler class, <code>RegisterHandler</code> takes
-an <strong>instance</strong> of it instead. This is the shape Reactor's own docking
-natives and the Monaco sample use.</p>
+control", and so does returning the control you were handed — return a
+different <code>UIElement</code> only when you genuinely replaced it. If you <em>do</em>
+have a handler class, <code>RegisterHandler</code> takes an <strong>instance</strong> of it
+instead. This is the shape Reactor's own docking natives and the Monaco
+sample use.</p>
+<p>Reactor records the element on the control that <code>mount</code> or <code>update</code>
+returns wherever Reactor itself reads it back — keyed reordering, the
+<code>unmount</code> lookup and <code>.Ref(...)</code> cleanup — so the delegates don't call
+<code>Reconciler.SetElementTag</code> for those. If your own code reads the element
+back with <code>Reconciler.GetElementTag</code>, from an event handler for example,
+keep tagging the control yourself. Return a control your registration
+owns: a control Reactor already mounted for another kind of element
+keeps that element's identity, so to wrap built-in elements write a
+component instead. <code>unmount</code> runs when Reactor unmounts the control,
+<em>instead of</em> Reactor's own walk over the control's children. If your
+delegates mount child elements through the reconciler, unmount them
+there too (<code>r.UnmountChild(child)</code>); without an <code>unmount</code> delegate,
+Reactor walks the children itself. One gap remains: a control that
+<code>update</code> replaced inside a single-content parent such as <code>Border</code> is
+swapped out without <code>unmount</code>, so don't rely on it for a control your
+<code>update</code> replaces.</p>
 <p>A library that wants eager setup ships an ordinary
 <code>public static void UseAcme(Reconciler reconciler)</code> over one of these —
 Reactor deliberately adds no <code>IReactorLibrary</code> interface or
