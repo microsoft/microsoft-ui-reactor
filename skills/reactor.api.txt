@@ -4597,12 +4597,14 @@ Mount(Func<RenderContext, Element> renderFunc) → void
 WaitForIdleAsync(int maxYields = 50) → Task
 
 ### class ReactorHostControl
+new()
 new(Component component = null, ILogger logger = null)
 Action<double, double, double> OnRenderComplete { get; set; }
 Func<Component> ComponentFactory { get; set; }
 Reconciler Reconciler { get; }
+RenderStats Stats { get; }
+Type ComponentType { get; set; }
 object Props { get; set; }
-ref RenderStats Stats { get; }
 Dispose() → void
 Mount(Component component) → void
 Mount(Func<RenderContext, Element> renderFunc) → void

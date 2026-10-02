@@ -39,9 +39,9 @@ class WpfHostedDashboard : Component
 // WPF hosts foreign HWNDs through HwndHost. DesktopWindowXamlSource owns the
 // island HWND; ReactorHostControl is the WinUI element mounted inside it.
 //
-// ReactorHostControl has no ComponentType property — that one belongs to the
-// WinForms XamlIslandControl. On the WinUI side you either hand it a
-// ComponentFactory or call Mount(...) directly.
+// There is no XAML here to declare it in, so construct it in code and hand it
+// a ComponentFactory or call Mount(...). (ComponentType is the markup form, for
+// a ReactorHostControl declared in a WinUI XAML page.)
 sealed class ReactorWpfIsland : HwndHost
 {
     private DesktopWindowXamlSource? _source;
