@@ -16,9 +16,17 @@ The doc pipeline needs:
 |------------------|----------------------------------------|-----------------------------|
 | .NET 10 SDK      | Building the `mur` CLI + doc apps      | Always                      |
 | Windows App SDK  | Doc apps render WinUI controls         | Screenshot capture          |
+| winapp CLI       | `winapp ui screenshot` captures the doc app window | Screenshot capture |
 | Node.js 20+      | Hosts `mermaid-cli`                    | `.mmd` → `.svg` diagrams    |
 | `mermaid-cli`    | CLI front-end for Mermaid              | `.mmd` → `.svg` diagrams    |
 | Chromium / Edge  | Pulled in by Puppeteer for `mmdc`      | `.mmd` → `.svg` diagrams    |
+
+Screenshot capture uses the **winapp CLI** (`winapp ui screenshot`). `./bootstrap.ps1`
+installs it (`winget install Microsoft.WinAppCli`); `mur` finds it the same way the E2E
+tests do — `$REACTOR_WINAPP_EXE`, then `%LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe`,
+then `PATH` — and a capture run without it fails every requested screenshot with an
+install hint, leaving the committed images untouched. Like the E2E tests, the pipeline
+does not pin a winapp version.
 
 Doc apps and screenshots work without Mermaid. Mermaid only enters
 the pipeline when a topic has at least one `*.mmd` file in
@@ -240,7 +248,8 @@ last contributor; if it jumped by ~20%, you did not.
 
 ##### When 150% is not your primary display
 
-Capture is `PrintWindow` over the live window in *physical* pixels, so the scale
+Capture is `winapp ui screenshot` of the live window, cropped to its client area, in
+*physical* pixels, so the scale
 baked into a PNG is the DPI of whichever monitor the window lands on — and a doc
 app's window opens on the **primary** display. If your 150% monitor is not the
 primary one (and you cannot change that, e.g. over a remote session), set
@@ -253,6 +262,30 @@ mur docs compile --screenshots-only
 
 The harness forwards that to each doc app as `--x` / `--y`, which the devtools
 preview host applies as the window's start position.
+
+##### How a capture works
+
+1. `mur` launches the doc app with `dotnet run -- --preview --vscode` at the manifest's
+   size. The in-app preview host (`Microsoft.UI.Reactor.Devtools`) renders the app and
+   switches between the manifest's components (`POST /preview`) — that part is unchanged.
+2. After the startup delay, `mur` finds the app's WinUI window (by owning process: the
+   app is a child of `dotnet run`).
+3. For each screenshot it switches component, waits 1 s for layout and transitions to
+   settle, and runs `winapp ui screenshot -w <hwnd> -o <tmp> --json`. It never passes
+   `--focus` or `--capture-screen`, so capture does not foreground the window or take
+   input focus — you can keep using the desktop while it runs (the windows still appear).
+4. winapp returns the window's visible frame, title bar included. `mur` crops it to the
+   client area, so images keep the old framing, and squares the window's rounded bottom
+   corners, which Windows 11 composes into the capture but the old `PrintWindow` capture
+   did not have (left as is, the corner arcs read as content and content-crop would keep
+   the whole window).
+5. A blank first frame is captured again until it has content, for up to 5 s, as before
+   (issue #989), and then the usual `ImageProcessor` crop, border and shadow apply.
+
+Compared with the old `PrintWindow` + JPEG frame stream, captures are lossless (crisper
+text edges) and content-crop is typically 1–4 px tighter, because JPEG ringing no
+longer counts as content. Regenerated images are therefore very slightly smaller than
+the committed ones of the same scale — that is expected, not a scale change.
 
 **The value is in DIPs, not physical pixels**, because it becomes
 `WindowSpec.ManualPosition` and the window converts it with *its own* DPI — which
@@ -379,9 +412,9 @@ narrower half of a two-part claim, which is why the wording here is deliberately
 specific about which writes are caught.
 
 Capture itself needs an **interactive desktop**. It launches each doc app,
-waits for the preview capture server, and reads real frames over HTTP. In a
-headless, locked, or RDP-disconnected session the app window never paints and
-the capture server returns a solid-white surface. Historically that surface was
+waits for the preview host, and captures the window with `winapp ui screenshot`.
+In a headless, locked, or RDP-disconnected session the app window never paints and
+the capture comes back as a solid-white (or transparent) surface. Historically that surface was
 written straight over the committed screenshot as a ~3 KB white rectangle, and
 the compile still exited 0 ([issue #989][i989]). Several guards now prevent that:
 
