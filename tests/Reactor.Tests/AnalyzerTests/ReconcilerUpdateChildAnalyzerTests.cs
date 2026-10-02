@@ -450,4 +450,48 @@ class Host
 }";
         await VerifyFixAsync(code, code);
     }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Manual_Unmount_Carries_A_Comment()
+    {
+        // Removing the statement would take the comment with it.
+        const string code = @"
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+        {
+            r.UnmountChild(existing); // UpdateChild leaves it mounted
+            slot.Content = replacement;
+        }
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_A_Directive_Precedes_The_Manual_Unmount()
+    {
+        // The #endif is leading trivia of the unmount statement: removing it with the statement
+        // would leave the #if unbalanced.
+        const string code = @"
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+        {
+#if true
+            Console.WriteLine(""replaced"");
+#endif
+            r.UnmountChild(existing);
+            slot.Content = replacement;
+        }
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
 }

@@ -35,7 +35,8 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// is read nowhere but that <c>if</c>, the existing control is a plain local or parameter (it is
 /// compared with the result), the arguments are positional (<c>Reconcile</c> names its parameters
 /// differently), and every <c>UnmountChild(existing)</c> in the block is a statement of its own in
-/// the body. Anywhere else the diagnostic stands without a fix.
+/// the body with no comment or directive in or around it. Anywhere else the diagnostic stands
+/// without a fix.
 /// </remarks>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(ReconcilerUpdateChildCodeFix))]
 [Shared]
@@ -181,6 +182,10 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
                     || ifStatement.Statement is not BlockSyntax body
                     || unmount.Parent != body)
                     return null;
+                // Removing the statement removes the trivia in and around it, so that has to be
+                // layout only: a comment would be lost, and an #endif before it would unbalance the file.
+                if (!IsLayoutOnly(unmount))
+                    return null;
                 unmounts.Add(unmount);
             }
             if (unmounts.Count > 0 && ((BlockSyntax)ifStatement.Statement).Statements.Count == unmounts.Count)
@@ -231,6 +236,17 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
                 return false;
             return call.ArgumentList.Arguments[0].Expression is IdentifierNameSyntax argument
                 && SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(argument, ct).Symbol, control);
+        }
+
+        /// <summary>True when the only trivia in and around <paramref name="statement"/> is whitespace and line breaks.</summary>
+        private static bool IsLayoutOnly(StatementSyntax statement)
+        {
+            foreach (var trivia in statement.DescendantTrivia())
+            {
+                if (!trivia.IsKind(SyntaxKind.WhitespaceTrivia) && !trivia.IsKind(SyntaxKind.EndOfLineTrivia))
+                    return false;
+            }
+            return true;
         }
 
         /// <summary>
