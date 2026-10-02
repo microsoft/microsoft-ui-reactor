@@ -71,9 +71,9 @@ using Microsoft.UI.Xaml;
 class Slot { public UIElement Content; }
 ";
 
-    private static Task<MetadataReference>? s_stub;
+    private static readonly Lazy<Task<MetadataReference>> s_stub = new(CompileStubAsync);
 
-    private static Task<MetadataReference> StubAsync() => s_stub ??= CompileStubAsync();
+    private static Task<MetadataReference> StubAsync() => s_stub.Value;
 
     private static async Task<MetadataReference> CompileStubAsync()
     {

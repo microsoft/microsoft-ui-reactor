@@ -467,7 +467,10 @@ internal static class SlotReplacementFixtures
 
         private void NestedSlotUpdate(Reconciler reconciler, WinXC.Border control, int from, int to, Action requestRerender)
         {
-            _ = reconciler.UpdateChild(Inner(from), Inner(to), control.Child, requestRerender);
+            var existing = control.Child;
+            var next = reconciler.Reconcile(Inner(from), Inner(to), existing, requestRerender);
+            if (!ReferenceEquals(next, existing))
+                control.Child = next;
             _nestedText = ((control.Child as WinXC.Border)?.Child as WinXC.TextBlock)?.Text;
         }
 
@@ -578,7 +581,10 @@ internal static class SlotReplacementFixtures
                     _updatingOuter = control;
                     try
                     {
-                        _ = r.UpdateChild(Inner(oldEl.Generation), Inner(newEl.Generation), control.Child, requestRerender);
+                        var existing = control.Child;
+                        var next = r.Reconcile(Inner(oldEl.Generation), Inner(newEl.Generation), existing, requestRerender);
+                        if (!ReferenceEquals(next, existing))
+                            control.Child = next;
                     }
                     finally { _updatingOuter = null; }
                     return BuildOuter(r, newEl.Generation, requestRerender);
