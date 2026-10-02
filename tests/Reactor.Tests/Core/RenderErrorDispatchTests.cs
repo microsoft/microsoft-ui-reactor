@@ -478,6 +478,26 @@ public class RenderErrorDispatchTests
     }
 
     [Fact]
+    public void InvokeHandler_A_Declined_Propagation_From_Nested_Work_Escapes_Instead_Of_Failing_The_Handler()
+    {
+        var nested = new InvalidOperationException("declined in nested work");
+        var error = NewError();
+        WithUnhandledCallback(_ => false, () =>
+        {
+            var thrown = Assert.Throws<InvalidOperationException>(() => RenderErrorDispatch.InvokeHandler(e =>
+            {
+                // The handler synchronously runs another Reactor frame whose render error
+                // the app declines.
+                using (RenderErrorDispatch.EnterPropagationScope())
+                    RenderErrorDispatch.RaiseUnhandled(nested);
+                return null;
+            }, error, logger: null, out _));
+
+            Assert.Same(nested, thrown);
+        });
+    }
+
+    [Fact]
     public void BuildHostFallback_A_Declined_Propagation_From_Install_Escapes()
     {
         var declined = new InvalidOperationException("declined during install");

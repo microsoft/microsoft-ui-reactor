@@ -144,7 +144,9 @@ internal static class RenderErrorDispatch
         {
             appElement = handler(error);
         }
-        catch (Exception hx) when (hx is not OutOfMemoryException and not StackOverflowException)
+        // A declined RenderError.Propagate() from nested Reactor work the handler started is
+        // not a handler failure; it keeps going out like at every catch site.
+        catch (Exception hx) when (hx is not OutOfMemoryException and not StackOverflowException && !IsPropagating(hx))
         {
             error.CancelPropagation();
             appElement = null;

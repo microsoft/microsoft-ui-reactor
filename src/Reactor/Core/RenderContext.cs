@@ -2234,11 +2234,14 @@ public sealed class RenderContext
                 {
                     handleRef.Current = Microsoft.UI.Reactor.ReactorApp.OpenWindow(stamped, factory);
                 }
-                catch (Exception ex) when (ex is InvalidOperationException || ex is global::System.Runtime.InteropServices.COMException)
+                catch (Exception ex) when ((ex is InvalidOperationException || ex is global::System.Runtime.InteropServices.COMException)
+                    && !RenderErrorDispatch.IsPropagating(ex))
                 {
                     // No XAML application or UI dispatcher available. Hooks
                     // must not crash the calling render; the live multi-
-                    // window path is exercised in selftest fixtures.
+                    // window path is exercised in selftest fixtures. A render
+                    // error the app asked to propagate (and then declined) is
+                    // not that case: it keeps going out (issue #1291).
                     handleRef.Current = null;
                 }
             }

@@ -1426,8 +1426,11 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
                 return;
             // Don't set e.Handled = true for unknown exceptions — let the app crash
             // with a useful error rather than silently running in a corrupt state.
-            bool handled = ReportUnhandled(e.Exception);
-            if (OnUnhandledException is not null)
+            // Read the callback once: a one-shot callback that unregisters itself before
+            // returning true must still have its decision applied.
+            var callback = OnUnhandledException;
+            bool handled = ReportUnhandled(e.Exception, callback);
+            if (callback is not null)
                 e.Handled = handled;
         };
     }
@@ -1438,10 +1441,12 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
     /// by <see cref="RenderError.Propagate"/>, which WinUI would not surface through
     /// <see cref="Application.UnhandledException"/> on its own.
     /// </summary>
-    internal static bool ReportUnhandled(Exception ex)
+    internal static bool ReportUnhandled(Exception ex) => ReportUnhandled(ex, OnUnhandledException);
+
+    private static bool ReportUnhandled(Exception ex, Func<Exception, bool>? callback)
     {
         ReactorApp.AppLogger?.LogError(ex, "UnhandledException: {ExceptionType}: {ExceptionMessage}", ex.GetType().Name, ex.Message);
-        return OnUnhandledException is { } callback && callback(ex);
+        return callback is not null && callback(ex);
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)

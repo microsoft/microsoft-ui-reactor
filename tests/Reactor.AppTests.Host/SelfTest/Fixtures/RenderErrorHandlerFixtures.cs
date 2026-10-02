@@ -65,16 +65,18 @@ internal static class RenderErrorHandlerFixtures
         }
     }
 
+    // Window to host the nested work in, and where to hand the created host back to the
+    // fixture for disposal.
+    private sealed record NestedRenderProps(Window Window, List<ReactorHost> Created);
+
     // Starts nested Reactor work during its own render: a host whose first (inline) render
     // fails and propagates.
-    private sealed class NestedPropagatingRenderComponent : Component<Window>
+    private sealed class NestedPropagatingRenderComponent : Component<NestedRenderProps>
     {
-        public static ReactorHost? NestedHost;
-
         public override Element Render()
         {
-            var nested = new ReactorHost(Props) { RenderErrorHandler = e => { e.Propagate(); return null; } };
-            NestedHost = nested;
+            var nested = new ReactorHost(Props.Window) { RenderErrorHandler = e => { e.Propagate(); return null; } };
+            Props.Created.Add(nested);
             nested.Mount(_ => throw new InvalidOperationException("nested render declined in boundary"));
             return TextBlock("Unreachable");
         }
@@ -841,13 +843,13 @@ internal static class RenderErrorHandlerFixtures
             var nestedWindow = new Window { Title = "RenderErrorHandler Boundary Nested" };
             nestedWindow.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(300, 200));
             nestedWindow.Activate();
-            NestedPropagatingRenderComponent.NestedHost = null;
+            var created = new List<ReactorHost>();
             var host = H.CreateHost();
             Exception? escaped = null;
             try
             {
                 host.Mount(_ => ErrorBoundary(
-                    Component<NestedPropagatingRenderComponent, Window>(nestedWindow),
+                    Component<NestedPropagatingRenderComponent, NestedRenderProps>(new NestedRenderProps(nestedWindow, created)),
                     TextBlock("BoundaryCaughtDeclined")));
             }
             catch (InvalidOperationException ex) { escaped = ex; }
@@ -857,8 +859,8 @@ internal static class RenderErrorHandlerFixtures
                 escaped?.Message ?? "(nothing escaped)");
             H.Check("RenderErrorHandler_Boundary_FallbackNotShown", H.FindText("BoundaryCaughtDeclined") is null);
 
-            NestedPropagatingRenderComponent.NestedHost?.Dispose();
-            NestedPropagatingRenderComponent.NestedHost = null;
+            foreach (var nested in created)
+                nested.Dispose();
             nestedWindow.Close();
 
             var next = H.CreateHost();
@@ -959,6 +961,51 @@ internal static class RenderErrorHandlerFixtures
                 return Task.CompletedTask;
             });
             await Task.Delay(80);
+        }
+    }
+
+    // A child window opened by UseOpenWindow whose first render propagates (declined) is not
+    // swallowed by the hook's "no XAML application" fallback; it keeps going out. The outer
+    // host's first render runs inline, so the escape is observable at Mount.
+    internal class UseOpenWindow_DoesNotSwallowDeclinedPropagation(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            if (ReactorApp.UIDispatcher is null)
+                ReactorApp.UIDispatcher = DispatcherQueue.GetForCurrentThread();
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            await WithUnhandledCallback(_ => false, async () =>
+            {
+                var spec = new WindowSpec
+                {
+                    Title = "RenderErrorHandler UseOpenWindow",
+                    Width = 300,
+                    Height = 200,
+                    RenderErrorHandler = e => { e.Propagate(); return null; },
+                };
+                var host = H.CreateHost();
+                Exception? escaped = null;
+                try
+                {
+                    host.Mount(ctx =>
+                    {
+                        var opened = ctx.UseOpenWindow(new WindowKey("render-error-use-open-window"), spec,
+                            () => new ThrowingComponent());
+                        return TextBlock(opened is null ? "UseOpenWindowSwallowed" : "UseOpenWindowOpened");
+                    });
+                }
+                catch (InvalidOperationException ex) { escaped = ex; }
+                await Harness.Render();
+
+                H.Check("RenderErrorHandler_UseOpenWindow_DeclinedEscapes", escaped?.Message == "child render boom",
+                    escaped?.Message ?? "(nothing escaped)");
+                H.Check("RenderErrorHandler_UseOpenWindow_NotSwallowed", H.FindText("UseOpenWindowSwallowed") is null);
+
+                var next = H.CreateHost();
+                next.Mount(_ => TextBlock("AfterUseOpenWindow"));
+                await Harness.Render();
+                H.Check("RenderErrorHandler_UseOpenWindow_NewHostWorks", H.FindText("AfterUseOpenWindow") is not null);
+            });
         }
     }
 
