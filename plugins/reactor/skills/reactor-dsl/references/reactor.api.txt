@@ -4625,8 +4625,6 @@ Window Window { get; }
 
 ### static class ReactorSourceMap
 bool Enabled { get; set; }
-EnterRootMountSite(string filePath, int lineNumber) → object
-ExitRootMountSite(object token) → void
 GetSource(UIElement control) → SourceLocation?
 
 ### class ReactorSourceTransparentAttribute

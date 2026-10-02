@@ -9,9 +9,9 @@ namespace Microsoft.UI.Reactor.SourceMap.Tests;
 
 /// <summary>
 /// Root mount call sites — the generator intercepts <c>ReactorApp.Run</c>,
-/// <c>ReactorApp.OpenWindow</c>, <c>ReactorHost.Mount</c> and
-/// <c>ReactorHostControl.Mount</c> and brackets each with a root mount scope the host
-/// claims, so <c>ReactorDiagnostics.GetHosts()</c> can report where a root was mounted.
+/// <c>ReactorApp.OpenWindow</c>, <c>ReactorWindow.Mount</c>, <c>ReactorHost.Mount</c> and
+/// <c>ReactorHostControl.Mount</c> and brackets each with a root mount scope the
+/// intercepted method claims for the host it mounts, so <c>ReactorDiagnostics.GetHosts()</c> can report where a root was mounted.
 ///
 /// <para>A headless test cannot reach a host (each needs a WinUI window), so every call
 /// here is made to fail on its first argument check — AFTER the interceptor has opened
@@ -23,16 +23,19 @@ namespace Microsoft.UI.Reactor.SourceMap.Tests;
 public sealed class RootMountInterceptionTests : IDisposable
 {
     private readonly List<SourceLocation> _entered = new();
+    private readonly List<SourceLocation> _claimed = new();
 
     public RootMountInterceptionTests()
     {
         ReactorSourceMap.Enabled = true;
         ReactorSourceMap.RootMountSiteEnteredForTest = _entered.Add;
+        ReactorSourceMap.RootMountSiteClaimedForTest = _claimed.Add;
     }
 
     public void Dispose()
     {
         ReactorSourceMap.RootMountSiteEnteredForTest = null;
+        ReactorSourceMap.RootMountSiteClaimedForTest = null;
         ReactorSourceMap.Enabled = false;
     }
 
@@ -51,12 +54,22 @@ public sealed class RootMountInterceptionTests : IDisposable
         Assert.Equal(0, ReactorSourceMap.OpenRootMountScopeCountForTest);
     }
 
+    /// <summary>
+    /// The intercepted method claimed its OWN scope as its first statement — before the
+    /// argument check that makes it throw — so no later mount could have taken it.
+    /// </summary>
+    private void AssertClaimedByTheEntryPoint(int expectedLine)
+    {
+        AssertSingleSiteAt(expectedLine);
+        Assert.Equal(_entered, _claimed);
+    }
+
     [Fact]
     public void OpenWindowWithComponentRoot_OpensAScopeAtTheCallSite()
     {
         Assert.Throws<ArgumentNullException>(() => ReactorApp.OpenWindow(new WindowSpec(), (Func<Component>)null!)); int expected = Line();
 
-        AssertSingleSiteAt(expected);
+        AssertClaimedByTheEntryPoint(expected);
     }
 
     [Fact]
@@ -64,7 +77,7 @@ public sealed class RootMountInterceptionTests : IDisposable
     {
         Assert.Throws<ArgumentNullException>(() => ReactorApp.OpenWindow(new WindowSpec(), (Func<RenderContext, Element>)null!)); int expected = Line();
 
-        AssertSingleSiteAt(expected);
+        AssertClaimedByTheEntryPoint(expected);
     }
 
     [Fact]
@@ -72,7 +85,7 @@ public sealed class RootMountInterceptionTests : IDisposable
     {
         Assert.Throws<ArgumentNullException>(() => ReactorApp.Run<Probe>((WindowSpec)null!)); int expected = Line();
 
-        AssertSingleSiteAt(expected);
+        AssertClaimedByTheEntryPoint(expected);
     }
 
     [Fact]
@@ -80,7 +93,7 @@ public sealed class RootMountInterceptionTests : IDisposable
     {
         Assert.Throws<ArgumentNullException>(() => ReactorApp.Run((WindowSpec)null!, _ => TextBlock("x"))); int expected = Line();
 
-        AssertSingleSiteAt(expected);
+        AssertClaimedByTheEntryPoint(expected);
     }
 
     [Fact]
@@ -99,6 +112,16 @@ public sealed class RootMountInterceptionTests : IDisposable
         ReactorHostControl control = null!;
 
         Assert.Throws<NullReferenceException>(() => control.Mount(new Probe())); int expected = Line();
+
+        AssertSingleSiteAt(expected);
+    }
+
+    [Fact]
+    public void ReactorWindowMount_InstanceCallIsIntercepted()
+    {
+        ReactorWindow window = null!;
+
+        Assert.Throws<NullReferenceException>(() => window.Mount(new Probe())); int expected = Line();
 
         AssertSingleSiteAt(expected);
     }

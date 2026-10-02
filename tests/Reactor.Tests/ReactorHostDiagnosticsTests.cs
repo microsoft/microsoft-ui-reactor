@@ -223,19 +223,41 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
     }
 
     [Fact]
-    public void RootMountSite_ScopeOpenedOnOneThreadIsClaimedOnAnother()
+    public void RootMountSite_IsNotVisibleFromAnotherThread()
     {
-        // ReactorApp.Run opens its scope on the caller's thread and mounts on the STA
-        // thread it starts; a thread-static would lose the site.
+        // Every entry point claims its own scope synchronously on the caller's thread
+        // (Run included, before it starts WinUI), so scopes are per-thread: a mount on a
+        // different thread must never pick up — or steal — this thread's site.
         ReactorSourceMap.Enabled = true;
         var token = ReactorSourceMap.EnterRootMountSite("Program.cs", 3);
         try
         {
-            SourceLocation? claimed = null;
-            var thread = new Thread(() => claimed = ReactorSourceMap.TakeRootMountSite());
+            SourceLocation? claimedElsewhere = new SourceLocation("sentinel", -1);
+            var thread = new Thread(() => claimedElsewhere = ReactorSourceMap.TakeRootMountSite());
             thread.Start();
             thread.Join();
-            Assert.Equal(new SourceLocation("Program.cs", 3), claimed);
+
+            Assert.Null(claimedElsewhere);
+            Assert.Equal(new SourceLocation("Program.cs", 3), ReactorSourceMap.TakeRootMountSite());
+        }
+        finally
+        {
+            ReactorSourceMap.ExitRootMountSite(token);
+        }
+    }
+
+    [Fact]
+    public void RootMountSite_ClaimedScopeHidesItselfFromNestedUninterceptedMounts()
+    {
+        // An entry point claims its scope first; anything it then runs (a configure
+        // callback mounting a second host, a framework-created window) sees no site
+        // rather than the outer call's line.
+        ReactorSourceMap.Enabled = true;
+        var token = ReactorSourceMap.EnterRootMountSite("App.cs", 40);
+        try
+        {
+            Assert.Equal(new SourceLocation("App.cs", 40), ReactorSourceMap.TakeRootMountSite());
+            Assert.Null(ReactorSourceMap.TakeRootMountSite());
         }
         finally
         {

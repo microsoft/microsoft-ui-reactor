@@ -118,11 +118,12 @@ public sealed class ReactorHostInfo
 
     /// <summary>
     /// Where the root was mounted — the <c>ReactorApp.Run</c>, <c>ReactorApp.OpenWindow</c>,
-    /// <c>ReactorHost.Mount</c> or <c>ReactorHostControl.Mount</c> call in app code. Null
-    /// unless the calling project was built with source mapping (<c>ReactorSourceMap=true</c>,
-    /// the Debug default) and <see cref="Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/>
-    /// was true at mount time; also null for a root created from
-    /// <see cref="ReactorHostControl.ComponentFactory"/>, which has no call site.
+    /// <c>ReactorWindow.Mount</c>, <c>ReactorHost.Mount</c> or <c>ReactorHostControl.Mount</c>
+    /// call in app code. Null unless the calling project was built with source mapping
+    /// (<c>ReactorSourceMap=true</c>, the Debug default) and
+    /// <see cref="Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/> was true at mount
+    /// time; also null for a root created from <see cref="ReactorHostControl.ComponentFactory"/>
+    /// or mounted by framework code, neither of which has a call site in app code.
     /// </summary>
     public SourceLocation? MountSite { get; }
 }

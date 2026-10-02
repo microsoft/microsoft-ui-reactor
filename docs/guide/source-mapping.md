@@ -327,12 +327,16 @@ alive; it costs one small allocation per host and nothing per render.
 
 **Root mount sites.** A root is not an element, so it has no `CallSite`. When
 source mapping is on, the generator also intercepts `ReactorApp.Run`,
-`ReactorApp.OpenWindow`, `ReactorHost.Mount` and `ReactorHostControl.Mount` and
-records the line that called them; the host claims it at mount and reports it as
-`ReactorHostInfo.MountSite`. `Run(Action<ReactorAppContext>)` is left alone — it
-mounts no root itself, and each `OpenWindow` in its startup callback reports its
-own line. A root created from `ReactorHostControl.ComponentFactory` (set in XAML)
-has no call site and reports `null`.
+`ReactorApp.OpenWindow`, `ReactorWindow.Mount`, `ReactorHost.Mount` and
+`ReactorHostControl.Mount` and records the line that called them. Each of those
+methods claims its own line first thing and hands it to the host it mounts, which
+reports it as `ReactorHostInfo.MountSite`. Anything else that mounts while that
+call is running — a host created in a `configure` callback, a window the framework
+opens itself — reports `null` rather than the outer call's line.
+`Run(Action<ReactorAppContext>)` is left alone: it mounts no root itself, and each
+`OpenWindow` in its startup callback reports its own line. A root created from
+`ReactorHostControl.ComponentFactory` (set in XAML) has no call site and reports
+`null`.
 
 **Component boundaries are always tagged while mapping is on.** Every
 `Component<T>()`, `Func(...)` and `Memo(...)` mounts behind a `Border` wrapper. With

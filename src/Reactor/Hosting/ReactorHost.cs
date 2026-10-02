@@ -280,7 +280,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             reconciler: _reconciler,
             rootControl: _currentControl,
             rootComponent: _rootComponent,
-            rootRenderFunction: _rootRenderFunc,
+            // Report the root that actually renders: Render() prefers the component when
+            // both have been mounted on this host.
+            rootRenderFunction: _rootComponent is null ? _rootRenderFunc : null,
             mountSite: _mountSite);
     }
 
@@ -365,17 +367,28 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         => s_chartingBridge?.PushAccessibilityState(_isForcedColors, _isReducedMotion, _forcedColorsTheme);
 
     public void Mount(Component component)
+        => Mount(component, Diagnostics.ReactorSourceMap.TakeRootMountSite());
+
+    public void Mount(Func<RenderContext, Element> renderFunc)
+        => Mount(renderFunc, Diagnostics.ReactorSourceMap.TakeRootMountSite());
+
+    /// <summary>
+    /// Mount with an explicit diagnostics call site — used by <see cref="ReactorWindow"/>,
+    /// whose own public entry point (<c>ReactorApp.Run</c> / <c>OpenWindow</c> /
+    /// <c>ReactorWindow.Mount</c>) already claimed it.
+    /// </summary>
+    internal void Mount(Component component, SourceLocation? mountSite)
     {
         _rootComponent = component;
-        _mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
+        _mountSite = mountSite;
         RequestRender();
     }
 
-    public void Mount(Func<RenderContext, Element> renderFunc)
+    internal void Mount(Func<RenderContext, Element> renderFunc, SourceLocation? mountSite)
     {
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
-        _mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
+        _mountSite = mountSite;
         RequestRender();
     }
 

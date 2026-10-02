@@ -34,7 +34,8 @@ internal record ReactorAppOptions(
     bool FullScreen = false,
     WindowIcon? WindowIcon = null,
     Action<ReactorAppContext>? Startup = null,
-    WindowSpec? InitialWindowSpec = null);
+    WindowSpec? InitialWindowSpec = null,
+    Core.SourceLocation? RootMountSite = null);
 
 public static partial class ReactorApp
 {
@@ -497,6 +498,7 @@ public static partial class ReactorApp
         Action<ReactorHost>? configure = null)
         where TRoot : Component, new()
     {
+        var rootMountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         EmitDipBehaviorChangeNoticeOnce(width, height);
         if (TryRunDevtools(title, width, height, fullScreen, configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot())) return;
 
@@ -507,7 +509,8 @@ public static partial class ReactorApp
             WindowWidth: width,
             WindowHeight: height,
             FullScreen: fullScreen,
-            WindowIcon: icon));
+            WindowIcon: icon,
+            RootMountSite: rootMountSite));
     }
 
     /// <summary>
@@ -527,6 +530,7 @@ public static partial class ReactorApp
         Action<ReactorHost>? configure = null)
         where TRoot : Component, new()
     {
+        var rootMountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         ArgumentNullException.ThrowIfNull(spec);
         spec.Validate();
         EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
@@ -539,7 +543,8 @@ public static partial class ReactorApp
             WindowWidth: spec.Width,
             WindowHeight: spec.Height,
             FullScreen: IsFullScreen(spec),
-            InitialWindowSpec: spec));
+            InitialWindowSpec: spec,
+            RootMountSite: rootMountSite));
     }
 
     /// <summary>
@@ -569,6 +574,7 @@ public static partial class ReactorApp
         WindowIcon? icon = null,
         Action<ReactorHost>? configure = null)
     {
+        var rootMountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         EmitDipBehaviorChangeNoticeOnce(width, height);
         if (TryRunDevtools(title, width, height, fullScreen, configure, rootRenderFunc: rootRender)) return;
 
@@ -579,7 +585,8 @@ public static partial class ReactorApp
             WindowWidth: width,
             WindowHeight: height,
             FullScreen: fullScreen,
-            WindowIcon: icon));
+            WindowIcon: icon,
+            RootMountSite: rootMountSite));
     }
 
     /// <summary>
@@ -592,6 +599,7 @@ public static partial class ReactorApp
         Func<RenderContext, Element> rootRender,
         Action<ReactorHost>? configure = null)
     {
+        var rootMountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(rootRender);
         spec.Validate();
@@ -605,7 +613,8 @@ public static partial class ReactorApp
             WindowWidth: spec.Width,
             WindowHeight: spec.Height,
             FullScreen: IsFullScreen(spec),
-            InitialWindowSpec: spec));
+            InitialWindowSpec: spec,
+            RootMountSite: rootMountSite));
     }
 
     /// <summary>
@@ -704,10 +713,11 @@ public static partial class ReactorApp
         Func<Component> root,
         Action<ReactorHost>? configure = null)
     {
+        var mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(root);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
-        return OpenAndAnnounce(spec, () => OpenWindowCore(spec, root, renderFunc: null, configure: configure));
+        return OpenAndAnnounce(spec, () => OpenWindowCore(spec, root, renderFunc: null, configure: configure, mountSite: mountSite));
     }
 
     /// <summary>
@@ -721,10 +731,11 @@ public static partial class ReactorApp
         Func<RenderContext, Element> render,
         Action<ReactorHost>? configure = null)
     {
+        var mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(render);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
-        return OpenAndAnnounce(spec, () => OpenWindowCore(spec, rootFactory: null, render, configure: configure));
+        return OpenAndAnnounce(spec, () => OpenWindowCore(spec, rootFactory: null, render, configure: configure, mountSite: mountSite));
     }
 
     // Internal overload used by the legacy Run<TRoot>/Run(string, Func) bridges
@@ -735,7 +746,8 @@ public static partial class ReactorApp
         Func<Component>? rootFactory,
         Func<RenderContext, Element>? renderFunc,
         Action<ReactorHost>? configure,
-        bool excludeFromShutdownPolicy = false)
+        bool excludeFromShutdownPolicy = false,
+        Core.SourceLocation? mountSite = null)
     {
         ReactorWindow window = new ReactorWindow(spec);
         window.ExcludeFromShutdownPolicy = excludeFromShutdownPolicy;
@@ -748,7 +760,7 @@ public static partial class ReactorApp
             // ReactorApp.Windows and therefore to PrepareOpenWindowsForExit.
             configure?.Invoke(window.Host);
             RegisterWindow(window);
-            window.MountAndActivate(rootFactory, renderFunc);
+            window.MountAndActivate(rootFactory, renderFunc, mountSite);
         }
         catch (Exception)
         {
@@ -1462,7 +1474,7 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
 
         try
         {
-            ReactorApp.OpenWindowCore(spec, opts.RootFactory, opts.RootRenderFunc, opts.Configure);
+            ReactorApp.OpenWindowCore(spec, opts.RootFactory, opts.RootRenderFunc, opts.Configure, mountSite: opts.RootMountSite);
         }
         finally
         {

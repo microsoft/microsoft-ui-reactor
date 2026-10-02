@@ -10,6 +10,9 @@ internal static class SelfTestFixtureRegistry
     public static readonly string[] AllFixtures =
     [
         "SourceMapReadPath_Enabled",
+        "HostDiag_WindowHostIsListedAndBoundariesAreTagged",
+        "HostDiag_FlagOffLeavesBoundariesUntagged",
+        "HostDiag_HostControlIsListed",
         "SourceMapReadPath_DistinctLines",
         "SourceMapReadPath_Disabled",
         "SourceMapReadPath_HandStamped",
@@ -2628,6 +2631,9 @@ internal static class SelfTestFixtureRegistry
         "AnimScope_WithAnimationIntegration" => new AnimationScopeTests.WithAnimationIntegration(harness),
         // Spec 010 — source-map read path (UIElement → ReactorState → Element.CallSite)
         "SourceMapReadPath_Enabled" => new SourceMapReadPathTests.LeafIsReadableWhenEnabled(harness),
+        "HostDiag_WindowHostIsListedAndBoundariesAreTagged" => new HostDiagnosticsFixtures.WindowHostIsListedAndBoundariesAreTagged(harness),
+        "HostDiag_FlagOffLeavesBoundariesUntagged" => new HostDiagnosticsFixtures.FlagOffLeavesBoundariesUntagged(harness),
+        "HostDiag_HostControlIsListed" => new HostDiagnosticsFixtures.HostControlIsListed(harness),
         "SourceMapReadPath_DistinctLines" => new SourceMapReadPathTests.DistinctLeavesReportDistinctLines(harness),
         "SourceMapReadPath_Disabled" => new SourceMapReadPathTests.LeafIsNotTaggedWhenDisabled(harness),
         "SourceMapReadPath_HandStamped" => new SourceMapReadPathTests.HandStampedLeafIsTaggedWithFlagOff(harness),

@@ -169,7 +169,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         Core.Diagnostics.ReactorHostRegistry.Register(this);
 
         if (component is not null)
-            Mount(component);
+            MountRoot(component, mountSite: null);
     }
 
     Core.Diagnostics.ReactorHostInfo? Core.Diagnostics.IReactorDiagnosticHost.CaptureDiagnosticInfo()
@@ -195,13 +195,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     /// Mount a Component instance directly. Starts the render loop immediately.
     /// </summary>
     public void Mount(Component component)
-    {
-        _rootRenderFunc = null;
-        _funcContext = null;
-        _rootComponent = component;
-        _mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
-        RequestRender();
-    }
+        => MountRoot(component, Diagnostics.ReactorSourceMap.TakeRootMountSite());
 
     /// <summary>
     /// Mount a function component. Starts the render loop immediately.
@@ -212,6 +206,15 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
         _mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
+        RequestRender();
+    }
+
+    private void MountRoot(Component component, SourceLocation? mountSite)
+    {
+        _rootRenderFunc = null;
+        _funcContext = null;
+        _rootComponent = component;
+        _mountSite = mountSite;
         RequestRender();
     }
 
@@ -228,7 +231,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         if (Props is not null && component is IPropsReceiver receiver)
             receiver.SetProps(Props);
 
-        Mount(component);
+        // A ComponentFactory root has no call site in app code (it is usually set in
+        // XAML), and must not claim a scope some unrelated in-flight call opened.
+        MountRoot(component, mountSite: null);
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

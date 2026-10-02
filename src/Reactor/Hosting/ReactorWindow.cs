@@ -607,7 +607,10 @@ public sealed partial class ReactorWindow : IDisposable
     /// Mount the supplied root and (optionally) activate the window. Pass
     /// exactly one of <paramref name="rootFactory"/> / <paramref name="renderFunc"/>.
     /// </summary>
-    internal void MountAndActivate(Func<Component>? rootFactory, Func<RenderContext, Element>? renderFunc)
+    internal void MountAndActivate(
+        Func<Component>? rootFactory,
+        Func<RenderContext, Element>? renderFunc,
+        Core.SourceLocation? mountSite = null)
     {
         if ((rootFactory is null) == (renderFunc is null))
             throw new ArgumentException(
@@ -619,9 +622,9 @@ public sealed partial class ReactorWindow : IDisposable
         ApplyTitleBarTheme();
 
         if (rootFactory is not null)
-            _host.Mount(rootFactory());
+            _host.Mount(rootFactory(), mountSite);
         else
-            _host.Mount(renderFunc!);
+            _host.Mount(renderFunc!, mountSite);
 
         if (_spec.ActivateOnOpen && !_disposed && (_spec.Embed is null || _spec.Embed.InitialVisibility))
             _window.Activate();
@@ -3422,20 +3425,22 @@ public sealed partial class ReactorWindow : IDisposable
     [UIThreadOnly]
     public void Mount(Component root)
     {
+        var mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Mount));
         if (_disposed) throw new ObjectDisposedException(nameof(ReactorWindow));
         ArgumentNullException.ThrowIfNull(root);
-        _host.Mount(root);
+        _host.Mount(root, mountSite);
     }
 
     /// <summary>Mount a new render-function root. UI-thread only.</summary>
     [UIThreadOnly]
     public void Mount(Func<RenderContext, Element> render)
     {
+        var mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Mount));
         if (_disposed) throw new ObjectDisposedException(nameof(ReactorWindow));
         ArgumentNullException.ThrowIfNull(render);
-        _host.Mount(render);
+        _host.Mount(render, mountSite);
     }
 
     // ── teardown ──────────────────────────────────────────────────────
