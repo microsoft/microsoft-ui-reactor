@@ -291,6 +291,16 @@ internal static class HostDiagnosticsFixtures
                 var remounted = ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.ReactorWindow, win));
                 H.Check("HostDiagWin_RemountedRoot", remounted?.RootComponentType == typeof(IslandRoot));
 
+                // A render-function remount on top of a component root: ReactorHost keeps
+                // rendering the component (pre-existing behaviour), so the snapshot must keep
+                // describing the component — its type AND its mount site — not the ignored
+                // render function.
+                win.Mount(static _ => TextBlock("hostdiag-ignored-render"));
+                await win.Host.WaitForIdleAsync();
+                var afterRender = ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.ReactorWindow, win));
+                H.Check("HostDiagWin_IgnoredRenderRemountKeepsComponentRoot",
+                    afterRender?.RootComponentType == typeof(IslandRoot) && afterRender.RootRenderFunction is null);
+
 #if REACTOR_SOURCEMAP
                 H.Check("HostDiagWin_OpenWindowSite",
                     info.MountSite is { } site
@@ -300,10 +310,14 @@ internal static class HostDiagnosticsFixtures
                 H.Check("HostDiagWin_RemountSite",
                     remounted?.MountSite?.LineNumber == remountLine,
                     $"site={remounted?.MountSite?.ToShortString() ?? "null"} expected line {remountLine}");
+                H.Check("HostDiagWin_IgnoredRenderRemountKeepsComponentSite",
+                    afterRender?.MountSite?.LineNumber == remountLine,
+                    $"site={afterRender?.MountSite?.ToShortString() ?? "null"} expected line {remountLine}");
 #else
                 _ = openLine; _ = remountLine;
                 H.Skip("HostDiagWin_OpenWindowSite", SkipReason);
                 H.Skip("HostDiagWin_RemountSite", SkipReason);
+                H.Skip("HostDiagWin_IgnoredRenderRemountKeepsComponentSite", SkipReason);
 #endif
             }
             finally
