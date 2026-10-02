@@ -1063,9 +1063,15 @@ public sealed class ReactorHost : IDisposable
         // Issue #1291 — the app's handler (host override, else the app-wide default) may
         // replace the built-in panel, or ask to propagate.
         var error = new RenderError(ex, source, componentName, isHostLevel: true);
+        var rerender = _rerenderAction ??= () => RequestRender();
         var (content, tree, propagate) = RenderErrorDispatch.BuildHostFallback(
             EffectiveRenderErrorHandler, error, _logger,
-            element => _reconciler.Reconcile(_currentTree, element, _currentControl, _rerenderAction ??= () => RequestRender()));
+            install: element => _reconciler.Reconcile(_currentTree, element, _currentControl, rerender),
+            releaseCurrent: () =>
+            {
+                if (_currentTree is not null)
+                    _reconciler.Reconcile(_currentTree, null, _currentControl, rerender);
+            });
         SetErrorContent(content, tree);
         // Nothing is shown where the failure happened. Returns only when the app's
         // unhandled-exception callback handled it; otherwise rethrows.

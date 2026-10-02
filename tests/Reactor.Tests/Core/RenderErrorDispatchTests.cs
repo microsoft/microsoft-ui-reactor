@@ -437,7 +437,7 @@ public class RenderErrorDispatchTests
     }
 
     [Fact]
-    public void RunCleanups_A_Handler_Removed_Mid_Disposal_Lets_The_Failure_Escape_After_Draining()
+    public void RunCleanups_A_Handler_Removed_Mid_Disposal_Lets_The_Next_Failure_Escape_Immediately()
     {
         bool lastRan = false;
         RenderErrorHandler? current = null;
@@ -449,11 +449,32 @@ public class RenderErrorDispatchTests
             () => lastRan = true);
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pending = null;
 
-        using (RenderErrorDispatch.EnterPropagationScope())
-            RenderErrorDispatch.RunCleanups(ctx, () => current, "Probe", isHostLevel: true, logger: null, ref pending);
+        var escaped = Assert.Throws<InvalidOperationException>(() =>
+            RenderErrorDispatch.RunCleanups(ctx, () => current, "Probe", isHostLevel: true, logger: null, ref pending));
 
+        // No handler when it failed: the pre-#1291 outcome.
+        Assert.Equal("after removal", escaped.Message);
+        Assert.False(lastRan);
+    }
+
+    [Fact]
+    public void RunCleanups_A_Handler_Installed_By_An_Earlier_Cleanup_Handles_A_Later_Failure()
+    {
+        var log = new List<string>();
+        RenderErrorHandler? current = null;
+        RenderErrorHandler installed = e => { log.Add(e.Exception.Message); return null; };
+        bool lastRan = false;
+        var ctx = ContextWithCleanups(
+            () => current = installed,
+            () => throw new InvalidOperationException("after install"),
+            () => lastRan = true);
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pending = null;
+
+        RenderErrorDispatch.RunCleanups(ctx, () => current, "Probe", isHostLevel: true, logger: null, ref pending);
+
+        Assert.Equal(new[] { "after install" }, log);
         Assert.True(lastRan);
-        Assert.Equal("after removal", pending?.SourceException.Message);
+        Assert.Null(pending);
     }
 
     // ── WindowSpec ───────────────────────────────────────────────────────────

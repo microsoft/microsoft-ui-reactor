@@ -65,6 +65,14 @@ internal static class RenderErrorHandlerFixtures
         }
     }
 
+    // Throws the same exception instance on every render.
+    private sealed class SameInstanceThrower : Component
+    {
+        public static readonly InvalidOperationException Instance = new("same instance boom");
+
+        public override Element Render() => throw Instance;
+    }
+
     // Counts live instances via mount/unmount effects.
     private sealed class CountingFallback : Component
     {
@@ -798,6 +806,67 @@ internal static class RenderErrorHandlerFixtures
     }
 
     // ── Host fallback lifecycle ─────────────────────────────────────────────
+
+    // Outcomes that show no Reactor tree (a handled Propagate(), a throwing handler) still
+    // unmount the tree they replace, so its components and effect cleanups are not retained.
+    internal class HostFallback_NoTreeOutcomesReleaseCurrentTree(Harness h) : SelfTestFixtureBase(h)
+    {
+        private async Task<int> CleanupRunsAfterFailure(string label, RenderErrorHandler handler)
+        {
+            CleanupFlagComponent.CleanupRuns = 0;
+            bool shouldThrow = false;
+            var host = H.CreateHost();
+            host.RenderErrorHandler = handler;
+            host.Mount(_ => shouldThrow ? throw new InvalidOperationException("release boom") : VStack(Component<CleanupFlagComponent>()));
+            await Harness.Render();
+            shouldThrow = true;
+            host.RequestRender();
+            await Harness.Render();
+            int runs = CleanupFlagComponent.CleanupRuns;
+
+            // Recovery mounts a fresh tree; the released one is not unmounted a second time.
+            shouldThrow = false;
+            host.RequestRender();
+            await Harness.Render();
+            H.Check($"RenderErrorHandler_Release_{label}_RecoveryNoDoubleUnmount", CleanupFlagComponent.CleanupRuns == runs
+                && H.FindText("CleanupFlagChild") is not null, $"runs={CleanupFlagComponent.CleanupRuns}");
+            return runs;
+        }
+
+        public override Task RunAsync() => WithUnhandledCallback(_ => true, async () =>
+        {
+            int afterHandledPropagate = await CleanupRunsAfterFailure("HandledPropagate", e => { e.Propagate(); return null; });
+            H.Check("RenderErrorHandler_Release_HandledPropagate", afterHandledPropagate == 1, $"runs={afterHandledPropagate}");
+
+            int afterThrowingHandler = await CleanupRunsAfterFailure("ThrowingHandler", _ => throw new InvalidOperationException("handler bug"));
+            H.Check("RenderErrorHandler_Release_ThrowingHandler", afterThrowingHandler == 1, $"runs={afterThrowingHandler}");
+        });
+    }
+
+    // A standalone Reconciler (no host render loop) is its own outermost frame: a declined
+    // propagation must not leave markers that make a later throw of the same instance
+    // bypass the handler.
+    internal class StandaloneReconcile_DoesNotLeakPropagation(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithUnhandledCallback(_ => false, () =>
+        {
+            int handled = 0;
+            return WithDefault(e => { handled++; e.Propagate(); return null; }, () =>
+            {
+                for (int pass = 1; pass <= 2; pass++)
+                {
+                    using var reconciler = new Reconciler();
+                    Exception? escaped = null;
+                    try { reconciler.Reconcile(null, VStack(Component<SameInstanceThrower>()), null, () => { }); }
+                    catch (InvalidOperationException ex) { escaped = ex; }
+                    H.Check($"RenderErrorHandler_Standalone_Pass{pass}_Propagated",
+                        ReferenceEquals(escaped, SameInstanceThrower.Instance), escaped?.Message ?? "(nothing escaped)");
+                }
+                H.Check("RenderErrorHandler_Standalone_HandlerSawBothPasses", handled == 2, $"handled={handled}");
+                return Task.CompletedTask;
+            });
+        });
+    }
 
     // Repeated host-level failures reuse the fallback (reconciled in place) instead of
     // mounting a fresh one each time, and the good tree it replaces is unmounted, not leaked.

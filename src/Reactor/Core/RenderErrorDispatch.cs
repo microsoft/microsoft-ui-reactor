@@ -80,16 +80,23 @@ internal static class RenderErrorDispatch
 
     /// <summary>
     /// Saves the current propagation marker and starts a fresh one; disposing restores the
-    /// saved marker. See <see cref="t_propagating"/>.
+    /// saved marker. See <see cref="t_propagating"/>. <c>default</c> is an inactive scope
+    /// whose disposal does nothing, for callers that only sometimes open one.
     /// </summary>
     internal readonly struct PropagationScope : IDisposable
     {
         private readonly Exception? _outer;
+        private readonly bool _active;
 
-        internal PropagationScope(Exception? outer) => _outer = outer;
+        internal PropagationScope(Exception? outer)
+        {
+            _outer = outer;
+            _active = true;
+        }
 
         public void Dispose()
         {
+            if (!_active) return;
             t_propagating = _outer;
             t_scopeDepth--;
         }
@@ -97,8 +104,8 @@ internal static class RenderErrorDispatch
 
     /// <summary>
     /// Opens a propagation scope for an outermost Reactor frame — the render loop, host
-    /// <c>Dispose</c>, or <c>Reconciler.Dispose</c>. Dispose the result in a <c>finally</c>
-    /// (or a <c>using</c>).
+    /// <c>Dispose</c>, a top-level <c>Reconciler.Reconcile</c>, or <c>Reconciler.Dispose</c>.
+    /// Dispose the result in a <c>finally</c> (or a <c>using</c>).
     /// </summary>
     internal static PropagationScope EnterPropagationScope()
     {
@@ -185,12 +192,19 @@ internal static class RenderErrorDispatch
     /// current tree so the next render reconciles away from it). <paramref name="install"/>
     /// reconciles the guarded fallback against the host's current tree, so a fallback shown
     /// for a repeated failure updates the previous one in place, and the replaced tree is
-    /// unmounted (running its cleanups) rather than leaked. When the outcome is
+    /// unmounted (running its cleanups) rather than leaked. When the handler's outcome shows
+    /// no Reactor tree (it propagated, or it threw), <paramref name="releaseCurrent"/>
+    /// unmounts the current tree for the same reason. When the outcome is
     /// <see cref="Outcome.Propagate"/>, the content is null and the caller must install it
     /// before calling <see cref="RaiseUnhandled"/>.
     /// </summary>
+    /// <remarks>
+    /// With no handler (or one returning <c>null</c>) the built-in panel replaces the content
+    /// exactly as before #1291, current tree included.
+    /// </remarks>
     internal static (UIElement? Content, Element? Tree, bool Propagate) BuildHostFallback(
-        RenderErrorHandler? handler, RenderError error, ILogger? logger, Func<Element, UIElement?> install)
+        RenderErrorHandler? handler, RenderError error, ILogger? logger,
+        Func<Element, UIElement?> install, Action releaseCurrent)
     {
         switch (InvokeHandler(handler, error, logger, out var appElement))
         {
@@ -202,15 +216,32 @@ internal static class RenderErrorDispatch
                 }
                 catch (Exception mountEx) when (mountEx is not OutOfMemoryException and not StackOverflowException)
                 {
+                    // The reconcile against the current tree failed part-way, so that tree's
+                    // state is unknown; it is not unmounted a second time.
                     logger?.LogError(mountEx, "RenderErrorHandler fallback failed to mount; showing the neutral fallback");
                     return (ErrorFallback.BuildSafePanel(), null, false);
                 }
             case Outcome.HandlerFailed:
+                Release(releaseCurrent, logger);
                 return (ErrorFallback.BuildSafePanel(), null, false);
             case Outcome.Propagate:
+                Release(releaseCurrent, logger);
                 return (null, null, true);
             default:
                 return (ErrorFallback.BuildPanel(error.Exception), null, false);
+        }
+    }
+
+    private static void Release(Action releaseCurrent, ILogger? logger)
+    {
+        try
+        {
+            releaseCurrent();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException && !IsPropagating(ex))
+        {
+            // Best effort: the error being handled matters more than a failed teardown.
+            logger?.LogError(ex, "Unmounting the failed tree threw; continuing with the render-error outcome");
         }
     }
 
@@ -237,37 +268,38 @@ internal static class RenderErrorDispatch
     }
 
     /// <summary>
-    /// Runs <paramref name="context"/>'s cleanups. With no handler when disposal reaches this
-    /// context, this is the unchanged <see cref="RenderContext.RunCleanups()"/> (the first
-    /// throw escapes). Otherwise every cleanup runs and the first propagation is kept in
-    /// <paramref name="pending"/> for the caller to rethrow after disposal. The handler is
-    /// resolved for each failure, so a cleanup that sets or clears it affects later ones.
+    /// Runs <paramref name="context"/>'s cleanups during disposal. Every cleanup runs; the
+    /// handler is resolved when each one fails, so a cleanup that sets or clears it affects
+    /// the later ones. A failure with no handler at that moment escapes immediately, as
+    /// before #1291. Otherwise it is reported, and the first propagation is kept in
+    /// <paramref name="pending"/> for the caller to rethrow after disposal.
     /// </summary>
     internal static void RunCleanups(
         RenderContext? context, Func<RenderErrorHandler?> resolveHandler, string? componentName, bool isHostLevel,
         ILogger? logger, ref ExceptionDispatchInfo? pending)
     {
         if (context is null) return;
-        if (resolveHandler() is null)
-        {
-            context.RunCleanups();
-            return;
-        }
         ExceptionDispatchInfo? first = null;
         context.RunCleanupsIsolated(ex =>
         {
             ExceptionDispatchInfo? propagation;
             if (IsPropagating(ex))
+            {
                 // Already declined by the app in a nested frame the cleanup started: keep it
                 // going out instead of reporting it again as this cleanup's own failure.
                 propagation = ContinuePropagation(ex);
+            }
             else if (resolveHandler() is { } handler)
+            {
                 // Report every failure; only the first propagation is rethrown.
                 propagation = ReportCleanup(handler, ex, componentName, isHostLevel, logger);
+            }
             else
-                // The handler was removed mid-disposal: no-handler outcome, the exception
-                // escapes, after the remaining cleanups have run.
-                propagation = ContinuePropagation(ex);
+            {
+                // No handler when this cleanup failed: the pre-#1291 outcome, it escapes now.
+                ExceptionDispatchInfo.Capture(ex).Throw();
+                return;
+            }
             first ??= propagation;
         });
         pending ??= first;

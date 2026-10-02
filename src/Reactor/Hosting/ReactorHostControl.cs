@@ -689,9 +689,15 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
         // Issue #1291 — see ReactorHost.ShowErrorFallback.
         var error = new RenderError(ex, source, componentName, isHostLevel: true);
+        var rerender = _requestRenderAction ??= RequestRender;
         var (content, tree, propagate) = RenderErrorDispatch.BuildHostFallback(
             EffectiveRenderErrorHandler, error, _logger,
-            element => _reconciler.Reconcile(_currentTree, element, _currentControl, _requestRenderAction ??= RequestRender));
+            install: element => _reconciler.Reconcile(_currentTree, element, _currentControl, rerender),
+            releaseCurrent: () =>
+            {
+                if (_currentTree is not null)
+                    _reconciler.Reconcile(_currentTree, null, _currentControl, rerender);
+            });
         SetErrorContent(content, tree);
         if (propagate)
             RenderErrorDispatch.RaiseUnhandled(ex);
