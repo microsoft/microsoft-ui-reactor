@@ -256,7 +256,7 @@ Expect change. Every line of code in this project is fair game. The DSL syntax m
 
 The idea isn't tied to C#. Over in [windows-rs](https://github.com/microsoft/windows-rs),
 the Rust for Windows project, the same experiment is running in Rust:
-[**windows-reactor**](https://github.com/microsoft/windows-rs/blob/master/docs/crates/windows-reactor.md)
+[**windows-reactor**](https://github.com/microsoft/windows-rs/blob/HEAD/docs/crates/windows-reactor.md)
 is a declarative WinUI library where components own their state, controls send
 typed messages back, and only the WinUI controls that changed get updated. It's a
 separate library with its own model, available on

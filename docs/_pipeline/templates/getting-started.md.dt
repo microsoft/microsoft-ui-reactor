@@ -45,10 +45,11 @@ No XAML, no data binding, no view models. You describe your UI as a function of
 state and Reactor keeps the screen in sync.
 
 > **Prefer Rust?** The same declarative WinUI idea is available in Rust through
-> [windows-reactor](https://github.com/microsoft/windows-rs/blob/master/docs/crates/windows-reactor.md),
+> [windows-reactor](https://github.com/microsoft/windows-rs/blob/HEAD/docs/crates/windows-reactor.md),
 > a separate library in [windows-rs](https://github.com/microsoft/windows-rs) built
-> around components and typed messages. This guide covers Microsoft.UI.Reactor,
-> the C# library.
+> around components and typed messages, available on
+> [crates.io](https://crates.io/crates/windows-reactor). This guide covers
+> Microsoft.UI.Reactor, the C# library.
 
 ## Setup
 
