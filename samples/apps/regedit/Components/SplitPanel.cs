@@ -50,7 +50,12 @@ internal static class CursorBorderRegistration
                 else if (existing is null)
                     panel.Children.Insert(0, next);
                 else if (!ReferenceEquals(next, existing))
-                    panel.Children[0] = next;
+                {
+                    // RemoveAt + Insert rather than the indexer: WinUI's Children[i] = x doesn't
+                    // always fully disconnect the old element from the panel.
+                    panel.Children.RemoveAt(0);
+                    panel.Children.Insert(0, next);
+                }
                 panel.Tag = newEl;
                 return null;
             });
