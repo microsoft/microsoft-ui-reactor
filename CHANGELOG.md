@@ -40,6 +40,18 @@ Conventions for contributors:
   now declares its counter host in markup, and `samples/InteropFirst` declares its host
   with `x:Name` (issue #1324).
 
+- **`ReactorHostControl.IsIdle` / `WaitForIdleAsync(int maxYields = 50)`**, matching
+  `ReactorHost`. Await it after a `setState` or `Mount` to read a XAML island's realized
+  tree back once its render loop settles, instead of waiting on wall-clock time. Both
+  hosts now share one idle-wait loop.
+
+- **`Theme.NotifyResourcesChanged()`** for runtime resource edits (a brand dictionary
+  swap, a replaced brush in `Application.Current.Resources`, an inspector's live
+  resource edit). Reactor caches each resolved `(key, theme)` brush and only cleared
+  that cache on a theme or palette change, so such an edit was invisible to `ThemeRef`
+  overrides and `ThemeRef.Resolve`. The call clears the cache and re-renders every
+  live host past memoization. Callable from any thread.
+
 - **Getting Started documents the single-file path.** A Reactor app does not need
   a `.csproj`: .NET 10 runs a lone `.cs` file whose `#:package` / `#:property`
   header supplies what a project file otherwise would. The header also references

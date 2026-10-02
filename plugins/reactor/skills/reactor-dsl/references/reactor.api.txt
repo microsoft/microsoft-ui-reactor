@@ -4604,10 +4604,12 @@ Func<Component> ComponentFactory { get; set; }
 Reconciler Reconciler { get; }
 RenderStats Stats { get; }
 Type ComponentType { get; set; }
+bool IsIdle { get; }
 object Props { get; set; }
 Dispose() → void
 Mount(Component component) → void
 Mount(Func<RenderContext, Element> renderFunc) → void
+WaitForIdleAsync(int maxYields = 50) → Task
 
 ### static class ReactorSourceMap
 bool Enabled { get; set; }
@@ -5820,6 +5822,7 @@ GetHashCode() → int
 ToString() → string
 
 ### static class Theme
+NotifyResourcesChanged() → void
 Ref(string resourceKey) → ThemeRef
 
 ### struct ThemeRef

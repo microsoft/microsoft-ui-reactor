@@ -54,6 +54,16 @@ public readonly record struct ThemeRef(string ResourceKey)
     /// </summary>
     internal static void InvalidateResolutionCache() => s_resolutionCache.Clear();
 
+    /// <summary>Test seam: number of cached resolutions.</summary>
+    internal static int ResolutionCacheCountForTest => s_resolutionCache.Count;
+
+    /// <summary>
+    /// Test seam: plants a cache entry. Headless tests cannot construct a <see cref="Brush"/>,
+    /// so this is the only way to prove an invalidation actually empties the cache.
+    /// </summary>
+    internal static void SeedResolutionCacheForTest(string resourceKey, string themeName)
+        => s_resolutionCache[(resourceKey, themeName)] = null;
+
     private static Brush? ResolveForTheme(string resourceKey, string themeName)
     {
         var resources = Application.Current?.Resources;
@@ -217,4 +227,33 @@ public static class Theme
     /// (e.g., defined in XamlControlsResources or added via app resources).
     /// </summary>
     public static ThemeRef Ref(string resourceKey) => new(resourceKey);
+
+    /// <summary>
+    /// Tells Reactor that application resources were edited at runtime, so theme
+    /// references resolve again and every live host re-renders with the new values.
+    /// </summary>
+    /// <remarks>
+    /// <para>Call it after changing <c>Application.Current.Resources</c> in a way that is
+    /// <em>not</em> a theme change — replacing a brush in a <c>ThemeDictionaries</c> entry,
+    /// merging or removing a brand dictionary, or an inspector's live resource edit. Reactor
+    /// caches each resolved <c>(resource key, theme)</c> brush and only drops that cache
+    /// when the effective theme or the system palette changes, so without this call such an
+    /// edit is not seen. Not needed for a Light/Dark/high-contrast switch
+    /// (<c>RequestedTheme</c>) or for mutating an existing brush's <c>Color</c>; both are
+    /// already picked up.</para>
+    /// <para>What it does: clears the resolution cache behind <see cref="ThemeRef"/>, then
+    /// asks every live <see cref="Microsoft.UI.Reactor.Hosting.ReactorHost"/> and
+    /// <see cref="Microsoft.UI.Reactor.Hosting.ReactorHostControl"/> for a full re-render that
+    /// bypasses component memoization (as hot reload does). That re-resolves
+    /// <c>.Resources(...)</c> theme overrides, re-applies <see cref="ThemeRef"/> modifiers
+    /// such as <c>.Background(Theme.Accent)</c>, and re-runs any
+    /// <see cref="ThemeRef.Resolve(string, bool)"/> call in a <c>Render</c> method.</para>
+    /// <para>Callable from any thread; the re-renders are scheduled on each host's UI
+    /// thread. Await a host's <c>WaitForIdleAsync()</c> to observe the result.</para>
+    /// </remarks>
+    public static void NotifyResourcesChanged()
+    {
+        ThemeRef.InvalidateResolutionCache();
+        ThemeResourceListeners.NotifyAll();
+    }
 }

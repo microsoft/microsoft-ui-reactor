@@ -41,7 +41,7 @@ namespace Microsoft.UI.Reactor.Hosting;
 ///   - Error boundary with fallback UI
 ///   - Clean lifecycle via Loaded/Unloaded
 /// </summary>
-public sealed partial class ReactorHostControl : ContentControl, IDisposable
+public sealed partial class ReactorHostControl : ContentControl, IDisposable, IThemeResourceListener
 {
 #pragma warning disable CS0414 // Design constant for render-loop limiting; wiring pending
     private static readonly int MaxRenderIterations = 50;
@@ -214,8 +214,20 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
 
+        ThemeResourceListeners.Register(this);
+
         if (component is not null)
             Mount(component);
+    }
+
+    // Theme.NotifyResourcesChanged: re-render past memoization (the same reconciler
+    // signal hot reload uses), so every theme-resolved value is resolved again.
+    // ForceFullRenderPending is volatile and RequestRender is thread-safe.
+    void IThemeResourceListener.OnThemeResourcesChanged()
+    {
+        if (_disposed) return;
+        _reconciler.ForceFullRenderPending = true;
+        RequestRender();
     }
 
     private bool AnyOverlayFlagOn => ReactorFeatureFlags.HighlightReconcileChanges;
@@ -429,6 +441,34 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, _renderLoopHandler ??= RenderLoop);
         }
     }
+
+    /// <summary>
+    /// True when the render loop has no pending or in-flight render and no
+    /// re-render queued for the next tick — same contract as
+    /// <see cref="ReactorHost.IsIdle"/>. Safe to read from any thread. A disposed
+    /// control reports idle: it will never render again.
+    /// </summary>
+    public bool IsIdle =>
+        _disposed ||
+        (Volatile.Read(ref _renderPending) == 0 &&
+         !_isRendering &&
+         !_needsRerender);
+
+    /// <summary>
+    /// Completes once the render loop is idle (see <see cref="IsIdle"/>) — after a
+    /// <c>setState</c>, a <see cref="Mount(Component)"/>, or any other change that
+    /// schedules a render, await this before reading the realized tree back. Yields to
+    /// the dispatcher at Low priority so Normal-priority renders and Low-priority
+    /// re-renders all complete first; gives up after <paramref name="maxYields"/>
+    /// yields, or immediately if the dispatcher is shutting down. Same contract as
+    /// <see cref="ReactorHost.WaitForIdleAsync"/>; callable from any thread.
+    /// </summary>
+    public Task WaitForIdleAsync(int maxYields = 50)
+        => RenderLoopIdle.WaitAsync(
+            () => IsIdle,
+            _dispatcherQueue.TryEnqueue,
+            maxYields,
+            () => $"renderPending={_renderPending} isRendering={_isRendering} needsRerender={_needsRerender}");
 
     /// <summary>
     /// Hot Reload state migration entry point (spec 049 §6). Mirror of
@@ -792,6 +832,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+
+        ThemeResourceListeners.Unregister(this);
 
         Loaded -= OnLoaded;
         Unloaded -= OnUnloaded;
