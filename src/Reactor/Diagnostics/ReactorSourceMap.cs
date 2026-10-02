@@ -31,7 +31,7 @@ namespace Microsoft.UI.Reactor.Diagnostics;
 /// pays. It is public-settable so a host that embeds its own inspector (or a
 /// test) can opt in without going through the CLI.</para>
 /// </summary>
-public static class ReactorSourceMap
+public static partial class ReactorSourceMap
 {
     /// <summary>
     /// Seeded from the <c>REACTOR_SOURCEMAP</c> environment variable so a

@@ -164,6 +164,70 @@ public sealed partial class Reconciler : IDisposable
     public int DebugUIElementsModified;
     private int _debugReconcileDepth;
 
+    // ── ReactorDiagnostics.SourceProperty publishing (diagnostics mode only) ─────
+    // Every touch of these is behind ReactorFeatures.DevtoolsSupported && IsEnabled, so
+    // a build without Reactor.DevtoolsSupport trims it and a Release JIT app folds it away.
+
+    /// <summary>The component whose render output is being mounted / reconciled right now.</summary>
+    private string? _diagOwner;
+
+    /// <summary>
+    /// Owner name for the host's root render output (the root component, or
+    /// <c>FuncElement</c> for a root render function). Set by the host before each pass.
+    /// </summary>
+    internal string? DiagnosticRootOwner { get; set; }
+
+    /// <summary>
+    /// Owner for elements realized now: the component being rendered, else the root while a
+    /// reconcile pass is running. Outside a pass (an ItemsRepeater realizing a row during
+    /// layout) the owner is unknown and the field is omitted rather than guessed.
+    /// </summary>
+    private string? CurrentDiagnosticOwner => _diagOwner ?? (_debugReconcileDepth > 0 ? DiagnosticRootOwner : null);
+
+    private void PublishSource(UIElement control, Element element)
+    {
+        // A KeyedMemoElement realizes its factory output, which published itself.
+        if (element is KeyedMemoElement) return;
+        Component? component = element is ComponentElement && _componentNodes.TryGetValue(control, out var node)
+            ? node.Component
+            : null;
+        Diagnostics.ReactorSourcePublisher.Publish(control, element, CurrentDiagnosticOwner, component);
+    }
+
+    /// <summary>
+    /// Shallow-skip refresh: the element was skipped, so only its call site can have moved.
+    /// The control kept its place, so it keeps the owner it was last published with.
+    /// </summary>
+    internal static void PublishSourceOnSkip(UIElement control, Element newEl)
+        => Diagnostics.ReactorSourcePublisher.Publish(control, newEl, Diagnostics.ReactorSourcePublisher.LastOwner(control));
+
+    /// <summary>Host hook: describes the root content control, naming the host's root component.</summary>
+    internal void PublishRootSource(UIElement? control, Element tree, string rootName, string? rootHooks)
+    {
+        if (control is null || tree is KeyedMemoElement) return;
+        Component? component = tree is ComponentElement && _componentNodes.TryGetValue(control, out var node)
+            ? node.Component
+            : null;
+        Diagnostics.ReactorSourcePublisher.Publish(control, tree, rootName, component, rootName, rootHooks);
+    }
+
+    private UIElement? MountUnderOwner(Element element, Action requestRerender, string owner)
+    {
+        var previous = _diagOwner;
+        _diagOwner = owner;
+        try { return Mount(element, requestRerender); }
+        finally { _diagOwner = previous; }
+    }
+
+    private UIElement? ReconcileUnderOwner(
+        Element? oldElement, Element? newElement, UIElement? existing, Action requestRerender, string owner)
+    {
+        var previous = _diagOwner;
+        _diagOwner = owner;
+        try { return Reconcile(oldElement, newElement, existing, requestRerender); }
+        finally { _diagOwner = previous; }
+    }
+
     // Hot reload signal: when set, the next top-level Reconcile() pass bypasses
     // Component memo (props/deps equality) so updated method bodies are picked up
     // even when props are unchanged. Cleared at the start of that pass.
@@ -2314,7 +2378,10 @@ public sealed partial class Reconciler : IDisposable
         // Each component is wrapped in a Border as an identity anchor, so we
         // reconcile the child inside the wrapper, not the wrapper itself.
         var existingChild = (control as Border)?.Child;
-        var newControl = Reconcile(node.RenderedElement, newChildElement, existingChild, componentRerender);
+        var newControl = global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+            ? ReconcileUnderOwner(node.RenderedElement, newChildElement, existingChild, componentRerender,
+                Diagnostics.ReactorSourceFormat.ComponentName(node.Component, newEl))
+            : Reconcile(node.RenderedElement, newChildElement, existingChild, componentRerender);
         if (control is Border border)
         {
             if (newControl != existingChild)
@@ -3194,7 +3261,8 @@ public sealed partial class Reconciler : IDisposable
         // path's refresh.
         if (existingControl is FrameworkElement migratedFe)
             SetElementTagIfNeeded(migratedFe, newEl);
-
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
+            PublishSource(existingControl, newEl);
         Diagnostics.ReactorEventSource.Log.HotReloadStateMigrated(newType.FullName ?? newType.Name);
         return true;
     }

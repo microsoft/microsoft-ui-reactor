@@ -205,6 +205,21 @@ several calls on one line apart. It is `0` for a location built without one
 (`new SourceLocation(path, line)`). `ToString()` keeps the `file:line` shape,
 so read the column from the property.
 
+### Declared names and hook names
+
+The generator also records two static facts that an inspector cannot recover at runtime:
+
+- **Declared name.** `SourceLocation.DeclaredName` gives the identifier an element was assigned to, much like XAML's `x:Name`. It is the local, field or property for an initializer (`var title = TextBlock("x").Bold()` → `title`), the target of a simple assignment, or the member / local-function name of an expression body. Fluent modifier chains, parentheses, casts and both arms of a `?:` are looked through. Inline elements (arguments, collection items, a `return`) and a component's `Render() =>` body have no name.
+- **Hook names.** For each class component's `Render()` and each render function (`Memo(ctx => …)`, `RenderEachTime(ctx => …)`, a root `Mount(ctx => …)`), the generator records the hooks in call order. Each entry has the variable the hook's result went into (`var (count, setCount) = UseState(0)` → `count`) and its line. An unstored hook such as `UseEffect(...)` is listed under its method name. Inspectors read this as the `hooks=` field of `ReactorDiagnostics.SourceProperty`.
+
+Hook indices are `RenderContext` slots, which is what an inspector matches against at runtime. They are exact as long as every hook so far has a statically known slot count:
+
+- `UseState`, `UseReducer`, `UseRef`, `UseEffect`, `UseMemo`, `UseCallback` and `UseContext` take one slot each.
+- A custom hook written in the same project takes the slots of the hooks its straight-line body calls.
+- After a composite built-in (`UseCommand`, `UseResource`, the window hooks), a custom hook from another assembly, or a hook inside a branch or loop (a rules-of-hooks violation), the following indices are reported as `?`.
+
+Both tables describe the compiled build. Registering them costs one delegate per assembly at startup; they are built on first use. After a hot-reload edit moves a call, its name or hooks are reported as unknown rather than wrong.
+
 ### Helper methods and `[ReactorSourceTransparent]`
 
 By default a helper is attributed to *itself*. In

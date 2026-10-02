@@ -146,6 +146,39 @@ are only issued while the event is enabled, so subscribe with
 `ReactorTrace.Subscribe(..., EventLevel.Verbose, (EventKeywords)0x4000)` first.
 The payload carries no props, state values, keys or paths.
 
+### Inspector diagnostics on controls
+
+Out-of-process inspectors (WinUI DevTools, VS Live Property Explorer) read the visual tree
+through XamlDiagnostics, which cannot call into managed code. That matters most for Native
+AOT apps, which have no managed agent to load. Reactor therefore publishes what it knows about each control as a string attached
+property, `ReactorDiagnostics.SourceProperty` (`.ReactorSource` in XamlDiagnostics):
+
+```
+v=1|at=Pages/Main.cs:36:13|owner=Counter|element=Button|key=t1|name=incrementButton
+v=1|at=App.cs:46:9|owner=App|element=Component|mounts=Counter|hooks=0:count@36;1:density@37
+```
+
+| Field | Meaning |
+|---|---|
+| `at` | DSL call site `path:line[:column]`, relative to the project directory |
+| `rel` | `root` = `at` is relative to the solution root; `0` = file name only (file outside both) |
+| `owner` | Component whose render produced the control (`FuncElement` / `MemoElement` for function components) |
+| `element` | Element kind: `Button`, `TextBlock`, `Stack`, `Component`, … |
+| `mounts` | On a component's wrapper: the component it hosts |
+| `root` | On a host's root content: the host's root component |
+| `key` | The element's key |
+| `name` | The identifier the element was assigned to (`var title = TextBlock(…)` → `title`) |
+| `hooks` | On `mounts` / `root` controls: `slot:variable@line;…` (`?` once slots are not statically known) |
+
+Values escape `%` as `%25` and `|` as `%7C`. Readers ignore fields they do not know.
+
+**Gating.** Publishing needs both of these:
+
+- the `Reactor.DevtoolsSupport` build switch: on by default in Debug through `$(ReactorDiagnostics)`, and `-p:ReactorDiagnostics=true` for a Release / Native AOT build;
+- `REACTOR_DIAGNOSTICS=1` in the environment at launch.
+
+Otherwise nothing is written, and a trimmed or AOT build without the switch does not contain the publishing code at all. Like XAML's runtime source info, paths are never absolute developer paths. See the [threat model](../security/threat-model.md) §7.7.
+
 > **NativeAOT:** the .NET NativeAOT toolchain defaults the `EventSourceSupport`
 > feature switch to `false`, which compiles the whole `EventSource` surface out.
 > A NativeAOT-published app therefore emits none of these events — including

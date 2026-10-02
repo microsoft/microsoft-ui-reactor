@@ -116,6 +116,9 @@ public sealed partial class Reconciler
                 SetElementTag(tagFeSE, newEl);
             else if (CallSiteChangedOnSkip(oldEl, newEl) && control is FrameworkElement srcFeSE)
                 SetElementTag(srcFeSE, newEl);   // spec 010 — keep the reported line live
+            if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+                && CallSiteChangedOnSkip(oldEl, newEl))
+                PublishSourceOnSkip(control, newEl);
             if (newEl.ThemeBindings is not null && control is FrameworkElement thFeSE)
                 ApplyThemeBindings(thFeSE, newEl.ThemeBindings);
             // Re-resolve ThemeRef-based resource overrides on theme change, against the
@@ -246,6 +249,8 @@ public sealed partial class Reconciler
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
         // stale values (same principle as the flex attached-property fix).
         var target = result ?? control;
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
+            PublishSource(target, newEl);
 
         // Record the control for highlight overlay only when the element's own
         // WinUI properties were actually updated (not just children recursed).

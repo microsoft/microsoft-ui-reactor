@@ -134,6 +134,8 @@ public sealed partial class Reconciler
             if (ReactorFeatureFlags.HighlightReconcileChanges
                 && _highlightMounted is not null)
                 _highlightMounted.Add(control);
+            if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
+                PublishSource(control, element);
         }
 
         // Issue #345 — one-time debug warning for HStack/VStack collapsing to 0×0 inside a
@@ -895,7 +897,9 @@ public sealed partial class Reconciler
         }
         if (traceRendered && !renderReported)
             EmitComponentRendered(node, null, compElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
-        UIElement? childControl = Mount(childElement, componentRerender);
+        UIElement? childControl = global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+            ? MountUnderOwner(childElement, componentRerender, Diagnostics.ReactorSourceFormat.ComponentName(component, compElement))
+            : Mount(childElement, componentRerender);
 
         wrapper.Child = childControl;
         // Map the id only once the subtree has mounted: a descendant that throws into an
@@ -959,7 +963,9 @@ public sealed partial class Reconciler
         }
         if (traceRendered && !renderReported)
             EmitComponentRendered(node, null, funcElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
-        UIElement? childControl = Mount(childElement, componentRerender);
+        UIElement? childControl = global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+            ? MountUnderOwner(childElement, componentRerender, nameof(FuncElement))
+            : Mount(childElement, componentRerender);
 
         wrapper.Child = childControl;
         // Map the id only once the subtree has mounted: a descendant that throws into an
@@ -1024,7 +1030,9 @@ public sealed partial class Reconciler
         }
         if (traceRendered && !renderReported)
             EmitComponentRendered(node, null, memoElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
-        UIElement? childControl = Mount(childElement, componentRerender);
+        UIElement? childControl = global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+            ? MountUnderOwner(childElement, componentRerender, nameof(MemoElement))
+            : Mount(childElement, componentRerender);
 
         wrapper.Child = childControl;
         // Map the id only once the subtree has mounted: a descendant that throws into an

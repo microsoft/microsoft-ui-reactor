@@ -4551,8 +4551,11 @@ ToString() → string
 Register(IReactorDevtoolsHost host) → void
 
 ### static class ReactorDiagnostics
+DependencyProperty SourceProperty { get; }
 IReadOnlyList<KeyedListDiagnostic> RecentKeyedListWarnings { get; }
+bool IsSourcePublishingEnabled { get; }
 ClearRecentKeyedListWarnings() → void
+GetSource(DependencyObject element) → string
 
 ### static class ReactorDisplay
 DisplayInfo Primary { get; }
@@ -4612,9 +4615,16 @@ Mount(Func<RenderContext, Element> renderFunc) → void
 ### static class ReactorSourceMap
 bool Enabled { get; set; }
 GetSource(UIElement control) → SourceLocation?
+RegisterStaticInfo(Action<ReactorStaticInfoBuilder> fill) → void
 
 ### class ReactorSourceTransparentAttribute
 new()
+
+### class ReactorStaticInfoBuilder
+ComponentHooks(string componentTypeFullName, string hooks) → void
+Name(string filePath, int lineNumber, int columnNumber, string name) → void
+RenderFunctionHooks(string filePath, int lineNumber, int columnNumber, string hooks) → void
+Roots(string projectDirectory, string rootDirectory) → void
 
 ### static class ReactorTrace
 GetComponentControl(long componentId) → UIElement
@@ -5326,6 +5336,7 @@ new(string FilePath, int LineNumber)
 new(string FilePath, int LineNumber, int ColumnNumber)
 int ColumnNumber { get; init; }
 int LineNumber { get; init; }
+string DeclaredName { get; }
 string FilePath { get; init; }
 Deconstruct(ref string FilePath, ref int LineNumber) → void
 Equals(SourceLocation other) → bool

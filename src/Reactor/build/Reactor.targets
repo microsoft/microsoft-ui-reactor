@@ -65,6 +65,28 @@
     A PackageReference consumer imports this file after the project body, where
     $(Configuration) is always set, so the empty arm is inert for them.
   -->
+  <!--
+    Inspector diagnostics (ReactorDiagnostics.SourceProperty, read out of process through
+    XamlDiagnostics, which also works for Native AOT apps). Same posture as XAML's XBF line info:
+    on by default in Debug, an explicit opt-in in Release, and inert at runtime until the
+    process is launched with REACTOR_DIAGNOSTICS=1.
+
+    $(ReactorDiagnostics) = true turns the Reactor.DevtoolsSupport switch on (Trim="true",
+    so a build without it trims the publishing code) and implies ReactorSourceMap=true.
+    An explicit value always wins: -p:ReactorDiagnostics=false turns the Debug default off,
+    an explicit <ReactorSourceMap>false</ReactorSourceMap> is honoured, and when the value
+    is only the Debug DEFAULT a Reactor.DevtoolsSupport item the project declares itself
+    (Value="false") wins over it (see _NormalizeReactorDevtoolsSupportSwitch). winapp passes
+    -p:ReactorDiagnostics=true for a Release / Native AOT devtools run. Published call
+    sites are project-relative paths, but do not ship a build made with it.
+  -->
+  <PropertyGroup Condition="'$(ReactorDiagnostics)' == '' and ('$(Configuration)' == 'Debug' or '$(Configuration)' == '')">
+    <ReactorDiagnostics>true</ReactorDiagnostics>
+    <_ReactorDiagnosticsDefaulted>true</_ReactorDiagnosticsDefaulted>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(ReactorDiagnostics)' == 'true' and '$(ReactorSourceMap)' == ''">
+    <ReactorSourceMap>true</ReactorSourceMap>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(ReactorSourceMap)' == '' and ('$(Configuration)' == 'Debug' or '$(Configuration)' == '')">
     <ReactorSourceMap>true</ReactorSourceMap>
   </PropertyGroup>
@@ -104,6 +126,10 @@
   <ItemGroup>
     <!-- Lets the generator read $(ReactorSourceMap) via the analyzer config. -->
     <CompilerVisibleProperty Include="ReactorSourceMap" />
+    <!-- Lets the generator record where the project lives, so ReactorDiagnostics.SourceProperty
+         publishes call sites relative to it instead of as absolute developer paths. -->
+    <CompilerVisibleProperty Include="MSBuildProjectDirectory" />
+    <CompilerVisibleProperty Include="SolutionDir" />
   </ItemGroup>
 
   <ItemGroup>
@@ -138,14 +164,33 @@
                                           Value="true" Trim="true" />.
          SDK uses last-write-wins for duplicate Include keys on
          RuntimeHostConfigurationOption. -->
+    <!-- $(ReactorDiagnostics) (see the property group above) turns the switch on. When it is
+         only the Debug default and the project already declared the switch itself, the
+         project's own item is left to decide. Tagged so _NormalizeReactorDevtoolsSupportSwitch
+         can still tell it from a project-declared item when this file is imported first. -->
+    <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                    Value="true"
+                                    Trim="true"
+                                    ReactorDiagnosticsDefault="$(_ReactorDiagnosticsDefaulted)"
+                                    Condition="'$(ReactorDiagnostics)' == 'true' and ('$(_ReactorDiagnosticsDefaulted)' != 'true' or '@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport'))' == '')" />
     <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
                                     Value="false"
                                     Trim="true"
+                                    ReactorDiagnosticsDefault="true"
                                     Condition="'@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport'))' == ''" />
   </ItemGroup>
 
   <Target Name="_NormalizeReactorDevtoolsSupportSwitch"
           BeforeTargets="_GenerateRuntimeConfigurationFilesInputCache;GenerateBuildRuntimeConfigurationFiles;PrepareForILLink">
+    <!-- A project-declared Value="false" beats the Debug DEFAULT of $(ReactorDiagnostics)
+         (an explicit -p:ReactorDiagnostics=true is not tagged and still wins). -->
+    <PropertyGroup>
+      <_ReactorProjectDevtoolsOff Condition="'%(RuntimeHostConfigurationOption.Identity)' == 'Reactor.DevtoolsSupport' and '%(RuntimeHostConfigurationOption.Value)' == 'false' and '%(RuntimeHostConfigurationOption.ReactorDiagnosticsDefault)' != 'true'">true</_ReactorProjectDevtoolsOff>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(_ReactorProjectDevtoolsOff)' == 'true'">
+      <RuntimeHostConfigurationOption Remove="@(RuntimeHostConfigurationOption)"
+                                      Condition="'%(RuntimeHostConfigurationOption.Identity)' == 'Reactor.DevtoolsSupport' and '%(RuntimeHostConfigurationOption.ReactorDiagnosticsDefault)' == 'true' and '%(RuntimeHostConfigurationOption.Value)' == 'true'" />
+    </ItemGroup>
   <ItemGroup Condition="'@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport')->WithMetadataValue('Value', 'true'))' != ''">
       <RuntimeHostConfigurationOption Remove="Reactor.DevtoolsSupport" />
       <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"

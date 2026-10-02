@@ -194,6 +194,11 @@ public sealed class ReactorHost : IDisposable
         // Microsoft.Extensions.Logging call paths.
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
+        // Diagnostics mode needs call sites stamped from the very first render, so it
+        // implies source mapping (REACTOR_SOURCEMAP=1 alone remains the narrower opt-in).
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+            && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
         _window = window;
         _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
@@ -341,6 +346,12 @@ public sealed class ReactorHost : IDisposable
     // invoked, which only happens for apps that use charts.
     private void PushChartingState()
         => s_chartingBridge?.PushAccessibilityState(_isForcedColors, _isReducedMotion, _forcedColorsTheme);
+
+    /// <summary>Owner / root= name of this host's root component for ReactorDiagnostics.SourceProperty.</summary>
+    private string DiagnosticRootName()
+        => _rootComponent is not null
+            ? Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourceFormat.ComponentName(_rootComponent.GetType())
+            : nameof(FuncElement);
 
     /// <summary>
     /// The root's Render() threw: report the render (as a throwing child component's is)
@@ -682,6 +693,11 @@ public sealed class ReactorHost : IDisposable
                 ? new Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Scope(capturedAmbient)
                 : default;
 
+            // Guarded inline (not through a local) so ILC's scanner folds the switch and drops
+            // the publishing path entirely from a build without Reactor.DevtoolsSupport.
+            if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+                && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
+                _reconciler.DiagnosticRootOwner = DiagnosticRootName();
             UIElement? newControl;
             try
             {
@@ -756,6 +772,13 @@ public sealed class ReactorHost : IDisposable
 
             _currentControl = newControl;
             _currentTree = newTree;
+            if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+                && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
+                _reconciler.PublishRootSource(
+                    newControl, newTree, DiagnosticRootName(),
+                    _rootComponent is not null
+                        ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetComponentHooks(_rootComponent.GetType())
+                        : null);
             _rootDiagnostics.TrackContent(newControl);
             OwningWindow?.OnHostContentRendered(newControl);
 

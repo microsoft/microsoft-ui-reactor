@@ -330,6 +330,8 @@ internal static class SelfTestFixtureRegistry
         "ComponentRendered_ErrorBoundaryCaughtRendersAreReported",
         "ComponentRendered_RootHookOrderRetryIsHotReload",
         "ComponentRendered_RootMappingFollowsHostChanges",
+        // ReactorDiagnostics.SourceProperty published on every control in diagnostics mode
+        "ReactorSource_PublishedOnEveryControl",
         "FocusTrapContentDialog_ContainmentProbe",
         // Issue #487 — RichTextBlock + inline UI inside ScrollViewer scroll anchor
         "Issue487_ScrollOffsetRestoredAfterRunMutation",
@@ -2327,6 +2329,7 @@ internal static class SelfTestFixtureRegistry
         "ComponentRendered_ErrorBoundaryCaughtRendersAreReported" => new ComponentRendered_ErrorBoundaryCaughtRendersAreReported(harness),
         "ComponentRendered_RootHookOrderRetryIsHotReload" => new ComponentRendered_RootHookOrderRetryIsHotReload(harness),
         "ComponentRendered_RootMappingFollowsHostChanges" => new ComponentRendered_RootMappingFollowsHostChanges(harness),
+        "ReactorSource_PublishedOnEveryControl" => new ReactorSource_PublishedOnEveryControl(harness),
         "FocusTrapContentDialog_ContainmentProbe" => new FocusTrapContentDialog_ContainmentProbe(harness),
         "Issue487_ScrollOffsetRestoredAfterRunMutation" => new Issue487ScrollAnchorFixtures.Issue487_ScrollOffsetRestoredAfterRunMutation(harness),
         "Issue487_RepeatedMutationDoesNotDrift" => new Issue487ScrollAnchorFixtures.Issue487_RepeatedMutationDoesNotDrift(harness),

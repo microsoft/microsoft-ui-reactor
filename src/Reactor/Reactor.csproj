@@ -62,6 +62,9 @@
     <InternalsVisibleTo Include="Reactor.AppTests.Host" />
     <InternalsVisibleTo Include="Reactor.PackagedTests.Host" />
     <InternalsVisibleTo Include="Reactor.Fuzz" />
+    <!-- The source-map suite reads the generator's static tables (declared names, hook
+         names) through internal ReactorSourceMap lookups. -->
+    <InternalsVisibleTo Include="Reactor.SourceMap.Tests" />
     <!-- Spec 062 §7 Track B (B1/B2): the charting, docking, and markdown
          subsystems moved from this assembly into Reactor.Advanced. Each reaches
          the REST of core only through small, cleanly expressible seams:

@@ -197,6 +197,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // already-constructed controls.
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
+        // Diagnostics mode needs call sites stamped from the very first render, so it
+        // implies source mapping (REACTOR_SOURCEMAP=1 alone remains the narrower opt-in).
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+            && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         // A standalone ReactorHostControl has no ReactorApp bootstrap, so nothing else
         // sets ReactorApp.UIDispatcher. Cross-thread setState — including the re-render
@@ -221,6 +226,12 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     }
 
     private bool AnyOverlayFlagOn => ReactorFeatureFlags.HighlightReconcileChanges;
+
+    /// <summary>Owner / root= name of this host's root component for ReactorDiagnostics.SourceProperty.</summary>
+    private string DiagnosticRootName()
+        => _rootComponent is not null
+            ? Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourceFormat.ComponentName(_rootComponent.GetType())
+            : nameof(FuncElement);
 
     /// <summary>
     /// The root's Render() threw: report the render (as a throwing child component's is)
@@ -637,6 +648,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 ? new Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Scope(capturedAmbient)
                 : default;
 
+            // Guarded inline (not through a local) so ILC's scanner folds the switch and drops
+            // the publishing path entirely from a build without Reactor.DevtoolsSupport.
+            if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+                && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
+                _reconciler.DiagnosticRootOwner = DiagnosticRootName();
             UIElement? newControl;
             try
             {
@@ -691,6 +707,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
             _currentControl = newControl;
             _currentTree = newTree;
+            if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+                && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
+                _reconciler.PublishRootSource(
+                    newControl, newTree, DiagnosticRootName(),
+                    _rootComponent is not null
+                        ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetComponentHooks(_rootComponent.GetType())
+                        : null);
             _rootDiagnostics.TrackContent(newControl);
 
             // Spec 033 §6 — Backdrop modifier on the root tree is a no-op for
