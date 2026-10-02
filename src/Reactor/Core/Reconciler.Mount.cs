@@ -856,6 +856,9 @@ public sealed partial class Reconciler
         // changes propagate SelfTriggered up through all component ancestors.
         var componentRerender = CreateComponentRerender(node, requestRerender);
 
+        bool traceRendered = Diagnostics.ComponentRenderTrace.IsEnabled;
+        long renderedStart = traceRendered ? global::System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+
         Element childElement;
         try
         {
@@ -871,6 +874,8 @@ public sealed partial class Reconciler
             _logger?.LogError(ex, "Component Render() threw during mount: {ComponentName}", compElement.GetType().Name);
             childElement = ErrorFallback.BuildElement(ex);
         }
+        if (traceRendered)
+            EmitComponentRendered(node, wrapper, compElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
         UIElement? childControl = Mount(childElement, componentRerender);
 
         wrapper.Child = childControl;
@@ -895,6 +900,9 @@ public sealed partial class Reconciler
         // changes propagate SelfTriggered up through all component ancestors.
         var componentRerender = CreateComponentRerender(node, requestRerender);
 
+        bool traceRendered = Diagnostics.ComponentRenderTrace.IsEnabled;
+        long renderedStart = traceRendered ? global::System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+
         Element childElement;
         try
         {
@@ -910,6 +918,8 @@ public sealed partial class Reconciler
             _logger?.LogError(ex, "FuncComponent Render() threw during mount");
             childElement = ErrorFallback.BuildElement(ex);
         }
+        if (traceRendered)
+            EmitComponentRendered(node, wrapper, funcElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
         UIElement? childControl = Mount(childElement, componentRerender);
 
         wrapper.Child = childControl;
@@ -935,6 +945,9 @@ public sealed partial class Reconciler
         // changes propagate SelfTriggered up through all component ancestors.
         var componentRerender = CreateComponentRerender(node, requestRerender);
 
+        bool traceRendered = Diagnostics.ComponentRenderTrace.IsEnabled;
+        long renderedStart = traceRendered ? global::System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+
         Element childElement;
         try
         {
@@ -950,6 +963,8 @@ public sealed partial class Reconciler
             _logger?.LogError(ex, "MemoComponent Render() threw during mount");
             childElement = ErrorFallback.BuildElement(ex);
         }
+        if (traceRendered)
+            EmitComponentRendered(node, wrapper, memoElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
         UIElement? childControl = Mount(childElement, componentRerender);
 
         wrapper.Child = childControl;

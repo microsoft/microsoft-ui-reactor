@@ -58,6 +58,7 @@ internal sealed class ReactorEventSource : EventSource
         public const EventKeywords Theme = (EventKeywords)0x800;        // theme apply, bindings
         public const EventKeywords Shell = (EventKeywords)0x1000;       // JumpList/Tray/ThumbnailToolbar
         public const EventKeywords HotReload = (EventKeywords)0x2000;   // spec 049 — state migration across edits
+        public const EventKeywords RenderDetail = (EventKeywords)0x4000; // per-component ComponentRendered (reason + instance id) for inspectors
     }
     // </snippet:etw-keywords>
 
@@ -497,6 +498,43 @@ internal sealed class ReactorEventSource : EventSource
             WriteEvent(38, valueType ?? string.Empty);
     }
 
+    // ── Per-component render notification (devtools "highlight updates") ──
+    //
+    // One event per component Render() — mount, update and host root alike —
+    // carrying WHY it rendered. Verbose, and keyworded both Render (so an
+    // existing Render@Verbose capture sees it) and RenderDetail (so an
+    // inspector can take ONLY this event without enabling the Start/Stop and
+    // EffectsFlush spans, which cost a Stopwatch read each).
+    //
+    // PII: componentName is the component's CLR type name (developer-authored,
+    //      same string as ComponentRenderStart / ComponentUnmount). reason is a
+    //      fixed framework token (ComponentRenderTrace.Reasons). componentId is
+    //      a process-local counter. No props, state values, keys or paths.
+    //
+    // Written with WriteEventCore so an enabled listener costs no boxing and
+    // no params-array allocation per render.
+    [Event(40, Level = EventLevel.Verbose, Keywords = Keywords.Render | Keywords.RenderDetail,
+        Message = "Component rendered (component={componentName}, id={componentId}, reason={reason}, elapsedUs={elapsedMicroseconds})")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("ReflectionAnalysis", "IL2026:RequiresUnreferencedCode",
+        Justification = "Every payload field is a string or long; WriteEventCore only reflects over non-primitive payloads.")]
+    public unsafe void ComponentRendered(string componentName, long componentId, string reason, long elapsedMicroseconds)
+    {
+        if (!IsEnabled(EventLevel.Verbose, Keywords.Render | Keywords.RenderDetail)) return;
+
+        componentName ??= string.Empty;
+        reason ??= string.Empty;
+        fixed (char* pName = componentName)
+        fixed (char* pReason = reason)
+        {
+            EventData* data = stackalloc EventData[4];
+            data[0] = new EventData { DataPointer = (IntPtr)pName, Size = (componentName.Length + 1) * sizeof(char) };
+            data[1] = new EventData { DataPointer = (IntPtr)(&componentId), Size = sizeof(long) };
+            data[2] = new EventData { DataPointer = (IntPtr)pReason, Size = (reason.Length + 1) * sizeof(char) };
+            data[3] = new EventData { DataPointer = (IntPtr)(&elapsedMicroseconds), Size = sizeof(long) };
+            WriteEventCore(40, 4, data);
+        }
+    }
+
     // ── EventId allocation ──────────────────────────────────────────────
     //
     // Used: 1-15 (original surface), 16-17 (spec 044 Phase A generics),
@@ -504,6 +542,7 @@ internal sealed class ReactorEventSource : EventSource
     //       33-35 (spec 044 Phase C §4.2 navigation transition + deep link),
     //       36    (spec 045 §2.7 docking layout load fallback),
     //       37-38 (spec 049 §6 hot reload state migration),
-    //       39    (spec 044 §6.1 generic framework Warning).
-    // Next free EventId: 40.
+    //       39    (spec 044 §6.1 generic framework Warning),
+    //       40    (ComponentRendered — per-component render + reason).
+    // Next free EventId: 41.
 }

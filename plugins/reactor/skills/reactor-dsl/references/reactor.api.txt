@@ -4615,7 +4615,9 @@ GetSource(UIElement control) → SourceLocation?
 new()
 
 ### static class ReactorTrace
+GetComponentControl(long componentId) → UIElement
 Subscribe(Action<ReactorEvent> onEvent, EventLevel level = EventLevel.Verbose, EventKeywords keywords = EventKeywords.All) → IDisposable
+TryGetComponentId(UIElement control, ref long componentId) → bool
 
 ### class ReactorTrayIcon
 TrayIconSpec Spec { get; }

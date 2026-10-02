@@ -56,6 +56,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private global::Windows.UI.ViewManagement.UISettings? _uiSettings;
 
     private Component? _rootComponent;
+    // componentId of the root in ReactorEventSource.ComponentRendered; 0 until traced.
+    private long _rootDiagnosticId;
+    // False until the current root has rendered once (ComponentRendered reason "mount").
+    private bool _rootRendered;
     private Func<RenderContext, Element>? _rootRenderFunc;
     private RenderContext? _funcContext;
 
@@ -169,6 +173,34 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
     private bool AnyOverlayFlagOn => ReactorFeatureFlags.HighlightReconcileChanges;
 
+    /// <summary>A new (or disposed) root is a new component instance: fresh id, next render is "mount".</summary>
+    private void ForgetRootDiagnostics()
+    {
+        if (_rootDiagnosticId != 0)
+            Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderControls.Registry.Forget(_rootDiagnosticId, null);
+        _rootDiagnosticId = 0;
+        _rootRendered = false;
+    }
+
+    /// <summary>
+    /// The root's Render() threw: report the render (as a throwing child component's is)
+    /// and map its id to the error panel that now stands in for the root's content.
+    /// </summary>
+    private void ShowRootRenderError(Exception ex, bool hotReloadRender)
+    {
+        bool traced = TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
+        ShowErrorFallback(ex);
+        if (traced)
+            Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderControls.Registry.Track(
+                _rootDiagnosticId, _currentControl, mapControlToId: false);
+    }
+    /// <summary>ComponentRendered for the root; see <c>ComponentRenderControls.TraceRootRendered</c>.</summary>
+    private bool TraceRootRendered(bool hotReloadRender, double elapsedMilliseconds)
+        => Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderControls.TraceRootRendered(
+            ref _rootDiagnosticId, ref _rootRendered,
+            _rootComponent?.GetType().Name ?? nameof(FuncElement),
+            hotReloadRender, _reconciler.ForceFullRenderPending, elapsedMilliseconds);
+
     /// <summary>
     /// Mount a Component instance directly. Starts the render loop immediately.
     /// </summary>
@@ -177,6 +209,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _rootRenderFunc = null;
         _funcContext = null;
         _rootComponent = component;
+        ForgetRootDiagnostics();
         RequestRender();
     }
 
@@ -188,6 +221,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _rootComponent = null;
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
+        ForgetRootDiagnostics();
         RequestRender();
     }
 
@@ -399,7 +433,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 catch (Exception ex)
                 {
                     _logger?.LogError(ex, "Component Render() threw");
-                    ShowErrorFallback(ex);
+                    ShowRootRenderError(ex, hotReloadRender);
                     return;
                 }
             }
@@ -421,7 +455,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 catch (Exception ex)
                 {
                     _logger?.LogError(ex, "Function component threw");
-                    ShowErrorFallback(ex);
+                    ShowRootRenderError(ex, hotReloadRender);
                     return;
                 }
             }
@@ -429,6 +463,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             double treeBuildMs = _phaseSw.Elapsed.TotalMilliseconds;
 
             if (newTree is null) return;
+            bool traceRootRendered = TraceRootRendered(hotReloadRender, treeBuildMs);
 
             _phaseSw.Restart();
 
@@ -497,6 +532,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
             _currentControl = newControl;
             _currentTree = newTree;
+            if (traceRootRendered)
+                Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderControls.Registry.Track(
+                    _rootDiagnosticId, newControl, mapControlToId: false);
 
             // Spec 033 §6 — Backdrop modifier on the root tree is a no-op for
             // ReactorHostControl, which doesn't own its hosting Window. We
@@ -666,6 +704,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         }
 
         _rootComponent?.Context.RunCleanups();
+        ForgetRootDiagnostics();
         _funcContext?.RunCleanups();
         _reconciler.Dispose();
         _rootComponent = null;

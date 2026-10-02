@@ -566,6 +566,17 @@ public sealed partial class Reconciler : IDisposable
         /// pool, so no renter inherits them.
         /// </summary>
         public HashSet<string>? ManagedResourceKeys;
+
+        /// <summary>
+        /// <c>componentId</c> (<c>ReactorEventSource.ComponentRendered</c>) of the component
+        /// whose wrapper this control is; 0 when none. Backs
+        /// <c>ReactorTrace.TryGetComponentId</c>. Stored here rather than in a
+        /// <c>ConditionalWeakTable</c> for the same duplicate-RCW reason as
+        /// <see cref="EchoSuppressCount"/>: an inspector that reaches the control through
+        /// the visual tree may hold a different managed wrapper than the reconciler did.
+        /// Cleared when the component unmounts, before the wrapper can be pooled.
+        /// </summary>
+        public long ComponentDiagnosticId;
     }
 
     internal static class ReactorAttached
@@ -1860,6 +1871,23 @@ public sealed partial class Reconciler : IDisposable
     // without a matching decrement, which silently suppresses all later spans.
     internal int ReconcileTraceDepthForTests => _reconcileTraceDepth;
 
+    /// <summary>
+    /// Emits <c>ReactorEventSource.ComponentRendered</c> for a component node and keeps
+    /// the id → wrapper registry current. Only called when the event is enabled.
+    /// </summary>
+    private static void EmitComponentRendered(
+        ComponentNode node, UIElement wrapper, Element element, string reason, long startTimestamp)
+    {
+        long id = node.DiagnosticId;
+        if (id == 0) node.DiagnosticId = id = Diagnostics.ComponentRenderTrace.NextId();
+        Diagnostics.ComponentRenderControls.Registry.Track(id, wrapper, mapControlToId: true);
+        Diagnostics.ReactorEventSource.Log.ComponentRendered(
+            node.Component?.GetType().Name ?? element.GetType().Name,
+            id,
+            reason,
+            Diagnostics.ComponentRenderTrace.ElapsedMicroseconds(startTimestamp));
+    }
+
     private static void FlushEffectsTraced(RenderContext ctx, string? componentName)
     {
         // Fast path when the Render keyword is off: no Stopwatch, no event emit.
@@ -1963,6 +1991,8 @@ public sealed partial class Reconciler : IDisposable
         // inside ReconcileImperative; overwrite defensively regardless.
         _componentNodes.Remove(replacement);
         _componentNodes[realized] = freshNode;
+        if (freshNode.DiagnosticId != 0)
+            Diagnostics.ComponentRenderControls.Registry.Track(freshNode.DiagnosticId, realized, mapControlToId: true);
 
         // Move the fresh visual subtree into the parented wrapper. Assigning
         // Border.Child detaches it from `replacementWrapper` first (and detaches the
@@ -1989,6 +2019,11 @@ public sealed partial class Reconciler : IDisposable
         // ── Memo check: skip render if props/context unchanged and not self-triggered ──
         bool selfTriggered = node.SelfTriggered;
         node.SelfTriggered = false;
+
+        // ComponentRendered bookkeeping: what forced or let this render through. Plain
+        // locals holding interned constants, so they cost nothing when tracing is off.
+        bool forcedRender = _forceFullRenderActive;
+        string? memoReason = null;
 
         // Hot reload forces every component to re-run Render(); the new method
         // body lives only on the type, not in props/deps, so the memo gate
@@ -2020,6 +2055,11 @@ public sealed partial class Reconciler : IDisposable
 
                 bool contextChanged = HasConsumedContextChanged(node);
                 skipRender = !propsChanged && !contextChanged;
+                memoReason = !propsChanged
+                    ? Diagnostics.ComponentRenderTrace.Reasons.Context
+                    : node.Component is IPropsReceiver
+                        ? Diagnostics.ComponentRenderTrace.Reasons.Props
+                        : Diagnostics.ComponentRenderTrace.Reasons.Parent;
             }
             else if (node.Context is not null && newEl is MemoElement newMemo)
             {
@@ -2031,6 +2071,9 @@ public sealed partial class Reconciler : IDisposable
                     : oldDeps is null || newDeps is null || !DepsEqual(oldDeps, newDeps);
                 bool contextChanged = HasConsumedContextChanged(node);
                 skipRender = !depsChanged && !contextChanged;
+                memoReason = depsChanged
+                    ? Diagnostics.ComponentRenderTrace.Reasons.Props
+                    : Diagnostics.ComponentRenderTrace.Reasons.Context;
             }
 
             if (skipRender)
@@ -2077,6 +2120,8 @@ public sealed partial class Reconciler : IDisposable
                 componentName, selfTriggered ? "self" : "parent");
             renderStart = global::System.Diagnostics.Stopwatch.GetTimestamp();
         }
+        bool traceRendered = Diagnostics.ComponentRenderTrace.IsEnabled;
+        long renderedStart = traceRendered ? global::System.Diagnostics.Stopwatch.GetTimestamp() : 0;
 
         Element newChildElement;
         // The RenderContext backing whichever branch we render (component or
@@ -2167,6 +2212,13 @@ public sealed partial class Reconciler : IDisposable
             var renderElapsedUs = (long)((global::System.Diagnostics.Stopwatch.GetTimestamp() - renderStart)
                 * 1_000_000.0 / global::System.Diagnostics.Stopwatch.Frequency);
             Diagnostics.ReactorEventSource.Log.ComponentRenderStop(componentName!, renderElapsedUs);
+        }
+        if (traceRendered)
+        {
+            EmitComponentRendered(node, control, newEl,
+                Diagnostics.ComponentRenderTrace.ClassifyUpdate(
+                    forcedRender, HotReloadService.WithinUpdatePass, selfTriggered, memoReason),
+                renderedStart);
         }
 
         // Dereference the Border wrapper to get the actual child control.
@@ -2446,6 +2498,9 @@ public sealed partial class Reconciler : IDisposable
         {
             Diagnostics.ReactorEventSource.Log.ComponentUnmount(
                 node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
+            // The wrapper may be pooled and reused by an unrelated element; drop its id.
+            if (node.DiagnosticId != 0)
+                Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, control);
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
             _componentNodes.Remove(control);
@@ -2843,6 +2898,9 @@ public sealed partial class Reconciler : IDisposable
         {
             Diagnostics.ReactorEventSource.Log.ComponentUnmount(
                 node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
+            // The wrapper may be pooled and reused by an unrelated element; drop its id.
+            if (node.DiagnosticId != 0)
+                Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, control);
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
             _componentNodes.Remove(control);
@@ -5905,6 +5963,11 @@ public sealed partial class Reconciler : IDisposable
         /// Accessed from background threads (UseState callbacks) — use volatile field.</summary>
         private volatile bool _selfTriggered;
         public bool SelfTriggered { get => _selfTriggered; set => _selfTriggered = value; }
+        /// <summary>
+        /// <c>componentId</c> of this node in <c>ReactorEventSource.ComponentRendered</c>;
+        /// 0 until the node first renders while that event is enabled.
+        /// </summary>
+        public long DiagnosticId { get; set; }
     }
 
     /// <summary>

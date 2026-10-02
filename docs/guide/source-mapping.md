@@ -53,6 +53,7 @@ public static class Keywords
     public const EventKeywords Theme = (EventKeywords)0x800;        // theme apply, bindings
     public const EventKeywords Shell = (EventKeywords)0x1000;       // JumpList/Tray/ThumbnailToolbar
     public const EventKeywords HotReload = (EventKeywords)0x2000;   // spec 049 — state migration across edits
+    public const EventKeywords RenderDetail = (EventKeywords)0x4000; // per-component ComponentRendered (reason + instance id) for inspectors
 }
 ```
 
@@ -71,11 +72,12 @@ on every tick".
 | Signal | Granularity | Where it surfaces |
 |---|---|---|
 | `ComponentRenderStart` / `Stop` | Component CLR type name | ETW `Render` keyword |
+| `ComponentRendered` | Component type name + instance id + render reason | ETW `RenderDetail` keyword (Verbose); id resolves to a control via `ReactorTrace.GetComponentControl` |
 | `ReconcileStart` / `Stop` | Root element type + diff counters | ETW `Reconcile` keyword |
 | `EffectsFlushStart` / `Stop` | Component CLR type name | ETW `Render` keyword |
 | `StateChange` | Hook kind + value type | ETW `State` keyword |
 | `RenderError` | Component name + exception type only (message redacted) | ETW `Errors` keyword |
-| Per-element file:line | Element call site | `Element.CallSite` / `ReactorSourceMap.GetSource` (when source mapping is enabled at build time) |
+| Per-element file:line:column | Element call site | `Element.CallSite` / `ReactorSourceMap.GetSource` (when source mapping is enabled at build time) |
 
 The reconcile pass also emits a counter summary on stop:
 

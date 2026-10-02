@@ -84,6 +84,46 @@ public static class ReactorTrace
     }
     // </snippet:subscribe-shape>
 
+    /// <summary>
+    /// Resolves the <c>componentId</c> carried by a <c>ComponentRendered</c> event
+    /// (<c>Microsoft-UI-Reactor</c> EventId 40) to the realized control whose bounds are
+    /// that component's — the component's wrapper, or for a host's root component the
+    /// host's current root content control. Use it to flash the region that just
+    /// re-rendered ("highlight updates").
+    ///
+    /// <para>Returns <c>null</c> for <c>0</c>, for an id this process never issued,
+    /// once the component has unmounted or its control was collected, and — for a root
+    /// on its first render — until that render's reconcile pass has produced the
+    /// control. Resolve after the pass completes (e.g. on the next dispatcher tick)
+    /// rather than inside the event callback. Ids are only issued, and controls only
+    /// recorded, while the event is enabled, so subscribe first.</para>
+    ///
+    /// <para>Call on the UI thread; the returned control is a live WinUI object.</para>
+    /// </summary>
+    /// <param name="componentId">The event's <c>componentId</c> payload field.</param>
+    public static Microsoft.UI.Xaml.UIElement? GetComponentControl(long componentId)
+        => ComponentRenderControls.Registry.Resolve(componentId);
+
+    /// <summary>
+    /// The reverse of <see cref="GetComponentControl(long)"/>: the <c>componentId</c>
+    /// that <c>ComponentRendered</c> events use for the component rendering into
+    /// <paramref name="control"/> (a component's wrapper control). Lets an inspector
+    /// filter the event stream down to the component a user selected.
+    ///
+    /// <para>Returns <c>false</c> when <paramref name="control"/> is not a component
+    /// wrapper, or when that component has not rendered since <c>ComponentRendered</c>
+    /// was enabled. A host's root id is never returned here — the root content control
+    /// is often also a child component's wrapper, and that child keeps the mapping.</para>
+    ///
+    /// <para>Call on the UI thread: the id is read from the control's Reactor state.</para>
+    /// </summary>
+    /// <exception cref="ArgumentNullException">If <paramref name="control"/> is <c>null</c>.</exception>
+    public static bool TryGetComponentId(Microsoft.UI.Xaml.UIElement control, out long componentId)
+    {
+        ArgumentNullException.ThrowIfNull(control);
+        return ComponentRenderControls.Registry.TryGetId(control, out componentId);
+    }
+
     private sealed class Subscription : EventListener
     {
         // Configured target. Captured at construction so OnEventWritten
