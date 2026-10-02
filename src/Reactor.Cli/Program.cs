@@ -70,7 +70,7 @@ if (arg == "docs")
 
 if (arg == "devtools")
 {
-    return Microsoft.UI.Reactor.Cli.Devtools.DevtoolsSupervisor.Run(args.Skip(1).ToArray());
+    return Microsoft.UI.Reactor.Cli.Devtools.DevtoolsRemoved.Run(args.Skip(1).ToArray(), Console.Error);
 }
 
 if (arg == "check")
@@ -137,7 +137,7 @@ void ShowHelp()
     Console.WriteLine("  loc validate     Check ICU syntax and parameter consistency");
     Console.WriteLine("  loc status       Show translation coverage per locale");
     Console.WriteLine("  loc prune        Find unused localization keys");
-    Console.WriteLine("  devtools         (deprecated: use `winapp run . --devtools`) Launch with --devtools run");
+    Console.WriteLine("  devtools         Removed: prints the winapp equivalent (`winapp run . --devtools`) and exits 1");
     Console.WriteLine("  check [path]     Build and emit one-line diagnostics with skill-file pointers");
     Console.WriteLine("  pack-local       Pack the in-source framework to <repo>/local-nupkgs/ as 0.0.0-local");
     Console.WriteLine("  clean-local      Remove local packages, NuGet cache entries, and templates");
@@ -275,10 +275,9 @@ int CreateProject(string name)
     Console.WriteLine($"    dotnet build {name}.sln");
     Console.WriteLine($"    dotnet run");
     Console.WriteLine();
-    Console.WriteLine("To develop with an AI agent (MCP) and a VS Code preview panel:");
-    Console.WriteLine($"    mur devtools                 # prints MCP_ENDPOINT to stdout");
-    Console.WriteLine($"    mur devtools --mcp-port 9000 # pin the port across reloads");
-    Console.WriteLine($"    mur devtools --print-config  # emit MCP config for Claude Code / VS Code / Copilot");
+    Console.WriteLine("To inspect the running app (component tree, C# call sites, state, live edits)");
+    Console.WriteLine("with the WinUI DevTools in the winapp CLI; AI agents use the winui-devtools skill:");
+    Console.WriteLine($"    winapp run . --devtools");
 
     return 0;
 }

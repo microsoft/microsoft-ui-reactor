@@ -178,7 +178,7 @@ Same shape as Boundary A: loopback-only HTTP (`http://127.0.0.1:<port>/mcp`) wit
 ### 7.2 Devtools MCP server
 
 **File:** `src/Reactor/Hosting/Devtools/DevtoolsMcpServer.cs`
-**Activation:** opt-in via `--devtools` on the consuming app or via `mur devtools`. Off in production.
+**Activation:** opt-in via `--devtools` on the consuming app (the `mur devtools` launcher has been removed). Off in production.
 **Surface:** loopback HTTP at `http://127.0.0.1:<port>/mcp` OR stdio.
 
 **Endpoints:** JSON-RPC 2.0 `tools/list` and `tools/call` over `/mcp`. Tools are AI-agent affordances: inspect the running element tree, dispatch synthetic input, request screenshots, etc. (See `src/Reactor/Hosting/Devtools/Tools/` for the inventory.)

@@ -45,7 +45,7 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
 
             if (ElevationCheck.IsCurrentProcessElevated())
             {
-                ViewModel.ShowError("Visual Studio is elevated", "Embedded preview will silently drop input due to UIPI. Restart VS non-elevated to use embedded preview, or use the standalone preview (mur devtools).");
+                ViewModel.ShowError("Visual Studio is elevated", "Embedded preview will silently drop input due to UIPI. Restart VS non-elevated to use embedded preview, or use the standalone preview (winapp run . --devtools -- --preview <Name>).");
                 ViewModel.TransitionTo(EmbedStatus.BuildFailed);
                 return;
             }

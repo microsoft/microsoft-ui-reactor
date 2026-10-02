@@ -489,9 +489,10 @@ public static partial class ReactorApp
     /// DIPs; leave them <c>null</c> (the default) to let the OS pick the initial
     /// window size, exactly as a plain XAML <c>Window</c> does. Enable the
     /// <c>Reactor.DevtoolsSupport</c> runtime host
-    /// configuration switch in DEBUG builds to allow the <c>mur devtools</c> /
-    /// <c>--devtools</c> surface: component switching via VS Code, MCP agent tools,
-    /// and component listing.
+    /// configuration switch in DEBUG builds (with the deprecated Microsoft.UI.Reactor.Devtools
+    /// package) to allow the <c>--devtools</c> surface: component switching via VS Code, MCP
+    /// agent tools, and component listing. To inspect a running app, prefer the WinUI DevTools:
+    /// <c>winapp run . --devtools</c>.
     /// </summary>
     /// <param name="title">Window caption text.</param>
     /// <param name="width">Initial DIP width; <c>null</c> defers to the OS.</param>

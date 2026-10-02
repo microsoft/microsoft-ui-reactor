@@ -1,8 +1,13 @@
 # Reactor Devtools — MCP Surface
 
+> **Deprecated.** This package is replaced by the WinUI DevTools in the winapp CLI
+> (`winapp run . --devtools`) and stays only until the component preview host is decided.
+> The `mur devtools` CLI (supervisor, named verbs, `--print-config`) has been **removed**;
+> sections below that mention it describe the old CLI.
+
 This folder implements the `--devtools` runtime path: the MCP server that
-exposes `reactor.*` tools (tree, screenshot, click, state, fire, …), the
-`mur devtools` supervisor, and the rolling log that records every call.
+exposes `reactor.*` tools (tree, screenshot, click, state, fire, …) and the
+rolling log that records every call.
 
 Reference specs: [024-ai-agent-devtools.md](../../Docs/specs/024-ai-agent-devtools.md),
 [task list](../../../../docs/specs/tasks/ai-agent-devtools-implementation.md).
@@ -129,9 +134,9 @@ custom `EventSource` events, so a custom `.etl`-to-Chromium converter is
 required. One is tracked separately; when it lands, swap the `.etl` path
 into it and the resulting JSON drops into <https://ui.perfetto.dev/> directly.
 
-## `--print-config`
+## `--print-config` (removed)
 
-`mur devtools --print-config [--mcp-port N]` emits JSON fragments for
+`mur devtools --print-config [--mcp-port N]` used to emit JSON fragments for
 Claude Code, VS Code, and GitHub Copilot MCP configs, parameterized with
 the requested port. The tool never writes to disk — the user pastes the
 fragment they want into the target config file themselves.

@@ -58,7 +58,7 @@ Beyond those two, load topical skills only when the task hits them — see the t
 | `reactor-input` | Gestures, drag-drop, focus management. |
 | `reactor-charts` | Data visualization. |
 | `reactor-commanding` | Actions in multiple surfaces, keyboard shortcuts, `CanExecute`. |
-| `reactor-devtools` | **Deprecated** — inspect and drive a running app with `winapp run . --devtools` and the `winui-devtools` skill. Legacy `mur devtools` only. |
+| `reactor-devtools` | **Removed** — `mur devtools` no longer works; inspect and drive a running app with `winapp run . --devtools` and the `winui-devtools` skill. This skill only maps old commands to winapp. |
 | `reactor-recipes` | You need a paste-ready snippet for a common pattern. |
 
 Loading every skill up front is the failure mode that bloats context. Load topical skills *when the task hits them*, not preemptively.

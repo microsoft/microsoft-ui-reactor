@@ -33,7 +33,7 @@
 
   <!-- Actors -->
   <rect class="actor-rect" x="30" y="20" width="140" height="56" rx="6"/>
-  <text class="label" x="100" y="40" text-anchor="middle">mur devtools CLI</text>
+  <text class="label" x="100" y="40" text-anchor="middle">MCP client</text>
   <text class="sub" x="100" y="56" text-anchor="middle">JSON-RPC client</text>
 
   <rect class="actor-rect" x="210" y="20" width="160" height="56" rx="6"/>

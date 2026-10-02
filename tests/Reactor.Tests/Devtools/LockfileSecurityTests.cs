@@ -7,8 +7,8 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 /// <summary>
 /// Security-regression tests for spec 025 lockfile hardening (TASK-001 / 005 /
 /// 031 / 032). The bearer-token, schema, endpoint, and size validations live in
-/// <see cref="LockfileRegistry"/> on the server side; the CLI side mirrors them
-/// in <c>LockfileReader</c> (see Reactor.Cli tests).
+/// <see cref="LockfileRegistry"/> on the server side (the CLI-side reader left with the
+/// removed <c>mur devtools</c>).
 /// </summary>
 public class LockfileSecurityTests
 {

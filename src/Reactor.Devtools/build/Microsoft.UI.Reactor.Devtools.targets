@@ -1,9 +1,9 @@
 <Project>
   <!--
-    Microsoft.UI.Reactor.Devtools is deprecated. Reactor's built-in DevTools (this
-    package, the Reactor.DevtoolsSupport switch and `mur devtools`) are replaced by
-    the WinUI DevTools in the winapp CLI, which need nothing in the project:
-    `winapp run . (dash-dash)devtools`.
+    Microsoft.UI.Reactor.Devtools is deprecated (the `mur devtools` CLI is already
+    removed). Reactor's built-in DevTools are replaced by the WinUI DevTools in the
+    winapp CLI, which need nothing in the project: `winapp run . (dash-dash)devtools`.
+    The package stays only for the in-app component preview host until that is decided.
 
     Packed to build\ only (not buildTransitive\), so it warns the project that
     references the package directly and not every project above it.

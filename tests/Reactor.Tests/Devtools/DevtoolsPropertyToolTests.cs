@@ -507,7 +507,7 @@ public class DevtoolsPropertyToolTests
             DevtoolsPropertyTools.TryParseCornerRadius("-1,-2,-3,-4", out _));
     }
 
-    // ─── KnownVerbs registry ────────────────────────────────────────────
+    // ─── Removed mur devtools verbs still name their winapp command ────
 
     [Theory]
     [InlineData("properties")]
@@ -516,8 +516,11 @@ public class DevtoolsPropertyToolTests
     [InlineData("set-resource")]
     [InlineData("styles")]
     [InlineData("ancestors")]
-    public void KnownVerbs_ContainsNewPropertyVerbs(string verb)
+    public void RemovedPropertyVerbs_MapToAWinappCommand(string verb)
     {
-        Assert.Contains(verb, DevtoolsVerbs.KnownVerbs);
+        var row = DevtoolsRemoved.Find(verb);
+        Assert.NotNull(row);
+        Assert.True(row!.HasEquivalent, verb);
+        Assert.StartsWith("winapp devtools ", row.WinappForm);
     }
 }

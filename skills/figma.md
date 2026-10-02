@@ -29,8 +29,8 @@ Translate Figma designs built with the [Windows UI Kit (Community)](https://www.
 6. Agent applies `design.md` best practices (typography, layout, accessibility)
 7. Agent generates Component `.cs` files
 8. Agent scaffolds project if needed (`mur --create`)
-9. Agent launches app via `dotnet run -- --devtools run`
-10. Agent verifies via `mur devtools tree` and `mur devtools screenshot`
+9. Agent launches app via `winapp run MyApp --devtools --detach`
+10. Agent verifies via `winapp devtools inspect` and `winapp ui screenshot` (WinUI DevTools in the winapp CLI; see the `winui-devtools` skill)
 11. Agent iterates until structure matches
 
 ### Watch-Based Sync (continuous)
@@ -433,7 +433,7 @@ public class <ComponentName> : Component
 ### For AI agents (recommended)
 
 ```bash
-# 1. Build and launch with the WinUI DevTools (winapp CLI; `mur devtools` is deprecated)
+# 1. Build and launch with the WinUI DevTools (winapp CLI; `mur devtools` has been removed)
 winapp run MyApp --devtools --detach
 
 # 2. Verify structure (components, element kinds, C# call sites)

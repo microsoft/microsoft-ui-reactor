@@ -176,7 +176,7 @@ gallery (1,660 call sites) that is about one second on an incremental rebuild.
 A Debug build that never turns the runtime flag on allocates nothing extra
 per render: the interceptor checks `ReactorSourceMap.Enabled` and returns the
 original element untouched, measured as byte-identical to a build with no
-generator at all on the M12 control-model benchmark. `winapp run . --devtools` (and the deprecated `mur devtools` verb) sets that flag for you; a host embedding
+generator at all on the M12 control-model benchmark. `winapp run . --devtools` sets that flag for you; a host embedding
 its own inspector can set `ReactorSourceMap.Enabled` directly, and a process that
 never goes through the CLI (a benchmark host, a repro) can start with
 `REACTOR_SOURCEMAP=1` in the environment.

@@ -17,11 +17,12 @@ it. Gate the construction, not just the rendering.
 
 # DevTools Internals
 
-> **Deprecated.** This page describes Reactor's built-in DevTools (`mur devtools`,
-> the `Microsoft.UI.Reactor.Devtools` package, the MCP server, and the in-app dev menu),
-> which are replaced by the WinUI DevTools in the winapp CLI: `winapp run . --devtools`.
-> See [Dev Tooling](dev-tooling.md#winui-devtools-winapp) for the mapping. The page is removed
-> together with the package; the `Microsoft-UI-Reactor` ETW provider stays.
+> **Deprecated.** This page describes the internals of the `Microsoft.UI.Reactor.Devtools`
+> package — the in-app MCP server, the in-app dev menu, and the component preview host.
+> The `mur devtools` CLI that drove it has been **removed**; use the WinUI DevTools in the
+> winapp CLI (`winapp run . --devtools`) — see [Dev Tooling](dev-tooling.md#winui-devtools-winapp)
+> for the mapping. The package stays (deprecated) until the preview host is decided, and this
+> page goes with it; the `Microsoft-UI-Reactor` ETW provider stays.
 
 This page covers the internals of Reactor's devtools — the MCP server
 that external agents talk to, the in-app dev menu, the runtime
@@ -51,7 +52,6 @@ the lockfile, present the token, and call tools.
 | MCP server | `DevtoolsMcpServer` | `src/Reactor.Devtools/DevtoolsMcpServer.cs` | Bearer token + project lockfile |
 | Tool registry | `McpToolRegistry` | `src/Reactor.Devtools/McpToolRegistry.cs` | Per-tool input-schema validation |
 | JSON-RPC dispatch | `McpDispatcher` | `src/Reactor.Devtools/McpDispatcher.cs` | Method allowlist + `tools/call` routing |
-| CLI client | `McpCliClient` | `src/Reactor.Cli/Devtools/McpCliClient.cs` | Reads lockfile, posts bearer-authed JSON-RPC |
 | In-app menu | `DevtoolsMenu(...)` factory | `src/Reactor.Devtools/DevtoolsMenuFactory.cs` | `UseDevtools()` — returns `Empty()` when off |
 | Overlays | `ReactorFeatureFlags` | `src/Reactor/Core/` | Toggle binds an ETW listener only when on |
 
@@ -90,38 +90,12 @@ gate read in every component already rendered.
 
 ## The CLI client
 
-```csharp
-internal sealed class McpCliClient : IDisposable
-{
-    private readonly HttpClient _http;
-    private readonly string _endpoint;
-    private readonly string? _token;
-
-    public McpCliClient(string endpoint, TimeSpan? timeout = null, string? token = null)
-    {
-        _endpoint = endpoint;
-        _token = token;
-        _http = new HttpClient { Timeout = timeout ?? TimeSpan.FromSeconds(30) };
-        if (!string.IsNullOrEmpty(token))
-        {
-            _http.DefaultRequestHeaders.Authorization =
-                new global::System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-        }
-    }
-```
-
-`McpCliClient` is the CLI-side terminus of the MCP loop. It takes an
-endpoint URL, an optional bearer token, and an optional timeout, and
-exposes `InvokeTool` and `InvokeMethod` as the two entry points; the
-CLI's verb commands (`mur devtools components`, `mur devtools click`,
-…) all layer on top of `InvokeTool` with the tool name baked in. The
-token comes from the lockfile the server wrote on startup, so the
-discovery flow is open-the-lockfile → read endpoint + token →
-construct client. The `Authorization: Bearer <token>` header is the
-only thing standing between an attacker on localhost and the
-running app's MCP surface — the lockfile sits in the user's tempdir
-so any process running as the user can read it, but processes
-running as other users can't.
+The `mur devtools` CLI client that used to read the lockfile and post
+bearer-authed JSON-RPC to this server has been removed; `mur devtools`
+now only prints the winapp equivalent of each command. The server below
+still runs inside an app that references the deprecated package (for
+example to host the component preview), and any local client that reads
+the lockfile can call it.
 
 ## Endpoint discovery
 
@@ -132,13 +106,11 @@ project path. The path hash is a truncated SHA-256 of the
 canonicalized `.csproj` path — `C:\foo\bar.csproj` and
 `c:/foo/bar.csproj` collide deliberately, so re-launching the same
 project from a different shell finds the existing session rather
-than starting a second one. The `mur devtools` supervisor
-checks for a live lockfile before binding a new port; if one exists
-and the process is still alive, the second invocation exits with the
-running session's information instead of starting a new server.
+than starting a second one. (The removed `mur devtools` supervisor
+used to check for a live lockfile before binding a new port.)
 
 A lockfile is *stale* when the recorded pid doesn't match a running
-process. The CLI deletes stale lockfiles on read; the running server
+process. Readers should ignore stale lockfiles; the running server
 doesn't proactively re-write its lockfile, but it also doesn't need
 to — the file's `pid` field is the only check that matters, and the
 pid doesn't change for the life of the session.

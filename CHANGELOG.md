@@ -395,19 +395,15 @@ Conventions for contributors:
 
 ### Deprecated
 
-- **Reactor's built-in DevTools are deprecated in favour of the WinUI DevTools in the winapp
-  CLI.** `mur devtools` (every verb), the `Microsoft.UI.Reactor.Devtools` package and the
-  `Reactor.DevtoolsSupport` switch are replaced by `winapp run . --devtools`, which needs nothing
-  in the project; agents use the winapp CLI with `--json` and the `winui-devtools` skill (the MCP
-  server is not carried over). Everything keeps working for now: every `mur devtools` command
-  prints a notice naming its winapp equivalent to stderr (`mur devtools --help` prints the full
-  mapping; silence it with `MUR_DEVTOOLS_NO_DEPRECATION_NOTICE=1`), and a project that references
-  the package gets build warning `REACTOR_DEVTOOLS_001` (suppress with `NoWarn` or
+- **The `Microsoft.UI.Reactor.Devtools` package and the `Reactor.DevtoolsSupport` switch are
+  deprecated** in favour of the WinUI DevTools in the winapp CLI (`winapp run . --devtools`), which
+  need nothing in the project. A project that references the package gets build warning
+  `REACTOR_DEVTOOLS_001` (suppress with `NoWarn` or
   `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`).
-  They are removed one Reactor minor release after this notice. The component preview host
-  (`--component`, the VS Code panel and the Visual Studio embedded preview) has no winapp
-  equivalent yet and is unaffected until that is decided. Reactor keeps its library diagnostics:
-  source mapping, `ReactorTrace` / the `Microsoft-UI-Reactor` EventSource, and hot reload.
+  The package still works and stays until a decision on its in-app component preview host
+  (`winapp run . --devtools -- --preview <Name>`), the VS Code panel and the Visual Studio embedded
+  preview, which have no winapp equivalent yet. Reactor keeps its library diagnostics: source
+  mapping, `ReactorTrace` / the `Microsoft-UI-Reactor` EventSource, and hot reload.
 
 - **`Microsoft.UI.Reactor.ProjectTemplates` is deprecated on NuGet.org.** Published versions
   remain restorable but are marked deprecated with a pointer to `dotnet new reactor`. Scaffold the
@@ -423,6 +419,19 @@ Conventions for contributors:
   variable, or point `CopilotCliBinaryPath` at a pre-downloaded binary (issue #1292).
 
 ### Removed
+
+- **`mur devtools` has been removed.** Reactor's developer tools are the WinUI DevTools in the
+  winapp CLI: `winapp run . --devtools` (`--watch` for hot reload with automatic re-attach); agents
+  use the winapp CLI with `--json` and the `winui-devtools` skill — the MCP client, `--print-config`
+  and `call` are not carried over. The supervisor/launcher, every named verb, `session list/clean`,
+  the lockfile reader, endpoint discovery, port ownership and the MCP client are gone. Every
+  `mur devtools …` invocation — including bare `mur devtools` and `--help` — now only prints the
+  winapp equivalent to stderr and **exits 1** (`mur devtools --help` prints the full table), for
+  example `mur devtools tree` → `winapp devtools inspect`, `fire` →
+  `winapp devtools invoke-handler <selector> <event>`, `logs` → `winapp devtools logs [--follow]`,
+  `--component <Name>` → `winapp run . --devtools -- --preview <Name>` (needs the package).
+  `windows.close`, `shutdown` and the `docking.*` tools have no tool equivalent (app behavior).
+  There is no opt-out. `mur --create` now points at `winapp run . --devtools`.
 
 - **Removed automatic npm-mirror detection for the Copilot CLI download**
   (`tools/CopilotNpmRegistry.props` and bootstrap's `~/.npmrc` / `NPM_CONFIG_REGISTRY` probe).
