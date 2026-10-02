@@ -64,7 +64,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private int _renderPending;      // 0 or 1 — Interlocked for thread-safe access
     private volatile bool _isRendering;       // only touched on UI thread
     private volatile bool _needsRerender;     // only touched on UI thread
-    private bool _themeListenerAttached;
+    private bool _themeListenerAttached;   // UISettings subscribed (once per control)
+    private FrameworkElement? _themeListenerElement;   // current content root listened to
+
+    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
+    internal FrameworkElement? ThemeListenerElement => _themeListenerElement;
     private volatile bool _disposed;
     private Curve? _pendingAnimationCurve;
     // Snapshot of AnimationAmbient.Current at setter dispatch time
@@ -136,6 +140,26 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// </summary>
     public Action<double, double, double>? OnRenderComplete { get; set; }
 
+    private RenderErrorHandler? _renderErrorHandler;
+
+    /// <summary>
+    /// Replaces the built-in render-error fallback for this control only. <c>null</c> (the
+    /// default) falls through to <see cref="ReactorApp.DefaultRenderErrorHandler"/> at
+    /// error time. See <see cref="Core.RenderErrorHandler"/>. (issue #1291)
+    /// </summary>
+    public RenderErrorHandler? RenderErrorHandler
+    {
+        get => Volatile.Read(ref _renderErrorHandler);
+        set => Volatile.Write(ref _renderErrorHandler, value);
+    }
+
+    /// <summary>
+    /// The handler this control would use right now: its own <see cref="RenderErrorHandler"/>,
+    /// else <see cref="ReactorApp.DefaultRenderErrorHandler"/>, else <c>null</c> (built-in
+    /// fallback).
+    /// </summary>
+    public RenderErrorHandler? EffectiveRenderErrorHandler => RenderErrorDispatch.Resolve(RenderErrorHandler);
+
     public ReactorHostControl(Component? component = null, ILogger? logger = null)
     {
         // Fall back to ReactorApp.AppLogger so an app that sets the process-wide
@@ -144,6 +168,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // already-constructed controls.
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
+        _reconciler.RenderErrorHandlerProvider = () => EffectiveRenderErrorHandler;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         // A standalone ReactorHostControl has no ReactorApp bootstrap, so nothing else
         // sets ReactorApp.UIDispatcher. Cross-thread setState — including the re-render
@@ -276,10 +301,22 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // _renderPending is 1 here — all concurrent RequestRender calls are
         // blocked from enqueuing duplicates. Render once, then decide.
         _needsRerender = false;
-        Render();
-
-        // Reset the gate so future setState calls can enqueue.
-        Interlocked.Exchange(ref _renderPending, 0);
+        // Outermost frame for a propagated render error (issue #1291). Scoped, so a first
+        // render started synchronously from inside another frame (e.g. app cleanup code
+        // mounting a new host) restores that frame's marker instead of clearing it.
+        using (RenderErrorDispatch.EnterPropagationScope())
+        {
+            try
+            {
+                Render();
+            }
+            finally
+            {
+                // Reset the gate so future setState calls can enqueue — also when a render
+                // error the app chose to propagate (RenderError.Propagate) escapes Render().
+                Interlocked.Exchange(ref _renderPending, 0);
+            }
+        }
 
         // If state changed during render, re-enqueue at LOW priority so WinUI
         // layout/paint/input (normal priority + WM_PAINT) run first. Without this,
@@ -375,6 +412,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             RequestRender();
         }
 
+        // Which phase the outer catch attributes a failure to (issue #1291).
+        var failurePhase = RenderErrorSource.Reconcile;
         try
         {
             Element? newTree = null;
@@ -396,10 +435,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                     RecoverFromHookOrder(ex, _rootComponent.Context, "component");
                     return;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
                 {
                     _logger?.LogError(ex, "Component Render() threw");
-                    ShowErrorFallback(ex);
+                    ShowErrorFallback(ex, RenderErrorSource.RootRender, _rootComponent.GetType().Name);
                     return;
                 }
             }
@@ -418,10 +457,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                     RecoverFromHookOrder(ex, _funcContext, "function-component");
                     return;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
                 {
                     _logger?.LogError(ex, "Function component threw");
-                    ShowErrorFallback(ex);
+                    ShowErrorFallback(ex, RenderErrorSource.RootRender);
                     return;
                 }
             }
@@ -519,10 +558,12 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
             _phaseSw.Restart();
 
+            failurePhase = RenderErrorSource.Effects;
             if (_rootComponent is not null)
                 _rootComponent.Context.FlushEffects();
             else if (_funcContext is not null)
                 _funcContext.FlushEffects();
+            failurePhase = RenderErrorSource.Reconcile;
 
             double effectsMs = _phaseSw.Elapsed.TotalMilliseconds;
 
@@ -582,10 +623,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 _reportClock.Restart();
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogError(ex, "Render FAILED");
-            ShowErrorFallback(ex);
+            // A root effect failure belongs to the root component; a commit-phase one has no
+            // single owning component.
+            ShowErrorFallback(ex, failurePhase,
+                failurePhase == RenderErrorSource.Effects ? _rootComponent?.GetType().Name : null);
         }
         finally
         {
@@ -602,17 +646,18 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// </summary>
     private void AttachThemeListener(UIElement? control)
     {
-        if (_themeListenerAttached || control is not FrameworkElement fe) return;
-        _themeListenerAttached = true;
+        if (control is not FrameworkElement fe || ReferenceEquals(fe, _themeListenerElement)) return;
 
-        fe.ActualThemeChanged += (_, _) =>
-        {
-            _logger?.LogDebug("Theme changed to {Theme} — re-rendering", fe.ActualTheme);
-            // Issue #660 (#86): drop the (key,theme)->Brush cache so ThemeRef
-            // resolves re-read the now-current ThemeDictionaries.
-            Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
-            RequestRender();
-        };
+        // Follow the current content root (issue #1291): an app-supplied error fallback
+        // replaces the root after a successful render, and a listener left on the
+        // detached old root would never see ActualThemeChanged again.
+        if (_themeListenerElement is not null)
+            _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
+        _themeListenerElement = fe;
+        fe.ActualThemeChanged += OnActualThemeChanged;
+
+        if (_themeListenerAttached) return;
+        _themeListenerAttached = true;
 
         // Issue #660 (#86): also invalidate on high-contrast / accent / palette
         // changes, which don't raise ActualThemeChanged but can change a resolved
@@ -626,19 +671,47 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         catch { /* headless / no UISettings projection — nothing to invalidate */ }
     }
 
+    private void OnActualThemeChanged(FrameworkElement sender, object args)
+    {
+        _logger?.LogDebug("Theme changed to {Theme} — re-rendering", sender.ActualTheme);
+        // Issue #660 (#86): drop the (key,theme)->Brush cache so ThemeRef
+        // resolves re-read the now-current ThemeDictionaries.
+        Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
+        RequestRender();
+    }
+
     private void OnColorValuesChanged(global::Windows.UI.ViewManagement.UISettings sender, object args)
     {
         Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
         RequestRender();
     }
 
-    private void ShowErrorFallback(Exception ex)
+    private void ShowErrorFallback(Exception ex, RenderErrorSource source, string? componentName = null)
     {
         // The render that failed never reaches Reconcile, so its validation claims have
         // no consumer. Withdraw them here rather than waiting for a next render that may
         // never come (issue #1262).
         Controls.Validation.ValidationRenderScope.AbandonPendingClaims();
-        var errorPanel = Microsoft.UI.Reactor.Core.ErrorFallback.BuildPanel(ex);
+
+        // Issue #1291 — see ReactorHost.ShowErrorFallback.
+        var error = new RenderError(ex, source, componentName, isHostLevel: true);
+        var rerender = _requestRenderAction ??= RequestRender;
+        var (content, tree, propagate, replacesTree) = RenderErrorDispatch.BuildHostFallback(
+            EffectiveRenderErrorHandler, error, _logger,
+            install: element => _reconciler.Reconcile(_currentTree, element, _currentControl, rerender),
+            releaseCurrent: () =>
+            {
+                if (_currentTree is not null)
+                    _reconciler.Reconcile(_currentTree, null, _currentControl, rerender);
+            },
+            currentIsAppFallback: RenderErrorDispatch.IsAppFallback(_currentTree));
+        SetErrorContent(content, tree, replacesTree);
+        if (propagate)
+            RenderErrorDispatch.RaiseUnhandled(ex);
+    }
+
+    private void SetErrorContent(UIElement? errorPanel, Element? errorTree, bool replacesTree)
+    {
         if (_overlayWiring is not null && _overlayWiring.TryShowErrorInWrapper(errorPanel))
         {
             // shared overlay wrapper took it
@@ -648,7 +721,23 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             Content = errorPanel;
         }
         _currentControl = errorPanel;
-        _currentTree = null;
+        _currentTree = errorTree;
+        // See ReactorHost.SetErrorContent: when the handler's outcome replaced the tree, the
+        // theme listener follows the new content, or is detached when there is none.
+        if (replacesTree)
+        {
+            if (errorPanel is FrameworkElement)
+                AttachThemeListener(errorPanel);
+            else
+                DetachThemeListener();
+        }
+    }
+
+    private void DetachThemeListener()
+    {
+        if (_themeListenerElement is null) return;
+        _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
+        _themeListenerElement = null;
     }
 
     public void Dispose()
@@ -664,10 +753,23 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
             _uiSettings = null;
         }
+        DetachThemeListener();
 
-        _rootComponent?.Context.RunCleanups();
-        _funcContext?.RunCleanups();
-        _reconciler.Dispose();
+        // Issue #1291 — see ReactorHost.Dispose.
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
+        // Resolved per failure (a cleanup may change the handler), not once per batch.
+        Func<RenderErrorHandler?> cleanupHandler = () => EffectiveRenderErrorHandler;
+        using (RenderErrorDispatch.EnterPropagationScope())
+        {
+            RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
+                isHostLevel: true, _logger, ref pendingPropagation);
+            RenderErrorDispatch.RunCleanups(_funcContext, cleanupHandler, componentName: null,
+                isHostLevel: true, _logger, ref pendingPropagation);
+            // Always dispose the reconciler (it runs every child cleanup), even when a root
+            // cleanup already holds the propagation; only then keep the first propagation.
+            var reconcilerPropagation = _reconciler.DisposeCollectingPropagation();
+            pendingPropagation ??= reconcilerPropagation;
+        }
         _rootComponent = null;
         _rootRenderFunc = null;
         _funcContext = null;
@@ -677,5 +779,6 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _overlayWiring = null;
 
         Content = null;
+        pendingPropagation?.Throw();
     }
 }

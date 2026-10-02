@@ -2,6 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Reactor.Hooks;
+using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Input;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI;
@@ -276,6 +277,35 @@ class FlakyComponent : Component
     }
 }
 // </snippet:error-boundary-retry>
+
+// <snippet:render-error-handler>
+static class RenderErrorHandlerSetup
+{
+    public static void Configure(WindowSpec settingsSpec, ReactorHost host)
+    {
+        // App-wide default, consulted by every host without its own handler,
+        // including windows opened later, tray flyouts and ReactorHostControl embeds.
+        ReactorApp.DefaultRenderErrorHandler = error =>
+        {
+            Telemetry.Record(error.Exception);   // the app decides what is kept, and where
+            return TextBlock("Something went wrong.");
+        };
+
+        // Per window, applied before the window's first render.
+        ReactorApp.OpenWindow(
+            settingsSpec with { RenderErrorHandler = error => TextBlock($"Settings could not load ({error.Source}).") },
+            _ => TextBlock("Settings"));
+
+        // Per host (ReactorHost or ReactorHostControl).
+        host.RenderErrorHandler = _ => null;   // null keeps the built-in fallback
+    }
+}
+
+static class Telemetry
+{
+    public static void Record(Exception exception) => System.Diagnostics.Debug.WriteLine(exception);
+}
+// </snippet:render-error-handler>
 
 // <snippet:snap-back>
 class SnapBackDemo : Component

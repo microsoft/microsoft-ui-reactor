@@ -264,6 +264,21 @@ var folder = await UseFolderPickerAsync(new FolderPickerOptions());
 Picker hooks must run on the owning window's UI thread and use the owning HWND;
 there is no arbitrary HWND parameter.
 
+## Render errors
+
+Outside an `ErrorBoundary`, a render failure shows a built-in fallback with the
+full exception text. Replace it app-wide, per window, or per host; a host's own
+handler wins, and `null` on the window/host falls through to the app default:
+
+```csharp
+ReactorApp.DefaultRenderErrorHandler = e => TextBlock("Something went wrong.");
+ReactorApp.OpenWindow(spec with { RenderErrorHandler = e => SettingsErrorView(e) }, render);
+window.Host.RenderErrorHandler = e => { e.Propagate(); return null; }; // → OnUnhandledException
+```
+
+Return `null` to keep the built-in fallback. If the handler (or the element it
+returns) throws, Reactor shows a neutral message without exception details.
+
 ## Recipe: Command Palette
 
 PowerToys Run-style launcher. See `samples/apps/command-palette-window/`.

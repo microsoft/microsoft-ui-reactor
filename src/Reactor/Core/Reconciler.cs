@@ -61,6 +61,24 @@ public sealed partial class Reconciler : IDisposable
     // resolve their concrete brush against the correct effective theme at mount.
     private ElementTheme _ambientRequestedTheme = ElementTheme.Default;
     private int _errorBoundaryDepth;
+
+    /// <summary>
+    /// Supplies the owning host's effective <see cref="RenderErrorHandler"/> (issue #1291).
+    /// Set by <c>ReactorHost</c> / <c>ReactorHostControl</c>; a reconciler without a host
+    /// falls back to <see cref="ReactorApp.DefaultRenderErrorHandler"/>.
+    /// </summary>
+    internal Func<RenderErrorHandler?>? RenderErrorHandlerProvider { get; set; }
+
+    private RenderErrorHandler? ResolveRenderErrorHandler() =>
+        RenderErrorHandlerProvider is { } provider ? provider() : ReactorApp.DefaultRenderErrorHandler;
+
+    /// <summary>In-tree placeholder for a component whose render or effect flush threw.</summary>
+    private Element BuildInTreeFallback(Exception ex, bool inEffects, string? componentName) =>
+        RenderErrorDispatch.BuildInTreeFallback(
+            ResolveRenderErrorHandler(),
+            new RenderError(ex, inEffects ? RenderErrorSource.Effects : RenderErrorSource.ComponentRender,
+                componentName, isHostLevel: false),
+            _logger);
     /// <summary>
     /// Active rerender-callback depth. Throws past
     /// <see cref="MaxRerenderReentrancy"/> so a component that synchronously
@@ -1714,7 +1732,13 @@ public sealed partial class Reconciler : IDisposable
         UIElement? existingControl,
         Action requestRerender)
     {
-        // Declared first so it is disposed last: validation changes raised by mount,
+        // A top-level pass is an outermost Reactor frame for render-error propagation
+        // (issue #1291): a standalone caller (no host render loop) must not leave the
+        // propagation markers behind. Nested passes get the inactive default scope.
+        using var propagationScope = _debugReconcileDepth == 0
+            ? RenderErrorDispatch.EnterPropagationScope()
+            : default;
+        // Declared before the reconcile work so it is disposed after it: validation changes raised by mount,
         // update, or unmount are announced only once the whole pass has finished.
         using var validationScope = Controls.Validation.ValidationRenderScope.BeginReconcile();
         ReferenceDirtySet.BeginCommit();
@@ -2084,8 +2108,10 @@ public sealed partial class Reconciler : IDisposable
         // hot-reload pass: reset this context's hook state and re-render once.
         RenderContext? renderCtx = node.Component?.Context ?? node.Context;
         bool hotReloadRetried = false;
+        bool inEffects = false;
         while (true)
         {
+            inEffects = false;
             try
             {
                 if (node.Component is not null)
@@ -2102,6 +2128,7 @@ public sealed partial class Reconciler : IDisposable
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(node.Component.Render());
                     }
+                    inEffects = true;
                     FlushEffectsTraced(node.Component.Context, componentName);
                 }
                 else if (node.Context is not null && newEl is FuncElement func)
@@ -2111,6 +2138,7 @@ public sealed partial class Reconciler : IDisposable
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(func.RenderFunc(node.Context));
                     }
+                    inEffects = true;
                     FlushEffectsTraced(node.Context, componentName);
                 }
                 else if (node.Context is not null && newEl is MemoElement memo)
@@ -2120,6 +2148,7 @@ public sealed partial class Reconciler : IDisposable
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(memo.RenderFunc(node.Context));
                     }
+                    inEffects = true;
                     FlushEffectsTraced(node.Context, componentName);
                 }
                 else
@@ -2147,7 +2176,7 @@ public sealed partial class Reconciler : IDisposable
                 renderCtx.ResetForHotReload();
                 continue;
             }
-            catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
+            catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
             {
                 _logger?.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
                 if (Diagnostics.ReactorEventSource.Log.IsEnabled(
@@ -2157,7 +2186,7 @@ public sealed partial class Reconciler : IDisposable
                     Diagnostics.ReactorEventSource.Log.RenderError(
                         componentName ?? newEl.GetType().Name, ex.GetType().Name, ex.Message);
                 }
-                newChildElement = ErrorFallback.BuildElement(ex);
+                newChildElement = BuildInTreeFallback(ex, inEffects, node.Component?.GetType().Name);
             }
             break;
         }
@@ -6078,10 +6107,32 @@ public sealed partial class Reconciler : IDisposable
 
     public void Dispose()
     {
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation;
+        // Standalone disposal is its own outermost frame (issue #1291).
+        using (RenderErrorDispatch.EnterPropagationScope())
+            pendingPropagation = DisposeCollectingPropagation();
+        pendingPropagation?.Throw();
+    }
+
+    /// <summary>
+    /// Disposes and returns, rather than throws, a cleanup exception the app asked to
+    /// propagate. Hosts call this inside their own propagation scope so the root's and the
+    /// reconciler's cleanups share one "only the first propagation is rethrown" decision,
+    /// and the host finishes its own teardown before rethrowing.
+    /// </summary>
+    internal global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? DisposeCollectingPropagation()
+    {
+        // Issue #1291: with a RenderErrorHandler configured, every effect cleanup runs and
+        // each failure is reported (Source = Cleanup). With no handler the first throwing
+        // cleanup escapes as before.
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
+        // Resolved per failure (a cleanup may change the handler), not once per batch.
+        Func<RenderErrorHandler?> cleanupHandler = ResolveRenderErrorHandler;
         foreach (var node in _componentNodes.Values)
         {
-            node.Context?.RunCleanups();
-            node.Component?.Context?.RunCleanups();
+            var name = node.Component?.GetType().Name;
+            RenderErrorDispatch.RunCleanups(node.Context, cleanupHandler, name, isHostLevel: false, _logger, ref pendingPropagation);
+            RenderErrorDispatch.RunCleanups(node.Component?.Context, cleanupHandler, name, isHostLevel: false, _logger, ref pendingPropagation);
         }
         _componentNodes.Clear();
         _errorBoundaryNodes.Clear();
@@ -6096,6 +6147,7 @@ public sealed partial class Reconciler : IDisposable
         }
         _navigationHostNodes.Clear();
         _pool.Clear();
+        return pendingPropagation;
     }
 }
 

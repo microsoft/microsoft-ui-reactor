@@ -805,7 +805,9 @@ public sealed partial class Reconciler
             renderedElement = eb.Child;
             wrapper.Child = Mount(eb.Child, requestRerender);
         }
-        catch (Exception ex)
+        // An exception the app declined via RenderError.Propagate() is on its way out (issue
+        // #1291); no boundary, including the internal guard around an app fallback, takes it.
+        catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogWarning(ex, "ErrorBoundary caught render error");
             caughtEx = ex;
@@ -857,6 +859,7 @@ public sealed partial class Reconciler
         var componentRerender = CreateComponentRerender(node, requestRerender);
 
         Element childElement;
+        bool inEffects = false;
         try
         {
             component.Context.BeginRender(componentRerender, _contextScope);
@@ -864,12 +867,13 @@ public sealed partial class Reconciler
             {
                 childElement = ValidationRenderScope.ApplyProvide(component.Render());
             }
+            inEffects = true;
             component.Context.FlushEffects();
         }
-        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
+        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogError(ex, "Component Render() threw during mount: {ComponentName}", compElement.GetType().Name);
-            childElement = ErrorFallback.BuildElement(ex);
+            childElement = BuildInTreeFallback(ex, inEffects, component.GetType().Name);
         }
         UIElement? childControl = Mount(childElement, componentRerender);
 
@@ -896,6 +900,7 @@ public sealed partial class Reconciler
         var componentRerender = CreateComponentRerender(node, requestRerender);
 
         Element childElement;
+        bool inEffects = false;
         try
         {
             ctx.BeginRender(componentRerender, _contextScope);
@@ -903,12 +908,13 @@ public sealed partial class Reconciler
             {
                 childElement = ValidationRenderScope.ApplyProvide(funcElement.RenderFunc(ctx));
             }
+            inEffects = true;
             ctx.FlushEffects();
         }
-        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
+        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogError(ex, "FuncComponent Render() threw during mount");
-            childElement = ErrorFallback.BuildElement(ex);
+            childElement = BuildInTreeFallback(ex, inEffects, componentName: null);
         }
         UIElement? childControl = Mount(childElement, componentRerender);
 
@@ -936,6 +942,7 @@ public sealed partial class Reconciler
         var componentRerender = CreateComponentRerender(node, requestRerender);
 
         Element childElement;
+        bool inEffects = false;
         try
         {
             ctx.BeginRender(componentRerender, _contextScope);
@@ -943,12 +950,13 @@ public sealed partial class Reconciler
             {
                 childElement = ValidationRenderScope.ApplyProvide(memoElement.RenderFunc(ctx));
             }
+            inEffects = true;
             ctx.FlushEffects();
         }
-        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
+        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogError(ex, "MemoComponent Render() threw during mount");
-            childElement = ErrorFallback.BuildElement(ex);
+            childElement = BuildInTreeFallback(ex, inEffects, componentName: null);
         }
         UIElement? childControl = Mount(childElement, componentRerender);
 

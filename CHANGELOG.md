@@ -60,6 +60,19 @@ Conventions for contributors:
     the framework had no notion of a submit before, so that policy could never
     display anything.
 
+- **Apps can replace the built-in render-error fallback (issue #1291).** Outside an
+  `ErrorBoundary`, a render failure showed a fallback with the full exception text
+  (type, message, stack trace), which a shipped app could not hide. A
+  `RenderErrorHandler` now replaces it, set app-wide
+  (`ReactorApp.DefaultRenderErrorHandler`), per window (`WindowSpec.RenderErrorHandler`)
+  or per host (`ReactorHost` / `ReactorHostControl.RenderErrorHandler`). It sees the
+  root render, child renders, the reconcile pass, effects and dispose-time cleanups,
+  through a `RenderError` that carries the exception and its `Source`. Return an element
+  to show it, `null` to keep the built-in fallback, or call `Propagate()` to route the
+  exception to `ReactorApplication.OnUnhandledException`. A handler that throws (or whose
+  fallback throws) fails closed to a neutral message without exception details. With no
+  handler, behavior is unchanged.
+
 - **Framework mechanics are searchable in the ReactorGallery index (spec 064,
   issue #1275).** `find-ui --source reactor` answered "what is control X" but not
   "how does mechanism Y work": `UseState hook` and `key down event handler`

@@ -111,7 +111,7 @@ internal sealed class TrayFlyoutHostWindow : IDisposable
 
         // Tear down the previous mount before re-mounting so the flyout gets
         // a fresh hook state per invocation.
-        try { _host?.Dispose(); } catch { /* best effort */ }
+        try { _host?.Dispose(); } catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex)) { /* best effort; a declined RenderError.Propagate() keeps going out (issue #1291) */ }
         _host = new ReactorHost(_window);
         _host.Mount(_ => flyoutContent);
 
@@ -168,7 +168,7 @@ internal sealed class TrayFlyoutHostWindow : IDisposable
 
         // Dispose the per-show host so its hook-state cleanups run promptly;
         // the next Show creates a new host on the same window.
-        try { _host?.Dispose(); } catch { /* best effort */ }
+        try { _host?.Dispose(); } catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex)) { /* best effort; a declined RenderError.Propagate() keeps going out (issue #1291) */ }
         _host = null;
     }
 
@@ -224,7 +224,7 @@ internal sealed class TrayFlyoutHostWindow : IDisposable
         if (_disposed) return;
         _disposed = true;
         try { _window.Activated -= OnActivated; } catch { /* best effort */ }
-        try { _host?.Dispose(); } catch { /* best effort */ }
+        try { _host?.Dispose(); } catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex)) { /* best effort; a declined RenderError.Propagate() keeps going out (issue #1291) */ }
         _host = null;
         try { _window.Close(); } catch { /* best effort */ }
     }
