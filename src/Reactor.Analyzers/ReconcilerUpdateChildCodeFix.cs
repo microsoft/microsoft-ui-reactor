@@ -35,8 +35,9 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// is read nowhere but that <c>if</c>, the existing control is a plain local or parameter (it is
 /// compared with the result), the arguments are positional (<c>Reconcile</c> names its parameters
 /// differently), and every <c>UnmountChild(existing)</c> in the block is a statement of its own in
-/// the body with no comment or directive in or around it. Anywhere else the diagnostic stands
-/// without a fix.
+/// the body with no comment or directive in or around it. A conditional access
+/// (<c>r?.UpdateChild(...)</c>) is rewritten the same way and keeps its <c>?.</c>. Anywhere else the
+/// diagnostic stands without a fix.
 /// </remarks>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(ReconcilerUpdateChildCodeFix))]
 [Shared]
@@ -58,19 +59,23 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
 
         foreach (var diagnostic in context.Diagnostics)
         {
-            // The diagnostic sits on the method name of a member access.
+            // The diagnostic sits on the method name: r.UpdateChild(...) or r?.UpdateChild(...).
             if (root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true) is not SimpleNameSyntax name)
                 continue;
-            if (name.Parent is not MemberAccessExpressionSyntax access || access.Name != name)
-                continue;
-            if (access.Parent is not InvocationExpressionSyntax invocation || invocation.Expression != access)
+            ExpressionSyntax? member = name.Parent switch
+            {
+                MemberAccessExpressionSyntax access when access.Name == name => access,
+                MemberBindingExpressionSyntax binding => binding,
+                _ => null,
+            };
+            if (member?.Parent is not InvocationExpressionSyntax invocation || invocation.Expression != member)
                 continue;
 
             semanticModel ??= await context.Document
                 .GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
             if (semanticModel is null) return;
 
-            var plan = Plan.TryCreate(semanticModel, invocation, context.CancellationToken);
+            var plan = Plan.TryCreate(semanticModel, invocation, name, context.CancellationToken);
             if (plan is null) continue;
 
             context.RegisterCodeFix(
@@ -119,10 +124,9 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
             return tracked;
         }
 
-        public static Plan? TryCreate(SemanticModel model, InvocationExpressionSyntax invocation, CancellationToken ct)
+        public static Plan? TryCreate(SemanticModel model, InvocationExpressionSyntax invocation, SimpleNameSyntax name,
+            CancellationToken ct)
         {
-            var access = (MemberAccessExpressionSyntax)invocation.Expression;
-
             // Reconcile names its parameters differently, so only positional arguments carry over.
             var arguments = invocation.ArgumentList.Arguments;
             if (arguments.Count != 4)
@@ -141,8 +145,12 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
             if (existingSymbol is not (ILocalSymbol or IParameterSymbol))
                 return null;
 
-            // var result = r.UpdateChild(...);, directly followed by if (result is not null) ...
-            if (invocation.Parent is not EqualsValueClauseSyntax { Parent: VariableDeclaratorSyntax declarator }
+            // var result = r.UpdateChild(...);, directly followed by if (result is not null) ... A
+            // conditional access (r?.UpdateChild(...)) yields null for a null receiver either way.
+            ExpressionSyntax initializer = invocation;
+            while (initializer.Parent is ConditionalAccessExpressionSyntax conditional && conditional.WhenNotNull == initializer)
+                initializer = conditional;
+            if (initializer.Parent is not EqualsValueClauseSyntax { Parent: VariableDeclaratorSyntax declarator }
                 || declarator.Parent is not VariableDeclarationSyntax { Variables.Count: 1 } declaration
                 || declaration.Parent is not LocalDeclarationStatementSyntax statement
                 || !statement.UsingKeyword.IsKind(SyntaxKind.None)
@@ -197,7 +205,7 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
             var newCondition = SyntaxFactory.ParseExpression(
                 $"{ifStatement.Condition.WithoutTrivia()} && !{referenceEquals}({declarator.Identifier.Text}, {existing.Identifier.Text})");
 
-            return new Plan(access.Name, ifStatement.Condition, newCondition, unmounts.ToImmutable());
+            return new Plan(name, ifStatement.Condition, newCondition, unmounts.ToImmutable());
         }
 
         /// <summary><c>x is not null</c>, <c>x != null</c> or <c>null != x</c> on <paramref name="local"/>.</summary>

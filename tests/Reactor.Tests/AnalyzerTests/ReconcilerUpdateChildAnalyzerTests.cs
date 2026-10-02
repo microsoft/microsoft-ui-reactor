@@ -233,6 +233,31 @@ class Host
     }
 
     [Fact]
+    public async Task CodeFix_Rewrites_A_Conditional_Access()
+    {
+        // A null receiver yields null from either call, so the ?. stays.
+        await VerifyFixAsync(@"
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    {
+        var replacement = r?.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+            slot.Content = replacement;
+    }
+}", @"
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    {
+        var replacement = r?.Reconcile(oldEl, newEl, existing, rerender);
+        if (replacement is not null && !ReferenceEquals(replacement, existing))
+            slot.Content = replacement;
+    }
+}");
+    }
+
+    [Fact]
     public async Task CodeFix_Keeps_A_NotEquals_Check_And_Removes_The_Manual_Unmount()
     {
         // Reconcile unmounts the control it replaces, so the body's own UnmountChild goes.

@@ -3178,6 +3178,13 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    // Matched by reference, not IsSameControl. A frame holds the control it watches, and while a
+    // managed wrapper is alive CsWinRT hands back that same wrapper for its native control, so every
+    // path that reaches the control to unmount it (the reference an update was handed, or a walk of
+    // the visual tree) arrives with this reference. IsSameControl's ReactorState compare is for an
+    // update's result, which user code chooses. Here it would add native reads to every unmount
+    // inside a slot update, which is nearly every unmount, and attach a ReactorState to a watched
+    // control that has none.
     private void NoteUnmountDuringSlotUpdate(UIElement control)
     {
         for (int i = 0; i < _slotUpdateDepth; i++)
