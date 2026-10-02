@@ -703,7 +703,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             {
                 if (_currentTree is not null)
                     _reconciler.Reconcile(_currentTree, null, _currentControl, rerender);
-            });
+            },
+            currentIsAppFallback: RenderErrorDispatch.IsAppFallback(_currentTree));
         SetErrorContent(content, tree, replacesTree);
         if (propagate)
             RenderErrorDispatch.RaiseUnhandled(ex);

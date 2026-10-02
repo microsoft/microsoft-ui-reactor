@@ -145,8 +145,12 @@ public class RenderErrorDispatchTests
 
         var guarded = RenderErrorDispatch.Guard(probe);
 
-        var boundary = Assert.IsType<ErrorBoundaryElement>(guarded);
+        var boundary = Assert.IsType<FallbackGuardElement>(guarded);
+        Assert.IsAssignableFrom<ErrorBoundaryElement>(guarded);
         Assert.Same(probe, boundary.Child);
+        Assert.True(RenderErrorDispatch.IsAppFallback(guarded));
+        Assert.False(RenderErrorDispatch.IsAppFallback(new ErrorBoundaryElement(probe, _ => probe)));
+        Assert.False(RenderErrorDispatch.IsAppFallback(null));
         // Method-group identity: the guard must degrade to the detail-free placeholder, never
         // to ErrorFallback.BuildElement (which renders the exception text).
         Assert.Equal(nameof(ErrorFallback.BuildSafeElement), boundary.Fallback.Method.Name);
@@ -416,6 +420,32 @@ public class RenderErrorDispatchTests
     }
 
     [Fact]
+    public void RunCleanups_A_Declined_Propagation_From_The_Cleanup_Handler_Is_Deferred_And_Draining_Continues()
+    {
+        var nested = new InvalidOperationException("declined in the cleanup handler's nested work");
+        bool lastRan = false;
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pending = null;
+        WithUnhandledCallback(_ => false, () =>
+        {
+            var ctx = ContextWithCleanups(
+                () => throw new InvalidOperationException("cleanup failure"),
+                () => lastRan = true);
+            RenderErrorHandler handler = _ =>
+            {
+                // The handler synchronously runs another Reactor frame whose render error
+                // the app declines.
+                using (RenderErrorDispatch.EnterPropagationScope())
+                    RenderErrorDispatch.RaiseUnhandled(nested);
+                return null;
+            };
+            RenderErrorDispatch.RunCleanups(ctx, () => handler, "Outer", isHostLevel: true, logger: null, ref pending);
+        });
+
+        Assert.True(lastRan);
+        Assert.Same(nested, pending?.SourceException);
+    }
+
+    [Fact]
     public void RunCleanups_Resolves_The_Handler_For_Each_Failure()
     {
         var first = new List<string>();
@@ -511,7 +541,8 @@ public class RenderErrorDispatchTests
             var escaped = Assert.Throws<InvalidOperationException>(() => RenderErrorDispatch.BuildHostFallback(
                 _ => new ProbeElement("fallback"), NewError(), logger: null,
                 install: _ => throw declined,
-                releaseCurrent: () => released = true));
+                releaseCurrent: () => released = true,
+                currentIsAppFallback: false));
 
             Assert.Same(declined, escaped);
             Assert.False(released);

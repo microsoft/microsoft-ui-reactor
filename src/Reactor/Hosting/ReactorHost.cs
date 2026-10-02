@@ -1076,7 +1076,8 @@ public sealed class ReactorHost : IDisposable
             {
                 if (_currentTree is not null)
                     _reconciler.Reconcile(_currentTree, null, _currentControl, rerender);
-            });
+            },
+            currentIsAppFallback: RenderErrorDispatch.IsAppFallback(_currentTree));
         SetErrorContent(content, tree, replacesTree);
         // Nothing is shown where the failure happened. Returns only when the app's
         // unhandled-exception callback handled it; otherwise rethrows.

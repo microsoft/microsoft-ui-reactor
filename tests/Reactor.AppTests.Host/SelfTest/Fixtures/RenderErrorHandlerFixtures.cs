@@ -1087,6 +1087,49 @@ internal static class RenderErrorHandlerFixtures
         });
     }
 
+    // A later failure that falls back to the built-in panel (handler removed, or now returning
+    // null) releases an app fallback shown earlier; an ordinary pre-error tree keeps the
+    // pre-#1291 behavior (not unmounted).
+    internal class HostFallback_BuiltInAfterAppFallbackReleasesIt(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            CountingFallback.Mounts = CountingFallback.Unmounts = 0;
+            bool useAppFallback = true;
+            var host = H.CreateHost();
+            host.RenderErrorHandler = _ => useAppFallback ? Component<CountingFallback>() : null;
+            host.Mount(_ => throw new InvalidOperationException("switching fallback boom"));
+            await Harness.Render();
+            var fallbackRoot = host.ThemeListenerElement;
+            H.Check("RenderErrorHandler_BuiltInAfterApp_AppFallbackShown",
+                CountingFallback.Mounts == 1 && H.FindText("CountingFallback") is not null,
+                $"mounts={CountingFallback.Mounts}");
+
+            useAppFallback = false;
+            host.RequestRender();
+            await Harness.Render();
+            H.Check("RenderErrorHandler_BuiltInAfterApp_AppFallbackReleased", CountingFallback.Unmounts == 1,
+                $"unmounts={CountingFallback.Unmounts}");
+            H.Check("RenderErrorHandler_BuiltInAfterApp_BuiltInShown", H.FindTextContaining(BuiltInMarker) is not null);
+            H.Check("RenderErrorHandler_BuiltInAfterApp_ListenerMoved",
+                host.ThemeListenerElement is not null && !ReferenceEquals(host.ThemeListenerElement, fallbackRoot),
+                host.ThemeListenerElement?.GetType().Name ?? "null");
+
+            // Negative control: no handler, ordinary tree → built-in panel, tree not unmounted.
+            CleanupFlagComponent.CleanupRuns = 0;
+            bool shouldThrow = false;
+            var plain = H.CreateHost();
+            plain.Mount(_ => shouldThrow ? throw new InvalidOperationException("plain boom") : VStack(Component<CleanupFlagComponent>()));
+            await Harness.Render();
+            shouldThrow = true;
+            plain.RequestRender();
+            await Harness.Render();
+            H.Check("RenderErrorHandler_BuiltInAfterApp_LegacyTreeUntouched",
+                CleanupFlagComponent.CleanupRuns == 0 && H.FindTextContaining(BuiltInMarker) is not null,
+                $"cleanups={CleanupFlagComponent.CleanupRuns}");
+        }
+    }
+
     // Repeated host-level failures reuse the fallback (reconciled in place) instead of
     // mounting a fresh one each time, and the good tree it replaces is unmounted, not leaked.
     internal class HostFallback_ReconciledNotAccumulated(Harness h) : SelfTestFixtureBase(h)

@@ -6,6 +6,15 @@ using Microsoft.UI.Xaml;
 namespace Microsoft.UI.Reactor.Core;
 
 /// <summary>
+/// The internal error boundary around an app-supplied render-error fallback (issue #1291).
+/// Behaves exactly like <see cref="ErrorBoundaryElement"/>; a distinct type so a host can
+/// tell that its current tree is a handler fallback, which it must release when a later
+/// failure switches to the built-in panel.
+/// </summary>
+internal sealed record FallbackGuardElement(Element Child, Func<Exception, Element> Fallback)
+    : ErrorBoundaryElement(Child, Fallback);
+
+/// <summary>
 /// Shared plumbing behind <see cref="RenderErrorHandler"/> (issue #1291): resolves the
 /// effective handler, invokes it defensively, and routes <see cref="RenderError.Propagate"/>
 /// to the unhandled-exception path. Every site that used to go straight to
@@ -186,7 +195,10 @@ internal static class RenderErrorDispatch
     /// detail instead of re-entering the handler (and looping).
     /// </summary>
     internal static Element Guard(Element appElement) =>
-        new ErrorBoundaryElement(appElement, ErrorFallback.BuildSafeElement);
+        new FallbackGuardElement(appElement, ErrorFallback.BuildSafeElement);
+
+    /// <summary>Whether <paramref name="tree"/> is an app-supplied fallback a host installed.</summary>
+    internal static bool IsAppFallback(Element? tree) => tree is FallbackGuardElement;
 
     /// <summary>
     /// Host-level counterpart of <see cref="BuildInTreeFallback"/>. Returns the content to
@@ -202,13 +214,14 @@ internal static class RenderErrorDispatch
     /// </summary>
     /// <remarks>
     /// With no handler (or one returning <c>null</c>) the built-in panel replaces the content
-    /// exactly as before #1291, current tree and theme listener included. Every other outcome
-    /// replaces the tree (<c>ReplacesTree</c>), so the host moves its theme listener to the
-    /// new content (or detaches it when there is none).
+    /// exactly as before #1291, current tree and theme listener included, unless the current
+    /// tree is itself an earlier app fallback: that one is released like any replaced
+    /// fallback. Every outcome that replaces the tree (<c>ReplacesTree</c>) has the host move
+    /// its theme listener to the new content (or detach it when there is none).
     /// </remarks>
     internal static (UIElement? Content, Element? Tree, bool Propagate, bool ReplacesTree) BuildHostFallback(
         RenderErrorHandler? handler, RenderError error, ILogger? logger,
-        Func<Element, UIElement?> install, Action releaseCurrent)
+        Func<Element, UIElement?> install, Action releaseCurrent, bool currentIsAppFallback)
     {
         switch (InvokeHandler(handler, error, logger, out var appElement))
         {
@@ -235,7 +248,12 @@ internal static class RenderErrorDispatch
                 Release(releaseCurrent, logger);
                 return (null, null, true, true);
             default:
-                return (ErrorFallback.BuildPanel(error.Exception), null, false, false);
+                if (!currentIsAppFallback)
+                    return (ErrorFallback.BuildPanel(error.Exception), null, false, false);
+                // The handler was removed or now returns null after an earlier failure showed
+                // an app fallback: release that fallback rather than abandon it.
+                Release(releaseCurrent, logger);
+                return (ErrorFallback.BuildPanel(error.Exception), null, false, true);
         }
     }
 
@@ -299,7 +317,17 @@ internal static class RenderErrorDispatch
             else if (resolveHandler() is { } handler)
             {
                 // Report every failure; only the first propagation is rethrown.
-                propagation = ReportCleanup(handler, ex, componentName, isHostLevel, logger);
+                try
+                {
+                    propagation = ReportCleanup(handler, ex, componentName, isHostLevel, logger);
+                }
+                catch (Exception nested) when (IsPropagating(nested))
+                {
+                    // The handler started nested Reactor work whose propagation the app
+                    // declined: defer it like any propagated cleanup failure, so the
+                    // remaining cleanups and teardown still run.
+                    propagation = ContinuePropagation(nested);
+                }
             }
             else
             {
