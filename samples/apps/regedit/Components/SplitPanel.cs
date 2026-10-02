@@ -39,11 +39,14 @@ internal static class CursorBorderRegistration
             update: (r, oldEl, newEl, panel, rerender) =>
             {
                 if (newEl.Background is not null) panel.Background = newEl.Background;
-                if (panel.Children.Count > 0 && panel.Children[0] is UIElement existingChild)
+                // Reconcile patches the child in place, or unmounts it and mounts the new
+                // element, and returns the control the panel should hold (null for Empty()).
+                var existing = panel.Children.Count > 0 ? panel.Children[0] : null;
+                var next = r.Reconcile(oldEl.Child, newEl.Child, existing, rerender);
+                if (!ReferenceEquals(next, existing))
                 {
-                    var replacement = r.UpdateChild(oldEl.Child, newEl.Child, existingChild, rerender);
-                    if (replacement is not null)
-                        panel.Children[0] = replacement;
+                    if (existing is not null) panel.Children.RemoveAt(0);
+                    if (next is not null) panel.Children.Insert(0, next);
                 }
                 panel.Tag = newEl;
                 return null;

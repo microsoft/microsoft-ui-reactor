@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml;
 using static Microsoft.UI.Reactor.Controls.Validation.ValidationRuleDsl;
 using static Microsoft.UI.Reactor.Controls.Validation.ValidationVisualizerDsl;
 using static Microsoft.UI.Reactor.Factories;
+using AdvancedControls = Microsoft.UI.Reactor.Controls;
 using WinDocs = Microsoft.UI.Xaml.Documents;
 using WinXC = Microsoft.UI.Xaml.Controls;
 
@@ -39,6 +40,11 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// while a handler inside that nested reconcile unmounts the outer control. The last fixture
 /// checks that a slot updated after such a self-unmount still unmounts its own replaced
 /// control.</para>
+///
+/// <para>The custom-control fixtures cover code built on Reactor that hosts a child: the data
+/// grid's resize grip, and a <c>RegisterType</c> host written the way the extending-controls
+/// guide teaches. Both used to update the child with <c>Reconciler.UpdateChild</c>, which
+/// neither checks the element type nor unmounts a control it replaces.</para>
 /// </summary>
 internal static class SlotReplacementFixtures
 {
@@ -684,5 +690,147 @@ internal static class SlotReplacementFixtures
                 && registration.Unmounted.Count(c => ReferenceEquals(c, siblingOld)) == 1,
                 registration.Describe());
         }
+    }
+
+    /// <summary>
+    /// A custom control that hosts one child element, taken through every way the child can
+    /// leave: an update that builds a new control (a <c>ValidationVisualizer</c> remounts on
+    /// update), a change of element type (to a <c>TextBlock</c>), and removal. Each old child must
+    /// be unmounted exactly once, the type change must not throw, and the host control must stay.
+    /// </summary>
+    internal abstract class CustomHostChildFixture(Harness h) : SelfTestFixtureBase(h)
+    {
+        protected abstract string Name { get; }
+
+        /// <summary>Registers the host control on the test host's reconciler, if it needs it.</summary>
+        protected abstract void Prepare(Reconciler reconciler);
+
+        /// <summary>The host element, holding <paramref name="child"/>, or no child when null.</summary>
+        protected abstract Element Host(Element? child);
+
+        /// <summary>The control the host currently holds as its child.</summary>
+        protected abstract UIElement? Child(FrameworkElement host);
+
+        private readonly Counts _counts = new();
+        private readonly List<FrameworkElement> _hosts = new();
+        private readonly List<FrameworkElement> _mounted = new();
+        private readonly List<FrameworkElement> _unmounted = new();
+        private readonly List<FrameworkElement> _textUnmounted = new();
+
+        private string Text => $"{Name}-text";
+
+        private Element? ChildAt(int step) => step switch
+        {
+            0 or 1 => ValidationVisualizer(
+                    VisualizerStyle.Inline,
+                    Component<EffectProbe, ProbeProps>(new ProbeProps(_counts)),
+                    title: $"{Name} generation {step}")
+                .OnMount(_mounted.Add)
+                .OnUnmount(_unmounted.Add),
+            2 => TextBlock(Text).OnUnmount(_textUnmounted.Add),
+            _ => null,
+        };
+
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            Prepare(host.Reconciler);
+
+            var label = $"{Name} next";
+            host.Mount(ctx =>
+            {
+                var (step, setStep) = ctx.UseState(0);
+                return VStack(
+                    Button(label, () => setStep(step + 1)),
+                    Host(ChildAt(step)).OnMount(_hosts.Add));
+            });
+
+            H.Check($"{Name}_Mounted", await Harness.WaitFor(() => _hosts.Count == 1 && _mounted.Count == 1), Describe());
+            if (_hosts.Count != 1 || _mounted.Count != 1) return;
+            var hostControl = _hosts[0];
+            H.Check($"{Name}_Mount_ChildInHost", ReferenceEquals(Child(hostControl), _mounted[0]), Describe());
+
+            H.ClickButton(label);
+            H.Check($"{Name}_Replaced", await Harness.WaitFor(() => _mounted.Count == 2), Describe());
+            // Exact counts below: give a second unmount a pass to show up.
+            await Harness.Render();
+            H.Check($"{Name}_Replaced_OldChildUnmountedOnce",
+                _unmounted.Count == 1 && ReferenceEquals(_unmounted[0], _mounted[0])
+                && _counts.Mounts == 2 && _counts.Cleanups == 1
+                && ReferenceEquals(Child(hostControl), _mounted[^1]),
+                Describe());
+
+            H.ClickButton(label);
+            H.Check($"{Name}_TypeChanged",
+                await Harness.WaitFor(() => Child(hostControl) is WinXC.TextBlock { Text: var text } && text == Text),
+                Describe());
+            await Harness.Render();
+            H.Check($"{Name}_TypeChanged_OldChildUnmountedOnce",
+                _unmounted.Count == 2 && ReferenceEquals(_unmounted[1], _mounted[1]) && _counts.Cleanups == 2,
+                Describe());
+
+            H.ClickButton(label);
+            H.Check($"{Name}_Removed", await Harness.WaitFor(() => Child(hostControl) is null), Describe());
+            await Harness.Render();
+            H.Check($"{Name}_Removed_ChildUnmountedOnce", _textUnmounted.Count == 1, Describe());
+            H.Check($"{Name}_HostKept", _hosts.Count == 1, Describe());
+        }
+
+        private string Describe()
+        {
+            var child = _hosts.Count == 0 ? null : Child(_hosts[0]);
+            var held = child switch
+            {
+                null => "nothing",
+                WinXC.TextBlock text => $"TextBlock '{text.Text}'",
+                FrameworkElement fe when _mounted.IndexOf(fe) is var i and >= 0 => $"visualizer #{i}",
+                _ => child.GetType().Name,
+            };
+            return $"host mounted {_hosts.Count} times and holds {held}; visualizers mounted {_mounted.Count}, "
+                + $"unmounted [{string.Join(", ", _unmounted.Select(c => $"#{_mounted.IndexOf(c)}"))}]; "
+                + $"text unmounted {_textUnmounted.Count} times; effect mounts {_counts.Mounts}, cleanups {_counts.Cleanups}";
+        }
+    }
+
+    /// <summary>The data grid's resize grip, an <c>IElementHandler</c> with an optional child.</summary>
+    internal sealed class ResizeGripChild(Harness h) : CustomHostChildFixture(h)
+    {
+        protected override string Name => "SlotReplace_ResizeGripChild";
+
+        protected override void Prepare(Reconciler reconciler) => _ = AdvancedControls.ResizeGripRegistration.Done;
+
+        protected override Element Host(Element? child) => new AdvancedControls.ResizeGripElement(child);
+
+        protected override UIElement? Child(FrameworkElement host)
+        {
+            var grip = (WinXC.Grid)host;
+            return grip.Children.Count > 0 ? grip.Children[0] : null;
+        }
+    }
+
+    private sealed record FramedElement(Element Content) : Element;
+
+    /// <summary>
+    /// A <c>RegisterType</c> host that updates its child the way the extending-controls guide
+    /// teaches: <c>Reconcile</c>, and the returned control installed when it differs.
+    /// </summary>
+    internal sealed class RegisteredHostReconcilesChild(Harness h) : CustomHostChildFixture(h)
+    {
+        protected override string Name => "SlotReplace_RegisteredHostReconcilesChild";
+
+        protected override void Prepare(Reconciler reconciler) =>
+            reconciler.RegisterType<FramedElement, WinXC.Border>(
+                mount: static (r, el, requestRerender) =>
+                    new WinXC.Border { Child = r.Mount(el.Content, requestRerender) },
+                update: static (r, oldEl, newEl, frame, requestRerender) =>
+                {
+                    var next = r.Reconcile(oldEl.Content, newEl.Content, frame.Child, requestRerender);
+                    if (!ReferenceEquals(next, frame.Child)) frame.Child = next;
+                    return null;
+                });
+
+        protected override Element Host(Element? child) => new FramedElement(child ?? Empty());
+
+        protected override UIElement? Child(FrameworkElement host) => ((WinXC.Border)host).Child;
     }
 }
