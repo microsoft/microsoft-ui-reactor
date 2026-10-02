@@ -477,6 +477,27 @@ public class RenderErrorDispatchTests
         Assert.Null(pending);
     }
 
+    [Fact]
+    public void BuildHostFallback_A_Declined_Propagation_From_Install_Escapes()
+    {
+        var declined = new InvalidOperationException("declined during install");
+        WithUnhandledCallback(_ => false, () =>
+        {
+            // Nested Reactor work run while installing the fallback (e.g. a cleanup of the
+            // replaced tree) propagated an error the app declined.
+            Assert.Throws<InvalidOperationException>(() => RenderErrorDispatch.RaiseUnhandled(declined));
+            bool released = false;
+
+            var escaped = Assert.Throws<InvalidOperationException>(() => RenderErrorDispatch.BuildHostFallback(
+                _ => new ProbeElement("fallback"), NewError(), logger: null,
+                install: _ => throw declined,
+                releaseCurrent: () => released = true));
+
+            Assert.Same(declined, escaped);
+            Assert.False(released);
+        });
+    }
+
     // ── WindowSpec ───────────────────────────────────────────────────────────
 
     [Fact]

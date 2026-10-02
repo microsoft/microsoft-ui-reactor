@@ -66,6 +66,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private volatile bool _needsRerender;     // only touched on UI thread
     private bool _themeListenerAttached;   // UISettings subscribed (once per control)
     private FrameworkElement? _themeListenerElement;   // current content root listened to
+
+    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
+    internal FrameworkElement? ThemeListenerElement => _themeListenerElement;
     private volatile bool _disposed;
     private Curve? _pendingAnimationCurve;
     // Snapshot of AnimationAmbient.Current at setter dispatch time
@@ -623,7 +626,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogError(ex, "Render FAILED");
-            ShowErrorFallback(ex, failurePhase);
+            // A root effect failure belongs to the root component; a commit-phase one has no
+            // single owning component.
+            ShowErrorFallback(ex, failurePhase,
+                failurePhase == RenderErrorSource.Effects ? _rootComponent?.GetType().Name : null);
         }
         finally
         {
@@ -690,7 +696,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // Issue #1291 — see ReactorHost.ShowErrorFallback.
         var error = new RenderError(ex, source, componentName, isHostLevel: true);
         var rerender = _requestRenderAction ??= RequestRender;
-        var (content, tree, propagate) = RenderErrorDispatch.BuildHostFallback(
+        var (content, tree, propagate, replacesTree) = RenderErrorDispatch.BuildHostFallback(
             EffectiveRenderErrorHandler, error, _logger,
             install: element => _reconciler.Reconcile(_currentTree, element, _currentControl, rerender),
             releaseCurrent: () =>
@@ -698,12 +704,12 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 if (_currentTree is not null)
                     _reconciler.Reconcile(_currentTree, null, _currentControl, rerender);
             });
-        SetErrorContent(content, tree);
+        SetErrorContent(content, tree, replacesTree);
         if (propagate)
             RenderErrorDispatch.RaiseUnhandled(ex);
     }
 
-    private void SetErrorContent(UIElement? errorPanel, Element? errorTree)
+    private void SetErrorContent(UIElement? errorPanel, Element? errorTree, bool replacesTree)
     {
         if (_overlayWiring is not null && _overlayWiring.TryShowErrorInWrapper(errorPanel))
         {
@@ -715,10 +721,22 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         }
         _currentControl = errorPanel;
         _currentTree = errorTree;
-        // See ReactorHost.SetErrorContent: an app fallback is a live Reactor tree that
-        // may use ThemeRef, so it takes over the theme listener from the replaced root.
-        if (errorTree is not null)
-            AttachThemeListener(errorPanel);
+        // See ReactorHost.SetErrorContent: when the handler's outcome replaced the tree, the
+        // theme listener follows the new content, or is detached when there is none.
+        if (replacesTree)
+        {
+            if (errorPanel is FrameworkElement)
+                AttachThemeListener(errorPanel);
+            else
+                DetachThemeListener();
+        }
+    }
+
+    private void DetachThemeListener()
+    {
+        if (_themeListenerElement is null) return;
+        _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
+        _themeListenerElement = null;
     }
 
     public void Dispose()
@@ -734,11 +752,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
             _uiSettings = null;
         }
-        if (_themeListenerElement is not null)
-        {
-            _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
-            _themeListenerElement = null;
-        }
+        DetachThemeListener();
 
         // Issue #1291 — see ReactorHost.Dispose.
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;

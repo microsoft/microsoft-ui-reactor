@@ -200,9 +200,11 @@ internal static class RenderErrorDispatch
     /// </summary>
     /// <remarks>
     /// With no handler (or one returning <c>null</c>) the built-in panel replaces the content
-    /// exactly as before #1291, current tree included.
+    /// exactly as before #1291, current tree and theme listener included. Every other outcome
+    /// replaces the tree (<c>ReplacesTree</c>), so the host moves its theme listener to the
+    /// new content (or detaches it when there is none).
     /// </remarks>
-    internal static (UIElement? Content, Element? Tree, bool Propagate) BuildHostFallback(
+    internal static (UIElement? Content, Element? Tree, bool Propagate, bool ReplacesTree) BuildHostFallback(
         RenderErrorHandler? handler, RenderError error, ILogger? logger,
         Func<Element, UIElement?> install, Action releaseCurrent)
     {
@@ -212,23 +214,26 @@ internal static class RenderErrorDispatch
                 var guarded = Guard(appElement!);
                 try
                 {
-                    return (install(guarded), guarded, false);
+                    return (install(guarded), guarded, false, true);
                 }
-                catch (Exception mountEx) when (mountEx is not OutOfMemoryException and not StackOverflowException)
+                // A declined propagation from nested work started while installing (e.g. a
+                // cleanup of the replaced tree) keeps going out, like at every catch site.
+                catch (Exception mountEx) when (mountEx is not OutOfMemoryException and not StackOverflowException
+                    && !IsPropagating(mountEx))
                 {
                     // The reconcile against the current tree failed part-way, so that tree's
                     // state is unknown; it is not unmounted a second time.
                     logger?.LogError(mountEx, "RenderErrorHandler fallback failed to mount; showing the neutral fallback");
-                    return (ErrorFallback.BuildSafePanel(), null, false);
+                    return (ErrorFallback.BuildSafePanel(), null, false, true);
                 }
             case Outcome.HandlerFailed:
                 Release(releaseCurrent, logger);
-                return (ErrorFallback.BuildSafePanel(), null, false);
+                return (ErrorFallback.BuildSafePanel(), null, false, true);
             case Outcome.Propagate:
                 Release(releaseCurrent, logger);
-                return (null, null, true);
+                return (null, null, true, true);
             default:
-                return (ErrorFallback.BuildPanel(error.Exception), null, false);
+                return (ErrorFallback.BuildPanel(error.Exception), null, false, false);
         }
     }
 

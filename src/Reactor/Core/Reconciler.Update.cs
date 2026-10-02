@@ -1509,7 +1509,8 @@ public sealed partial class Reconciler
             if (newControl != existingChild)
                 wrapper.Child = newControl;
         }
-        catch (Exception ex)
+        // See MountErrorBoundary: a declined RenderError.Propagate() is not caught (issue #1291).
+        catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogWarning(ex, "ErrorBoundary caught render error during update");
             caughtEx = ex;

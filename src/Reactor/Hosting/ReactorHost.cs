@@ -40,6 +40,8 @@ public sealed class ReactorHost : IDisposable
     private volatile bool _isRendering;     // only touched on UI thread
     private volatile bool _needsRerender;   // only touched on UI thread
     private FrameworkElement? _themeListenerElement;
+    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
+    internal FrameworkElement? ThemeListenerElement => _themeListenerElement;
     private volatile bool _disposed;
 
     // Set when the owning window has raised Closed — i.e. the native window is
@@ -825,7 +827,10 @@ public sealed class ReactorHost : IDisposable
         catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogError(ex, "Render FAILED");
-            ShowErrorFallback(ex, failurePhase);
+            // A root effect failure belongs to the root component; a commit-phase one has no
+            // single owning component.
+            ShowErrorFallback(ex, failurePhase,
+                failurePhase == RenderErrorSource.Effects ? _rootComponent?.GetType().Name : null);
         }
         finally
         {
@@ -1064,7 +1069,7 @@ public sealed class ReactorHost : IDisposable
         // replace the built-in panel, or ask to propagate.
         var error = new RenderError(ex, source, componentName, isHostLevel: true);
         var rerender = _rerenderAction ??= () => RequestRender();
-        var (content, tree, propagate) = RenderErrorDispatch.BuildHostFallback(
+        var (content, tree, propagate, replacesTree) = RenderErrorDispatch.BuildHostFallback(
             EffectiveRenderErrorHandler, error, _logger,
             install: element => _reconciler.Reconcile(_currentTree, element, _currentControl, rerender),
             releaseCurrent: () =>
@@ -1072,7 +1077,7 @@ public sealed class ReactorHost : IDisposable
                 if (_currentTree is not null)
                     _reconciler.Reconcile(_currentTree, null, _currentControl, rerender);
             });
-        SetErrorContent(content, tree);
+        SetErrorContent(content, tree, replacesTree);
         // Nothing is shown where the failure happened. Returns only when the app's
         // unhandled-exception callback handled it; otherwise rethrows.
         if (propagate)
@@ -1082,7 +1087,7 @@ public sealed class ReactorHost : IDisposable
     // Installs the error content. A handler-supplied fallback is kept as the current tree
     // so the next successful render reconciles away from it (running its cleanups); the
     // built-in panel is a raw control, so the tree is cleared and the next render mounts fresh.
-    private void SetErrorContent(UIElement? errorPanel, Element? errorTree)
+    private void SetErrorContent(UIElement? errorPanel, Element? errorTree, bool replacesTree)
     {
         if (_overlayWiring is not null && _overlayWiring.TryShowErrorInWrapper(errorPanel))
         {
@@ -1098,10 +1103,11 @@ public sealed class ReactorHost : IDisposable
         }
         _currentControl = errorPanel;
         _currentTree = errorTree;
-        // An app fallback is a live Reactor tree that may use ThemeRef, so it takes over
-        // the theme listener like any content swap. The built-in panels use fixed colors
-        // and keep the pre-#1291 behavior.
-        if (errorTree is not null)
+        // When the handler's outcome replaced (and released) the tree, the theme listener
+        // moves to the new content like any content swap, or is detached when there is none,
+        // so it neither pins the released root nor misses a ThemeRef-bound app fallback. The
+        // no-handler built-in panel keeps the pre-#1291 behavior.
+        if (replacesTree)
             AttachThemeListener(errorPanel);
     }
 }

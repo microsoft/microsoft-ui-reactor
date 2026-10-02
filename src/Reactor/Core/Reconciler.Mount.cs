@@ -804,7 +804,9 @@ public sealed partial class Reconciler
             renderedElement = eb.Child;
             wrapper.Child = Mount(eb.Child, requestRerender);
         }
-        catch (Exception ex)
+        // An exception the app declined via RenderError.Propagate() is on its way out (issue
+        // #1291); no boundary, including the internal guard around an app fallback, takes it.
+        catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogWarning(ex, "ErrorBoundary caught render error");
             caughtEx = ex;

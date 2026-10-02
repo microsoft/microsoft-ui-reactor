@@ -65,6 +65,30 @@ internal static class RenderErrorHandlerFixtures
         }
     }
 
+    // Starts nested Reactor work during its own render: a host whose first (inline) render
+    // fails and propagates.
+    private sealed class NestedPropagatingRenderComponent : Component<Window>
+    {
+        public static ReactorHost? NestedHost;
+
+        public override Element Render()
+        {
+            var nested = new ReactorHost(Props) { RenderErrorHandler = e => { e.Propagate(); return null; } };
+            NestedHost = nested;
+            nested.Mount(_ => throw new InvalidOperationException("nested render declined in boundary"));
+            return TextBlock("Unreachable");
+        }
+    }
+
+    private sealed class RootEffectComponent : Component
+    {
+        public override Element Render()
+        {
+            UseEffect(() => throw new InvalidOperationException("root component effect boom"));
+            return TextBlock("RootEffectComponentRendered");
+        }
+    }
+
     // Throws the same exception instance on every render.
     private sealed class SameInstanceThrower : Component
     {
@@ -806,6 +830,115 @@ internal static class RenderErrorHandlerFixtures
     }
 
     // ── Host fallback lifecycle ─────────────────────────────────────────────
+
+    // A user ErrorBoundary does not take an exception the app already declined via
+    // Propagate() in nested Reactor work; it keeps going out. The outer host's first render
+    // runs inline, so the escape is observable at Mount.
+    internal class Boundary_DoesNotCatchDeclinedPropagation(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithUnhandledCallback(_ => false, async () =>
+        {
+            var nestedWindow = new Window { Title = "RenderErrorHandler Boundary Nested" };
+            nestedWindow.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(300, 200));
+            nestedWindow.Activate();
+            NestedPropagatingRenderComponent.NestedHost = null;
+            var host = H.CreateHost();
+            Exception? escaped = null;
+            try
+            {
+                host.Mount(_ => ErrorBoundary(
+                    Component<NestedPropagatingRenderComponent, Window>(nestedWindow),
+                    TextBlock("BoundaryCaughtDeclined")));
+            }
+            catch (InvalidOperationException ex) { escaped = ex; }
+            await Harness.Render();
+
+            H.Check("RenderErrorHandler_Boundary_DeclinedEscapes", escaped?.Message == "nested render declined in boundary",
+                escaped?.Message ?? "(nothing escaped)");
+            H.Check("RenderErrorHandler_Boundary_FallbackNotShown", H.FindText("BoundaryCaughtDeclined") is null);
+
+            NestedPropagatingRenderComponent.NestedHost?.Dispose();
+            NestedPropagatingRenderComponent.NestedHost = null;
+            nestedWindow.Close();
+
+            var next = H.CreateHost();
+            next.Mount(_ => TextBlock("AfterBoundaryDeclined"));
+            await Harness.Render();
+            H.Check("RenderErrorHandler_Boundary_NewHostWorks", H.FindText("AfterBoundaryDeclined") is not null);
+        });
+    }
+
+    // Outcomes that show no Reactor tree move the theme listener off the released root: onto
+    // the neutral panel (so a theme flip re-renders and the root can recover), or nowhere
+    // when there is no content.
+    internal class HostFallback_NoTreeOutcomesMoveThemeListener(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static ElementTheme Opposite(FrameworkElement fe) =>
+            fe.ActualTheme == ElementTheme.Dark ? ElementTheme.Light : ElementTheme.Dark;
+
+        public override Task RunAsync() => WithUnhandledCallback(_ => true, async () =>
+        {
+            // ReactorHostControl, throwing handler: listener moves to the neutral panel.
+            int calls = 0;
+            var control = new ReactorHostControl { RenderErrorHandler = _ => { calls++; throw new InvalidOperationException("handler bug"); } };
+            H.SetContent(control);
+            control.Mount(_ => TextBlock("ControlListenerHealthy"));
+            await Harness.Render(50);
+            var healthyRoot = control.ThemeListenerElement;
+            control.Mount(_ => throw new InvalidOperationException("control listener boom"));
+            await Harness.Render(50);
+            H.Check("RenderErrorHandler_Listener_Control_MovedOffReleasedRoot",
+                control.ThemeListenerElement is not null && !ReferenceEquals(control.ThemeListenerElement, healthyRoot)
+                && H.FindText(ErrorFallback.SafeMessage) is not null,
+                control.ThemeListenerElement?.GetType().Name ?? "null");
+            control.RequestedTheme = Opposite(control);
+            await Harness.Render(100);
+            H.Check("RenderErrorHandler_Listener_Control_NeutralPanelRerenders", calls >= 2, $"calls={calls}");
+            H.SetContent(null);
+            control.Dispose();
+
+            // ReactorHostControl, handled Propagate(): no content, listener detached.
+            var propagating = new ReactorHostControl { RenderErrorHandler = e => { e.Propagate(); return null; } };
+            H.SetContent(propagating);
+            propagating.Mount(_ => TextBlock("PropagateListenerHealthy"));
+            await Harness.Render(50);
+            propagating.Mount(_ => throw new InvalidOperationException("propagate listener boom"));
+            await Harness.Render(50);
+            H.Check("RenderErrorHandler_Listener_Control_DetachedOnPropagate", propagating.ThemeListenerElement is null,
+                propagating.ThemeListenerElement?.GetType().Name ?? "null");
+            H.SetContent(null);
+            propagating.Dispose();
+
+            // ReactorHost, handled Propagate(): listener detached as well.
+            bool shouldThrow = false;
+            var host = H.CreateHost();
+            host.RenderErrorHandler = e => { e.Propagate(); return null; };
+            host.Mount(_ => shouldThrow ? throw new InvalidOperationException("host listener boom") : TextBlock("HostListenerHealthy"));
+            await Harness.Render();
+            shouldThrow = true;
+            host.RequestRender();
+            await Harness.Render();
+            H.Check("RenderErrorHandler_Listener_Host_DetachedOnPropagate", host.ThemeListenerElement is null,
+                host.ThemeListenerElement?.GetType().Name ?? "null");
+        });
+    }
+
+    // A root *component*'s effect failure carries its name, like a child effect failure.
+    internal class RootEffect_ReportsComponentName(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var log = new List<RenderError>();
+            var host = H.CreateHost();
+            host.RenderErrorHandler = Recording(log, e => TextBlock($"Custom:{e.Source}"));
+            host.Mount(new RootEffectComponent());
+            await Harness.Render();
+
+            H.Check("RenderErrorHandler_RootEffect_ComponentName",
+                log.Count >= 1 && log[0].Source == RenderErrorSource.Effects && log[0].IsHostLevel
+                && log[0].ComponentName == nameof(RootEffectComponent), Sources(log) + " name=" + (log.Count > 0 ? log[0].ComponentName : ""));
+        }
+    }
 
     // Outcomes that show no Reactor tree (a handled Propagate(), a throwing handler) still
     // unmount the tree they replace, so its components and effect cleanups are not retained.
