@@ -10,9 +10,8 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 ///
 /// <para>
 /// The loop terminates cleanly when stdin reaches EOF (the agent closed the
-/// pipe) or when <see cref="Stop"/> is called. Reload still exits the process
-/// with sentinel code 42 — the supervisor treats it identically to the HTTP
-/// transport's teardown.
+/// pipe) or when <see cref="Stop"/> is called. <c>reload</c> returns a tool error
+/// on both transports; it no longer exits the process.
 /// </para>
 /// </summary>
 internal sealed class StdioMcpLoop : IDisposable

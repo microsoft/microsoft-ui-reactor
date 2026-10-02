@@ -39,7 +39,7 @@ public sealed class DevtoolsServerPortRaceTests
     }
 
     [Fact]
-    public void McpServer_PinnedPortTaken_ThrowsWithoutMovingAndTheHostExits43()
+    public void McpServer_PinnedPortTaken_ThrowsWithoutMoving_AndTheHostReportsItWithoutExiting()
     {
         using var thief = PortThief.HoldWithSocket();
         using var server = new DevtoolsMcpServer(
@@ -53,21 +53,30 @@ public sealed class DevtoolsServerPortRaceTests
         Assert.True(ex.Pinned);
         Assert.Equal(thief.Port, ex.Port);
         Assert.Equal(thief.Port, server.Port);
-        Assert.Equal(DevtoolsHost.McpPortUnavailableExitCode, DevtoolsHost.ExitCodeForMcpStartFailure(ex));
+        var message = DevtoolsHost.DescribeMcpStartFailure(ex);
+        Assert.NotNull(message);
+        Assert.Contains($"MCP port {thief.Port} (--mcp-port) is already in use", message);
     }
 
     [Fact]
-    public void ExitCodeForMcpStartFailure_KeepsRunningForEverythingButAPinnedPortInUse()
+    public void DescribeMcpStartFailure_ReportsOnlyAPinnedPortInUse_AndNamesWinappWatch()
     {
         var inUse = new HttpListenerException(LoopbackHttpListener.ErrorSharingViolation);
 
-        Assert.Equal(
-            DevtoolsHost.McpPortUnavailableExitCode,
-            DevtoolsHost.ExitCodeForMcpStartFailure(new LoopbackPortUnavailableException(9000, pinned: true, attempts: 1, inUse)));
-        Assert.Null(DevtoolsHost.ExitCodeForMcpStartFailure(
+        // The supervisor that relaunched on exit 43 is gone, so the message says the app keeps
+        // running and names the replacement, rather than announcing an exit code.
+        var pinned = DevtoolsHost.DescribeMcpStartFailure(new LoopbackPortUnavailableException(9000, pinned: true, attempts: 1, inUse));
+        Assert.NotNull(pinned);
+        Assert.StartsWith("[devtools] MCP port 9000 (--mcp-port) is already in use", pinned);
+        Assert.Contains("the app keeps running without its MCP endpoint", pinned);
+        Assert.Contains("winapp run . --devtools --watch", pinned);
+        Assert.DoesNotContain("exiting", pinned);
+        Assert.DoesNotContain("43", pinned);
+
+        Assert.Null(DevtoolsHost.DescribeMcpStartFailure(
             new LoopbackPortUnavailableException(9000, pinned: false, attempts: LoopbackHttpListener.MaxAttempts, inUse)));
-        Assert.Null(DevtoolsHost.ExitCodeForMcpStartFailure(new HttpListenerException(5)));
-        Assert.Null(DevtoolsHost.ExitCodeForMcpStartFailure(new ObjectDisposedException(nameof(DevtoolsMcpServer))));
+        Assert.Null(DevtoolsHost.DescribeMcpStartFailure(new HttpListenerException(5)));
+        Assert.Null(DevtoolsHost.DescribeMcpStartFailure(new ObjectDisposedException(nameof(DevtoolsMcpServer))));
     }
 
     [Fact]

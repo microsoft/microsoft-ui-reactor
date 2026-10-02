@@ -25,13 +25,12 @@ internal sealed record ComponentInfo(
 
 internal static class DevtoolsTools
 {
-    /// <summary>Supplies data the tools need from the host: components, switch callback, reload request.</summary>
+    /// <summary>Supplies data the tools need from the host: components, switch and shutdown callbacks.</summary>
     internal sealed class ToolHostContext
     {
         public required Func<IReadOnlyList<string>> GetComponents { get; init; }
         public required Func<string?> GetCurrentComponent { get; init; }
         public required Func<string, bool> SwitchComponent { get; init; }
-        public required Action RequestReload { get; init; }
         public required Action RequestShutdown { get; init; }
         public required WindowRegistry Windows { get; init; }
 
@@ -74,7 +73,7 @@ internal static class DevtoolsTools
         Register_Version(server);
         Register_Components(server, ctx);
         Register_SwitchComponent(server, ctx);
-        Register_Reload(server, ctx);
+        Register_Reload(server);
         Register_Shutdown(server, ctx);
         Register_Windows(server, ctx);
         Register_WindowsList(server, ctx);
@@ -173,23 +172,24 @@ internal static class DevtoolsTools
 
     // -- reload ------------------------------------------------------------------
 
-    private static void Register_Reload(DevtoolsMcpServer server, ToolHostContext ctx)
+    /// <summary>Returned by <c>reload</c>: nothing relaunches the app since <c>mur devtools</c> was removed.</summary>
+    internal const string ReloadUnavailableMessage =
+        "reload is no longer available: the `mur devtools` supervisor that rebuilt and relaunched the app has been " +
+        "removed, so the app keeps running unchanged. Use .NET Hot Reload for edits, or relaunch with " +
+        "`" + DevtoolsHost.WatchEquivalent + "` to rebuild on rude edits and re-attach automatically.";
+
+    private static void Register_Reload(DevtoolsMcpServer server)
     {
+        // Still registered so an agent that calls it learns what to use instead.
         server.Tools.Register(
             new McpToolDescriptor(
                 Name: "reload",
                 Description:
-                    "Flushes the response, closes listeners, and exits with sentinel code 42 so the " +
-                    "`mur devtools` supervisor rebuilds and relaunches. Old node ids do not carry over.",
+                    "Unavailable: always returns an error and leaves the app running. Use .NET Hot Reload, " +
+                    "or relaunch with `" + DevtoolsHost.WatchEquivalent + "` to rebuild and re-attach.",
                 InputSchema: Schema.Root(
-                    ("component", Schema.Str("Optional component to focus after restart")))),
-            @params =>
-            {
-                // Return the response immediately; the reload fires after the HTTP write flushes.
-                var exitingBuild = server.BuildTag;
-                ctx.RequestReload();
-                return new ExitResult(Ok: true, ExitingBuild: exitingBuild);
-            });
+                    ("component", Schema.Str("Ignored")))),
+            _ => throw new McpToolException(ReloadUnavailableMessage));
     }
 
     // -- shutdown ----------------------------------------------------------------
@@ -201,8 +201,7 @@ internal static class DevtoolsTools
                 Name: "shutdown",
                 Description:
                     "Closes the app cleanly. Flushes the HTTP response, disposes the MCP listener, " +
-                    "closes the window, and exits with code 0 so the `mur devtools` supervisor " +
-                    "returns without rebuilding. Use to release file locks on the build output.",
+                    "closes the window, and exits with code 0. Use to release file locks on the build output.",
                 InputSchema: Schema.Root()),
             @params =>
             {

@@ -60,7 +60,6 @@ internal static class DevtoolsFixtures
                 GetComponents = () => available,
                 GetCurrentComponent = () => _currentComponent,
                 SwitchComponent = switchComponent ?? (_ => false),
-                RequestReload = () => { /* reload is Appium-only; no-op here */ },
                 RequestShutdown = () => { /* shutdown is Appium-only; no-op here */ },
                 Windows = Windows,
                 Nodes = Nodes,
