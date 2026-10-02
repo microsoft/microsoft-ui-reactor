@@ -21,7 +21,8 @@ it. Gate the construction, not just the rendering.
 > package — the in-app MCP server, the in-app dev menu, and the component preview host.
 > The `mur devtools` CLI that drove it has been **removed**; use the WinUI DevTools in the
 > winapp CLI (`winapp run . --devtools`) — see [Dev Tooling](dev-tooling.md#winui-devtools-winapp)
-> for the mapping. The package stays (deprecated) until the preview host is decided, and this
+> for the mapping. The package stays (deprecated) until winapp has its own previewer, because the
+> VS Code live preview and the Visual Studio embedded preview run on it; this
 > page goes with it; the `Microsoft-UI-Reactor` ETW provider stays.
 
 This page covers the internals of Reactor's devtools — the MCP server

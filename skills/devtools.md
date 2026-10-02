@@ -43,5 +43,5 @@ and `winapp ui`: `"<Counter>"`, `"<Counter>/Button"`, `key=t1`, `App.cs:67`.
 
 `mur devtools --help` prints the same table. The `Microsoft.UI.Reactor.Devtools`
 package (the in-app host, including the component preview host) still exists but is
-deprecated (build warning `REACTOR_DEVTOOLS_001`); its removal waits on a decision
-about the preview host.
+deprecated (build warning `REACTOR_DEVTOOLS_001`). It stays until winapp has its own
+previewer, because the VS Code live preview and the Visual Studio embedded preview run on it.

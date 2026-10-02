@@ -3,15 +3,20 @@
 > [!WARNING]
 > **Deprecated.** Reactor's built-in DevTools are replaced by the **WinUI DevTools in the
 > winapp CLI**, which need nothing in your project. The `mur devtools` CLI has already been
-> **removed** (each command now only prints its winapp equivalent and exits 1). This package —
-> the in-app host, including the component preview host — and the `Reactor.DevtoolsSupport`
-> switch remain until the preview host is decided, then go too. Builds that reference it show
+> **removed** (each command now only prints its winapp equivalent and exits 1).
+>
+> **What stays, and why:** this package — the in-app host, including the component preview host
+> and the preview capture server — and the `Reactor.DevtoolsSupport` switch keep working, because
+> the **VS Code live preview panel** and the **Visual Studio embedded preview** run on them and winapp
+> has no previewer yet. If you use either preview, keep the package (Debug-only). It goes only once
+> winapp has its own previewer. Builds that reference it show
 > warning `REACTOR_DEVTOOLS_001`
 > (suppress with `<NoWarn>$(NoWarn);REACTOR_DEVTOOLS_001</NoWarn>` or
 > `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`).
 >
 > **Migrate:**
-> 1. Remove `<PackageReference Include="Microsoft.UI.Reactor.Devtools" … />` and
+> 1. If you don't use the VS Code live preview or the Visual Studio embedded preview, remove
+>    `<PackageReference Include="Microsoft.UI.Reactor.Devtools" … />` and
 >    `<RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" … />` from your project,
 >    and any launch profile that passes `--devtools`.
 > 2. Keep a Debug build (source mapping stays on in Debug through `Microsoft.UI.Reactor`).

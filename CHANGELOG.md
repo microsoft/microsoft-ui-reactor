@@ -400,9 +400,10 @@ Conventions for contributors:
   need nothing in the project. A project that references the package gets build warning
   `REACTOR_DEVTOOLS_001` (suppress with `NoWarn` or
   `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`).
-  The package still works and stays until a decision on its in-app component preview host
-  (`winapp run . --devtools -- --preview <Name>`), the VS Code panel and the Visual Studio embedded
-  preview, which have no winapp equivalent yet. Reactor keeps its library diagnostics: source
+  The package still works and **stays until winapp has its own previewer**: its in-app component
+  preview host (`winapp run . --devtools -- --preview <Name>`) and capture server run the VS Code live
+  preview panel and the Visual Studio embedded preview, which have no winapp equivalent yet. Keep it
+  (Debug-only) if you use either preview. Reactor keeps its library diagnostics: source
   mapping, `ReactorTrace` / the `Microsoft-UI-Reactor` EventSource, and hot reload.
 
 - **`Microsoft.UI.Reactor.ProjectTemplates` is deprecated on NuGet.org.** Published versions

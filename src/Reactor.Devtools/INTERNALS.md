@@ -1,7 +1,9 @@
 # Reactor Devtools — MCP Surface
 
 > **Deprecated.** This package is replaced by the WinUI DevTools in the winapp CLI
-> (`winapp run . --devtools`) and stays only until the component preview host is decided.
+> (`winapp run . --devtools`). It stays, and keeps working, for the component preview host and
+> capture server that the VS Code live preview and the Visual Studio embedded preview need, until
+> winapp has its own previewer.
 > The `mur devtools` CLI (supervisor, named verbs, `--print-config`) has been **removed**;
 > sections below that mention it describe the old CLI.
 

@@ -34,8 +34,8 @@ so end users never see anything you don't intend to ship.
 > prints its winapp equivalent and exits `1`. The `Microsoft.UI.Reactor.Devtools`
 > package and the `Reactor.DevtoolsSupport` switch remain, deprecated, for the
 > in-app hosts that have no winapp equivalent yet — the component preview host, the
-> VS Code panel, the Visual Studio embedded preview and the in-app dev menu — and
-> are removed once the preview host is decided. The rest of this page — `dotnet
+> VS Code live preview panel, the Visual Studio embedded preview and the in-app dev
+> menu — and stay until winapp has its own previewer. The rest of this page — `dotnet
 > watch`, hot reload, the other `mur` commands — is unaffected.
 
 Reactor's inner loop centers on `dotnet watch` and preview mode: you edit
