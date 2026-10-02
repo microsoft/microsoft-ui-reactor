@@ -180,20 +180,62 @@ public class CliFlagParsingTests
         Assert.Equal(DevtoolsSubverb.List, opts.Subverb);
     }
 
-    [Fact]
-    public void DevtoolsScreenshot_ParsesAsScreenshot()
+    [Theory]
+    [InlineData("app", "winapp run . --devtools")]
+    [InlineData("screenshot", "winapp ui screenshot")]
+    [InlineData("tree", "winapp devtools inspect")]
+    [InlineData("TREE", "winapp devtools inspect")]
+    public void RemovedSubverbs_ReportTheWinappCommand_InsteadOfRunningAComponentNamedAfterThem(string verb, string winapp)
     {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "screenshot", "CounterDemo", "--out", "c:/tmp/out.png"]);
-        Assert.Equal(DevtoolsSubverb.Screenshot, opts.Subverb);
-        Assert.Equal("CounterDemo", opts.ComponentName);
-        Assert.Equal("c:/tmp/out.png", opts.ScreenshotOutputPath);
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", verb, "CounterDemo"]);
+
+        Assert.Null(opts.Subverb);
+        Assert.Null(opts.ComponentName);
+        Assert.NotNull(opts.RemovedSubverbError);
+        Assert.Contains($"'--devtools {verb.ToLowerInvariant()}' was removed", opts.RemovedSubverbError);
+        Assert.Contains(winapp, opts.RemovedSubverbError);
     }
 
-    [Fact]
-    public void DevtoolsTree_ParsesAsTree()
+    [Theory]
+    [InlineData("run")]
+    [InlineData("list")]
+    [InlineData("Counter")]
+    public void KeptSubverbsAndComponentNames_AreNotReportedAsRemoved(string token)
     {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "tree"]);
-        Assert.Equal(DevtoolsSubverb.Tree, opts.Subverb);
+        // Positive control for the theory above: the same position holding a kept verb
+        // or a component name parses normally.
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", token]);
+
+        Assert.NotNull(opts.Subverb);
+        Assert.Null(opts.RemovedSubverbError);
+    }
+
+    [Theory]
+    [InlineData("--mcp-port", "1234")]
+    [InlineData("--mcp-transport", "stdio")]
+    [InlineData("--devtools-log-level", "trace")]
+    [InlineData("--devtools-logs", "off")]
+    [InlineData("--devtools-project", "MyProj")]
+    public void RemovedMcpFlags_AreIgnored_AndDoNotBecomeTheComponentName(string flag, string value)
+    {
+        // The MCP server's flags went with it. An old launch profile that still passes
+        // one must run the named component, not fail or read the value as a component.
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "Counter", flag, value]);
+
+        Assert.Equal(DevtoolsSubverb.Run, opts.Subverb);
+        Assert.Equal("Counter", opts.ComponentName);
+        Assert.Null(opts.RemovedSubverbError);
+        Assert.Null(opts.EmbedValidationError);
+    }
+    [Fact]
+    public void RemovedSubverbName_AsAComponentNameAfterRun_StillRuns()
+    {
+        // Only the token right after --devtools is a verb; `run tree` previews a component called "tree".
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "tree"]);
+
+        Assert.Equal(DevtoolsSubverb.Run, opts.Subverb);
+        Assert.Equal("tree", opts.ComponentName);
+        Assert.Null(opts.RemovedSubverbError);
     }
 
     [Fact]
@@ -290,20 +332,6 @@ public class CliFlagParsingTests
     }
 
     [Fact]
-    public void McpPortFlag_IsParsed()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--mcp-port", "54321"]);
-        Assert.Equal(54321, opts.McpPort);
-    }
-
-    [Fact]
-    public void McpPortFlag_Default_IsNull()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
-        Assert.Null(opts.McpPort);
-    }
-
-    [Fact]
     public void Fps_Default_Is10()
     {
         var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
@@ -324,72 +352,6 @@ public class CliFlagParsingTests
         var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "MyComponent"]);
         Assert.Equal(DevtoolsSubverb.Run, opts.Subverb);
         Assert.Equal("MyComponent", opts.ComponentName);
-    }
-
-    [Fact]
-    public void LogLevelFlag_IsParsed()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--devtools-log-level", "trace"]);
-        Assert.Equal("trace", opts.LogLevel);
-    }
-
-    [Fact]
-    public void LogLevelFlag_Default_IsNull()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
-        Assert.Null(opts.LogLevel);
-    }
-
-    [Fact]
-    public void McpTransportFlag_Stdio_IsPicked()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--mcp-transport", "stdio"]);
-        Assert.Equal(McpTransport.Stdio, opts.Transport);
-    }
-
-    [Fact]
-    public void McpTransportFlag_DefaultsToHttp()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
-        Assert.Equal(McpTransport.Http, opts.Transport);
-    }
-
-    [Fact]
-    public void McpTransportFlag_UnknownValue_KeepsHttpDefault()
-    {
-        // An unknown transport token should not flip to stdio silently —
-        // the HTTP default stays, so users don't end up with a silently
-        // broken stdout stream.
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--mcp-transport", "carrier-pigeon"]);
-        Assert.Equal(McpTransport.Http, opts.Transport);
-    }
-
-    [Fact]
-    public void LogsFlag_OffDisablesCapture()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--devtools-logs", "off"]);
-        Assert.True(opts.LogsDisabled);
-    }
-
-    [Fact]
-    public void LogsFlag_Default_CaptureEnabled()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
-        Assert.False(opts.LogsDisabled);
-    }
-
-    [Fact]
-    public void LogsCapacityFlag_IsParsed()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--devtools-logs-capacity", "16"]);
-        Assert.Equal(16, opts.LogsCapacityMb);
-    }
-
-    [Fact]
-    public void LogsCapacityFlag_Default_IsNull()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
-        Assert.Null(opts.LogsCapacityMb);
     }
 
     [Fact]
@@ -549,11 +511,6 @@ public class DevtoolsHostCliTests
             return true;
         }
 
-        public global::Microsoft.UI.Reactor.Core.Element? BuildDevtoolsMenu(
-            Func<IEnumerable<global::Microsoft.UI.Reactor.Core.MenuFlyoutItemBase>>? items,
-            string glyph,
-            string toolTip,
-            string? automationId) => null;
     }
 
     [Theory]

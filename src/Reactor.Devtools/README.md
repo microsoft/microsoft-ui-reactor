@@ -2,11 +2,12 @@
 
 > [!WARNING]
 > **Deprecated.** Reactor's built-in DevTools are replaced by the **WinUI DevTools in the
-> winapp CLI**, which need nothing in your project. The `mur devtools` CLI has already been
-> **removed** (each command now only prints its winapp equivalent and exits 1).
+> winapp CLI**, which need nothing in your project. The `mur devtools` CLI has been
+> **removed** (each command now only prints its winapp equivalent and exits 1), and so have this
+> package's MCP server and the in-app dev menu (`DevtoolsMenu`, `UseDevtools`).
 >
-> **What stays, and why:** this package — the in-app host, including the component preview host
-> and the preview capture server — and the `Reactor.DevtoolsSupport` switch keep working, because
+> **What stays, and why:** this package — now only the component preview host, the preview
+> capture server and the `--embed` handshake — and the `Reactor.DevtoolsSupport` switch keep working, because
 > the **VS Code live preview panel** and the **Visual Studio embedded preview** run on them and winapp
 > has no previewer yet. If you use either preview, keep the package (Debug-only). It goes only once
 > winapp has its own previewer. Builds that reference it show
@@ -22,7 +23,7 @@
 > 2. Keep a Debug build (source mapping stays on in Debug through `Microsoft.UI.Reactor`).
 > 3. Launch with `winapp run . --devtools` (add `--watch` to rebuild on rude edits and re-attach automatically, `--detach` when an agent drives it).
 > 4. AI agents: use the winapp CLI with `--json` and the `winui-devtools` skill. The MCP server
->    is not carried over.
+>    has been removed.
 >
 > | Reactor DevTools | use instead |
 > |---|---|
@@ -49,65 +50,63 @@
 > Reactor apps work with `winapp devtools` selectors such as `"<Counter>/Button"`, `key=t1`
 > and `App.cs:67`. `mur devtools --help` prints the full mapping.
 
-**Optional developer-loop devtools host for [`Microsoft.UI.Reactor`](https://www.nuget.org/packages/Microsoft.UI.Reactor) — live element-tree inspection, hot reload, preview, and an agent-friendly MCP surface.**
+**Deprecated in-app preview host for [`Microsoft.UI.Reactor`](https://www.nuget.org/packages/Microsoft.UI.Reactor) — kept for the VS Code live preview and the Visual Studio embedded preview.**
 
 ## About
 
-`Microsoft.UI.Reactor.Devtools` adds an opt-in, developer-loop tooling surface to a Reactor app. It hosts a loopback Model Context Protocol (MCP) server that exposes `reactor.*` tools (inspect the element tree, capture screenshots, click, read state, fire handlers) and a rolling per-call log. The `mur devtools` CLI that used to drive it has been removed.
+`Microsoft.UI.Reactor.Devtools` hosts a Reactor component in a preview window and, when an editor
+asks for it, runs a loopback capture server that streams frames, lists and switches components,
+returns the reference graph, and performs the Visual Studio `--embed` handshake. That is all it does
+now: inspecting, editing and automating a running app is the WinUI DevTools in the winapp CLI.
 
-It is designed strictly for the inner development loop — not for production endpoints. See the security model below.
+It is designed strictly for the inner development loop — not for production. See the security model
+below.
 
 ## How to Use
 
-Install the package into your Reactor app (typically as a Debug-only reference):
-
-```shell
-dotnet add package Microsoft.UI.Reactor.Devtools
-```
-
-Enable the build-time capability gate (keep it Debug-conditional so Release/AOT builds carry no devtools surface):
+Reference the package Debug-only, with the build-time capability switch:
 
 ```xml
 <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+  <PackageReference Include="Microsoft.UI.Reactor.Devtools" />
   <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />
 </ItemGroup>
 ```
 
-Then launch the app with the in-app host. The component preview host runs alongside the WinUI DevTools:
+The VS Code extension and the Visual Studio extension launch the app themselves
+(`--devtools run --vscode` and `--devtools run --embed …`). To preview one component by hand,
+alongside the WinUI DevTools:
 
 ```shell
 winapp run . --devtools -- --preview <ComponentName>
 ```
 
-or, without winapp, `dotnet run -- --devtools run`. (`mur devtools run` and `mur devtools --print-config` have been removed.)
+or, without winapp, `dotnet run -- --devtools run <ComponentName>`. `--devtools app`,
+`--devtools screenshot` and `--devtools tree` have been removed; they print the winapp command to
+use instead and exit 2.
 
 ## Security model
 
-The devtools surface is **developer-loop only** and ships with hard gates:
-
-1. **Opt in at build time and launch time.** The `Reactor.DevtoolsSupport` MSBuild switch is the build-time gate; `--devtools run` / `--devtools app` (or `--preview <Name>`) on the app's command line is the session-time gate. Both must be present before the MCP server, capture server, logger, or in-app dev menu is enabled.
-2. **Loopback-only binding.** The MCP `HttpListener` binds to `http://127.0.0.1:{port}/` and is never exposed on a non-loopback adapter.
-3. **No authentication in v1.** Any local process can connect to the MCP port. Do **not** run a devtools-enabled app in an environment with untrusted local processes, do **not** enable `Reactor.DevtoolsSupport` in Release builds that ship to end users, and do **not** expose the MCP surface beyond localhost (reverse proxy, remote-binding SSH tunnel, or `0.0.0.0` container forwarding).
-
-## Key Features
-
-- **MCP tool surface** — `reactor.tree`, `reactor.screenshot`, `reactor.click`, `reactor.state`, `reactor.fire`, and more.
-- **Rolling call log** — one line per tool call to `%LOCALAPPDATA%/Reactor/devtools/{pid}.log`, rolling at 10 MB with five archives kept.
-- **ETW trace correlation** — emits a `Microsoft-UI-Reactor` `EventSource` for correlated Reactor + WinUI timelines (see [`INTERNALS.md`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/Reactor.Devtools/INTERNALS.md)).
+1. **Opt in at build time and launch time.** The `Reactor.DevtoolsSupport` switch is the build-time
+   gate; `--devtools run` (or `--preview <Name>`) on the app's command line is the launch-time gate.
+   The capture server starts only when an editor passes `--vscode` (or `--embed`).
+2. **Loopback-only binding.** The capture server's `HttpListener` binds to `http://127.0.0.1:{port}/`
+   and is never exposed on a non-loopback adapter.
+3. **Per-launch bearer token.** Every request, including `/status`, needs the `CAPTURE_TOKEN` the app
+   prints at startup. State-changing endpoints are POST-only with a JSON content type.
 
 ## Best Practices
 
-- **Reference it Debug-only.** Wrap the `PackageReference` and the `Reactor.DevtoolsSupport` switch in a `'$(Configuration)' == 'Debug'` condition so Release and AOT builds carry no devtools surface at all.
-- **Never ship devtools to end users.** The MCP port has no authentication in v1; treat it as a local development tool only.
-- **Keep it on loopback.** Don't expose the MCP port through a reverse proxy, remote-binding tunnel, or `0.0.0.0` container forwarding.
-- **Run only with trusted local processes.** Any process on the same machine can call the MCP tools while the session is active.
+- **Reference it Debug-only.** Release and AOT builds then carry no devtools surface at all.
+- **Never ship it to end users.** It is a local development tool.
+- **Keep it on loopback.** Don't expose the capture port through a reverse proxy, a remote-binding
+  tunnel, or `0.0.0.0` container forwarding.
 
 ## Additional Documentation
 
-- [Devtools internals & ETW guide](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/Reactor.Devtools/INTERNALS.md)
+- [Package internals](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/Reactor.Devtools/INTERNALS.md)
+- [DevTools internals](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/devtools-internals.md)
 - [User guide](https://github.com/microsoft/microsoft-ui-reactor/tree/main/docs/guide)
-- [Model Context Protocol](https://modelcontextprotocol.io/)
-
 ## Related Packages
 
 - [`Microsoft.UI.Reactor`](https://www.nuget.org/packages/Microsoft.UI.Reactor) — the core declarative WinUI 3 framework (required).

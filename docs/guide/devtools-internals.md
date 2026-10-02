@@ -1,305 +1,240 @@
 
-The Microsoft.UI.Reactor (Reactor) devtools surface is two subsystems that share a single
-gate. The MCP server speaks JSON-RPC over either HTTP loopback or
-stdio, exposing a fixed inventory of tools (`tools/list`, `tools/call`)
-that an external CLI, editor, or agent harness drives against the
-running app. The in-app dev menu — `DevtoolsMenu(...)`, the keyboard
-shortcuts, the reconcile-highlight overlay —
-runs entirely in-process, observes the same component tree the user
-sees, and is gated by the same `UseDevtools()` flag. Both subsystems
-are zero-cost in retail: the gate evaluates a `static readonly bool`,
-and code paths gated behind it never construct elements or register
-ETW listeners. The most common mistake is reaching for a devtools
-modifier outside the gate; in retail it's still a `null`-returning
-factory and contributes nothing visual, but the code path still
-allocates whatever the surrounding component constructed to pass to
-it. Gate the construction, not just the rendering.
+What is left of Microsoft.UI.Reactor (Reactor)'s own devtools is one in-app
+subsystem: the preview host in the deprecated `Microsoft.UI.Reactor.Devtools`
+package. It mounts a single component (or the whole app) in a window, and when an
+editor asks for it, runs a loopback capture server that streams frames, lists
+components, switches the previewed component, draws the reference graph, and
+hands the window to Visual Studio for embedding. Everything else — inspecting and
+editing a running app, UI automation, logs, agents — is the WinUI DevTools in the
+winapp CLI (`winapp run . --devtools`), which attaches from outside the app and
+needs nothing in your project. The preview host is zero-cost in retail: without the
+`Reactor.DevtoolsSupport` switch the package's code is trimmed and a `--devtools`
+argument only prints how to enable it.
 
 # DevTools Internals
 
-> **Deprecated.** This page describes the internals of the `Microsoft.UI.Reactor.Devtools`
-> package — the in-app MCP server, the in-app dev menu, and the component preview host.
-> The `mur devtools` CLI that drove it has been **removed**; use the WinUI DevTools in the
-> winapp CLI (`winapp run . --devtools`) — see [Dev Tooling](dev-tooling.md#winui-devtools-winapp)
-> for the mapping. The package stays (deprecated) until winapp has its own previewer, because the
-> VS Code live preview and the Visual Studio embedded preview run on it; this
-> page goes with it; the `Microsoft-UI-Reactor` ETW provider stays.
+> **Deprecated.** This page describes the in-app preview host in the
+> `Microsoft.UI.Reactor.Devtools` package. Its MCP server, its in-app dev menu
+> (`DevtoolsMenu`, `UseDevtools`) and the `mur devtools` CLI have been **removed**; use
+> the WinUI DevTools in the winapp CLI (`winapp run . --devtools`) — see
+> [Dev Tooling](dev-tooling.md#winui-devtools-winapp) for the mapping. The package stays
+> (deprecated) until winapp has its own previewer, because the VS Code live preview and
+> the Visual Studio embedded preview run on it; this page goes with it. The
+> `Microsoft-UI-Reactor` ETW provider stays.
 
-This page covers the internals of Reactor's devtools — the MCP server
-that external agents talk to, the in-app dev menu, the runtime
-overlays, and the gate that keeps the whole subsystem out of retail.
-[Dev Tooling](dev-tooling.md) is the user-facing companion; this is
-the internals view.
+[Dev Tooling](dev-tooling.md) is the user-facing companion; this is the internals
+view.
 
-## The MCP loop
-
-![DevTools MCP loop — CLI reads lockfile, POSTs JSON-RPC tools/call, server dispatches to McpDispatcher, hops to UI thread, tool runs against live tree, returns JSON-RPC response. In-app DevtoolsMenu observes the same UseDevtools gate](images/devtools-internals/mcp-loop.svg)
-
-The MCP server is a loopback `HttpListener` (or a stdio reader/writer
-loop) running inside the host process. On startup it picks a free
-port, generates a per-launch bearer token, and writes a lockfile under
-`%TEMP%/reactor-devtools/<hash>.json` advertising the endpoint, the
-port, the pid, the build tag, and the token. The CLI reads that
-lockfile to find the running app — there's no service registry, no
-broadcast discovery, just a file in tempdir keyed by the project's
-canonicalized path. Any process running as the same user can read
-the lockfile, present the token, and call tools.
+![The in-app preview host: the VS Code live preview, the Visual Studio embedded preview and the doc screenshot pipeline launch the app, read CAPTURE_PORT and CAPTURE_TOKEN, and call the bearer-authed PreviewCaptureServer, which hops to the UI thread to capture frames, switch the previewed component or walk the reference graph. The MCP server, the in-app dev menu and mur devtools are removed in favour of the winapp CLI.](images/devtools-internals/preview-host.svg)
 
 ## Reference
 
 | Subsystem | Owner type | Source | Gate |
 |---|---|---|---|
-| Gate hook | `UseDevtools()` | `src/Reactor/Hooks/UseDevtools.cs` | Build-time `Reactor.DevtoolsSupport` AND session-time `--devtools app` |
-| MCP server | `DevtoolsMcpServer` | `src/Reactor.Devtools/DevtoolsMcpServer.cs` | Bearer token + project lockfile |
-| Tool registry | `McpToolRegistry` | `src/Reactor.Devtools/McpToolRegistry.cs` | Per-tool input-schema validation |
-| JSON-RPC dispatch | `McpDispatcher` | `src/Reactor.Devtools/McpDispatcher.cs` | Method allowlist + `tools/call` routing |
-| In-app menu | `DevtoolsMenu(...)` factory | `src/Reactor.Devtools/DevtoolsMenuFactory.cs` | `UseDevtools()` — returns `Empty()` when off |
-| Overlays | `ReactorFeatureFlags` | `src/Reactor/Core/` | Toggle binds an ETW listener only when on |
+| Host registration | `ModuleInit` → `ReactorDevtoolsBootstrap.Register` | `src/Reactor.Devtools/ModuleInit.cs` | Package referenced |
+| Launch parsing | `DevtoolsCliParser` | `src/Reactor/Hosting/Devtools/DevtoolsCliParser.cs` | `--devtools run`/`list`, `--preview`, `--preview-list` |
+| Preview host | `DevtoolsHost` | `src/Reactor.Devtools/DevtoolsHost.cs` | Build-time `Reactor.DevtoolsSupport` switch |
+| Capture server | `PreviewCaptureServer` | `src/Reactor.Devtools/PreviewCaptureServer.cs` | `--vscode` (implied by `--embed`) + per-launch bearer token |
+| Reference graph | `ReferenceOverlay` | `src/Reactor.Devtools/ReferenceOverlay.cs` | `GET /references` |
+| Overlays | `ReactorFeatureFlags` | `src/Reactor/Core/` | Set from code |
 
 ## The gate
 
 ```csharp
-public static bool UseDevtools(this RenderContext ctx) =>
-    ReactorApp.DevtoolsEnabled;
+var options = DevtoolsCliParser.Parse(args);
+
+if (options.PreviewAndDevtoolsConflict)
+{
+    Console.Error.WriteLine("[devtools] Error: pass either --devtools or --preview, not both.");
+    return true;
+}
+
+if (!string.IsNullOrEmpty(options.RemovedSubverbError ?? options.EmbedValidationError))
+{
+    Console.Error.WriteLine($"[reactor] {options.RemovedSubverbError ?? options.EmbedValidationError}");
+    Environment.ExitCode = 2;
+    if (exitOnUnavailable) Environment.Exit(2);
+    return true;
+}
+
+if (options.Subverb is null) return false;
+
+if (ReactorFeatures.IsDevtoolsSupported && ReactorDevtoolsBootstrap.Current is { } host)
+{
+    var request = new ReactorDevtoolsBootRequest(
+        options,
+        title,
+        options.WindowWidth ?? width,
+        options.WindowHeight ?? height,
+        fullScreen,
+        hostRoot,
+        hostRootFactory,
+        rootRenderFunc,
+        configure);
+    return host.TryHandleCommandLine(request);
+}
+
+EmitDevtoolsNotAvailableMessage();
+Environment.ExitCode = 2;
+if (exitOnUnavailable) Environment.Exit(2);
+return true;
 ```
 
-`UseDevtools()` returns `ReactorApp.DevtoolsEnabled` — the AND of two
-independent signals captured at process startup. The build-time signal
-is the `Reactor.DevtoolsSupport` runtime host configuration switch in
-the app project; ship a release binary without it and the AND is false
-no matter what flags the user passes. The session-time signal is the `--devtools app` (or
-`--devtools run`) command-line argument the user supplies. Both must
-hold for the gate to open.
+Two signals combine. The build-time signal is the `Reactor.DevtoolsSupport`
+runtime host configuration switch in the app project (`ReactorFeatures.IsDevtoolsSupported`);
+ship a Release binary without it and the package's code is trimmed away. The
+launch-time signal is the command line: `--devtools run [<Component>]` or
+`--preview <Component>` runs the preview host, `--devtools list` /
+`--preview-list` writes the component list and exits. `ReactorApp.Run` parses the
+arguments with `DevtoolsCliParser` before it creates a window. With no devtools
+argument it returns at once and the app starts normally; with one but without the
+switch or the package, it prints how to enable them and exits `2`.
 
-The value is frozen for the session and the hook deliberately does
-not consume a slot in the [hook table](hooks-internals.md). That's
-why `UseDevtools()` can be called from helpers that aren't part of
-the render path — there's no positional invariant to violate. The
-trade-off: the value can't change at runtime. Flipping
-`ReactorApp.DevtoolsEnabled` mid-session would produce a stale
-gate read in every component already rendered.
-
-> **Caveat:** Calling `UseDevtools()` does not opt the component into observing the
-> flag — the flag is frozen for the session, so observation isn't
-> needed. But code inside the `dev ? DebugOverlay() : null` branch is
-> still evaluated when the gate is open, even if your overlay never
-> displays anything user-visible. A `DebugOverlay()` factory that
-> constructs 200 children to display in a dev-only data panel is 200
-> allocations per render whenever devtools are enabled, including
-> during automated UI testing that happens to launch with `--devtools
-> app`. Gate construction, not just display.
-
-## The CLI client
-
-The `mur devtools` CLI client that used to read the lockfile and post
-bearer-authed JSON-RPC to this server has been removed; `mur devtools`
-now only prints the winapp equivalent of each command. The server below
-still runs inside an app that references the deprecated package (for
-example to host the component preview), and any local client that reads
-the lockfile can call it.
-
-## Endpoint discovery
-
-The lockfile under `%TEMP%/reactor-devtools/<hash>.json` carries the
-endpoint URL, the per-launch bearer token, the pid (for liveness
-probing), the build tag, the transport (`http` or `stdio`), and the
-project path. The path hash is a truncated SHA-256 of the
-canonicalized `.csproj` path — `C:\foo\bar.csproj` and
-`c:/foo/bar.csproj` collide deliberately, so re-launching the same
-project from a different shell finds the existing session rather
-than starting a second one. (The removed `mur devtools` supervisor
-used to check for a live lockfile before binding a new port.)
-
-A lockfile is *stale* when the recorded pid doesn't match a running
-process. Readers should ignore stale lockfiles; the running server
-doesn't proactively re-write its lockfile, but it also doesn't need
-to — the file's `pid` field is the only check that matters, and the
-pid doesn't change for the life of the session.
-
-## Tool dispatch — the UI-thread hop
+The verbs that went with the MCP server and the dev menu — `--devtools app`,
+`--devtools screenshot`, `--devtools tree` — are still recognised, so they don't
+fall through to `run` with the verb read as a component name: they print the
+winapp command to use instead and exit `2`.
 
 ```csharp
-private object? HandleCall(JsonElement? @params)
+internal static string? RemovedSubverbMessage(string[] args, int devtoolsIdx)
 {
-    if (@params is not { } p || p.ValueKind != JsonValueKind.Object)
-        throw new McpToolException("tools/call params must be an object with { name, arguments? }.",
-            JsonRpcErrorCodes.InvalidParams);
-    if (!p.TryGetProperty("name", out var nameEl) || nameEl.ValueKind != JsonValueKind.String)
-        throw new McpToolException("tools/call requires a string 'name' field.", JsonRpcErrorCodes.InvalidParams);
-
-    var name = nameEl.GetString()!;
-    JsonElement? args = p.TryGetProperty("arguments", out var argsEl) ? argsEl : null;
-    return Invoke(name, args);
+    if (devtoolsIdx + 1 >= args.Length) return null;
+    return args[devtoolsIdx + 1].ToLowerInvariant() switch
+    {
+        "app" => "'--devtools app' was removed with the in-app dev menu. Inspect the running app with the WinUI DevTools: winapp run . --devtools",
+        "screenshot" => "'--devtools screenshot' was removed. Use: winapp ui screenshot -a <app>",
+        "tree" => "'--devtools tree' was removed. Use: winapp devtools inspect",
+        _ => null,
+    };
 }
 ```
 
-Tool handlers reach the UI dispatcher, but not because the dispatcher
-puts them there. `McpDispatcher.HandleCall` parses `{ name, arguments }`
-off the JSON-RPC `params`, looks the handler up in the
-[`McpToolRegistry`](https://github.com/microsoft/reactor), and invokes
-it *inline on the transport's worker thread*. Each handler that touches
-WinUI wraps its body in `server.OnDispatcher<T>(...)`, which returns
-immediately when it already has thread access and otherwise posts
-through `DispatcherQueue.TryEnqueue` and waits (5 s default timeout).
-That hop is what makes it safe for a handler to query the live WinUI
-tree — `WindowRegistry.Snapshot()`, `host.Mount(new T())`, every
-property read on a `FrameworkElement` — all of which assume the calling
-thread is the one that owns the visual tree. A handler that forgets the
-wrapper races against the UI thread and either throws
-`COMException` or produces a stale snapshot.
+`ReactorApp.DevtoolsEnabled` is true while the preview host runs. Source
+mapping keys on it, which is how the VS Code panel can jump from an element to its
+call site.
 
-The dispatch path is the same for HTTP and stdio. The two transports
-diverge only at the read boundary (`HttpListenerContext` vs
-`StreamReader`) and the write boundary (`HttpListenerResponse` vs
-`StreamWriter`). Everything between — JSON-RPC parsing, the
-`McpDispatcher.Dispatch(body)` call, the registry lookup, the tool
-handler — is shared code.
+## The preview host
+
+`DevtoolsHost` registers itself from a module initializer, so referencing the
+package is enough; `ReactorDevtools.EnsureRegistered()` runs the registration
+explicitly, before `ReactorApp.Run`, for apps that must not depend on module-initializer
+order (the NativeAOT sample does this). On `run` it mounts the requested
+component (or the app's root when none is named) in a window sized by the app's
+`ReactorApp.Run` call, or by `--width`/`--height`/`--x`/`--y` when given.
+
+## The capture server
+
+When an editor launches the app with `--vscode` (the VS Code panel does this;
+`--embed` implies it), the host starts `PreviewCaptureServer`, a loopback
+`HttpListener` on a free port. It prints `CAPTURE_PORT=<port>` and
+`CAPTURE_TOKEN=<token>` on stdout and requires `Authorization: Bearer <token>`
+on every request, including `/status`:
+
+```csharp
+// SECURITY (TASK-018): require bearer auth on every endpoint.
+if (!BearerMatches(ctx.Request.Headers["Authorization"]))
+{
+    response.StatusCode = 401;
+    response.Headers.Add("WWW-Authenticate", "Bearer realm=\"reactor-preview\"");
+    response.Close();
+    return;
+}
+```
+
+> **Caveat:** The bearer token is the only thing between the capture server and any other
+> process running as the same user: the port is loopback-only but discoverable.
+> Don't log `CAPTURE_TOKEN` anywhere persistent, don't relax the check for
+> "read-only" endpoints such as `/frame` (a frame can show anything on screen), and
+> keep state-changing endpoints (`/focus`, `/preview`, `/embed/*`) POST-only with a
+> non-simple content type, so a browser page can't drive them with a simple
+> cross-origin request.
+
+| Endpoint | Used by | What it does |
+|---|---|---|
+| `GET /frame` | VS Code panel, doc screenshot pipeline | Latest captured frame as PNG |
+| `GET /status` | Both extensions | Liveness, port, frame rate and embed protocol version |
+| `POST /focus` | VS Code panel | Brings the preview window forward |
+| `GET /components` | Both extensions | The app's previewable components |
+| `POST /preview` | VS Code panel, doc screenshot pipeline | Switches the previewed component |
+| `GET /references` | VS Code panel | The reference graph (below) |
+| `GET /hwnd`, `POST /embed/*` | Visual Studio | The `--embed` handshake: the window handle, then ack, resize, move and release (embed mode only) |
 
 ## The reference-graph overlay
 
-The `references` MCP tool walks the visual tree and returns the app's
-reactive reference graph: the reference edges every control declares
-through `descriptor.Reference`/`.ReferenceList`, the `binding.Reference`
-bridge, and the modifier-level edges (`.LabeledBy`, `.DescribedBy`,
-`.FlowsTo`/`.FlowsFrom`, `.XYFocusUp/Down/Left/Right`). Each edge is
-emitted as `{from, to, label, slot, kind, resolved}` keyed to the same
-node ids the `tree` tool uses, plus diagnostics for **cycles** and
-**unresolved** (perpetually-null) references. Cycles are a supported
-topology — push resolution converges on them by design — so they are
-reported informationally, not as errors. The edges live in each
-control's own `ReactorState.ReferenceEdges` bag; the overlay
-(`ReferenceOverlay`) reads those bags after the `TreeWalker` records its
-element→id map, so it never re-walks or re-renders.
-
-The same overlay is served over the preview loopback at `GET /references`
-(`PreviewCaptureServer`) so the VS Code live-preview extension can draw
-the graph next to the streamed frame. Like every tool handler, the build
-hops the UI dispatcher first, because reading the per-control reference
-state touches attached dependency properties that only the UI thread may
-read.
-
-## The in-app menu
-
-`DevtoolsMenu(...)` is the in-app counterpart to the MCP server: a
-titlebar widget that shows up only when `UseDevtools()` is true and
-hosts a flyout of `MenuFlyoutItemBase` items the host app supplies.
-The pattern is `static readonly Observable<bool>` fields in an
-`AppFlags` class, mutated by `ToggleMenuItem` callbacks, observed by
-components via `ctx.UseObservable(AppFlags.DebugUI).Value`. The
-`DevtoolsMenu` factory also appends a built-in
-"Highlight reconcile changes" toggle that drives the
-[overlay](#overlays) subsystem.
-
-When the gate is closed, the factory returns `Empty()` *and* never
-invokes the `items` lambda — every menu construction inside the
-lambda is skipped at retail cost of one bool check. That asymmetry
-matters: callers can freely allocate `Observable<bool>` fields,
-construct `MenuItem` records, and read state from the surrounding
-component without paying for any of it when the app ships without
-the gate flipped.
+`GET /references` walks the visual tree and returns the app's reactive reference
+graph: the reference edges every control declares through
+`descriptor.Reference`/`.ReferenceList`, the `binding.Reference` bridge, and the
+modifier-level edges (`.LabeledBy`, `.DescribedBy`, `.FlowsTo`/`.FlowsFrom`,
+`.XYFocusUp/Down/Left/Right`). Each edge is emitted as
+`{from, to, label, slot, kind, resolved}` keyed to node ids, plus diagnostics for
+**cycles** and **unresolved** (perpetually-null) references. Cycles are a supported
+topology — push resolution converges on them by design — so they are reported
+informationally, not as errors. The edges live in each control's own
+`ReactorState.ReferenceEdges` bag; `ReferenceOverlay` reads those bags after the
+`TreeWalker` records its element→id map, so it never re-walks or re-renders. The
+build hops the UI dispatcher first, because reading the per-control reference
+state touches attached dependency properties that only the UI thread may read.
+The payload serializes through a source-generated `JsonSerializerContext`, so it
+stays NativeAOT-safe.
 
 ## Overlays
 
-The reconcile-highlight overlay attaches to a running app when the
-gate is open. It's driven by
-`ReactorFeatureFlags.HighlightReconcileChanges`, a simple `static bool`
-property the dev menu toggles. The overlay is a stateless wrapper
-that paints a brief flash on every element the reconciler patched on
-the most recent render. It does not allocate per frame when its flag
-is off.
+The reconcile-highlight overlay is driven by
+`ReactorFeatureFlags.HighlightReconcileChanges`, a simple `static bool` property
+an app sets from code (for example from a Debug-only menu item). The overlay paints
+a brief flash on every element the reconciler patched on the most recent render. It
+does not allocate per frame when its flag is off.
 
 ## Patterns
 
-### Adding a new MCP tool
+### Previewing a component from a script
 
-The MCP tool surface is `internal` to `Reactor.Devtools` — the registry
-(`McpToolRegistry`), the descriptor (`McpToolDescriptor`), and the
-schema node (`SchemaNode`) are all internal types, so this is a
-framework-contributor extension point, not a host-app one. A host that
-wants agent-visible custom state exposes it through an existing tool's
-payload rather than registering a new verb.
+Launch the app the way the doc screenshot pipeline does — `--preview <Component>
+--vscode` — read `CAPTURE_PORT` and `CAPTURE_TOKEN` from stdout, then
+`GET /frame` with the bearer token for a PNG of the window, and
+`POST /preview` with `{"component":"<Name>"}` to switch components without a
+relaunch. For anything beyond pixels — the tree, properties, clicks — use the
+WinUI DevTools (`winapp run . --devtools`, then `winapp devtools inspect` or
+`winapp ui click`) instead of extending the capture server.
 
-Inside the assembly, registration happens at server bring-up. The shape
-is a descriptor (name, description, input schema built with the
-`Schema` helpers) plus an `McpToolHandler` — a
-`delegate object? (JsonElement? @params)` — that returns a
-JSON-serializable result:
+### Adding an endpoint
 
-```csharp
-server.Tools.Register(
-    new McpToolDescriptor(
-        Name: "docking.list",
-        Description:
-            "Enumerates every live DockManager host in the process. " +
-            "Returns { hosts: [{ id, paneCount, activeKey, sideCounts }] }. " +
-            "Host ids are stable for as long as the host stays mounted; " +
-            "agents pass them to docking.snapshot / docking.dock.",
-        InputSchema: Schema.Root()),
-    _ => server.OnDispatcher<object>(() => BuildListPayload()));
-```
-
-The tool shows up in `tools/list` on the next call, with the input
-schema echoed back to agents that introspect their tool inventory.
-`Schema.Root()` with no arguments is the "takes no parameters" shape;
-the overloads take a `required` name array and `(name, node)` pairs, and
-a required name that isn't a declared property is a hard error at
-registration time rather than a wire-level surprise. Handlers that touch
-WinUI state wrap their body in `server.OnDispatcher<T>(...)`, which is
-the dispatcher trampoline every built-in tool uses — see the
-`docking.list` registration in
-`src/Reactor.Devtools/DevtoolsDockingTools.cs` for the canonical shape.
+Don't, unless the VS Code or Visual Studio preview needs it: the package is
+deprecated and goes away once winapp has its own previewer. If a preview does need
+one, follow the existing shape — route it in the `switch` after the bearer check,
+reject the wrong HTTP method with `405`, hop the UI dispatcher before touching
+WinUI state, and serialize through a source-generated `JsonSerializerContext` so
+the payload stays NativeAOT-safe.
 
 ## Common Mistakes
 
-### Reaching for UseDevtools to gate a render-time decision
+### Expecting the preview host to inspect the app
 
-```csharp
-// Don't:
-public override Element Render()
-{
-    var (dev, _) = UseState(this.UseDevtools());  // captures once, never refreshes
-    return dev ? VStack(...) : VStack(...);
-}
-```
+The preview host renders and streams; it does not inspect. Component trees,
+properties, state, handlers and UI automation are the WinUI DevTools:
+`winapp run . --devtools`, then `winapp devtools inspect` or `winapp ui ...`.
 
-```csharp
-public static bool UseDevtools(this RenderContext ctx) =>
-    ReactorApp.DevtoolsEnabled;
-```
+### Shipping the switch in Release
 
-`UseDevtools()` is already a static read; wrapping it in
-[`UseState`](hooks.md) gains nothing and loses the contract: the
-state cell only captures the value once and ignores subsequent
-session changes. Just call `UseDevtools()` inline at the branch
-point — it's a `static readonly bool` read, allocation-free, and
-the value doesn't change for the life of the session anyway.
+`Reactor.DevtoolsSupport` keeps the preview host in the binary. Scope it to Debug
+builds so Release/AOT binaries trim it.
 
 ## Tips
 
-**The lockfile is the discovery contract.** When an agent or CLI
-can't find a running app, the first thing to check is whether the
-lockfile exists at `%TEMP%/reactor-devtools/`. Missing means the
-session didn't pass the build-time gate. Present but stale means
-the previous session crashed; deleting the file unblocks the next
-launch.
+**The token is printed, not discovered.** There is no lockfile any more. A client
+that connects to an already-running preview reads `CAPTURE_PORT` and
+`CAPTURE_TOKEN` from that process's output.
 
-**`Observable<bool>` is the dev-flag pattern.** Plain `static bool`
-fields don't notify, so toggling them from the dev menu doesn't
-re-render components that observe them. The
-[devtools-menu](dev-tooling.md) cookbook in `dev-tooling.md` uses
-`static readonly Observable<bool>` fields exactly so the
-[`UseObservable`](hooks.md) hook can pick up changes.
-
-**Tools that touch the tree must hop the dispatcher.** JSON-RPC
-dispatch runs the handler inline on the transport thread; the UI-thread
-hop is opt-in per handler via `server.OnDispatcher<T>(...)`. Any
-[reconciler](reconciliation.md)-touching or `FrameworkElement`-reading
-code path belongs inside that wrapper.
+**`Observable<bool>` is the dev-flag pattern.** Plain `static bool` fields don't
+notify, so toggling them doesn't re-render components that observe them. The
+Debug-only menu in [Dev Tooling](dev-tooling.md) uses
+`static readonly Observable<bool>` fields so the [`UseObservable`](hooks.md) hook
+picks up changes.
 
 ## Next Steps
 
-- **[Dev Tooling](dev-tooling.md)** — User-facing devtools API and the inner-loop story.
-- **[Perf Instrumentation](perf-instrumentation.md)** — ETW provider the overlays consume.
-- **[Hooks Internals](hooks-internals.md)** — Why `UseDevtools` doesn't consume a slot.
+- **[Dev Tooling](dev-tooling.md)** — The WinUI DevTools and the inner-loop story.
+- **[Visual Studio Embedded Preview](vs-extension.md)** — The `--embed` client.
+- **[Perf Instrumentation](perf-instrumentation.md)** — The ETW provider.
 - **[Reconciliation](reconciliation.md)** — How the reconcile-highlight overlay observes patches.
 - **[Focus and Input Internals](focus-and-input-internals.md)** — Previous under-the-hood page.

@@ -850,7 +850,7 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 
 | Order | Page | Tier | Description |
 |-------|------|------|-------------|
-| 2 | dev-tooling | solid → comprehensive | `mur` CLI, MCP server, VS Code panel, dotnet watch, in-app dev menu, reconcile-highlight + layout-cost overlays |
+| 2 | dev-tooling | solid → comprehensive | `mur` CLI, the WinUI DevTools (winapp), VS Code panel, dotnet watch, Debug-only dev menus, reconcile-highlight overlay |
 | 22.6 | testing | NEW stub → solid | Renderer fixtures, headless tests, snapshot tests, a11y scanner |
 | 22.7 | performance | NEW stub → solid | ETW, EventDispatch walkthroughs, flame graphs |
 | 22.8 | packaging | NEW stub → solid | MSIX, single-file, ARM64, AOT considerations |
@@ -877,7 +877,7 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 | 37 | source-mapping | NEW stub → solid | Spec 010: stack-trace attribution to user source |
 | 38 | modifier-system | NEW stub → comprehensive | `.FontSize(24).Bold()` — modifier records vs property writes |
 | 39 | analyzer-architecture | NEW stub → comprehensive | REACTOR_THEME/A11Y/GRID/FUNC/PERSIST — authoring your own analyzer |
-| 40 | devtools-internals | NEW stub → comprehensive | Dev menu, reconcile-highlight overlay, layout-cost overlay, MCP protocol |
+| 40 | devtools-internals | NEW stub → comprehensive | In-app preview host (capture server, embed handshake, references), reconcile-highlight overlay |
 | 41 | animation-pipeline | NEW stub → comprehensive | Composition API end-to-end, 4 animation systems, compositor-property ceiling |
 | 42 | focus-and-input-internals | NEW stub → comprehensive | UseFocus dispatcher, UseFocusTrap container, pointer vs routed events |
 | 43 | perf-instrumentation | NEW stub → comprehensive | ETW sources, frame-aligned sampling (spec 031), layout-cost attribution (spec 032) |

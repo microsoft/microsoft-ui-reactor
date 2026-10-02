@@ -855,28 +855,24 @@ side effects, `UseRef` for non-rendering bookkeeping).
 
 ### Running with devtools
 
-The dev menu needs **two** independent signals, and neither one is
-`#if DEBUG`. First the build-time capability — the `Reactor.DevtoolsSupport`
-feature switch, which `dotnet new reactor` already sets in Debug
-configurations along with the `Microsoft.UI.Reactor.Devtools` package. Second a
-session opt-in on the command line:
+The developer tools for a running Reactor app are the WinUI DevTools in the
+[winapp CLI](https://github.com/microsoft/winappCli). They attach from outside
+the app, so nothing goes in your project — launch a Debug build with:
 
 ```powershell
-dotnet run -- --devtools app
+winapp run . --devtools
 ```
 
-The scaffolded `Properties/launchSettings.json` ships a second
-`"<AppName> Devtools"` profile that passes that flag for you, so pick that
-profile in Visual Studio or use
-`dotnet run --launch-profile "<AppName> Devtools"`. The default profile
-deliberately passes no arguments — a plain `dotnet run -c Debug` starts the app
-with **no** dev menu.
-
-`UseDevtools()` returns `true` only when both signals are present, which is what
-gates the reconcile-highlight overlay and the rest of the menu. Release builds
-drop the package and the switch, so the devtools code trims away entirely. The
-[dev tooling](dev-tooling.md) page covers the full menu.
-
+Then inspect the component tree, edit properties and state, or drive the UI with
+`winapp devtools inspect` and `winapp ui ...`; add `--watch` for hot reload with
+automatic re-attach. `dotnet new reactor` also references the deprecated
+`Microsoft.UI.Reactor.Devtools` package and sets the `Reactor.DevtoolsSupport`
+switch in Debug. They keep the in-app preview host that the Visual Studio embedded
+preview and the VS Code live preview use; Release builds drop both, so that code
+trims away. The template's `"<AppName> (Unpackaged, Devtools)"` launch profile
+starts the app under that preview host. The in-app dev menu it used to show
+(`DevtoolsMenu`, `UseDevtools`) has been removed. The
+[dev tooling](dev-tooling.md) page covers the full inner loop.
 ## Common Mistakes
 
 ### Editing `bin/` artifacts to "see your change"

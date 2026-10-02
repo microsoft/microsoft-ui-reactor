@@ -38,8 +38,7 @@ These subsystems compile cleanly with `IsAotCompatible=true` (the warnings are s
 | **DataGrid `AutoColumns<T>`** | Reflects over `T`'s public properties via `TypeRegistry`. The `T` parameter is annotated `[DynamicallyAccessedMembers(PublicProperties)]` so the trimmer keeps the members, but `AutoColumns` ultimately funnels into `TypeRegistry.Resolve`, which is `RequiresUnreferencedCode`. Use explicit `Column<T,V>(…)` definitions instead. | Issue #70 |
 | **`UseObservable` on POCOs** | `ObservableTreeTracker` walks public properties via reflection to subscribe to INPC. Observables built explicitly (`Observable<T>`, `IObservableCollection`) are fine; the implicit-INPC path is not. | Issue #70 |
 | **Form validation** | `FormField`'s default editor resolution goes through `TypeRegistry`. Same caveat as PropertyGrid. | Issue #70 |
-| **Component discovery (`ReactorApp.Run<TApp>` reflection paths)** | The instantiation of `TApp` itself is annotated and works. Devtools component enumeration is available only when the app opts into `Reactor.DevtoolsSupport` at build time and launches with `--devtools`; leave the switch off for retail/AOT builds. | Issue #70 |
-| **Devtools `properties` / `setProperty` DP discovery** | The tools locate `DependencyProperty` statics by reflection, and the trimmer keeps no reflection metadata for them unless something roots the members — so under AOT the lookups find nothing. Not specific to WinUI's CsWinRT-projected static properties: a C#-authored DP *field* on a custom control is equally undiscoverable. Works under JIT, which is where the devtools inner loop lives. The tool reports the likely cause rather than an empty result. See [Devtools DependencyProperty discovery](#devtools-dependencyproperty-discovery) for the measured cost of fixing it. Affected fixture: `Devtools_PropertyToolsDpDiscovery`. | Issue #1109 |
+| **Component discovery (`ReactorApp.Run<TApp>` reflection paths)** | The instantiation of `TApp` itself is annotated and works. The (deprecated) in-app preview host's component enumeration is available only when the app opts into `Reactor.DevtoolsSupport` at build time and launches with `--devtools run`; leave the switch off for retail/AOT builds. | Issue #70 |
 | **Third-party-assembly XAML metadata (Issue #142 fixtures)** | Built-in WinUI controls work under AOT now. What remains is `{TemplateBinding}` against private DPs in a third-party assembly that ships *no* `.xaml` file: the XAML compiler only emits an `IXamlMetadataProvider` for projects that have at least one `.xaml`, and AOT trims any implicit metadata path. Affected fixtures: `Issue142_CustomControlPrivateDp_Renders`, `Issue142_ThirdPartyControlPrivateDp_Renders`. The library-author workaround is to register a hand-written `IXamlMetadataProvider` via `RegisterControlAssembly`. The same trim hits a compiled `.xaml` page inside a `ReactorApp.Run` app with no `App.xaml`: `ReactorApplication` finds the app's generated provider only by reflecting over the entry assembly, nothing roots it, and AOT removes it, so the page fails to parse (`Hosting_HostControlXamlComponentType`). A vanilla WinUI app is unaffected: its `App` *is* the provider. | Issue #142 |
 
 ### Code-only apps wrapping toolkit controls
@@ -59,37 +58,11 @@ The concrete provider name depends on the library. The SettingsExpander selftest
 uses this registration explicitly; passing it is not proof of automatic metadata
 discovery under trimming.
 
-## Devtools DependencyProperty discovery
-
-The devtools `properties` / `setProperty` tools find `DependencyProperty` statics by
-reflecting over static members, and trimming removes the metadata for members nothing
-roots. On a NativeAOT build the lookups therefore come back empty even for DPs that
-plainly exist (issue #1109). Under JIT — where the devtools inner loop lives, since an
-AOT publish takes 10-15 minutes — discovery works.
-
-**The tool says so rather than looking broken.** When the inspected app is a NativeAOT
-build, an empty listing carries a `notice`, and a failed by-name lookup appends the same
-explanation to its error. Both are conditioned on the app actually being NativeAOT
-(`RuntimeFeature.IsDynamicCodeSupported`), so a JIT build never sees them, and an AOT
-build that does root its DP statics stays silent too. Without this the caller gets the
-same `not found` they would for a typo and goes hunting for a mistake they did not make.
-
-**If you need DP inspection in an AOT build**, root the DependencyProperty statics with an
-ILLink descriptor. That was measured on `samples/apps/hello-world-aot-devtools-on`
-(win-x64, `TrimMode=full`, `OptimizationPreference=Size`) before being left out of the
-#1109 fix, so the cost is known: rooting only the DP getters adds **+1.5 MB** (11.655 →
-13.196 MB) and covers all 1851 DPs across 311 WinUI types, while the blunt
-`preserve="all"` over `Microsoft.WinUI` costs +16.7 MB for the same capability. Gating
-the descriptor on the `Reactor.DevtoolsSupport` switch keeps devtools-off apps
-byte-identical. It is not shipped because a generated descriptor pinned to a Windows App
-SDK version needs regenerating on every SDK bump — ongoing friction for everyone, to
-serve a scenario the tool is not aimed at.
-
 ## Devtools support switch
 
-Devtools are a two-layer opt-in so release and NativeAOT binaries stay trimmed by default:
+The in-app preview host in the deprecated `Microsoft.UI.Reactor.Devtools` package (kept for the VS Code and Visual Studio previews) is a two-layer opt-in so release and NativeAOT binaries stay trimmed by default. Inspecting a running app needs neither: use the WinUI DevTools (`winapp run . --devtools`).
 
-1. **Build-time capability** — add the feature switch to an app project that needs devtools:
+1. **Build-time capability** — add the feature switch to an app project that needs the preview host:
 
    ```xml
    <ItemGroup>

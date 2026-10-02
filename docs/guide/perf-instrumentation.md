@@ -284,8 +284,8 @@ in the band's event payload.
 
 ## Next Steps
 
-- **[Diagnostics](diagnostics.md)** — How to capture, filter, and read the error / HR / subsystem events Reactor emits in Release builds, plus `ReactorTrace.Subscribe` and `reactor.logs source=event`.
-- **[DevTools Internals](devtools-internals.md)** — Where the overlays consume these events.
+- **[Diagnostics](diagnostics.md)** — How to capture, filter, and read the error / HR / subsystem events Reactor emits in Release builds, plus `ReactorTrace.Subscribe`.
+- **[DevTools Internals](devtools-internals.md)** — The in-app preview host and the reconcile-highlight overlay.
 - **[Reconciliation](reconciliation.md)** — What the reconcile-stop counters describe.
 - **[Hooks Internals](hooks-internals.md)** — Why `StateChange` fires from inside the slot table.
 - **[Animation Pipeline](animation-pipeline.md)** — Companion under-the-hood page on animation.

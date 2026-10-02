@@ -4,34 +4,35 @@ runtime is designed to surface the work it is doing — every render,
 every reconcile, every effect, every dispatcher hop — through a small
 set of dedicated tools so you can see, attribute, and reason about
 what your app is doing without a profiler. The `mur` CLI, preview
-mode under `dotnet watch`, the MCP server, the VS Code panel, the
-in-app dev menu, and the reconcile-highlight overlay
-are all variants of the same idea: the runtime publishes its work,
-and the inner loop lets you read it. The cost is zero in retail —
-every devtools entry point lives behind a build-time capability switch
-(`Reactor.DevtoolsSupport`) plus a session-time opt-in (`--devtools app`)
-so end users never see anything you don't intend to ship.
+mode under `dotnet watch`, the WinUI DevTools, the VS Code panel, and
+the reconcile-highlight overlay are all variants of the same idea: the
+runtime publishes its work, and the inner loop lets you read it. The
+cost is zero in retail — the WinUI DevTools attach from outside the app,
+and the in-app preview host lives behind a build-time capability switch
+(`Reactor.DevtoolsSupport`) so end users never see anything you don't
+intend to ship.
 
 # Dev Tooling
 
 > **`mur devtools` has been removed.** Reactor's developer tools are the
 > [WinUI DevTools in the winapp CLI](#winui-devtools-winapp), which need nothing in
 > your project: `winapp run . --devtools`. Every `mur devtools` command now only
-> prints its winapp equivalent and exits `1`. The `Microsoft.UI.Reactor.Devtools`
-> package and the `Reactor.DevtoolsSupport` switch remain, deprecated, for the
-> in-app hosts that have no winapp equivalent yet — the component preview host, the
-> VS Code live preview panel, the Visual Studio embedded preview and the in-app dev
-> menu — and stay until winapp has its own previewer. The rest of this page — `dotnet
-> watch`, hot reload, the other `mur` commands — is unaffected.
+> prints its winapp equivalent and exits `1`. The in-app MCP server and the in-app
+> dev menu (`DevtoolsMenu`, `UseDevtools`) have been removed too. The
+> `Microsoft.UI.Reactor.Devtools` package and the `Reactor.DevtoolsSupport` switch
+> remain, deprecated, only for the in-app preview host that has no winapp
+> equivalent yet — it powers the component preview (`--preview <Name>`), the VS Code
+> live preview panel and the Visual Studio embedded preview — and stay until winapp
+> has its own previewer. The rest of this page — `dotnet watch`, hot reload, the
+> other `mur` commands — is unaffected.
 
 Reactor's inner loop centers on `dotnet watch` and preview mode: you edit
 code, save, and see changes in a running window — no manual restart, no
 state-resetting class reload most of the time. Surrounding that loop are
-five complementary surfaces — the [`mur` CLI](#the-mur-cli), the
-[MCP server](#mcp-server), the [VS Code panel](#vs-code-panel), the
-[in-app dev menu](#in-app-dev-menu), and the
-[runtime overlays](#runtime-overlays) — each of which lights up only
-when you ask for it.
+four complementary surfaces — the [`mur` CLI](#the-mur-cli), the
+[WinUI DevTools](#winui-devtools-winapp), the [VS Code panel](#vs-code-panel),
+and the [runtime overlays](#runtime-overlays) — each of which lights up
+only when you ask for it.
 
 ## Preview Mode
 
@@ -42,15 +43,15 @@ preview workflow:
 // Program entry point — this is the entire App.cs file:
 // ReactorApp.Run<DevToolingApp>("Dev Tooling Demo");
 //
-// Hot reload works when the app is launched under dotnet watch. Devtools
-// screenshot capture is enabled by the app project's Reactor.DevtoolsSupport
-// switch and activated by launching with --devtools.
+// Hot reload works when the app is launched under dotnet watch. Inspect the
+// running app with the WinUI DevTools: winapp run . --devtools
 ```
 
 The app entry point is an ordinary `ReactorApp.Run` call; there is no
-`preview:` or `devtools:` argument. Devtools-specific screenshot capture is
-enabled by the app project's `Reactor.DevtoolsSupport` switch and activated
-at launch with `--devtools`.
+`preview:` or `devtools:` argument. The in-app preview host (the VS Code
+panel and the Visual Studio embedded preview use it) is enabled by the app
+project's `Reactor.DevtoolsSupport` switch and activated at launch with
+`--devtools run`.
 
 ## Running with Hot Reload
 
@@ -261,15 +262,14 @@ prints its winapp equivalent to stderr and exits `1`; none of them runs anything
 
 ## MCP Server
 
-> **Removed.** `mur devtools` no longer launches, supervises or connects to the
-> app's MCP endpoint, and `--print-config` is gone. Use
+> **Removed.** `mur devtools` no longer launches, supervises or connects to an MCP
+> endpoint, `--print-config` is gone, and the in-app MCP server has been removed
+> from `Microsoft.UI.Reactor.Devtools` (with the `--mcp-port`, `--mcp-transport`,
+> `--devtools-log-level`, `--devtools-logs*` and `--devtools-project` flags and the
+> `--devtools app|screenshot|tree` verbs). Use
 > [`winapp run . --devtools`](#winui-devtools-winapp) and the winapp CLI with
 > `--json`; agents load the `winui-devtools` skill.
 
-The in-app MCP server is part of the deprecated `Microsoft.UI.Reactor.Devtools`
-package. It still starts when an app that references the package is launched
-with `--devtools run` (the VS Code panel does this), and its protocol is
-described in [DevTools Internals](devtools-internals.md).
 ## VS Code Panel
 
 The Reactor VS Code extension lives in `src/vscode-reactor/` and provides
@@ -299,105 +299,41 @@ preview process, enter both the `CAPTURE_PORT=...` and `CAPTURE_TOKEN=...`
 values from that process's output. The capture server requires the bearer
 token before any endpoint probe, including `/status`.
 
-## In-App Dev Menu
+## A Debug-Only Dev Menu
 
-For the dev surface that lives **inside** a running app — a "Dev" item
-in the titlebar, debug overlays you can toggle, one-off commands —
-Reactor exposes three small primitives: `UseDevtools()`,
-`DevtoolsMenu(...)`, and `Observable<T>`. Two independent signals
-combine:
-
-1. **Build-time capability** — add the feature switch to the app project:
-
-   ```xml
-   <ItemGroup>
-     <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
-                                     Value="true" Trim="true" />
-   </ItemGroup>
-   ```
-
-   This is a capability gate — it does **not** by itself show any dev
-   UI. Samples typically enable it only in Debug builds so Release/AOT
-   binaries keep the devtools code trimmed.
-
-2. **Session opt-in** — run the app with `--devtools app`:
-
-   ```
-   myapp.exe --devtools app
-   ```
-
-`UseDevtools()` returns `true` only when **both** are present. It keys on
-Reactor's own (deprecated) devtools session, so it stays `false` under
-`winapp run . --devtools`. It is a
-`RenderContext` extension, so you call it from a
-[function component](components.md)'s `ctx` — or from a helper you hand
-the `ctx` to, provided that helper is itself named `Use*`, since
-[`REACTOR_HOOKS_005`](rules-of-reactor.md) only permits hook calls from
-`Render()` or a `Use*` method — and gate the dev-only element with a
-ternary:
-
-```csharp
-static class DevGate
-{
-    // UseDevtools() is a RenderContext extension, so it is reached from a
-    // function component's ctx (or any helper you hand the ctx to) — there is
-    // no Component-level forwarder. It returns true only when BOTH the
-    // Reactor.DevtoolsSupport build switch and `--devtools app` are present.
-    //
-    // The helper is named Use* because it consumes a hook slot: REACTOR_HOOKS_005
-    // only permits hook calls from Render() or a Use*-named method, so a helper
-    // called `Shell` here would warn in any project that copies this.
-    public static Element UseShell(RenderContext ctx)
-    {
-        var dev = ctx.UseDevtools();
-
-        return VStack(8,
-            MainContent(),
-            dev ? DebugOverlay() : Empty()
-        );
-    }
-
-    private static Element MainContent() => TextBlock("App content");
-
-    // Only *constructed* when dev is true. In retail the ternary costs one
-    // bool read plus one branch — no element tree, no children reconciled.
-    private static Element DebugOverlay() =>
-        TextBlock("debug overlay").Opacity(0.6);
-}
-```
-
-`DebugOverlay()` is only **constructed** when `dev` is true. In retail
-that line costs one bool read plus one branch — no element tree
-allocated, no children reconciled. The cost model carries over to
-[`DevtoolsMenu`](devtools-internals.md), which renders itself as a
-titlebar item only when `UseDevtools()` is true:
+The in-app dev menu (`DevtoolsMenu(...)` and `UseDevtools()`) has been removed.
+Inspecting and editing a running app is the job of the WinUI DevTools overlay
+toolbar (`winapp run . --devtools`). For app-specific switches — a debug overlay,
+a "clear cache" command — build an ordinary menu and compile it into Debug builds
+only:
 
 ```csharp
 static class DevMenu
 {
+    // Named Use* because it consumes a hook slot: REACTOR_HOOKS_005 only
+    // permits hook calls from Render() or a Use*-named method.
     public static Element UseTitleBar(RenderContext ctx)
     {
-        // Subscribe during render — not inside the menu builder. The builder
-        // lambda runs when the flyout opens, which is not a render pass, so a
-        // hook call in there would break hook ordering.
-        //
-        // Named Use* for the same reason as DevGate.UseShell: it consumes a
-        // hook slot, which REACTOR_HOOKS_005 requires be done from Render() or
-        // a Use*-named helper.
+        // Subscribe during render — not inside a menu item callback, which
+        // runs when the item is clicked rather than during a render pass.
         var debugUI = ctx.UseObservable(AppFlags.DebugUI).Value;
 
         return HStack(8,
             TextBlock("My App"),
-            // DevtoolsMenu renders itself as a titlebar item only when
-            // UseDevtools() is true, so the same cost model carries over.
-            DevtoolsMenu(() => new MenuFlyoutItemBase[]
+#if DEBUG
+            // An ordinary menu, compiled into Debug builds only.
+            DropDownButton("Dev", MenuItems(new MenuFlyoutItemBase[]
             {
                 ToggleMenuItem("Debug UI", debugUI,
                     v => AppFlags.DebugUI.Value = v),
                 MenuSeparator(),
                 MenuItem("Clear cache", () => CacheService.Clear()),
                 MenuItem("Slow mode off", () => AppFlags.SlowMode.Value = false),
-            })
+            })),
+#endif
+            // Only *constructed* when the flag is on: in retail the ternary
+            // costs one bool read — no element tree, no children reconciled.
+            debugUI ? TextBlock("debug overlay").Opacity(0.6) : null
         );
     }
 }
@@ -424,24 +360,22 @@ public static class AppFlags
 ```
 
 Any component that wants to react to changes subscribes via
-`ctx.UseObservable(AppFlags.DebugUI).Value` **during render** — not
-inside the `DevtoolsMenu` builder lambda, which runs when the flyout
-opens rather than during a render pass. See
-[Advanced Patterns](advanced.md) for the broader observable-binding
-story.
+`ctx.UseObservable(AppFlags.DebugUI).Value` **during render** — not inside a
+menu item callback, which runs when the item is clicked rather than during a
+render pass. See [Advanced Patterns](advanced.md) for the broader
+observable-binding story.
 
 ## Runtime Overlays
-
-The reconcile-highlight overlay attaches to a running app when devtools are on:
 
 - **Reconcile-highlight overlay.** Flashes a rectangle around any
   element that the reconciler patched on the most recent render. Useful
   for catching unintended re-renders (the [Rules of Reactor](rules-of-reactor.md)
-  page covers the most common causes).
-
-The overlay renders under the `DevtoolsMenu` toggle group. It is
-zero-cost when off.
-
+  page covers the most common causes). Turn it on from code — for example
+  from a Debug-only menu item — with
+  `ReactorFeatureFlags.HighlightReconcileChanges = true`. It is zero-cost when off.
+- **Keyed-list diagnostics.** `ReactorDiagnostics.RecentKeyedListWarnings`
+  holds the most recent keyed-list bailout diagnostics, newest first; surface them from
+  the same menu if you want them on screen.
 ## The Iteration Cycle
 
 The full inner loop:
@@ -496,7 +430,7 @@ class IterationDemo : Component
 ### Per-feature debug flag with a Dev menu toggle
 
 Declare a flag as an `Observable<bool>` in a static class, expose it
-through the Dev menu's `ToggleMenuItem`, and read it from any component
+through your Debug-only menu's `ToggleMenuItem`, and read it from any component
 via `ctx.UseObservable(...)`. Flipping the flag re-renders every
 subscribed component — no event-wiring boilerplate. The pattern scales
 to a dozen flags without a config UI.
@@ -514,14 +448,11 @@ hand.
 
 ## Common Mistakes
 
-### Enabling the switch without a session gate
+### Shipping the devtools switch in Release
 
-Forgetting that `Reactor.DevtoolsSupport` is the **capability** gate
-and `--devtools app` is the **activation** gate is the most common
-mistake. A binary built with the switch enabled shows no dev UI to a
-user — the session-time flag does. If you want devtools trimmed out of
-retail, keep the switch Debug-only instead of enabling it for Release/AOT.
-
+`Reactor.DevtoolsSupport` keeps the in-app preview host in the binary. Enable it
+for Debug builds only, so Release/AOT binaries keep the devtools code trimmed.
+The WinUI DevTools need neither the switch nor the package.
 ### Wiring real app state through `UseState` during inner-loop work
 
 `UseState` resets on every hot reload. If your loop depends on a
@@ -530,16 +461,11 @@ the relevant state in [`UsePersisted`](persistence.md) (Window scope)
 or in an `Observable<T>` field. The hot reload picks up the new code
 without resetting your state.
 
-### Treating the in-app dev menu as the only devtools surface
+### Expecting the WinUI DevTools under a bare `dotnet watch run`
 
-The WinUI DevTools (`winapp run . --devtools`) and the VS Code panel are
-**separate** surfaces from the in-app menu. They observe a running
-app from the outside; the in-app menu observes the runtime from
-inside the app itself. Build-time capability (`Reactor.DevtoolsSupport`)
-plus `--devtools app` opens the in-app menu, while the WinUI DevTools
-attach only when you launch through `winapp run . --devtools` instead of a
-bare `dotnet watch run` — don't expect them to start automatically.
-
+The WinUI DevTools attach only when you launch through
+`winapp run . --devtools` (add `--watch` for hot reload with automatic
+re-attach). A bare `dotnet watch run` starts the app without them.
 ## Tips
 
 **Keep dotnet watch running.** Don't stop and restart it between
@@ -564,4 +490,4 @@ with `dotnet run -r win-arm64` to get native performance numbers.
 - **[Components](components.md)** — Next: component classes, props, function components, composition
 - **[Hooks](hooks.md)** — Learn the state management primitives used inside components
 - **[Testing](testing.md)** — Headless renderer fixtures, snapshot tests, async test patterns
-- **[DevTools Internals](devtools-internals.md)** — How the dev menu, overlays, and MCP server are implemented
+- **[DevTools Internals](devtools-internals.md)** — How the in-app preview host and the overlays are implemented

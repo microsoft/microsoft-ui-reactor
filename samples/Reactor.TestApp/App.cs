@@ -106,7 +106,7 @@ class DemoApp : Component
                 Content = HStack(8,
                     ComboBox(TabElements, (int)currentTab, i => setTab((Tab)i)).Width(240),
                     ComboBox(Languages, langIndex, setLangIndex),
-                    DevtoolsMenu(() => new MenuFlyoutItemBase[]
+                    DropDownButton("Dev", MenuItems(new MenuFlyoutItemBase[]
                     {
                         ToggleMenuItem("Debug UI",
                             debugUI,
@@ -116,8 +116,8 @@ class DemoApp : Component
                             v => AppFlags.OutlineLayout.Value = v),
                         MenuSeparator(),
                         MenuItem("Log tab change",
-                            () => Debug.WriteLine($"[devtools] current tab = {currentTab}")),
-                    })
+                            () => Debug.WriteLine($"[dev] current tab = {currentTab}")),
+                    }))
                 ),
             }).Flex(shrink: 0),
 
@@ -164,9 +164,8 @@ class DemoApp : Component
             .Flex(grow: 1),
 
             // Debug strip — only constructed when the Debug UI flag is on.
-            // The flag can only be toggled from the DevtoolsMenu above, which
-            // itself only renders in devtools sessions, so in practice this
-            // strip is dev-only. Retail cost is one bool check.
+            // The flag can only be toggled from the Dev menu above. Retail cost
+            // is one bool check.
             debugUI ? DebugStrip(currentTab) : null
         )
         // Spec 033 §6 — Mica window backdrop on the demo shell.

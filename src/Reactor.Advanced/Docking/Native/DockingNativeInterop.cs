@@ -88,7 +88,7 @@ public static class DockingNativeInterop
                 // DockManager instance the host renders resolves to it.
                 DockHostLiveAnnouncer.Register(element, host);
                 // Spec 045 §2.26 — register the host in the process-
-                // wide registry so MCP tools + devtools introspection
+                // wide registry so tools and tests
                 // can enumerate live hosts. The registry weak-refs the
                 // element so it doesn't keep mounted layouts alive
                 // after unmount.

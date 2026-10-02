@@ -1,3 +1,3 @@
 using Microsoft.UI.Reactor.Hosting.Devtools;
 
-_ = typeof(DevtoolsMcpServer);
+_ = typeof(DevtoolsHost);

@@ -3,20 +3,15 @@ using Microsoft.UI.Reactor;
 
 namespace Microsoft.UI.Reactor.Hosting.Devtools;
 
+/// <summary>
+/// What the in-app preview host was asked to do: <see cref="Run"/> the preview (the
+/// VS Code live preview and the Visual Studio embedded preview launch this), or
+/// <see cref="List"/> the app's components.
+/// </summary>
 public enum DevtoolsSubverb
 {
     Run,
     List,
-    Screenshot,
-    Tree,
-    App,
-}
-
-/// <summary>Which MCP transport the devtools surface uses.</summary>
-public enum McpTransport
-{
-    Http,
-    Stdio,
 }
 
 /// <summary>
@@ -29,15 +24,8 @@ public sealed record DevtoolsCliOptions(
     bool VsCodeMode,
     int Fps,
     string? ListOutputPath,
-    string? ScreenshotOutputPath,
-    int? McpPort,
-    string? LogLevel,
-    McpTransport Transport,
     bool UsedDeprecatedPreview,
     bool PreviewAndDevtoolsConflict,
-    string? ProjectIdentifier = null,
-    bool LogsDisabled = false,
-    int? LogsCapacityMb = null,
     bool EmbedRequested = false,
     WindowEmbedStyle EmbedStyle = WindowEmbedStyle.Child,
     int? EmbedHostPid = null,
@@ -46,12 +34,13 @@ public sealed record DevtoolsCliOptions(
     double? WindowWidth = null,
     double? WindowHeight = null,
     double? WindowX = null,
-    double? WindowY = null);
+    double? WindowY = null,
+    string? RemovedSubverbError = null);
 
 /// <summary>
 /// Pure command-line parser for the devtools entry point. Has no side effects so it is
-/// unit-testable without spinning up a process. The runtime surfaces deprecation warnings
-/// based on <see cref="DevtoolsCliOptions.UsedDeprecatedPreview"/>.
+/// unit-testable without spinning up a process. <c>--devtools app|screenshot|tree</c> parse to
+/// <see cref="DevtoolsCliOptions.RemovedSubverbError"/>, which the runtime prints before exiting.
 /// </summary>
 internal static class DevtoolsCliParser
 {
@@ -73,14 +62,8 @@ internal static class DevtoolsCliParser
                 VsCodeMode: false,
                 Fps: 10,
                 ListOutputPath: null,
-                ScreenshotOutputPath: null,
-                McpPort: null,
-                LogLevel: null,
-                Transport: McpTransport.Http,
                 UsedDeprecatedPreview: true,
                 PreviewAndDevtoolsConflict: true,
-                LogsDisabled: false,
-                LogsCapacityMb: null,
                 EmbedRequested: false,
                 EmbedStyle: ParseEmbedStyle(args),
                 EmbedHostPid: ParseEmbedHostPid(args),
@@ -97,19 +80,26 @@ internal static class DevtoolsCliParser
                 VsCodeMode: embedOnlyRequested,
                 Fps: 10,
                 ListOutputPath: null,
-                ScreenshotOutputPath: null,
-                McpPort: null,
-                LogLevel: null,
-                Transport: McpTransport.Http,
                 UsedDeprecatedPreview: false,
                 PreviewAndDevtoolsConflict: false,
-                LogsDisabled: false,
-                LogsCapacityMb: null,
                 EmbedRequested: embedOnlyRequested,
                 EmbedStyle: ParseEmbedStyle(args),
                 EmbedHostPid: ParseEmbedHostPid(args),
                 EmbedValidationError: embedOnlyRequested ? "--embed requires '--devtools run'" : null,
                 EmbedAutoEnabledVsCode: embedOnlyRequested && !args.Contains("--vscode"));
+        }
+
+        if (devtoolsIdx >= 0 && RemovedSubverbMessage(args, devtoolsIdx) is { } removed)
+        {
+            return new DevtoolsCliOptions(
+                Subverb: null,
+                ComponentName: null,
+                VsCodeMode: false,
+                Fps: 10,
+                ListOutputPath: null,
+                UsedDeprecatedPreview: false,
+                PreviewAndDevtoolsConflict: false,
+                RemovedSubverbError: removed);
         }
 
         DevtoolsSubverb subverb;
@@ -147,9 +137,8 @@ internal static class DevtoolsCliParser
 
         string? componentName = null;
         string? listOut = null;
-        string? screenshotOut = null;
 
-        if (subverb is DevtoolsSubverb.Run or DevtoolsSubverb.Screenshot or DevtoolsSubverb.Tree)
+        if (subverb is DevtoolsSubverb.Run)
         {
             if (trailingArgStart < args.Length && !args[trailingArgStart].StartsWith("-"))
                 componentName = args[trailingArgStart];
@@ -172,45 +161,6 @@ internal static class DevtoolsCliParser
         int fpsIdx = IndexOf(args, "--fps");
         if (fpsIdx >= 0 && fpsIdx + 1 < args.Length && int.TryParse(args[fpsIdx + 1], out var parsedFps))
             fps = Math.Clamp(parsedFps, 1, 30);
-
-        int? mcpPort = null;
-        int mcpPortIdx = IndexOf(args, "--mcp-port");
-        if (mcpPortIdx >= 0 && mcpPortIdx + 1 < args.Length && int.TryParse(args[mcpPortIdx + 1], out var parsedPort))
-            mcpPort = parsedPort;
-
-        string? logLevel = null;
-        int logLevelIdx = IndexOf(args, "--devtools-log-level");
-        if (logLevelIdx >= 0 && logLevelIdx + 1 < args.Length)
-            logLevel = args[logLevelIdx + 1];
-
-        var transport = McpTransport.Http;
-        int transportIdx = IndexOf(args, "--mcp-transport");
-        if (transportIdx >= 0 && transportIdx + 1 < args.Length)
-        {
-            if (string.Equals(args[transportIdx + 1], "stdio", StringComparison.OrdinalIgnoreCase))
-                transport = McpTransport.Stdio;
-        }
-
-        int outIdx = IndexOf(args, "--out");
-        if (outIdx >= 0 && outIdx + 1 < args.Length && subverb == DevtoolsSubverb.Screenshot)
-            screenshotOut = args[outIdx + 1];
-
-        string? projectIdentifier = null;
-        int projIdx = IndexOf(args, "--devtools-project");
-        if (projIdx >= 0 && projIdx + 1 < args.Length)
-            projectIdentifier = args[projIdx + 1];
-
-        bool logsDisabled = false;
-        int logsIdx = IndexOf(args, "--devtools-logs");
-        if (logsIdx >= 0 && logsIdx + 1 < args.Length
-            && string.Equals(args[logsIdx + 1], "off", StringComparison.OrdinalIgnoreCase))
-            logsDisabled = true;
-
-        int? logsCapMb = null;
-        int logsCapIdx = IndexOf(args, "--devtools-logs-capacity");
-        if (logsCapIdx >= 0 && logsCapIdx + 1 < args.Length
-            && int.TryParse(args[logsCapIdx + 1], out var parsedCap) && parsedCap > 0)
-            logsCapMb = parsedCap;
 
         _ = anchorIdx;
 
@@ -250,15 +200,8 @@ internal static class DevtoolsCliParser
             VsCodeMode: vscode,
             Fps: fps,
             ListOutputPath: listOut,
-            ScreenshotOutputPath: screenshotOut,
-            McpPort: mcpPort,
-            LogLevel: logLevel,
-            Transport: transport,
             UsedDeprecatedPreview: deprecated,
             PreviewAndDevtoolsConflict: false,
-            ProjectIdentifier: projectIdentifier,
-            LogsDisabled: logsDisabled,
-            LogsCapacityMb: logsCapMb,
             EmbedRequested: embedRequested,
             EmbedStyle: embedStyle,
             EmbedHostPid: embedHostPid,
@@ -327,12 +270,28 @@ internal static class DevtoolsCliParser
         {
             "run" => (DevtoolsSubverb.Run, devtoolsIdx + 2),
             "list" => (DevtoolsSubverb.List, devtoolsIdx + 2),
-            "screenshot" => (DevtoolsSubverb.Screenshot, devtoolsIdx + 2),
-            "tree" => (DevtoolsSubverb.Tree, devtoolsIdx + 2),
-            "app" => (DevtoolsSubverb.App, devtoolsIdx + 2),
             _ => (DevtoolsSubverb.Run, devtoolsIdx + 1),
         };
     }
+
+    /// <summary>
+    /// The message for a <c>--devtools</c> verb that was removed with the MCP server and the
+    /// in-app dev menu, or null. Without this, <c>--devtools app</c> would fall through to
+    /// <c>run</c> with "app" read as a component name.
+    /// </summary>
+    // <snippet:removed-subverbs>
+    internal static string? RemovedSubverbMessage(string[] args, int devtoolsIdx)
+    {
+        if (devtoolsIdx + 1 >= args.Length) return null;
+        return args[devtoolsIdx + 1].ToLowerInvariant() switch
+        {
+            "app" => "'--devtools app' was removed with the in-app dev menu. Inspect the running app with the WinUI DevTools: winapp run . --devtools",
+            "screenshot" => "'--devtools screenshot' was removed. Use: winapp ui screenshot -a <app>",
+            "tree" => "'--devtools tree' was removed. Use: winapp devtools inspect",
+            _ => null,
+        };
+    }
+    // </snippet:removed-subverbs>
 
     private static bool IsExplicitDevtoolsRun(string[] args, int devtoolsIdx)
     {

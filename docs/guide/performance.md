@@ -21,7 +21,7 @@ you're adding a new event id, not before you take your first trace.
 | `dotnet-trace` | EventPipe | `.nettrace` opened in speedscope.app or VS Profiler | Reactor-only timing on any OS, AOT-friendly |
 | PerfView / xperf | Classic ETW | `.etl` opened in PerfView's Events view or WPA | Frame stutter that may be Reactor *or* WinUI native |
 | `tests/perf_bench/PerfBench.*` | In-process `BenchTracker` | `*.report.txt` next to the exe | Reproducing a regression with FPS / update-ms / GC numbers |
-| Reconcile-highlight overlay | Dev menu | Flashing rectangle per re-render | Finding which component re-rendered without taking a trace |
+| Reconcile-highlight overlay | `ReactorFeatureFlags.HighlightReconcileChanges` | Flashing rectangle per re-render | Finding which component re-rendered without taking a trace |
 
 The reconcile-highlight overlay is documented in
 [Dev Tooling](dev-tooling.md); reach for it first when "something

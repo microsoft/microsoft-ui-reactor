@@ -33,14 +33,15 @@ public class ReactorFeaturesTests
     [Fact]
     public void DevtoolsCliParser_RecognizesDevtoolsVerbs_WithoutLoadingHandlers()
     {
-        var options = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--mcp-port", "1234"]);
+        var options = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "Counter", "--vscode"]);
 
         Assert.Equal(DevtoolsSubverb.Run, options.Subverb);
-        Assert.Equal(1234, options.McpPort);
+        Assert.Equal("Counter", options.ComponentName);
+        Assert.True(options.VsCodeMode);
         Assert.False(options.PreviewAndDevtoolsConflict);
         Assert.DoesNotContain(
             options.GetType().GetProperties().Select(p => p.PropertyType),
-            t => t.FullName == "Microsoft.UI.Reactor.Hosting.Devtools.DevtoolsMcpServer");
+            t => t.Assembly.GetName().Name == "Microsoft.UI.Reactor.Devtools");
     }
 
     [Fact]
@@ -56,7 +57,7 @@ public class ReactorFeaturesTests
         try
         {
             var consumed = ReactorApp.TryRunDevtoolsForTest(
-                ["app.exe", "--devtools", "run", "--mcp-port", "1234"],
+                ["app.exe", "--devtools", "run", "--vscode"],
                 title: "Spec051",
                 width: 320,
                 height: 240);

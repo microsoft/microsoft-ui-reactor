@@ -21,7 +21,7 @@
     <Authors>Microsoft</Authors>
     <Company>Microsoft</Company>
     <Description>DEPRECATED: use the WinUI DevTools in the winapp CLI instead (`winapp run . --devtools`; agents: the winui-devtools skill). Still needed for the VS Code live preview and the Visual Studio embedded preview until winapp has its own previewer.</Description>
-    <PackageTags>WinUI;WinUI3;Windows App SDK;WinAppSDK;Windows;desktop;Reactor;devtools;diagnostics;hot-reload;preview;MCP;deprecated</PackageTags>
+    <PackageTags>WinUI;WinUI3;Windows App SDK;WinAppSDK;Windows;desktop;Reactor;devtools;diagnostics;hot-reload;preview;deprecated</PackageTags>
     <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
     <PackageIcon>Icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -43,17 +43,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="System.Drawing.Common" />
-    <PackageReference Include="MessageFormat" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Reactor\Reactor.csproj" />
-    <!-- Spec 062 §7 Track B (B1): docking moved core → Reactor.Advanced. The
-         docking.* MCP tools (DevtoolsDockingTools) resolve docking types incl.
-         the internal DockHostModelBridge from Advanced. -->
-    <ProjectReference Include="..\Reactor.Advanced\Reactor.Advanced.csproj" />
   </ItemGroup>
 
   <ItemGroup>

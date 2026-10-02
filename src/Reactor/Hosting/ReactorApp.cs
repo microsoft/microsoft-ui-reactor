@@ -449,10 +449,10 @@ public static partial class ReactorApp
     internal static IXamlMetadataProvider[] RegisteredControlAssemblyProviders
         => Volatile.Read(ref _registeredXamlMetadataProviders);
 
-    // Session-scoped flag. True iff the process was launched with a devtools
-    // subverb (--devtools app / --devtools run) and the binary was built with
-    // Reactor.DevtoolsSupport enabled. Frozen after startup; read by UseDevtools()
-    // and by the DevtoolsMenu component to decide whether to render themselves.
+    // Session-scoped flag. True iff the process was launched under the in-app
+    // preview host (--devtools run / --preview) and the binary was built with
+    // Reactor.DevtoolsSupport enabled. Frozen after startup; it turns source
+    // mapping on for that session.
     private static int _devtoolsEnabled;
     public static bool DevtoolsEnabled
     {
@@ -1277,8 +1277,8 @@ public static partial class ReactorApp
     }
 
     /// <summary>
-    /// Checks the process command-line for <c>--devtools</c> or the deprecated <c>--preview</c>.
-    /// If a devtools subverb is selected, launches the corresponding flow (list, run, etc.).
+    /// Checks the process command-line for <c>--devtools</c> or <c>--preview</c>.
+    /// If a devtools subverb is selected, launches the in-app preview host (run) or lists components.
     /// With <c>--vscode</c>, starts the capture server for the VS Code preview panel. Devtools
     /// dispatch requires the build-time <c>Reactor.DevtoolsSupport</c> switch.
     /// </summary>
@@ -1299,6 +1299,7 @@ public static partial class ReactorApp
 
     private static bool TryRunDevtoolsCore(string[] args, string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, Func<RenderContext, Element>? rootRenderFunc = null, bool exitOnUnavailable = false, Core.SourceLocation? rootMountSite = null)
     {
+        // <snippet:devtools-gate>
         var options = DevtoolsCliParser.Parse(args);
 
         if (options.PreviewAndDevtoolsConflict)
@@ -1307,9 +1308,9 @@ public static partial class ReactorApp
             return true;
         }
 
-        if (!string.IsNullOrEmpty(options.EmbedValidationError))
+        if (!string.IsNullOrEmpty(options.RemovedSubverbError ?? options.EmbedValidationError))
         {
-            Console.Error.WriteLine($"[reactor] {options.EmbedValidationError}");
+            Console.Error.WriteLine($"[reactor] {options.RemovedSubverbError ?? options.EmbedValidationError}");
             Environment.ExitCode = 2;
             if (exitOnUnavailable) Environment.Exit(2);
             return true;
@@ -1339,6 +1340,7 @@ public static partial class ReactorApp
         Environment.ExitCode = 2;
         if (exitOnUnavailable) Environment.Exit(2);
         return true;
+        // </snippet:devtools-gate>
     }
 
     private static void EmitDevtoolsNotAvailableMessage()
@@ -1349,7 +1351,7 @@ public static partial class ReactorApp
         Console.Error.WriteLine(
             "  <RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\" Value=\"true\" Trim=\"true\" />");
         Console.Error.WriteLine(
-            "[reactor] Reactor's built-in devtools are deprecated. Launch with `winapp run . --devtools` instead; it needs no package or switch.");
+            "[reactor] The in-app preview host is deprecated and kept only for the VS Code and Visual Studio previews. To inspect a running app, launch it with `winapp run . --devtools`; that needs no package or switch.");
     }
 
     internal static void ResetDevtoolsEnabledForTests()

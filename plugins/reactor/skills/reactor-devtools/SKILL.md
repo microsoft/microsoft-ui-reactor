@@ -14,7 +14,7 @@ winapp devtools inspect            # component tree, element kinds, keys, App.cs
 ```
 
 **Agents: load the `winui-devtools` skill** and call the winapp CLI with `--json`.
-The MCP server is not carried over. Reactor selectors work in both `winapp devtools`
+The in-app MCP server and dev menu have been removed too. Reactor selectors work in both `winapp devtools`
 and `winapp ui`: `"<Counter>"`, `"<Counter>/Button"`, `key=t1`, `App.cs:67`.
 
 | removed `mur devtools` | use instead |
@@ -36,8 +36,10 @@ and `winapp ui`: `"<Counter>"`, `"<Counter>/Button"`, `key=t1`, `App.cs:67`.
 | `--component`, `components`, `switch`, `windows.open` | `winapp run . --devtools -- --preview <Name>` — the preview host is in the app, so for now the app must reference `Microsoft.UI.Reactor.Devtools` |
 | `--print-config`, `call <tool>` | not carried over: the matching winapp command with `--json` |
 | `windows.close`, `shutdown`, `call docking.*` | no tool equivalent: app behavior — drive the app's UI with `winapp ui` |
+| `DevtoolsMenu(...)`, `UseDevtools()` (removed APIs) | the DevTools overlay toolbar; for app-specific switches, an ordinary menu inside `#if DEBUG` |
+| `--devtools app`, `--devtools screenshot`, `--devtools tree` (app flags) | `winapp run . --devtools`, `winapp ui screenshot`, `winapp devtools inspect` (the old flags print this and exit 2) |
 
 `mur devtools --help` prints the same table. The `Microsoft.UI.Reactor.Devtools`
-package (the in-app host, including the component preview host) still exists but is
+package (now only the component preview host, its capture server and the `--embed` handshake) still exists but is
 deprecated (build warning `REACTOR_DEVTOOLS_001`). It stays until winapp has its own
 previewer, because the VS Code live preview and the Visual Studio embedded preview run on it.

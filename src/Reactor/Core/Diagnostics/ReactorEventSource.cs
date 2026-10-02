@@ -136,6 +136,9 @@ internal sealed class ReactorEventSource : EventSource
     }
 
     // ── MCP dispatch ─────────────────────────────────────────────────────
+    // Nothing emits these since the in-app MCP server was removed from
+    // Microsoft.UI.Reactor.Devtools. Event ids 7/8 and the Mcp keyword stay
+    // reserved so existing trace consumers and manifests keep their meaning.
 
     [Event(7, Level = EventLevel.Informational, Keywords = Keywords.Mcp,
         Task = Tasks.McpCall, Opcode = EventOpcode.Start,

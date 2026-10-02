@@ -164,7 +164,7 @@ first; everyone else can follow the order.
 
 ### 7. Tooling & process
 
-- **[Dev Tooling](dev-tooling.md)** — `mur` CLI, MCP server, VS Code panel, dotnet watch, in-app dev menu
+- **[Dev Tooling](dev-tooling.md)** — `mur` CLI, the WinUI DevTools (`winapp run . --devtools`), VS Code panel, dotnet watch
 - **[VS Extension](vs-extension.md)** — Rough experimental embedded preview for Visual Studio 2022 (17.14+) and 2026 (18.x)
 - **[Testing](testing.md)** — Headless renderer, structural assertions, async test patterns
 - **[Performance](performance.md)** — ETW, EventDispatch, flame graphs
@@ -195,7 +195,7 @@ does, not just how to use it.
 - **[Source Mapping](source-mapping.md)** — How stack traces and devtools attribute work back to user source
 - **[Modifier System](modifier-system.md)** — How `.FontSize(24).Bold()` actually works
 - **[Analyzer Architecture](analyzer-architecture.md)** — Roslyn analyzers shipped with Reactor; authoring your own
-- **[DevTools Internals](devtools-internals.md)** — Dev menu, reconcile-highlight overlay, MCP protocol
+- **[DevTools Internals](devtools-internals.md)** — The in-app preview host behind the VS Code and Visual Studio previews
 - **[Animation Pipeline](animation-pipeline.md)** — Composition API end-to-end; 4 animation systems
 - **[Focus and Input Internals](focus-and-input-internals.md)** — `UseFocus` dispatcher, `FocusTrap` container, pointer event flow
 - **[Perf Instrumentation](perf-instrumentation.md)** — ETW sources, frame-aligned sampling

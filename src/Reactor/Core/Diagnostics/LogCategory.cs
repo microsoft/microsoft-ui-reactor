@@ -35,7 +35,7 @@ internal enum LogCategory
     /// <summary>Windows shell integration: JumpList, ThumbnailToolbar, tray icon, taskbar.</summary>
     Shell,
 
-    /// <summary>Devtools surface: MCP server, log capture, preview pipe.</summary>
+    /// <summary>Devtools surface: the in-app preview host and its capture server.</summary>
     Devtools,
 
     /// <summary>Markdown rendering: md4c parser, builder, list of inline children.</summary>

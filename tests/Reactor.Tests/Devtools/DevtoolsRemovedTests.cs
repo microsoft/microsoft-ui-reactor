@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.UI.Reactor.Cli.Devtools;
 using Xunit;
 
@@ -178,7 +179,7 @@ public class DevtoolsRemovedTests
     [Theory]
     [InlineData("devtools", "tree", "--pretty")]
     [InlineData("devtools")]
-    public void MurBinary_RoutesDevtoolsToTheStub_StderrOnly_Exit1(params string[] argv)
+    public async Task MurBinary_RoutesDevtoolsToTheStub_StderrOnly_Exit1(params string[] argv)
     {
         // The real `mur` binary: exit code, stderr text, and nothing on stdout.
         var mur = global::System.IO.Path.Combine(AppContext.BaseDirectory, "mur.exe");
@@ -193,11 +194,12 @@ public class DevtoolsRemovedTests
         foreach (var a in argv) psi.ArgumentList.Add(a);
         using var proc = global::System.Diagnostics.Process.Start(psi)!;
         // Drain both pipes concurrently: the help table is larger than a pipe buffer.
-        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
-        var stderrTask = proc.StandardError.ReadToEndAsync();
+        var ct = TestContext.Current.CancellationToken;
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
+        var stderrTask = proc.StandardError.ReadToEndAsync(ct);
         Assert.True(proc.WaitForExit(30_000), "mur did not exit");
-        var stdout = stdoutTask.GetAwaiter().GetResult();
-        var stderr = stderrTask.GetAwaiter().GetResult();
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
 
         Assert.Equal(1, proc.ExitCode);
         Assert.Equal(string.Empty, stdout);
@@ -213,4 +215,21 @@ public class DevtoolsRemovedTests
 
     private static DevtoolsVerbMapping Row(string key) =>
         DevtoolsRemoved.Find(key) ?? throw new InvalidOperationException($"no row '{key}'");
+
+    // ─── Removed mur devtools verbs still name their winapp command ────
+
+    [Theory]
+    [InlineData("properties")]
+    [InlineData("set-property")]
+    [InlineData("resources")]
+    [InlineData("set-resource")]
+    [InlineData("styles")]
+    [InlineData("ancestors")]
+    public void RemovedPropertyVerbs_MapToAWinappCommand(string verb)
+    {
+        var row = DevtoolsRemoved.Find(verb);
+        Assert.NotNull(row);
+        Assert.True(row!.HasEquivalent, verb);
+        Assert.StartsWith("winapp devtools ", row.WinappForm);
+    }
 }

@@ -7,18 +7,18 @@ const long MaxHelloWorldAotExeBytes = 13_107_200;
 MstatAssertion[] assertions =
 [
     new("Microsoft.UI.Reactor.Hosting.Devtools.*", name =>
-        name.Contains("DevtoolsMcpServer", StringComparison.Ordinal)
-        || name.Contains("LockfileRegistry", StringComparison.Ordinal)
-        || name.Contains("DevtoolsDockingTools", StringComparison.Ordinal)
-        || name.Contains("DevtoolsPropertyTools", StringComparison.Ordinal)
-        || name.Contains("DevtoolsUiaTools", StringComparison.Ordinal)
+        // Not Contains("DevtoolsHost"): core's IReactorDevtoolsHost is in every app.
+        name == "DevtoolsHost"
+        || name.Contains("Devtools.DevtoolsHost", StringComparison.Ordinal)
+        || name.Contains("TreeWalker", StringComparison.Ordinal)
+        || name.Contains("ReferenceOverlay", StringComparison.Ordinal)
         || name.Contains("DevtoolsJsonContext", StringComparison.Ordinal)),
     new("Microsoft.UI.Reactor.Hosting.PreviewCaptureServer", name => name.Contains("Microsoft.UI.Reactor.Hosting.PreviewCaptureServer", StringComparison.Ordinal) || name.Contains("PreviewCaptureServer", StringComparison.Ordinal)),
-    new("System.Net.Http.HttpClient", name => name.Contains("System.Net.Http.HttpClient", StringComparison.Ordinal) || name.Contains("HttpClient", StringComparison.Ordinal)),
-    new("System.Net.Http.SocketsHttpHandler", name => name.Contains("SocketsHttpHandler", StringComparison.Ordinal)),
-    new("System.Net.Http.HttpConnection", name => name.Contains("HttpConnection", StringComparison.Ordinal)),
-    new("System.Net.Http.Http2Connection", name => name.Contains("Http2Connection", StringComparison.Ordinal)),
-    new("System.Net.Security.SslStream", name => name.Contains("System.Net.Security.SslStream", StringComparison.Ordinal) || name.Contains("SslStream", StringComparison.Ordinal)),
+    new("System.Net.Http.HttpClient", name => name.Contains("System.Net.Http.HttpClient", StringComparison.Ordinal) || name.Contains("HttpClient", StringComparison.Ordinal), RequiredWhenDevtoolsOn: false),
+    new("System.Net.Http.SocketsHttpHandler", name => name.Contains("SocketsHttpHandler", StringComparison.Ordinal), RequiredWhenDevtoolsOn: false),
+    new("System.Net.Http.HttpConnection", name => name.Contains("HttpConnection", StringComparison.Ordinal), RequiredWhenDevtoolsOn: false),
+    new("System.Net.Http.Http2Connection", name => name.Contains("Http2Connection", StringComparison.Ordinal), RequiredWhenDevtoolsOn: false),
+    new("System.Net.Security.SslStream", name => name.Contains("System.Net.Security.SslStream", StringComparison.Ordinal) || name.Contains("SslStream", StringComparison.Ordinal), RequiredWhenDevtoolsOn: false),
     new("System.Net.HttpListener", name => name.Contains("System.Net.HttpListener", StringComparison.Ordinal) || name.Contains("HttpListener", StringComparison.Ordinal)),
     new("System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>", name => name.Contains("JsonTypeInfo", StringComparison.Ordinal)),
     new("System.Text.Json.Serialization.JsonConverter<T>", name => name.Contains("JsonConverter", StringComparison.Ordinal)),
@@ -62,7 +62,7 @@ int VerifyMstat(string modeArg, string mstatPath, string exePath)
         var present = names.Any(assertion.Matches);
         if (mode == "absence" && present)
             failures.Add($"Expected absent but found: {assertion.Label}");
-        else if (mode == "presence" && !present)
+        else if (mode == "presence" && assertion.RequiredWhenDevtoolsOn && !present)
             failures.Add($"Expected present but not found: {assertion.Label}");
     }
 
@@ -96,7 +96,7 @@ static int VerifyReactorIl(string reactorDllPath)
             failures.Add($"Unexpected devtools implementation type in Reactor.dll: {fullName}");
 
         if (fullName.Contains("PreviewCaptureServer", StringComparison.Ordinal)
-            || fullName.Contains("LockfileRegistry", StringComparison.Ordinal))
+            || type.Name == "DevtoolsHost")
             failures.Add($"Unexpected devtools implementation symbol in Reactor.dll: {fullName}");
     }
 
@@ -122,7 +122,6 @@ static bool IsAllowedCoreDevtoolsType(TypeDefinition type)
 
     return type.Name is
         "DevtoolsSubverb" or
-        "McpTransport" or
         "DevtoolsCliOptions" or
         "DevtoolsCliParser" or
         "IReactorDevtoolsHost" or
@@ -228,4 +227,7 @@ static IEnumerable<string> ExtractAsciiStrings(byte[] bytes)
         yield return builder.ToString();
 }
 
-internal sealed record MstatAssertion(string Label, Func<string, bool> Matches);
+// RequiredWhenDevtoolsOn: false marks types a devtools-off app must not contain but the
+// devtools-on app no longer needs either (the client-side HTTP/TLS stack was pulled in only by
+// the removed MCP lockfile probe), so the presence check doesn't require them.
+internal sealed record MstatAssertion(string Label, Func<string, bool> Matches, bool RequiredWhenDevtoolsOn = true);
