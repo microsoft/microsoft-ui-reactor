@@ -195,14 +195,24 @@ internal static class HostDiagnosticsFixtures
             ReactorSourceMap.Enabled = true;
             var island = new ReactorHostControl();
             var factoryIsland = new ReactorHostControl { ComponentFactory = static () => new IslandRoot() };
+            object? sentinel = null;
             try
             {
                 var root = new IslandRoot();
                 island.Mount(root); var mountLine = Line();
+
+                // An unrelated root-mount scope left open while the factory island loads.
+                // ComponentFactory has no call site in app code, so it must not borrow this
+                // one; the sentinel being still unclaimed afterwards is what proves it.
+                sentinel = ReactorSourceMap.EnterRootMountSite("Sentinel.cs", 123);
                 H.SetContent(new StackPanel { Children = { island, factoryIsland } });
                 var rendered = await Harness.WaitFor(
                     () => island.Content is not null && factoryIsland.Content is not null, maxPasses: 40, perPassMs: 10);
                 H.Check("HostDiagIsland_Rendered", rendered);
+                H.Check("HostDiagIsland_FactoryDidNotClaimAnUnrelatedScope",
+                    ReactorSourceMap.TakeRootMountSite() is { LineNumber: 123 });
+                ReactorSourceMap.ExitRootMountSite(sentinel);
+                sentinel = null;
 
                 var info = InfoFor(island);
                 H.Check("HostDiagIsland_Listed", info is not null);
@@ -234,9 +244,72 @@ internal static class HostDiagnosticsFixtures
             }
             finally
             {
+                ReactorSourceMap.ExitRootMountSite(sentinel);
                 island.Dispose();
                 factoryIsland.Dispose();
                 H.SetContent(null);
+                ReactorSourceMap.Enabled = previous;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The <c>ReactorApp.OpenWindow</c> → <c>ReactorWindow</c> → <c>ReactorHost</c> path:
+    /// the window's host is listed with its <c>ReactorWindow</c>, and both the opening call
+    /// and a later <c>ReactorWindow.Mount</c> report their own lines — the site travels down
+    /// through <c>OpenWindowCore</c> / <c>MountAndActivate</c> rather than being re-claimed.
+    /// </summary>
+    internal class ReactorWindowReportsItsMountSites(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            if (ReactorApp.UIDispatcher is null)
+                ReactorApp.UIDispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+
+            var previous = ReactorSourceMap.Enabled;
+            ReactorSourceMap.Enabled = true;
+            ReactorWindow? win = null;
+            try
+            {
+                var spec = new WindowSpec { Title = "HostDiag ReactorWindow", Width = 240, Height = 160 };
+                win = ReactorApp.OpenWindow(spec, static () => new Probe()); var openLine = Line();
+                await win.Host.WaitForIdleAsync();
+                await Harness.Render(50);
+
+                var info = ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.ReactorWindow, win));
+                H.Check("HostDiagWin_Listed", info is not null);
+                if (info is null) return;
+
+                H.Check("HostDiagWin_Kind", info.Kind == ReactorHostKind.WindowHost);
+                H.Check("HostDiagWin_Host", ReferenceEquals(info.Host, win.Host));
+                H.Check("HostDiagWin_Window", ReferenceEquals(info.Window, win.NativeWindow));
+                H.Check("HostDiagWin_Root", info.RootComponentType == typeof(Probe));
+
+                win.Mount(new IslandRoot()); var remountLine = Line();
+                await win.Host.WaitForIdleAsync();
+                var remounted = ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.ReactorWindow, win));
+                H.Check("HostDiagWin_RemountedRoot", remounted?.RootComponentType == typeof(IslandRoot));
+
+#if REACTOR_SOURCEMAP
+                H.Check("HostDiagWin_OpenWindowSite",
+                    info.MountSite is { } site
+                    && site.LineNumber == openLine
+                    && site.FilePath.EndsWith("HostDiagnosticsFixtures.cs", StringComparison.Ordinal),
+                    $"site={info.MountSite?.ToShortString() ?? "null"} expected line {openLine}");
+                H.Check("HostDiagWin_RemountSite",
+                    remounted?.MountSite?.LineNumber == remountLine,
+                    $"site={remounted?.MountSite?.ToShortString() ?? "null"} expected line {remountLine}");
+#else
+                _ = openLine; _ = remountLine;
+                H.Skip("HostDiagWin_OpenWindowSite", SkipReason);
+                H.Skip("HostDiagWin_RemountSite", SkipReason);
+#endif
+            }
+            finally
+            {
+                try { win?.Close(); } catch { /* already closed */ }
+                await Task.Delay(80);
                 ReactorSourceMap.Enabled = previous;
             }
         }

@@ -388,7 +388,10 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     {
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
-        _mountSite = mountSite;
+        // Render() keeps preferring a component root mounted earlier on this host, so the
+        // render function's site only describes the live root when there is none.
+        if (_rootComponent is null)
+            _mountSite = mountSite;
         RequestRender();
     }
 
