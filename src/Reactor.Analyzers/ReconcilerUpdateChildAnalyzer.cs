@@ -16,8 +16,9 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// update had to build one. It is only correct after the internal <c>CanUpdate</c> check (same
 /// element type and key), and its caller has to unmount a control it replaces. Code outside the
 /// framework can't make that check, and the two call sites the repository had did neither: a child
-/// that changed type threw <c>InvalidCastException</c>, and a replaced child's effect cleanups,
-/// refs and unmount callbacks never ran. <c>Reconciler.Reconcile</c> takes the same arguments,
+/// that changed type threw <c>InvalidCastException</c>, and a replaced child's effect cleanups and
+/// unmount callbacks never ran and its refs were never cleared. <c>Reconciler.Reconcile</c> takes
+/// the same arguments,
 /// does both and returns the control the slot should hold, so the rule points there and
 /// <see cref="ReconcilerUpdateChildCodeFix"/> rewrites the common shape.
 ///
@@ -47,7 +48,8 @@ public sealed class ReconcilerUpdateChildAnalyzer : DiagnosticAnalyzer
         "control when the update had to build one. It doesn't check that the new element has the " +
         "element type and key of the old one, so a child that changes type throws " +
         "InvalidCastException for a built-in control, and it leaves a control it replaced mounted, " +
-        "so that subtree's effect cleanups, refs and unmount callbacks never run. Reconciler.Reconcile " +
+        "so that subtree's effect cleanups and unmount callbacks never run and its refs are never " +
+        "cleared. Reconciler.Reconcile " +
         "takes the same arguments, patches the child or unmounts it and mounts the new element, and " +
         "returns the control the slot should hold: install it when it differs from the existing " +
         "control. In an IElementHandler, UpdateContext.ReconcileChild does the same.";

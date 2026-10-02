@@ -95,6 +95,25 @@ Conventions for contributors:
   wins over the element, and — unlike the caption height — no content extension is
   required. ReactorGallery uses it so its caption buttons follow the gallery theme.
 
+- **`REACTOR_LIFECYCLE_003` — a custom control updates the child it hosts with
+  `Reconciler.UpdateChild` (#1307).** `UpdateChild` is only correct after a check
+  that the new element can update the old control (same element type and key).
+  That check is internal, so code outside the framework can't make it, and
+  `UpdateChild` also leaves a control it replaced mounted for the caller to
+  unmount. A `RegisterType` registration or `IElementHandler` that hosts a child
+  this way throws `InvalidCastException` when the child changes element type, and
+  a replaced child's effect cleanups and unmount callbacks never run and its refs
+  are never cleared. The analyzer points at `Reconciler.Reconcile`, which takes the
+  same arguments, does both, and returns the control the slot should hold
+  (`UpdateContext.ReconcileChild` in a handler). Its code fix rewrites
+  `var x = r.UpdateChild(…); if (x is not null) …` and drops a manual
+  `UnmountChild(existing)`, and is offered only where that keeps the code's
+  meaning. The rule is silent in the assembly that declares `Reconciler`, whose
+  slot owners make the check first. The repository's two call sites, the data
+  grid's internal `ResizeGrip` and the regedit sample, now use `Reconcile`
+  (neither reached the bad path), and the Extending Reactor Controls guide shows a
+  `RegisterType` host reconciling its child.
+
 ### Changed
 
 - **`.Validate(fieldName, value, validators…)` now runs its validators during the
