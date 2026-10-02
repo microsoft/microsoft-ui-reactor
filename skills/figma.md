@@ -433,21 +433,20 @@ public class <ComponentName> : Component
 ### For AI agents (recommended)
 
 ```bash
-# 1. Build and launch with devtools
-dotnet run --project MyApp/MyApp.csproj -- --devtools run
+# 1. Build and launch with the WinUI DevTools (winapp CLI; `mur devtools` is deprecated)
+winapp run MyApp --devtools --detach
 
-# 2. Verify structure
-mur devtools tree --pretty
+# 2. Verify structure (components, element kinds, C# call sites)
+winapp devtools inspect
 
 # 3. Capture screenshot
-mur devtools screenshot --out preview.png
+winapp ui screenshot -a MyApp --output preview.png
 
-# 4. After editing code, reload without restarting
-mur devtools reload
+# 4. After editing code, rely on .NET Hot Reload; for rude edits, close the app and re-run step 1
 
 # 5. Re-verify
-mur devtools tree --pretty
-mur devtools screenshot --out preview-v2.png
+winapp devtools inspect
+winapp ui screenshot -a MyApp --output preview-v2.png
 ```
 
 ### For developers (hot-reload)
@@ -456,7 +455,7 @@ mur devtools screenshot --out preview-v2.png
 dotnet watch run --project MyApp/MyApp.csproj
 ```
 
-Note: `dotnet watch` does not maintain MCP/devtools sessions across rebuilds. Use it for manual iteration only.
+Note: `dotnet watch` does not keep a DevTools session attached across rebuilds. Use it for manual iteration only.
 
 ## Rules
 

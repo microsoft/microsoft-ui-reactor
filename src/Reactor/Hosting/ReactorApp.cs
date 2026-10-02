@@ -1347,6 +1347,8 @@ public static partial class ReactorApp
             "Devtools must be enabled at build time. Add the following to your csproj and rebuild:");
         Console.Error.WriteLine(
             "  <RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\" Value=\"true\" Trim=\"true\" />");
+        Console.Error.WriteLine(
+            "[reactor] Reactor's built-in devtools are deprecated. Launch with `winapp run . --devtools` instead; it needs no package or switch.");
     }
 
     internal static void ResetDevtoolsEnabledForTests()

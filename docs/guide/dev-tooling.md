@@ -14,6 +14,14 @@ so end users never see anything you don't intend to ship.
 
 # Dev Tooling
 
+> **Reactor's built-in DevTools are deprecated.** `mur devtools`, the
+> `Microsoft.UI.Reactor.Devtools` package, and the `Reactor.DevtoolsSupport`
+> switch are replaced by the [WinUI DevTools in the winapp CLI](#winui-devtools-winapp),
+> which need nothing in your project: `winapp run . --devtools`. They keep working
+> until they are removed one Reactor minor release after this notice. The rest of
+> this page — `dotnet watch`, hot reload, the `mur` CLI, the VS Code panel — is
+> unaffected unless a section says otherwise.
+
 Reactor's inner loop centers on `dotnet watch` and preview mode: you edit
 code, save, and see changes in a running window — no manual restart, no
 state-resetting class reload most of the time. Surrounding that loop are
@@ -173,7 +181,7 @@ the workflows below.
 | Subcommand | Purpose | Common invocation |
 |------------|---------|-------------------|
 | `mur loc` | Run the localization pipeline (`extract`, `translate`, `validate`, `status`, `prune`) | `mur loc extract` |
-| `mur devtools` | Launch the project with `--devtools run`, supervise reloads, and host the MCP endpoint | `mur devtools` |
+| `mur devtools` | **Deprecated** — use `winapp run . --devtools` ([mapping](#winui-devtools-winapp)). Launches the project with `--devtools run`, supervises reloads, and hosts the MCP endpoint | `mur devtools` |
 | `mur check` | Repo-health checks (cref validity, namespace policy, "did you mean" suggestions) | `mur check` |
 | `mur doctor` | Verify the install — SDK, `mur`, local feed, templates, plugin | `mur doctor` |
 | `mur upgrade` | Re-pack the framework and refresh the plugin after a `git pull`; checks template availability but does not install the pack (that's `winapp new`) | `mur upgrade` |
@@ -205,7 +213,50 @@ for the full surface and the `--validate-only`, `--no-screenshots`
 `--skip-reference`, and `--tier <stub|solid|comprehensive>`
 flags that make the inner loop fast.
 
+## WinUI DevTools (winapp)
+
+The developer tools for a running Reactor app are the WinUI DevTools in the
+[winapp CLI](https://github.com/microsoft/winappCli). Nothing goes in your
+project: keep a Debug build (source mapping is on in Debug) and launch with
+DevTools attached:
+
+<!-- ai:lock -->
+```
+winapp run . --devtools --detach
+winapp devtools inspect
+```
+<!-- /ai:lock -->
+
+`inspect` shows the tree your C# created — `<Counter>` component rows, element
+kinds, keys, and the `App.cs:67` call site of each element — across every window.
+Reactor selectors such as `"<Counter>/Button"`, `key=t1`, and `App.cs:67` work in
+both `winapp devtools` and `winapp ui`. AI agents use the same CLI with `--json`
+and the `winui-devtools` skill; the MCP server below is not carried over.
+
+| `mur devtools` (deprecated) | winapp |
+|---|---|
+| `mur devtools [project]` | `winapp run . --devtools` |
+| `session list` / `session clean` | `winapp devtools list` / not needed |
+| `tree`, `ancestors` | `winapp devtools inspect [<selector> --ancestors]` |
+| `properties`, `set-property`, `styles` | `winapp devtools get-property`, `set-property` |
+| `resources`, `set-resource` | `winapp devtools get-resource`, `set-resource` |
+| `state` | `winapp devtools get-state`, `set-state`, `rerender` (any component) |
+| `fire` | `winapp devtools invoke-handler <selector> <Handler>` |
+| `click`, `type`, `focus`, `invoke`, `scroll`, `wait` | `winapp ui click`, `set-value`, `focus`, `invoke`, `scroll`, `wait-for` |
+| `toggle`, `select`, `expand`, `collapse` | `winapp ui invoke <selector> --action toggle` (`select`, `expand`, `collapse`) |
+| `screenshot`, `windows.list` | `winapp ui screenshot`, `winapp ui list-windows` |
+| In-app ⚡ dev menu | The DevTools overlay toolbar |
+| `--print-config` (MCP) | Not carried over |
+| `logs` | Planned (`winapp devtools logs`) |
+| `--component`, `components`, `switch` | No equivalent yet — the component preview host is under review |
+
+`mur devtools --help` prints the complete mapping, and every `mur devtools`
+command prints its winapp equivalent before it runs.
+
 ## MCP Server
+
+> **Deprecated.** Use [`winapp run . --devtools`](#winui-devtools-winapp) and the
+> winapp CLI with `--json` instead; agents load the `winui-devtools` skill.
 
 `mur devtools` launches your project with `--devtools run`, supervises
 it across reloads, and pins a [Model Context Protocol](https://modelcontextprotocol.io/)
@@ -293,7 +344,9 @@ combine:
    myapp.exe --devtools app
    ```
 
-`UseDevtools()` returns `true` only when **both** are present. It is a
+`UseDevtools()` returns `true` only when **both** are present. It keys on
+Reactor's own (deprecated) devtools session, so it stays `false` under
+`winapp run . --devtools`. It is a
 `RenderContext` extension, so you call it from a
 [function component](components.md)'s `ctx` — or from a helper you hand
 the `ctx` to, provided that helper is itself named `Use*`, since

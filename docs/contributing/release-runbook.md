@@ -64,7 +64,10 @@ Also check NuGet.org for already-published packages:
 
 - `Microsoft.UI.Reactor`
 - `Microsoft.UI.Reactor.Advanced`
-- `Microsoft.UI.Reactor.Devtools`
+- `Microsoft.UI.Reactor.Devtools` — **deprecated**. After publishing, mark the new version
+  deprecated on NuGet.org (Manage package → Deprecation → "Legacy", alternate package: none,
+  message: "Use the WinUI DevTools in the winapp CLI: `winapp run . --devtools`."). NuGet
+  deprecation metadata lives on the gallery, not in the `.nupkg`.
 
 ## Prepare the release PR
 

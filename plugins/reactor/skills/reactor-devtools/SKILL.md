@@ -1,9 +1,35 @@
 ---
 name: reactor-devtools
-description: "Driving a running Reactor app via `mur devtools` — screenshot, inspect visual tree, click/type/scroll, read hook state. Use when diagnosing visible bugs (layout, contrast) or verifying a UI change landed."
+description: "DEPRECATED: prefer the winui-devtools skill and `winapp run . --devtools`. Legacy: driving a running Reactor app via `mur devtools` — screenshot, inspect visual tree, click/type/scroll, read hook state. Use only for apps that still depend on the legacy Reactor devtools (component preview host)."
 ---
 
 # Reactor Devtools — CLI-driven UI automation
+
+> **DEPRECATED — use the WinUI DevTools in the winapp CLI instead.** `mur devtools`,
+> the `Microsoft.UI.Reactor.Devtools` package and the `Reactor.DevtoolsSupport` switch
+> are replaced by `winapp run . --devtools` (nothing to add to the project) and are
+> removed one Reactor minor release after this notice. **Agents: load the
+> `winui-devtools` skill** and call the winapp CLI with `--json`; the MCP server is not
+> carried over. Use this file only for an app that still depends on the legacy surface
+> (the `--component` preview host, the VS Code / Visual Studio preview).
+>
+> | `mur devtools` | winapp |
+> |---|---|
+> | launch (`mur devtools`, `dotnet run -- --devtools run`) | `winapp run . --devtools --detach` |
+> | `session list` | `winapp devtools list` |
+> | `tree`, `ancestors` | `winapp devtools inspect [<selector> --ancestors]` |
+> | `properties`, `set-property`, `styles` | `winapp devtools get-property`, `set-property` |
+> | `resources`, `set-resource` | `winapp devtools get-resource`, `set-resource` |
+> | `state` | `winapp devtools get-state`, `set-state`, `rerender` |
+> | `fire` | `winapp devtools invoke-handler <selector> <Handler>` |
+> | `click`, `type`, `focus`, `invoke`, `scroll`, `wait` | `winapp ui click`, `set-value`, `focus`, `invoke`, `scroll`, `wait-for` |
+> | `toggle`, `select`, `expand`, `collapse` | `winapp ui invoke <selector> --action toggle` (`select`, `expand`, `collapse`) |
+> | `screenshot`, `windows.list` | `winapp ui screenshot -a <app>`, `winapp ui list-windows` |
+> | `logs` | planned: `winapp devtools logs` |
+> | `components`, `switch`, `--component` | no equivalent yet (preview host under review) |
+>
+> Reactor selectors work in both `winapp devtools` and `winapp ui`: `"<Counter>"`,
+> `"<Counter>/Button"`, `key=t1`, `App.cs:67`. `mur devtools --help` prints the full mapping.
 
 The Reactor devtools let you look at a running debug-build app the way a
 user does (screenshots, rendered text, layout bounds) and drive it the way

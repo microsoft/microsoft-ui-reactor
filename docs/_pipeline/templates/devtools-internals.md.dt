@@ -35,6 +35,12 @@ it. Gate the construction, not just the rendering.
 
 # DevTools Internals
 
+> **Deprecated.** This page describes Reactor's built-in DevTools (`mur devtools`,
+> the `Microsoft.UI.Reactor.Devtools` package, the MCP server, and the in-app dev menu),
+> which are replaced by the WinUI DevTools in the winapp CLI: `winapp run . --devtools`.
+> See [Dev Tooling](dev-tooling.md#winui-devtools-winapp) for the mapping. The page is removed
+> together with the package; the `Microsoft-UI-Reactor` ETW provider stays.
+
 This page covers the internals of Reactor's devtools — the MCP server
 that external agents talk to, the in-app dev menu, the runtime
 overlays, and the gate that keeps the whole subsystem out of retail.

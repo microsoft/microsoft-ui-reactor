@@ -8,6 +8,7 @@ namespace Microsoft.UI.Reactor.Cli.Devtools;
 /// <c>mur devtools [project] [--component Name] [--mcp-port N]</c>.
 /// Launches <c>dotnet run -- --devtools run</c> against the target project and
 /// respawns after each exit-code-42 from the child (the reload sentinel).
+/// Deprecated in favour of <c>winapp run . --devtools</c>; see <see cref="DevtoolsDeprecation"/>.
 /// </summary>
 internal sealed record SupervisorArgs(
     string? Project,
@@ -86,6 +87,10 @@ internal static class DevtoolsSupervisor
 
     public static int Run(string[] args)
     {
+        // Deprecated in favour of `winapp run . --devtools`. The notice goes to
+        // stderr so JSON / PNG / --print-config output on stdout stays parseable.
+        DevtoolsDeprecation.WriteNotice(Console.Error, args, Environment.GetEnvironmentVariable);
+
         // Spec 025 routes: session subverbs and the named-verb surface dispatch
         // before the launcher parser so the launcher doesn't misread them as
         // project paths.
@@ -314,6 +319,8 @@ internal static class DevtoolsSupervisor
 
     private static void PrintHelp()
     {
+        Console.Write(DevtoolsDeprecation.BuildMappingTable());
+        Console.WriteLine();
         Console.WriteLine("mur devtools [project] [--component Name] [--mcp-port N]");
         Console.WriteLine("mur devtools --print-config [--mcp-port N]");
         Console.WriteLine();

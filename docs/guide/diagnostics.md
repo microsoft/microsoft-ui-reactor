@@ -291,6 +291,9 @@ routes above — they cost less and emit a richer format.
 
 ## `reactor.logs source=event` — MCP integration
 
+> **Deprecated.** `mur devtools` and its MCP server are replaced by the WinUI DevTools in
+> the winapp CLI (`winapp run . --devtools`); a `winapp devtools logs` verb is planned.
+
 The Reactor in-process devtools (`mur devtools`) expose a `logs` MCP
 tool that drains the captured `Console.Out` / `Console.Error` /
 `Debug.WriteLine` ring buffer. Spec 044 extended the tool so the

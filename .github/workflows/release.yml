@@ -467,9 +467,11 @@ jobs:
 
             Versioned in lock-step with the framework package.
 
-            ### `Microsoft.UI.Reactor.Devtools.${{ steps.version.outputs.version }}.nupkg` — optional devtools host (debug + VS preview)
+            ### `Microsoft.UI.Reactor.Devtools.${{ steps.version.outputs.version }}.nupkg` — **deprecated** devtools host (debug + VS preview)
 
-            Referenced by the scaffolded `dotnet new reactor` csproj in a
+            **Deprecated:** use the WinUI DevTools in the winapp CLI
+            (`winapp run . --devtools`) instead; this package is removed one
+            Reactor minor release after the deprecation notice. Referenced by the scaffolded `dotnet new reactor` csproj in a
             Debug-only `ItemGroup`, paired with `RuntimeHostConfigurationOption
             Reactor.DevtoolsSupport=true`. Required to light up the right-click
             devtools menu in Debug F5 launches and for the Reactor VS embedded

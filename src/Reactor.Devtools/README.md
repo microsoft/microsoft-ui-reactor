@@ -1,5 +1,42 @@
 # Microsoft.UI.Reactor.Devtools
 
+> [!WARNING]
+> **Deprecated.** Reactor's built-in DevTools — this package, the `Reactor.DevtoolsSupport`
+> build switch, and `mur devtools` — are replaced by the **WinUI DevTools in the winapp CLI**,
+> which need nothing in your project. The package will be removed one Reactor minor release
+> after this notice. Builds that reference it show warning `REACTOR_DEVTOOLS_001`
+> (suppress with `<NoWarn>$(NoWarn);REACTOR_DEVTOOLS_001</NoWarn>` or
+> `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`).
+>
+> **Migrate:**
+> 1. Remove `<PackageReference Include="Microsoft.UI.Reactor.Devtools" … />` and
+>    `<RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" … />` from your project,
+>    and any launch profile that passes `--devtools`.
+> 2. Keep a Debug build (source mapping stays on in Debug through `Microsoft.UI.Reactor`).
+> 3. Launch with `winapp run . --devtools` (add `--detach` when an agent drives it).
+> 4. AI agents: use the winapp CLI with `--json` and the `winui-devtools` skill. The MCP server
+>    is not carried over.
+>
+> | Reactor DevTools | winapp |
+> |---|---|
+> | `mur devtools [project]` | `winapp run . --devtools` |
+> | `mur devtools session list` | `winapp devtools list` |
+> | `tree`, `ancestors` | `winapp devtools inspect [<selector> --ancestors]` |
+> | `properties`, `set-property`, `styles` | `winapp devtools get-property`, `set-property` |
+> | `resources`, `set-resource` | `winapp devtools get-resource`, `set-resource` |
+> | `state` (root component only) | `winapp devtools get-state`, `set-state`, `rerender` (any component) |
+> | `fire` | `winapp devtools invoke-handler <selector> <Handler>` |
+> | `click`, `type`, `focus`, `invoke`, `scroll`, `wait` | `winapp ui click`, `set-value`, `focus`, `invoke`, `scroll`, `wait-for` |
+> | `toggle`, `select`, `expand`, `collapse` | `winapp ui invoke <selector> --action toggle\|select\|expand\|collapse` |
+> | `screenshot`, `windows.list` | `winapp ui screenshot`, `winapp ui list-windows` |
+> | In-app ⚡ dev menu | The winapp DevTools overlay toolbar |
+> | `--print-config` / MCP endpoint | Not carried over (`winapp … --json` + `winui-devtools` skill) |
+> | `logs` | Planned: `winapp devtools logs` |
+> | `--component`, `components`, `switch`, VS Code / Visual Studio preview | No winapp equivalent yet — the component preview host is under review; keep this package for it until then |
+>
+> Reactor apps work with `winapp devtools` selectors such as `"<Counter>/Button"`, `key=t1`
+> and `App.cs:67`. Run `mur devtools --help` for the full verb mapping.
+
 **Optional developer-loop devtools host for [`Microsoft.UI.Reactor`](https://www.nuget.org/packages/Microsoft.UI.Reactor) — live element-tree inspection, hot reload, preview, and an agent-friendly MCP surface.**
 
 ## About

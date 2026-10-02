@@ -1,0 +1,22 @@
+<Project>
+  <!--
+    Microsoft.UI.Reactor.Devtools is deprecated. Reactor's built-in DevTools (this
+    package, the Reactor.DevtoolsSupport switch and `mur devtools`) are replaced by
+    the WinUI DevTools in the winapp CLI, which need nothing in the project:
+    `winapp run . (dash-dash)devtools`.
+
+    Packed to build\ only (not buildTransitive\), so it warns the project that
+    references the package directly and not every project above it.
+
+    Suppress with either:
+      <NoWarn>$(NoWarn);REACTOR_DEVTOOLS_001</NoWarn>
+      <ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>
+  -->
+  <Target Name="_ReactorWarnDevtoolsPackageDeprecated"
+          BeforeTargets="CoreCompile"
+          Condition="'$(ReactorSuppressDevtoolsDeprecationWarning)' != 'true' and '$(DesignTimeBuild)' != 'true' and !$([System.String]::Copy(';$(NoWarn);').Replace(',', ';').Replace(' ', '').Contains(';REACTOR_DEVTOOLS_001;'))">
+    <Warning Code="REACTOR_DEVTOOLS_001"
+             Text="Microsoft.UI.Reactor.Devtools is deprecated and will be removed one Reactor minor release after this notice. Remove the PackageReference and the Reactor.DevtoolsSupport RuntimeHostConfigurationOption, then launch with 'winapp run . --devtools' (WinUI DevTools in the winapp CLI). Suppress with &lt;NoWarn&gt;REACTOR_DEVTOOLS_001&lt;/NoWarn&gt;."
+             HelpLink="https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/Reactor.Devtools/README.md" />
+  </Target>
+</Project>

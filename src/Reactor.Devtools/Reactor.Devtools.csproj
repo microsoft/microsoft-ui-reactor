@@ -20,8 +20,8 @@
     <Version Condition="'$(Version)' == ''">0.0.0-local</Version>
     <Authors>Microsoft</Authors>
     <Company>Microsoft</Company>
-    <Description>Optional devtools host for Microsoft.UI.Reactor.</Description>
-    <PackageTags>WinUI;WinUI3;Windows App SDK;WinAppSDK;Windows;desktop;Reactor;devtools;diagnostics;hot-reload;preview;MCP</PackageTags>
+    <Description>DEPRECATED: use the WinUI DevTools in the winapp CLI instead (`winapp run . --devtools`; agents: the winui-devtools skill). Optional devtools host for Microsoft.UI.Reactor, removed one Reactor minor release after this notice.</Description>
+    <PackageTags>WinUI;WinUI3;Windows App SDK;WinAppSDK;Windows;desktop;Reactor;devtools;diagnostics;hot-reload;preview;MCP;deprecated</PackageTags>
     <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
     <PackageIcon>Icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -60,6 +60,10 @@
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
     <None Include="..\..\assets\Icon.png" Pack="true" PackagePath="" Visible="false" />
     <None Include="README.md" Pack="true" PackagePath="" Visible="false" />
+    <!-- Deprecation warning REACTOR_DEVTOOLS_001 for projects that reference the
+         package directly. build\ only: transitive consumers are not warned. -->
+    <None Remove="build\Microsoft.UI.Reactor.Devtools.targets" />
+    <None Include="build\Microsoft.UI.Reactor.Devtools.targets" Pack="true" PackagePath="build\" />
   </ItemGroup>
 
 </Project>

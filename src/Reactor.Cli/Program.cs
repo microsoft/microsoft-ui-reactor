@@ -137,7 +137,7 @@ void ShowHelp()
     Console.WriteLine("  loc validate     Check ICU syntax and parameter consistency");
     Console.WriteLine("  loc status       Show translation coverage per locale");
     Console.WriteLine("  loc prune        Find unused localization keys");
-    Console.WriteLine("  devtools         Launch project with --devtools run and supervise reloads");
+    Console.WriteLine("  devtools         (deprecated: use `winapp run . --devtools`) Launch with --devtools run");
     Console.WriteLine("  check [path]     Build and emit one-line diagnostics with skill-file pointers");
     Console.WriteLine("  pack-local       Pack the in-source framework to <repo>/local-nupkgs/ as 0.0.0-local");
     Console.WriteLine("  clean-local      Remove local packages, NuGet cache entries, and templates");

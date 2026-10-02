@@ -395,6 +395,20 @@ Conventions for contributors:
 
 ### Deprecated
 
+- **Reactor's built-in DevTools are deprecated in favour of the WinUI DevTools in the winapp
+  CLI.** `mur devtools` (every verb), the `Microsoft.UI.Reactor.Devtools` package and the
+  `Reactor.DevtoolsSupport` switch are replaced by `winapp run . --devtools`, which needs nothing
+  in the project; agents use the winapp CLI with `--json` and the `winui-devtools` skill (the MCP
+  server is not carried over). Everything keeps working for now: every `mur devtools` command
+  prints a notice naming its winapp equivalent to stderr (`mur devtools --help` prints the full
+  mapping; silence it with `MUR_DEVTOOLS_NO_DEPRECATION_NOTICE=1`), and a project that references
+  the package gets build warning `REACTOR_DEVTOOLS_001` (suppress with `NoWarn` or
+  `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`).
+  They are removed one Reactor minor release after this notice. The component preview host
+  (`--component`, the VS Code panel and the Visual Studio embedded preview) has no winapp
+  equivalent yet and is unaffected until that is decided. Reactor keeps its library diagnostics:
+  source mapping, `ReactorTrace` / the `Microsoft-UI-Reactor` EventSource, and hot reload.
+
 - **`Microsoft.UI.Reactor.ProjectTemplates` is deprecated on NuGet.org.** Published versions
   remain restorable but are marked deprecated with a pointer to `dotnet new reactor`. Scaffold the
   replacement with `winapp new -t reactor -n MyApp`, which installs the Windows App SDK template
