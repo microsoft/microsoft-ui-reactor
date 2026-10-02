@@ -18,7 +18,8 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 /// </summary>
 public class ReconcilerUpdateChildAnalyzerTests
 {
-    private const string ReactorStub = @"
+    // Reconciler's members mirror Reactor's nullable signatures.
+    private const string ReactorStub = @"#nullable enable
 namespace Microsoft.UI.Xaml
 {
     public class UIElement { }
@@ -32,8 +33,8 @@ namespace Microsoft.UI.Reactor.Core
 
     public sealed class Reconciler
     {
-        public UIElement UpdateChild(Element oldEl, Element newEl, UIElement control, System.Action requestRerender) => null;
-        public UIElement Reconcile(Element oldElement, Element newElement, UIElement existingControl, System.Action requestRerender) => null;
+        public UIElement? UpdateChild(Element oldEl, Element newEl, UIElement control, System.Action requestRerender) => null;
+        public UIElement? Reconcile(Element? oldElement, Element? newElement, UIElement? existingControl, System.Action requestRerender) => existingControl;
         public void UnmountChild(UIElement control) { }
     }
 
@@ -61,7 +62,9 @@ namespace ThirdParty
         public UIElement UpdateChild(Element oldEl, Element newEl, UIElement control, System.Action requestRerender) => control;
         public void UnmountChild(UIElement control) { }
     }
-}";
+}
+#nullable restore
+";
 
     private const string Usings = @"
 using System;

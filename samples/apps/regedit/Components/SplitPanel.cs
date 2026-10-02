@@ -43,11 +43,14 @@ internal static class CursorBorderRegistration
                 // element, and returns the control the panel should hold (null for Empty()).
                 var existing = panel.Children.Count > 0 ? panel.Children[0] : null;
                 var next = r.Reconcile(oldEl.Child, newEl.Child, existing, rerender);
-                if (!ReferenceEquals(next, existing))
+                if (next is null)
                 {
                     if (existing is not null) panel.Children.RemoveAt(0);
-                    if (next is not null) panel.Children.Insert(0, next);
                 }
+                else if (existing is null)
+                    panel.Children.Insert(0, next);
+                else if (!ReferenceEquals(next, existing))
+                    panel.Children[0] = next;
                 panel.Tag = newEl;
                 return null;
             });

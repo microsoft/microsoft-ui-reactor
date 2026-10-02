@@ -199,11 +199,34 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
             if (unmounts.Count > 0 && ((BlockSyntax)ifStatement.Statement).Statements.Count == unmounts.Count)
                 return null;
 
-            var referenceEquals = BindsToObjectReferenceEquals(model, ifStatement.Condition.SpanStart)
-                ? "ReferenceEquals"
-                : "object.ReferenceEquals";
-            var newCondition = SyntaxFactory.ParseExpression(
-                $"{ifStatement.Condition.WithoutTrivia()} && !{referenceEquals}({declarator.Identifier.Text}, {existing.Identifier.Text})");
+            // The condition is x is not null, x != null or null != x (IsNotNullCheckOf), all of which
+            // bind tighter than &&, so it needs no parentheses.
+            ExpressionSyntax referenceEquals = SyntaxFactory.IdentifierName(nameof(object.ReferenceEquals));
+            if (!BindsToObjectReferenceEquals(model, ifStatement.Condition.SpanStart))
+            {
+                referenceEquals = SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.ObjectKeyword)),
+                    (SimpleNameSyntax)referenceEquals);
+            }
+            var identityCheck = SyntaxFactory.PrefixUnaryExpression(
+                    SyntaxKind.LogicalNotExpression,
+                    SyntaxFactory.InvocationExpression(
+                        referenceEquals,
+                        SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(new[]
+                        {
+                            SyntaxFactory.Argument(SyntaxFactory.IdentifierName(declarator.Identifier.WithoutTrivia())),
+                            SyntaxFactory.Argument(existing.WithoutTrivia()),
+                        }))))
+                .NormalizeWhitespace();
+            var newCondition = SyntaxFactory.BinaryExpression(
+                SyntaxKind.LogicalAndExpression,
+                ifStatement.Condition.WithoutTrivia(),
+                SyntaxFactory.Token(
+                    SyntaxFactory.TriviaList(SyntaxFactory.Space),
+                    SyntaxKind.AmpersandAmpersandToken,
+                    SyntaxFactory.TriviaList(SyntaxFactory.Space)),
+                identityCheck);
 
             return new Plan(name, ifStatement.Condition, newCondition, unmounts.ToImmutable());
         }

@@ -701,8 +701,9 @@ internal static class SlotReplacementFixtures
     /// <summary>
     /// A custom control that hosts one child element, taken through every way the child can
     /// leave: an update that builds a new control (a <c>ValidationVisualizer</c> remounts on
-    /// update), a change of element type (to a <c>TextBlock</c>), and removal. Each old child must
-    /// be unmounted exactly once, the type change must not throw, and the host control must stay.
+    /// update), a change of element type (to a <c>TextBlock</c>), and removal; then a child is
+    /// added back. Each old child must be unmounted exactly once, the type change must not throw,
+    /// and the host control must stay.
     /// </summary>
     internal abstract class CustomHostChildFixture(Harness h) : SelfTestFixtureBase(h)
     {
@@ -725,6 +726,8 @@ internal static class SlotReplacementFixtures
 
         private string Text => $"{Name}-text";
 
+        private string ReaddedText => $"{Name}-readded";
+
         private Element? ChildAt(int step) => step switch
         {
             0 or 1 => ValidationVisualizer(
@@ -734,6 +737,7 @@ internal static class SlotReplacementFixtures
                 .OnMount(_mounted.Add)
                 .OnUnmount(_unmounted.Add),
             2 => TextBlock(Text).OnUnmount(_textUnmounted.Add),
+            4 => TextBlock(ReaddedText),
             _ => null,
         };
 
@@ -779,6 +783,11 @@ internal static class SlotReplacementFixtures
             H.Check($"{Name}_Removed", await Harness.WaitFor(() => Child(hostControl) is null), Describe());
             await Harness.Render();
             H.Check($"{Name}_Removed_ChildUnmountedOnce", _textUnmounted.Count == 1, Describe());
+
+            H.ClickButton(label);
+            H.Check($"{Name}_Readded",
+                await Harness.WaitFor(() => Child(hostControl) is WinXC.TextBlock { Text: var readded } && readded == ReaddedText),
+                Describe());
             H.Check($"{Name}_HostKept", _hosts.Count == 1, Describe());
         }
 
