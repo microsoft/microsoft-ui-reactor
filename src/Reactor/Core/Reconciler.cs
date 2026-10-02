@@ -1699,6 +1699,22 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    /// <summary>
+    /// Reconciles one child slot: brings <paramref name="existingControl"/>, the control mounted
+    /// for <paramref name="oldElement"/>, up to date with <paramref name="newElement"/>, and returns
+    /// the control the slot should now hold.
+    /// </summary>
+    /// <remarks>
+    /// When <paramref name="newElement"/> has the element type and key of
+    /// <paramref name="oldElement"/>, the control is patched in place and returned unchanged,
+    /// unless the update had to build a new control. In every other case the old control is
+    /// unmounted before the new one is returned: a changed element type or key, an update that
+    /// built a new control, or a null or empty <paramref name="newElement"/>, which returns null.
+    /// Without an <paramref name="existingControl"/> the new element is mounted. Put the result in
+    /// the slot when it differs from <paramref name="existingControl"/>. A custom control updates
+    /// the child elements it hosts with this method; in an <c>IElementHandler</c>,
+    /// <c>UpdateContext.ReconcileChild</c> does the same.
+    /// </remarks>
     // <snippet:reconciler-entry>
     public UIElement? Reconcile(
         Element? oldElement,
@@ -2338,9 +2354,19 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Updates a single child element. Returns non-null if the child control was replaced.
-    /// Public so registered type handlers can recursively reconcile children.
+    /// Low-level update of one child control, for callers that have already checked the new
+    /// element can update it in place. Code outside the framework should call
+    /// <see cref="Reconcile"/>, which makes that check and unmounts a control it replaces.
     /// </summary>
+    /// <remarks>
+    /// Patches <paramref name="control"/> to match <paramref name="newEl"/> and returns null, or
+    /// returns a new control when the update had to build one, which the caller installs before
+    /// unmounting <paramref name="control"/> with <see cref="UnmountChild"/>. It doesn't check that
+    /// <paramref name="newEl"/> has the element type and key of <paramref name="oldEl"/>: a changed
+    /// type throws <c>InvalidCastException</c> for a built-in control. The analyzer rule
+    /// <c>REACTOR_LIFECYCLE_003</c> flags calls to this method and offers to switch them to
+    /// <see cref="Reconcile"/>.
+    /// </remarks>
     public UIElement? UpdateChild(Element oldEl, Element newEl, UIElement control, Action requestRerender)
     {
         return Update(oldEl, newEl, control, requestRerender);
