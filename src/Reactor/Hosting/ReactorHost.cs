@@ -573,6 +573,8 @@ public sealed class ReactorHost : IDisposable
                 {
                     Debugger.BreakForUserUnhandledException(ex);
                     _logger?.LogError(ex, "Component Render() threw");
+                    Reconciler.EmitRenderError(
+                        Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_rootComponent, element: null), ex);
                     ShowErrorFallback(ex);
                     return;
                 }
@@ -595,6 +597,7 @@ public sealed class ReactorHost : IDisposable
                 catch (Exception ex)
                 {
                     _logger?.LogError(ex, "Function component threw");
+                    Reconciler.EmitRenderError(nameof(FuncElement), ex);
                     ShowErrorFallback(ex);
                     return;
                 }

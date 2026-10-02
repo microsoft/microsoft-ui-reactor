@@ -399,6 +399,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 catch (Exception ex)
                 {
                     _logger?.LogError(ex, "Component Render() threw");
+                    Reconciler.EmitRenderError(
+                        Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_rootComponent, element: null), ex);
                     ShowErrorFallback(ex);
                     return;
                 }
@@ -421,6 +423,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 catch (Exception ex)
                 {
                     _logger?.LogError(ex, "Function component threw");
+                    Reconciler.EmitRenderError(nameof(FuncElement), ex);
                     ShowErrorFallback(ex);
                     return;
                 }

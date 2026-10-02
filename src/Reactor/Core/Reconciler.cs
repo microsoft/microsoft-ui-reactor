@@ -1860,6 +1860,21 @@ public sealed partial class Reconciler : IDisposable
     // without a matching decrement, which silently suppresses all later spans.
     internal int ReconcileTraceDepthForTests => _reconcileTraceDepth;
 
+    /// <summary>
+    /// <c>ReactorEventSource.RenderError</c> for a component whose Render() threw and was
+    /// replaced by the error fallback. Shared by the mount and update paths so both name
+    /// the component the same way (<see cref="Diagnostics.ComponentNames"/>).
+    /// </summary>
+    internal static void EmitRenderError(string componentName, Exception ex)
+    {
+        if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                global::System.Diagnostics.Tracing.EventLevel.Error,
+                Diagnostics.ReactorEventSource.Keywords.Errors))
+        {
+            Diagnostics.ReactorEventSource.Log.RenderError(componentName, ex.GetType().Name, ex.Message);
+        }
+    }
+
     private static void FlushEffectsTraced(RenderContext ctx, string? componentName)
     {
         // Fast path when the Render keyword is off: no Stopwatch, no event emit.
@@ -2072,7 +2087,7 @@ public sealed partial class Reconciler : IDisposable
         long renderStart = 0;
         if (traceRender)
         {
-            componentName = node.Component?.GetType().Name ?? newEl.GetType().Name;
+            componentName = Diagnostics.ComponentNames.For(node.Component, newEl);
             Diagnostics.ReactorEventSource.Log.ComponentRenderStart(
                 componentName, selfTriggered ? "self" : "parent");
             renderStart = global::System.Diagnostics.Stopwatch.GetTimestamp();
@@ -2142,21 +2157,16 @@ public sealed partial class Reconciler : IDisposable
                 _logger?.LogWarning(ex,
                     "Hot reload: hook order/type changed in child component — " +
                     "resetting state and re-rendering: {ComponentName}",
-                    componentName ?? newEl.GetType().Name);
+                    componentName ?? Diagnostics.ComponentNames.For(node.Component, newEl));
                 hotReloadRetried = true;
                 renderCtx.ResetForHotReload();
                 continue;
             }
             catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
             {
-                _logger?.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
-                if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                        global::System.Diagnostics.Tracing.EventLevel.Error,
-                        Diagnostics.ReactorEventSource.Keywords.Errors))
-                {
-                    Diagnostics.ReactorEventSource.Log.RenderError(
-                        componentName ?? newEl.GetType().Name, ex.GetType().Name, ex.Message);
-                }
+                var failedName = componentName ?? Diagnostics.ComponentNames.For(node.Component, newEl);
+                _logger?.LogError(ex, "Component Render() threw: {ComponentName}", failedName);
+                EmitRenderError(failedName, ex);
                 newChildElement = ErrorFallback.BuildElement(ex);
             }
             break;
@@ -2445,7 +2455,7 @@ public sealed partial class Reconciler : IDisposable
         if (_componentNodes.TryGetValue(control, out var node))
         {
             Diagnostics.ReactorEventSource.Log.ComponentUnmount(
-                node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
+                Diagnostics.ComponentNames.For(node.Component, node.Element));
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
             _componentNodes.Remove(control);
@@ -2842,7 +2852,7 @@ public sealed partial class Reconciler : IDisposable
         if (_componentNodes.TryGetValue(control, out var node))
         {
             Diagnostics.ReactorEventSource.Log.ComponentUnmount(
-                node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
+                Diagnostics.ComponentNames.For(node.Component, node.Element));
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
             _componentNodes.Remove(control);

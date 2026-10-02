@@ -868,7 +868,9 @@ public sealed partial class Reconciler
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
-            _logger?.LogError(ex, "Component Render() threw during mount: {ComponentName}", compElement.GetType().Name);
+            var failedName = Diagnostics.ComponentNames.For(component, compElement);
+            _logger?.LogError(ex, "Component Render() threw during mount: {ComponentName}", failedName);
+            EmitRenderError(failedName, ex);
             childElement = ErrorFallback.BuildElement(ex);
         }
         UIElement? childControl = Mount(childElement, componentRerender);
@@ -908,6 +910,7 @@ public sealed partial class Reconciler
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
             _logger?.LogError(ex, "FuncComponent Render() threw during mount");
+            EmitRenderError(nameof(FuncElement), ex);
             childElement = ErrorFallback.BuildElement(ex);
         }
         UIElement? childControl = Mount(childElement, componentRerender);
@@ -948,6 +951,7 @@ public sealed partial class Reconciler
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
             _logger?.LogError(ex, "MemoComponent Render() threw during mount");
+            EmitRenderError(nameof(MemoElement), ex);
             childElement = ErrorFallback.BuildElement(ex);
         }
         UIElement? childControl = Mount(childElement, componentRerender);
