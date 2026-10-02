@@ -498,6 +498,57 @@ public class RenderErrorDispatchTests
         });
     }
 
+    [Fact]
+    public void Declined_Mark_Survives_Cleanup_Nested_In_An_Outer_Frame()
+    {
+        var ex = new InvalidOperationException("declined during a failed open");
+        var previous = ReactorApplication.OnUnhandledException;
+        ReactorApplication.OnUnhandledException = _ => false;
+        try
+        {
+            // OpenWindowCore: the open and its failed-open cleanup share one outer frame.
+            using (RenderErrorDispatch.EnterPropagationScope())
+            {
+                // The synchronous first render (RenderLoop) propagates; the app declines.
+                using (RenderErrorDispatch.EnterPropagationScope())
+                    Assert.Throws<InvalidOperationException>(() => RenderErrorDispatch.RaiseUnhandled(ex));
+
+                // Failed-open cleanup (window Close/Dispose) runs host Dispose: a nested frame.
+                using (RenderErrorDispatch.EnterPropagationScope()) { }
+            }
+
+            // The rethrow reaches Application.UnhandledException: still recognised, once.
+            Assert.True(RenderErrorDispatch.TryConsumeDeclined(ex));
+            Assert.False(RenderErrorDispatch.TryConsumeDeclined(ex));
+        }
+        finally
+        {
+            ReactorApplication.OnUnhandledException = previous;
+        }
+    }
+
+    [Fact]
+    public void Declined_Mark_Is_Cleared_By_A_New_Top_Level_Dispatch()
+    {
+        // Positive control for the test above: without the outer frame, the cleanup's scope
+        // is a new top-level dispatch and clears the mark.
+        var ex = new InvalidOperationException("declined, then a new dispatch");
+        var previous = ReactorApplication.OnUnhandledException;
+        ReactorApplication.OnUnhandledException = _ => false;
+        try
+        {
+            using (RenderErrorDispatch.EnterPropagationScope())
+                Assert.Throws<InvalidOperationException>(() => RenderErrorDispatch.RaiseUnhandled(ex));
+            using (RenderErrorDispatch.EnterPropagationScope()) { }
+
+            Assert.False(RenderErrorDispatch.TryConsumeDeclined(ex));
+        }
+        finally
+        {
+            ReactorApplication.OnUnhandledException = previous;
+        }
+    }
+
     // ── WindowSpec ───────────────────────────────────────────────────────────
 
     [Fact]

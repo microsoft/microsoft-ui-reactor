@@ -758,6 +758,12 @@ public static partial class ReactorApp
         Action<ReactorHost>? configure,
         bool excludeFromShutdownPolicy = false)
     {
+        // The open and its failed-open cleanup are one outermost Reactor frame for render-error
+        // propagation (issue #1291). A synchronous first render can rethrow an error the app
+        // declined via RenderError.Propagate(); the Close/Dispose below must run as nested
+        // frames, not as a new top-level dispatch, or they would clear the "already offered"
+        // mark while that exception is still unwinding.
+        using var propagationScope = RenderErrorDispatch.EnterPropagationScope();
         ReactorWindow window = new ReactorWindow(spec);
         window.ExcludeFromShutdownPolicy = excludeFromShutdownPolicy;
         try

@@ -923,6 +923,45 @@ internal static class RenderErrorHandlerFixtures
         });
     }
 
+    // A failed OpenWindow (its synchronous first render propagates and the app declines)
+    // cleans the window up before rethrowing. That cleanup must not clear the "already
+    // offered" mark, so Application.UnhandledException would not ask the app a second time.
+    internal class OpenWindow_FailedOpenKeepsDeclinedMark(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            if (ReactorApp.UIDispatcher is null)
+                ReactorApp.UIDispatcher = DispatcherQueue.GetForCurrentThread();
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            int offered = 0;
+            await WithUnhandledCallback(_ => { offered++; return false; }, () =>
+            {
+                Exception? escaped = null;
+                try
+                {
+                    ReactorApp.OpenWindow(
+                        new WindowSpec
+                        {
+                            Title = "RenderErrorHandler Failed Open",
+                            Width = 300,
+                            Height = 200,
+                            RenderErrorHandler = e => { e.Propagate(); return null; },
+                        },
+                        (Func<RenderContext, Element>)(_ => throw new InvalidOperationException("failed open declined")));
+                }
+                catch (InvalidOperationException ex) { escaped = ex; }
+
+                H.Check("RenderErrorHandler_FailedOpen_Rethrown", escaped?.Message == "failed open declined",
+                    escaped?.Message ?? "(nothing escaped)");
+                H.Check("RenderErrorHandler_FailedOpen_OfferedOnce", offered == 1, $"offered={offered}");
+                H.Check("RenderErrorHandler_FailedOpen_MarkPreserved",
+                    escaped is not null && RenderErrorDispatch.TryConsumeDeclined(escaped));
+                return Task.CompletedTask;
+            });
+            await Task.Delay(80);
+        }
+    }
+
     // A root *component*'s effect failure carries its name, like a child effect failure.
     internal class RootEffect_ReportsComponentName(Harness h) : SelfTestFixtureBase(h)
     {
