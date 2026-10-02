@@ -167,25 +167,20 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
 
             // Reconcile returns the existing control where UpdateChild returned null, so the result
             // may be read only where the rewritten condition has already told the two apart.
-            foreach (var reference in block.DescendantNodes().OfType<IdentifierNameSyntax>())
-            {
-                if (reference.Identifier.ValueText != result.Name)
-                    continue;
-                if (!SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(reference, ct).Symbol, result))
-                    continue;
-                if (!ifStatement.Condition.Span.Contains(reference.Span)
-                    && !ifStatement.Statement.Span.Contains(reference.Span))
-                    return null;
-            }
+            var resultReads = block.DescendantNodes().OfType<IdentifierNameSyntax>()
+                .Where(reference => reference.Identifier.ValueText == result.Name
+                    && SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(reference, ct).Symbol, result));
+            if (resultReads.Any(reference => !ifStatement.Condition.Span.Contains(reference.Span)
+                    && !ifStatement.Statement.Span.Contains(reference.Span)))
+                return null;
 
             // Reconcile unmounts the control it replaces, so an UnmountChild of it in the body would
             // run a second time. Remove it where it is a statement of its own in the body's block;
             // anywhere else in the block, decline.
             var unmounts = ImmutableArray.CreateBuilder<StatementSyntax>();
-            foreach (var call in block.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            foreach (var call in block.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                         .Where(call => IsUnmountOf(model, call, existingSymbol, ct)))
             {
-                if (!IsUnmountOf(model, call, existingSymbol, ct))
-                    continue;
                 if (call.Parent is not ExpressionStatementSyntax unmount
                     || ifStatement.Statement is not BlockSyntax body
                     || unmount.Parent != body)
