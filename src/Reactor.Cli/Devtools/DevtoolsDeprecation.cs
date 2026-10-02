@@ -23,6 +23,8 @@ internal static class DevtoolsDeprecation
 
     internal const string LaunchKey = "(launch)";
     internal const string LaunchEquivalent = "winapp run . --devtools";
+    internal const string WatchEquivalent = "winapp run . --devtools --watch";
+    internal const string ReferencesKey = "references";
     internal const string AgentSkill = "winui-devtools";
 
     private const string Prefix = "[mur devtools] ";
@@ -34,12 +36,12 @@ internal static class DevtoolsDeprecation
     /// </summary>
     internal static readonly IReadOnlyList<DevtoolsVerbMapping> Mappings = new DevtoolsVerbMapping[]
     {
-        new(LaunchKey, "mur devtools [project]", LaunchEquivalent + "  (add --detach for agents; no package or build switch needed)", true),
+        new(LaunchKey, "mur devtools [project]", LaunchEquivalent + "  (add --watch to rebuild on rude edits and re-attach automatically; --detach for agents; no package or build switch needed)", true),
         new("--component", "mur devtools --component <Name>", NoPreviewHostYet, false),
         new("--print-config", "mur devtools --print-config / --mcp-port", "none: the MCP server is not carried over; agents run winapp with --json and load the " + AgentSkill + " skill", false),
         new("session list", "session list", "winapp devtools list", true),
         new("session clean", "session clean", "not needed: winapp sessions use per-process named pipes, not lockfiles", false),
-        new("version", "version", "winapp devtools list", true),
+        new("version", "version", "winapp devtools call DevTools.negotiate  (reports the Reactor version; winapp devtools list only lists sessions)", true),
         new("windows", "windows", "winapp ui list-windows -a <app>", true),
         new("windows.list", "windows.list", "winapp ui list-windows -a <app>", true),
         new("windows.activate", "windows.activate <id>", "winapp ui focus <selector> -w <hwnd>", true),
@@ -61,15 +63,16 @@ internal static class DevtoolsDeprecation
         new("collapse", "collapse <selector>", "winapp ui invoke <selector> --action collapse", true),
         new("scroll", "scroll <selector>", "winapp ui scroll <selector>  (or winapp ui scroll-into-view <selector>)", true),
         new("wait", "wait <selector>", "winapp ui wait-for <selector>", true),
-        new("fire", "fire <Component>.<event>", "winapp devtools invoke-handler <selector> <Handler>", true),
+        new("fire", "fire <Component>.<event>", "winapp devtools invoke-handler <selector> <event>  (for example OnClick)", true),
         new("properties", "properties <selector>", "winapp devtools get-property <selector>", true),
         new("set-property", "set-property <selector> <prop> <value>", "winapp devtools set-property <selector> <prop> <value>", true),
         new("styles", "styles <selector>", "winapp devtools get-property <selector>  (shows where each value comes from)", true),
         new("resources", "resources", "winapp devtools get-resource <key> [selector]", true),
         new("set-resource", "set-resource <key> <value>", "winapp devtools set-resource <key> <value> [selector]", true),
-        new("reload", "reload", ".NET Hot Reload for edits; for rude edits, restart " + LaunchEquivalent, false),
-        new("logs", "logs", "none yet: winapp devtools logs is planned", false),
+        new("reload", "reload", WatchEquivalent + "  (.NET Hot Reload for edits; rebuilds and re-attaches on rude edits)", true),
+        new("logs", "logs", "winapp devtools logs [--follow]", true),
         new("shutdown", "shutdown", "none: close the app through its UI or stop the winapp run process", false),
+        new(ReferencesKey, "call references", "winapp devtools get-property <selector>  (References section)", true),
         new("call", "call <tool>", "none: use the matching winapp verb with --json", false),
     };
 
@@ -96,6 +99,10 @@ internal static class DevtoolsDeprecation
                     : "session list";
                 return s_byKey[sub];
             }
+            // `call references` drove the references overlay; it has its own row.
+            if (string.Equals(first, "call", StringComparison.OrdinalIgnoreCase) && args.Length > 1
+                && string.Equals(args[1], ReferencesKey, StringComparison.OrdinalIgnoreCase))
+                return s_byKey[ReferencesKey];
             if (DevtoolsVerbs.KnownVerbs.Contains(first) && s_byKey.TryGetValue(first, out var verb))
                 return verb;
         }

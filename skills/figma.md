@@ -442,7 +442,8 @@ winapp devtools inspect
 # 3. Capture screenshot
 winapp ui screenshot -a MyApp --output preview.png
 
-# 4. After editing code, rely on .NET Hot Reload; for rude edits, close the app and re-run step 1
+# 4. After editing code, rely on .NET Hot Reload. Launch with `winapp run MyApp --devtools --watch`
+#    instead of step 1 to rebuild on rude edits and re-attach DevTools automatically
 
 # 5. Re-verify
 winapp devtools inspect

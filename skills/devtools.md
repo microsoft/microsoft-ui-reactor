@@ -20,17 +20,20 @@ description: >
 >
 > | `mur devtools` | winapp |
 > |---|---|
-> | launch (`mur devtools`, `dotnet run -- --devtools run`) | `winapp run . --devtools --detach` |
+> | launch (`mur devtools`, `dotnet run -- --devtools run`) | `winapp run . --devtools --detach` (add `--watch` for hot reload with automatic re-attach) |
 > | `session list` | `winapp devtools list` |
+> | `version` | `winapp devtools call DevTools.negotiate` |
 > | `tree`, `ancestors` | `winapp devtools inspect [<selector> --ancestors]` |
 > | `properties`, `set-property`, `styles` | `winapp devtools get-property`, `set-property` |
 > | `resources`, `set-resource` | `winapp devtools get-resource`, `set-resource` |
 > | `state` | `winapp devtools get-state`, `set-state`, `rerender` |
-> | `fire` | `winapp devtools invoke-handler <selector> <Handler>` |
+> | `fire` | `winapp devtools invoke-handler <selector> <event>` (e.g. `OnClick`) |
 > | `click`, `type`, `focus`, `invoke`, `scroll`, `wait` | `winapp ui click`, `set-value`, `focus`, `invoke`, `scroll`, `wait-for` |
 > | `toggle`, `select`, `expand`, `collapse` | `winapp ui invoke <selector> --action toggle` (`select`, `expand`, `collapse`) |
 > | `screenshot`, `windows.list` | `winapp ui screenshot -a <app>`, `winapp ui list-windows` |
-> | `logs` | planned: `winapp devtools logs` |
+> | `logs` | `winapp devtools logs [--follow]` |
+> | `reload` | `winapp run . --devtools --watch` |
+> | `call references` | `winapp devtools get-property <selector>` (References section) |
 > | `components`, `switch`, `--component` | no equivalent yet (preview host under review) |
 >
 > Reactor selectors work in both `winapp devtools` and `winapp ui`: `"<Counter>"`,

@@ -13,25 +13,28 @@
 >    `<RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" … />` from your project,
 >    and any launch profile that passes `--devtools`.
 > 2. Keep a Debug build (source mapping stays on in Debug through `Microsoft.UI.Reactor`).
-> 3. Launch with `winapp run . --devtools` (add `--detach` when an agent drives it).
+> 3. Launch with `winapp run . --devtools` (add `--watch` to rebuild on rude edits and re-attach automatically, `--detach` when an agent drives it).
 > 4. AI agents: use the winapp CLI with `--json` and the `winui-devtools` skill. The MCP server
 >    is not carried over.
 >
 > | Reactor DevTools | winapp |
 > |---|---|
-> | `mur devtools [project]` | `winapp run . --devtools` |
+> | `mur devtools [project]` | `winapp run . --devtools` (add `--watch` for hot reload with automatic re-attach) |
 > | `mur devtools session list` | `winapp devtools list` |
+> | `version` | `winapp devtools call DevTools.negotiate` (reports the Reactor version) |
 > | `tree`, `ancestors` | `winapp devtools inspect [<selector> --ancestors]` |
 > | `properties`, `set-property`, `styles` | `winapp devtools get-property`, `set-property` |
 > | `resources`, `set-resource` | `winapp devtools get-resource`, `set-resource` |
 > | `state` (root component only) | `winapp devtools get-state`, `set-state`, `rerender` (any component) |
-> | `fire` | `winapp devtools invoke-handler <selector> <Handler>` |
+> | `fire` | `winapp devtools invoke-handler <selector> <event>` (for example `OnClick`) |
 > | `click`, `type`, `focus`, `invoke`, `scroll`, `wait` | `winapp ui click`, `set-value`, `focus`, `invoke`, `scroll`, `wait-for` |
 > | `toggle`, `select`, `expand`, `collapse` | `winapp ui invoke <selector> --action toggle\|select\|expand\|collapse` |
 > | `screenshot`, `windows.list` | `winapp ui screenshot`, `winapp ui list-windows` |
 > | In-app ⚡ dev menu | The winapp DevTools overlay toolbar |
 > | `--print-config` / MCP endpoint | Not carried over (`winapp … --json` + `winui-devtools` skill) |
-> | `logs` | Planned: `winapp devtools logs` |
+> | `logs` | `winapp devtools logs [--follow]` |
+> | `reload` | `winapp run . --devtools --watch` |
+> | References overlay (`call references`) | `winapp devtools get-property <selector>` (References section) |
 > | `--component`, `components`, `switch`, VS Code / Visual Studio preview | No winapp equivalent yet — the component preview host is under review; keep this package for it until then |
 >
 > Reactor apps work with `winapp devtools` selectors such as `"<Counter>/Button"`, `key=t1`

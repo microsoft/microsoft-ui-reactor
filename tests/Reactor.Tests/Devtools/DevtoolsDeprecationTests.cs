@@ -58,14 +58,18 @@ public class DevtoolsDeprecationTests
     [InlineData(new[] { "TREE" }, "winapp devtools inspect")]
     [InlineData(new[] { "ancestors", "x" }, "winapp devtools inspect <selector> --ancestors")]
     [InlineData(new[] { "state" }, "winapp devtools get-state <selector>")]
-    [InlineData(new[] { "fire", "App.OnClick" }, "winapp devtools invoke-handler <selector> <Handler>")]
+    [InlineData(new[] { "fire", "App.OnClick" }, "winapp devtools invoke-handler <selector> <event>")]
     [InlineData(new[] { "click", "Submit" }, "winapp ui click <selector>")]
     [InlineData(new[] { "toggle", "x" }, "winapp ui invoke <selector> --action toggle")]
     [InlineData(new[] { "wait", "x" }, "winapp ui wait-for <selector>")]
     [InlineData(new[] { "screenshot", "--launch" }, "winapp ui screenshot")]
     [InlineData(new[] { "set-resource", "k", "v" }, "winapp devtools set-resource")]
     [InlineData(new[] { "windows.list" }, "winapp ui list-windows")]
-    [InlineData(new[] { "logs" }, "winapp devtools logs is planned")]
+    [InlineData(new[] { "logs" }, "`winapp devtools logs [--follow]`")]
+    [InlineData(new[] { "reload" }, "`winapp run . --devtools --watch`")]
+    [InlineData(new[] { "version" }, "`winapp devtools call DevTools.negotiate`")]
+    [InlineData(new[] { "call", "references", "--pretty" }, "`winapp devtools get-property <selector>` (References section)")]
+    [InlineData(new[] { "call", "tree" }, "use the matching winapp verb")]
     public void Notice_NamesTheWinappEquivalentForThisInvocation(string[] args, string expected)
     {
         var notice = DevtoolsDeprecation.BuildNotice(args);
@@ -89,6 +93,25 @@ public class DevtoolsDeprecationTests
         Assert.NotEqual(launch, tree);
         Assert.Contains("Instead of `mur devtools tree`: `winapp devtools inspect`", tree);
         Assert.Contains("Instead of `mur devtools [project]`: `winapp run . --devtools`", launch);
+        Assert.Contains("--watch", launch);
+    }
+
+    [Fact]
+    public void Mapping_MatchesTheShippedWinappVerbs()
+    {
+        // Pinned to what winapp actually ships (checked against winapp P4).
+        Assert.Equal("winapp devtools logs [--follow]", DevtoolsDeprecation.Find("logs")!.WinappForm);
+        Assert.True(DevtoolsDeprecation.Find("logs")!.HasEquivalent);
+        Assert.StartsWith("winapp run . --devtools --watch", DevtoolsDeprecation.Find("reload")!.WinappForm);
+        Assert.True(DevtoolsDeprecation.Find("reload")!.HasEquivalent);
+        Assert.StartsWith("winapp devtools call DevTools.negotiate", DevtoolsDeprecation.Find("version")!.WinappForm);
+        Assert.StartsWith("winapp devtools invoke-handler <selector> <event>", DevtoolsDeprecation.Find("fire")!.WinappForm);
+        Assert.StartsWith("winapp devtools get-property <selector>", DevtoolsDeprecation.Find("references")!.WinappForm);
+        Assert.Contains("References section", DevtoolsDeprecation.Find("references")!.WinappForm);
+        Assert.Contains("--watch", DevtoolsDeprecation.Find(DevtoolsDeprecation.LaunchKey)!.WinappForm);
+        // Preview-host rows stay "no equivalent yet" until Reactor hosting owns --preview.
+        foreach (var key in new[] { "--component", "components", "switch", "windows.open" })
+            Assert.False(DevtoolsDeprecation.Find(key)!.HasEquivalent, key);
     }
 
     [Theory]
