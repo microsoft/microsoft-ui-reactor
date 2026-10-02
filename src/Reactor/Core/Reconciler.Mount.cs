@@ -866,6 +866,13 @@ public sealed partial class Reconciler
             }
             component.Context.FlushEffects();
         }
+        // Inside an ErrorBoundary: name the failing component, then let the boundary
+        // handle it (see ReconcileComponent).
+        catch (Exception ex) when (_errorBoundaryDepth > 0 && ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            EmitRenderError(Diagnostics.ComponentNames.For(component, compElement), ex);
+            throw;
+        }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
             var failedName = Diagnostics.ComponentNames.For(component, compElement);
@@ -907,6 +914,13 @@ public sealed partial class Reconciler
             }
             ctx.FlushEffects();
         }
+        // Inside an ErrorBoundary: name the failing component, then let the boundary
+        // handle it (see ReconcileComponent).
+        catch (Exception ex) when (_errorBoundaryDepth > 0 && ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            EmitRenderError(nameof(FuncElement), ex);
+            throw;
+        }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
             _logger?.LogError(ex, "FuncComponent Render() threw during mount");
@@ -947,6 +961,13 @@ public sealed partial class Reconciler
                 childElement = ValidationRenderScope.ApplyProvide(memoElement.RenderFunc(ctx));
             }
             ctx.FlushEffects();
+        }
+        // Inside an ErrorBoundary: name the failing component, then let the boundary
+        // handle it (see ReconcileComponent).
+        catch (Exception ex) when (_errorBoundaryDepth > 0 && ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            EmitRenderError(nameof(MemoElement), ex);
+            throw;
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {

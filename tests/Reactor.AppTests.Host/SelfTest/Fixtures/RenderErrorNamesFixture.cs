@@ -89,6 +89,76 @@ internal class RenderErrorNames_ComponentTypeOnEveryPath(Harness h) : SelfTestFi
 
 internal sealed class RenderErrorProbeException(string message) : Exception(message);
 
+/// <summary>
+/// An error an <c>ErrorBoundary</c> catches and recovers from must still reach a
+/// <c>RenderError</c> listener — the user sees the fallback, so an inspector must too — and
+/// must name the descendant that threw (the boundary cannot know it). Exactly one event per
+/// throw: the component reports at the throw site and the boundary does not report again.
+/// Covers the mount path (first render inside the boundary) and the update path (a
+/// component inside the boundary that starts throwing on re-render).
+/// </summary>
+internal class RenderErrorNames_ErrorBoundaryCatchIsReported(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var names = new List<string>();
+        using var subscription = ReactorTrace.Subscribe(
+            e =>
+            {
+                if (e.EventName == nameof(ReactorEventSource.RenderError)
+                    && e.Payload[1] as string == nameof(RenderErrorProbeException))
+                    lock (names) names.Add((string)e.Payload[0]!);
+            },
+            EventLevel.Error,
+            ReactorEventSource.Keywords.Errors);
+
+        if (!ReactorEventSource.Log.IsEnabled(EventLevel.Error, ReactorEventSource.Keywords.Errors))
+        {
+            H.Skip("RenderErrorNames_Boundary_Mount", "EventSource disabled (NativeAOT)");
+            return;
+        }
+
+        List<string> Take()
+        {
+            lock (names)
+            {
+                var copy = names.ToList();
+                names.Clear();
+                return copy;
+            }
+        }
+
+        var host = H.CreateHost();
+        host.Mount(ctx =>
+        {
+            var (n, setN) = ctx.UseState(0);
+            return VStack(4,
+                ErrorBoundary(Component<ThrowOnMountCounter, int>(n), _ => TextBlock("mount fallback")),
+                ErrorBoundary(Component<ThrowOnUpdateCounter, int>(n), _ => TextBlock("update fallback")),
+                Button("bump", () => setN(n + 1)));
+        });
+        await Harness.Render();
+
+        var mount = Take();
+        Console.WriteLine("# boundary mount RenderError: " + string.Join(", ", mount));
+        // Positive control: the boundary really caught it (fallback on screen, no raw crash).
+        H.Check("RenderErrorNames_Boundary_Mount_FallbackShown", H.FindText("mount fallback") is not null);
+        H.Check("RenderErrorNames_Boundary_Mount_ReportedOnceByName",
+            mount.Count(n => n == nameof(ThrowOnMountCounter)) == 1);
+
+        H.ClickButton("bump");
+        await Harness.Render();
+
+        var update = Take();
+        Console.WriteLine("# boundary update RenderError: " + string.Join(", ", update));
+        H.Check("RenderErrorNames_Boundary_Update_FallbackShown", H.FindText("update fallback") is not null);
+        H.Check("RenderErrorNames_Boundary_Update_ReportedOnceByName",
+            update.Count(n => n == nameof(ThrowOnUpdateCounter)) == 1);
+        H.Check("RenderErrorNames_Boundary_NoElementTypeName",
+            !mount.Concat(update).Any(n => n.StartsWith("ComponentElement", StringComparison.Ordinal)));
+    }
+}
+
 internal sealed class ThrowOnMountCounter : Component<int>
 {
     public override Element Render() => throw new RenderErrorProbeException("mount");

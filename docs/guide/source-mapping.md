@@ -79,7 +79,7 @@ components, which have no type of their own, report `FuncElement` and
 | `ReconcileStart` / `Stop` | Root element type + diff counters | ETW `Reconcile` keyword |
 | `EffectsFlushStart` / `Stop` | Component CLR type name | ETW `Render` keyword |
 | `StateChange` | Hook kind + value type | ETW `State` keyword |
-| `RenderError` | Component name + exception type only (message redacted); emitted on mount, update and host-root renders | ETW `Errors` keyword |
+| `RenderError` | Component name + exception type only (message redacted); emitted on mount, update and host-root renders, including errors an `ErrorBoundary` catches (named at the throw site, once) | ETW `Errors` keyword |
 | Per-element file:line | Element call site | `Element.CallSite` / `ReactorSourceMap.GetSource` (when source mapping is enabled at build time) |
 
 The reconcile pass also emits a counter summary on stop:
