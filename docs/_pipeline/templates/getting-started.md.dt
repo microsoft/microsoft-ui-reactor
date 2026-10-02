@@ -47,7 +47,8 @@ state and Reactor keeps the screen in sync.
 > **Prefer Rust?** The same declarative WinUI idea is available in Rust through
 > [windows-reactor](https://github.com/microsoft/windows-rs/blob/master/docs/crates/windows-reactor.md),
 > a separate library in [windows-rs](https://github.com/microsoft/windows-rs) built
-> around components and typed messages. This guide covers the C# library.
+> around components and typed messages. This guide covers Microsoft.UI.Reactor,
+> the C# library.
 
 ## Setup
 
