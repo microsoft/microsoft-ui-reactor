@@ -57,6 +57,7 @@ REACTOR_MOD_003 | Reactor.Modifier | Warning | NoOpModifierAnalyzer - Generic co
 REACTOR_MEDIA_001 | Reactor.Layout | Info | UnsizedWebViewInStackAnalyzer - WebView2 is a direct child of an auto-layout stack (HStack/VStack/FlexRow/FlexColumn) without explicit .Width/.Height
 REACTOR_ANIM_003 | Reactor.Animation | Warning | AnimationScopeAsyncAnalyzer - async lambda to WithAnimation loses the ThreadStatic scope after await
 REACTOR_LIFECYCLE_002 | Reactor.Lifecycle | Warning | EffectCleanupAnalyzer - UseEffect(Action) allocates a timer/subscription/event with no returned cleanup
+REACTOR_LIFECYCLE_003 | Reactor.Lifecycle | Warning | ReconcilerUpdateChildAnalyzer - Reconciler.UpdateChild neither checks the child's element type nor unmounts a control it replaces; use Reconcile (ships a fix for the common shape)
 REACTOR_MEMO_001 | Reactor.Performance | Info | MemoWrapperModifierAnalyzer - Modifiers on a keyed Memo(key,factory) wrapper opt the row out of the recycle cache
 REACTOR_DYM_001 | Reactor.DidYouMean | Warning | NonInvocableMemberParensAnalyzer - Reactor property/field invoked like a method (e.g. GridSize.Auto()); remove the parentheses
 REACTOR_DYM_002 | Reactor.DidYouMean | Warning | ThemeBackgroundSuffixAnalyzer - Invented Theme.*Background token (e.g. Theme.AppBackground); use Theme.SolidBackground (Theme.LayerBackground -> Theme.LayerFill)
