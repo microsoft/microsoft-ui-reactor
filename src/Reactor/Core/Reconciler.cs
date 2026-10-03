@@ -1918,8 +1918,10 @@ public sealed partial class Reconciler : IDisposable
         // caller is out of scope for this fix.
         if (CanUpdate(oldElement, newElement))
         {
-            var replacement = Update(oldElement, newElement, existingControl, requestRerender);
-            if (replacement is not null && replacement != existingControl)
+            // An update that already unmounted the control it replaced (a target-wrapping flyout
+            // whose Target changes element type) is not followed by a second unmount.
+            var replacement = UpdateSlotChild(oldElement, newElement, existingControl, requestRerender, out var unmountedByUpdate);
+            if (replacement is not null && replacement != existingControl && !unmountedByUpdate)
                 Unmount(existingControl);
             return replacement ?? existingControl;
         }
@@ -3140,8 +3142,9 @@ public sealed partial class Reconciler : IDisposable
         return Mount(newChild, requestRerender);
     }
 
-    // The controls the ReconcileV1Child updates now running are working on, outermost first, and
-    // whether each has been unmounted while its update ran. A target-wrapping flyout whose Target
+    // The controls the slot updates now running are working on, outermost first, and whether each
+    // has been unmounted while its update ran. ReconcileV1Child and ReconcileImperative (behind the
+    // public Reconcile) run their updates in these frames. A target-wrapping flyout whose Target
     // changes element type unmounts the old Target itself before it returns the new one
     // (OverlayLifecycle.UpdateFlyoutElement and its MenuFlyout / CommandBarFlyout twins), and a
     // second unmount would run the old subtree's handler and registered unmount callbacks again.

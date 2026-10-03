@@ -376,15 +376,23 @@ internal static class SlotReplacementFixtures
     }
 
     /// <summary>
-    /// A <c>Flyout</c> in a <c>Border</c> whose Target changes element type. The flyout's update
-    /// unmounts the old Target itself before it returns the new one
-    /// (<c>OverlayLifecycle.UpdateFlyoutElement</c>), so the slot must not unmount it again: a
-    /// second pass would run the <c>unmount</c> callback of the registered control inside the old
-    /// Target twice.
+    /// A <c>Flyout</c> whose Target changes element type. The flyout's update unmounts the old
+    /// Target itself before it returns the new one (<c>OverlayLifecycle.UpdateFlyoutElement</c>), so
+    /// whatever reconciles the flyout must not unmount it again: a second pass would run the
+    /// <c>unmount</c> callback of the registered control inside the old Target twice.
     /// </summary>
-    internal sealed class FlyoutTargetTypeChange(Harness h) : SelfTestFixtureBase(h)
+    internal abstract class FlyoutTargetTypeChangeFixture(Harness h) : SelfTestFixtureBase(h)
     {
-        private const string Name = "SlotReplace_FlyoutTargetTypeChange";
+        protected abstract string Name { get; }
+
+        /// <summary>Registers the host control on the test host's reconciler, if it needs it.</summary>
+        protected virtual void Prepare(Reconciler reconciler) { }
+
+        /// <summary>The host element, holding the flyout.</summary>
+        protected abstract Element Host(Element flyout);
+
+        /// <summary>The control the host currently holds: the flyout's Target.</summary>
+        protected abstract UIElement? Child(FrameworkElement host);
 
         private readonly HostedRegistration _registration = new();
         private readonly List<FrameworkElement> _parents = new();
@@ -394,6 +402,7 @@ internal static class SlotReplacementFixtures
             var registration = _registration;
             var host = H.CreateHost();
             registration.Register(host.Reconciler);
+            Prepare(host.Reconciler);
 
             var label = $"{Name} rerender";
             var newTarget = $"{Name}-new-target";
@@ -405,20 +414,20 @@ internal static class SlotReplacementFixtures
                     : TextBlock(newTarget);
                 return VStack(
                     Button(label, () => setGeneration(generation + 1)),
-                    Border(Flyout(target, TextBlock($"{Name}-content"))).OnMount(_parents.Add));
+                    Host(Flyout(target, TextBlock($"{Name}-content"))).OnMount(_parents.Add));
             });
 
             H.Check($"{Name}_Mounted",
                 await Harness.WaitFor(() => _parents.Count == 1 && registration.Counts.Mounts == 1),
                 registration.Describe());
             if (_parents.Count != 1 || registration.Controls.Count != 1) return;
-            var parent = (WinXC.Border)_parents[0];
-            H.Check($"{Name}_Mount_TargetInSlot", parent.Child is WinXC.Panel);
+            var parent = _parents[0];
+            H.Check($"{Name}_Mount_TargetInSlot", Child(parent) is WinXC.Panel);
 
             H.ClickButton(label);
             H.Check($"{Name}_TargetReplaced",
-                await Harness.WaitFor(() => parent.Child is WinXC.TextBlock { Text: var text } && text == newTarget),
-                $"slot holds {parent.Child?.GetType().Name ?? "null"}");
+                await Harness.WaitFor(() => Child(parent) is WinXC.TextBlock { Text: var text } && text == newTarget),
+                $"slot holds {Child(parent)?.GetType().Name ?? "null"}");
             // Exact counts below: give a second unmount a pass to show up.
             await Harness.Render();
 
@@ -428,6 +437,32 @@ internal static class SlotReplacementFixtures
                 && registration.Counts.Cleanups == 1,
                 registration.Describe());
         }
+    }
+
+    /// <summary>The flyout in a <c>Border</c>, reconciled through <c>ReconcileV1Child</c>.</summary>
+    internal sealed class FlyoutTargetTypeChange(Harness h) : FlyoutTargetTypeChangeFixture(h)
+    {
+        protected override string Name => "SlotReplace_FlyoutTargetTypeChange";
+
+        protected override Element Host(Element flyout) => Border(flyout);
+
+        protected override UIElement? Child(FrameworkElement host) => ((WinXC.Border)host).Child;
+    }
+
+    /// <summary>
+    /// The flyout in a <c>RegisterType</c> host that updates its child with the public
+    /// <c>Reconcile</c>, which reaches <c>ReconcileImperative</c>: the path component roots take
+    /// too.
+    /// </summary>
+    internal sealed class FlyoutTargetThroughReconcile(Harness h) : FlyoutTargetTypeChangeFixture(h)
+    {
+        protected override string Name => "SlotReplace_FlyoutTargetThroughReconcile";
+
+        protected override void Prepare(Reconciler reconciler) => RegisterFramedHost(reconciler);
+
+        protected override Element Host(Element flyout) => new FramedElement(flyout);
+
+        protected override UIElement? Child(FrameworkElement host) => ((WinXC.Border)host).Child;
     }
 
     private sealed record NestedHostElement(int Generation) : Element;
@@ -826,6 +861,22 @@ internal static class SlotReplacementFixtures
     private sealed record FramedElement(Element Content) : Element;
 
     /// <summary>
+    /// Registers <see cref="FramedElement"/> as a <c>Border</c> that updates its child the way the
+    /// extending-controls guide teaches: <c>Reconcile</c>, and the returned control installed when
+    /// it differs.
+    /// </summary>
+    private static void RegisterFramedHost(Reconciler reconciler) =>
+        reconciler.RegisterType<FramedElement, WinXC.Border>(
+            mount: static (r, el, requestRerender) =>
+                new WinXC.Border { Child = r.Mount(el.Content, requestRerender) },
+            update: static (r, oldEl, newEl, frame, requestRerender) =>
+            {
+                var next = r.Reconcile(oldEl.Content, newEl.Content, frame.Child, requestRerender);
+                if (!ReferenceEquals(next, frame.Child)) frame.Child = next;
+                return null;
+            });
+
+    /// <summary>
     /// A <c>RegisterType</c> host that updates its child the way the extending-controls guide
     /// teaches: <c>Reconcile</c>, and the returned control installed when it differs.
     /// </summary>
@@ -833,16 +884,7 @@ internal static class SlotReplacementFixtures
     {
         protected override string Name => "SlotReplace_RegisteredHostReconcilesChild";
 
-        protected override void Prepare(Reconciler reconciler) =>
-            reconciler.RegisterType<FramedElement, WinXC.Border>(
-                mount: static (r, el, requestRerender) =>
-                    new WinXC.Border { Child = r.Mount(el.Content, requestRerender) },
-                update: static (r, oldEl, newEl, frame, requestRerender) =>
-                {
-                    var next = r.Reconcile(oldEl.Content, newEl.Content, frame.Child, requestRerender);
-                    if (!ReferenceEquals(next, frame.Child)) frame.Child = next;
-                    return null;
-                });
+        protected override void Prepare(Reconciler reconciler) => RegisterFramedHost(reconciler);
 
         protected override Element Host(Element? child) => new FramedElement(child ?? Empty());
 
