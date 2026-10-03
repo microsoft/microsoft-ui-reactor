@@ -557,14 +557,17 @@ put what it returns in the slot when it differs:
 ```csharp snippet="extending-reactor-controls/per-host-child-reconcile"
 ```
 
-`Reconcile` patches the child in place when the new element has the
-same type and key. Otherwise it unmounts the old control and returns
-the new one, or `null` when the new child is empty. A handler class gets
-the same from `ctx.ReconcileChild(oldChild, newChild, existing)`. Don't
-use `r.UpdateChild` here. It skips that type check, so a child that
-changes type throws `InvalidCastException` for a built-in control, and
-it leaves a control it replaced mounted. `REACTOR_LIFECYCLE_003` flags
-the call and offers to switch it to `Reconcile`.
+When the new element has the same type and key, `Reconcile` updates the
+child, usually in place. If that update builds a new control instead (a
+`ValidationVisualizer` remounts on every update, and a `RegisterType`
+`update` can return a new control), or the type or key changed,
+`Reconcile` unmounts the old control and returns the new one. It returns
+`null` when the new child is empty. A handler class gets the same from
+`ctx.ReconcileChild(oldChild, newChild, existing)`. Don't use
+`r.UpdateChild` here. It skips the type check, so a child that changes
+type throws `InvalidCastException` for a built-in control, and it leaves
+a control it replaced mounted. `REACTOR_LIFECYCLE_003` flags the call
+and offers to switch it to `Reconcile`.
 
 A library that wants eager setup ships an ordinary
 `public static void UseAcme(Reconciler reconciler)` over one of these —
