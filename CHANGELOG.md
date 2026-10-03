@@ -317,6 +317,16 @@ Conventions for contributors:
   content, and realized item content in `ListView`, `GridView`, `TreeView<T>`
   and templated `FlipView`.
 
+- **A flyout's old Target is unmounted once, not twice, when its Target changes
+  element type at a component's root or through `Reconciler.Reconcile`** (#1307).
+  A `Flyout`, `MenuFlyout` or `CommandBarFlyout` that wraps a Target unmounts
+  the old Target itself when the Target's element type changes. The reconcile
+  path behind component roots, `ErrorBoundary`, the app root and the public
+  `Reconciler.Reconcile` then unmounted it again, so the old subtree's
+  `RegisterType` `unmount` callbacks and handler unmounts ran twice. That path
+  now notices the update already unmounted it, as single-child slots do. A
+  panel still unmounts such a Target twice.
+
 - **The Forms guide's "Validation Context" example now works as written**
   (issue #1262). Clicking **Register** on an empty form submitted successfully
   with no errors, because five defects compounded: `.Validate()` was inert
