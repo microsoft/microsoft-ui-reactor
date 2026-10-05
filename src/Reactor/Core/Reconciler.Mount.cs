@@ -883,10 +883,14 @@ public sealed partial class Reconciler
             throw;
         }
         if (traceRendered)
-            EmitComponentRendered(node, wrapper, compElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
+            EmitComponentRendered(node, null, compElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
         UIElement? childControl = Mount(childElement, componentRerender);
 
         wrapper.Child = childControl;
+        // Map the id only once the subtree has mounted: a descendant that throws into an
+        // enclosing ErrorBoundary discards this wrapper without unmounting it.
+        if (traceRendered)
+            Diagnostics.ComponentRenderControls.Registry.Track(node.DiagnosticId, wrapper, mapControlToId: true);
         node.RenderedElement = childElement;
         // Spec 010 - see MountErrorBoundary: the wrapper is the realized control an
         // inspector hits, so it has to carry the call site. Free when unstamped.
@@ -935,10 +939,14 @@ public sealed partial class Reconciler
             throw;
         }
         if (traceRendered)
-            EmitComponentRendered(node, wrapper, funcElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
+            EmitComponentRendered(node, null, funcElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
         UIElement? childControl = Mount(childElement, componentRerender);
 
         wrapper.Child = childControl;
+        // Map the id only once the subtree has mounted: a descendant that throws into an
+        // enclosing ErrorBoundary discards this wrapper without unmounting it.
+        if (traceRendered)
+            Diagnostics.ComponentRenderControls.Registry.Track(node.DiagnosticId, wrapper, mapControlToId: true);
         node.RenderedElement = childElement;
         // Spec 010 - see MountErrorBoundary: the wrapper is the realized control an
         // inspector hits, so it has to carry the call site. Free when unstamped.
@@ -988,10 +996,14 @@ public sealed partial class Reconciler
             throw;
         }
         if (traceRendered)
-            EmitComponentRendered(node, wrapper, memoElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
+            EmitComponentRendered(node, null, memoElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
         UIElement? childControl = Mount(childElement, componentRerender);
 
         wrapper.Child = childControl;
+        // Map the id only once the subtree has mounted: a descendant that throws into an
+        // enclosing ErrorBoundary discards this wrapper without unmounting it.
+        if (traceRendered)
+            Diagnostics.ComponentRenderControls.Registry.Track(node.DiagnosticId, wrapper, mapControlToId: true);
         node.RenderedElement = childElement;
         // Spec 010 - see MountErrorBoundary: the wrapper is the realized control an
         // inspector hits, so it has to carry the call site. Free when unstamped.

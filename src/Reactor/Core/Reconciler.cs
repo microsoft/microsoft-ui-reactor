@@ -6156,8 +6156,24 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    /// <summary>
+    /// Drops the <c>ComponentRendered</c> id mapping of every component this reconciler
+    /// tracks, for teardown paths that discard the tree without unmounting it
+    /// (<see cref="Dispose"/>, a host replacing its content with the error panel).
+    /// Cheap when tracing was never on: no id was ever issued, so nothing is touched.
+    /// </summary>
+    internal void ForgetComponentDiagnostics()
+    {
+        foreach (var (control, node) in _componentNodes)
+        {
+            if (node.DiagnosticId != 0)
+                Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, control);
+        }
+    }
+
     public void Dispose()
     {
+        ForgetComponentDiagnostics();
         foreach (var node in _componentNodes.Values)
         {
             node.Context?.RunCleanups();

@@ -801,6 +801,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // no consumer. Withdraw them here rather than waiting for a next render that may
         // never come (issue #1262).
         Controls.Validation.ValidationRenderScope.AbandonPendingClaims();
+        // The previous tree is replaced without being unmounted; its components are no
+        // longer on screen, so their ComponentRendered ids must stop resolving.
+        _reconciler.ForgetComponentDiagnostics();
         var errorPanel = Microsoft.UI.Reactor.Core.ErrorFallback.BuildPanel(ex);
         if (_overlayWiring is not null && _overlayWiring.TryShowErrorInWrapper(errorPanel))
         {

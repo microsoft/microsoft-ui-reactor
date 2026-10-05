@@ -211,7 +211,15 @@ internal class ComponentRendered_HostControlRootAndThrowingRoot(Harness h) : Sel
             () => For(nameof(RenderedHostControlRoot)).Any(e =>
                 (long)e.Payload[1]! == rootId && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.State),
             maxPasses: 32, perPassMs: 10));
+        var leafId = For(nameof(RenderedHostControlLeaf)).Select(e => (long)e.Payload[1]!).FirstOrDefault();
+        var leafWrapper = leafId != 0 ? ReactorTrace.GetComponentControl(leafId) : null;
+        H.Check("ComponentRendered_HostControl_LeafResolves", leafWrapper is not null);
         hostControl.Dispose();
+        // Dispose drops the tree without unmounting it; its components must stop resolving.
+        H.Check("ComponentRendered_HostControl_DisposeForgetsComponentIds",
+            ReactorTrace.GetComponentControl(leafId) is null
+            && (leafWrapper is null || !ReactorTrace.TryGetComponentId(leafWrapper, out _))
+            && ReactorTrace.GetComponentControl(rootId) is null);
 
         var throwingHost = new ReactorHostControl();
         throwingHost.Mount(new RenderedThrowingRoot());
@@ -254,6 +262,23 @@ internal class ComponentRendered_HostControlRootAndThrowingRoot(Harness h) : Sel
             passPanelUnderResolved = passResolved is not null && ReferenceEquals(d, passResolved);
         Console.WriteLine($"# pass failure: id={passId} resolved={passResolved?.GetType().Name ?? "null"} text={(passText is null ? "missing" : "found")}");
         H.Check("ComponentRendered_PassFailure_RootIdResolvesToTheErrorPanel", passPanelUnderResolved);
+
+        // A root that rendered a healthy tree and then throws: the error panel replaces
+        // that tree without unmounting it, so its components must stop resolving.
+        var flipHost = H.CreateHost();
+        var flipRoot = new RenderedFlipRoot();
+        flipHost.Mount(flipRoot);
+        await Harness.Render();
+        var flipLeafId = For(nameof(RenderedFlipLeaf)).Select(e => (long)e.Payload[1]!).FirstOrDefault();
+        var flipLeafWrapper = flipLeafId != 0 ? ReactorTrace.GetComponentControl(flipLeafId) : null;
+        H.Check("ComponentRendered_FailureAfterHealthy_LeafResolvedBefore", flipLeafWrapper is not null);
+        flipRoot.Explode?.Invoke();
+        await Harness.Render();
+        H.Check("ComponentRendered_FailureAfterHealthy_ErrorPanelShown",
+            H.FindTextContaining(RenderedFlipRoot.Message) is not null);
+        H.Check("ComponentRendered_FailureAfterHealthy_OldTreeIdsForgotten",
+            ReactorTrace.GetComponentControl(flipLeafId) is null
+            && (flipLeafWrapper is null || !ReactorTrace.TryGetComponentId(flipLeafWrapper, out _)));
     }
 }
 
@@ -305,7 +330,22 @@ internal class ComponentRendered_ErrorBoundaryCaughtRendersAreReported(Harness h
         H.Check("ComponentRendered_Boundary_ThrowingUpdateReportedWithSameId",
             For(nameof(RenderedBoomChild)).Any(e =>
                 (long)e.Payload[1]! == boomId && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Props));
+
+        // A parent whose descendant throws on mount: the boundary discards the parent's
+        // wrapper without unmounting it, so the parent's id must not resolve to it.
+        var parentHost = H.CreateHost();
+        parentHost.Mount(_ => ErrorBoundary(Component<RenderedThrowingSubtreeParent>(), _ => TextBlock("subtree caught")));
+        await Harness.Render();
+        var parentId = For(nameof(RenderedThrowingSubtreeParent)).Select(e => (long)e.Payload[1]!).FirstOrDefault();
+        H.Check("ComponentRendered_Boundary_SubtreeFallbackShown", H.FindText("subtree caught") is not null);
+        H.Check("ComponentRendered_Boundary_DiscardedParentReportedButUnmapped",
+            parentId != 0 && ReactorTrace.GetComponentControl(parentId) is null);
     }
+}
+
+internal sealed class RenderedThrowingSubtreeParent : Component
+{
+    public override Element Render() => VStack(TextBlock("parent"), Component<RenderedThrowOnMountChild>());
 }
 
 internal sealed class RenderedThrowOnMountChild : Component
@@ -335,8 +375,32 @@ internal sealed class RenderedHostControlRoot : Component
     {
         var (n, setN) = UseState(0);
         Bump = () => setN(n + 1);
-        return TextBlock($"host control root {n}");
+        return VStack(TextBlock($"host control root {n}"), Component<RenderedHostControlLeaf>());
     }
+}
+
+internal sealed class RenderedHostControlLeaf : Component
+{
+    public override Element Render() => TextBlock("host control leaf");
+}
+
+internal sealed class RenderedFlipRoot : Component
+{
+    public const string Message = "ComponentRendered selftest: root failure after a healthy render";
+    public Action? Explode;
+
+    public override Element Render()
+    {
+        var (exploded, setExploded) = UseState(false);
+        Explode = () => setExploded(true);
+        if (exploded) throw new InvalidOperationException(Message);
+        return VStack(TextBlock("flip root"), Component<RenderedFlipLeaf>());
+    }
+}
+
+internal sealed class RenderedFlipLeaf : Component
+{
+    public override Element Render() => TextBlock("flip leaf");
 }
 
 internal sealed class RenderedThrowingRoot : Component
