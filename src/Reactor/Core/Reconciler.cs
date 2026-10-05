@@ -515,6 +515,8 @@ public sealed partial class Reconciler : IDisposable
         // on a mismatch. Cleared on resolve, on unset, and everywhere the echo
         // state is cleared (pool return / ClearCurrentEventHandlers /
         // DetachReactorState) so a stale arm can't fire into a later lifecycle.
+        // A Loaded resolution that still finds no target leaves it set: the request
+        // is genuinely still pending, which ReactorDiagnostics.GetReferenceEdges reports.
         public string? PendingLabeledBy;
         // Spec 042 Phase 1 — keyed-list reconciliation state. Set when the
         // host element is a templated items control (ListView/GridView/
@@ -4893,10 +4895,15 @@ public sealed partial class Reconciler : IDisposable
                     fe.Loaded -= OnLoaded;
                     if (!TryGetReactorState(fe, out var pending) || pending.PendingLabeledBy != labelId)
                         return;
-                    pending.PendingLabeledBy = null;
                     var deferred = FindByAutomationId(fe, labelId);
                     if (deferred is not null)
+                    {
+                        pending.PendingLabeledBy = null;
                         Microsoft.UI.Xaml.Automation.AutomationProperties.SetLabeledBy(fe, deferred);
+                    }
+                    // Not found: the request stays recorded as pending (still unresolved), so
+                    // ReactorDiagnostics.GetReferenceEdges keeps reporting it. Nothing retries it
+                    // here; a later render that changes or drops the id, or pool return, retires it.
                 }
                 fe.Loaded += OnLoaded;
             }

@@ -47,6 +47,7 @@ public static partial class ReactorDiagnostics
     /// only when the control is tagged with its element (turn source mapping on). Reads existing
     /// reconciler state on demand. Must be called on the UI thread.
     /// </remarks>
+    [Microsoft.UI.Reactor.Hosting.UIThreadOnly]
     public static IReadOnlyList<ReferenceEdgeSnapshot> GetReferenceEdges(UIElement control)
     {
         ArgumentNullException.ThrowIfNull(control);

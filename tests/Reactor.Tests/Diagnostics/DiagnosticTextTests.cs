@@ -231,6 +231,21 @@ public class DiagnosticTextTests
         Assert.Equal(("<redacted>", true), DiagnosticText.FormatPlain("Password", "x"));
     }
 
+    private sealed class FormattableSecret : IFormattable
+    {
+        public string ToString(string? format, IFormatProvider? provider) => "ApiKey: hunter2";
+    }
+
+    [Fact]
+    public void FormatPlain_RedactsLabelledSecretText_InEveryValueShape()
+    {
+        Assert.Equal(("<redacted>", true), DiagnosticText.FormatPlain("ToolTip", "AccessToken=hunter2"));
+        Assert.Equal(("<redacted>", true), DiagnosticText.FormatPlain("", new FormattableSecret()));
+        Assert.Equal(("<redacted>", true), DiagnosticText.FormatPlain("", new HandWritten("Password = hunter2")));
+        // A bare label is ordinary UI text.
+        Assert.Equal(("Password:", false), DiagnosticText.FormatPlain("ToolTip", "Password:"));
+    }
+
     // ── Parsing ─────────────────────────────────────────────────────
 
     public static IEnumerable<object?[]> Parsed() =>

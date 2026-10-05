@@ -183,12 +183,13 @@ internal static class DiagnosticText
                 text = OwnText(f, () => f.ToString(null, CultureInfo.InvariantCulture));
                 break;
             default:
-                // An object's own text can print its members — a record's ToString() does — so a
-                // secret one would leak through it. Withhold the whole value instead.
                 text = OwnText(value, value.ToString);
-                if (s_secretMemberInText.IsMatch(text)) return (Redacted, true);
                 break;
         }
+        // Any text — a string, a formattable value, an object's own ToString() (a record prints
+        // its members) — can carry a labelled secret ("AccessToken=…", "Password = …"); withhold
+        // the whole value rather than leak it.
+        if (value is not null && s_secretMemberInText.IsMatch(text)) return (Redacted, true);
         return (Truncate(text), false);
     }
 

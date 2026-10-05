@@ -55,4 +55,37 @@ internal static class ReferenceEdgeFixtures
             H.Check("RefEdges_NoEdgesOnPlainControl", target is not null && ReactorDiagnostics.GetReferenceEdges(target).Count == 0);
         }
     }
+
+    /// <summary>
+    /// An AutomationId <c>.LabeledBy("id")</c> whose target never appears stays reported as a
+    /// pending edge after the control loads — even with source mapping off, where the control is
+    /// not tagged and the deferred request itself is the only record of what the author wrote.
+    /// </summary>
+    internal class PendingAutomationIdSurvivesLoaded(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var previous = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = false;
+            try
+            {
+                var host = H.CreateHost();
+                host.Mount(ctx => VStack(TextBox(placeholderText: "refedge-labelled").LabeledBy("refedge-missing-label")));
+                await Harness.Render();
+                await Harness.Render(50);
+
+                var box = H.FindControl<TextBox>(t => t.PlaceholderText == "refedge-labelled");
+                H.Check("RefEdges_LabelledMounted", box is not null && box.IsLoaded);
+                if (box is null) return;
+
+                var edge = ReactorDiagnostics.GetReferenceEdges(box).SingleOrDefault(e => e.Property == "LabeledBy");
+                H.Check("RefEdges_PendingAutomationIdAfterLoaded",
+                    edge is { TargetAutomationId: "refedge-missing-label", IsResolved: false, Target: null });
+            }
+            finally
+            {
+                Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = previous;
+            }
+        }
+    }
 }

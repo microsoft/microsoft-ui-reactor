@@ -1779,6 +1779,7 @@ internal static class SelfTestFixtureRegistry
         "ReferenceOverlay_UnresolvedDiagnostic",
         "ReferenceOverlay_CycleDiagnostic",
         "Diagnostics_ReferenceEdges",
+        "Diagnostics_ReferenceEdgesPendingId",
         // Spec 057 §10 — first-party TeachingTip.Target reference proof.
         "TeachingTip_TargetReferenceResolvesBothMountOrders",
         "TeachingTip_SurfaceParity",
@@ -3737,6 +3738,7 @@ internal static class SelfTestFixtureRegistry
         "ReferenceOverlay_UnresolvedDiagnostic" => new ReferenceOverlaySelfHostFixtures.UnresolvedDiagnostic(harness),
         "ReferenceOverlay_CycleDiagnostic" => new ReferenceOverlaySelfHostFixtures.CycleDiagnostic(harness),
         "Diagnostics_ReferenceEdges" => new ReferenceEdgeFixtures.PendingThenResolved(harness),
+        "Diagnostics_ReferenceEdgesPendingId" => new ReferenceEdgeFixtures.PendingAutomationIdSurvivesLoaded(harness),
         "TeachingTip_TargetReferenceResolvesBothMountOrders" => new TeachingTipTargetFixtures.TargetReferenceResolvesBothMountOrders(harness),
         "TeachingTip_SurfaceParity" => new RefNodeSurfaceParityFixtures.Execution(harness),
         "RealRef_TeachingTipTarget_CrossSubtree" => new RealRefTortureFixtures.TeachingTipTargetCrossSubtree(harness),

@@ -88,6 +88,7 @@ public static partial class ReactorDiagnostics
     /// element. Works with or without source mapping.
     /// </summary>
     /// <remarks>Must be called on the UI thread.</remarks>
+    [Microsoft.UI.Reactor.Hosting.UIThreadOnly]
     public static ComponentSnapshot? DescribeComponent(UIElement element)
     {
         ArgumentNullException.ThrowIfNull(element);
@@ -112,6 +113,7 @@ public static partial class ReactorDiagnostics
     /// Only state, reducer and persisted hooks of a text-typed value can be set; secrets never are.
     /// Must be called on the UI thread that renders the component.
     /// </remarks>
+    [Microsoft.UI.Reactor.Hosting.UIThreadOnly]
     public static bool TrySetState(UIElement element, int hookIndex, string text, out string? error)
     {
         ArgumentNullException.ThrowIfNull(element);
@@ -136,6 +138,7 @@ public static partial class ReactorDiagnostics
     /// same. Must be called on the UI thread that renders the component.
     /// </remarks>
     /// <returns>False when no component is hosted at <paramref name="element"/> or it has never rendered.</returns>
+    [Microsoft.UI.Reactor.Hosting.UIThreadOnly]
     public static bool Rerender(UIElement element)
     {
         ArgumentNullException.ThrowIfNull(element);
@@ -159,6 +162,7 @@ public static partial class ReactorDiagnostics
     /// different live name was written by the app. Properties a control's own element record sets
     /// (<c>TextBlock("hi")</c> → <c>Text</c>) are not listed. Must be called on the UI thread.
     /// </remarks>
+    [Microsoft.UI.Reactor.Hosting.UIThreadOnly]
     public static IReadOnlyList<AppliedProperty> GetAppliedProperties(UIElement control)
     {
         ArgumentNullException.ThrowIfNull(control);
