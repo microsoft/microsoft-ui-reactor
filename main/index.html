@@ -768,6 +768,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#prefer-rust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prefer Rust?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3576,6 +3587,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#prefer-rust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prefer Rust?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3858,6 +3880,15 @@ version check. See <a href="packaging/">Packaging</a> for the
 and <code>UseEffect</code> unlocks everything else.</p>
 <p><strong>Keep components small.</strong> Extract pieces into their own components early.
 Composition is always easier to reason about than a single giant <code>Render()</code>.</p>
+<h2 id="prefer-rust">Prefer Rust?<a class="headerlink" href="#prefer-rust" title="Permanent link">&para;</a></h2>
+<p>The idea isn't tied to C#. Over in <a href="https://github.com/microsoft/windows-rs">windows-rs</a>,
+the Rust for Windows project, the same experiment is running in Rust:
+<a href="https://github.com/microsoft/windows-rs/blob/HEAD/docs/crates/windows-reactor.md"><strong>windows-reactor</strong></a>
+is a declarative WinUI library where components own their state, controls send
+typed messages back, and only the WinUI controls that changed get updated. It's a
+separate library with its own model, available on
+<a href="https://crates.io/crates/windows-reactor">crates.io</a>. Different language, same
+native controls underneath.</p>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong><a href="getting-started/">Getting Started</a></strong> — Build your first app, manage state, ship a todo list.</li>
