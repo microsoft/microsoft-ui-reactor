@@ -460,25 +460,38 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
         var stop = 0;
         var bad = 0;
         var reads = 0;
+        using var started = new ManualResetEventSlim();
 
         var reader = new Thread(() =>
         {
             while (Volatile.Read(ref stop) == 0)
             {
                 var v = slot.Value;
-                reads++;
+                Interlocked.Increment(ref reads);
+                started.Set();
                 if (v is { } site && site != a && site != b) Interlocked.Increment(ref bad);
             }
-        });
+        }) { IsBackground = true };
         reader.Start();
 
-        for (int i = 0; i < 200_000; i++)
-            slot.Value = (i % 3) switch { 0 => a, 1 => b, _ => null };
+        int overlapped;
+        try
+        {
+            Assert.True(started.Wait(TimeSpan.FromSeconds(10)), "The reader thread never started.");
+            var readsBefore = Volatile.Read(ref reads);
+            var budget = global::System.Diagnostics.Stopwatch.StartNew();
+            // Keep writing until the reader has overlapped plenty of writes (10 s cap).
+            for (int i = 0; i < 200_000 || (Volatile.Read(ref reads) - readsBefore < 10_000 && budget.Elapsed < TimeSpan.FromSeconds(10)); i++)
+                slot.Value = (i % 3) switch { 0 => a, 1 => b, _ => null };
+            overlapped = Volatile.Read(ref reads) - readsBefore;
+        }
+        finally
+        {
+            Volatile.Write(ref stop, 1);
+            reader.Join();
+        }
 
-        Volatile.Write(ref stop, 1);
-        reader.Join();
-
-        Assert.True(reads > 0);
+        Assert.True(overlapped > 0, "No read overlapped the writes.");
         Assert.Equal(0, bad);
     }
 

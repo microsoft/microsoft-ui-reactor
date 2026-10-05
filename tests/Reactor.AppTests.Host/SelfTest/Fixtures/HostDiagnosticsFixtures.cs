@@ -249,6 +249,64 @@ internal static class HostDiagnosticsFixtures
         }
     }
     /// <summary>
+    /// A component that is a <c>Flyout</c> target shares its wrapper with the decorator, which
+    /// tags it with the <c>FlyoutElement</c> and resolves <c>OnOpened</c>/<c>OnClosed</c>
+    /// through that tag. Turning source mapping on late must leave that tag alone (an
+    /// undecorated sibling still gets its component tag), and the callbacks must keep firing.
+    /// </summary>
+    internal class LateEnableKeepsDecoratorTag(Harness h) : SelfTestFixtureBase(h)
+    {
+        private sealed class FlyoutTarget : Component
+        {
+            public override Element Render() => TextBlock("hostdiag-flyout-target");
+        }
+
+        public override async Task RunAsync()
+        {
+            var previous = ReactorSourceMap.Enabled;
+            ReactorSourceMap.Enabled = false;
+            using var host = H.CreateHost();
+            try
+            {
+                var opened = 0;
+                var closed = 0;
+                host.Mount(_ => VStack(
+                    new ComponentElement(typeof(Probe)),
+                    Flyout(new ComponentElement(typeof(FlyoutTarget)), TextBlock("hostdiag-flyout-content")) with
+                    {
+                        OnOpened = () => opened++,
+                        OnClosed = () => closed++,
+                    }));
+                await Harness.Render();
+                await host.WaitForIdleAsync();
+
+                var decorated = WrapperOf(H, "hostdiag-flyout-target");
+                var plain = WrapperOf(H, "hostdiag-component");
+                H.Check("HostDiagDecor_WrappersFound", decorated is not null && plain is not null);
+                if (decorated is null || plain is null) return;
+                H.Check("HostDiagDecor_FlyoutTagBeforeEnable", Reconciler.GetElementTag(decorated) is FlyoutElement);
+
+                ReactorSourceMap.Enabled = true;
+                H.Check("HostDiagDecor_FlyoutTagKept", Reconciler.GetElementTag(decorated) is FlyoutElement,
+                    $"tag={Reconciler.GetElementTag(decorated)?.GetType().Name ?? "null"}");
+                H.Check("HostDiagDecor_PlainBoundaryTagged", Reconciler.GetElementTag(plain) is ComponentElement);
+
+                var flyout = Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.GetAttachedFlyout(decorated);
+                H.Check("HostDiagDecor_FlyoutAttached", flyout is not null);
+                if (flyout is null) return;
+                flyout.ShowAt(decorated);
+                H.Check("HostDiagDecor_OnOpenedFires", await Harness.WaitFor(() => opened > 0));
+                flyout.Hide();
+                H.Check("HostDiagDecor_OnClosedFires", await Harness.WaitFor(() => closed > 0));
+            }
+            finally
+            {
+                ReactorSourceMap.Enabled = previous;
+            }
+        }
+    }
+
+    /// <summary>
     /// <c>host?.Mount(...)</c> on a non-null host is intercepted like a plain call: the
     /// conditional access compiles to a member binding, which the generator now handles.
     /// (The null-receiver control lives in <c>RootMountInterceptionTests</c>.)

@@ -6083,13 +6083,20 @@ public sealed partial class Reconciler : IDisposable
     /// turns on, so boundaries mounted while it was off become discoverable too — including
     /// cached subtrees that later renders skip without ever reaching <see cref="NeedsTag"/>.
     /// Walks <c>_componentNodes</c>, which holds every mounted Component/Func/Memo.
+    /// Only untagged wrappers are filled in: a wrapper that already carries an element keeps
+    /// it, because an outer decorator (a <c>Flyout</c> on a component target, for example)
+    /// re-tags the wrapper with its own element and resolves its callbacks and unmount
+    /// cleanup through that tag.
     /// </summary>
     internal void TagComponentBoundaries()
     {
         foreach (var (wrapper, node) in _componentNodes)
         {
-            if (wrapper is FrameworkElement fe && node.Element is { } element && IsComponentBoundary(element))
-                SetElementTagIfNeeded(fe, element);
+            if (wrapper is not FrameworkElement fe || node.Element is not { } element || !IsComponentBoundary(element))
+                continue;
+            if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState { Element: not null })
+                continue;
+            SetElementTagIfNeeded(fe, element);
         }
     }
 
