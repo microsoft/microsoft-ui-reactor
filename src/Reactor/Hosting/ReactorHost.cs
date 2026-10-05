@@ -31,10 +31,8 @@ public sealed class ReactorHost : IDisposable
     private readonly ILogger? _logger;
 
     private Component? _rootComponent;
-    // componentId of the root in ReactorEventSource.ComponentRendered; 0 until traced.
-    private long _rootDiagnosticId;
-    // False until the current root has rendered once (ComponentRendered reason "mount").
-    private bool _rootRendered;
+    // The root's ReactorEventSource.ComponentRendered bookkeeping (id, first render).
+    private readonly Microsoft.UI.Reactor.Core.Diagnostics.RootRenderDiagnostics _rootDiagnostics = new();
     private Func<RenderContext, Element>? _rootRenderFunc;
     private RenderContext? _funcContext;
 
@@ -344,15 +342,6 @@ public sealed class ReactorHost : IDisposable
     private void PushChartingState()
         => s_chartingBridge?.PushAccessibilityState(_isForcedColors, _isReducedMotion, _forcedColorsTheme);
 
-    /// <summary>A new (or disposed) root is a new component instance: fresh id, next render is "mount".</summary>
-    private void ForgetRootDiagnostics()
-    {
-        if (_rootDiagnosticId != 0)
-            Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderControls.Registry.Forget(_rootDiagnosticId, null);
-        _rootDiagnosticId = 0;
-        _rootRendered = false;
-    }
-
     /// <summary>
     /// The root's Render() threw: report the render (as a throwing child component's is)
     /// and map its id to the error panel that now stands in for the root's content.
@@ -361,21 +350,19 @@ public sealed class ReactorHost : IDisposable
     {
         bool traced = TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
         ShowErrorFallback(ex);
-        if (traced)
-            Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderControls.Registry.Track(
-                _rootDiagnosticId, _currentControl, mapControlToId: false);
+        if (traced) _rootDiagnostics.TrackContent(_currentControl);
     }
-    /// <summary>ComponentRendered for the root; see <c>ComponentRenderControls.TraceRootRendered</c>.</summary>
+
+    /// <summary>ComponentRendered for the root; must run before Reconcile consumes ForceFullRenderPending.</summary>
     private bool TraceRootRendered(bool hotReloadRender, double elapsedMilliseconds)
-        => Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderControls.TraceRootRendered(
-            ref _rootDiagnosticId, ref _rootRendered,
+        => _rootDiagnostics.TraceRendered(
             _rootComponent?.GetType().Name ?? nameof(FuncElement),
             hotReloadRender, _reconciler.ForceFullRenderPending, elapsedMilliseconds);
 
     public void Mount(Component component)
     {
         _rootComponent = component;
-        ForgetRootDiagnostics();
+        _rootDiagnostics.Reset();
         RequestRender();
     }
 
@@ -383,7 +370,7 @@ public sealed class ReactorHost : IDisposable
     {
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
-        ForgetRootDiagnostics();
+        _rootDiagnostics.Reset();
         RequestRender();
     }
 
@@ -731,8 +718,7 @@ public sealed class ReactorHost : IDisposable
             _currentControl = newControl;
             _currentTree = newTree;
             if (traceRootRendered)
-                Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderControls.Registry.Track(
-                    _rootDiagnosticId, newControl, mapControlToId: false);
+                _rootDiagnostics.TrackContent(newControl);
             OwningWindow?.OnHostContentRendered(newControl);
 
             // Spec 033 §6 — apply (or clear) the SystemBackdrop modifier carried on
@@ -1007,7 +993,7 @@ public sealed class ReactorHost : IDisposable
         }
 
         _rootComponent?.Context.RunCleanups();
-        ForgetRootDiagnostics();
+        _rootDiagnostics.Reset();
         _funcContext?.RunCleanups();
 
         // Clear the SystemBackdrop so a window-reuse path returns to the WinUI

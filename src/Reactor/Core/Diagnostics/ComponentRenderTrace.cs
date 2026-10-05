@@ -266,3 +266,40 @@ internal static class ComponentRenderControls
         return true;
     }
 }
+
+/// <summary>
+/// A host's ROOT-component bookkeeping for <see cref="ReactorEventSource.ComponentRendered"/>,
+/// shared by <c>ReactorHost</c> and <c>ReactorHostControl</c> so the two hosts cannot drift.
+/// </summary>
+internal sealed class RootRenderDiagnostics
+{
+    // componentId of the root; 0 until the root first renders while the event is enabled.
+    private long _id;
+    // False until the current root has rendered once (reason "mount").
+    private bool _rendered;
+
+    internal long IdForTests => _id;
+
+    /// <summary>A new (or disposed) root is a new component instance: fresh id, next render is "mount".</summary>
+    public void Reset()
+    {
+        if (_id != 0) ComponentRenderControls.Registry.Forget(_id, null);
+        _id = 0;
+        _rendered = false;
+    }
+
+    /// <summary>See <see cref="ComponentRenderControls.TraceRootRendered"/>. Returns whether the event is enabled.</summary>
+    public bool TraceRendered(string componentName, bool hotReloadRender, bool forcePending, double elapsedMilliseconds)
+        => ComponentRenderControls.TraceRootRendered(
+            ref _id, ref _rendered, componentName, hotReloadRender, forcePending, elapsedMilliseconds);
+
+    /// <summary>
+    /// Maps the root's id to the control now standing in for its content (the reconciled
+    /// root, or the error panel when Render() threw). Never the reverse direction: that
+    /// control is often also a child component's wrapper, whose own id must keep winning.
+    /// </summary>
+    public void TrackContent(Microsoft.UI.Xaml.UIElement? control)
+    {
+        if (_id != 0) ComponentRenderControls.Registry.Track(_id, control, mapControlToId: false);
+    }
+}

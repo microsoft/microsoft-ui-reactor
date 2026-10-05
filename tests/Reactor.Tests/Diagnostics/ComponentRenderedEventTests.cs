@@ -89,7 +89,7 @@ public sealed class ComponentRenderedEventTests
     }
 
     [Fact]
-    public void TraceRootRendered_FirstIsMount_ThenState_SameId()
+    public void RootRenderDiagnostics_FirstIsMount_ThenByForce_SameId_ResetStartsOver()
     {
         // The host-root path (ReactorHost / ReactorHostControl, including their
         // render-threw branches) goes through this one helper.
@@ -97,21 +97,23 @@ public sealed class ComponentRenderedEventTests
         using var collector = ReactorTraceCollector.Capture(
             EventLevel.Verbose, ReactorEventSource.Keywords.RenderDetail);
 
-        long rootId = 0;
-        bool rendered = false;
-        Assert.True(ComponentRenderControls.TraceRootRendered(
-            ref rootId, ref rendered, name, hotReloadRender: false, forcePending: false, elapsedMilliseconds: 1.5));
-        Assert.True(rendered);
-        Assert.NotEqual(0, rootId);
-        long firstId = rootId;
-        ComponentRenderControls.TraceRootRendered(
-            ref rootId, ref rendered, name, hotReloadRender: false, forcePending: true, elapsedMilliseconds: 0);
+        var root = new RootRenderDiagnostics();
+        Assert.True(root.TraceRendered(name, hotReloadRender: false, forcePending: false, elapsedMilliseconds: 1.5));
+        long firstId = root.IdForTests;
+        Assert.NotEqual(0, firstId);
+        root.TraceRendered(name, hotReloadRender: false, forcePending: true, elapsedMilliseconds: 0);
+
+        root.Reset();   // a new root component was mounted
+        Assert.Equal(0, root.IdForTests);
+        root.TraceRendered(name, hotReloadRender: false, forcePending: false, elapsedMilliseconds: 0);
 
         var events = collector.ByName(nameof(ReactorEventSource.ComponentRendered))
             .Where(e => (e.Payload[0] as string) == name)
             .ToList();
-        Assert.Equal(new[] { "mount", "forced" }, events.Select(e => (string)e.Payload[2]!));
-        Assert.All(events, e => Assert.Equal(firstId, e.Payload[1]));
+        Assert.Equal(new[] { "mount", "forced", "mount" }, events.Select(e => (string)e.Payload[2]!));
+        Assert.Equal(firstId, events[0].Payload[1]);
+        Assert.Equal(firstId, events[1].Payload[1]);
+        Assert.NotEqual(firstId, events[2].Payload[1]);
         Assert.Equal(1500L, events[0].Payload[3]);
     }
 

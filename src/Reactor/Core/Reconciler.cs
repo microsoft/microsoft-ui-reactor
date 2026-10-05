@@ -1991,7 +1991,9 @@ public sealed partial class Reconciler : IDisposable
         // inside ReconcileImperative; overwrite defensively regardless.
         _componentNodes.Remove(replacement);
         _componentNodes[realized] = freshNode;
-        if (freshNode.DiagnosticId != 0)
+        // Registry bookkeeping only while ComponentRendered is enabled; if it is off now,
+        // the next traced render of this node re-tracks its id onto the realized wrapper.
+        if (freshNode.DiagnosticId != 0 && Diagnostics.ComponentRenderTrace.IsEnabled)
             Diagnostics.ComponentRenderControls.Registry.Track(freshNode.DiagnosticId, realized, mapControlToId: true);
 
         // Move the fresh visual subtree into the parented wrapper. Assigning
