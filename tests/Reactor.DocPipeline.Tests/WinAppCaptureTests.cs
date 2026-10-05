@@ -52,6 +52,25 @@ public class WinAppCaptureTests
         Assert.Null(resolved);
     }
 
+    [Fact]
+    public void Relative_override_and_LOCALAPPDATA_are_never_used()
+    {
+        var relativeOverride = Path.Combine("tools", "winapp.exe");
+        var relativeAlias = Path.Combine("local", "Microsoft", "WindowsApps", "winapp.exe");
+        var onPath = @"C:\bin\winapp.exe";
+        var env = new Dictionary<string, string?>
+        {
+            [WinAppCapture.WinAppExeEnvVar] = relativeOverride,
+            ["LOCALAPPDATA"] = "local",
+            ["PATH"] = @"C:\bin",
+        };
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { relativeOverride, relativeAlias, onPath };
+
+        var resolved = WinAppCapture.ResolveWinAppExe(k => env.GetValueOrDefault(k), existing.Contains);
+
+        Assert.Equal(onPath, resolved);
+    }
+
     // ── command line ───────────────────────────────────────────────────────
 
     [Fact]

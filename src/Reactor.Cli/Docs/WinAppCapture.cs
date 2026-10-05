@@ -48,11 +48,13 @@ internal static class WinAppCapture
     internal static string? ResolveWinAppExe(Func<string, string?> getEnv, Func<string, bool> fileExists)
     {
         var overridePath = getEnv(WinAppExeEnvVar);
-        if (!string.IsNullOrEmpty(overridePath) && fileExists(overridePath))
+        // A relative path would resolve against the working directory (often a doc topic's
+        // folder), so only absolute candidates are ever executed.
+        if (!string.IsNullOrEmpty(overridePath) && Path.IsPathFullyQualified(overridePath) && fileExists(overridePath))
             return Path.GetFullPath(overridePath);
 
         var local = getEnv("LOCALAPPDATA");
-        if (!string.IsNullOrEmpty(local))
+        if (!string.IsNullOrEmpty(local) && Path.IsPathFullyQualified(local))
         {
             var candidate = Path.Combine(local, "Microsoft", "WindowsApps", "winapp.exe");
             if (fileExists(candidate)) return Path.GetFullPath(candidate);
