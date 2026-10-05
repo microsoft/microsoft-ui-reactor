@@ -200,6 +200,11 @@ public sealed partial class Reconciler : IDisposable
         _forceFullRenderActive
         && (_resourceRefreshActive || el is ComponentElement or MemoElement or FuncElement);
 
+    // True for the duration of a resource-refresh pass. Read by the skip arms that are not
+    // shallow-equality gates (a KeyedMemoElement with an unchanged key, an ItemsHost whose
+    // item list is unchanged) so they still reconcile their element children.
+    internal bool ResourceRefreshActive => _resourceRefreshActive;
+
     // Set of realized UIElements that lie on the path from the root to a
     // ComponentNode whose <see cref="ComponentNode.SelfTriggered"/> is true.
     // Populated at the start of each top-level Reconcile pass by walking

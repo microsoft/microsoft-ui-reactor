@@ -45,24 +45,52 @@ public readonly record struct ThemeRef(string ResourceKey)
     // for an unknown key (so missing keys aren't re-walked). Brushes resolved from a
     // ThemeDictionary are shared instances today, so returning the cached reference
     // is identical to the prior behavior.
-    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<(string Key, string Theme), Brush?> s_resolutionCache = new();
+    // Each entry is stamped with the invalidation generation it was resolved under. A resolve
+    // that started before InvalidateResolutionCache and publishes after it carries an older
+    // generation, so it is never served: Clear() alone is not a barrier for in-flight resolves.
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<(string Key, string Theme), (int Generation, Brush? Brush)> s_resolutionCache = new();
+    private static int s_resolutionGeneration;
 
     /// <summary>
     /// Drops every cached <see cref="ResolveForTheme"/> result. Called by the host
-    /// when the effective theme or the system palette changes so the next resolve
-    /// re-reads the (now-updated) ThemeDictionaries.
+    /// when the effective theme or the system palette changes, and by
+    /// <see cref="Theme.NotifyResourcesChanged"/>, so the next resolve re-reads the
+    /// (now-updated) dictionaries. Thread-safe.
     /// </summary>
-    internal static void InvalidateResolutionCache() => s_resolutionCache.Clear();
+    internal static void InvalidateResolutionCache()
+    {
+        Interlocked.Increment(ref s_resolutionGeneration);
+        s_resolutionCache.Clear();
+    }
+
+    private static bool TryGetCurrentResolution((string Key, string Theme) cacheKey, int generation, out Brush? brush)
+    {
+        if (s_resolutionCache.TryGetValue(cacheKey, out var entry) && entry.Generation == generation)
+        {
+            brush = entry.Brush;
+            return true;
+        }
+        brush = null;
+        return false;
+    }
 
     /// <summary>Test seam: number of cached resolutions.</summary>
     internal static int ResolutionCacheCountForTest => s_resolutionCache.Count;
 
+    /// <summary>Test seam: the current invalidation generation.</summary>
+    internal static int ResolutionGenerationForTest => Volatile.Read(ref s_resolutionGeneration);
+
     /// <summary>
-    /// Test seam: plants a cache entry. Headless tests cannot construct a <see cref="Brush"/>,
-    /// so this is the only way to prove an invalidation actually empties the cache.
+    /// Test seam: plants a cache entry, stamped with <paramref name="generation"/> (default:
+    /// the current one). Headless tests cannot construct a <see cref="Brush"/>, so this is the
+    /// only way to prove an invalidation empties the cache and that a late publish is ignored.
     /// </summary>
-    internal static void SeedResolutionCacheForTest(string resourceKey, string themeName)
-        => s_resolutionCache[(resourceKey, themeName)] = null;
+    internal static void SeedResolutionCacheForTest(string resourceKey, string themeName, int? generation = null)
+        => s_resolutionCache[(resourceKey, themeName)] = (generation ?? ResolutionGenerationForTest, null);
+
+    /// <summary>Test seam: whether a lookup would be served from the cache.</summary>
+    internal static bool IsResolutionCachedForTest(string resourceKey, string themeName)
+        => TryGetCurrentResolution((resourceKey, themeName), ResolutionGenerationForTest, out _);
 
     private static Brush? ResolveForTheme(string resourceKey, string themeName)
     {
@@ -74,7 +102,8 @@ public readonly record struct ThemeRef(string ResourceKey)
         if (resources is null) return null;
 
         var cacheKey = (resourceKey, themeName);
-        if (s_resolutionCache.TryGetValue(cacheKey, out var cached))
+        int generation = Volatile.Read(ref s_resolutionGeneration);
+        if (TryGetCurrentResolution(cacheKey, generation, out var cached))
             return cached;
 
         var resolved = ResolveForThemeUncached(resources, resourceKey, themeName);
@@ -85,7 +114,7 @@ public readonly record struct ThemeRef(string ResourceKey)
         // wouldn't be cleared). Unknown keys are rare and re-walking them is the
         // same cost as before this cache existed, so this is strictly safe.
         if (resolved is not null)
-            s_resolutionCache[cacheKey] = resolved;
+            s_resolutionCache[cacheKey] = (generation, resolved);
         return resolved;
     }
 

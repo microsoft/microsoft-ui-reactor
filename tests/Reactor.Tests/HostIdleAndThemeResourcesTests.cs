@@ -145,6 +145,21 @@ public sealed partial class HostIdleAndThemeResourcesTests
     }
 
     [Fact]
+    public void ResolutionPublishedAfterAnInvalidation_IsNotServed()
+    {
+        // A resolve that read the dictionaries before the invalidation and publishes after it.
+        int generationAtResolveStart = ThemeRef.ResolutionGenerationForTest;
+        Theme.NotifyResourcesChanged();
+        ThemeRef.SeedResolutionCacheForTest("LateBrush", "Light", generationAtResolveStart);
+
+        Assert.False(ThemeRef.IsResolutionCachedForTest("LateBrush", "Light"));
+
+        ThemeRef.SeedResolutionCacheForTest("FreshBrush", "Light");
+        Assert.True(ThemeRef.IsResolutionCachedForTest("FreshBrush", "Light"));
+        ThemeRef.InvalidateResolutionCache();
+    }
+
+    [Fact]
     public void NotifyResourcesChanged_ReachesEveryRegisteredHost()
     {
         var a = new FakeListener();

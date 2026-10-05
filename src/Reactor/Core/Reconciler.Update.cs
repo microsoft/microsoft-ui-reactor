@@ -235,7 +235,9 @@ public sealed partial class Reconciler
             // the post-dispatch ApplyModifiers below.
             // The one exception is a component inside the subtree that updated its own state:
             // returning null would leave it un-rendered, so the pass walks down to it instead.
-            (KeyedMemoElement, KeyedMemoElement memo, _) when IsOnDirtyAncestorPath(control)
+            // A resource-refresh pass (Theme.NotifyResourcesChanged) walks down the same way,
+            // so theme values inside the memoized subtree are re-applied.
+            (KeyedMemoElement, KeyedMemoElement memo, _) when IsOnDirtyAncestorPath(control) || _resourceRefreshActive
                 => UpdateKeyedMemoTowardDirtyDescendant(memo, control, requestRerender),
             (KeyedMemoElement, KeyedMemoElement, _) => null,
             _ => Mount(newEl, requestRerender),

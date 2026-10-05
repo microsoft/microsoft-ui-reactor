@@ -160,6 +160,32 @@ public sealed record ItemsHost<TElement, TControl>(
     /// Default = reference + value equality via
     /// <see cref="object.Equals(object,object)"/>.</summary>
     public Func<object?, object?, bool>? ItemEquals { get; init; }
+
+    /// <summary>
+    /// Called when an Update keeps the item list (same list, or every item equal). Outside a
+    /// resource-refresh pass that is the whole update. During one
+    /// (<see cref="Theme.NotifyResourcesChanged"/>) each <see cref="Element"/> item is still
+    /// reconciled in place, so theme values inside the kept items are re-applied.
+    /// </summary>
+    internal void RefreshKeptItems(
+        Reconciler reconciler, TControl control,
+        IReadOnlyList<object> oldItems, IReadOnlyList<object> newItems, Action requestRerender)
+    {
+        if (!reconciler.ResourceRefreshActive) return;
+        var collection = GetCollection(control);
+        // Items map 1:1 onto the collection only when every item realized to an entry.
+        if (oldItems.Count != newItems.Count || collection.Count != newItems.Count) return;
+        for (int i = 0; i < newItems.Count; i++)
+        {
+            if (newItems[i] is Element newChild && oldItems[i] is Element oldChild
+                && collection[i] is UIElement existing)
+            {
+                var updated = reconciler.ReconcileV1Child(oldChild, newChild, existing, requestRerender);
+                if (updated is not null && !ReferenceEquals(updated, existing))
+                    collection[i] = updated;
+            }
+        }
+    }
 }
 
 /// <summary>Placeholder for future ItemsHost options (virtualization mode,

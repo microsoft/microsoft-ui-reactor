@@ -141,7 +141,9 @@ internal static class HostIdleAndThemeResourceFixtures
     /// ordinary <c>.Foreground(Theme.Ref(...))</c> modifier and a background-thread call.
     /// A memoized subtree is skipped wholesale by a plain re-render — and by a hot-reload
     /// style force pass, which only declines wrapper skips — so its <c>{ThemeResource}</c>
-    /// style setter is never re-applied. The resource-refresh pass must walk into it.
+    /// style setter is never re-applied. The resource-refresh pass must walk into it, and into
+    /// a keyed <c>Memo(key, ...)</c> with an unchanged key and an ItemsHost (ComboBox item elements) whose items
+    /// are kept, which skip their children by other routes.
     /// "RerenderAloneIsStale" is the negative control.
     /// </summary>
     internal class NotifyResourcesChangedRefreshesMemoizedThemeModifiers(Harness h) : SelfTestFixtureBase(h)
@@ -173,7 +175,15 @@ internal static class HostIdleAndThemeResourceFixtures
                     setTick = set;
                     var memo = ctx.UseMemo<Element>(
                         () => Border(TextBlock("ThemeMemoProbe").Foreground(Theme.Ref(AppKey))));
-                    return VStack(TextBlock($"tick:{tick}"), memo);
+                    // An ItemsHost (ComboBox item elements) whose items are kept, and a keyed Memo with an
+                    // unchanged key: both skip their children outside a resource refresh.
+                    var listItems = ctx.UseMemo<Element[]>(
+                        () => [TextBlock("ListItemProbe").Foreground(Theme.Ref(AppKey))]);
+                    return VStack(
+                        TextBlock($"tick:{tick}"),
+                        memo,
+                        Memo("keyed", () => TextBlock("KeyedMemoProbe").Foreground(Theme.Ref(AppKey))),
+                        ComboBox(listItems, default, null));
                 });
                 await host.WaitForIdleAsync();
                 H.Check("ThemeMemo_InitialRed", ProbeColor(target) == Colors.Red, $"color={ProbeColor(target)}");
@@ -183,10 +193,14 @@ internal static class HostIdleAndThemeResourceFixtures
                 await host.WaitForIdleAsync();
                 H.Check("ThemeMemo_Rerendered", FindText(target, "tick:1") is not null);
                 H.Check("ThemeMemo_RerenderAloneIsStale", ProbeColor(target) == Colors.Red, $"color={ProbeColor(target)}");
+                H.Check("ThemeMemo_KeyedMemoRerenderAloneIsStale", ProbeColor(target, "KeyedMemoProbe") == Colors.Red, $"color={ProbeColor(target, "KeyedMemoProbe")}");
+                H.Check("ThemeMemo_ListItemRerenderAloneIsStale", ListItemColor(target) == Colors.Red, $"color={ListItemColor(target)}");
 
                 await Task.Run(Theme.NotifyResourcesChanged);
                 await WaitForAllHostsIdleAsync();
                 H.Check("ThemeMemo_NotifiedFromBackgroundIsBlue", ProbeColor(target) == Colors.Blue, $"color={ProbeColor(target)}");
+                H.Check("ThemeMemo_KeyedMemoNotifiedIsBlue", ProbeColor(target, "KeyedMemoProbe") == Colors.Blue, $"color={ProbeColor(target, "KeyedMemoProbe")}");
+                H.Check("ThemeMemo_ListItemNotifiedIsBlue", ListItemColor(target) == Colors.Blue, $"color={ListItemColor(target)}");
 
                 // A second edit, notified from the UI thread: the call is repeatable.
                 // <snippet:runtime-resource-edit>
@@ -205,8 +219,26 @@ internal static class HostIdleAndThemeResourceFixtures
             }
         }
 
-        private static global::Windows.UI.Color? ProbeColor(Border target)
-            => (FindText(target, "ThemeMemoProbe")?.Foreground as SolidColorBrush)?.Color;
+        private static global::Windows.UI.Color? ProbeColor(Border target, string probe = "ThemeMemoProbe")
+            => (FindText(target, probe)?.Foreground as SolidColorBrush)?.Color;
+
+        // Read through ComboBox.Items: the item is the TextBlock itself, whether or not the
+        // drop-down has ever been opened.
+        private static global::Windows.UI.Color? ListItemColor(Border target)
+            => (FindComboBox(target)?.Items.OfType<TextBlock>().FirstOrDefault(t => t.Text == "ListItemProbe")
+                    ?.Foreground as SolidColorBrush)?.Color;
+
+        private static ComboBox? FindComboBox(DependencyObject? root)
+        {
+            if (root is null) return null;
+            if (root is ComboBox cb) return cb;
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                if (FindComboBox(VisualTreeHelper.GetChild(root, i)) is { } found) return found;
+            }
+            return null;
+        }
 
         private static TextBlock? FindText(DependencyObject? root, string text)
         {

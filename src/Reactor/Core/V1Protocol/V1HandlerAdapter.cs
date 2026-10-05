@@ -369,7 +369,11 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                 var oldItems = ih.GetItems(oldEl);
                 var newItems = ih.GetItems(newEl);
                 var equals = ih.ItemEquals ?? object.Equals;
-                if (ReferenceEquals(oldItems, newItems)) return;
+                if (ReferenceEquals(oldItems, newItems))
+                {
+                    ih.RefreshKeptItems(reconciler, control, oldItems, newItems, requestRerender);
+                    return;
+                }
                 if (oldItems.Count == newItems.Count)
                 {
                     bool same = true;
@@ -377,7 +381,11 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                     {
                         if (!equals(oldItems[i], newItems[i])) { same = false; break; }
                     }
-                    if (same) return;
+                    if (same)
+                    {
+                        ih.RefreshKeptItems(reconciler, control, oldItems, newItems, requestRerender);
+                        return;
+                    }
                 }
                 // Structural change — rebuild. Element items are unmounted via
                 // the existing UnmountChild path (ReconcileV1Child(old, null, ...))

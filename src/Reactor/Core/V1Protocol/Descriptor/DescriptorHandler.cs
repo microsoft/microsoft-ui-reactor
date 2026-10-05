@@ -211,7 +211,11 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
     {
         var oldItems = ih.GetItems(oldEl);
         var newItems = ih.GetItems(newEl);
-        if (ReferenceEquals(oldItems, newItems)) return;
+        if (ReferenceEquals(oldItems, newItems))
+        {
+            ih.RefreshKeptItems(ctx.Reconciler, ctrl, oldItems, newItems, ctx.RequestRerender);
+            return;
+        }
         var equals = ih.ItemEquals ?? object.Equals;
         if (oldItems.Count == newItems.Count)
         {
@@ -220,7 +224,11 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
             {
                 if (!equals(oldItems[i], newItems[i])) { same = false; break; }
             }
-            if (same) return;
+            if (same)
+            {
+                ih.RefreshKeptItems(ctx.Reconciler, ctrl, oldItems, newItems, ctx.RequestRerender);
+                return;
+            }
         }
         // Structural change — unmount Element items via the reconciler so
         // any descendant component state is torn down, then rebuild flat.
