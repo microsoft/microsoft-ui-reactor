@@ -106,13 +106,16 @@ Conventions for contributors:
   are never cleared. The analyzer points at `Reconciler.Reconcile`, which takes the
   same arguments, does both, and returns the control the slot should hold
   (`UpdateContext.ReconcileChild` in a handler). Its code fix rewrites
-  `var x = r.UpdateChild(…); if (x is not null) …` and drops a manual
-  `UnmountChild(existing)`, and is offered only where that keeps the code's
-  meaning. The rule is silent in the assembly that declares `Reconciler`, whose
-  slot owners make the check first. The repository's two call sites, the data
-  grid's internal `ResizeGrip` and the regedit sample, now use `Reconcile`
-  (neither reached the bad path), and the Extending Reactor Controls guide shows a
-  `RegisterType` host reconciling its child.
+  `var x = r.UpdateChild(…); if (x is not null) slot = x;` into
+  `var x = r.Reconcile(…); if (!ReferenceEquals(x, existing)) slot = x;`, which
+  also empties the slot when the child becomes `Empty()`, and drops a manual
+  `UnmountChild(existing)` made through the same reconciler. It is offered only
+  where that keeps the code's meaning: for instance, not when the body does more
+  than install the result. The rule is silent in the assembly that declares
+  `Reconciler`, whose slot owners make the check first. The repository's two call
+  sites, the data grid's internal `ResizeGrip` and the regedit sample, now use
+  `Reconcile` (neither reached the bad path), and the Extending Reactor Controls
+  guide shows a `RegisterType` host reconciling its child.
 
 ### Changed
 
