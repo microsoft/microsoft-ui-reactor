@@ -1863,7 +1863,9 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// <c>ReactorEventSource.RenderError</c> for a component whose Render() threw and was
     /// replaced by the error fallback. Shared by the mount and update paths so both name
-    /// the component the same way (<see cref="Diagnostics.ComponentNames"/>).
+    /// the component the same way (<see cref="Diagnostics.ComponentNames"/>). The event
+    /// sink drops <paramref name="ex"/>'s message from the ETW payload (TASK-064 PII
+    /// redaction); only the component name and exception type are written.
     /// </summary>
     internal static void EmitRenderError(string componentName, Exception ex)
     {
@@ -2463,8 +2465,13 @@ public sealed partial class Reconciler : IDisposable
 
         if (_componentNodes.TryGetValue(control, out var node))
         {
-            Diagnostics.ReactorEventSource.Log.ComponentUnmount(
-                Diagnostics.ComponentNames.For(node.Component, node.Element));
+            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                    global::System.Diagnostics.Tracing.EventLevel.Informational,
+                    Diagnostics.ReactorEventSource.Keywords.Lifecycle))
+            {
+                Diagnostics.ReactorEventSource.Log.ComponentUnmount(
+                    Diagnostics.ComponentNames.For(node.Component, node.Element));
+            }
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
             _componentNodes.Remove(control);
@@ -2860,8 +2867,13 @@ public sealed partial class Reconciler : IDisposable
         // Run cleanup logic (component teardown, etc.)
         if (_componentNodes.TryGetValue(control, out var node))
         {
-            Diagnostics.ReactorEventSource.Log.ComponentUnmount(
-                Diagnostics.ComponentNames.For(node.Component, node.Element));
+            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                    global::System.Diagnostics.Tracing.EventLevel.Informational,
+                    Diagnostics.ReactorEventSource.Keywords.Lifecycle))
+            {
+                Diagnostics.ReactorEventSource.Log.ComponentUnmount(
+                    Diagnostics.ComponentNames.For(node.Component, node.Element));
+            }
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
             _componentNodes.Remove(control);

@@ -45,10 +45,17 @@ internal static class ComponentNames
     {
         if (!type.IsGenericType) return type.Name;
 
-        var sb = new global::System.Text.StringBuilder();
-        Append(sb, type);
-        return sb.ToString();
+        // Generic names are built, so cache them: the name is asked for on every traced
+        // render and unmount. A weak table, so it never roots a collectible or hot-reloaded type.
+        return s_genericNames.GetValue(type, static t =>
+        {
+            var sb = new global::System.Text.StringBuilder();
+            Append(sb, t);
+            return sb.ToString();
+        });
     }
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<Type, string> s_genericNames = new();
 
     private static void Append(global::System.Text.StringBuilder sb, Type type)
     {

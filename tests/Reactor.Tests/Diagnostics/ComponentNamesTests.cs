@@ -43,6 +43,18 @@ public sealed class ComponentNamesTests
     }
 
     [Fact]
+    public void GenericName_IsBuiltOnceAndReused()
+    {
+        // The name is asked for on every traced render and unmount; a generic name is
+        // built, so it is cached per type rather than reallocated on each call.
+        var first = ComponentNames.For(typeof(GenericList<int>));
+        var second = ComponentNames.For(typeof(GenericList<int>));
+
+        Assert.Equal("GenericList<Int32>", first);
+        Assert.Same(first, second);
+    }
+
+    [Fact]
     public void PropsComponentElement_NamesTheComponentNotTheElement()
     {
         // Component<T, TProps>() builds a ComponentElement<TProps>: the reported case.
