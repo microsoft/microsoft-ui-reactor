@@ -11,9 +11,10 @@ namespace Microsoft.UI.Reactor.Tests;
 /// The control itself needs a live WinUI runtime, so these pin the pure-managed halves:
 /// assignment-time validation of <c>ComponentType</c>, and root creation through the app's
 /// XAML type information (faked here with an <see cref="IXamlMetadataProvider"/>).
-/// The markup half — that the XAML compiler accepts the element and generates an activator
-/// for the named component — is proved by building <c>samples/ReactorHostControlDemo</c>,
-/// whose counter panel is declared that way.
+/// The markup half — that the XAML compiler accepts the element, generates an activator for
+/// the named component, and the host mounts it — is proved live by the
+/// <c>Hosting_HostControlXamlComponentType</c> selftest (a compiled <c>.xaml</c> page) and at
+/// build time by <c>samples/ReactorHostControlDemo</c>, whose counter panel is declared that way.
 /// </summary>
 public sealed partial class ReactorHostControlXamlTests
 {
