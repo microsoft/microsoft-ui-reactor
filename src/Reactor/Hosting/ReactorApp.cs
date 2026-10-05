@@ -1407,6 +1407,14 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
     /// Optional callback for unhandled exceptions. If set, called before deciding whether to handle.
     /// Return true to mark the exception as handled; return false (or leave null) to let it crash.
     /// </summary>
+    /// <remarks>
+    /// Also receives render errors an app's <see cref="RenderErrorHandler"/> routes here with
+    /// <see cref="RenderError.Propagate"/>. That call is made by Reactor itself, not by WinUI,
+    /// so it happens even when the app's <c>Application</c> is not a
+    /// <see cref="ReactorApplication"/> (for example a XAML app hosting
+    /// <c>ReactorHostControl</c>). See <see cref="RenderError.Propagate"/> for what happens
+    /// when it returns false.
+    /// </remarks>
     public static Func<Exception, bool>? OnUnhandledException { get; set; }
 
     public ReactorApplication()

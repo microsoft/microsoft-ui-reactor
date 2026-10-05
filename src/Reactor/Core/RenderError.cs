@@ -23,6 +23,12 @@ namespace Microsoft.UI.Reactor.Core;
 /// <para>Failure is closed, not open: if the handler throws, or the element it returns
 /// throws while rendering, Reactor shows a neutral "Something went wrong." message
 /// without exception details, and does not call the handler again for that failure.</para>
+/// <para>The handler can run many times for the same fault. Reactor does not latch a
+/// failing component: every later render retries it (that retry is how recovery works),
+/// and if it throws again the handler is called again — once per re-render of a failing
+/// child, and once per host render for a host-level failure. De-duplicate side effects
+/// such as telemetry or logging, for example by remembering the exceptions already
+/// recorded.</para>
 /// </remarks>
 public delegate Element? RenderErrorHandler(RenderError error);
 
@@ -95,11 +101,29 @@ public sealed class RenderError
     /// <summary>
     /// Show no fallback and route the exception to the app's unhandled-exception path
     /// instead: <see cref="ReactorApp.AppLogger"/> and
-    /// <see cref="ReactorApplication.OnUnhandledException"/>. When that callback marks it
-    /// handled, nothing is shown where the failure happened and the app keeps running;
-    /// otherwise the exception is rethrown out of the render pass (stack preserved), where
-    /// it follows the dispatcher's normal unhandled-exception behavior. The handler's
-    /// return value is ignored. Has no effect if the handler throws afterwards.
+    /// <see cref="ReactorApplication.OnUnhandledException"/>. The handler's return value is
+    /// ignored. Has no effect if the handler throws afterwards.
     /// </summary>
+    /// <remarks>
+    /// <para>When <see cref="ReactorApplication.OnUnhandledException"/> returns <c>true</c>,
+    /// nothing is shown where the failure happened and the app keeps running. Otherwise the
+    /// exception is rethrown (stack preserved) out of whatever ran the render:</para>
+    /// <list type="bullet">
+    /// <item>Re-renders, and every render of a <see cref="Hosting.ReactorHostControl"/>, run
+    /// from a <c>DispatcherQueue</c> callback. WinUI ends the process for an exception that
+    /// escapes one, without raising <c>Application.UnhandledException</c> or
+    /// <c>AppDomain.UnhandledException</c> (microsoft/microsoft-ui-xaml#8940). The
+    /// <see cref="ReactorApplication.OnUnhandledException"/> call Reactor makes first is
+    /// therefore the only managed hook the app gets, and returning <c>false</c> (or not
+    /// setting it) ends the process.</item>
+    /// <item>The first render of a <see cref="Hosting.ReactorHost"/> runs synchronously
+    /// inside <c>Mount</c> / <c>ReactorApp.OpenWindow</c>, so there the exception is thrown
+    /// to that caller.</item>
+    /// </list>
+    /// <para><see cref="ReactorApplication.OnUnhandledException"/> is static and is called
+    /// even when the app's <c>Application</c> is not a <see cref="ReactorApplication"/> — for
+    /// example a XAML app that hosts Reactor content in <see cref="Hosting.ReactorHostControl"/>.
+    /// For such an app it is the only way to observe a propagated render error.</para>
+    /// </remarks>
     public void Propagate() => IsPropagationRequested = true;
 }

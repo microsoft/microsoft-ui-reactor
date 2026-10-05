@@ -261,7 +261,10 @@ window.Host.RenderErrorHandler = e => { e.Propagate(); return null; }; // → On
 ```
 
 Return `null` to keep the built-in fallback. If the handler (or the element it
-returns) throws, Reactor shows a neutral message without exception details.
+returns) throws, Reactor shows a neutral message without exception details. The
+handler runs again each time a failing component re-renders, so de-duplicate
+telemetry. If `OnUnhandledException` declines a propagated error, a re-render
+ends the process (WinUI does not raise `Application.UnhandledException` for it).
 
 ## Recipe: Command Palette
 

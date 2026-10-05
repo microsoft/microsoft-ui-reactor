@@ -144,7 +144,7 @@ static class RenderErrorHandlerSetup
         // including windows opened later, tray flyouts and ReactorHostControl embeds.
         ReactorApp.DefaultRenderErrorHandler = error =>
         {
-            Telemetry.Record(error.Exception);   // the app decides what is kept, and where
+            Telemetry.Record(error.Exception);   // de-duplicated: see Telemetry below
             return TextBlock("Something went wrong.");
         };
 
@@ -160,7 +160,15 @@ static class RenderErrorHandlerSetup
 
 static class Telemetry
 {
-    public static void Record(Exception exception) => System.Diagnostics.Debug.WriteLine(exception);
+    // The handler runs again each time a failing component re-renders, so record each
+    // exception once. The weak table lets recorded exceptions be collected.
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Exception, object> Recorded = new();
+
+    public static void Record(Exception exception)
+    {
+        if (Recorded.TryAdd(exception, Recorded))
+            System.Diagnostics.Debug.WriteLine(exception);
+    }
 }
 ```
 
@@ -175,7 +183,7 @@ reports which one applies. The handler runs on the UI thread and receives a
 | `Source` | `RootRender`, `ComponentRender`, `Reconcile` (reconciling, installing content, or a post-render host callback such as `OnRenderComplete`), `Effects`, or `Cleanup` (an effect cleanup during host disposal). |
 | `ComponentName` | The failing component's type name, when known. |
 | `IsHostLevel` | `true` when the returned element replaces the whole host content; `false` when it fills only the failing component's slot. For `Cleanup`, `true` means the host's root component registered the cleanup and `false` a child component. |
-| `Propagate()` | Show no fallback and route the exception to `ReactorApplication.OnUnhandledException` instead. If that returns `true` the app keeps running; otherwise the exception is rethrown out of the render pass and follows the dispatcher's normal unhandled-exception behavior. |
+| `Propagate()` | Show no fallback and route the exception to `ReactorApplication.OnUnhandledException` instead. If that returns `true` the app keeps running; otherwise see [Propagating to the unhandled-exception path](#propagating-to-the-unhandled-exception-path). |
 
 Return an element to show it instead of the built-in fallback, or `null` to
 keep the built-in one. The handler covers every place Reactor used to show the
@@ -189,10 +197,38 @@ or the element it returns throws while rendering, Reactor shows a neutral
 "Something went wrong." message without exception details, and does not call
 the handler again for that failure.
 
+The handler can run many times for the same fault. Reactor does not latch a
+failing component: every later render retries it, which is how recovery works,
+and if it throws again the handler is called again — once per re-render of a
+failing child, once per host render for a host-level failure. De-duplicate side
+effects such as telemetry, for example by remembering the exceptions you have
+already recorded.
+
 `Cleanup` reports an effect cleanup that threw while a host was being
 disposed — a window closing, or a `ReactorHostControl` being disposed. There
 is nothing left to display, so the return value is ignored and the handler only
 reports. Every other cleanup still runs.
+
+#### Propagating to the unhandled-exception path
+
+When the handler calls `Propagate()` and `ReactorApplication.OnUnhandledException`
+does not return `true`, Reactor rethrows the exception out of whatever ran the
+render:
+
+- Re-renders, and every render of a `ReactorHostControl`, run from a
+  `DispatcherQueue` callback. WinUI ends the process for an exception that
+  escapes one, without raising `Application.UnhandledException` or
+  `AppDomain.UnhandledException`
+  ([microsoft-ui-xaml#8940](https://github.com/microsoft/microsoft-ui-xaml/issues/8940)).
+  The `OnUnhandledException` call Reactor makes first is the only managed hook
+  the app gets, and returning `false` (or leaving it unset) ends the process.
+- The first render of a `ReactorHost` runs synchronously inside `Mount` /
+  `ReactorApp.OpenWindow`, so there the exception is thrown to that caller.
+
+`ReactorApplication.OnUnhandledException` is static, and Reactor calls it even
+when the app's `Application` is not a `ReactorApplication` — for example a XAML
+app that hosts Reactor screens in `ReactorHostControl`. For such an app it is
+the only way to observe a propagated render error.
 
 ## Memo
 

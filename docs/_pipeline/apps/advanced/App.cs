@@ -287,7 +287,7 @@ static class RenderErrorHandlerSetup
         // including windows opened later, tray flyouts and ReactorHostControl embeds.
         ReactorApp.DefaultRenderErrorHandler = error =>
         {
-            Telemetry.Record(error.Exception);   // the app decides what is kept, and where
+            Telemetry.Record(error.Exception);   // de-duplicated: see Telemetry below
             return TextBlock("Something went wrong.");
         };
 
@@ -303,7 +303,15 @@ static class RenderErrorHandlerSetup
 
 static class Telemetry
 {
-    public static void Record(Exception exception) => System.Diagnostics.Debug.WriteLine(exception);
+    // The handler runs again each time a failing component re-renders, so record each
+    // exception once. The weak table lets recorded exceptions be collected.
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Exception, object> Recorded = new();
+
+    public static void Record(Exception exception)
+    {
+        if (Recorded.TryAdd(exception, Recorded))
+            System.Diagnostics.Debug.WriteLine(exception);
+    }
 }
 // </snippet:render-error-handler>
 
