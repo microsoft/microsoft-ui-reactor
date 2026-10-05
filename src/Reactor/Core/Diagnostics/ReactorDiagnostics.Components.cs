@@ -13,8 +13,9 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 /// <param name="Kind"><c>"class"</c>, <c>"function"</c> or <c>"memo"</c>.</param>
 /// <param name="IsRoot">True for a host's root component (the one passed to <c>Mount</c>).</param>
 /// <param name="Props">The props of a <c>Component&lt;TProps&gt;</c> (or the props carried by its
-/// element), one row per public property, or one row named <c>Props</c> for a scalar. Empty for
-/// function components and propless classes.</param>
+/// element), one row per public property, or one row named <c>Props</c> for a scalar — or for a
+/// props type whose members were trimmed away (NativeAOT), described as
+/// <c>&lt;Type&gt; (members unavailable)</c>. Empty for function components and propless classes.</param>
 /// <param name="State">The component's hooks in call order. <see cref="DiagnosticValue.Index"/> is
 /// the index <see cref="ReactorDiagnostics.TrySetState"/> takes.</param>
 /// <param name="Contexts">The contexts the component reads through <c>UseContext</c>.</param>

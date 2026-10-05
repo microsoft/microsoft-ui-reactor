@@ -63,11 +63,17 @@ internal static class ComponentInspectionFixtures
                 var counter = ReactorDiagnostics.DescribeComponent(wrapper);
                 H.Check("CompInspect_ClassDescribed",
                     counter is { Name: "Counter", Kind: "class", IsRoot: false });
-                H.Check("CompInspect_ClassProps",
-                    counter is not null
+                // NativeAOT/trimming may strip the props record's property metadata; Props then
+                // degrades to one "(members unavailable)" row. Either way the secret never leaks.
+                var fullProps = counter is not null
                     && counter.Props.Count == 2
                     && counter.Props[0] is { Name: "Step", Type: "int", Value: "2", Redacted: false }
-                    && counter.Props[1] is { Name: "AdminPassword", Value: "<redacted>", Redacted: true });
+                    && counter.Props[1] is { Name: "AdminPassword", Value: "<redacted>", Redacted: true };
+                var opaqueProps = counter is { Props: [{ Name: "Props", Value: "CounterProps (members unavailable)" }] };
+                H.Check("CompInspect_ClassProps",
+                    counter is not null
+                    && !counter.Props.Any(p => p.Value.Contains("hunter2", StringComparison.Ordinal))
+                    && (fullProps || (!global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported && opaqueProps)));
                 H.Check("CompInspect_ClassState",
                     counter is not null && counter.State is [{ Index: 0, Kind: "state", Type: "int", Value: "0", Editable: true }]);
 

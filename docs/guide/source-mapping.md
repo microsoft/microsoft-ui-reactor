@@ -368,7 +368,9 @@ reported as
 names, dates, time spans, GUIDs, plain text and their nullables (`null` clears a
 string or nullable); it refuses any other type with a reason rather than guessing.
 Hook names are not recorded, so `State` rows have an empty `Name` and are
-identified by call-order index and kind.
+identified by call-order index and kind. Props are read by reflection: under
+NativeAOT or trimming a props type's members can be trimmed away, and `Props` then
+holds a single `<Type> (members unavailable)` row instead.
 
 Component lookup does not depend on source mapping. `GetAppliedProperties` reads
 the element back-pointer, so it needs the control to be tagged — turn source
