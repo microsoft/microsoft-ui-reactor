@@ -16,19 +16,21 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// Drop this into any vanilla WinUI app — no ReactorApp, ReactorApplication, or special
 /// bootstrapping needed. Each instance owns its own Reconciler and render loop.
 ///
-/// Usage in XAML:
+/// Usage in XAML (<c>xmlns:reactor="using:Microsoft.UI.Reactor.Hosting"</c>):
 ///   <![CDATA[
-///   <local:ReactorHostControl x:Name="reactorHost" />
+///   <reactor:ReactorHostControl ComponentType="local:StatsCard" />
+///   ]]>
+///   — or declare an empty host and mount it from code-behind —
+///   <![CDATA[
+///   <reactor:ReactorHostControl x:Name="reactorHost" />
 ///   ]]>
 ///
 /// Usage in code-behind:
 ///   reactorHost.Mount(new MyComponent());
 ///   — or —
 ///   reactorHost.Mount(ctx => VStack(TextBlock("Hello from Reactor!")));
-///   — or via XAML property —
-///   <![CDATA[
-///   <local:ReactorHostControl ComponentFactory="{x:Bind CreateMyComponent}" />
-///   ]]>
+///   — or —
+///   reactorHost.ComponentFactory = () => new MyComponent();
 ///
 /// Features:
 ///   - Thread-safe render batching (setState from any thread)
@@ -110,7 +112,14 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// Live render performance snapshot, updated every ~1 second.
     /// Always available (FPS, frame time). DEBUG builds include per-reconcile element counters.
     /// </summary>
-    public ref readonly RenderStats Stats => ref _stats;
+    /// <remarks>
+    /// Returned by value, unlike <see cref="ReactorHost.Stats"/>: the XAML compiler emits
+    /// type metadata for every public property of a control declared in markup, and a
+    /// <c>ref</c>-returning property becomes <c>typeof(RenderStats&amp;)</c> in the app's
+    /// generated <c>XamlTypeInfo.g.cs</c>, which does not compile. The copy is a few dozen
+    /// bytes, read about once a second.
+    /// </remarks>
+    public RenderStats Stats => _stats;
 
     /// <summary>
     /// Factory to create the root component. Set this or use Mount() for more control.
@@ -118,6 +127,39 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// Example: ComponentFactory = () => new MyComponent();
     /// </summary>
     public Func<Component>? ComponentFactory { get; set; }
+
+    /// <summary>
+    /// The root component's type, for declaring a host in XAML:
+    /// <c>&lt;reactor:ReactorHostControl ComponentType="local:StatsCard" /&gt;</c>.
+    /// When the control is Loaded and nothing has been mounted, an instance is created
+    /// and mounted, receiving <see cref="Props"/> like a <see cref="ComponentFactory"/> root.
+    /// <see cref="ComponentFactory"/> wins when both are set.
+    /// </summary>
+    /// <remarks>
+    /// <para>The instance is created through the app's XAML type information
+    /// (<c>Application.Current</c> as <see cref="Microsoft.UI.Xaml.Markup.IXamlMetadataProvider"/>),
+    /// not reflection: naming a type in markup makes the XAML compiler generate an activator
+    /// for its public parameterless constructor, so this stays trim- and AOT-safe. A type
+    /// that is only ever assigned from code has no such entry, and the host shows an
+    /// error saying so in place of the root; set <see cref="ComponentFactory"/> there
+    /// instead.</para>
+    /// <para>Read once, at Loaded, like <see cref="ComponentFactory"/>; changing it after the
+    /// root has mounted does not remount. Use <see cref="Mount(Component)"/> to swap roots.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// The type does not derive from <see cref="Component"/>, or is abstract or an open generic.
+    /// </exception>
+    public Type? ComponentType
+    {
+        get => _componentType;
+        set
+        {
+            if (value is not null) ValidateComponentType(value);
+            _componentType = value;
+        }
+    }
+
+    private Type? _componentType;
 
     /// <summary>
     /// Optional props to pass to the root component created by ComponentFactory.
@@ -135,6 +177,15 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// the breakdown of a Reactor render cycle.
     /// </summary>
     public Action<double, double, double>? OnRenderComplete { get; set; }
+
+    /// <summary>
+    /// Creates an empty host. This is the constructor XAML uses
+    /// (<c>&lt;reactor:ReactorHostControl ... /&gt;</c>); set <see cref="ComponentType"/> or
+    /// <see cref="ComponentFactory"/>, or call <c>Mount</c>, to give it a root.
+    /// </summary>
+    public ReactorHostControl() : this(component: null, logger: null)
+    {
+    }
 
     public ReactorHostControl(Component? component = null, ILogger? logger = null)
     {
@@ -197,15 +248,101 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         if (_rootComponent is not null || _rootRenderFunc is not null)
             return; // Already mounted via Mount()
 
-        if (ComponentFactory is null)
+        if (ComponentFactory is null && ComponentType is null)
             return;
 
-        var component = ComponentFactory();
+        var component = TryCreateLoadedRoot(
+            ComponentFactory, ComponentType, Props,
+            Application.Current as Microsoft.UI.Xaml.Markup.IXamlMetadataProvider,
+            out var error);
+        if (error is not null)
+        {
+            // An exception escaping a Loaded handler fail-fasts the whole WinUI process.
+            // Report it in this host instead, the same way a throwing Render() is reported.
+            _logger?.LogError(error, "ReactorHostControl could not create its root component");
+            ShowErrorFallback(error);
+            return;
+        }
 
-        if (Props is not null && component is IPropsReceiver receiver)
-            receiver.SetProps(Props);
+        if (component is not null)
+            Mount(component);
+    }
 
-        Mount(component);
+    /// <summary>
+    /// Creates the Loaded-time root from <see cref="ComponentFactory"/> (which wins) or
+    /// <see cref="ComponentType"/>, and applies <see cref="Props"/>. Never throws for an
+    /// ordinary failure (no XAML activation info for a code-only <c>ComponentType</c>, a
+    /// throwing or null-returning factory, props of the wrong type): it comes back in <paramref name="error"/>
+    /// for the host to show. Fatal runtime exceptions still propagate.
+    /// </summary>
+    internal static Component? TryCreateLoadedRoot(
+        Func<Component>? factory,
+        Type? componentType,
+        object? props,
+        Microsoft.UI.Xaml.Markup.IXamlMetadataProvider? provider,
+        out Exception? error)
+    {
+        error = null;
+        try
+        {
+            Component component;
+            if (factory is not null)
+                component = factory()
+                    ?? throw new InvalidOperationException("ReactorHostControl.ComponentFactory returned null.");
+            else if (componentType is not null)
+                component = CreateComponent(componentType, provider);
+            else
+                return null;
+
+            if (props is not null && component is IPropsReceiver receiver)
+                receiver.SetProps(props);
+
+            return component;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            error = ex;
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Rejects a <see cref="ComponentType"/> that can never produce a root, at assignment
+    /// time, so a bad XAML attribute fails while the page loads rather than silently
+    /// mounting nothing.
+    /// </summary>
+    internal static void ValidateComponentType(Type type)
+    {
+        if (!typeof(Component).IsAssignableFrom(type))
+            throw new ArgumentException(
+                $"ReactorHostControl.ComponentType must derive from {typeof(Component).FullName}; '{type.FullName}' does not.",
+                nameof(ComponentType));
+        if (type.IsAbstract || type.ContainsGenericParameters)
+            throw new ArgumentException(
+                $"ReactorHostControl.ComponentType must be a concrete, closed component type; '{type.FullName}' is {(type.IsAbstract ? "abstract" : "an open generic")}.",
+                nameof(ComponentType));
+    }
+
+    /// <summary>
+    /// Creates the root for <see cref="ComponentType"/> through the app's XAML type
+    /// information — the same metadata the XAML runtime just used to turn
+    /// <c>"local:StatsCard"</c> into a <see cref="Type"/>, so a markup-declared type is
+    /// always resolvable and no reflection activation is involved.
+    /// </summary>
+    internal static Component CreateComponent(Type type, Microsoft.UI.Xaml.Markup.IXamlMetadataProvider? provider)
+    {
+        ValidateComponentType(type);
+
+        var xamlType = provider?.GetXamlType(type);
+        if (xamlType is null || !xamlType.IsConstructible)
+            throw new InvalidOperationException(
+                $"ReactorHostControl.ComponentType '{type.FullName}' has no XAML activation info in this app. " +
+                "ComponentType is for declaring a host in XAML markup and needs a public parameterless constructor; " +
+                "from code, set ComponentFactory = () => new " + type.Name + "(...) or call Mount(...) instead.");
+
+        return xamlType.ActivateInstance() as Component
+            ?? throw new InvalidOperationException(
+                $"XAML activation of ReactorHostControl.ComponentType '{type.FullName}' did not produce a Component.");
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

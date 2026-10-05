@@ -891,12 +891,14 @@ overwritten.
 
 Reactor expects to own the window. `ReactorApp.Run<T>` opens a
 `Window`, mounts your component tree directly, and drives the
-reconciler from that root. Mounting a Reactor component inside a
-WinUI `Page` (via `xmlns:reactor=...` markup) does not work — there
-is no XAML loader for Reactor elements. If you need Reactor inside an
-existing WinUI/WinForms host, see [WinForms interop](winforms-interop.md)
-for `XamlIslandControl` or use `ReactorHostControl` from
-[components](components.md) for the WinUI host case.
+reconciler from that root. Writing Reactor *elements* in a WinUI
+`Page`'s markup does not work — there is no XAML loader for them. To
+put Reactor inside an existing WinUI page, declare a
+`ReactorHostControl` there and name the root component:
+`<reactor:ReactorHostControl ComponentType="local:StatsCard" />` with
+`xmlns:reactor="using:Microsoft.UI.Reactor.Hosting"` (see
+[Reactor for XAML Developers](xaml-developers.md)). For WinForms, see
+[WinForms interop](winforms-interop.md) for `XamlIslandControl`.
 
 ### Reaching for `INotifyPropertyChanged` out of habit
 
