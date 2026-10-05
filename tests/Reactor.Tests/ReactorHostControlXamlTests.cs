@@ -110,7 +110,7 @@ public sealed partial class ReactorHostControlXamlTests
     }
 
     [Fact]
-    public void LoadedRoot_ThrowingFactoryAndWrongProps_ReturnTheError()
+    public void LoadedRoot_ThrowingOrNullFactoryAndWrongProps_ReturnTheError()
     {
         var boom = new InvalidOperationException("factory failed");
         Assert.Null(ReactorHostControl.TryCreateLoadedRoot(
@@ -120,6 +120,11 @@ public sealed partial class ReactorHostControlXamlTests
         Assert.Null(ReactorHostControl.TryCreateLoadedRoot(
             () => new Titled(), componentType: null, props: 42, provider: null, out var propsError));
         Assert.IsType<InvalidCastException>(propsError);
+
+        Assert.Null(ReactorHostControl.TryCreateLoadedRoot(
+            () => null!, componentType: null, props: null, provider: null, out var nullError));
+        var nullIoe = Assert.IsType<InvalidOperationException>(nullError);
+        Assert.Contains("ComponentFactory returned null", nullIoe.Message, StringComparison.Ordinal);
     }
 
     [Fact]
