@@ -46,13 +46,7 @@ internal static class ThemeResourceListeners
         IThemeResourceListener[] live;
         lock (s_gate)
         {
-            if (s_listeners is null || s_listeners.Count == 0) return 0;
-            var buffer = new List<IThemeResourceListener>(s_listeners.Count);
-            foreach (var weak in s_listeners)
-            {
-                if (weak.TryGetTarget(out var listener)) buffer.Add(listener);
-            }
-            live = buffer.ToArray();
+            live = SnapshotLiveLocked();
         }
 
         foreach (var listener in live)
@@ -77,13 +71,17 @@ internal static class ThemeResourceListeners
     {
         lock (s_gate)
         {
-            if (s_listeners is null) return [];
-            var live = new List<IThemeResourceListener>(s_listeners.Count);
-            foreach (var weak in s_listeners)
-            {
-                if (weak.TryGetTarget(out var listener)) live.Add(listener);
-            }
-            return live.ToArray();
+            return SnapshotLiveLocked();
         }
     }
+
+    // Caller holds s_gate. One TryGetTarget per entry: a target collected mid-snapshot is
+    // dropped, never read back as null.
+    private static IThemeResourceListener[] SnapshotLiveLocked()
+        => s_listeners is null
+            ? []
+            : s_listeners
+                .Select(static weak => weak.TryGetTarget(out var listener) ? listener : null)
+                .OfType<IThemeResourceListener>()
+                .ToArray();
 }

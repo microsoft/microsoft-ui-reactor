@@ -25,7 +25,7 @@ internal static class HostIdleAndThemeResourceFixtures
     {
         public override async Task RunAsync()
         {
-            var host = new ReactorHostControl();
+            using var host = new ReactorHostControl();
             Action<int>? setCount = null;
             host.Mount(ctx =>
             {
@@ -54,7 +54,6 @@ internal static class HostIdleAndThemeResourceFixtures
             }
             finally
             {
-                host.Dispose();
                 H.SetContent(null);
             }
         }
@@ -94,7 +93,7 @@ internal static class HostIdleAndThemeResourceFixtures
             Application.Current.Resources.MergedDictionaries.Add(resources);
             ThemeRef.InvalidateResolutionCache();
 
-            var host = new ReactorHostControl();
+            using var host = new ReactorHostControl();
             Action<int>? setTick = null;
             host.Mount(ctx =>
             {
@@ -122,7 +121,6 @@ internal static class HostIdleAndThemeResourceFixtures
             {
                 Application.Current.Resources.MergedDictionaries.Remove(resources);
                 ThemeRef.InvalidateResolutionCache();
-                host.Dispose();
                 H.SetContent(null);
             }
         }
@@ -160,9 +158,10 @@ internal static class HostIdleAndThemeResourceFixtures
             var previousActiveHost = ReactorApp.ActiveHostInternal;
             var target = new Border();
             H.SetContent(target);
-            var host = new ReactorHost(H.Window) { ContentTarget = target };
             try
             {
+                // Disposed at the end of this block, before finally restores the active host.
+                using var host = new ReactorHost(H.Window) { ContentTarget = target };
                 Action<int>? setTick = null;
                 host.Mount(ctx =>
                 {
@@ -187,7 +186,6 @@ internal static class HostIdleAndThemeResourceFixtures
             }
             finally
             {
-                host.Dispose();
                 ReactorApp.ActiveHostInternal = previousActiveHost;
                 H.SetContent(null);
                 Application.Current.Resources.MergedDictionaries.Remove(resources);
