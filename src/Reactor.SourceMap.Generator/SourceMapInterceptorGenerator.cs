@@ -1053,7 +1053,9 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                 int h = Attribute.GetHashCode();
                 h = (h * 397) ^ FilePath.GetHashCode();
                 h = (h * 397) ^ Line;
-                return (h * 397) ^ Signature.GetHashCode();
+                h = (h * 397) ^ Signature.GetHashCode();
+                h = (h * 397) ^ (IsInstance ? 1 : 0);
+                return (h * 397) ^ (ReturnsVoid ? 1 : 0);
             }
         }
     }

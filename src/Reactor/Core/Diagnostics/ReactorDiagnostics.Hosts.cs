@@ -332,17 +332,31 @@ internal static class ReactorHostRegistry
             host.TagComponentBoundaries();
     }
 
-    /// <summary>Live hosts in registration order.</summary>
+    /// <summary>Live hosts in registration order. Prunes entries whose host was collected.</summary>
     internal static IReactorDiagnosticHost[] Snapshot()
     {
         lock (s_gate)
         {
             if (s_hosts is null || s_hosts.Count == 0) return global::System.Array.Empty<IReactorDiagnosticHost>();
-            return s_hosts
-                .Select(static weak => weak.TryGetTarget(out var host) ? host : null)
-                .Where(static host => host is not null)
-                .ToArray()!;
+            var live = new List<IReactorDiagnosticHost>(s_hosts.Count);
+            s_hosts.RemoveAll(weak =>
+            {
+                if (!weak.TryGetTarget(out var host)) return true;
+                live.Add(host);
+                return false;
+            });
+            return live.ToArray();
         }
+    }
+
+    internal static int EntryCountForTest
+    {
+        get { lock (s_gate) return s_hosts?.Count ?? 0; }
+    }
+
+    internal static int DeadEntryCountForTest
+    {
+        get { lock (s_gate) return s_hosts?.Count(static w => !w.TryGetTarget(out _)) ?? 0; }
     }
 }
 

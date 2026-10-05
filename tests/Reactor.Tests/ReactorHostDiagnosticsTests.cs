@@ -104,14 +104,31 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
     {
         var weak = RegisterUnreferencedHost();
 
-        for (int i = 0; i < 5 && weak.IsAlive; i++)
+        for (int i = 0; i < 10 && weak.IsAlive; i++)
         {
-            GC.Collect();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
             GC.WaitForPendingFinalizers();
         }
 
         Assert.False(weak.IsAlive, "The host registry rooted a host nothing else references.");
-        Assert.DoesNotContain(ReactorHostRegistry.Snapshot(), h => ReferenceEquals(h, weak.Target));
+    }
+
+    [Fact]
+    public void Snapshot_PrunesCollectedHosts()
+    {
+        var weak = RegisterUnreferencedHost();
+        for (int i = 0; i < 10 && weak.IsAlive; i++)
+        {
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+        }
+        Assert.False(weak.IsAlive);
+
+        // No Register() call follows, so only Snapshot() can drop the dead entry.
+        Assert.True(ReactorHostRegistry.DeadEntryCountForTest > 0);
+        var live = ReactorHostRegistry.Snapshot();
+        Assert.Equal(0, ReactorHostRegistry.DeadEntryCountForTest);
+        Assert.Equal(live.Length, ReactorHostRegistry.EntryCountForTest);
     }
 
     [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
