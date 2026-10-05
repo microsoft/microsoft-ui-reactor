@@ -73,8 +73,11 @@ internal static class HostIdleAndThemeResourceFixtures
 
         public override async Task RunAsync()
         {
-            var resources = Application.Current.Resources;
-            resources[AppKey] = new SolidColorBrush(Colors.Red);
+            // The app dictionary has a Source (XamlControlsResources) and rejects local
+            // values; use our own merged dictionary, which ThemeRef resolution also scans.
+            var resources = new ResourceDictionary { [AppKey] = new SolidColorBrush(Colors.Red) };
+            Application.Current.Resources.MergedDictionaries.Add(resources);
+            Theme.NotifyResourcesChanged();
 
             var host = new ReactorHostControl();
             Action<int>? setTick = null;
@@ -102,7 +105,7 @@ internal static class HostIdleAndThemeResourceFixtures
             }
             finally
             {
-                resources.Remove(AppKey);
+                Application.Current.Resources.MergedDictionaries.Remove(resources);
                 Theme.NotifyResourcesChanged();
                 host.Dispose();
                 H.SetContent(null);
