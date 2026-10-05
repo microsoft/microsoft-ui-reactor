@@ -182,6 +182,20 @@ Conventions for contributors:
 
 ### Fixed
 
+- **`RenderError` names the component that threw, and now reports every render
+  error** (issue #1321, spec 044 §6.2.1). For class components the event reported
+  the element record (``ComponentElement`1`` / `ComponentElement`) instead of the
+  component unless the `Render` keyword was also on, so an Errors-only listener
+  such as `winapp devtools logs` could not tell which component failed. It now
+  reports the component's type name (`Counter`; a generic one as `Foo<Int32>`),
+  and the other per-component events agree on it. **Listeners now also receive
+  errors that were previously silent:** a component (class, function or memo)
+  throwing on its first render, a `ReactorHost` / `ReactorHostControl` root
+  component or render function throwing, and any render error an `ErrorBoundary`
+  catches — reported once, at the throw site, even though the app shows the
+  fallback. Same event, same payload; the message stays redacted. Generic
+  component names change from ``Foo`1`` to `Foo<Int32>` in every component event.
+
 - **Dropping an `AutoSuggestBox` right after its text changed can no longer crash
   the app** (PR #1302, supersedes #559). WinUI raises the box's `TextChanged` from
   an internal timer 150 ms after its text last changed, keeps that timer running
