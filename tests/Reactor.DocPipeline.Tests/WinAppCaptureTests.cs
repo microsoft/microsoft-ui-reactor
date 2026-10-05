@@ -203,6 +203,86 @@ public class WinAppCaptureTests
         Assert.Equal(0, WinAppCapture.SquareRoundedCorners(bmp));
     }
 
+    [Fact]
+    public void A_fully_transparent_capture_is_left_alone()
+    {
+        // A headless or not-yet-composed window can come back fully transparent; every row has
+        // no opaque pixel, so nothing is replaced (and the pass stays linear per row).
+        using var bmp = new Bitmap(1366, 1092, PixelFormat.Format32bppArgb);
+
+        Assert.Equal(0, WinAppCapture.SquareRoundedCorners(bmp));
+        Assert.Equal(0, bmp.GetPixel(683, 546).A);
+    }
+
+    /// <summary>
+    /// The linear pass must give exactly what the nearest-opaque scan it replaced gave: the
+    /// left half takes the nearest opaque pixel to its right, the right half the nearest
+    /// already-opaque pixel to its left.
+    /// </summary>
+    [Fact]
+    public void Corner_squaring_matches_the_nearest_opaque_scan()
+    {
+        var rng = new Random(1320);
+        for (var trial = 0; trial < 200; trial++)
+        {
+            var width = rng.Next(1, 24);
+            var row = new int[width];
+            for (var x = 0; x < width; x++)
+            {
+                var alpha = rng.Next(3) switch { 0 => 0, 1 => 128, _ => 255 };
+                row[x] = (alpha << 24) | rng.Next(0x1000000);
+            }
+
+            var expected = (int[])row.Clone();
+            var expectedReplaced = ReferenceSquare(expected);
+
+            using var bmp = new Bitmap(width, 1, PixelFormat.Format32bppArgb);
+            for (var x = 0; x < width; x++) bmp.SetPixel(x, 0, Color.FromArgb(row[x]));
+
+            Assert.Equal(expectedReplaced, WinAppCapture.SquareRoundedCorners(bmp));
+            for (var x = 0; x < width; x++)
+                Assert.Equal(expected[x], bmp.GetPixel(x, 0).ToArgb());
+        }
+
+        static int ReferenceSquare(int[] row)
+        {
+            var replaced = 0;
+            var mid = row.Length / 2;
+            for (var x = 0; x < row.Length; x++)
+            {
+                if ((uint)row[x] >> 24 == 0xFF) continue;
+                var step = x < mid ? 1 : -1;
+                for (var s = x + step; s >= 0 && s < row.Length; s += step)
+                {
+                    if ((uint)row[s] >> 24 != 0xFF) continue;
+                    row[x] = row[s];
+                    replaced++;
+                    break;
+                }
+            }
+            return replaced;
+        }
+    }
+
+    [Fact]
+    public async Task A_winapp_that_cannot_start_fails_the_screenshot_not_the_compile()
+    {
+        var notAnExe = global::System.IO.Path.Combine(
+            global::System.IO.Path.GetTempPath(), $"reactor-not-winapp-{Guid.NewGuid():N}.exe");
+        await global::System.IO.File.WriteAllTextAsync(notAnExe, "not a PE image", TestContext.Current.CancellationToken);
+        try
+        {
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => WinAppCapture.CaptureClientAreaAsync(notAnExe, IntPtr.Zero, TestContext.Current.CancellationToken));
+            Assert.Contains("could not start", ex.Message);
+            Assert.IsType<global::System.ComponentModel.Win32Exception>(ex.InnerException);
+        }
+        finally
+        {
+            global::System.IO.File.Delete(notAnExe);
+        }
+    }
+
     /// <summary>
     /// Why the squaring exists. Without it the corner arcs read as content, so
     /// content-crop keeps the whole frame. After it, the crop lands on the real content.

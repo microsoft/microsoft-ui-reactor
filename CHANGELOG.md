@@ -103,7 +103,8 @@ Conventions for contributors:
   keep the same framing (client area only, physical pixels, the 150% convention), are lossless, and
   content-crop is typically 1–4 px tighter. Capture no longer waits on the frame stream's warm-up, so
   a topic is about 8–10 s faster; it never takes input focus. The winapp CLI is now a prerequisite
-  for screenshot capture (`./bootstrap.ps1` installs it; `$REACTOR_WINAPP_EXE` overrides it).
+  for screenshot capture (`./bootstrap.ps1` installs it; `$REACTOR_WINAPP_EXE` overrides it)
+  (#1320; spec 013 §4).
 - **`.Validate(fieldName, value, validators…)` now runs its validators during the
   render that calls it**, instead of only when a `FormField` mounts the element —
   the only consumer that ever ran them. Results are therefore readable by the

@@ -182,7 +182,8 @@ internal static class WinAppCapture
     /// A WinUI client area is otherwise fully opaque, so "alpha below 255" picks out exactly
     /// those pixels, and filling them from the nearest opaque pixel inward reproduces the
     /// square corner <c>PrintWindow</c> rendered: the window background, in practice. A row
-    /// with no opaque pixel is left alone.
+    /// with no opaque pixel is left alone. Linear per row: a fully transparent frame (a
+    /// headless or not-yet-composed window) costs one pass, not a scan per pixel.
     /// </para>
     /// </remarks>
     internal static int SquareRoundedCorners(Bitmap bmp)
@@ -193,24 +194,42 @@ internal static class WinAppCapture
         try
         {
             var row = new int[bmp.Width];
+            var nextOpaque = new int[bmp.Width];
+            var hasNextOpaque = new bool[bmp.Width];
             for (var y = 0; y < bmp.Height; y++)
             {
                 var rowPtr = data.Scan0 + (y * data.Stride);
                 Marshal.Copy(rowPtr, row, 0, row.Length);
-                var changed = false;
                 var mid = row.Length / 2;
+
+                // Nearest opaque pixel to the right of each x (left half searches rightward).
+                var haveRight = false;
+                var right = 0;
+                for (var x = row.Length - 1; x >= 0; x--)
+                {
+                    nextOpaque[x] = right;
+                    hasNextOpaque[x] = haveRight;
+                    if ((uint)row[x] >> 24 == 0xFF) { right = row[x]; haveRight = true; }
+                }
+
+                // Right half searches leftward, seeing pixels already filled in this pass.
+                var changed = false;
+                var haveLeft = false;
+                var left = 0;
                 for (var x = 0; x < row.Length; x++)
                 {
-                    if ((uint)row[x] >> 24 == 0xFF) continue;
-                    var step = x < mid ? 1 : -1;
-                    for (var s = x + step; s >= 0 && s < row.Length; s += step)
+                    if ((uint)row[x] >> 24 != 0xFF)
                     {
-                        if ((uint)row[s] >> 24 != 0xFF) continue;
-                        row[x] = row[s];
-                        replaced++;
-                        changed = true;
-                        break;
+                        if (x < mid ? hasNextOpaque[x] : haveLeft)
+                        {
+                            row[x] = x < mid ? nextOpaque[x] : left;
+                            replaced++;
+                            changed = true;
+                        }
+                        else continue;
                     }
+                    left = row[x];
+                    haveLeft = true;
                 }
                 if (changed) Marshal.Copy(row, 0, rowPtr, row.Length);
             }
@@ -289,8 +308,19 @@ internal static class WinAppCapture
             };
             foreach (var a in BuildScreenshotArguments(hwnd.ToInt64(), temp)) psi.ArgumentList.Add(a);
 
-            using var proc = Process.Start(psi)
-                ?? throw new InvalidOperationException($"could not start {winAppExe}");
+            Process proc;
+            try
+            {
+                proc = Process.Start(psi)
+                    ?? throw new InvalidOperationException($"could not start {winAppExe}");
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                // A blocked or invalid binary (e.g. a bad REACTOR_WINAPP_EXE) fails this
+                // screenshot like any other winapp error instead of aborting the compile.
+                throw new InvalidOperationException($"could not start {winAppExe}: {ex.Message}", ex);
+            }
+            using var _ = proc;
             var stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
             var stderrTask = proc.StandardError.ReadToEndAsync(ct);
             try
