@@ -44,6 +44,13 @@ Reactor is a declarative UI framework for building native Windows apps in pure C
 No XAML, no data binding, no view models. You describe your UI as a function of
 state and Reactor keeps the screen in sync.
 
+> **Prefer Rust?** The same declarative WinUI idea is available in Rust through
+> [windows-reactor](https://github.com/microsoft/windows-rs/blob/HEAD/docs/crates/windows-reactor.md),
+> a separate library in [windows-rs](https://github.com/microsoft/windows-rs) built
+> around components and typed messages, available on
+> [crates.io](https://crates.io/crates/windows-reactor). This guide covers
+> Microsoft.UI.Reactor, the C# library.
+
 ## Setup
 
 If you just want to build an app, scaffold one and go — you do not need to
@@ -595,12 +602,14 @@ overwritten.
 
 Reactor expects to own the window. `ReactorApp.Run<T>` opens a
 `Window`, mounts your component tree directly, and drives the
-reconciler from that root. Mounting a Reactor component inside a
-WinUI `Page` (via `xmlns:reactor=...` markup) does not work — there
-is no XAML loader for Reactor elements. If you need Reactor inside an
-existing WinUI/WinForms host, see [WinForms interop](winforms-interop.md)
-for `XamlIslandControl` or use `ReactorHostControl` from
-[components](components.md) for the WinUI host case.
+reconciler from that root. Writing Reactor *elements* in a WinUI
+`Page`'s markup does not work — there is no XAML loader for them. To
+put Reactor inside an existing WinUI page, declare a
+`ReactorHostControl` there and name the root component:
+`<reactor:ReactorHostControl ComponentType="local:StatsCard" />` with
+`xmlns:reactor="using:Microsoft.UI.Reactor.Hosting"` (see
+[Reactor for XAML Developers](xaml-developers.md)). For WinForms, see
+[WinForms interop](winforms-interop.md) for `XamlIslandControl`.
 
 ### Reaching for `INotifyPropertyChanged` out of habit
 

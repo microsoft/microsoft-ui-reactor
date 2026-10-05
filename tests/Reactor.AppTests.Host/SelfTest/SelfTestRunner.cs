@@ -271,6 +271,14 @@ internal static class SelfTestRunner
         "Issue142_CustomControlPrivateDp_Renders",
         "Issue142_ThirdPartyControlPrivateDp_Renders",
 
+        // Same root cause, for this host's own compiled page: ReactorApplication finds
+        // the host's generated XamlMetaDataProvider only by reflecting over the entry
+        // assembly, nothing roots it (no App.xaml), and AOT trims it, so
+        // XamlDeclaredHostPanel.xaml throws XamlParseException before ReactorHostControl
+        // runs. A vanilla WinUI app's App *is* the provider, so ComponentType works there
+        // under AOT; the code-only failure sibling still runs here. --
+        "Hosting_HostControlXamlComponentType",
+
         // -- Spec 049 Phase 3 component state migration is reflection-based and
         // JIT-only by design: the production entry point is gated on
         // HotReloadService.IsHotReloadLive (MetadataUpdater.IsSupported), which

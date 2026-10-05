@@ -36,10 +36,11 @@ The `ListView`'s `ItemTemplate` is authored declaratively in `MainWindow.xaml`
 via `x:Bind` and `x:DataType="models:Order"` — the conventional XAML/MVVM data-
 binding shape, with compile-time-checked bindings.
 
-The `ReactorHostControl` itself is constructed in code-behind (matching the
-convention from `samples/ReactorHostControlDemo`) rather than placed directly
-in markup; this keeps WinAppSDK 2.0 preview's XAML compiler happy and keeps
-the host's lifecycle visible to the window that owns the ViewModel.
+The `ReactorHostControl` is declared in `MainWindow.xaml`
+(`<reactor:ReactorHostControl x:Name="ReactorHost" />`) and its root is mounted
+from code-behind, because the root is a render function fed by the window's
+ViewModel. A root with no inputs can be named entirely in markup with
+`ComponentType="local:MyComponent"` — see `samples/ReactorHostControlDemo`.
 
 ## What this sample does *not* show
 
