@@ -220,13 +220,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, IT
             Mount(component);
     }
 
-    // Theme.NotifyResourcesChanged: re-render past memoization (the same reconciler
-    // signal hot reload uses), so every theme-resolved value is resolved again.
-    // ForceFullRenderPending is volatile and RequestRender is thread-safe.
+    // Theme.NotifyResourcesChanged: a resource-refresh pass — past memoization AND past
+    // every structural skip, so every theme-resolved value is resolved again.
+    // ResourceRefreshPending is volatile and RequestRender is thread-safe.
     void IThemeResourceListener.OnThemeResourcesChanged()
     {
         if (_disposed) return;
-        _reconciler.ForceFullRenderPending = true;
+        _reconciler.ResourceRefreshPending = true;
         RequestRender();
     }
 

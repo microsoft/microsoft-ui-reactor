@@ -6,7 +6,7 @@ This document covers how to apply Windows 11 theme resources correctly in Reacto
 
 WinUI provides 200+ semantic theme resources organized by theme variant (Light, Dark, HighContrast). In XAML you'd use `{ThemeResource}` markup — in Reactor, you use `Theme.*` tokens or `Theme.Ref("ResourceKey")`.
 
-When the reconciler mounts or updates an element with a `ThemeRef`, it resolves the resource by walking `Application.Current.Resources.ThemeDictionaries` to find the brush matching the element's effective theme. When the system theme changes, elements using `ThemeRef` automatically update.
+When the reconciler mounts or updates an element with a `ThemeRef`, it resolves the resource by walking `Application.Current.Resources.ThemeDictionaries` to find the brush matching the element's effective theme. When the system theme changes, elements using `ThemeRef` automatically update. Resolutions are cached per `(key, theme)`, so if you replace or add a resource at runtime without a theme change (swap a brand dictionary, replace a brush), call `Theme.NotifyResourcesChanged()` afterwards; it clears the cache and re-renders every host, memoized subtrees included.
 
 ## Theme Token Quick Reference
 
@@ -330,7 +330,7 @@ Border(hero).Background(Theme.Ref("BrandAccentGradientBrush"))
 
 ### Rules
 
-1. **Register before building the visual tree** — call `AppTheme.Register()` in the App constructor or `OnLaunched`, before any component renders.
+1. **Register before building the visual tree** — call `AppTheme.Register()` in the App constructor or `OnLaunched`, before any component renders. If you change resources after the tree is built, call `Theme.NotifyResourcesChanged()` so `Theme.Ref` values re-resolve.
 2. **Always provide all three variants** (light, dark, highContrast). Omitting HC causes accessibility regressions. There is no optional-HC overload by design.
 3. **HC values must reference system color brushes or solid hex colors** — no gradients, no opacity, no custom colors in HC. Use WinUI system brush keys like `"SystemColorHighlightColorBrush"`, `"SystemColorHotlightColorBrush"`, etc.
 4. **Custom keys must end in `Brush`** — matches WinUI naming conventions and ensures `Theme.Ref()` resolves them correctly.

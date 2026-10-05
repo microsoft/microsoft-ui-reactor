@@ -46,11 +46,12 @@ Conventions for contributors:
   hosts now share one idle-wait loop.
 
 - **`Theme.NotifyResourcesChanged()`** for runtime resource edits (a brand dictionary
-  swap, a replaced brush in `Application.Current.Resources`, an inspector's live
+  swap, a replaced brush in an app-level dictionary, an inspector's live
   resource edit). Reactor caches each resolved `(key, theme)` brush and only cleared
   that cache on a theme or palette change, so such an edit was invisible to `ThemeRef`
-  overrides and `ThemeRef.Resolve`. The call clears the cache and re-renders every
-  live host past memoization. Callable from any thread.
+  modifiers, overrides and `ThemeRef.Resolve`. The call clears the cache and re-renders
+  every live host past memoization and the skip of unchanged elements. Callable from
+  any thread.
 
 - **Getting Started documents the single-file path.** A Reactor app does not need
   a `.csproj`: .NET 10 runs a lone `.cs` file whose `#:package` / `#:property`

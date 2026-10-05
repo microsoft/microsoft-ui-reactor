@@ -301,6 +301,18 @@ issue number in the reason when the skip marks a real product gap: a
 skip is never evidence the product works, only that this run did not
 establish otherwise.
 
+To read the realized tree back after a state change, await the host's
+render loop instead of a fixed delay: both `ReactorHost` and the XAML
+island host `ReactorHostControl` expose `WaitForIdleAsync()` (and an
+`IsIdle` property), which completes once every pending render and
+re-render has run:
+
+```csharp
+var host = new ReactorHostControl();
+host.Mount(ctx => TextBlock("ready"));
+await host.WaitForIdleAsync();   // the island's tree is now realized
+```
+
 ## Tips
 
 **Don't drive the unit fixture from `Task.Delay`.** If an effect

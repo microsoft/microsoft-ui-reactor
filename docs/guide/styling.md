@@ -432,21 +432,29 @@ differs from the system pair.
 
 Switching Light/Dark (`.RequestedTheme(...)`, the system theme, high
 contrast) needs nothing extra. Changing what a resource key *means* at
-runtime does — replacing a brush in `Application.Current.Resources`,
-merging or removing a brand dictionary, or a live edit from an inspector.
-Reactor caches each resolved `(key, theme)` brush and only drops that
-cache on a theme or palette change, so tell it explicitly:
+runtime does — replacing a brush in an app-level dictionary, merging or
+removing a brand dictionary, or a live edit from an inspector. Reactor
+caches each resolved `(key, theme)` brush and only drops that cache on a
+theme or palette change, so tell it explicitly. Keep app brushes in your
+own dictionary merged into `Application.Current.Resources` (the app
+dictionary itself is `XamlControlsResources` and rejects direct entries):
 
 ```csharp
-Application.Current.Resources["BrandBrush"] = new SolidColorBrush(newBrand);
+var brand = new ResourceDictionary { ["BrandBrush"] = new SolidColorBrush(initialBrand) };
+Application.Current.Resources.MergedDictionaries.Add(brand);
+
+// later, at runtime
+brand["BrandBrush"] = new SolidColorBrush(newBrand);
 Theme.NotifyResourcesChanged();
 ```
 
 `Theme.NotifyResourcesChanged()` clears the resolution cache and
-re-renders every live host past component memoization, so `ThemeRef`
-modifiers, `.Resources(...)` theme overrides and `ThemeRef.Resolve(...)`
-calls in `Render` all pick up the new value. It is safe to call from any
-thread. Mutating an existing brush's `Color` in place does not need it.
+re-renders every live host past component memoization and the skip of
+unchanged elements, so `ThemeRef` modifiers, `.Resources(...)` theme
+overrides and `ThemeRef.Resolve(...)` calls in `Render` all pick up the
+new value, memoized subtrees included. It is safe to call from any
+thread; await a host's `WaitForIdleAsync()` to observe the result.
+Mutating an existing brush's `Color` in place does not need it.
 
 ### Per-element theme override scope
 

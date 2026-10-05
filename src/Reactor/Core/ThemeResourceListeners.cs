@@ -68,4 +68,22 @@ internal static class ThemeResourceListeners
             return s_listeners?.Exists(w => w.TryGetTarget(out var t) && ReferenceEquals(t, listener)) == true;
         }
     }
+
+    /// <summary>
+    /// Test-only: the live listeners, so a selftest can wait for every host a
+    /// notification reached to settle before it reads the shared window back.
+    /// </summary>
+    internal static IThemeResourceListener[] LiveListenersForTest()
+    {
+        lock (s_gate)
+        {
+            if (s_listeners is null) return [];
+            var live = new List<IThemeResourceListener>(s_listeners.Count);
+            foreach (var weak in s_listeners)
+            {
+                if (weak.TryGetTarget(out var listener)) live.Add(listener);
+            }
+            return live.ToArray();
+        }
+    }
 }

@@ -244,7 +244,8 @@ public static class Theme
     /// <para>What it does: clears the resolution cache behind <see cref="ThemeRef"/>, then
     /// asks every live <see cref="Microsoft.UI.Reactor.Hosting.ReactorHost"/> and
     /// <see cref="Microsoft.UI.Reactor.Hosting.ReactorHostControl"/> for a full re-render that
-    /// bypasses component memoization (as hot reload does). That re-resolves
+    /// bypasses component memoization and the reconciler's skip of unchanged elements, so
+    /// memoized and reused subtrees are refreshed too. That re-resolves
     /// <c>.Resources(...)</c> theme overrides, re-applies <see cref="ThemeRef"/> modifiers
     /// such as <c>.Background(Theme.Accent)</c>, and re-runs any
     /// <see cref="ThemeRef.Resolve(string, bool)"/> call in a <c>Render</c> method.</para>
