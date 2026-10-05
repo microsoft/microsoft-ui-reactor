@@ -12,38 +12,58 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Microsoft.UI.Reactor.Analyzers;
 
 /// <summary>
-/// Code fix for <c>REACTOR_LIFECYCLE_003</c>: switches a <c>Reconciler.UpdateChild</c> call to
-/// <c>Reconciler.Reconcile</c> in the shape both of the repository's call sites had:
+/// Code fix for <c>REACTOR_LIFECYCLE_003</c>: switches a <c>Reconciler.UpdateChild</c> call whose
+/// result is installed in one slot to <c>Reconciler.Reconcile</c>:
 /// <code>
 /// var replacement = r.UpdateChild(oldChild, newChild, existing, rerender);
 /// if (replacement is not null)
-///     slot = replacement;
+///     slot.Content = replacement;
 /// </code>
 /// becomes
 /// <code>
 /// var replacement = r.Reconcile(oldChild, newChild, existing, rerender);
-/// if (replacement is not null &amp;&amp; !ReferenceEquals(replacement, existing))
-///     slot = replacement;
+/// if (!ReferenceEquals(replacement, existing))
+///     slot.Content = replacement;
 /// </code>
 /// </summary>
 /// <remarks>
-/// <c>Reconcile</c> takes the same arguments but returns the existing control where
-/// <c>UpdateChild</c> returned null, so the null check gains an identity check, and it unmounts a
-/// control it replaces, so an <c>UnmountChild(existing)</c> statement in the body is removed. The
-/// null check stays: <c>Reconcile</c> returns null for an empty new child, and the body was written
-/// for a control. The fix is only offered where that rewrite provably keeps the meaning: the result
-/// is read nowhere but that <c>if</c>, the existing control is a plain local or parameter (it is
-/// compared with the result), the arguments are positional (<c>Reconcile</c> names its parameters
-/// differently), and every <c>UnmountChild(existing)</c> in the block is a statement of its own in
-/// the body with no comment or directive in or around it. A conditional access
-/// (<c>r?.UpdateChild(...)</c>) is rewritten the same way and keeps its <c>?.</c>. Anywhere else the
-/// diagnostic stands without a fix.
+/// <para>
+/// <c>Reconcile</c> takes the same arguments. Where <c>UpdateChild</c> returned null it returns the
+/// existing control, unless the new child is empty: then it unmounts the old control and returns
+/// null. In every other case it returns the control the slot should hold, having unmounted the one it
+/// replaced. So the null check becomes an identity check, which also assigns null, and so empties the
+/// slot, when the child is gone, and an <c>UnmountChild(existing)</c> in the body is removed.
+/// </para>
+/// <para>
+/// The fix is only offered where that rewrite keeps the code's meaning:
+/// </para>
+/// <list type="bullet">
+/// <item>The call is <c>r.UpdateChild(...)</c> with four positional arguments. <c>Reconcile</c> names
+/// its parameters differently, and after <c>r?.</c> a null receiver would empty the slot.</item>
+/// <item>The existing control is a local or parameter that the call doesn't assign, since it is
+/// compared with the result afterwards.</item>
+/// <item>The result goes into a local read only by the <c>if</c> right after it, whose condition is
+/// <c>x is not null</c>, <c>x != null</c> or <c>null != x</c> and which has no <c>else</c>.</item>
+/// <item>Apart from <c>UnmountChild(existing)</c> statements, the body is one assignment of the result
+/// to a field, property, local or parameter. The target is reached through names and member
+/// accesses only, and can hold null.</item>
+/// <item>Each <c>UnmountChild(existing)</c> in the block is a statement of its own in the body, with
+/// no comment or directive in or around it. It goes through the reconciler the call used (the same
+/// local or parameter, or the same handler context's <c>Reconciler</c>). When the result replaces
+/// the existing control's own variable, the unmount comes first.</item>
+/// </list>
+/// <para>
+/// Anywhere else the diagnostic stands without a fix.
+/// </para>
 /// </remarks>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(ReconcilerUpdateChildCodeFix))]
 [Shared]
 public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
 {
     private const string Title = "Use Reconcile";
+
+    private const string HandlerContextNamespace = "Microsoft.UI.Reactor.Core.V1Protocol";
+    private const string ContextReconcilerProperty = "Reconciler";
 
     public override ImmutableArray<string> FixableDiagnosticIds =>
         ImmutableArray.Create(ReconcilerUpdateChildAnalyzer.DiagnosticId);
@@ -59,23 +79,20 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
 
         foreach (var diagnostic in context.Diagnostics)
         {
-            // The diagnostic sits on the method name: r.UpdateChild(...) or r?.UpdateChild(...).
+            // The diagnostic sits on the method name of a member access. After r?.UpdateChild(...),
+            // the name hangs off a member binding instead, and the fix declines that form.
             if (root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true) is not SimpleNameSyntax name)
                 continue;
-            ExpressionSyntax? member = name.Parent switch
-            {
-                MemberAccessExpressionSyntax access when access.Name == name => access,
-                MemberBindingExpressionSyntax binding => binding,
-                _ => null,
-            };
-            if (member?.Parent is not InvocationExpressionSyntax invocation || invocation.Expression != member)
+            if (name.Parent is not MemberAccessExpressionSyntax access || access.Name != name)
+                continue;
+            if (access.Parent is not InvocationExpressionSyntax invocation || invocation.Expression != access)
                 continue;
 
             semanticModel ??= await context.Document
                 .GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
             if (semanticModel is null) return;
 
-            var plan = Plan.TryCreate(semanticModel, invocation, name, context.CancellationToken);
+            var plan = Plan.TryCreate(semanticModel, invocation, access, context.CancellationToken);
             if (plan is null) continue;
 
             context.RegisterCodeFix(
@@ -124,8 +141,8 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
             return tracked;
         }
 
-        public static Plan? TryCreate(SemanticModel model, InvocationExpressionSyntax invocation, SimpleNameSyntax name,
-            CancellationToken ct)
+        public static Plan? TryCreate(SemanticModel model, InvocationExpressionSyntax invocation,
+            MemberAccessExpressionSyntax access, CancellationToken ct)
         {
             // Reconcile names its parameters differently, so only positional arguments carry over.
             var arguments = invocation.ArgumentList.Arguments;
@@ -137,20 +154,10 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
                     return null;
             }
 
-            // The existing control is compared with Reconcile's result after the call, so it has to
-            // be a plain local or parameter: re-reading anything else could see another value.
-            if (arguments[2].Expression is not IdentifierNameSyntax existing)
-                return null;
-            var existingSymbol = model.GetSymbolInfo(existing, ct).Symbol;
-            if (existingSymbol is not (ILocalSymbol or IParameterSymbol))
-                return null;
-
-            // var result = r.UpdateChild(...);, directly followed by if (result is not null) ... A
-            // conditional access (r?.UpdateChild(...)) yields null for a null receiver either way.
-            ExpressionSyntax initializer = invocation;
-            while (initializer.Parent is ConditionalAccessExpressionSyntax conditional && conditional.WhenNotNull == initializer)
-                initializer = conditional;
-            if (initializer.Parent is not EqualsValueClauseSyntax { Parent: VariableDeclaratorSyntax declarator }
+            // var result = r.UpdateChild(...);, directly followed by if (result is not null) ...
+            // without an else: an else ran whenever UpdateChild returned null, which includes a
+            // child that became empty, and that case now takes the if branch.
+            if (invocation.Parent is not EqualsValueClauseSyntax { Parent: VariableDeclaratorSyntax declarator }
                 || declarator.Parent is not VariableDeclarationSyntax { Variables.Count: 1 } declaration
                 || declaration.Parent is not LocalDeclarationStatementSyntax statement
                 || !statement.UsingKeyword.IsKind(SyntaxKind.None)
@@ -162,7 +169,19 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
             var index = block.Statements.IndexOf(statement);
             if (index + 1 >= block.Statements.Count || block.Statements[index + 1] is not IfStatementSyntax ifStatement)
                 return null;
-            if (!IsNotNullCheckOf(model, ifStatement.Condition, result, ct))
+            if (ifStatement.Else is not null || !IsNotNullCheckOf(model, ifStatement.Condition, result, ct))
+                return null;
+
+            // The existing control is compared with the result after the call, so it has to be a
+            // local or parameter that the call doesn't assign: re-reading anything else could see
+            // another value.
+            var callFlow = model.AnalyzeDataFlow(statement);
+            if (callFlow is null || !callFlow.Succeeded)
+                return null;
+            if (arguments[2].Expression is not IdentifierNameSyntax existing)
+                return null;
+            var existingSymbol = model.GetSymbolInfo(existing, ct).Symbol;
+            if (existingSymbol is null || !IsLocalTheCallLeaves(existingSymbol, callFlow))
                 return null;
 
             // Reconcile returns the existing control where UpdateChild returned null, so the result
@@ -177,25 +196,46 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
             // Reconcile unmounts the control it replaces, so an UnmountChild of it in the body would
             // run a second time. Remove it where it is a statement of its own in the body's block;
             // anywhere else in the block, decline.
+            var body = ifStatement.Statement as BlockSyntax;
+            var callReceiver = ReceiverOf(model, access.Expression, callFlow, ct);
             var unmounts = ImmutableArray.CreateBuilder<StatementSyntax>();
             foreach (var call in block.DescendantNodes().OfType<InvocationExpressionSyntax>()
                          .Where(call => IsUnmountOf(model, call, existingSymbol, ct)))
             {
-                if (call.Parent is not ExpressionStatementSyntax unmount
-                    || ifStatement.Statement is not BlockSyntax body
-                    || unmount.Parent != body)
+                if (body is null || call.Parent is not ExpressionStatementSyntax unmount || unmount.Parent != body)
                     return null;
                 // Removing the statement removes the trivia in and around it, so that has to be
                 // layout only: a comment would be lost, and an #endif before it would unbalance the file.
                 if (!IsLayoutOnly(unmount))
                     return null;
+                // Each reconciler keeps its own component and handler state, and Reconcile unmounts
+                // through the reconciler the call used, so only an unmount through that one goes.
+                // The body can't reassign it: what stays in it is one assignment of a control.
+                var unmountReceiver = ReceiverOf(model, ((MemberAccessExpressionSyntax)call.Expression).Expression, callFlow, ct);
+                if (callReceiver.IsDefault || unmountReceiver.IsDefault
+                    || !callReceiver.SequenceEqual(unmountReceiver, SymbolEqualityComparer.Default))
+                    return null;
                 unmounts.Add(unmount);
             }
-            if (unmounts.Count > 0 && ((BlockSyntax)ifStatement.Statement).Statements.Count == unmounts.Count)
+
+            // What remains of the body installs the result. Without the null check it also runs when
+            // the child is gone, so it has to be an assignment that empties the slot when given null.
+            var remaining = (body is null ? new[] { ifStatement.Statement } : body.Statements.AsEnumerable())
+                .Where(bodyStatement => !unmounts.Contains(bodyStatement))
+                .ToList();
+            if (remaining.Count != 1
+                || remaining[0] is not ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax assignment } install
+                || !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
+                || assignment.Right is not IdentifierNameSyntax assigned
+                || !SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(assigned, ct).Symbol, result)
+                || !IsClearableTarget(model, assignment.Left, result, ct))
+                return null;
+            // When the result replaces the existing control's own variable, an unmount after that
+            // assignment received the result, not the control it replaced.
+            if (SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(assignment.Left, ct).Symbol, existingSymbol)
+                && unmounts.Any(unmount => unmount.SpanStart > install.SpanStart))
                 return null;
 
-            // The condition is x is not null, x != null or null != x (IsNotNullCheckOf), all of which
-            // bind tighter than &&, so it needs no parentheses.
             ExpressionSyntax referenceEquals = SyntaxFactory.IdentifierName(nameof(object.ReferenceEquals));
             if (!BindsToObjectReferenceEquals(model, ifStatement.Condition.SpanStart))
             {
@@ -204,7 +244,7 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
                     SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.ObjectKeyword)),
                     (SimpleNameSyntax)referenceEquals);
             }
-            var identityCheck = SyntaxFactory.PrefixUnaryExpression(
+            var newCondition = SyntaxFactory.PrefixUnaryExpression(
                     SyntaxKind.LogicalNotExpression,
                     SyntaxFactory.InvocationExpression(
                         referenceEquals,
@@ -214,16 +254,8 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
                             SyntaxFactory.Argument(existing.WithoutTrivia()),
                         }))))
                 .NormalizeWhitespace();
-            var newCondition = SyntaxFactory.BinaryExpression(
-                SyntaxKind.LogicalAndExpression,
-                ifStatement.Condition.WithoutTrivia(),
-                SyntaxFactory.Token(
-                    SyntaxFactory.TriviaList(SyntaxFactory.Space),
-                    SyntaxKind.AmpersandAmpersandToken,
-                    SyntaxFactory.TriviaList(SyntaxFactory.Space)),
-                identityCheck);
 
-            return new Plan(name, ifStatement.Condition, newCondition, unmounts.ToImmutable());
+            return new Plan(access.Name, ifStatement.Condition, newCondition, unmounts.ToImmutable());
         }
 
         /// <summary><c>x is not null</c>, <c>x != null</c> or <c>null != x</c> on <paramref name="local"/>.</summary>
@@ -262,6 +294,80 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
                 return false;
             return call.ArgumentList.Arguments[0].Expression is IdentifierNameSyntax argument
                 && SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(argument, ct).Symbol, control);
+        }
+
+        /// <summary>
+        /// The symbols that name the reconciler <paramref name="receiver"/> evaluates to, when they
+        /// pin down one instance for the whole block: a local or parameter that the call doesn't
+        /// assign, or the <c>Reconciler</c> of such a local's or parameter's handler context.
+        /// Otherwise default.
+        /// </summary>
+        private static ImmutableArray<ISymbol> ReceiverOf(SemanticModel model, ExpressionSyntax receiver,
+            DataFlowAnalysis callFlow, CancellationToken ct)
+        {
+            switch (receiver)
+            {
+                case IdentifierNameSyntax name
+                    when model.GetSymbolInfo(name, ct).Symbol is { } symbol && IsLocalTheCallLeaves(symbol, callFlow):
+                    return ImmutableArray.Create(symbol);
+                case MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax owner } member
+                    when member.IsKind(SyntaxKind.SimpleMemberAccessExpression)
+                        && model.GetSymbolInfo(owner, ct).Symbol is { } context
+                        && IsLocalTheCallLeaves(context, callFlow)
+                        && model.GetSymbolInfo(member, ct).Symbol is IPropertySymbol { Name: ContextReconcilerProperty } property
+                        && IsHandlerContext(property.ContainingType):
+                    return ImmutableArray.Create(context, property);
+                default:
+                    return default;
+            }
+        }
+
+        /// <summary><c>MountContext</c>, <c>UpdateContext</c> or <c>UnmountContext</c>: each holds one reconciler in a readonly field.</summary>
+        private static bool IsHandlerContext(INamedTypeSymbol type) =>
+            type.Name is "MountContext" or "UpdateContext" or "UnmountContext"
+            && type.ContainingNamespace?.ToDisplayString() == HandlerContextNamespace;
+
+        /// <summary>A local or parameter that the <c>UpdateChild</c> statement doesn't assign.</summary>
+        private static bool IsLocalTheCallLeaves(ISymbol symbol, DataFlowAnalysis callFlow) =>
+            symbol is (ILocalSymbol or IParameterSymbol) && !IsWritten(callFlow, symbol);
+
+        private static bool IsWritten(DataFlowAnalysis flow, ISymbol symbol) =>
+            flow.WrittenInside.Any(written => SymbolEqualityComparer.Default.Equals(written, symbol));
+
+        /// <summary>
+        /// True when <paramref name="target"/> is a field, property, local or parameter reached
+        /// through names and member accesses, not through <paramref name="result"/>, that can be
+        /// assigned null without a nullable warning.
+        /// </summary>
+        private static bool IsClearableTarget(SemanticModel model, ExpressionSyntax target, ILocalSymbol result,
+            CancellationToken ct)
+        {
+            var node = target;
+            while (node is MemberAccessExpressionSyntax member && member.IsKind(SyntaxKind.SimpleMemberAccessExpression))
+                node = member.Expression;
+            if (node is IdentifierNameSyntax rootName)
+            {
+                if (SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(rootName, ct).Symbol, result))
+                    return false;
+            }
+            else if (node is not ThisExpressionSyntax)
+            {
+                return false;
+            }
+
+            var type = model.GetSymbolInfo(target, ct).Symbol switch
+            {
+                IFieldSymbol field => field.Type,
+                IPropertySymbol property => property.Type,
+                ILocalSymbol local => local.Type,
+                IParameterSymbol parameter => parameter.Type,
+                _ => null,
+            };
+            if (type is null)
+                return false;
+            return !(type.IsReferenceType
+                && type.NullableAnnotation == NullableAnnotation.NotAnnotated
+                && model.GetNullableContext(target.SpanStart).WarningsEnabled());
         }
 
         /// <summary>True when the only trivia in and around <paramref name="statement"/> is whitespace and line breaks.</summary>

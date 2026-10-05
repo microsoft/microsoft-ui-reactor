@@ -18,11 +18,15 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 /// </summary>
 public class ReconcilerUpdateChildAnalyzerTests
 {
-    // Reconciler's members mirror Reactor's nullable signatures.
+    // Reconciler's members mirror Reactor's nullable signatures, and the handler context mirrors
+    // Reactor's: a readonly ref struct in V1Protocol that holds one Reconciler.
     private const string ReactorStub = @"#nullable enable
 namespace Microsoft.UI.Xaml
 {
-    public class UIElement { }
+    public class UIElement
+    {
+        public object? Tag { get; set; }
+    }
 }
 
 namespace Microsoft.UI.Reactor.Core
@@ -38,16 +42,25 @@ namespace Microsoft.UI.Reactor.Core
         public void UnmountChild(UIElement control) { }
     }
 
-    public sealed class UpdateContext
-    {
-        public Reconciler Reconciler { get; } = new Reconciler();
-        public System.Action RequestRerender { get; } = () => { };
-    }
-
     // Decoy: the namespace and method name of Reconciler.UpdateChild on another type.
     public sealed class ElementTree
     {
         public UIElement UpdateChild(Element oldEl, Element newEl, UIElement control, System.Action requestRerender) => control;
+    }
+}
+
+namespace Microsoft.UI.Reactor.Core.V1Protocol
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public readonly ref struct UpdateContext
+    {
+        private readonly Reconciler _reconciler;
+
+        public UpdateContext(Reconciler reconciler) { _reconciler = reconciler; }
+
+        public Reconciler Reconciler => _reconciler;
+        public System.Action RequestRerender => () => { };
     }
 }
 
@@ -69,6 +82,7 @@ namespace ThirdParty
     private const string Usings = @"
 using System;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Xaml;
 
 class Slot { public UIElement Content; }
@@ -212,6 +226,8 @@ namespace Microsoft.UI.Reactor.Core
     [Fact]
     public async Task CodeFix_Rewrites_The_Common_Shape()
     {
+        // Reconcile returns null when the child is gone, and the identity check then assigns it,
+        // which empties the slot.
         await VerifyFixAsync(@"
 class Host
 {
@@ -229,41 +245,17 @@ class Host
     {
         var existing = slot.Content;
         var replacement = r.Reconcile(oldEl, newEl, existing, rerender);
-        if (replacement is not null && !ReferenceEquals(replacement, existing))
+        if (!ReferenceEquals(replacement, existing))
             slot.Content = replacement;
     }
 }");
     }
 
     [Fact]
-    public async Task CodeFix_Rewrites_A_Conditional_Access()
+    public async Task CodeFix_Removes_A_Manual_Unmount_Through_The_Handler_Context()
     {
-        // A null receiver yields null from either call, so the ?. stays.
-        await VerifyFixAsync(@"
-class Host
-{
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
-    {
-        var replacement = r?.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
-        if (replacement is not null)
-            slot.Content = replacement;
-    }
-}", @"
-class Host
-{
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
-    {
-        var replacement = r?.Reconcile(oldEl, newEl, existing, rerender);
-        if (replacement is not null && !ReferenceEquals(replacement, existing))
-            slot.Content = replacement;
-    }
-}");
-    }
-
-    [Fact]
-    public async Task CodeFix_Keeps_A_NotEquals_Check_And_Removes_The_Manual_Unmount()
-    {
-        // Reconcile unmounts the control it replaces, so the body's own UnmountChild goes.
+        // Reconcile unmounts the control it replaces through the same reconciler, so the body's
+        // own UnmountChild goes.
         await VerifyFixAsync(@"
 class Handler
 {
@@ -282,7 +274,7 @@ class Handler
     void Update(UpdateContext ctx, Element oldEl, Element newEl, Slot slot, UIElement existing)
     {
         var replacement = ctx.Reconciler.Reconcile(oldEl, newEl, existing, ctx.RequestRerender);
-        if (null != replacement && !ReferenceEquals(replacement, existing))
+        if (!ReferenceEquals(replacement, existing))
         {
             slot.Content = replacement;
         }
@@ -291,36 +283,63 @@ class Handler
     }
 
     [Fact]
-    public async Task CodeFix_Keeps_Unmounts_Of_Other_Controls()
+    public async Task CodeFix_Removes_A_Manual_Unmount_Before_The_Existing_Control_Is_Replaced()
     {
-        // Only Reconciler.UnmountChild of the existing control duplicates what Reconcile does.
+        // The result goes into the existing control's own variable, after the unmount.
         await VerifyFixAsync(@"
 class Host
 {
-    void Update(Reconciler r, ThirdParty.Reconciler other, Element oldEl, Element newEl, Slot slot,
-        UIElement existing, UIElement sibling, Action rerender)
+    UIElement Update(Reconciler r, Element oldEl, Element newEl, UIElement existing, Action rerender)
     {
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
-        if (replacement is not null)
+        if (replacement != null)
         {
-            r.UnmountChild(sibling);
-            other.UnmountChild(existing);
-            slot.Content = replacement;
+            r.UnmountChild(existing);
+            existing = replacement;
         }
+        return existing;
     }
 }", @"
 class Host
 {
-    void Update(Reconciler r, ThirdParty.Reconciler other, Element oldEl, Element newEl, Slot slot,
-        UIElement existing, UIElement sibling, Action rerender)
+    UIElement Update(Reconciler r, Element oldEl, Element newEl, UIElement existing, Action rerender)
     {
         var replacement = r.Reconcile(oldEl, newEl, existing, rerender);
-        if (replacement is not null && !ReferenceEquals(replacement, existing))
+        if (!ReferenceEquals(replacement, existing))
         {
-            r.UnmountChild(sibling);
-            other.UnmountChild(existing);
-            slot.Content = replacement;
+            existing = replacement;
         }
+        return existing;
+    }
+}");
+    }
+
+    [Fact]
+    public async Task CodeFix_Rewrites_A_Nullable_Slot()
+    {
+        await VerifyFixAsync(@"
+#nullable enable
+class NullableSlot { public UIElement? Content; }
+
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, NullableSlot slot, UIElement existing, Action rerender)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+            slot.Content = replacement;
+    }
+}", @"
+#nullable enable
+class NullableSlot { public UIElement? Content; }
+
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, NullableSlot slot, UIElement existing, Action rerender)
+    {
+        var replacement = r.Reconcile(oldEl, newEl, existing, rerender);
+        if (!ReferenceEquals(replacement, existing))
+            slot.Content = replacement;
     }
 }");
     }
@@ -347,10 +366,27 @@ class Host
     void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
     {
         var replacement = r.Reconcile(oldEl, newEl, existing, rerender);
-        if (replacement != null && !object.ReferenceEquals(replacement, existing))
+        if (!object.ReferenceEquals(replacement, existing))
             slot.Content = replacement;
     }
 }");
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_For_A_Conditional_Access()
+    {
+        // Without the null check, a null receiver would empty the slot, which UpdateChild never did.
+        const string code = @"
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    {
+        var replacement = r?.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+            slot.Content = replacement;
+    }
+}";
+        await VerifyFixAsync(code, code);
     }
 
     [Fact]
@@ -425,6 +461,23 @@ class Host
     }
 
     [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Call_Writes_The_Existing_Control()
+    {
+        // The rewritten condition reads the existing control after the call.
+        const string code = @"
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, () => existing = null);
+        if (replacement is not null)
+            slot.Content = replacement;
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
     public async Task CodeFix_Not_Offered_Without_A_Following_Null_Check()
     {
         const string code = @"
@@ -441,20 +494,151 @@ class Host
     }
 
     [Fact]
-    public async Task CodeFix_Not_Offered_When_The_Manual_Unmount_Is_Nested()
+    public async Task CodeFix_Not_Offered_With_An_Else()
+    {
+        // The else ran whenever UpdateChild returned null, which includes a child that became
+        // empty; that case now takes the if branch.
+        const string code = @"
+class Host
+{
+    int _patched;
+
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+            slot.Content = replacement;
+        else
+            _patched++;
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Body_Does_More_Than_Install()
+    {
+        // Without the null check, the rest of the body would also run when the child is gone.
+        const string code = @"
+class Host
+{
+    int _swaps;
+
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+        {
+            slot.Content = replacement;
+            _swaps++;
+        }
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Body_Assigns_Something_Else()
+    {
+        // Only installing the result itself empties the slot when the result is null.
+        const string code = @"
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, UIElement placeholder, Action rerender)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+            slot.Content = placeholder;
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Install_Calls_A_Method()
+    {
+        // Passing null to a method doesn't empty a slot.
+        const string code = @"
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, System.Collections.Generic.List<UIElement> children, UIElement existing, Action rerender)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+            children.Add(replacement);
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Install_Writes_An_Indexer()
+    {
+        // An indexer usually writes into a collection such as Panel.Children, where null isn't an
+        // empty slot.
+        const string code = @"
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, System.Collections.Generic.List<UIElement> children, UIElement existing, Action rerender)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+            children[0] = replacement;
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Install_Writes_Through_The_Result()
+    {
+        // With the result null, the assignment would throw.
+        const string code = @"
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, UIElement existing, Action rerender)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+            replacement.Tag = replacement;
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_For_A_Non_Nullable_Slot()
+    {
+        // Assigning a result that can now be null would add a nullable warning.
+        const string code = @"
+#nullable enable
+class StrictSlot { public UIElement Content = null!; }
+
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, StrictSlot slot, UIElement existing, Action rerender)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+            slot.Content = replacement;
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_An_Unmount_Sits_Outside_The_Body()
     {
         // Only an UnmountChild that is a statement of its own in the body can be removed safely.
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender, bool flag)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
     {
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement is not null)
-        {
-            if (flag) r.UnmountChild(existing);
             slot.Content = replacement;
-        }
+        r.UnmountChild(existing);
     }
 }";
         await VerifyFixAsync(code, code);
@@ -463,7 +647,7 @@ class Host
     [Fact]
     public async Task CodeFix_Not_Offered_When_The_Body_Only_Unmounts()
     {
-        // Removing the unmount would leave an empty body around a result nothing installs.
+        // Removing the unmount would leave nothing that installs the result.
         const string code = @"
 class Host
 {
@@ -474,6 +658,88 @@ class Host
         {
             r.UnmountChild(existing);
         }
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Body_Unmounts_Another_Control()
+    {
+        // Only Reconciler.UnmountChild of the existing control duplicates what Reconcile does.
+        const string code = @"
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, UIElement sibling, Action rerender)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+        {
+            r.UnmountChild(sibling);
+            slot.Content = replacement;
+        }
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Unmount_Goes_Through_Another_Reconciler()
+    {
+        // Each reconciler keeps its own component and handler state, and Reconcile unmounts
+        // through r.
+        const string code = @"
+class Host
+{
+    void Update(Reconciler r, Reconciler other, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+        {
+            other.UnmountChild(existing);
+            slot.Content = replacement;
+        }
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Call_Writes_The_Reconciler()
+    {
+        // The unmount is no longer known to go through the reconciler the call used.
+        const string code = @"
+class Host
+{
+    void Update(Reconciler r, Reconciler other, Element oldEl, Element newEl, Slot slot, UIElement existing)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, () => r = other);
+        if (replacement is not null)
+        {
+            r.UnmountChild(existing);
+            slot.Content = replacement;
+        }
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Existing_Control_Is_Replaced_Before_The_Unmount()
+    {
+        // That unmount received the result, not the control it replaced.
+        const string code = @"
+class Host
+{
+    UIElement Update(Reconciler r, Element oldEl, Element newEl, UIElement existing, Action rerender)
+    {
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+        {
+            existing = replacement;
+            r.UnmountChild(existing);
+        }
+        return existing;
     }
 }";
         await VerifyFixAsync(code, code);
@@ -513,10 +779,9 @@ class Host
         if (replacement is not null)
         {
 #if true
-            Console.WriteLine(""replaced"");
+            slot.Content = replacement;
 #endif
             r.UnmountChild(existing);
-            slot.Content = replacement;
         }
     }
 }";
