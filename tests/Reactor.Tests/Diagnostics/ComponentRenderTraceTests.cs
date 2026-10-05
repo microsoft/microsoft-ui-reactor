@@ -131,20 +131,20 @@ public sealed class ComponentRenderTraceTests
     {
         var registry = NewRegistry();
         var alive = new object();
+        var doomed = new object();
         registry.Track(50, alive, mapControlToId: true);
-        TrackGarbage(registry, 51);
+        registry.Track(51, doomed, mapControlToId: true);
 
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        // Stands in for the control being collected, without forcing a GC.
+        registry.ExpireForTests(51);
+        Assert.Equal(2, registry.CountForTests);
         registry.PruneForTests();
 
         Assert.Equal(1, registry.CountForTests);
         Assert.Same(alive, registry.Resolve(50));
-        GC.KeepAlive(alive);
+        Assert.Null(registry.Resolve(51));
     }
 
-    [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     // Headless stand-in for the runtime's ReactorState slot: one id per object identity.
     private static ComponentControlRegistry<object> NewRegistry()
     {
@@ -153,7 +153,4 @@ public sealed class ComponentRenderTraceTests
             c => slots.TryGetValue(c, out var box) ? box.Value : 0,
             (c, id) => slots.GetValue(c, static _ => new global::System.Runtime.CompilerServices.StrongBox<long>()).Value = id);
     }
-
-    private static void TrackGarbage(ComponentControlRegistry<object> registry, long id)
-        => registry.Track(id, new object(), mapControlToId: true);
 }

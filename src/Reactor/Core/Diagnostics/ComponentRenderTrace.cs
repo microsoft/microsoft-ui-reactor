@@ -198,6 +198,15 @@ internal sealed class ComponentControlRegistry<TControl> where TControl : class
         lock (_gate) Prune();
     }
 
+    /// <summary>Clears the weak target of <paramref name="id"/>, as if its control had been collected.</summary>
+    internal void ExpireForTests(long id)
+    {
+        lock (_gate)
+        {
+            if (_byId.TryGetValue(id, out var weak)) weak.SetTarget(null!);
+        }
+    }
+
     private void Prune()
     {
         List<long>? dead = null;

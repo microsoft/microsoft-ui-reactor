@@ -29,11 +29,11 @@ public sealed class ColumnTests : IDisposable
 
     private static string SourceLine(int lineNumber)
     {
+        string relative = global::System.IO.Path.Join("tests", "Reactor.SourceMap.Tests", "ColumnTests.cs");
         var dir = new global::System.IO.DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            var candidate = global::System.IO.Path.Combine(
-                dir.FullName, "tests", "Reactor.SourceMap.Tests", "ColumnTests.cs");
+            var candidate = global::System.IO.Path.Join(dir.FullName, relative);
             if (global::System.IO.File.Exists(candidate))
                 return global::System.IO.File.ReadAllLines(candidate)[lineNumber - 1];
             dir = dir.Parent;
