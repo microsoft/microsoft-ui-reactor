@@ -6,10 +6,10 @@ using System.Text.Json.Nodes;
 namespace Microsoft.UI.Reactor.Cli.Docs;
 
 /// <summary>
-/// Captures screenshots of a running Reactor doc app with the winapp CLI.
+/// Captures screenshots of a running Reactor doc app with the winapp UI Automation library.
 /// Launches the app with <c>--preview --vscode</c> so the in-app preview host can switch
 /// between the manifest's components (<c>POST /preview</c>), waits for the startup delay,
-/// then captures the window's client area with <c>winapp ui screenshot</c>
+/// then captures the window's client area with Windows Graphics Capture
 /// (<see cref="WinAppCapture"/>).
 /// </summary>
 internal static class ScreenshotCapture
@@ -107,10 +107,10 @@ internal static class ScreenshotCapture
             return new CaptureResult(0, screenshots.Count);
         }
 
-        var winAppExe = WinAppCapture.ResolveWinAppExe(Environment.GetEnvironmentVariable, File.Exists);
-        if (winAppExe is null)
+        var windowCapture = WinAppCapture.CreateWindowCapture();
+        if (!windowCapture.IsFrameCaptureSupported)
         {
-            Console.Error.WriteLine($"    ✗ winapp CLI not found. {WinAppCapture.InstallHint}");
+            Console.Error.WriteLine($"    ✗ {WinAppCapture.GraphicsCaptureUnavailable}");
             return new CaptureResult(0, screenshots.Count);
         }
 
@@ -224,7 +224,7 @@ internal static class ScreenshotCapture
                     // A cold window's first frame is often still blank; keep capturing
                     // until one has content or the deadline expires (issue #989).
                     var frameBytes = await WinAppCapture.CaptureUntilContent(
-                        ct => WinAppCapture.CaptureClientAreaAsync(winAppExe, hwnd, ct),
+                        ct => WinAppCapture.CaptureClientAreaAsync(windowCapture, hwnd, ct),
                         TimeSpan.FromSeconds(5));
                     if (frameBytes.Length == 0)
                     {

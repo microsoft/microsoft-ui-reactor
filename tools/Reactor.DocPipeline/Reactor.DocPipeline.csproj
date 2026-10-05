@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The documentation pipeline (compile, check-tier, diagrams). It is a contributor tool for this
+    repository only, so it is not part of the shipped `mur` dotnet tool and is never packed. Run it
+    from the repository root with `dotnet run` on this project; docs/contributing/doc-pipeline.md
+    has the commands.
+    Being out of `mur` lets it use a Windows TFM: `PackAsTool` rejects TargetPlatformIdentifier
+    (NETSDK1146), so `mur` must stay plain net10.0. The Windows 10 19041+ TFM is what selects the
+    Windows Graphics Capture build of the winapp UI Automation library, which screenshot capture
+    uses in-process (see WinAppCapture.cs).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <AssemblyName>Reactor.DocPipeline</AssemblyName>
+    <!-- Kept from its time as `mur docs` so the move stays a pure move. -->
+    <RootNamespace>Microsoft.UI.Reactor.Cli.Docs</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Reactor.DocPipeline.Tests" />
+    <InternalsVisibleTo Include="Reactor.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="System.Drawing.Common" />
+    <PackageReference Include="YamlDotNet" />
+    <PackageReference Include="Vecc.YamlDotNet.Analyzers.StaticGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

@@ -1,12 +1,20 @@
 # Doc Pipeline — Contributor Guide
 
-This page covers the tooling that powers `mur docs compile` and the
-authoring conventions you need to follow when changing docs. It is the
-single source for spec 041's Phase-1 install / setup decisions.
+This page covers the tooling that powers the doc pipeline
+(`tools/Reactor.DocPipeline`) and the authoring conventions you need to follow when
+changing docs. It is the single source for spec 041's Phase-1 install / setup decisions.
 
 > **Heads-up:** `docs/guide/*.md` is generated output. Never hand-edit
 > it. Edit `docs/_pipeline/templates/<topic>.md.dt` (and supporting
-> doc apps, diagrams, manifests) and run `mur docs compile`.
+> doc apps, diagrams, manifests) and run
+> `dotnet run --project tools/Reactor.DocPipeline -- compile`.
+
+The pipeline used to be `mur docs`. It is a contributor tool for this repository only, so
+it is no longer part of the shipped `mur` dotnet tool (which `bootstrap.ps1` installs):
+run it with `dotnet run` from the repository root, as CI does. `mur docs` now prints the
+equivalent `dotnet run` command and exits 1. Being out of `mur` is also what lets it target
+Windows and capture screenshots in-process (a dotnet tool cannot use a Windows TFM;
+`PackAsTool` rejects it with NETSDK1146).
 
 ## 1. Prerequisites
 
@@ -14,19 +22,18 @@ The doc pipeline needs:
 
 | Tool             | Purpose                                | Required for                |
 |------------------|----------------------------------------|-----------------------------|
-| .NET 10 SDK      | Building the `mur` CLI + doc apps      | Always                      |
+| .NET 10 SDK      | Building the pipeline + doc apps       | Always                      |
 | Windows App SDK  | Doc apps render WinUI controls         | Screenshot capture          |
-| winapp CLI       | `winapp ui screenshot` captures the doc app window | Screenshot capture |
+| Windows Graphics Capture | Captures the doc app window (Windows 10 1903+, interactive desktop) | Screenshot capture |
 | Node.js 20+      | Hosts `mermaid-cli`                    | `.mmd` → `.svg` diagrams    |
 | `mermaid-cli`    | CLI front-end for Mermaid              | `.mmd` → `.svg` diagrams    |
 | Chromium / Edge  | Pulled in by Puppeteer for `mmdc`      | `.mmd` → `.svg` diagrams    |
 
-Screenshot capture uses the **winapp CLI** (`winapp ui screenshot`). `./bootstrap.ps1`
-installs it (`winget install Microsoft.WinAppCli`); `mur` finds it the same way the E2E
-tests do — `$REACTOR_WINAPP_EXE`, then `%LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe`,
-then `PATH` — and a capture run without it fails every requested screenshot with an
-install hint, leaving the committed images untouched. Like the E2E tests, the pipeline
-does not pin a winapp version.
+Screenshot capture uses the winapp UI Automation library
+(`Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation`, the engine behind `winapp ui`)
+in-process, so it needs no separate install. It uses Windows Graphics Capture only. On a
+machine where Graphics Capture is unavailable, a capture run fails every requested
+screenshot with that explanation and leaves the committed images untouched.
 
 Doc apps and screenshots work without Mermaid. Mermaid only enters
 the pipeline when a topic has at least one `*.mmd` file in
@@ -57,7 +64,7 @@ mmdc -i sample.mmd -o sample.svg
 
 ### 2.2 GitHub Actions (`windows-latest`)
 
-Add this step before `mur docs compile`:
+Add this step before `dotnet run --project tools/Reactor.DocPipeline -- compile`:
 
 ```yaml
 - name: Install mermaid-cli
@@ -114,7 +121,7 @@ generated one from the template's perspective.
 
 > **Version substitution.** Never hardcode the public package version
 > (e.g. `0.1.0-preview.11`) in a guide template. Write the `{{reactorVersion}}`
-> token instead; `mur docs compile` replaces it with `<ReactorPublicVersion>`
+> token instead; `dotnet run --project tools/Reactor.DocPipeline -- compile` replaces it with `<ReactorPublicVersion>`
 > read from the root `Directory.Build.props` (via `VersionSource`, a committed
 > file read — never a live NuGet lookup, so the output stays deterministic and
 > the CI freshness gate can't false-fail when a new version publishes). That
@@ -122,35 +129,35 @@ generated one from the template's perspective.
 > derives its `MicrosoftUIReactorVersion` fallback from the same property, so
 > the docs and the scaffolded template share a single literal. `README.md` is
 > deliberately version-agnostic (it names no version and links to NuGet /
-> Releases) and is **not** touched by `mur docs compile`.
+> Releases) and is **not** touched by `dotnet run --project tools/Reactor.DocPipeline -- compile`.
 
 ## 4. Running the pipeline
 
 ```powershell
 # Full compile (build doc apps, capture screenshots, extract, assemble)
-mur docs compile
+dotnet run --project tools/Reactor.DocPipeline -- compile
 
 # Lint only — fast, no doc-app build or screenshot capture
-mur docs compile --validate-only
+dotnet run --project tools/Reactor.DocPipeline -- compile --validate-only
 
 # Lint a single tier (e.g. while authoring Comprehensive pages)
-mur docs compile --validate-only --tier=comprehensive
+dotnet run --project tools/Reactor.DocPipeline -- compile --validate-only --tier=comprehensive
 
 # Tier-lint only — narrower than --validate-only (no cross-link
 # analyzer, no reference discovery). Best inner loop while iterating
 # on a tier upgrade.
-mur docs check-tier
-mur docs check-tier --topic hooks
-mur docs check-tier --tier solid --ci
+dotnet run --project tools/Reactor.DocPipeline -- check-tier
+dotnet run --project tools/Reactor.DocPipeline -- check-tier --topic hooks
+dotnet run --project tools/Reactor.DocPipeline -- check-tier --tier solid --ci
 
 # Skip costly phases for inner-loop iteration
-mur docs compile --skip-screenshots --skip-diagrams
+dotnet run --project tools/Reactor.DocPipeline -- compile --skip-screenshots --skip-diagrams
 
 # Render diagrams only (fast Mermaid loop)
-mur docs render-diagrams --topic architecture-overview
+dotnet run --project tools/Reactor.DocPipeline -- render-diagrams --topic architecture-overview
 
 # Scaffold a new Mermaid diagram
-mur docs new-diagram architecture-overview overview
+dotnet run --project tools/Reactor.DocPipeline -- new-diagram architecture-overview overview
 ```
 
 ### Which `Reactor.xml` the reference phase reads
@@ -248,7 +255,7 @@ last contributor; if it jumped by ~20%, you did not.
 
 ##### When 150% is not your primary display
 
-Capture is `winapp ui screenshot` of the live window, cropped to its client area, in
+Capture is a Windows Graphics Capture frame of the live window, cropped to its client area, in
 *physical* pixels, so the scale
 baked into a PNG is the DPI of whichever monitor the window lands on — and a doc
 app's window opens on the **primary** display. If your 150% monitor is not the
@@ -257,7 +264,7 @@ primary one (and you cannot change that, e.g. over a remote session), set
 
 ```powershell
 $env:REACTOR_DOCS_CAPTURE_ORIGIN = '2600,0'
-mur docs compile --screenshots-only
+dotnet run --project tools/Reactor.DocPipeline -- compile --screenshots-only
 ```
 
 The harness forwards that to each doc app as `--x` / `--y`, which the devtools
@@ -265,25 +272,25 @@ preview host applies as the window's start position.
 
 ##### How a capture works
 
-1. `mur` launches the doc app with `dotnet run -- --preview --vscode` at the manifest's
-   size. The in-app preview host (`Microsoft.UI.Reactor.Devtools`) renders the app and
-   switches between the manifest's components (`POST /preview`) — that part is unchanged.
-2. After the startup delay, `mur` finds the app's WinUI window (by owning process: the
+1. The pipeline launches the doc app with `dotnet run -- --preview --vscode` at the
+   manifest's size. The in-app preview host (`Microsoft.UI.Reactor.Devtools`) renders the
+   app and switches between the manifest's components (`POST /preview`) — that part is
+   unchanged.
+2. After the startup delay, it finds the app's WinUI window (by owning process: the
    app is a child of `dotnet run`).
 3. For each screenshot it switches component, waits 1 s for layout and transitions to
-   settle, and runs `winapp ui screenshot -w <hwnd> -o <tmp> --json`. It never passes
-   `--focus` or `--capture-screen`, and winapp's normal path (Windows Graphics Capture)
-   does not activate the window, so capture does not take input focus — you can keep using
-   the desktop while it runs (the windows still appear). If Windows Graphics Capture fails,
-   winapp silently falls back to `PrintWindow` and, when that frame is blank, brings the
-   window to the foreground to retry; winapp has no option to turn that off. `mur`
-   recognizes a fallback capture by its size and fails that screenshot with an explanation
-   (committed image untouched) rather than cropping it wrong.
-4. winapp returns the window's visible frame, title bar included. `mur` crops it to the
-   client area, so images keep the old framing, and squares the window's rounded bottom
-   corners, which Windows 11 composes into the capture but the old `PrintWindow` capture
-   did not have (left as is, the corner arcs read as content and content-crop would keep
-   the whole window).
+   settle, and captures the window in-process with the winapp UI Automation library's
+   Windows Graphics Capture frame grabber. Graphics Capture never activates the window, so
+   capture does not take input focus — you can keep using the desktop while it runs (the
+   windows still appear, and Windows may draw a capture border around them). The
+   library's one-shot screenshot API is deliberately not used: when Graphics Capture fails
+   it falls back to `PrintWindow` and can bring the window to the foreground. Here a
+   failure fails that screenshot instead (committed image untouched).
+4. Graphics Capture returns the window's visible frame, title bar included. The pipeline
+   crops it to the client area, so images keep the old framing, and squares the window's
+   rounded bottom corners, which Windows 11 composes into the capture but the old
+   `PrintWindow` capture did not have (left as is, the corner arcs read as content and
+   content-crop would keep the whole window).
 5. A blank first frame is captured again until it has content, for up to 5 s, as before
    (issue #989), and then the usual `ImageProcessor` crop, border and shadow apply.
 
@@ -368,10 +375,10 @@ regenerate a topic with:
 
 ```powershell
 # one topic
-dotnet run --project src/Reactor.Cli -- docs compile --topic layout
+dotnet run --project tools/Reactor.DocPipeline -- compile --topic layout
 
 # one image (the ref must belong to --topic, or omit --topic entirely)
-dotnet run --project src/Reactor.Cli -- docs compile --screenshots layout/card
+dotnet run --project tools/Reactor.DocPipeline -- compile --screenshots layout/card
 ```
 
 Capture needs an **interactive desktop** — it launches each doc app and
@@ -417,7 +424,7 @@ narrower half of a two-part claim, which is why the wording here is deliberately
 specific about which writes are caught.
 
 Capture itself needs an **interactive desktop**. It launches each doc app,
-waits for the preview host, and captures the window with `winapp ui screenshot`.
+waits for the preview host, and captures the window with Windows Graphics Capture.
 In a headless, locked, or RDP-disconnected session the app window never paints and
 the capture comes back as a solid-white (or transparent) surface. Historically that surface was
 written straight over the committed screenshot as a ~3 KB white rectangle, and
@@ -571,8 +578,8 @@ under `docs/guide/images/` before committing.
 
 ## 5. Tier-lint diagnostic codes
 
-The validator emits diagnostics from `mur docs compile --validate-only`
-(and the narrower `mur docs check-tier`) to stderr. Each is
+The validator emits diagnostics from `dotnet run --project tools/Reactor.DocPipeline -- compile --validate-only`
+(and the narrower `dotnet run --project tools/Reactor.DocPipeline -- check-tier`) to stderr. Each is
 `<file>:<line> <CODE>: <message>` so editors can parse them as build
 errors. `check-tier` runs only the §11 codes in the table below; it
 does not run the cross-link analyzer (`REACTOR_DOC_XLINK_001`) or
@@ -634,10 +641,10 @@ also tracks this role.
 
 **Workflow.**
 
-1. Run `mur docs compile --validate-only --ci` against a clean clone.
+1. Run `dotnet run --project tools/Reactor.DocPipeline -- compile --validate-only --ci` against a clean clone.
    Capture the full output. Errors block other audit work — fix them
    first.
-2. Run `mur docs check-tier` once with `--tier comprehensive` and once
+2. Run `dotnet run --project tools/Reactor.DocPipeline -- check-tier` once with `--tier comprehensive` and once
    with `--tier solid`. Read every finding — including W-level
    warnings the CI gate currently ignores (e.g. W001 winui-ref noise).
    Treat each as a small "should this still be at this tier?"
@@ -668,12 +675,12 @@ For inner-loop iteration during the audit, the local commands in §8
 
 ## 8. Tier-drift CI gate (spec 041 §5.2)
 
-The `docs-check-tier` job in `.github/workflows/ci.yml` runs `mur docs
-check-tier` on every PR that changes a file under any of:
+The `docs-check-tier` job in `.github/workflows/ci.yml` runs
+`dotnet run --project tools/Reactor.DocPipeline -- check-tier` on every PR that changes a file under any of:
 
 - `docs/_pipeline/templates/` — page templates
 - `docs/_pipeline/apps/` — doc apps backing snippets / screenshots
-- `src/Reactor.Cli/Docs/` — the doc-pipeline CLI itself
+- `tools/Reactor.DocPipeline/` — the doc pipeline itself
 
 It is intentionally narrower than the `docs-compile` job: no doc-app
 build, no screenshot capture, no diagram rendering, no reference
@@ -709,14 +716,14 @@ with its §11 structural checklist.
 
 ```powershell
 # Same flags as CI:
-mur docs check-tier
+dotnet run --project tools/Reactor.DocPipeline -- check-tier
 
 # Author iteration loop while fixing a finding:
-mur docs check-tier --topic <name>
+dotnet run --project tools/Reactor.DocPipeline -- check-tier --topic <name>
 
 # Tier-targeted lint pass (e.g. while shepherding several Solid pages
 # toward Comprehensive):
-mur docs check-tier --tier solid
+dotnet run --project tools/Reactor.DocPipeline -- check-tier --tier solid
 ```
 
 ## 9. Doc-snippet analyzer gate
@@ -795,7 +802,7 @@ git status --porcelain --untracked-files=all -- docs/guide
 Non-empty output fails the PR. The fix is never to edit the reported file:
 
 ```powershell
-dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots
+dotnet run --project tools/Reactor.DocPipeline -- compile --no-screenshots
 ```
 
 then commit the result.
@@ -834,8 +841,8 @@ is the defect it was added to fix, one level up.
 There is a third way a compile can exit 0 without regenerating, and it is
 **not** checked here on purpose. Phase 5.7 prints its header and then bails when
 `Reactor.xml` or `reference-map.yaml` is missing (see *Which `Reactor.xml` the
-reference phase reads*), leaving ~117 reference pages unwritten. `mur docs
-compile --ci` now **returns non-zero** for that, so the compile step catches it
+reference phase reads*), leaving ~117 reference pages unwritten. The pipeline's
+`compile --ci` now **returns non-zero** for that, so the compile step catches it
 and the gate never sees it. The first version of this gate grepped stdout for
 `Reactor.xml not found` instead, which was both the wrong owner and the wrong
 direction of failure: reword the message in `CompileCommand.cs` and the grep

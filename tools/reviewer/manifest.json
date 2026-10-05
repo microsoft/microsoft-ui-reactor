@@ -354,14 +354,14 @@
       "id": "security-batch-4",
       "agent": "security",
       "files": [
-        "src/Reactor.Cli/Docs/CompileCommand.cs",
-        "src/Reactor.Cli/Docs/DocAssembler.cs",
-        "src/Reactor.Cli/Docs/DocsCommand.cs",
-        "src/Reactor.Cli/Docs/ImageProcessor.cs",
-        "src/Reactor.Cli/Docs/ManifestParser.cs",
-        "src/Reactor.Cli/Docs/ScreenshotCapture.cs",
-        "src/Reactor.Cli/Docs/SnippetExtractor.cs",
-        "src/Reactor.Cli/Docs/TemplateParser.cs"
+        "tools/Reactor.DocPipeline/CompileCommand.cs",
+        "tools/Reactor.DocPipeline/DocAssembler.cs",
+        "tools/Reactor.DocPipeline/DocsCommand.cs",
+        "tools/Reactor.DocPipeline/ImageProcessor.cs",
+        "tools/Reactor.DocPipeline/ManifestParser.cs",
+        "tools/Reactor.DocPipeline/ScreenshotCapture.cs",
+        "tools/Reactor.DocPipeline/SnippetExtractor.cs",
+        "tools/Reactor.DocPipeline/TemplateParser.cs"
       ],
       "description": "CLI docs toolchain \u2014 file I/O, image processing, process invocation"
     },
@@ -1090,11 +1090,11 @@
         "src/Reactor.Cli/Loc/PruneCommand.cs",
         "src/Reactor.Cli/Loc/StatusCommand.cs",
         "src/Reactor.Cli/Loc/ValidateCommand.cs",
-        "src/Reactor.Cli/Docs/DocsCommand.cs",
-        "src/Reactor.Cli/Docs/CompileCommand.cs",
-        "src/Reactor.Cli/Docs/DocAssembler.cs",
-        "src/Reactor.Cli/Docs/ImageProcessor.cs",
-        "src/Reactor.Cli/Docs/ManifestParser.cs"
+        "tools/Reactor.DocPipeline/DocsCommand.cs",
+        "tools/Reactor.DocPipeline/CompileCommand.cs",
+        "tools/Reactor.DocPipeline/DocAssembler.cs",
+        "tools/Reactor.DocPipeline/ImageProcessor.cs",
+        "tools/Reactor.DocPipeline/ManifestParser.cs"
       ],
       "description": "CLI prune/status/validate and docs compilation"
     },
@@ -1102,9 +1102,9 @@
       "id": "general-batch-17",
       "agent": "general",
       "files": [
-        "src/Reactor.Cli/Docs/ScreenshotCapture.cs",
-        "src/Reactor.Cli/Docs/SnippetExtractor.cs",
-        "src/Reactor.Cli/Docs/TemplateParser.cs"
+        "tools/Reactor.DocPipeline/ScreenshotCapture.cs",
+        "tools/Reactor.DocPipeline/SnippetExtractor.cs",
+        "tools/Reactor.DocPipeline/TemplateParser.cs"
       ],
       "description": "CLI docs tooling \u2014 screenshots, snippets, templates"
     },

@@ -75,7 +75,7 @@ When the diff adds/changes control projection or modifiers, check the author
 ### CLI (`mur`, `src/Reactor.Cli/`)
 
 - **Command/option naming.** kebab-case options, consistent verb naming
-  (`mur check`, `mur pack-local`, `mur docs compile`). Flag inconsistent new
+  (`mur check`, `mur pack-local`, `dotnet run --project tools/Reactor.DocPipeline -- compile`). Flag inconsistent new
   options or subcommands.
 - **Help text.** New commands/options need a real description — not "TODO".
 - **Exit codes.** `mur check` returns the same exit code as `dotnet build`;

@@ -1,120 +1,34 @@
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor.Cli.Docs;
+using Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 
 /// <summary>
-/// Covers <see cref="WinAppCapture"/>, the winapp-backed capture path for doc screenshots.
-/// Everything here is headless: the winapp process and the live window are exercised by a
-/// real <c>mur docs compile</c> run, not by unit tests.
+/// Covers <see cref="WinAppCapture"/>, the in-process winapp capture path for doc
+/// screenshots. Everything here is headless: Windows Graphics Capture against a live window
+/// is exercised by a real doc-pipeline compile run, not by unit tests.
 /// </summary>
 public class WinAppCaptureTests
 {
     private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(5);
 
-    // ── winapp resolution ──────────────────────────────────────────────────
-
-    [Fact]
-    public void Resolution_prefers_the_override_then_WindowsApps_then_PATH()
-    {
-        var overridePath = @"C:\tools\winapp\winapp.exe";
-        var alias = @"C:\Users\u\AppData\Local\Microsoft\WindowsApps\winapp.exe";
-        var onPath = @"C:\bin\winapp.exe";
-        var env = new Dictionary<string, string?>
-        {
-            [WinAppCapture.WinAppExeEnvVar] = overridePath,
-            ["LOCALAPPDATA"] = @"C:\Users\u\AppData\Local",
-            ["PATH"] = string.Join(Path.PathSeparator, "relative\\dir", @"C:\bin"),
-        };
-        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { overridePath, alias, onPath };
-
-        string? Resolve() => WinAppCapture.ResolveWinAppExe(k => env.GetValueOrDefault(k), existing.Contains);
-
-        Assert.Equal(overridePath, Resolve());
-        existing.Remove(overridePath);
-        Assert.Equal(alias, Resolve());
-        existing.Remove(alias);
-        Assert.Equal(onPath, Resolve());
-        existing.Remove(onPath);
-        Assert.Null(Resolve());
-    }
-
-    [Fact]
-    public void Relative_PATH_entries_are_never_used()
-    {
-        var relative = Path.Combine("relative", "winapp.exe");
-        var env = new Dictionary<string, string?> { ["PATH"] = "relative" };
-
-        var resolved = WinAppCapture.ResolveWinAppExe(k => env.GetValueOrDefault(k), p => p == relative);
-
-        Assert.Null(resolved);
-    }
-
-    [Fact]
-    public void Relative_override_and_LOCALAPPDATA_are_never_used()
-    {
-        var relativeOverride = Path.Combine("tools", "winapp.exe");
-        var relativeAlias = Path.Combine("local", "Microsoft", "WindowsApps", "winapp.exe");
-        var onPath = @"C:\bin\winapp.exe";
-        var env = new Dictionary<string, string?>
-        {
-            [WinAppCapture.WinAppExeEnvVar] = relativeOverride,
-            ["LOCALAPPDATA"] = "local",
-            ["PATH"] = @"C:\bin",
-        };
-        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { relativeOverride, relativeAlias, onPath };
-
-        var resolved = WinAppCapture.ResolveWinAppExe(k => env.GetValueOrDefault(k), existing.Contains);
-
-        Assert.Equal(onPath, resolved);
-    }
-
-    // ── command line ───────────────────────────────────────────────────────
-
-    [Fact]
-    public void Arguments_target_one_window_and_never_take_focus()
-    {
-        var args = WinAppCapture.BuildScreenshotArguments(53613070, @"C:\t\shot.png");
-
-        Assert.Equal(["ui", "screenshot", "-w", "53613070", "-o", @"C:\t\shot.png", "--json"], args);
-        Assert.DoesNotContain("--focus", args);
-        Assert.DoesNotContain("--capture-screen", args);
-        // winapp rejects --quiet together with --json.
-        Assert.DoesNotContain("-q", args);
-    }
-
-    [Fact]
-    public void Screenshot_result_reports_the_image_size()
-    {
-        var json = """{ "filePath": "C:\\t\\shot.png", "width": 942, "height": 831, "processId": 1, "hwnd": 2 }""";
-
-        Assert.Equal(new Size(942, 831), WinAppCapture.ParseScreenshotResult(json));
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("Saved screenshot.png")]
-    [InlineData("""{ "filePath": "x.png" }""")]
-    [InlineData("""{ "width": 0, "height": 10 }""")]
-    public void Unexpected_screenshot_output_is_an_error(string output)
-    {
-        Assert.Throws<InvalidOperationException>(() => WinAppCapture.ParseScreenshotResult(output));
-    }
-
     // ── client-area crop ───────────────────────────────────────────────────
 
     /// <summary>
     /// Geometry measured from a real doc app window on a 150% monitor: DWM frame bounds
-    /// (2609,0)-(3551,831), client origin (2611,45), client 938x784, and the 942x831 PNG
-    /// winapp wrote. The crop drops the 2px visible border and the 45px title bar.
+    /// (2609,0)-(3551,831), client origin (2611,45), client 938x784, and the 942x831 frame
+    /// Windows Graphics Capture returned. The crop drops the 2px visible border and the 45px
+    /// title bar.
     /// </summary>
     [Fact]
     public void Client_crop_drops_the_title_bar_and_border()
     {
         var crop = WinAppCapture.ComputeClientCrop(
-            Rectangle.FromLTRB(2609, 0, 3551, 831), new Size(964, 842), new Point(2611, 45), new Size(938, 784), new Size(942, 831));
+            Rectangle.FromLTRB(2609, 0, 3551, 831), new Point(2611, 45), new Size(938, 784), new Size(942, 831));
 
         Assert.Equal(new Rectangle(2, 45, 938, 784), crop);
     }
@@ -124,37 +38,14 @@ public class WinAppCaptureTests
     {
         // The window was resized (or changed DPI) between the capture and the measurement.
         Assert.Throws<InvalidOperationException>(() => WinAppCapture.ComputeClientCrop(
-            Rectangle.FromLTRB(2609, 0, 3551, 831), new Size(964, 842), new Point(2611, 45), new Size(938, 784), new Size(882, 591)));
-    }
-
-    /// <summary>
-    /// When Windows Graphics Capture fails, winapp falls back to PrintWindow, sized from
-    /// GetWindowRect (invisible resize borders included). That is named as the fallback,
-    /// not reported as a resize, because the fallback can also foreground the window.
-    /// </summary>
-    [Fact]
-    public void A_PrintWindow_fallback_capture_is_reported_as_such()
-    {
-        var ex = Assert.Throws<InvalidOperationException>(() => WinAppCapture.ComputeClientCrop(
-            Rectangle.FromLTRB(2609, 0, 3551, 831), new Size(964, 842), new Point(2611, 45), new Size(938, 784), new Size(964, 842)));
-
-        Assert.Contains("fell back to PrintWindow", ex.Message);
-    }
-
-    [Fact]
-    public void A_resize_mismatch_is_not_mistaken_for_the_fallback()
-    {
-        var ex = Assert.Throws<InvalidOperationException>(() => WinAppCapture.ComputeClientCrop(
-            Rectangle.FromLTRB(2609, 0, 3551, 831), new Size(964, 842), new Point(2611, 45), new Size(938, 784), new Size(882, 591)));
-
-        Assert.DoesNotContain("PrintWindow", ex.Message);
+            Rectangle.FromLTRB(2609, 0, 3551, 831), new Point(2611, 45), new Size(938, 784), new Size(882, 591)));
     }
 
     [Fact]
     public void A_client_area_outside_the_capture_is_rejected()
     {
         Assert.Throws<InvalidOperationException>(() => WinAppCapture.ComputeClientCrop(
-            new Rectangle(0, 0, 100, 100), new Size(100, 100), new Point(10, 10), new Size(100, 100), new Size(100, 100)));
+            new Rectangle(0, 0, 100, 100), new Point(10, 10), new Size(100, 100), new Size(100, 100)));
     }
 
     [Fact]
@@ -165,7 +56,7 @@ public class WinAppCaptureTests
         frame.SetPixel(2, 3, Color.Red);
         frame.SetPixel(7, 6, Color.Blue);
 
-        var png = WinAppCapture.CropPng(Encode(frame), new Rectangle(2, 3, 6, 4), new Size(10, 8));
+        var png = WinAppCapture.CropBgra(ToBgra(frame), 10, 8, new Rectangle(2, 3, 6, 4));
 
         using var cropped = Decode(png);
         Assert.Equal(new Size(6, 4), cropped.Size);
@@ -174,30 +65,60 @@ public class WinAppCaptureTests
     }
 
     [Fact]
-    public void Crop_rejects_an_image_that_is_not_the_reported_size()
+    public void Crop_rejects_a_buffer_that_is_not_the_reported_size()
     {
         using var frame = new Bitmap(10, 8, PixelFormat.Format32bppArgb);
 
         var ex = Assert.Throws<InvalidOperationException>(
-            () => WinAppCapture.CropPng(Encode(frame), new Rectangle(0, 0, 4, 4), new Size(12, 8)));
+            () => WinAppCapture.CropBgra(ToBgra(frame), 12, 8, new Rectangle(0, 0, 4, 4)));
         Assert.Contains("12x8", ex.Message);
-        Assert.Contains("10x8", ex.Message);
+    }
+
+    // ── Windows Graphics Capture only ──────────────────────────────────────
+
+    /// <summary>
+    /// The library's one-shot screenshot falls back to PrintWindow and can foreground the
+    /// window; capture must not. Without Graphics Capture the screenshot fails instead, and no
+    /// other capture method is touched.
+    /// </summary>
+    [Fact]
+    public async Task Without_Graphics_Capture_the_screenshot_fails_and_nothing_else_is_tried()
+    {
+        var capture = new FakeWindowCapture { Supported = false };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => WinAppCapture.CaptureClientAreaAsync(capture, new IntPtr(1), TestContext.Current.CancellationToken));
+
+        Assert.Equal(WinAppCapture.GraphicsCaptureUnavailable, ex.Message);
+        Assert.Equal(0, capture.GrabbersStarted);
+        Assert.Equal(0, capture.FallbackCalls);
     }
 
     [Fact]
-    public void Quoted_or_padded_PATH_entries_are_normalized()
+    public async Task A_grabber_that_cannot_start_fails_the_screenshot_not_the_compile()
     {
-        var onPath = @"C:\Tools\bin\winapp.exe";
-        var env = new Dictionary<string, string?>
-        {
-            ["PATH"] = string.Join(Path.PathSeparator, " \"relative\" ", " \"C:\\Tools\\bin\" "),
-        };
+        var capture = new FakeWindowCapture { StartFailure = new PlatformNotSupportedException("no WGC") };
 
-        var resolved = WinAppCapture.ResolveWinAppExe(k => env.GetValueOrDefault(k), p => p == onPath);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => WinAppCapture.CaptureClientAreaAsync(capture, new IntPtr(1), TestContext.Current.CancellationToken));
 
-        Assert.Equal(onPath, resolved);
+        Assert.Contains("no WGC", ex.Message);
+        Assert.IsType<PlatformNotSupportedException>(ex.InnerException);
+        Assert.Equal(0, capture.FallbackCalls);
     }
 
+    [Fact]
+    public async Task A_grabber_with_no_frame_fails_the_screenshot_and_is_disposed()
+    {
+        var capture = new FakeWindowCapture();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => WinAppCapture.CaptureClientAreaAsync(capture, new IntPtr(1), TestContext.Current.CancellationToken));
+
+        Assert.Equal(1, capture.GrabbersStarted);
+        Assert.True(capture.LastGrabber!.Disposed);
+        Assert.Equal(0, capture.FallbackCalls);
+    }
     // ── rounded corners ────────────────────────────────────────────────────
 
     [Fact]
@@ -295,25 +216,6 @@ public class WinAppCaptureTests
         }
     }
 
-    [Fact]
-    public async Task A_winapp_that_cannot_start_fails_the_screenshot_not_the_compile()
-    {
-        var notAnExe = global::System.IO.Path.Combine(
-            global::System.IO.Path.GetTempPath(), $"reactor-not-winapp-{Guid.NewGuid():N}.exe");
-        await global::System.IO.File.WriteAllTextAsync(notAnExe, "not a PE image", TestContext.Current.CancellationToken);
-        try
-        {
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-                () => WinAppCapture.CaptureClientAreaAsync(notAnExe, IntPtr.Zero, TestContext.Current.CancellationToken));
-            Assert.Contains("could not start", ex.Message);
-            Assert.IsType<global::System.ComponentModel.Win32Exception>(ex.InnerException);
-        }
-        finally
-        {
-            global::System.IO.File.Delete(notAnExe);
-        }
-    }
-
     /// <summary>
     /// Why the squaring exists. Without it the corner arcs read as content, so
     /// content-crop keeps the whole frame. After it, the crop lands on the real content.
@@ -387,7 +289,7 @@ public class WinAppCaptureTests
     }
 
     /// <summary>
-    /// The deadline bounds each attempt: a capture that hangs (winapp never returns) is
+    /// The deadline bounds each attempt: a capture that hangs (no frame ever arrives) is
     /// cancelled when the time is up instead of holding the pass forever.
     /// </summary>
     [Fact]
@@ -412,7 +314,7 @@ public class WinAppCaptureTests
         var calls = 0;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => WinAppCapture.CaptureUntilContent(
-            _ => { calls++; throw new InvalidOperationException("winapp ui screenshot exited 1"); }, Deadline));
+            _ => { calls++; throw new InvalidOperationException("Windows Graphics Capture delivered no frame"); }, Deadline));
 
         Assert.Equal(1, calls);
     }
@@ -445,6 +347,66 @@ public class WinAppCaptureTests
         return bmp;
     }
 
+    /// <summary>Tightly packed BGRA, the layout <see cref="IFrameGrabber.TryGetLatest"/> returns.</summary>
+    private static byte[] ToBgra(Bitmap bmp)
+    {
+        var data = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            var bytes = new byte[bmp.Width * bmp.Height * 4];
+            for (var y = 0; y < bmp.Height; y++)
+                Marshal.Copy(data.Scan0 + (y * data.Stride), bytes, y * bmp.Width * 4, bmp.Width * 4);
+            return bytes;
+        }
+        finally
+        {
+            bmp.UnlockBits(data);
+        }
+    }
+
+    /// <summary>
+    /// Records what capture asked of the library. <see cref="FallbackCalls"/> counts the
+    /// PrintWindow / screen paths, which may foreground a window and must never be used.
+    /// </summary>
+    private sealed class FakeWindowCapture : IWindowCapture
+    {
+        public bool Supported { get; init; } = true;
+        public Exception? StartFailure { get; init; }
+        public int GrabbersStarted { get; private set; }
+        public int FallbackCalls { get; private set; }
+        public FakeGrabber? LastGrabber { get; private set; }
+
+        public bool IsFrameCaptureSupported => Supported;
+
+        public IFrameGrabber StartFrameGrabber(nint hwnd, int fps = 0)
+        {
+            if (StartFailure is not null) throw StartFailure;
+            GrabbersStarted++;
+            return LastGrabber = new FakeGrabber();
+        }
+
+        public byte[] CaptureWindowPixels(nint hwnd, int width, int height)
+        {
+            FallbackCalls++;
+            return [];
+        }
+
+        public byte[] CaptureScreenPixels(int x, int y, int cropWidth, int cropHeight, int encoderWidth, int encoderHeight, int displayWidth, int displayHeight)
+        {
+            FallbackCalls++;
+            return [];
+        }
+    }
+
+    /// <summary>A grabber whose window never delivers a frame.</summary>
+    private sealed class FakeGrabber : IFrameGrabber
+    {
+        public bool Disposed { get; private set; }
+        public bool IsClosed => false;
+        public (byte[] Pixels, int Width, int Height, long Version)? TryGetLatest() => null;
+        public Task<bool> WaitForFirstFrameAsync(TimeSpan timeout, CancellationToken ct) => Task.FromResult(false);
+        public void Dispose() => Disposed = true;
+    }
     private static byte[] Encode(Bitmap bmp)
     {
         using var ms = new MemoryStream();

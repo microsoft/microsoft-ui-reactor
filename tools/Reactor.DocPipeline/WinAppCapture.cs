@@ -2,14 +2,18 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
-using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation;
 
 namespace Microsoft.UI.Reactor.Cli.Docs;
 
 /// <summary>
-/// Captures a doc app's window with the winapp CLI (<c>winapp ui screenshot</c>) and crops
-/// it to the client area, so the image matches what the old in-app <c>PrintWindow</c>
-/// capture produced: client area only, physical pixels, no window frame.
+/// Captures a doc app's window with the winapp UI Automation library (the engine behind
+/// <c>winapp ui</c>, used in-process) and crops it to the client area, so the image matches
+/// what the old in-app <c>PrintWindow</c> capture produced: client area only, physical
+/// pixels, no window frame.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,128 +23,51 @@ namespace Microsoft.UI.Reactor.Cli.Docs;
 /// does any more, so the app no longer runs <c>PrintWindow</c> at all.
 /// </para>
 /// <para>
-/// <c>--focus</c> and <c>--capture-screen</c> (which foreground the window) are deliberately
-/// not passed. On the normal path winapp captures with Windows Graphics Capture, which never
-/// activates the window, so a capture run does not steal the keyboard. If Windows Graphics
-/// Capture fails, winapp (0.7.x) silently falls back to <c>PrintWindow</c> and, when that
-/// frame is blank, foregrounds the window and retries; no winapp option turns this off. That
-/// fallback sizes the image from <c>GetWindowRect</c> rather than the DWM frame, so it is
-/// detected here (<see cref="ComputeClientCrop"/>) and the screenshot fails with an
-/// explanation instead of being cropped wrong.
+/// Capture uses only Windows Graphics Capture (<see cref="IWindowCapture.StartFrameGrabber"/>),
+/// which never activates the window, so a capture run does not take input focus. The
+/// library's one-shot screenshot path is deliberately not used: when Graphics Capture fails
+/// it falls back to <c>PrintWindow</c> and, on a blank frame, foregrounds the window. Here a
+/// machine without Graphics Capture fails the screenshot instead.
 /// </para>
 /// </remarks>
 internal static class WinAppCapture
 {
-    /// <summary>
-    /// Absolute-path override for the winapp binary, honored ahead of every other candidate.
-    /// Same variable, and the same resolution order, as the E2E harness
-    /// (<c>tests/Reactor.AppTests/Infrastructure/WinAppUi.cs</c>).
-    /// </summary>
-    internal const string WinAppExeEnvVar = "REACTOR_WINAPP_EXE";
-
-    internal const string InstallHint =
-        "Install the winapp CLI with `winget install Microsoft.WinAppCli` (or run ./bootstrap.ps1), " +
-        "or set " + WinAppExeEnvVar + " to the full path of winapp.exe.";
-
     /// <summary>The window class every WinUI 3 desktop window registers.</summary>
     internal const string WinUIWindowClass = "WinUIDesktopWin32WindowClass";
 
     /// <summary>
-    /// Resolves winapp.exe: <see cref="WinAppExeEnvVar"/>, then
-    /// <c>%LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe</c> (the alias winget's MSIX install
-    /// drops), then the first absolute <c>PATH</c> entry that contains it. Null when none exists.
+    /// How long one capture attempt waits for Windows Graphics Capture to deliver a frame.
+    /// The caller's deadline (<see cref="CaptureUntilContent"/>) still bounds the attempt.
     /// </summary>
-    internal static string? ResolveWinAppExe(Func<string, string?> getEnv, Func<string, bool> fileExists)
-    {
-        var overridePath = getEnv(WinAppExeEnvVar);
-        // A relative path would resolve against the working directory (often a doc topic's
-        // folder), so only absolute candidates are ever executed.
-        if (!string.IsNullOrEmpty(overridePath) && Path.IsPathFullyQualified(overridePath) && fileExists(overridePath))
-            return Path.GetFullPath(overridePath);
-
-        var local = getEnv("LOCALAPPDATA");
-        if (!string.IsNullOrEmpty(local) && Path.IsPathFullyQualified(local))
-        {
-            var candidate = Path.Combine(local, "Microsoft", "WindowsApps", "winapp.exe");
-            if (fileExists(candidate)) return Path.GetFullPath(candidate);
-        }
-
-        var path = getEnv("PATH");
-        if (!string.IsNullOrEmpty(path))
-        {
-            foreach (var candidate in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-                         .Select(e => e.Trim().Trim('"'))
-                         .Where(Path.IsPathFullyQualified)
-                         .Select(e => Path.Combine(e, "winapp.exe")))
-            {
-                if (fileExists(candidate)) return Path.GetFullPath(candidate);
-            }
-        }
-        return null;
-    }
+    private static readonly TimeSpan FirstFrameTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// The <c>winapp</c> argument list for one capture. <c>-w</c> targets exactly one window
-    /// (no composite of owned windows), and neither <c>--focus</c> nor <c>--capture-screen</c>
-    /// is passed, so winapp does not bring the window to the foreground on its normal
-    /// (Windows Graphics Capture) path.
+    /// The library's window capture, resolved through its own service registration (the
+    /// implementation type is internal). Logging is discarded: failures surface as
+    /// exceptions on the screenshot that hit them.
     /// </summary>
-    internal static IReadOnlyList<string> BuildScreenshotArguments(long hwnd, string outputPath) =>
-    [
-        "ui", "screenshot",
-        "-w", hwnd.ToString(global::System.Globalization.CultureInfo.InvariantCulture),
-        "-o", outputPath,
-        "--json",
-    ];
-
-    /// <summary>Reads the <c>width</c>/<c>height</c> winapp reports for the PNG it wrote.</summary>
-    /// <exception cref="InvalidOperationException">The output is not the expected JSON.</exception>
-    internal static Size ParseScreenshotResult(string json)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            if (root.ValueKind == JsonValueKind.Object
-                && root.TryGetProperty("width", out var w) && w.TryGetInt32(out var width)
-                && root.TryGetProperty("height", out var h) && h.TryGetInt32(out var height)
-                && width > 0 && height > 0)
-            {
-                return new Size(width, height);
-            }
-        }
-        catch (JsonException)
-        {
-        }
-        throw new InvalidOperationException(
-            $"winapp ui screenshot did not report the image size: {Truncate(json)}");
-    }
+    internal static IWindowCapture CreateWindowCapture() =>
+        new ServiceCollection()
+            .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
+            .AddWinAppUiAutomation()
+            .BuildServiceProvider()
+            .GetRequiredService<IWindowCapture>();
 
     /// <summary>
-    /// Where the client area sits inside the image winapp captured.
+    /// Where the client area sits inside the frame Windows Graphics Capture returned.
     /// </summary>
     /// <remarks>
-    /// winapp captures the window's DWM frame bounds (<c>DWMWA_EXTENDED_FRAME_BOUNDS</c>):
+    /// Graphics Capture returns the window's DWM frame bounds (<c>DWMWA_EXTENDED_FRAME_BOUNDS</c>):
     /// the visible frame including the title bar, without the invisible resize borders.
     /// The old in-app capture took the client area only, so the crop is the client rect
     /// expressed relative to those bounds. All four inputs are physical pixels. A
     /// mismatch between the image and the frame bounds means the two were not taken of
     /// the same window state (a resize, a DPI change mid-capture), and cropping anyway
-    /// would cut the wrong region, so that is an error rather than a guess. An image the size
-    /// of <paramref name="windowRect"/> (<c>GetWindowRect</c>, which includes the invisible
-    /// resize borders) is winapp's <c>PrintWindow</c> fallback, reported as such.
+    /// would cut the wrong region, so that is an error rather than a guess.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The geometry does not line up.</exception>
-    internal static Rectangle ComputeClientCrop(
-        Rectangle frameBounds, Size windowRect, Point clientOrigin, Size clientSize, Size imageSize)
+    internal static Rectangle ComputeClientCrop(Rectangle frameBounds, Point clientOrigin, Size clientSize, Size imageSize)
     {
-        if (imageSize != frameBounds.Size && imageSize == windowRect)
-            throw new InvalidOperationException(
-                $"winapp fell back to PrintWindow capture ({imageSize.Width}x{imageSize.Height} window rect, " +
-                $"not the {frameBounds.Width}x{frameBounds.Height} DWM frame): Windows Graphics Capture failed " +
-                "for this window. That fallback can also bring the window to the foreground. " +
-                "Check that Windows Graphics Capture works on this machine (a normal interactive desktop " +
-                "session) and retry");
         if (imageSize != frameBounds.Size)
             throw new InvalidOperationException(
                 $"captured image is {imageSize.Width}x{imageSize.Height} but the window frame is " +
@@ -159,28 +86,39 @@ internal static class WinAppCapture
     }
 
     /// <summary>
-    /// Crops <paramref name="png"/> to <paramref name="region"/>, squares the window's rounded
-    /// corners (<see cref="SquareRoundedCorners"/>) and re-encodes it as PNG.
+    /// Crops a captured frame (<paramref name="width"/> x <paramref name="height"/>, tightly
+    /// packed BGRA, as <see cref="IFrameGrabber.TryGetLatest"/> returns it) to
+    /// <paramref name="region"/>, squares the window's rounded corners
+    /// (<see cref="SquareRoundedCorners"/>) and encodes it as PNG.
     /// </summary>
     /// <exception cref="InvalidOperationException">
-    /// The decoded image is not <paramref name="expectedSize"/> (the size the crop was computed
-    /// against), so the crop would not describe these pixels.
+    /// The buffer is not <paramref name="width"/> x <paramref name="height"/> BGRA pixels.
     /// </exception>
-    internal static byte[] CropPng(byte[] png, Rectangle region, Size expectedSize)
+    internal static byte[] CropBgra(byte[] pixels, int width, int height, Rectangle region)
     {
-        using var input = new MemoryStream(png);
-        using var source = new Bitmap(input);
-        if (source.Size != expectedSize)
+        if (width <= 0 || height <= 0 || pixels.Length != (long)width * height * 4)
             throw new InvalidOperationException(
-                $"winapp reported a {expectedSize.Width}x{expectedSize.Height} capture but wrote a " +
-                $"{source.Width}x{source.Height} image");
+                $"captured frame has {pixels.Length} bytes, not {width}x{height} BGRA pixels");
+
+        // BGRA bytes in memory are exactly GDI+'s 32bpp ARGB layout.
+        using var source = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+        var data = source.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            for (var y = 0; y < height; y++)
+                Marshal.Copy(pixels, y * width * 4, data.Scan0 + (y * data.Stride), width * 4);
+        }
+        finally
+        {
+            source.UnlockBits(data);
+        }
+
         using var cropped = source.Clone(region, PixelFormat.Format32bppArgb);
         SquareRoundedCorners(cropped);
         using var output = new MemoryStream();
         cropped.Save(output, ImageFormat.Png);
         return output.ToArray();
     }
-
     /// <summary>
     /// Replaces every pixel that is not fully opaque with the nearest opaque pixel in the same
     /// row, searching toward the middle of the row. Returns how many pixels it replaced.
@@ -316,70 +254,43 @@ internal static class WinAppCapture
     }
 
     /// <summary>
-    /// Captures <paramref name="hwnd"/> with winapp and returns the client area as PNG bytes.
+    /// Captures <paramref name="hwnd"/> with Windows Graphics Capture and returns the client
+    /// area as PNG bytes.
     /// </summary>
-    /// <exception cref="InvalidOperationException">winapp failed, or the geometry did not line up.</exception>
-    internal static async Task<byte[]> CaptureClientAreaAsync(string winAppExe, IntPtr hwnd, CancellationToken ct)
+    /// <exception cref="InvalidOperationException">
+    /// Graphics Capture is unavailable or produced no frame, or the geometry did not line up.
+    /// </exception>
+    internal static async Task<byte[]> CaptureClientAreaAsync(IWindowCapture capture, IntPtr hwnd, CancellationToken ct)
     {
-        var temp = Path.Combine(Path.GetTempPath(), $"reactor-docs-capture-{Guid.NewGuid():N}.png");
+        if (!capture.IsFrameCaptureSupported)
+            throw new InvalidOperationException(GraphicsCaptureUnavailable);
+
+        IFrameGrabber grabber;
         try
         {
-            var psi = new ProcessStartInfo(winAppExe)
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-            foreach (var a in BuildScreenshotArguments(hwnd.ToInt64(), temp)) psi.ArgumentList.Add(a);
+            grabber = capture.StartFrameGrabber(hwnd);
+        }
+        catch (Exception ex) when (ex is PlatformNotSupportedException or COMException or ArgumentException)
+        {
+            throw new InvalidOperationException($"Windows Graphics Capture could not start for this window: {ex.Message}", ex);
+        }
 
-            Process proc;
-            try
-            {
-                proc = Process.Start(psi)
-                    ?? throw new InvalidOperationException($"could not start {winAppExe}");
-            }
-            catch (System.ComponentModel.Win32Exception ex)
-            {
-                // A blocked or invalid binary (e.g. a bad REACTOR_WINAPP_EXE) fails this
-                // screenshot like any other winapp error instead of aborting the compile.
-                throw new InvalidOperationException($"could not start {winAppExe}: {ex.Message}", ex);
-            }
-            using var _ = proc;
-            var stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
-            var stderrTask = proc.StandardError.ReadToEndAsync(ct);
-            try
-            {
-                await proc.WaitForExitAsync(ct);
-            }
-            catch (OperationCanceledException)
-            {
-                try { proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
-                // Observe the readers so a stream faulted by the kill isn't left unobserved.
-                try { await Task.WhenAll(stdoutTask, stderrTask); }
-                catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException) { }
-                throw;
-            }
-            var stdout = await stdoutTask;
-            var stderr = await stderrTask;
-            if (proc.ExitCode != 0)
-                throw new InvalidOperationException(
-                    $"winapp ui screenshot exited {proc.ExitCode}: {Truncate(stderr.Length > 0 ? stderr : stdout)}");
-
-            var reported = ParseScreenshotResult(stdout);
-            var png = await File.ReadAllBytesAsync(temp, ct);
+        using (grabber)
+        {
+            if (!await grabber.WaitForFirstFrameAsync(FirstFrameTimeout, ct) || grabber.TryGetLatest() is not { } frame)
+                throw new InvalidOperationException("Windows Graphics Capture delivered no frame for the window");
 
             var geometry = Native.GetClientGeometry(hwnd);
-            var crop = ComputeClientCrop(geometry.FrameBounds, geometry.WindowRect, geometry.ClientOrigin, geometry.ClientSize, reported);
-            return CropPng(png, crop, reported);
-        }
-        finally
-        {
-            try { File.Delete(temp); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            var crop = ComputeClientCrop(
+                geometry.FrameBounds, geometry.ClientOrigin, geometry.ClientSize, new Size(frame.Width, frame.Height));
+            return CropBgra(frame.Pixels, frame.Width, frame.Height, crop);
         }
     }
 
+    internal const string GraphicsCaptureUnavailable =
+        "Windows Graphics Capture is not available, so doc screenshots cannot be taken without " +
+        "bringing windows to the foreground. Capture needs Windows 10 version 1903 or later on an " +
+        "interactive desktop session.";
     /// <summary>
     /// Waits for the doc app's WinUI window to appear. The app is a descendant of the
     /// <c>dotnet run</c> process <paramref name="rootPid"/>, so the window is matched by
@@ -398,13 +309,7 @@ internal static class WinAppCapture
         return IntPtr.Zero;
     }
 
-    private static string Truncate(string s)
-    {
-        s = s.Trim();
-        return s.Length <= 400 ? s : s[..400] + "…";
-    }
-
-    internal readonly record struct ClientGeometry(Rectangle FrameBounds, Size WindowRect, Point ClientOrigin, Size ClientSize);
+    internal readonly record struct ClientGeometry(Rectangle FrameBounds, Point ClientOrigin, Size ClientSize);
 
     private static class Native
     {
@@ -415,7 +320,7 @@ internal static class WinAppCapture
 
         /// <summary>
         /// Frame bounds and client rect in physical pixels. The thread switches to
-        /// per-monitor-v2 awareness for the calls, because <c>mur</c> itself is DPI-unaware
+        /// per-monitor-v2 awareness for the calls, because the pipeline process is DPI-unaware
         /// and would otherwise get coordinates scaled for a 150% window.
         /// </summary>
         public static ClientGeometry GetClientGeometry(IntPtr hwnd)
@@ -425,8 +330,6 @@ internal static class WinAppCapture
             {
                 if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT frame, Marshal.SizeOf<RECT>()) != 0)
                     throw new InvalidOperationException("DwmGetWindowAttribute(EXTENDED_FRAME_BOUNDS) failed");
-                if (!GetWindowRect(hwnd, out var window))
-                    throw new InvalidOperationException("GetWindowRect failed");
                 if (!GetClientRect(hwnd, out var client))
                     throw new InvalidOperationException("GetClientRect failed");
                 var origin = new POINT();
@@ -435,7 +338,6 @@ internal static class WinAppCapture
 
                 return new ClientGeometry(
                     Rectangle.FromLTRB(frame.Left, frame.Top, frame.Right, frame.Bottom),
-                    new Size(window.Right - window.Left, window.Bottom - window.Top),
                     new Point(origin.X, origin.Y),
                     new Size(client.Right - client.Left, client.Bottom - client.Top));
             }
@@ -522,7 +424,6 @@ internal static class WinAppCapture
         [DllImport("user32.dll")] private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
         [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out RECT value, int size);
         [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hwnd, out RECT rect);
-        [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
         [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr hwnd, ref POINT point);
         [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
         [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);

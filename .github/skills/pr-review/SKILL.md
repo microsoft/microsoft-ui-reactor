@@ -226,7 +226,7 @@ Coverage block and include its short "what I checked" note in a final
 - **No build/test execution.** Flag staleness (e.g. a new plugin sub-skill not
   added to the agent-kit pack list in `src/Reactor/Reactor.csproj`, or
   `skills/reactor.api.txt` looking out of date) but do not run `mur check`,
-  `dotnet build`, `dotnet test`, or `mur docs compile` yourself — they are slow
+  `dotnet build`, `dotnet test`, or `dotnet run --project tools/Reactor.DocPipeline -- compile` yourself — they are slow
   and the contributor will run them.
 - **Signal-to-noise.** Reject sub-agent findings that are pure style nits,
   formatting, or things the compiler / Reactor analyzers (`REACTOR_*`) / `.editorconfig`
