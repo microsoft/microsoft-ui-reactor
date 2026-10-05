@@ -68,7 +68,10 @@ internal sealed class ResizeGripHandler : IElementHandler<ResizeGripElement, Res
 
         // ReconcileChild patches the child in place, or unmounts it and mounts the new
         // element (a changed element type, a removed child, or an update that built a
-        // new control), and returns the control the grip should hold.
+        // new control), and returns the control the grip should hold. The grip holds
+        // nothing but that one child, at index 0.
+        global::System.Diagnostics.Debug.Assert(
+            panel.Children.Count <= 1, $"ResizeGripControl holds {panel.Children.Count} children; it hosts at most one");
         var existing = panel.Children.Count > 0 ? panel.Children[0] : null;
         var next = ctx.ReconcileChild(oldEl.Child, newEl.Child, existing);
         if (next is null)
