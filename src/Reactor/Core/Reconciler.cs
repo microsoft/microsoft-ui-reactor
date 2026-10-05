@@ -2362,8 +2362,10 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     /// <remarks>
     /// Patches <paramref name="control"/> to match <paramref name="newEl"/> and returns null, or
-    /// returns a new control when the update had to build one, which the caller installs before
-    /// unmounting <paramref name="control"/> with <see cref="UnmountChild"/>. It doesn't check that
+    /// returns a new control when the update had to build one. The caller then unmounts
+    /// <paramref name="control"/> with <see cref="UnmountChild"/> and puts the new control in its
+    /// slot, in that order, as <see cref="Reconcile"/> does: unmounting reads state from the control
+    /// while it is still in the tree, such as a connected-animation snapshot. It doesn't check that
     /// <paramref name="newEl"/> has the element type and key of <paramref name="oldEl"/>: a changed
     /// type throws <c>InvalidCastException</c> for a built-in control. The analyzer rule
     /// <c>REACTOR_LIFECYCLE_003</c> flags calls to this method and offers to switch them to
