@@ -270,19 +270,18 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     {
         if (_disposed) return null;
         var contentTarget = ContentTarget;
-        return new Core.Diagnostics.ReactorHostInfo(
+        // ForRoot reports the root that actually renders: Render() prefers the component
+        // when both have been mounted on this host.
+        return Core.Diagnostics.ReactorHostInfo.ForRoot(
             Core.Diagnostics.ReactorHostKind.WindowHost,
             host: this,
             hostControl: null,
             reactorWindow: OwningWindow,
             window: _window,
             hostElement: contentTarget,
-            reconciler: _reconciler,
             rootControl: _currentControl,
             rootComponent: _rootComponent,
-            // Report the root that actually renders: Render() prefers the component when
-            // both have been mounted on this host.
-            rootRenderFunction: _rootComponent is null ? _rootRenderFunc : null,
+            rootRenderFunction: _rootRenderFunc,
             mountSite: _mountSite);
     }
 

@@ -31,6 +31,25 @@ internal static class HostDiagnosticsFixtures
     private const string SkipReason =
         "assembly built without REACTOR_SOURCEMAP (Release) - no interceptors compiled in, so there is no mount site to read";
 
+    /// <summary>
+    /// The name a root component should be reported under, spelled out independently of the
+    /// product's formatter: namespace, then the nesting chain, joined with dots.
+    /// </summary>
+    private static string ExpectedName<T>() => typeof(T).FullName!.Replace('+', '.');
+
+    /// <summary>
+    /// The render-function name names the method that declared the lambda. NativeAOT may not
+    /// keep the metadata that needs (the property is then documented to be null), so the exact
+    /// name is asserted only where the runtime can describe delegates at all.
+    /// </summary>
+    private static bool RenderFunctionNamedFor(string? name, string declaringMethod)
+    {
+        var matches = name is not null && name.EndsWith("." + declaringMethod + " (lambda)", StringComparison.Ordinal);
+        return global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported
+            ? matches
+            : name is null || matches;
+    }
+
     private sealed class Probe : Component
     {
         public override Element Render() => TextBlock("hostdiag-component");
@@ -60,8 +79,8 @@ internal static class HostDiagnosticsFixtures
         => ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.HostControl, control));
 
     /// <summary>
-    /// A real window host is listed with its window, content target, reconciler, root and
-    /// mount site; its component boundaries are tagged on mount and still tagged after an
+    /// A real window host is listed with its window, content target, root control, root name
+    /// and mount site; its component boundaries are tagged on mount and still tagged after an
     /// update; it drops out of the list once disposed.
     /// </summary>
     internal class WindowHostIsListedAndBoundariesAreTagged(Harness h) : SelfTestFixtureBase(h)
@@ -92,9 +111,9 @@ internal static class HostDiagnosticsFixtures
                 H.Check("HostDiag_WindowHostWindow", ReferenceEquals(info.Window, H.Window));
                 H.Check("HostDiag_WindowHostElementIsContentTarget",
                     info.HostElement is not null && ReferenceEquals(info.HostElement, host.ContentTarget));
-                H.Check("HostDiag_WindowHostReconciler", ReferenceEquals(info.Reconciler, host.Reconciler));
                 H.Check("HostDiag_WindowHostRenderRoot",
-                    ReferenceEquals(info.RootRenderFunction, root) && info.RootComponent is null && info.RootComponentType is null);
+                    info.RootComponentName is null && RenderFunctionNamedFor(info.RootRenderFunctionName, nameof(RunAsync)),
+                    $"render={info.RootRenderFunctionName ?? "null"} component={info.RootComponentName ?? "null"}");
                 H.Check("HostDiag_WindowHostRootControl",
                     info.RootControl is not null && ReferenceEquals(info.RootControl, host.ContentTarget?.Child),
                     $"root={info.RootControl?.GetType().Name ?? "null"}");
@@ -222,7 +241,8 @@ internal static class HostDiagnosticsFixtures
                 H.Check("HostDiagIsland_HostElementIsItself", ReferenceEquals(info.HostElement, island));
                 H.Check("HostDiagIsland_NoWindow", info.Window is null && info.Host is null && info.ReactorWindow is null);
                 H.Check("HostDiagIsland_ComponentRoot",
-                    ReferenceEquals(info.RootComponent, root) && info.RootComponentType == typeof(IslandRoot) && info.RootRenderFunction is null);
+                    info.RootComponentName == ExpectedName<IslandRoot>() && info.RootRenderFunctionName is null,
+                    $"component={info.RootComponentName ?? "null"}");
                 H.Check("HostDiagIsland_RootControl", info.RootControl is not null && ReferenceEquals(info.RootControl, island.Content));
 
 #if REACTOR_SOURCEMAP
@@ -237,7 +257,7 @@ internal static class HostDiagnosticsFixtures
                 var factoryInfo = InfoFor(factoryIsland);
                 H.Check("HostDiagIsland_FactoryIslandListed", factoryInfo is not null);
                 H.Check("HostDiagIsland_FactoryIslandHasNoMountSite",
-                    factoryInfo is not null && factoryInfo.RootComponent is IslandRoot && factoryInfo.MountSite is null);
+                    factoryInfo is not null && factoryInfo.RootComponentName == ExpectedName<IslandRoot>() && factoryInfo.MountSite is null);
 
                 island.Dispose();
                 H.Check("HostDiagIsland_DisposedRemoved", InfoFor(island) is null);
@@ -284,12 +304,12 @@ internal static class HostDiagnosticsFixtures
                 H.Check("HostDiagWin_Kind", info.Kind == ReactorHostKind.WindowHost);
                 H.Check("HostDiagWin_Host", ReferenceEquals(info.Host, win.Host));
                 H.Check("HostDiagWin_Window", ReferenceEquals(info.Window, win.NativeWindow));
-                H.Check("HostDiagWin_Root", info.RootComponentType == typeof(Probe));
+                H.Check("HostDiagWin_Root", info.RootComponentName == ExpectedName<Probe>(), $"component={info.RootComponentName ?? "null"}");
 
                 win.Mount(new IslandRoot()); var remountLine = Line();
                 await win.Host.WaitForIdleAsync();
                 var remounted = ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.ReactorWindow, win));
-                H.Check("HostDiagWin_RemountedRoot", remounted?.RootComponentType == typeof(IslandRoot));
+                H.Check("HostDiagWin_RemountedRoot", remounted?.RootComponentName == ExpectedName<IslandRoot>());
 
                 // A render-function remount on top of a component root: ReactorHost keeps
                 // rendering the component (pre-existing behaviour), so the snapshot must keep
@@ -299,7 +319,7 @@ internal static class HostDiagnosticsFixtures
                 await win.Host.WaitForIdleAsync();
                 var afterRender = ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.ReactorWindow, win));
                 H.Check("HostDiagWin_IgnoredRenderRemountKeepsComponentRoot",
-                    afterRender?.RootComponentType == typeof(IslandRoot) && afterRender.RootRenderFunction is null);
+                    afterRender?.RootComponentName == ExpectedName<IslandRoot>() && afterRender.RootRenderFunctionName is null);
 
 #if REACTOR_SOURCEMAP
                 H.Check("HostDiagWin_OpenWindowSite",

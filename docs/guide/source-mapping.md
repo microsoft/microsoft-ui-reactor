@@ -313,17 +313,19 @@ windows opened through `ReactorApp.Run` / `ReactorApp.OpenWindow`, a
 ```csharp
 foreach (var host in ReactorDiagnostics.GetHosts())
 {
-    var root = host.RootComponentType?.Name ?? "render function";
+    var root = host.RootComponentName ?? host.RootRenderFunctionName ?? "(not mounted)";
     Console.WriteLine($"{host.Kind} {host.ReactorWindow?.Key} <{root}> at {host.MountSite}");
 }
 ```
 
 Each `ReactorHostInfo` carries the owning `Window` (window hosts), the host element
-(the `ReactorHostControl`, or a window host's `ContentTarget`), the host's
-`Reconciler`, the control the root currently renders as (`RootControl`), the root
-`RootComponent` / `RootComponentType` or `RootRenderFunction`, and `MountSite`. The
-registry holds hosts weakly and drops them on dispose, so it never keeps a window
-alive; it costs one small allocation per host and nothing per render.
+(the `ReactorHostControl`, or a window host's `ContentTarget`), the control the root
+currently renders as (`RootControl`), the root's name — `RootComponentName` for a
+component root, `RootRenderFunctionName` (for example `MyApp.Program.Main (lambda)`)
+for a render function — and `MountSite`. It deliberately exposes no reconciler
+internals or live component instances: an inspector reaches the tree on screen through
+`RootControl`. The registry holds hosts weakly and drops them on dispose, so it never
+keeps a window alive; it costs one small allocation per host and nothing per render.
 
 **Root mount sites.** A root is not an element, so it has no `CallSite`. When
 source mapping is on, the generator also intercepts `ReactorApp.Run`,

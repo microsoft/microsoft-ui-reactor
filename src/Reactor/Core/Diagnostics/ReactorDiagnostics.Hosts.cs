@@ -30,13 +30,16 @@ public enum ReactorHostKind
 /// <remarks>
 /// <para>Provisional diagnostics API for external inspectors (for example
 /// <c>winapp devtools</c>); shape may change while Reactor is in preview.</para>
+/// <para>Deliberately exposes no reconciler internals: the root is described by name and
+/// call site, and reached on screen through <see cref="RootControl"/> — the same WinUI
+/// control an inspector already walks. Everything else is an existing public WinUI or
+/// Reactor hosting type.</para>
 /// <para>A snapshot, not a live view: re-query after a render, window open, or close.
-/// Every value is a plain reference read captured when the snapshot was taken, so the
-/// snapshot itself can be taken from any thread; touching the returned WinUI objects
-/// is subject to their usual UI-thread rules. Take it on the UI thread when the
-/// values must be consistent with the visual tree you are about to walk.</para>
-/// <para>Holding a snapshot keeps its host, window and root objects alive; the
-/// registry behind <see cref="ReactorDiagnostics.GetHosts"/> does not.</para>
+/// The snapshot itself can be taken from any thread; touching the returned WinUI objects
+/// is subject to their usual UI-thread rules. Take it on the UI thread when the values
+/// must be consistent with the visual tree you are about to walk.</para>
+/// <para>Holding a snapshot keeps its host, window and root control alive; the registry
+/// behind <see cref="ReactorDiagnostics.GetHosts"/> does not.</para>
 /// </remarks>
 public sealed class ReactorHostInfo
 {
@@ -47,10 +50,9 @@ public sealed class ReactorHostInfo
         ReactorWindow? reactorWindow,
         Window? window,
         FrameworkElement? hostElement,
-        Reconciler reconciler,
         UIElement? rootControl,
-        Component? rootComponent,
-        Func<RenderContext, Element>? rootRenderFunction,
+        string? rootComponentName,
+        string? rootRenderFunctionName,
         SourceLocation? mountSite)
     {
         Kind = kind;
@@ -59,10 +61,9 @@ public sealed class ReactorHostInfo
         ReactorWindow = reactorWindow;
         Window = window;
         HostElement = hostElement;
-        Reconciler = reconciler;
         RootControl = rootControl;
-        RootComponent = rootComponent;
-        RootRenderFunction = rootRenderFunction;
+        RootComponentName = rootComponentName;
+        RootRenderFunctionName = rootRenderFunctionName;
         MountSite = mountSite;
     }
 
@@ -96,9 +97,6 @@ public sealed class ReactorHostInfo
     /// </summary>
     public FrameworkElement? HostElement { get; }
 
-    /// <summary>The host's reconciler. Each host owns exactly one.</summary>
-    public Reconciler Reconciler { get; }
-
     /// <summary>
     /// The control the root currently renders as, or null before the first render.
     /// This is the control the host places in <c>Window.Content</c> / its content slot;
@@ -107,14 +105,23 @@ public sealed class ReactorHostInfo
     /// </summary>
     public UIElement? RootControl { get; }
 
-    /// <summary>The root component instance, or null for a render-function root or before mount.</summary>
-    public Component? RootComponent { get; }
+    /// <summary>
+    /// The root component's type name, namespace-qualified, with nested types joined by
+    /// <c>.</c> and generic arguments spelled out (<c>MyApp.Pages.Dashboard</c>,
+    /// <c>MyApp.ListPage&lt;MyApp.Order&gt;</c>). Null for a render-function root and before
+    /// the first mount.
+    /// </summary>
+    public string? RootComponentName { get; }
 
-    /// <summary>The root component's runtime type (<c>RootComponent?.GetType()</c>), for display.</summary>
-    public Type? RootComponentType => RootComponent?.GetType();
-
-    /// <summary>The root render function, or null for a component root or before mount.</summary>
-    public Func<RenderContext, Element>? RootRenderFunction { get; }
+    /// <summary>
+    /// A readable name for a render-function root: the method that declares it, with
+    /// compiler-generated names undone — <c>MyApp.Program.Main (lambda)</c>,
+    /// <c>MyApp.Program.Main.Render</c> for a local function, <c>MyApp.Shell.Render</c> for
+    /// a method group. Null for a component root, before the first mount, and when the
+    /// runtime cannot describe the delegate (for example NativeAOT with stack-trace data
+    /// disabled). For a lambda, <see cref="MountSite"/> is usually the better identity.
+    /// </summary>
+    public string? RootRenderFunctionName { get; }
 
     /// <summary>
     /// Where the root was mounted — the <c>ReactorApp.Run</c>, <c>ReactorApp.OpenWindow</c>,
@@ -126,8 +133,141 @@ public sealed class ReactorHostInfo
     /// or mounted by framework code, neither of which has a call site in app code.
     /// </summary>
     public SourceLocation? MountSite { get; }
+
+    /// <summary>
+    /// Builds the snapshot for a host's current root. A component root wins when both are set,
+    /// matching what the hosts actually render.
+    /// </summary>
+    internal static ReactorHostInfo ForRoot(
+        ReactorHostKind kind,
+        ReactorHost? host,
+        ReactorHostControl? hostControl,
+        ReactorWindow? reactorWindow,
+        Window? window,
+        FrameworkElement? hostElement,
+        UIElement? rootControl,
+        Component? rootComponent,
+        Func<RenderContext, Element>? rootRenderFunction,
+        SourceLocation? mountSite)
+        => new(
+            kind, host, hostControl, reactorWindow, window, hostElement, rootControl,
+            rootComponent is null ? null : RootNames.ForType(rootComponent.GetType()),
+            rootComponent is null && rootRenderFunction is not null ? RootNames.ForDelegate(rootRenderFunction) : null,
+            mountSite);
 }
 
+/// <summary>
+/// Display names for diagnostics roots. Pure string work over runtime metadata that is
+/// always present (a constructed type's name) or explicitly AOT-aware
+/// (<see cref="global::System.Diagnostics.DiagnosticMethodInfo"/>), so it is trim- and AOT-safe.
+/// </summary>
+internal static class RootNames
+{
+    /// <summary>
+    /// <c>Namespace.Outer.Inner&lt;Arg&gt;</c> for any type. Nested types are joined with
+    /// <c>.</c>; a nested type of a generic outer lists all of its type arguments at the end
+    /// (that is how the runtime stores them), which keeps the name readable.
+    /// </summary>
+    internal static string ForType(Type type)
+    {
+        if (type.IsGenericParameter) return type.Name;
+
+        var name = StripArity(type.Name);
+        for (var outer = type.DeclaringType; outer is not null; outer = outer.DeclaringType)
+            name = StripArity(outer.Name) + "." + name;
+        if (!string.IsNullOrEmpty(type.Namespace))
+            name = type.Namespace + "." + name;
+
+        if (!type.IsGenericType) return name;
+        return name + "<" + string.Join(", ", type.GetGenericArguments().Select(ForType)) + ">";
+    }
+
+    /// <summary>A readable name for a delegate's target method, or null when unavailable.</summary>
+    internal static string? ForDelegate(Delegate function)
+    {
+        global::System.Diagnostics.DiagnosticMethodInfo? info;
+        try
+        {
+            info = global::System.Diagnostics.DiagnosticMethodInfo.Create(function);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null;
+        }
+        return info is null ? null : ForMethod(info.DeclaringTypeName, info.Name);
+    }
+
+    /// <summary>
+    /// Undoes the C# compiler's naming for lambdas, local functions and closure classes:
+    /// <list type="bullet">
+    ///   <item><c>Program+&lt;&gt;c</c>, <c>&lt;Main&gt;b__0_0</c> → <c>Program.Main (lambda)</c></item>
+    ///   <item><c>&lt;Main&gt;g__Render|0_1</c> → <c>Program.Main.Render</c></item>
+    ///   <item><c>&lt;&lt;Main&gt;$&gt;b__0_0</c> (top-level statements) → <c>Program.Main (lambda)</c></item>
+    ///   <item>an ordinary method → <c>Type.Method</c></item>
+    /// </list>
+    /// </summary>
+    internal static string ForMethod(string? declaringTypeName, string methodName)
+    {
+        var type = CleanTypeName(declaringTypeName);
+        var method = DemangleMethod(methodName);
+        return string.IsNullOrEmpty(type) ? method : type + "." + method;
+    }
+
+    private static string CleanTypeName(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return "";
+
+        // Drop any generic instantiation suffix ("Foo`1[[...]]") and the arity markers.
+        var bracket = name.IndexOf('[');
+        if (bracket >= 0) name = name.Substring(0, bracket);
+
+        var parts = name.Split('+')
+            .Where(static p => p.Length > 0 && p[0] != '<') // <>c, <>c__DisplayClass0_0, <Foo>d__3
+            .Select(StripArity);
+        return string.Join(".", parts);
+    }
+
+    private static string DemangleMethod(string name)
+    {
+        if (name.Length == 0 || name[0] != '<') return StripArity(name);
+
+        var close = MatchingClose(name);
+        if (close < 0) return name;
+
+        var inner = DemangleMethod(name.Substring(1, close - 1));
+        var rest = name.Substring(close + 1);
+
+        if (rest.StartsWith("b__", StringComparison.Ordinal))
+            return inner + " (lambda)";
+        if (rest.StartsWith("g__", StringComparison.Ordinal))
+        {
+            var local = rest.Substring(3);
+            var bar = local.IndexOf('|');
+            if (bar >= 0) local = local.Substring(0, bar);
+            return inner + "." + local;
+        }
+
+        // "<Main>$" (top-level statements entry point) and anything unrecognised.
+        return inner;
+    }
+
+    private static int MatchingClose(string name)
+    {
+        var depth = 0;
+        for (var i = 0; i < name.Length; i++)
+        {
+            if (name[i] == '<') depth++;
+            else if (name[i] == '>' && --depth == 0) return i;
+        }
+        return -1;
+    }
+
+    private static string StripArity(string name)
+    {
+        var tick = name.IndexOf('`');
+        return tick >= 0 ? name.Substring(0, tick) : name;
+    }
+}
 /// <summary>Implemented by every Reactor host so the diagnostics registry can describe it.</summary>
 internal interface IReactorDiagnosticHost
 {

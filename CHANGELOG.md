@@ -31,7 +31,7 @@ Conventions for contributors:
 - **Inspector diagnostics for hosts, roots and component boundaries** (spec 010).
   `ReactorDiagnostics.GetHosts()` (`Microsoft.UI.Reactor.Core.Diagnostics`) returns
   a snapshot of every live `ReactorHost` and `ReactorHostControl` — window,
-  host element, reconciler, root control, root component / render function, and
+  host element, root control, root component or render-function name, and
   `MountSite`, the `ReactorApp.Run` / `OpenWindow` / `Mount` call that mounted the
   root (recorded by the source-map generator when source mapping is on). While
   `ReactorSourceMap.Enabled` is true, every component's wrapper is also tagged, so

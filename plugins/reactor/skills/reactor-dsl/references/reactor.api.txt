@@ -4610,18 +4610,16 @@ Mount(Component component) → void
 Mount(Func<RenderContext, Element> renderFunc) → void
 
 ### class ReactorHostInfo
-Component RootComponent { get; }
 FrameworkElement HostElement { get; }
-Func<RenderContext, Element> RootRenderFunction { get; }
 ReactorHost Host { get; }
 ReactorHostControl HostControl { get; }
 ReactorHostKind Kind { get; }
 ReactorWindow ReactorWindow { get; }
-Reconciler Reconciler { get; }
 SourceLocation? MountSite { get; }
-Type RootComponentType { get; }
 UIElement RootControl { get; }
 Window Window { get; }
+string RootComponentName { get; }
+string RootRenderFunctionName { get; }
 
 ### static class ReactorSourceMap
 bool Enabled { get; set; }

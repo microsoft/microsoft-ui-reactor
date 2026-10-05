@@ -175,14 +175,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     Core.Diagnostics.ReactorHostInfo? Core.Diagnostics.IReactorDiagnosticHost.CaptureDiagnosticInfo()
     {
         if (_disposed) return null;
-        return new Core.Diagnostics.ReactorHostInfo(
+        return Core.Diagnostics.ReactorHostInfo.ForRoot(
             Core.Diagnostics.ReactorHostKind.HostControl,
             host: null,
             hostControl: this,
             reactorWindow: null,
             window: null,
             hostElement: this,
-            reconciler: _reconciler,
             rootControl: _currentControl,
             rootComponent: _rootComponent,
             rootRenderFunction: _rootRenderFunc,

@@ -23,19 +23,22 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
 
     // ── Host registry ────────────────────────────────────────────────────
 
+    // Unique per instance, so a test can pick its own fakes out of the process-wide
+    // registry without depending on any other host-identifying member.
     private sealed class FakeHost(string label) : IReactorDiagnosticHost
     {
+        public string Label { get; } = label + "#" + Guid.NewGuid().ToString("N");
         public bool Disposed { get; set; }
-        public Reconciler Reconciler { get; } = new();
         public Component? Root { get; set; }
+        public Func<RenderContext, Element>? RenderRoot { get; set; }
 
         public ReactorHostInfo? CaptureDiagnosticInfo() => Disposed
             ? null
-            : new ReactorHostInfo(
+            : ReactorHostInfo.ForRoot(
                 ReactorHostKind.HostControl, host: null, hostControl: null, reactorWindow: null,
-                window: null, hostElement: null, Reconciler, rootControl: null,
-                rootComponent: Root, rootRenderFunction: null,
-                mountSite: new SourceLocation(label, 1));
+                window: null, hostElement: null, rootControl: null,
+                rootComponent: Root, rootRenderFunction: RenderRoot,
+                mountSite: new SourceLocation(Label, 1));
     }
 
     private sealed class ProbeComponent : Component
@@ -44,7 +47,9 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
     }
 
     private static IEnumerable<ReactorHostInfo> InfosFor(params FakeHost[] hosts)
-        => ReactorDiagnostics.GetHosts().Where(i => hosts.Any(h => ReferenceEquals(h.Reconciler, i.Reconciler)));
+        => ReactorDiagnostics.GetHosts().Where(i => hosts.Any(h => i.MountSite?.FilePath == h.Label));
+
+    private static string LabelOf(ReactorHostInfo info) => info.MountSite!.Value.FilePath.Split('#')[0];
 
     [Fact]
     public void GetHosts_ListsRegisteredHostsInRegistrationOrder()
@@ -56,7 +61,7 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
         try
         {
             var infos = InfosFor(a, b).ToList();
-            Assert.Equal(new[] { "a", "b" }, infos.Select(i => i.MountSite!.Value.FilePath));
+            Assert.Equal(new[] { "a", "b" }, infos.Select(LabelOf));
         }
         finally
         {
@@ -81,9 +86,8 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
             ReactorHostRegistry.Unregister(removed);
             disposed.Disposed = true;
 
-            var infos = InfosFor(kept, removed, disposed).ToList();
-            Assert.Single(infos);
-            Assert.Same(kept.Reconciler, infos[0].Reconciler);
+            var info = Assert.Single(InfosFor(kept, removed, disposed));
+            Assert.Equal("kept", LabelOf(info));
         }
         finally
         {
@@ -115,18 +119,18 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
         return new WeakReference(host);
     }
 
+    // ── Root names ───────────────────────────────────────────────────────
+
     [Fact]
-    public void HostInfo_ExposesRootComponentAndItsType()
+    public void HostInfo_NamesAComponentRootByItsType()
     {
-        var root = new ProbeComponent();
-        var host = new FakeHost("typed") { Root = root };
+        var host = new FakeHost("typed") { Root = new ProbeComponent() };
         ReactorHostRegistry.Register(host);
         try
         {
             var info = Assert.Single(InfosFor(host));
-            Assert.Same(root, info.RootComponent);
-            Assert.Equal(typeof(ProbeComponent), info.RootComponentType);
-            Assert.Null(info.RootRenderFunction);
+            Assert.Equal("Microsoft.UI.Reactor.Tests.ReactorHostDiagnosticsTests.ProbeComponent", info.RootComponentName);
+            Assert.Null(info.RootRenderFunctionName);
         }
         finally
         {
@@ -134,6 +138,117 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
         }
     }
 
+    [Fact]
+    public void HostInfo_NamesARenderFunctionRootByItsDeclaringMethod()
+    {
+        var captured = 0;
+        var host = new FakeHost("render") { RenderRoot = _ => TextBlock($"r{captured}") };
+        ReactorHostRegistry.Register(host);
+        try
+        {
+            var info = Assert.Single(InfosFor(host));
+            Assert.Null(info.RootComponentName);
+            Assert.Equal(
+                "Microsoft.UI.Reactor.Tests.ReactorHostDiagnosticsTests.HostInfo_NamesARenderFunctionRootByItsDeclaringMethod (lambda)",
+                info.RootRenderFunctionName);
+        }
+        finally
+        {
+            ReactorHostRegistry.Unregister(host);
+        }
+    }
+
+    [Fact]
+    public void HostInfo_ComponentRootWinsOverAnIgnoredRenderFunction()
+    {
+        // The hosts keep rendering a component root when a render function is mounted on
+        // top, so the snapshot must describe the component and drop the render function.
+        var host = new FakeHost("both") { Root = new ProbeComponent(), RenderRoot = _ => TextBlock("ignored") };
+        ReactorHostRegistry.Register(host);
+        try
+        {
+            var info = Assert.Single(InfosFor(host));
+            Assert.EndsWith(".ProbeComponent", info.RootComponentName);
+            Assert.Null(info.RootRenderFunctionName);
+        }
+        finally
+        {
+            ReactorHostRegistry.Unregister(host);
+        }
+    }
+
+    private sealed class Outer<T>
+    {
+        public sealed class Inner<U> : Component
+        {
+            public override Element Render() => TextBlock("generic");
+        }
+    }
+
+    [Fact]
+    public void RootNames_TypeNamesAreReadable()
+    {
+        Assert.Equal("System.String", RootNames.ForType(typeof(string)));
+        Assert.Equal(
+            "Microsoft.UI.Reactor.Tests.ReactorHostDiagnosticsTests.ProbeComponent",
+            RootNames.ForType(typeof(ProbeComponent)));
+        Assert.Equal(
+            "System.Collections.Generic.Dictionary<System.String, System.Int32>",
+            RootNames.ForType(typeof(Dictionary<string, int>)));
+        Assert.Equal(
+            "Microsoft.UI.Reactor.Tests.ReactorHostDiagnosticsTests.Outer.Inner<System.Int32, System.String>",
+            RootNames.ForType(typeof(Outer<int>.Inner<string>)));
+    }
+
+    public static TheoryData<string?, string, string> CompilerNames => new()
+    {
+        // Ordinary method group.
+        { "MyApp.Shell", "Render", "MyApp.Shell.Render" },
+        // Static lambda: cached in the <>c singleton.
+        { "MyApp.Program+<>c", "<Main>b__0_0", "MyApp.Program.Main (lambda)" },
+        // Capturing lambda: display class.
+        { "MyApp.Program+<>c__DisplayClass0_0", "<Main>b__1", "MyApp.Program.Main (lambda)" },
+        // Local function.
+        { "MyApp.Program", "<Main>g__Render|0_1", "MyApp.Program.Main.Render" },
+        // Lambda inside a local function.
+        { "MyApp.Program+<>c", "<<Main>g__Render|0_1>b__0", "MyApp.Program.Main.Render (lambda)" },
+        // Top-level statements: the entry point is "<Main>$".
+        { "Program+<>c", "<<Main>$>b__0_0", "Program.Main (lambda)" },
+        // Lambda inside an async method: closure class nested in the state machine's owner.
+        { "MyApp.Page+<>c__DisplayClass3_0", "<LoadAsync>b__0", "MyApp.Page.LoadAsync (lambda)" },
+        // Generic declaring type.
+        { "MyApp.ListPage`1+<>c", "<Render>b__2_0", "MyApp.ListPage.Render (lambda)" },
+        // No declaring type available.
+        { null, "<Main>b__0_0", "Main (lambda)" },
+    };
+
+    [Theory]
+    [MemberData(nameof(CompilerNames))]
+    public void RootNames_CompilerGeneratedMethodNamesAreDemangled(string? declaringType, string method, string expected)
+        => Assert.Equal(expected, RootNames.ForMethod(declaringType, method));
+
+    private static Element NamedRender(RenderContext _) => TextBlock("named");
+
+    [Fact]
+    public void RootNames_ForDelegate_UsesTheRealDelegateMetadata()
+    {
+        // Real delegates, not strings: proves DiagnosticMethodInfo supplies what ForMethod
+        // expects for the three shapes an app actually passes to Mount.
+        Func<RenderContext, Element> methodGroup = NamedRender;
+        Func<RenderContext, Element> lambda = _ => TextBlock("lambda");
+        Element Local(RenderContext _) => TextBlock("local");
+        Func<RenderContext, Element> local = Local;
+
+        Assert.Equal(
+            "Microsoft.UI.Reactor.Tests.ReactorHostDiagnosticsTests.NamedRender",
+            RootNames.ForDelegate(methodGroup));
+        Assert.Equal(
+            "Microsoft.UI.Reactor.Tests.ReactorHostDiagnosticsTests.RootNames_ForDelegate_UsesTheRealDelegateMetadata (lambda)",
+            RootNames.ForDelegate(lambda));
+        Assert.Equal(
+            "Microsoft.UI.Reactor.Tests.ReactorHostDiagnosticsTests.RootNames_ForDelegate_UsesTheRealDelegateMetadata.Local",
+            RootNames.ForDelegate(local));
+    }
     // ── Root mount call-site scopes ──────────────────────────────────────
 
     [Fact]
