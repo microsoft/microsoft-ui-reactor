@@ -142,12 +142,37 @@ public class WinAppCaptureTests
         frame.SetPixel(2, 3, Color.Red);
         frame.SetPixel(7, 6, Color.Blue);
 
-        var png = WinAppCapture.CropPng(Encode(frame), new Rectangle(2, 3, 6, 4));
+        var png = WinAppCapture.CropPng(Encode(frame), new Rectangle(2, 3, 6, 4), new Size(10, 8));
 
         using var cropped = Decode(png);
         Assert.Equal(new Size(6, 4), cropped.Size);
         Assert.Equal(Color.Red.ToArgb(), cropped.GetPixel(0, 0).ToArgb());
         Assert.Equal(Color.Blue.ToArgb(), cropped.GetPixel(5, 3).ToArgb());
+    }
+
+    [Fact]
+    public void Crop_rejects_an_image_that_is_not_the_reported_size()
+    {
+        using var frame = new Bitmap(10, 8, PixelFormat.Format32bppArgb);
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => WinAppCapture.CropPng(Encode(frame), new Rectangle(0, 0, 4, 4), new Size(12, 8)));
+        Assert.Contains("12x8", ex.Message);
+        Assert.Contains("10x8", ex.Message);
+    }
+
+    [Fact]
+    public void Quoted_or_padded_PATH_entries_are_normalized()
+    {
+        var onPath = @"C:\Tools\bin\winapp.exe";
+        var env = new Dictionary<string, string?>
+        {
+            ["PATH"] = string.Join(Path.PathSeparator, " \"relative\" ", " \"C:\\Tools\\bin\" "),
+        };
+
+        var resolved = WinAppCapture.ResolveWinAppExe(k => env.GetValueOrDefault(k), p => p == onPath);
+
+        Assert.Equal(onPath, resolved);
     }
 
     // ── rounded corners ────────────────────────────────────────────────────

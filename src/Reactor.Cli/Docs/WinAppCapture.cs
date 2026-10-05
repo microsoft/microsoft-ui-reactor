@@ -64,6 +64,7 @@ internal static class WinAppCapture
         if (!string.IsNullOrEmpty(path))
         {
             foreach (var entry in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+                         .Select(e => e.Trim().Trim('"'))
                          .Where(Path.IsPathFullyQualified))
             {
                 var candidate = Path.Combine(entry, "winapp.exe");
@@ -145,10 +146,18 @@ internal static class WinAppCapture
     /// Crops <paramref name="png"/> to <paramref name="region"/>, squares the window's rounded
     /// corners (<see cref="SquareRoundedCorners"/>) and re-encodes it as PNG.
     /// </summary>
-    internal static byte[] CropPng(byte[] png, Rectangle region)
+    /// <exception cref="InvalidOperationException">
+    /// The decoded image is not <paramref name="expectedSize"/> (the size the crop was computed
+    /// against), so the crop would not describe these pixels.
+    /// </exception>
+    internal static byte[] CropPng(byte[] png, Rectangle region, Size expectedSize)
     {
         using var input = new MemoryStream(png);
         using var source = new Bitmap(input);
+        if (source.Size != expectedSize)
+            throw new InvalidOperationException(
+                $"winapp reported a {expectedSize.Width}x{expectedSize.Height} capture but wrote a " +
+                $"{source.Width}x{source.Height} image");
         using var cropped = source.Clone(region, PixelFormat.Format32bppArgb);
         SquareRoundedCorners(cropped);
         using var output = new MemoryStream();
@@ -304,7 +313,7 @@ internal static class WinAppCapture
 
             var geometry = Native.GetClientGeometry(hwnd);
             var crop = ComputeClientCrop(geometry.FrameBounds, geometry.ClientOrigin, geometry.ClientSize, reported);
-            return CropPng(png, crop);
+            return CropPng(png, crop, reported);
         }
         finally
         {
