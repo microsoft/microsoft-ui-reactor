@@ -18,9 +18,9 @@ an `HwndHost` subclass:
 // WPF hosts foreign HWNDs through HwndHost. DesktopWindowXamlSource owns the
 // island HWND; ReactorHostControl is the WinUI element mounted inside it.
 //
-// ReactorHostControl has no ComponentType property — that one belongs to the
-// WinForms XamlIslandControl. On the WinUI side you either hand it a
-// ComponentFactory or call Mount(...) directly.
+// There is no XAML here to declare it in, so construct it in code and hand it
+// a ComponentFactory or call Mount(...). (ComponentType is the markup form, for
+// a ReactorHostControl declared in a WinUI XAML page.)
 sealed class ReactorWpfIsland : HwndHost
 {
     private DesktopWindowXamlSource? _source;
@@ -66,10 +66,11 @@ sealed class ReactorWpfIsland : HwndHost
 
 Inside the island, the WinUI element you mount is a `ReactorHostControl`.
 
-> **`ReactorHostControl` has no `ComponentType` property.** That property
-> belongs to the WinForms `XamlIslandControl` wrapper, not to the host
-> control itself. On the WinUI side, set `ComponentFactory` (parameterless
-> components) or call `Mount(component)` / `Mount(renderFunc)`.
+> **Set the root from code here.** The island's content is built in C#, so give the
+> `ReactorHostControl` a `ComponentFactory` (parameterless components) or call
+> `Mount(component)` / `Mount(renderFunc)`. Its `ComponentType` property is the
+> markup form, for a host declared in a WinUI XAML page; the WinForms
+> `XamlIslandControl` wrapper has its own, separate `ComponentType`.
 
 ```csharp
 // Mount(...) is the alternative when the component needs constructor

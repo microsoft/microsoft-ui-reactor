@@ -28,6 +28,18 @@ Conventions for contributors:
 
 ### Added
 
+- **`ReactorHostControl` can be declared in XAML.** It gains a public parameterless
+  constructor (the XAML compiler rejected the old optional-parameter one with
+  `WMC0100`) and a `ComponentType` property, so a hybrid page can write
+  `<reactor:ReactorHostControl ComponentType="local:StatsCard" />`. The root is
+  created through the app's generated XAML type information, so it stays trim- and
+  AOT-safe. A `ComponentType` that is only assigned from code has no such entry; the
+  host shows an error naming the fix (`ComponentFactory` / `Mount`) instead of mounting,
+  and a throwing or null-returning `ComponentFactory` is reported the same way rather
+  than escaping the `Loaded` handler and terminating the app. `samples/ReactorHostControlDemo`
+  now declares its counter host in markup, and `samples/InteropFirst` declares its host
+  with `x:Name` (issue #1324).
+
 - **Getting Started documents the single-file path.** A Reactor app does not need
   a `.csproj`: .NET 10 runs a lone `.cs` file whose `#:package` / `#:property`
   header supplies what a project file otherwise would. The header also references
@@ -111,6 +123,13 @@ Conventions for contributors:
   stream's warm-up, so a topic is about 8–10 s faster, and it never activates a window: without
   Graphics Capture a screenshot fails rather than falling back to `PrintWindow`. `mur` also drops
   its YamlDotNet and System.Drawing.Common dependencies (#1320; spec 013 §4).
+- **`ReactorHostControl.Stats` returns `RenderStats` by value** instead of
+  `ref readonly`. The XAML compiler emits type metadata for every public property of
+  a control used in markup, and the by-ref property generated
+  `typeof(RenderStats&)`, which does not compile. Reads such as `host.Stats.Fps`
+  are unchanged; only `ref` bindings to it and already-compiled binaries are
+  affected. `ReactorHost.Stats` is unchanged (issue #1324).
+
 - **`.Validate(fieldName, value, validators…)` now runs its validators during the
   render that calls it**, instead of only when a `FormField` mounts the element —
   the only consumer that ever ran them. Results are therefore readable by the
