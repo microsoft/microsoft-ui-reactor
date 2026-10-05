@@ -63,11 +63,11 @@ internal static class WinAppCapture
         var path = getEnv("PATH");
         if (!string.IsNullOrEmpty(path))
         {
-            foreach (var entry in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            foreach (var candidate in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
                          .Select(e => e.Trim().Trim('"'))
-                         .Where(Path.IsPathFullyQualified))
+                         .Where(Path.IsPathFullyQualified)
+                         .Select(e => Path.Combine(e, "winapp.exe")))
             {
-                var candidate = Path.Combine(entry, "winapp.exe");
                 if (fileExists(candidate)) return Path.GetFullPath(candidate);
             }
         }
