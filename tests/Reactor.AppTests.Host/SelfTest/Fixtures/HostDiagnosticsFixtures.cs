@@ -307,25 +307,41 @@ internal static class HostDiagnosticsFixtures
                 var stop = 0;
                 var reads = 0;
                 var bad = 0;
-                var reader = Task.Run(() =>
+                var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                // A dedicated thread, not the pool: on a loaded CI runner a pool task may not be
+                // scheduled before the remount loop ends, and then nothing overlaps.
+                var reader = Task.Factory.StartNew(() =>
                 {
                     while (Volatile.Read(ref stop) == 0)
                     {
                         var info = ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.Host, host));
                         Interlocked.Increment(ref reads);
+                        started.TrySetResult();
                         if (info?.MountSite is { } site && site != a && site != b)
                             Interlocked.Increment(ref bad);
                     }
-                });
+                }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
-                for (int i = 0; i < 5000; i++)
-                    host.Mount(root, (i & 1) == 0 ? b : a);
+                await Task.WhenAny(started.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+                var readsBefore = Volatile.Read(ref reads);
+
+                // Remount until the reader has overlapped a meaningful number of snapshots.
+                var budget = global::System.Diagnostics.Stopwatch.StartNew();
+                int remounts = 0;
+                while (remounts < 5000 || (Volatile.Read(ref reads) - readsBefore < 200 && budget.Elapsed < TimeSpan.FromSeconds(10)))
+                {
+                    host.Mount(root, (remounts & 1) == 0 ? b : a);
+                    remounts++;
+                }
+                if ((remounts & 1) == 1)
+                    host.Mount(root, a);
+                var overlapped = Volatile.Read(ref reads) - readsBefore;
 
                 Volatile.Write(ref stop, 1);
                 await reader;
                 await host.WaitForIdleAsync();
 
-                H.Check("HostDiagRace_ReaderRan", Volatile.Read(ref reads) > 0, $"reads={reads}");
+                H.Check("HostDiagRace_ReaderRan", overlapped > 0, $"reads during remounts={overlapped}, total={reads}, remounts={remounts}");
                 H.Check("HostDiagRace_NoTornSites", bad == 0, $"torn={bad} of {reads}");
                 H.Check("HostDiagRace_FinalSite", InfoFor(host)?.MountSite == a);
             }
