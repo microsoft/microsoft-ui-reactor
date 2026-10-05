@@ -4711,12 +4711,14 @@ overwritten.</p>
 <h3 id="trying-to-use-reactor-inside-a-winui-page-or-usercontrol">Trying to use Reactor inside a WinUI <code>Page</code> or <code>UserControl</code><a class="headerlink" href="#trying-to-use-reactor-inside-a-winui-page-or-usercontrol" title="Permanent link">&para;</a></h3>
 <p>Reactor expects to own the window. <code>ReactorApp.Run&lt;T&gt;</code> opens a
 <code>Window</code>, mounts your component tree directly, and drives the
-reconciler from that root. Mounting a Reactor component inside a
-WinUI <code>Page</code> (via <code>xmlns:reactor=...</code> markup) does not work — there
-is no XAML loader for Reactor elements. If you need Reactor inside an
-existing WinUI/WinForms host, see <a href="../winforms-interop/">WinForms interop</a>
-for <code>XamlIslandControl</code> or use <code>ReactorHostControl</code> from
-<a href="../components/">components</a> for the WinUI host case.</p>
+reconciler from that root. Writing Reactor <em>elements</em> in a WinUI
+<code>Page</code>'s markup does not work — there is no XAML loader for them. To
+put Reactor inside an existing WinUI page, declare a
+<code>ReactorHostControl</code> there and name the root component:
+<code>&lt;reactor:ReactorHostControl ComponentType="local:StatsCard" /&gt;</code> with
+<code>xmlns:reactor="using:Microsoft.UI.Reactor.Hosting"</code> (see
+<a href="../xaml-developers/">Reactor for XAML Developers</a>). For WinForms, see
+<a href="../winforms-interop/">WinForms interop</a> for <code>XamlIslandControl</code>.</p>
 <h3 id="reaching-for-inotifypropertychanged-out-of-habit">Reaching for <code>INotifyPropertyChanged</code> out of habit<a class="headerlink" href="#reaching-for-inotifypropertychanged-out-of-habit" title="Permanent link">&para;</a></h3>
 <p>XAML developers often try to back state with a view model. In Reactor,
 state IS the binding — <code>UseState</code> returns <code>(value, setter)</code> and the

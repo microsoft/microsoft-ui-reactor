@@ -4002,9 +4002,11 @@ use <code>ContentFactory</code> instead of <code>ComponentType</code>:</p>
 </code></pre></div>
 <p>The factory function runs on the UI thread after the XAML Island is ready.
 Return any <code>UIElement</code> — typically a <code>ReactorHostControl</code> wrapping your
-component. Note that <code>ComponentType</code> lives on <code>XamlIslandControl</code>, not on
-<code>ReactorHostControl</code>: inside a factory you set <code>ComponentFactory</code> for a
-parameterless component, or call <code>Mount(component)</code> when it takes arguments.</p>
+component. Don't set <code>ReactorHostControl.ComponentType</code> here: that property is
+for declaring a host in WinUI XAML markup and creates the root through the XAML
+compiler's generated type information, which a type assigned only from code
+doesn't have. Inside a factory, set <code>ComponentFactory</code> for a parameterless
+component, or call <code>Mount(component)</code> when it takes arguments.</p>
 <h2 id="patterns">Patterns<a class="headerlink" href="#patterns" title="Permanent link">&para;</a></h2>
 <h3 id="bridge-a-winforms-vm-into-a-reactor-component-via-useobservable">Bridge a WinForms VM into a Reactor component via <code>UseObservable</code><a class="headerlink" href="#bridge-a-winforms-vm-into-a-reactor-component-via-useobservable" title="Permanent link">&para;</a></h3>
 <p>When an existing WinForms app already has a view model implementing

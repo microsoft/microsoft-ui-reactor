@@ -3290,9 +3290,9 @@ an <code>HwndHost</code> subclass:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1">// WPF hosts foreign HWNDs through HwndHost. DesktopWindowXamlSource owns the</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1">// island HWND; ReactorHostControl is the WinUI element mounted inside it.</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1">//</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1">// ReactorHostControl has no ComponentType property — that one belongs to the</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1">// WinForms XamlIslandControl. On the WinUI side you either hand it a</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1">// ComponentFactory or call Mount(...) directly.</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1">// There is no XAML here to declare it in, so construct it in code and hand it</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1">// a ComponentFactory or call Mount(...). (ComponentType is the markup form, for</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1">// a ReactorHostControl declared in a WinUI XAML page.)</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="k">sealed</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">ReactorWpfIsland</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">HwndHost</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">{</span>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">    </span><span class="k">private</span><span class="w"> </span><span class="n">DesktopWindowXamlSource</span><span class="o">?</span><span class="w"> </span><span class="n">_source</span><span class="p">;</span>
@@ -3337,10 +3337,11 @@ an <code>HwndHost</code> subclass:</p>
 </code></pre></div>
 <p>Inside the island, the WinUI element you mount is a <code>ReactorHostControl</code>.</p>
 <blockquote>
-<p><strong><code>ReactorHostControl</code> has no <code>ComponentType</code> property.</strong> That property
-belongs to the WinForms <code>XamlIslandControl</code> wrapper, not to the host
-control itself. On the WinUI side, set <code>ComponentFactory</code> (parameterless
-components) or call <code>Mount(component)</code> / <code>Mount(renderFunc)</code>.</p>
+<p><strong>Set the root from code here.</strong> The island's content is built in C#, so give the
+<code>ReactorHostControl</code> a <code>ComponentFactory</code> (parameterless components) or call
+<code>Mount(component)</code> / <code>Mount(renderFunc)</code>. Its <code>ComponentType</code> property is the
+markup form, for a host declared in a WinUI XAML page; the WinForms
+<code>XamlIslandControl</code> wrapper has its own, separate <code>ComponentType</code>.</p>
 </blockquote>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1">// Mount(...) is the alternative when the component needs constructor</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1">// arguments — ComponentFactory covers the parameterless case.</span>

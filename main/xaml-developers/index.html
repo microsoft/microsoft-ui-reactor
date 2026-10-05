@@ -4139,10 +4139,22 @@ still exists (<a href="../advanced/"><code>UseObservable</code></a>), but reach 
 when you're migrating an existing view model. New code uses hooks.</p>
 <h3 id="writing-xaml-at-all">Writing XAML at all<a class="headerlink" href="#writing-xaml-at-all" title="Permanent link">&para;</a></h3>
 <p>Reactor does not host a XAML loader. There is no <code>Application.LoadComponent</code>
-equivalent, no <code>xmlns:reactor</code>, no <code>*.reactor.xml</code> markup. Apps that
+equivalent, no markup for Reactor <em>elements</em>, no <code>*.reactor.xml</code> files. Apps that
 need part of the screen in XAML use a WinUI <code>Page</code> as the host and
 embed Reactor via <a href="../winforms-interop/">winforms-interop</a> or
-<code>ReactorHostControl</code>; everything inside that host is C#. If a
+<code>ReactorHostControl</code>; everything inside that host is C#. The host itself is an
+ordinary WinUI control, so it can be declared in the page's markup:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">&lt;Page</span><span class="w"> </span><span class="na">xmlns:reactor=</span><span class="s">&quot;using:Microsoft.UI.Reactor.Hosting&quot;</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">      </span><span class="na">xmlns:local=</span><span class="s">&quot;using:MyApp&quot;</span><span class="nt">&gt;</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="nt">&lt;reactor:ReactorHostControl</span><span class="w"> </span><span class="na">ComponentType=</span><span class="s">&quot;local:StatsCard&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="nt">&lt;/Page&gt;</span>
+</code></pre></div>
+<p><code>ComponentType</code> names a component with a public parameterless constructor; for
+a root that needs constructor arguments or view-model state, declare the host
+with an <code>x:Name</code> and call <code>Mount(...)</code> from code-behind. <code>ComponentType</code> only
+works for a type named in markup (that is what makes the XAML compiler generate
+its trim-safe activator); set from code, the host shows an error explaining this
+in place of the root, so use <code>ComponentFactory</code> or <code>Mount(...)</code> there. If a
 contractor's "Reactor XAML compiler" appears in your search results,
 it doesn't exist — the framework's design eliminates the second
 authoring language deliberately.</p>
