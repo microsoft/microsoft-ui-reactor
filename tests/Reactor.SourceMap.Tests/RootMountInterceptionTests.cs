@@ -140,14 +140,53 @@ public sealed class RootMountInterceptionTests : IDisposable
         Assert.Empty(_entered);
     }
 
+    /// <summary>
+    /// The site is taken even while the runtime flag is still off. <c>ReactorApp.Run</c>
+    /// depends on this: under <c>--devtools app</c> the devtools bootstrap turns source
+    /// mapping on INSIDE Run, after Run's own call site was taken, and the window mounts
+    /// later still. Whether a host keeps the site is decided at mount time
+    /// (<c>KeepIfEnabled</c>, unit-tested in Reactor.Tests).
+    /// </summary>
     [Fact]
-    public void FlagOff_ForwardsTheCallWithoutOpeningAScope()
+    public void FlagOff_StillTakesTheSiteAndClosesTheScope()
     {
         ReactorSourceMap.Enabled = false;
 
-        Assert.Throws<ArgumentNullException>(() => ReactorApp.OpenWindow(new WindowSpec(), (Func<Component>)null!));
+        Assert.Throws<ArgumentNullException>(() => ReactorApp.OpenWindow(new WindowSpec(), (Func<Component>)null!)); int expected = Line();
 
-        Assert.Empty(_entered);
-        Assert.Equal(0, ReactorSourceMap.OpenRootMountScopeCountForTest);
+        AssertClaimedByTheEntryPoint(expected);
+    }
+
+    /// <summary>
+    /// <c>Run</c> → startup options: the site Run claims is what <c>ReactorApplication</c>
+    /// receives for the primary window (<c>OnLaunched</c> passes
+    /// <c>RootMountSite</c> to <c>OpenWindowCore</c>, the same path <c>OpenWindow</c> takes
+    /// and the live selftests cover). Proven for both an explicit opt-in (flag already on)
+    /// and the devtools shape (flag off when Run is called, switched on before mount).
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Run_CarriesItsOwnSiteIntoTheStartupOptions(bool enabledAtCall)
+    {
+        ReactorSourceMap.Enabled = enabledAtCall;
+        ReactorAppOptions? captured = null;
+        ReactorApp.StartApplicationForTest = o => captured = o;
+        try
+        {
+            ReactorApp.Run<Probe>(new WindowSpec { Title = "options probe" }); int expected = Line();
+
+            Assert.NotNull(captured);
+            Assert.Equal(expected, captured!.RootMountSite?.LineNumber);
+            Assert.EndsWith("RootMountInterceptionTests.cs", captured.RootMountSite!.Value.FilePath, StringComparison.Ordinal);
+            Assert.Equal(0, ReactorSourceMap.OpenRootMountScopeCountForTest);
+
+            ReactorApp.Run(new WindowSpec { Title = "options probe" }, _ => TextBlock("x")); int expectedRender = Line();
+            Assert.Equal(expectedRender, captured!.RootMountSite?.LineNumber);
+        }
+        finally
+        {
+            ReactorApp.StartApplicationForTest = null;
+        }
     }
 }

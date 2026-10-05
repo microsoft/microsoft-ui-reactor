@@ -314,7 +314,7 @@ windows opened through `ReactorApp.Run` / `ReactorApp.OpenWindow`, a
 foreach (var host in ReactorDiagnostics.GetHosts())
 {
     var root = host.RootComponentName ?? host.RootRenderFunctionName ?? "(not mounted)";
-    Console.WriteLine($"{host.Kind} {host.ReactorWindow?.Key} <{root}> at {host.MountSite}");
+    lines.Add($"{host.Kind} {host.ReactorWindow?.Key} <{root}> at {host.MountSite}");
 }
 ```
 

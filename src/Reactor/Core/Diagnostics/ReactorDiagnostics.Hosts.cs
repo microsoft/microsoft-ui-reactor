@@ -172,9 +172,18 @@ internal static class RootNames
     {
         if (type.IsGenericParameter) return type.Name;
 
-        var name = StripArity(type.Name);
-        for (var outer = type.DeclaringType; outer is not null; outer = outer.DeclaringType)
-            name = StripArity(outer.Name) + "." + name;
+        // Arrays (and pointers/by-refs) name their element type: format it recursively,
+        // otherwise "List`1[]" loses both its type arguments and its rank.
+        if (type.IsArray)
+            return ForType(type.GetElementType()!) + "[" + new string(',', type.GetArrayRank() - 1) + "]";
+        if ((type.IsPointer || type.IsByRef) && type.GetElementType() is { } element)
+            return ForType(element) + (type.IsPointer ? "*" : "&");
+
+        // Outermost first: Namespace.Outer.Inner.
+        var segments = new Stack<string>();
+        for (var t = type; t is not null; t = t.DeclaringType)
+            segments.Push(StripArity(t.Name));
+        var name = string.Join(".", segments);
         if (!string.IsNullOrEmpty(type.Namespace))
             name = type.Namespace + "." + name;
 
@@ -273,6 +282,13 @@ internal interface IReactorDiagnosticHost
 {
     /// <summary>A snapshot of the host, or null once it has been disposed.</summary>
     ReactorHostInfo? CaptureDiagnosticInfo();
+
+    /// <summary>
+    /// Tags every already-mounted component boundary (see
+    /// <c>Reconciler.TagComponentBoundaries</c>). Callable from any thread: the host runs it
+    /// on its own UI thread. A disposed host does nothing.
+    /// </summary>
+    void TagComponentBoundaries();
 }
 
 /// <summary>
@@ -303,18 +319,26 @@ internal static class ReactorHostRegistry
         }
     }
 
+    /// <summary>
+    /// Called when source mapping turns on: every live host tags the component boundaries it
+    /// already mounted, so an inspector that switches the flag on late still sees them.
+    /// </summary>
+    internal static void TagComponentBoundariesInAllHosts()
+    {
+        foreach (var host in Snapshot())
+            host.TagComponentBoundaries();
+    }
+
     /// <summary>Live hosts in registration order.</summary>
     internal static IReactorDiagnosticHost[] Snapshot()
     {
         lock (s_gate)
         {
             if (s_hosts is null || s_hosts.Count == 0) return global::System.Array.Empty<IReactorDiagnosticHost>();
-            var live = new List<IReactorDiagnosticHost>(s_hosts.Count);
-            foreach (var weak in s_hosts)
-            {
-                if (weak.TryGetTarget(out var host)) live.Add(host);
-            }
-            return live.ToArray();
+            return s_hosts
+                .Select(static weak => weak.TryGetTarget(out var host) ? host : null)
+                .Where(static host => host is not null)
+                .ToArray()!;
         }
     }
 }
@@ -339,11 +363,9 @@ public static partial class ReactorDiagnostics
         var hosts = ReactorHostRegistry.Snapshot();
         if (hosts.Length == 0) return global::System.Array.Empty<ReactorHostInfo>();
 
-        var infos = new List<ReactorHostInfo>(hosts.Length);
-        foreach (var host in hosts)
-        {
-            if (host.CaptureDiagnosticInfo() is { } info) infos.Add(info);
-        }
-        return infos;
+        return hosts
+            .Select(static host => host.CaptureDiagnosticInfo())
+            .Where(static info => info is not null)
+            .ToList()!;
     }
 }

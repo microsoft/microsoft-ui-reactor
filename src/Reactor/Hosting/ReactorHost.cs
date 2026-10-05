@@ -266,6 +266,15 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         Core.Diagnostics.ReactorHostRegistry.Register(this);
     }
 
+    void Core.Diagnostics.IReactorDiagnosticHost.TagComponentBoundaries()
+    {
+        if (_disposed) return;
+        if (_dispatcherQueue.HasThreadAccess)
+            _reconciler.TagComponentBoundaries();
+        else
+            _dispatcherQueue.TryEnqueue(() => { if (!_disposed) _reconciler.TagComponentBoundaries(); });
+    }
+
     Core.Diagnostics.ReactorHostInfo? Core.Diagnostics.IReactorDiagnosticHost.CaptureDiagnosticInfo()
     {
         if (_disposed) return null;
@@ -379,7 +388,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     internal void Mount(Component component, SourceLocation? mountSite)
     {
         _rootComponent = component;
-        _mountSite = mountSite;
+        _mountSite = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
         RequestRender();
     }
 
@@ -390,7 +399,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         // Render() keeps preferring a component root mounted earlier on this host, so the
         // render function's site only describes the live root when there is none.
         if (_rootComponent is null)
-            _mountSite = mountSite;
+            _mountSite = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
         RequestRender();
     }
 

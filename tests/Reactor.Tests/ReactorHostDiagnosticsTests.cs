@@ -31,6 +31,9 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
         public bool Disposed { get; set; }
         public Component? Root { get; set; }
         public Func<RenderContext, Element>? RenderRoot { get; set; }
+        public int TagRefreshes { get; private set; }
+
+        public void TagComponentBoundaries() => TagRefreshes++;
 
         public ReactorHostInfo? CaptureDiagnosticInfo() => Disposed
             ? null
@@ -119,6 +122,34 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
         return new WeakReference(host);
     }
 
+    [Fact]
+    public void TurningSourceMappingOn_AsksEveryHostToTagItsMountedBoundaries()
+    {
+        ReactorSourceMap.Enabled = false;
+        var a = new FakeHost("a");
+        var b = new FakeHost("b");
+        ReactorHostRegistry.Register(a);
+        ReactorHostRegistry.Register(b);
+        try
+        {
+            ReactorSourceMap.Enabled = true;
+            Assert.Equal(1, a.TagRefreshes);
+            Assert.Equal(1, b.TagRefreshes);
+
+            // Only the off → on transition refreshes; a repeated set or a switch-off does not.
+            ReactorSourceMap.Enabled = true;
+            ReactorSourceMap.Enabled = false;
+            Assert.Equal(1, a.TagRefreshes);
+
+            ReactorSourceMap.Enabled = true;
+            Assert.Equal(2, a.TagRefreshes);
+        }
+        finally
+        {
+            ReactorHostRegistry.Unregister(a);
+            ReactorHostRegistry.Unregister(b);
+        }
+    }
     // ── Root names ───────────────────────────────────────────────────────
 
     [Fact]
@@ -198,6 +229,13 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
         Assert.Equal(
             "Microsoft.UI.Reactor.Tests.ReactorHostDiagnosticsTests.Outer.Inner<System.Int32, System.String>",
             RootNames.ForType(typeof(Outer<int>.Inner<string>)));
+        // Arrays keep their element's type arguments and their rank.
+        Assert.Equal(
+            "System.Collections.Generic.Dictionary<System.Collections.Generic.List<System.Int32>[], System.String[,]>",
+            RootNames.ForType(typeof(Dictionary<List<int>[], string[,]>)));
+        Assert.NotEqual(
+            RootNames.ForType(typeof(List<List<int>[]>)),
+            RootNames.ForType(typeof(List<List<string>[]>)));
     }
 
     public static TheoryData<string?, string, string> CompilerNames => new()
@@ -252,20 +290,26 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
     // ── Root mount call-site scopes ──────────────────────────────────────
 
     [Fact]
-    public void RootMountSite_IsNotRecordedWhenSourceMappingIsOff()
+    public void RootMountSite_IsTakenWithTheFlagOff_ButOnlyKeptWhileItIsOn()
     {
-        ReactorSourceMap.Enabled = false;
-        var token = ReactorSourceMap.EnterRootMountSite("App.cs", 12);
-        try
-        {
-            Assert.Null(token);
-            Assert.Null(ReactorSourceMap.TakeRootMountSite());
+            // Capture is unconditional (Run's site must survive a flag switched on later, as
+            // `--devtools app` does); the host's store is what the flag gates.
+            ReactorSourceMap.Enabled = false;
+            var token = ReactorSourceMap.EnterRootMountSite("App.cs", 12);
+            try
+            {
+                var site = ReactorSourceMap.TakeRootMountSite();
+                Assert.Equal(new SourceLocation("App.cs", 12), site);
+
+                Assert.Null(ReactorSourceMap.KeepIfEnabled(site));
+                ReactorSourceMap.Enabled = true;
+                Assert.Equal(site, ReactorSourceMap.KeepIfEnabled(site));
+            }
+            finally
+            {
+                ReactorSourceMap.ExitRootMountSite(token);
+            }
         }
-        finally
-        {
-            ReactorSourceMap.ExitRootMountSite(token);
-        }
-    }
 
     [Fact]
     public void RootMountSite_IsClaimedExactlyOnce()

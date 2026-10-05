@@ -89,7 +89,7 @@ internal static class HostDiagnosticsFixtures
         {
             var previous = ReactorSourceMap.Enabled;
             ReactorSourceMap.Enabled = true;
-            var host = H.CreateHost();
+            using var host = H.CreateHost();
             try
             {
                 Action<int>? setN = null;
@@ -142,7 +142,6 @@ internal static class HostDiagnosticsFixtures
             }
             finally
             {
-                host.Dispose();
                 ReactorSourceMap.Enabled = previous;
             }
         }
@@ -171,7 +170,7 @@ internal static class HostDiagnosticsFixtures
         {
             var previous = ReactorSourceMap.Enabled;
             ReactorSourceMap.Enabled = false;
-            var host = H.CreateHost();
+            using var host = H.CreateHost();
             try
             {
                 host.Mount(_ => Boundaries(0));
@@ -194,12 +193,61 @@ internal static class HostDiagnosticsFixtures
             }
             finally
             {
-                host.Dispose();
                 ReactorSourceMap.Enabled = previous;
             }
         }
     }
 
+    /// <summary>
+    /// Turning source mapping on late tags boundaries that were mounted while it was off —
+    /// including a cached one that later renders skip by reference and so never re-evaluate
+    /// <c>NeedsTag</c>. The parent re-renders with the SAME element instance; without the
+    /// activation refresh the wrapper would stay untagged forever.
+    /// </summary>
+    internal class LateEnableTagsCachedBoundaries(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static readonly Element CachedBoundary = new ComponentElement(typeof(Probe));
+
+        public override async Task RunAsync()
+        {
+            var previous = ReactorSourceMap.Enabled;
+            ReactorSourceMap.Enabled = false;
+            using var host = H.CreateHost();
+            try
+            {
+                Action<int>? setN = null;
+                host.Mount(ctx =>
+                {
+                    var (n, set) = ctx.UseState(0);
+                    setN = set;
+                    return VStack(TextBlock($"hostdiag-late:{n}"), CachedBoundary);
+                });
+                await Harness.Render();
+                await host.WaitForIdleAsync();
+
+                var wrapper = WrapperOf(H, "hostdiag-component");
+                H.Check("HostDiagLate_WrapperFound", wrapper is not null);
+                if (wrapper is null) return;
+                H.Check("HostDiagLate_UntaggedWhileOff", Reconciler.GetElementTag(wrapper) is null);
+
+                // Called on the UI thread, so the refresh runs inline.
+                ReactorSourceMap.Enabled = true;
+                H.Check("HostDiagLate_TaggedOnEnable",
+                    Reconciler.GetElementTag(wrapper) is ComponentElement comp && comp.ComponentType == typeof(Probe));
+
+                // A re-render that skips the cached boundary by reference keeps the tag.
+                setN!(1);
+                await Harness.WaitFor(() => H.FindControl<TextBlock>(t => t.Text == "hostdiag-late:1") is not null);
+                var after = WrapperOf(H, "hostdiag-component");
+                H.Check("HostDiagLate_SameWrapperAfterSkip", ReferenceEquals(after, wrapper));
+                H.Check("HostDiagLate_StillTaggedAfterSkip", after is not null && Reconciler.GetElementTag(after) is ComponentElement);
+            }
+            finally
+            {
+                ReactorSourceMap.Enabled = previous;
+            }
+        }
+    }
     /// <summary>
     /// A <c>ReactorHostControl</c> island is listed with itself as the host element and no
     /// window, reports its component root and mount site, and drops out once disposed. A
@@ -212,8 +260,8 @@ internal static class HostDiagnosticsFixtures
         {
             var previous = ReactorSourceMap.Enabled;
             ReactorSourceMap.Enabled = true;
-            var island = new ReactorHostControl();
-            var factoryIsland = new ReactorHostControl { ComponentFactory = static () => new IslandRoot() };
+            using var island = new ReactorHostControl();
+            using var factoryIsland = new ReactorHostControl { ComponentFactory = static () => new IslandRoot() };
             object? sentinel = null;
             try
             {
@@ -265,8 +313,6 @@ internal static class HostDiagnosticsFixtures
             finally
             {
                 ReactorSourceMap.ExitRootMountSite(sentinel);
-                island.Dispose();
-                factoryIsland.Dispose();
                 H.SetContent(null);
                 ReactorSourceMap.Enabled = previous;
             }
@@ -319,7 +365,7 @@ internal static class HostDiagnosticsFixtures
                 await win.Host.WaitForIdleAsync();
                 var afterRender = ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.ReactorWindow, win));
                 H.Check("HostDiagWin_IgnoredRenderRemountKeepsComponentRoot",
-                    afterRender?.RootComponentName == ExpectedName<IslandRoot>() && afterRender.RootRenderFunctionName is null);
+                    afterRender?.RootComponentName == ExpectedName<IslandRoot>() && afterRender?.RootRenderFunctionName is null);
 
 #if REACTOR_SOURCEMAP
                 H.Check("HostDiagWin_OpenWindowSite",
@@ -342,7 +388,7 @@ internal static class HostDiagnosticsFixtures
             }
             finally
             {
-                try { win?.Close(); } catch { /* already closed */ }
+                win?.Close(); // idempotent
                 await Task.Delay(80);
                 ReactorSourceMap.Enabled = previous;
             }

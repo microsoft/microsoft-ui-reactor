@@ -250,12 +250,7 @@ trees exist and where each one starts. Three pieces cover that.
 windows opened through `ReactorApp.Run` / `ReactorApp.OpenWindow`, a
 `new ReactorHost(window)` on any window, and every `ReactorHostControl` island:
 
-```csharp
-foreach (var host in ReactorDiagnostics.GetHosts())
-{
-    var root = host.RootComponentName ?? host.RootRenderFunctionName ?? "(not mounted)";
-    Console.WriteLine($"{host.Kind} {host.ReactorWindow?.Key} <{root}> at {host.MountSite}");
-}
+```csharp snippet="source:samples/apps/source-map-explorer/App.cs#list-hosts"
 ```
 
 Each `ReactorHostInfo` carries the owning `Window` (window hosts), the host element

@@ -6078,6 +6078,22 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
+    /// Tags the <c>Border</c> wrapper of every mounted component boundary with its element.
+    /// Called on this reconciler's UI thread when <see cref="global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/>
+    /// turns on, so boundaries mounted while it was off become discoverable too — including
+    /// cached subtrees that later renders skip without ever reaching <see cref="NeedsTag"/>.
+    /// Walks <c>_componentNodes</c>, which holds every mounted Component/Func/Memo.
+    /// </summary>
+    internal void TagComponentBoundaries()
+    {
+        foreach (var (wrapper, node) in _componentNodes)
+        {
+            if (wrapper is FrameworkElement fe && node.Element is { } element && IsComponentBoundary(element))
+                SetElementTagIfNeeded(fe, element);
+        }
+    }
+
+    /// <summary>
     /// Hot Reload (spec 049 §6 step 3). Invokes <paramref name="action"/> once for
     /// every live <see cref="RenderContext"/> tracked by this reconciler — both
     /// function-component contexts (<see cref="ComponentNode.Context"/>) and

@@ -69,7 +69,16 @@ public static partial class ReactorSourceMap
     public static bool Enabled
     {
         get => Volatile.Read(ref s_enabled) != 0;
-        set => Volatile.Write(ref s_enabled, value ? 1 : 0);
+        set
+        {
+            var was = Interlocked.Exchange(ref s_enabled, value ? 1 : 0);
+            // Off → on: component boundaries mounted while mapping was off carry no tag, and
+            // a cached subtree may never be re-rendered to pick one up. Tag them now, on each
+            // host's UI thread, so an inspector that turns mapping on late still sees every
+            // component. A no-op before any host exists (startup) and on repeated sets.
+            if (was == 0 && value)
+                Core.Diagnostics.ReactorHostRegistry.TagComponentBoundariesInAllHosts();
+        }
     }
 
     /// <summary>

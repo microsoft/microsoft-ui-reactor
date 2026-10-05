@@ -172,6 +172,15 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             MountRoot(component, mountSite: null);
     }
 
+    void Core.Diagnostics.IReactorDiagnosticHost.TagComponentBoundaries()
+    {
+        if (_disposed) return;
+        if (_dispatcherQueue.HasThreadAccess)
+            _reconciler.TagComponentBoundaries();
+        else
+            _dispatcherQueue.TryEnqueue(() => { if (!_disposed) _reconciler.TagComponentBoundaries(); });
+    }
+
     Core.Diagnostics.ReactorHostInfo? Core.Diagnostics.IReactorDiagnosticHost.CaptureDiagnosticInfo()
     {
         if (_disposed) return null;
@@ -204,7 +213,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         _rootComponent = null;
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
-        _mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
+        _mountSite = Diagnostics.ReactorSourceMap.KeepIfEnabled(Diagnostics.ReactorSourceMap.TakeRootMountSite());
         RequestRender();
     }
 
@@ -213,7 +222,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         _rootRenderFunc = null;
         _funcContext = null;
         _rootComponent = component;
-        _mountSite = mountSite;
+        _mountSite = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
         RequestRender();
     }
 

@@ -666,6 +666,15 @@ public static partial class ReactorApp
     }
 
     /// <summary>
+    /// Test seam: when set, <see cref="StartApplication"/> hands the options to this callback
+    /// instead of starting WinUI, so a headless test can see what a <c>Run</c> overload would
+    /// pass to <see cref="ReactorApplication"/> (for example the root mount site).
+    /// </summary>
+#pragma warning disable CS0649 // Assigned via InternalsVisibleTo (Reactor.SourceMap.Tests), never inside this assembly.
+    internal static Action<ReactorAppOptions>? StartApplicationForTest;
+#pragma warning restore CS0649
+
+    /// <summary>
     /// Shared startup tail for every <c>Run</c> overload: enter an STA, initialize the
     /// process, publish the options <see cref="ReactorApplication"/> reads on launch, and
     /// hand control to WinUI. Blocks until the app exits.
@@ -676,6 +685,12 @@ public static partial class ReactorApp
     /// </param>
     private static void StartApplication(Func<ReactorAppOptions> options)
     {
+        if (StartApplicationForTest is { } capture)
+        {
+            capture(options());
+            return;
+        }
+
         RunOnSta(() =>
         {
             InitProcess();

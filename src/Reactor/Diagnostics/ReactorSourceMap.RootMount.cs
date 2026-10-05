@@ -26,9 +26,17 @@ namespace Microsoft.UI.Reactor.Diagnostics;
 /// options, so nothing ever has to cross threads; the scope stack is therefore
 /// per-thread.</para>
 ///
-/// <para>Cost: nothing when <see cref="Enabled"/> is false — enter returns <c>null</c>
-/// without allocating. When enabled, one small allocation per intercepted root mount,
-/// which happens a handful of times per process.</para>
+/// <para><b>When the flag is read.</b> The scope opens whatever
+/// <see cref="Enabled"/> says at call time, and the host decides at mount time
+/// (<see cref="KeepIfEnabled"/>). That ordering matters for <c>ReactorApp.Run</c>: under
+/// <c>--devtools app</c> the flag is switched on by the devtools bootstrap inside Run,
+/// after Run's own call site has already been taken, and the primary window mounts later
+/// still. Gating the capture on the flag would lose exactly the site an inspector came
+/// for; gating the store keeps an ordinary launch from recording anything.</para>
+///
+/// <para>Cost: one small allocation per intercepted root mount call (a handful per
+/// process), and only in builds compiled with source mapping, since nothing else
+/// calls these hooks.</para>
 /// </summary>
 public static partial class ReactorSourceMap
 {
@@ -53,14 +61,12 @@ public static partial class ReactorSourceMap
     /// Infrastructure for generated source-map interceptors; not intended to be
     /// called directly. Opens a root mount scope for the call written at
     /// <paramref name="filePath"/>:<paramref name="lineNumber"/>, and returns a token
-    /// for <see cref="ExitRootMountSite"/>. Returns <c>null</c> (and records nothing)
-    /// when <see cref="Enabled"/> is false.
+    /// for <see cref="ExitRootMountSite"/>. The scope opens regardless of
+    /// <see cref="Enabled"/>; whether the site is kept is decided when the host mounts.
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static object? EnterRootMountSite(string filePath, int lineNumber)
     {
-        if (!Enabled) return null;
-
         var site = new SourceLocation(filePath, lineNumber);
         var frame = new RootMountFrame(site, t_rootMountTop);
         t_rootMountTop = frame;
@@ -109,6 +115,14 @@ public static partial class ReactorSourceMap
         RootMountSiteClaimedForTest?.Invoke(top.Site);
         return top.Site;
     }
+
+    /// <summary>
+    /// The site a host stores for its root: <paramref name="site"/> while source mapping
+    /// is on at mount time, otherwise null — so a launch nobody is inspecting records
+    /// nothing, while a site taken before the flag came on (see the remarks on this type)
+    /// survives.
+    /// </summary>
+    internal static SourceLocation? KeepIfEnabled(SourceLocation? site) => Enabled ? site : null;
 
     /// <summary>Test-only: number of open root mount scopes on this thread.</summary>
     internal static int OpenRootMountScopeCountForTest
