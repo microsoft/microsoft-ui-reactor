@@ -239,7 +239,92 @@ internal class ComponentRendered_HostControlRootAndThrowingRoot(Harness h) : Sel
              d = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(d))
             panelUnderResolved = resolved is not null && ReferenceEquals(d, resolved);
         H.Check("ComponentRendered_ThrowingWindowRoot_IdResolvesToTheErrorPanel", panelUnderResolved);
+
+        // The root rendered fine but the pass failed later (a setter threw during
+        // reconcile): the outer catch shows the error panel, and the root's id follows it.
+        var passHost = H.CreateHost();
+        passHost.Mount(new RenderedPassFailureRoot());
+        await Harness.Render();
+        var passId = For(nameof(RenderedPassFailureRoot)).Select(e => (long)e.Payload[1]!).FirstOrDefault();
+        var passResolved = passId != 0 ? ReactorTrace.GetComponentControl(passId) : null;
+        var passText = H.FindTextContaining(RenderedPassFailureRoot.Message);
+        bool passPanelUnderResolved = false;
+        for (DependencyObject? d = passText; d is not null && !passPanelUnderResolved;
+             d = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(d))
+            passPanelUnderResolved = passResolved is not null && ReferenceEquals(d, passResolved);
+        Console.WriteLine($"# pass failure: id={passId} resolved={passResolved?.GetType().Name ?? "null"} text={(passText is null ? "missing" : "found")}");
+        H.Check("ComponentRendered_PassFailure_RootIdResolvesToTheErrorPanel", passPanelUnderResolved);
     }
+}
+
+/// <summary>
+/// A component whose Render() throws inside an <c>ErrorBoundary</c> still reports the
+/// render (the boundary, not the reconciler, catches it), on mount and on update.
+/// </summary>
+internal class ComponentRendered_ErrorBoundaryCaughtRendersAreReported(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var events = new List<ReactorEvent>();
+        using var subscription = ReactorTrace.Subscribe(
+            e => { if (e.EventName == nameof(ReactorEventSource.ComponentRendered)) lock (events) events.Add(e); },
+            EventLevel.Verbose,
+            ReactorEventSource.Keywords.RenderDetail);
+
+        if (!ComponentRenderTrace.IsEnabled)
+        {
+            H.Skip("ComponentRendered_ErrorBoundary", "EventSource disabled (NativeAOT)");
+            return;
+        }
+
+        List<ReactorEvent> For(string name)
+        {
+            lock (events) return events.Where(e => (string)e.Payload[0]! == name).ToList();
+        }
+
+        var host = H.CreateHost();
+        host.Mount(ctx =>
+        {
+            var (boom, setBoom) = ctx.UseState(false);
+            return VStack(
+                ErrorBoundary(Component<RenderedThrowOnMountChild>(), _ => TextBlock("mount caught")),
+                ErrorBoundary(Component<RenderedBoomChild, bool>(boom), _ => TextBlock("update caught")),
+                Button("boom", () => setBoom(true)));
+        });
+        await Harness.Render();
+
+        H.Check("ComponentRendered_Boundary_FallbackShown", H.FindText("mount caught") is not null);
+        H.Check("ComponentRendered_Boundary_ThrowingMountReported",
+            For(nameof(RenderedThrowOnMountChild)).Any(e => (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Mount));
+        var boomId = For(nameof(RenderedBoomChild)).Select(e => (long)e.Payload[1]!).FirstOrDefault();
+        H.Check("ComponentRendered_Boundary_HealthyChildMounted", boomId != 0);
+
+        H.ClickButton("boom");
+        await Harness.Render();
+        H.Check("ComponentRendered_Boundary_FallbackShownOnUpdate", H.FindText("update caught") is not null);
+        H.Check("ComponentRendered_Boundary_ThrowingUpdateReportedWithSameId",
+            For(nameof(RenderedBoomChild)).Any(e =>
+                (long)e.Payload[1]! == boomId && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Props));
+    }
+}
+
+internal sealed class RenderedThrowOnMountChild : Component
+{
+    public override Element Render() => throw new InvalidOperationException("ComponentRendered selftest: boundary mount failure");
+}
+
+internal sealed class RenderedBoomChild : Component<bool>
+{
+    public override Element Render() =>
+        Props ? throw new InvalidOperationException("ComponentRendered selftest: boundary update failure") : TextBlock("boom child ok");
+}
+
+internal sealed class RenderedPassFailureRoot : Component
+{
+    public const string Message = "ComponentRendered selftest: reconcile pass failure";
+
+    public override Element Render() =>
+        TextBlock("pass failure root").Set(_ => throw new InvalidOperationException(Message));
 }
 
 internal sealed class RenderedHostControlRoot : Component

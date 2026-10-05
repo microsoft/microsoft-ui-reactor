@@ -150,7 +150,12 @@ internal sealed class ComponentControlRegistry<TControl> where TControl : class
             if (_byId.TryGetValue(id, out var weak))
             {
                 if (!weak.TryGetTarget(out var current) || !ReferenceEquals(current, control))
+                {
+                    // Retargeted (e.g. a realized-replacement adoption): the previous
+                    // control must stop answering TryGetId with this id.
+                    if (current is not null && _readId(current) == id) _writeId(current, 0);
                     weak.SetTarget(control);
+                }
             }
             else
             {
@@ -295,11 +300,13 @@ internal sealed class RootRenderDiagnostics
 
     /// <summary>
     /// Maps the root's id to the control now standing in for its content (the reconciled
-    /// root, or the error panel when Render() threw). Never the reverse direction: that
-    /// control is often also a child component's wrapper, whose own id must keep winning.
+    /// root, or the error panel when Render() or the pass threw). Never the reverse
+    /// direction: that control is often also a child component's wrapper, whose own id
+    /// must keep winning. A no-op until the root has an id, and while the event is off.
     /// </summary>
     public void TrackContent(Microsoft.UI.Xaml.UIElement? control)
     {
-        if (_id != 0) ComponentRenderControls.Registry.Track(_id, control, mapControlToId: false);
+        if (_id != 0 && ComponentRenderTrace.IsEnabled)
+            ComponentRenderControls.Registry.Track(_id, control, mapControlToId: false);
     }
 }

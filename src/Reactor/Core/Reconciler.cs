@@ -1873,14 +1873,18 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// Emits <c>ReactorEventSource.ComponentRendered</c> for a component node and keeps
-    /// the id → wrapper registry current. Only called when the event is enabled.
+    /// the id → wrapper registry current. Only called when the event is enabled. A null
+    /// <paramref name="wrapper"/> reports the render without touching the registry
+    /// (a render that threw into an <c>ErrorBoundary</c>, whose wrapper is discarded or
+    /// replaced by the boundary's fallback).
     /// </summary>
     private static void EmitComponentRendered(
-        ComponentNode node, UIElement wrapper, Element element, string reason, long startTimestamp)
+        ComponentNode node, UIElement? wrapper, Element element, string reason, long startTimestamp)
     {
         long id = node.DiagnosticId;
         if (id == 0) node.DiagnosticId = id = Diagnostics.ComponentRenderTrace.NextId();
-        Diagnostics.ComponentRenderControls.Registry.Track(id, wrapper, mapControlToId: true);
+        if (wrapper is not null)
+            Diagnostics.ComponentRenderControls.Registry.Track(id, wrapper, mapControlToId: true);
         Diagnostics.ReactorEventSource.Log.ComponentRendered(
             node.Component?.GetType().Name ?? element.GetType().Name,
             id,
@@ -2205,6 +2209,17 @@ public sealed partial class Reconciler : IDisposable
                         componentName ?? newEl.GetType().Name, ex.GetType().Name, ex.Message);
                 }
                 newChildElement = ErrorFallback.BuildElement(ex);
+            }
+            // Inside an ErrorBoundary the exception propagates to the boundary; the
+            // render still happened, so report it before letting it go.
+            catch (Exception ex) when (traceRendered && _errorBoundaryDepth > 0
+                && ex is not OutOfMemoryException and not StackOverflowException)
+            {
+                EmitComponentRendered(node, null, newEl,
+                    Diagnostics.ComponentRenderTrace.ClassifyUpdate(
+                        forcedRender, HotReloadService.WithinUpdatePass, selfTriggered, memoReason),
+                    renderedStart);
+                throw;
             }
             break;
         }

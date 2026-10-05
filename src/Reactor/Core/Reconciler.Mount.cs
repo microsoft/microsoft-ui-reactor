@@ -874,6 +874,14 @@ public sealed partial class Reconciler
             _logger?.LogError(ex, "Component Render() threw during mount: {ComponentName}", compElement.GetType().Name);
             childElement = ErrorFallback.BuildElement(ex);
         }
+        // Inside an ErrorBoundary the exception propagates to the boundary; the render
+        // still happened, so report it (the wrapper is discarded, so no registry entry).
+        catch (Exception ex) when (traceRendered && _errorBoundaryDepth > 0
+            && ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            EmitComponentRendered(node, null, compElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
+            throw;
+        }
         if (traceRendered)
             EmitComponentRendered(node, wrapper, compElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
         UIElement? childControl = Mount(childElement, componentRerender);
@@ -917,6 +925,14 @@ public sealed partial class Reconciler
         {
             _logger?.LogError(ex, "FuncComponent Render() threw during mount");
             childElement = ErrorFallback.BuildElement(ex);
+        }
+        // Inside an ErrorBoundary the exception propagates to the boundary; the render
+        // still happened, so report it (the wrapper is discarded, so no registry entry).
+        catch (Exception ex) when (traceRendered && _errorBoundaryDepth > 0
+            && ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            EmitComponentRendered(node, null, funcElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
+            throw;
         }
         if (traceRendered)
             EmitComponentRendered(node, wrapper, funcElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
@@ -962,6 +978,14 @@ public sealed partial class Reconciler
         {
             _logger?.LogError(ex, "MemoComponent Render() threw during mount");
             childElement = ErrorFallback.BuildElement(ex);
+        }
+        // Inside an ErrorBoundary the exception propagates to the boundary; the render
+        // still happened, so report it (the wrapper is discarded, so no registry entry).
+        catch (Exception ex) when (traceRendered && _errorBoundaryDepth > 0
+            && ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            EmitComponentRendered(node, null, memoElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
+            throw;
         }
         if (traceRendered)
             EmitComponentRendered(node, wrapper, memoElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);

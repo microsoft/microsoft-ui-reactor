@@ -127,6 +127,24 @@ public sealed class ComponentRenderTraceTests
     }
 
     [Fact]
+    public void Registry_Retarget_ClearsThePreviousControlsReverseSlot()
+    {
+        // TryAdoptRealizedReplacement moves an id from the replacement wrapper onto the
+        // realized one; the discarded wrapper must stop reporting that id.
+        var registry = NewRegistry();
+        var replacement = new object();
+        var realized = new object();
+        registry.Track(60, replacement, mapControlToId: true);
+
+        registry.Track(60, realized, mapControlToId: true);
+
+        Assert.Same(realized, registry.Resolve(60));
+        Assert.True(registry.TryGetId(realized, out var id));
+        Assert.Equal(60, id);
+        Assert.False(registry.TryGetId(replacement, out _));
+    }
+
+    [Fact]
     public void Registry_Prune_SweepsCollectedControls()
     {
         var registry = NewRegistry();

@@ -117,7 +117,9 @@ identifiers, never from user data (spec 044 §6.2.1).
 
 `ComponentRendered` (EventId 40, `Verbose`, keywords `Render | RenderDetail`)
 fires once each time a component's `Render()` runs — on mount, on update, and
-for a host's root component — and never for a component the memo gate skipped.
+for a host's root component, including a `Render()` that threw (whether the
+framework's error fallback or an `ErrorBoundary` caught it) — and never for a
+component the memo gate skipped.
 It is what an inspector needs to flash the regions that just re-rendered, or to
 answer *why did this render?*:
 

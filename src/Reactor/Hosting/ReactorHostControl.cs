@@ -610,6 +610,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         {
             _logger?.LogError(ex, "Render FAILED");
             ShowErrorFallback(ex);
+            // The root's ComponentRendered id (if this pass traced one) now names the error panel.
+            _rootDiagnostics.TrackContent(_currentControl);
         }
         finally
         {

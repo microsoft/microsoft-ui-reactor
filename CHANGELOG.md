@@ -28,6 +28,23 @@ Conventions for contributors:
 
 ### Added
 
+- **Inspector diagnostics: call-site column and a per-component render event**
+  (issue #1326, spec 010 §1.1):
+  - `SourceLocation.ColumnNumber` (1-based, `0` = unknown) plus a
+    `(FilePath, LineNumber, ColumnNumber)` constructor. The source-map generator
+    stamps the column of the invoked method's name, so several calls on one line
+    resolve to distinct positions. `ToString()` stays `file:line`.
+  - `ComponentRendered` on the `Microsoft-UI-Reactor` provider (EventId 40,
+    Verbose, keywords `Render | RenderDetail`; `RenderDetail` = `0x4000` is new):
+    one event per component render, including mount, the host root and a render
+    that threw. The payload carries the component name, a stable `componentId`,
+    the `reason` (`mount` / `state` / `props` / `context` / `parent` /
+    `hotReload` / `forced`) and the elapsed time.
+  - `ReactorTrace.GetComponentControl(long)` and
+    `ReactorTrace.TryGetComponentId(UIElement, out long)` map a `componentId` to
+    the component's on-screen control and back, so an inspector can flash what
+    re-rendered.
+
 - **Getting Started documents the single-file path.** A Reactor app does not need
   a `.csproj`: .NET 10 runs a lone `.cs` file whose `#:package` / `#:property`
   header supplies what a project file otherwise would. The header also references
