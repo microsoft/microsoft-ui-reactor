@@ -19,9 +19,14 @@ namespace Microsoft.UI.Reactor.Cli.Docs;
 /// does any more, so the app no longer runs <c>PrintWindow</c> at all.
 /// </para>
 /// <para>
-/// winapp never takes input focus here: <c>--focus</c> and <c>--capture-screen</c> (which
-/// foreground the window) are deliberately not passed, so a capture run does not steal the
-/// keyboard from whoever is using the desktop.
+/// <c>--focus</c> and <c>--capture-screen</c> (which foreground the window) are deliberately
+/// not passed. On the normal path winapp captures with Windows Graphics Capture, which never
+/// activates the window, so a capture run does not steal the keyboard. If Windows Graphics
+/// Capture fails, winapp (0.7.x) silently falls back to <c>PrintWindow</c> and, when that
+/// frame is blank, foregrounds the window and retries; no winapp option turns this off. That
+/// fallback sizes the image from <c>GetWindowRect</c> rather than the DWM frame, so it is
+/// detected here (<see cref="ComputeClientCrop"/>) and the screenshot fails with an
+/// explanation instead of being cropped wrong.
 /// </para>
 /// </remarks>
 internal static class WinAppCapture
@@ -77,7 +82,8 @@ internal static class WinAppCapture
     /// <summary>
     /// The <c>winapp</c> argument list for one capture. <c>-w</c> targets exactly one window
     /// (no composite of owned windows), and neither <c>--focus</c> nor <c>--capture-screen</c>
-    /// is passed, so the window is not brought to the foreground.
+    /// is passed, so winapp does not bring the window to the foreground on its normal
+    /// (Windows Graphics Capture) path.
     /// </summary>
     internal static IReadOnlyList<string> BuildScreenshotArguments(long hwnd, string outputPath) =>
     [
@@ -120,11 +126,21 @@ internal static class WinAppCapture
     /// expressed relative to those bounds. All four inputs are physical pixels. A
     /// mismatch between the image and the frame bounds means the two were not taken of
     /// the same window state (a resize, a DPI change mid-capture), and cropping anyway
-    /// would cut the wrong region, so that is an error rather than a guess.
+    /// would cut the wrong region, so that is an error rather than a guess. An image the size
+    /// of <paramref name="windowRect"/> (<c>GetWindowRect</c>, which includes the invisible
+    /// resize borders) is winapp's <c>PrintWindow</c> fallback, reported as such.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The geometry does not line up.</exception>
-    internal static Rectangle ComputeClientCrop(Rectangle frameBounds, Point clientOrigin, Size clientSize, Size imageSize)
+    internal static Rectangle ComputeClientCrop(
+        Rectangle frameBounds, Size windowRect, Point clientOrigin, Size clientSize, Size imageSize)
     {
+        if (imageSize != frameBounds.Size && imageSize == windowRect)
+            throw new InvalidOperationException(
+                $"winapp fell back to PrintWindow capture ({imageSize.Width}x{imageSize.Height} window rect, " +
+                $"not the {frameBounds.Width}x{frameBounds.Height} DWM frame): Windows Graphics Capture failed " +
+                "for this window. That fallback can also bring the window to the foreground. " +
+                "Check that Windows Graphics Capture works on this machine (a normal interactive desktop " +
+                "session) and retry");
         if (imageSize != frameBounds.Size)
             throw new InvalidOperationException(
                 $"captured image is {imageSize.Width}x{imageSize.Height} but the window frame is " +
@@ -354,7 +370,7 @@ internal static class WinAppCapture
             var png = await File.ReadAllBytesAsync(temp, ct);
 
             var geometry = Native.GetClientGeometry(hwnd);
-            var crop = ComputeClientCrop(geometry.FrameBounds, geometry.ClientOrigin, geometry.ClientSize, reported);
+            var crop = ComputeClientCrop(geometry.FrameBounds, geometry.WindowRect, geometry.ClientOrigin, geometry.ClientSize, reported);
             return CropPng(png, crop, reported);
         }
         finally
@@ -388,7 +404,7 @@ internal static class WinAppCapture
         return s.Length <= 400 ? s : s[..400] + "…";
     }
 
-    internal readonly record struct ClientGeometry(Rectangle FrameBounds, Point ClientOrigin, Size ClientSize);
+    internal readonly record struct ClientGeometry(Rectangle FrameBounds, Size WindowRect, Point ClientOrigin, Size ClientSize);
 
     private static class Native
     {
@@ -409,6 +425,8 @@ internal static class WinAppCapture
             {
                 if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT frame, Marshal.SizeOf<RECT>()) != 0)
                     throw new InvalidOperationException("DwmGetWindowAttribute(EXTENDED_FRAME_BOUNDS) failed");
+                if (!GetWindowRect(hwnd, out var window))
+                    throw new InvalidOperationException("GetWindowRect failed");
                 if (!GetClientRect(hwnd, out var client))
                     throw new InvalidOperationException("GetClientRect failed");
                 var origin = new POINT();
@@ -417,6 +435,7 @@ internal static class WinAppCapture
 
                 return new ClientGeometry(
                     Rectangle.FromLTRB(frame.Left, frame.Top, frame.Right, frame.Bottom),
+                    new Size(window.Right - window.Left, window.Bottom - window.Top),
                     new Point(origin.X, origin.Y),
                     new Size(client.Right - client.Left, client.Bottom - client.Top));
             }
@@ -503,6 +522,7 @@ internal static class WinAppCapture
         [DllImport("user32.dll")] private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
         [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out RECT value, int size);
         [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hwnd, out RECT rect);
+        [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
         [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr hwnd, ref POINT point);
         [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
         [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);

@@ -102,7 +102,9 @@ Conventions for contributors:
   come from the winapp CLI instead of the preview host's `PrintWindow` + JPEG frame stream. Images
   keep the same framing (client area only, physical pixels, the 150% convention), are lossless, and
   content-crop is typically 1–4 px tighter. Capture no longer waits on the frame stream's warm-up, so
-  a topic is about 8–10 s faster; it never takes input focus. The winapp CLI is now a prerequisite
+  a topic is about 8–10 s faster; it doesn't request focus, and winapp's normal Windows Graphics
+  Capture path never activates the window (its `PrintWindow` fallback can, so `mur` fails such a
+  capture with an explanation). The winapp CLI is now a prerequisite
   for screenshot capture (`./bootstrap.ps1` installs it; `$REACTOR_WINAPP_EXE` overrides it)
   (#1320; spec 013 §4).
 - **`.Validate(fieldName, value, validators…)` now runs its validators during the

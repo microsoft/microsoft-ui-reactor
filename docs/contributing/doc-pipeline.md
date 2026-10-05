@@ -272,8 +272,13 @@ preview host applies as the window's start position.
    app is a child of `dotnet run`).
 3. For each screenshot it switches component, waits 1 s for layout and transitions to
    settle, and runs `winapp ui screenshot -w <hwnd> -o <tmp> --json`. It never passes
-   `--focus` or `--capture-screen`, so capture does not foreground the window or take
-   input focus — you can keep using the desktop while it runs (the windows still appear).
+   `--focus` or `--capture-screen`, and winapp's normal path (Windows Graphics Capture)
+   does not activate the window, so capture does not take input focus — you can keep using
+   the desktop while it runs (the windows still appear). If Windows Graphics Capture fails,
+   winapp silently falls back to `PrintWindow` and, when that frame is blank, brings the
+   window to the foreground to retry; winapp has no option to turn that off. `mur`
+   recognizes a fallback capture by its size and fails that screenshot with an explanation
+   (committed image untouched) rather than cropping it wrong.
 4. winapp returns the window's visible frame, title bar included. `mur` crops it to the
    client area, so images keep the old framing, and squares the window's rounded bottom
    corners, which Windows 11 composes into the capture but the old `PrintWindow` capture

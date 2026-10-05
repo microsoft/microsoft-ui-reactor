@@ -114,7 +114,7 @@ public class WinAppCaptureTests
     public void Client_crop_drops_the_title_bar_and_border()
     {
         var crop = WinAppCapture.ComputeClientCrop(
-            Rectangle.FromLTRB(2609, 0, 3551, 831), new Point(2611, 45), new Size(938, 784), new Size(942, 831));
+            Rectangle.FromLTRB(2609, 0, 3551, 831), new Size(964, 842), new Point(2611, 45), new Size(938, 784), new Size(942, 831));
 
         Assert.Equal(new Rectangle(2, 45, 938, 784), crop);
     }
@@ -124,14 +124,37 @@ public class WinAppCaptureTests
     {
         // The window was resized (or changed DPI) between the capture and the measurement.
         Assert.Throws<InvalidOperationException>(() => WinAppCapture.ComputeClientCrop(
-            Rectangle.FromLTRB(2609, 0, 3551, 831), new Point(2611, 45), new Size(938, 784), new Size(882, 591)));
+            Rectangle.FromLTRB(2609, 0, 3551, 831), new Size(964, 842), new Point(2611, 45), new Size(938, 784), new Size(882, 591)));
+    }
+
+    /// <summary>
+    /// When Windows Graphics Capture fails, winapp falls back to PrintWindow, sized from
+    /// GetWindowRect (invisible resize borders included). That is named as the fallback,
+    /// not reported as a resize, because the fallback can also foreground the window.
+    /// </summary>
+    [Fact]
+    public void A_PrintWindow_fallback_capture_is_reported_as_such()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => WinAppCapture.ComputeClientCrop(
+            Rectangle.FromLTRB(2609, 0, 3551, 831), new Size(964, 842), new Point(2611, 45), new Size(938, 784), new Size(964, 842)));
+
+        Assert.Contains("fell back to PrintWindow", ex.Message);
+    }
+
+    [Fact]
+    public void A_resize_mismatch_is_not_mistaken_for_the_fallback()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => WinAppCapture.ComputeClientCrop(
+            Rectangle.FromLTRB(2609, 0, 3551, 831), new Size(964, 842), new Point(2611, 45), new Size(938, 784), new Size(882, 591)));
+
+        Assert.DoesNotContain("PrintWindow", ex.Message);
     }
 
     [Fact]
     public void A_client_area_outside_the_capture_is_rejected()
     {
         Assert.Throws<InvalidOperationException>(() => WinAppCapture.ComputeClientCrop(
-            new Rectangle(0, 0, 100, 100), new Point(10, 10), new Size(100, 100), new Size(100, 100)));
+            new Rectangle(0, 0, 100, 100), new Size(100, 100), new Point(10, 10), new Size(100, 100), new Size(100, 100)));
     }
 
     [Fact]
