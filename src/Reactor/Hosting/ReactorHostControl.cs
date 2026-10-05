@@ -269,9 +269,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
     /// <summary>
     /// Creates the Loaded-time root from <see cref="ComponentFactory"/> (which wins) or
-    /// <see cref="ComponentType"/>, and applies <see cref="Props"/>. Never throws: a failure
-    /// (no XAML activation info for a code-only <c>ComponentType</c>, a throwing factory,
-    /// props of the wrong type) comes back in <paramref name="error"/> for the host to show.
+    /// <see cref="ComponentType"/>, and applies <see cref="Props"/>. Never throws for an
+    /// ordinary failure (no XAML activation info for a code-only <c>ComponentType</c>, a
+    /// throwing factory, props of the wrong type): it comes back in <paramref name="error"/>
+    /// for the host to show. Fatal runtime exceptions still propagate.
     /// </summary>
     internal static Component? TryCreateLoadedRoot(
         Func<Component>? factory,
@@ -296,7 +297,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
             return component;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
             error = ex;
             return null;
