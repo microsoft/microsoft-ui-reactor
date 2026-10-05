@@ -185,9 +185,18 @@ internal static class WinAppCapture
     /// with no opaque pixel is left alone. Linear per row: a fully transparent frame (a
     /// headless or not-yet-composed window) costs one pass, not a scan per pixel.
     /// </para>
+    /// <para>
+    /// The pixels are read and written as 32bpp ARGB. <c>CropPng</c> always passes a
+    /// <see cref="PixelFormat.Format32bppArgb"/> bitmap; any other format is rejected rather
+    /// than silently converted.
+    /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="bmp"/> is not 32bpp ARGB.</exception>
     internal static int SquareRoundedCorners(Bitmap bmp)
     {
+        if (bmp.PixelFormat != PixelFormat.Format32bppArgb)
+            throw new ArgumentException(
+                $"expected a {PixelFormat.Format32bppArgb} bitmap, got {bmp.PixelFormat}", nameof(bmp));
         var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
         var data = bmp.LockBits(rect, ImageLockMode.ReadWrite, PixelFormat.Format32bppArgb);
         var replaced = 0;
@@ -330,6 +339,9 @@ internal static class WinAppCapture
             catch (OperationCanceledException)
             {
                 try { proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+                // Observe the readers so a stream faulted by the kill isn't left unobserved.
+                try { await Task.WhenAll(stdoutTask, stderrTask); }
+                catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException) { }
                 throw;
             }
             var stdout = await stdoutTask;

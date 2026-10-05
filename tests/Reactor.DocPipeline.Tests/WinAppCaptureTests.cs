@@ -204,6 +204,14 @@ public class WinAppCaptureTests
     }
 
     [Fact]
+    public void Corner_squaring_rejects_a_bitmap_that_is_not_32bpp_argb()
+    {
+        using var bmp = new Bitmap(4, 4, PixelFormat.Format24bppRgb);
+
+        Assert.Throws<ArgumentException>(() => WinAppCapture.SquareRoundedCorners(bmp));
+    }
+
+    [Fact]
     public void A_fully_transparent_capture_is_left_alone()
     {
         // A headless or not-yet-composed window can come back fully transparent; every row has
