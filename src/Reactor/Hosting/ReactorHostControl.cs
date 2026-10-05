@@ -222,11 +222,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, IT
 
     // Theme.NotifyResourcesChanged: a resource-refresh pass — past memoization AND past
     // every structural skip, so every theme-resolved value is resolved again.
-    // ResourceRefreshPending is volatile and RequestRender is thread-safe.
+    // RequestResourceRefresh and RequestRender are thread-safe.
     void IThemeResourceListener.OnThemeResourcesChanged()
     {
         if (_disposed) return;
-        _reconciler.ResourceRefreshPending = true;
+        _reconciler.RequestResourceRefresh();
         RequestRender();
     }
 

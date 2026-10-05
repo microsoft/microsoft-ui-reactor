@@ -183,9 +183,14 @@ public sealed partial class Reconciler : IDisposable
     // ALSO declines every structural skip, not just the wrapper ones. A reference-equal
     // subtree (a reused or UseMemo'd element) is otherwise skipped wholesale, and its
     // ThemeRef modifiers / ThemeRef-backed resource overrides would never be re-applied
-    // against the edited resources. Implies ForceFullRenderPending. Cleared with it.
-    internal volatile bool ResourceRefreshPending;
+    // against the edited resources. Implies a force pass. Set from any thread; consumed
+    // atomically at the start of a top-level pass so a request racing that pass is kept
+    // for the next one rather than lost.
+    private int _resourceRefreshPending;
     private bool _resourceRefreshActive;
+
+    /// <summary>Requests a resource-refresh pass (see above). Thread-safe.</summary>
+    internal void RequestResourceRefresh() => Interlocked.Exchange(ref _resourceRefreshPending, 1);
 
     // True only during a force pass, for the wrapper elements whose skip would prevent
     // ReconcileComponent from running — and for every element during a resource-refresh
@@ -1771,8 +1776,7 @@ public sealed partial class Reconciler : IDisposable
             // Consume the hot-reload and resource-refresh signals exactly once per
             // top-level pass so every component re-runs Render() even when props/deps
             // are unchanged (and, for a resource refresh, no element is skipped).
-            _resourceRefreshActive = ResourceRefreshPending;
-            ResourceRefreshPending = false;
+            _resourceRefreshActive = Interlocked.Exchange(ref _resourceRefreshPending, 0) != 0;
             _forceFullRenderActive = ForceFullRenderPending || _resourceRefreshActive;
             ForceFullRenderPending = false;
 
