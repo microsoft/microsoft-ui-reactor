@@ -57,21 +57,6 @@
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
-  <!-- WinUI keeps its compiled XAML (*.xbf) + resource index (*.pri) next to the
-       managed output; a NativeAOT publish must carry them into the publish dir or
-       the app fails to resolve XamlControlsResources at startup. Mirrors the same
-       target in samples/apps/hello-world-aot. -->
-  <Target Name="_CopyWinUIResourcesForAot" AfterTargets="Publish"
-          Condition="'$(PublishAot)' == 'true' and '$(AppxPackage)' != 'true'">
-    <ItemGroup>
-      <_WinUIResourcesForAot Include="$(OutputPath)**\*.xbf" />
-      <_WinUIResourcesForAot Include="$(OutputPath)$(AssemblyName).pri" Condition="Exists('$(OutputPath)$(AssemblyName).pri')" />
-    </ItemGroup>
-    <Copy SourceFiles="@(_WinUIResourcesForAot)"
-          DestinationFiles="@(_WinUIResourcesForAot->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
-  </Target>
-
   <ItemGroup>
     <!-- Generation engine: rides the user's logged-in Copilot subscription via
          the bundled Copilot CLI. Same package the demo-script-tool sample uses.
