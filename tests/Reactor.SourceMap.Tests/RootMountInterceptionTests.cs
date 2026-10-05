@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Diagnostics;
 using Microsoft.UI.Reactor.Hosting;
+using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -231,6 +232,57 @@ public sealed class RootMountInterceptionTests : IDisposable
         finally
         {
             ReactorApp.StartApplicationForTest = null;
+        }
+    }
+
+    private sealed class CapturingDevtoolsHost : IReactorDevtoolsHost
+    {
+        public ReactorDevtoolsBootRequest? Captured { get; private set; }
+
+        public bool TryHandleCommandLine(ReactorDevtoolsBootRequest request)
+        {
+            Captured = request;
+            return true;
+        }
+
+        public Element? BuildDevtoolsMenu(
+            Func<IEnumerable<MenuFlyoutItemBase>>? items, string glyph, string toolTip, string? automationId) => null;
+    }
+
+    /// <summary>
+    /// <c>--devtools run</c> takes over startup before <c>StartApplication</c>, so the site
+    /// <c>Run</c> claimed must travel in the boot request for the preview to report it.
+    /// The flag is off at the call, as it is under devtools (the preview turns it on later).
+    /// </summary>
+    [Fact]
+    public void Run_UnderDevtoolsRun_HandsItsSiteToTheDevtoolsHost()
+    {
+        const string switchName = "Reactor.DevtoolsSupport";
+        ReactorSourceMap.Enabled = false;
+        var host = new CapturingDevtoolsHost();
+        var previous = ReactorDevtoolsBootstrap.CurrentForTests;
+        ReactorDevtoolsBootstrap.Register(host);
+        ReactorAppOptions? started = null;
+        ReactorApp.StartApplicationForTest = o => started = o;
+        ReactorApp.CommandLineArgsForTest = ["app.exe", "--devtools", "run"];
+        try
+        {
+            AppContext.SetSwitch(switchName, true);
+
+            ReactorApp.Run<Probe>(new WindowSpec { Title = "devtools probe" }); int expected = Line();
+
+            Assert.Null(started);
+            Assert.NotNull(host.Captured);
+            Assert.Equal(expected, host.Captured!.RootMountSite?.LineNumber);
+            Assert.EndsWith("RootMountInterceptionTests.cs", host.Captured.RootMountSite!.Value.FilePath, StringComparison.Ordinal);
+            Assert.Equal(0, ReactorSourceMap.OpenRootMountScopeCountForTest);
+        }
+        finally
+        {
+            AppContext.SetSwitch(switchName, false);
+            ReactorApp.CommandLineArgsForTest = null;
+            ReactorApp.StartApplicationForTest = null;
+            ReactorDevtoolsBootstrap.RestoreForTests(previous);
         }
     }
 }

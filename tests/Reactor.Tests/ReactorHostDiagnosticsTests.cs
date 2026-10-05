@@ -477,7 +477,7 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
         int overlapped;
         try
         {
-            Assert.True(started.Wait(TimeSpan.FromSeconds(10)), "The reader thread never started.");
+            Assert.True(started.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken), "The reader thread never started.");
             var readsBefore = Volatile.Read(ref reads);
             var budget = global::System.Diagnostics.Stopwatch.StartNew();
             // Keep writing until the reader has overlapped plenty of writes (10 s cap).

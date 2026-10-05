@@ -500,7 +500,7 @@ public static partial class ReactorApp
     {
         var rootMountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         EmitDipBehaviorChangeNoticeOnce(width, height);
-        if (TryRunDevtools(title, width, height, fullScreen, configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot())) return;
+        if (TryRunDevtools(title, width, height, fullScreen, configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot(), rootMountSite: rootMountSite)) return;
 
         StartApplication(() => new ReactorAppOptions(
             RootFactory: () => new TRoot(),
@@ -534,7 +534,7 @@ public static partial class ReactorApp
         ArgumentNullException.ThrowIfNull(spec);
         spec.Validate();
         EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
-        if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot())) return;
+        if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot(), rootMountSite: rootMountSite)) return;
 
         StartApplication(() => new ReactorAppOptions(
             RootFactory: () => new TRoot(),
@@ -576,7 +576,7 @@ public static partial class ReactorApp
     {
         var rootMountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         EmitDipBehaviorChangeNoticeOnce(width, height);
-        if (TryRunDevtools(title, width, height, fullScreen, configure, rootRenderFunc: rootRender)) return;
+        if (TryRunDevtools(title, width, height, fullScreen, configure, rootRenderFunc: rootRender, rootMountSite: rootMountSite)) return;
 
         StartApplication(() => new ReactorAppOptions(
             RootRenderFunc: rootRender,
@@ -604,7 +604,7 @@ public static partial class ReactorApp
         ArgumentNullException.ThrowIfNull(rootRender);
         spec.Validate();
         EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
-        if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, rootRenderFunc: rootRender)) return;
+        if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, rootRenderFunc: rootRender, rootMountSite: rootMountSite)) return;
 
         StartApplication(() => new ReactorAppOptions(
             RootRenderFunc: rootRender,
@@ -1209,17 +1209,22 @@ public static partial class ReactorApp
     /// With <c>--vscode</c>, starts the capture server for the VS Code preview panel. Devtools
     /// dispatch requires the build-time <c>Reactor.DevtoolsSupport</c> switch.
     /// </summary>
-    private static bool TryRunDevtools(string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, Func<RenderContext, Element>? rootRenderFunc = null)
+    private static bool TryRunDevtools(string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, Func<RenderContext, Element>? rootRenderFunc = null, Core.SourceLocation? rootMountSite = null)
     {
-        return TryRunDevtoolsCore(Environment.GetCommandLineArgs(), title, width, height, fullScreen, configure, hostRoot, hostRootFactory, rootRenderFunc, exitOnUnavailable: true);
+        return TryRunDevtoolsCore(CommandLineArgsForTest ?? Environment.GetCommandLineArgs(), title, width, height, fullScreen, configure, hostRoot, hostRootFactory, rootRenderFunc, exitOnUnavailable: true, rootMountSite: rootMountSite);
     }
+
+    /// <summary>Test seam: replaces the process command line <c>Run</c> checks for <c>--devtools</c>.</summary>
+#pragma warning disable CS0649 // assigned only by tests through InternalsVisibleTo
+    internal static string[]? CommandLineArgsForTest;
+#pragma warning restore CS0649
 
     internal static bool TryRunDevtoolsForTest(string[] args, string title, double? width, double? height, Action<ReactorHost>? configure = null, Type? hostRoot = null)
     {
         return TryRunDevtoolsCore(args, title, width, height, fullScreen: false, configure, hostRoot, hostRootFactory: null, rootRenderFunc: null, exitOnUnavailable: false);
     }
 
-    private static bool TryRunDevtoolsCore(string[] args, string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, Func<RenderContext, Element>? rootRenderFunc = null, bool exitOnUnavailable = false)
+    private static bool TryRunDevtoolsCore(string[] args, string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, Func<RenderContext, Element>? rootRenderFunc = null, bool exitOnUnavailable = false, Core.SourceLocation? rootMountSite = null)
     {
         var options = DevtoolsCliParser.Parse(args);
 
@@ -1250,7 +1255,10 @@ public static partial class ReactorApp
                 hostRoot,
                 hostRootFactory,
                 rootRenderFunc,
-                configure);
+                configure)
+            {
+                RootMountSite = rootMountSite,
+            };
             return host.TryHandleCommandLine(request);
         }
 

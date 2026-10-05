@@ -133,7 +133,8 @@ public sealed class ReactorHostInfo
     /// (<c>ReactorSourceMap=true</c>, the Debug default) and
     /// <see cref="Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/> was true at mount
     /// time; also null for a root created from <see cref="ReactorHostControl.ComponentFactory"/>
-    /// or mounted by framework code, neither of which has a call site in app code.
+    /// or <see cref="ReactorHostControl.ComponentType"/>, or mounted by framework code, none of
+    /// which has a call site in app code.
     /// </summary>
     public SourceLocation? MountSite { get; }
 

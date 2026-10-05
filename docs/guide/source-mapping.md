@@ -337,8 +337,8 @@ call is running — a host created in a `configure` callback, a window the frame
 opens itself — reports `null` rather than the outer call's line.
 `Run(Action<ReactorAppContext>)` is left alone: it mounts no root itself, and each
 `OpenWindow` in its startup callback reports its own line. A root created from
-`ReactorHostControl.ComponentFactory` (set in XAML) has no call site and reports
-`null`.
+`ReactorHostControl.ComponentFactory` or `ComponentType` (set in XAML) has no call
+site and reports `null`.
 
 **Component boundaries are always tagged while mapping is on.** Every
 `Component<T>()`, `Func(...)` and `Memo(...)` mounts behind a `Border` wrapper. With
