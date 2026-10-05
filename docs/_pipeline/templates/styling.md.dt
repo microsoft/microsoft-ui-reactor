@@ -261,13 +261,12 @@ theme or palette change, so tell it explicitly. Keep app brushes in your
 own dictionary merged into `Application.Current.Resources` (the app
 dictionary itself is `XamlControlsResources` and rejects direct entries):
 
-```csharp
-var brand = new ResourceDictionary { ["BrandBrush"] = new SolidColorBrush(initialBrand) };
-Application.Current.Resources.MergedDictionaries.Add(brand);
+```csharp snippet="source:tests/Reactor.AppTests.Host/SelfTest/Fixtures/HostIdleAndThemeResourceFixtures.cs#runtime-resource-dictionary"
+```
 
-// later, at runtime
-brand["BrandBrush"] = new SolidColorBrush(newBrand);
-Theme.NotifyResourcesChanged();
+Later, at runtime, change the entry and notify Reactor:
+
+```csharp snippet="source:tests/Reactor.AppTests.Host/SelfTest/Fixtures/HostIdleAndThemeResourceFixtures.cs#runtime-resource-edit"
 ```
 
 `Theme.NotifyResourcesChanged()` clears the resolution cache and

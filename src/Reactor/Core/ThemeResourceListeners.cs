@@ -27,6 +27,8 @@ internal static class ThemeResourceListeners
         {
             var listeners = s_listeners ??= new List<WeakReference<IThemeResourceListener>>();
             listeners.RemoveAll(static w => !w.TryGetTarget(out _));
+            if (listeners.Exists(w => w.TryGetTarget(out var t) && ReferenceEquals(t, listener)))
+                return; // already registered: one notification per host
             listeners.Add(new WeakReference<IThemeResourceListener>(listener));
         }
     }
@@ -75,13 +77,28 @@ internal static class ThemeResourceListeners
         }
     }
 
-    // Caller holds s_gate. One TryGetTarget per entry: a target collected mid-snapshot is
-    // dropped, never read back as null.
+    /// <summary>Test-only: entries in the list, dead ones included.</summary>
+    internal static int EntryCountForTest()
+    {
+        lock (s_gate)
+        {
+            return s_listeners?.Count ?? 0;
+        }
+    }
+
+    // Caller holds s_gate. Also compacts the list, so entries whose host was collected
+    // without being disposed don't accumulate between registrations. One TryGetTarget per
+    // entry: a target collected mid-snapshot is dropped, never read back as null.
     private static IThemeResourceListener[] SnapshotLiveLocked()
-        => s_listeners is null
-            ? []
-            : s_listeners
-                .Select(static weak => weak.TryGetTarget(out var listener) ? listener : null)
-                .OfType<IThemeResourceListener>()
-                .ToArray();
+    {
+        if (s_listeners is null) return [];
+        var live = new List<IThemeResourceListener>(s_listeners.Count);
+        s_listeners.RemoveAll(weak =>
+        {
+            if (!weak.TryGetTarget(out var listener)) return true;
+            live.Add(listener);
+            return false;
+        });
+        return live.ToArray();
+    }
 }

@@ -201,6 +201,42 @@ public sealed partial class HostIdleAndThemeResourcesTests
         Assert.False(weak.IsAlive, "The theme listener list rooted a host nothing else references.");
     }
 
+    [Fact]
+    public void Register_IsIdempotent()
+    {
+        var listener = new FakeListener();
+        ThemeResourceListeners.Register(listener);
+        ThemeResourceListeners.Register(listener);
+        try
+        {
+            Theme.NotifyResourcesChanged();
+
+            Assert.Equal(1, listener.Notified);
+        }
+        finally
+        {
+            ThemeResourceListeners.Unregister(listener);
+        }
+    }
+
+    [Fact]
+    public void NotifyAll_CompactsCollectedListeners()
+    {
+        var weak = RegisterUnreferencedListener();
+        for (int i = 0; i < 5 && weak.IsAlive; i++)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
+        Assert.False(weak.IsAlive);
+        int before = ThemeResourceListeners.EntryCountForTest();
+
+        int notified = ThemeResourceListeners.NotifyAll();
+
+        Assert.True(before > notified, $"expected a dead entry to compact: before={before}, live={notified}");
+        Assert.Equal(notified, ThemeResourceListeners.EntryCountForTest());
+    }
+
     [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private static WeakReference RegisterUnreferencedListener()
     {

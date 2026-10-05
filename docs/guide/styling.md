@@ -440,11 +440,14 @@ own dictionary merged into `Application.Current.Resources` (the app
 dictionary itself is `XamlControlsResources` and rejects direct entries):
 
 ```csharp
-var brand = new ResourceDictionary { ["BrandBrush"] = new SolidColorBrush(initialBrand) };
-Application.Current.Resources.MergedDictionaries.Add(brand);
+var resources = new ResourceDictionary { [AppKey] = new SolidColorBrush(Colors.Red) };
+Application.Current.Resources.MergedDictionaries.Add(resources);
+```
 
-// later, at runtime
-brand["BrandBrush"] = new SolidColorBrush(newBrand);
+Later, at runtime, change the entry and notify Reactor:
+
+```csharp
+resources[AppKey] = new SolidColorBrush(Colors.Green);
 Theme.NotifyResourcesChanged();
 ```
 

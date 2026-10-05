@@ -41,12 +41,14 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("HostCtrlIdle_InitialRendered", (host.Content as TextBlock)?.Text == "Idle:0",
                     $"content={(host.Content as TextBlock)?.Text ?? host.Content?.GetType().Name ?? "null"}");
 
+                // <snippet:host-control-wait-for-idle>
                 setCount!(1);
                 H.Check("HostCtrlIdle_BusyAfterSetState", !host.IsIdle);
 
-                await host.WaitForIdleAsync();
+                await host.WaitForIdleAsync();   // no Task.Delay: the island's tree is now realized
                 H.Check("HostCtrlIdle_UpdatedWithoutDelay", (host.Content as TextBlock)?.Text == "Idle:1",
                     $"content={(host.Content as TextBlock)?.Text ?? "null"}");
+                // </snippet:host-control-wait-for-idle>
 
                 host.Dispose();
                 H.Check("HostCtrlIdle_DisposedIsIdle", host.IsIdle);
@@ -148,8 +150,10 @@ internal static class HostIdleAndThemeResourceFixtures
 
         public override async Task RunAsync()
         {
+            // <snippet:runtime-resource-dictionary>
             var resources = new ResourceDictionary { [AppKey] = new SolidColorBrush(Colors.Red) };
             Application.Current.Resources.MergedDictionaries.Add(resources);
+            // </snippet:runtime-resource-dictionary>
             ThemeRef.InvalidateResolutionCache();
 
             // A private ContentTarget on the (already settled) harness window: the other
@@ -183,6 +187,14 @@ internal static class HostIdleAndThemeResourceFixtures
                 await Task.Run(Theme.NotifyResourcesChanged);
                 await WaitForAllHostsIdleAsync();
                 H.Check("ThemeMemo_NotifiedFromBackgroundIsBlue", ProbeColor(target) == Colors.Blue, $"color={ProbeColor(target)}");
+
+                // A second edit, notified from the UI thread: the call is repeatable.
+                // <snippet:runtime-resource-edit>
+                resources[AppKey] = new SolidColorBrush(Colors.Green);
+                Theme.NotifyResourcesChanged();
+                // </snippet:runtime-resource-edit>
+                await WaitForAllHostsIdleAsync();
+                H.Check("ThemeMemo_SecondEditIsGreen", ProbeColor(target) == Colors.Green, $"color={ProbeColor(target)}");
             }
             finally
             {

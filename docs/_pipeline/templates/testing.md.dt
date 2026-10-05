@@ -228,12 +228,9 @@ To read the realized tree back after a state change, await the host's
 render loop instead of a fixed delay: both `ReactorHost` and the XAML
 island host `ReactorHostControl` expose `WaitForIdleAsync()` (and an
 `IsIdle` property), which completes once every pending render and
-re-render has run:
+re-render has run. From the island selftest:
 
-```csharp
-var host = new ReactorHostControl();
-host.Mount(ctx => TextBlock("ready"));
-await host.WaitForIdleAsync();   // the island's tree is now realized
+```csharp snippet="source:tests/Reactor.AppTests.Host/SelfTest/Fixtures/HostIdleAndThemeResourceFixtures.cs#host-control-wait-for-idle"
 ```
 
 ## Tips
