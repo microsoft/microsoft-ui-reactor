@@ -127,6 +127,50 @@ public sealed class RootMountInterceptionTests : IDisposable
     }
 
     /// <summary>
+    /// A null receiver in a conditional access never reaches the intercepted method, so
+    /// no scope opens — the "no site" control for the conditional-access shape. The
+    /// non-null case (the interceptor runs and the host keeps the site) needs a live host
+    /// and is covered by the <c>HostDiag_ConditionalAccessMountReportsItsSite</c> selftest;
+    /// <see cref="ConditionalAccessMount_IsIntercepted"/> proves the generator emitted an
+    /// interceptor for this exact call, so the empty list below is a measurement.
+    /// </summary>
+    [Fact]
+    public void ConditionalAccessMount_NullReceiver_OpensNoScope()
+    {
+        ReactorHost? host = null;
+        ReactorHostControl? control = null;
+        ReactorWindow? window = null;
+
+        host?.Mount(_ => TextBlock("x"));
+        control?.Mount(new Probe());
+        window?.Mount(new Probe());
+
+        Assert.Empty(_entered);
+        Assert.Equal(0, ReactorSourceMap.OpenRootMountScopeCountForTest);
+    }
+
+    /// <summary>
+    /// The generator emits an interceptor for <c>receiver?.Mount(...)</c> — read straight
+    /// from the generated file, keyed on this file and the call's line.
+    /// </summary>
+    [Fact]
+    public void ConditionalAccessMount_IsIntercepted()
+    {
+        ReactorHostControl? control = null;
+        control?.Mount(new Probe()); int expected = Line();
+
+        var generated = Directory.EnumerateFiles(
+                AppContext.BaseDirectory.Split(new[] { $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}" }, StringSplitOptions.None)[0],
+                "ReactorSourceMap.RootMounts.g.cs", SearchOption.AllDirectories)
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+        Assert.NotNull(generated);
+
+        var text = File.ReadAllText(generated!);
+        Assert.Contains($"RootMountInterceptionTests.cs\", {expected})", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The multi-window startup overload mounts no root of its own, so it is
     /// deliberately left alone: an app-lifetime scope there would be claimed by the
     /// first window opened through an unintercepted path. The positive controls above,

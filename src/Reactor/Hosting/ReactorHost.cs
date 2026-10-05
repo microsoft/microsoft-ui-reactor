@@ -36,7 +36,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
 
     // Where app code mounted the root (Run / OpenWindow / Mount), when source mapping
     // was on. Diagnostics only — see ReactorDiagnostics.GetHosts.
-    private SourceLocation? _mountSite;
+    private readonly Diagnostics.RootMountSiteSlot _mountSite = new();
 
     private Element? _currentTree;
     private UIElement? _currentControl;
@@ -291,7 +291,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             rootControl: _currentControl,
             rootComponent: _rootComponent,
             rootRenderFunction: _rootRenderFunc,
-            mountSite: _mountSite);
+            mountSite: _mountSite.Value);
     }
 
     /// <summary>Ensure the overlay wrapper exists whenever any dev overlay flag is on.</summary>
@@ -388,7 +388,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     internal void Mount(Component component, SourceLocation? mountSite)
     {
         _rootComponent = component;
-        _mountSite = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
+        _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
         RequestRender();
     }
 
@@ -399,7 +399,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         // Render() keeps preferring a component root mounted earlier on this host, so the
         // render function's site only describes the live root when there is none.
         if (_rootComponent is null)
-            _mountSite = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
+            _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
         RequestRender();
     }
 

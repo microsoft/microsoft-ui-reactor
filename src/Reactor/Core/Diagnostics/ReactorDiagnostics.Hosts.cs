@@ -35,9 +35,12 @@ public enum ReactorHostKind
 /// control an inspector already walks. Everything else is an existing public WinUI or
 /// Reactor hosting type.</para>
 /// <para>A snapshot, not a live view: re-query after a render, window open, or close.
-/// The snapshot itself can be taken from any thread; touching the returned WinUI objects
-/// is subject to their usual UI-thread rules. Take it on the UI thread when the values
-/// must be consistent with the visual tree you are about to walk.</para>
+/// The snapshot itself can be taken from any thread, and every value in it is read
+/// atomically (never half of one mount and half of another). A snapshot taken while the
+/// UI thread is remounting may still pair the outgoing root's name with the incoming
+/// root's site; take it on the UI thread when the values must agree with each other or
+/// with the visual tree you are about to walk. Touching the returned WinUI objects is
+/// subject to their usual UI-thread rules.</para>
 /// <para>Holding a snapshot keeps its host, window and root control alive; the registry
 /// behind <see cref="ReactorDiagnostics.GetHosts"/> does not.</para>
 /// </remarks>

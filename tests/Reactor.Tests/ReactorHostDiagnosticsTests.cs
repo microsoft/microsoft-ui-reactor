@@ -432,6 +432,39 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
         Assert.Equal(0, ReactorSourceMap.OpenRootMountScopeCountForTest);
     }
 
+    [Fact]
+    public void RootMountSiteSlot_NeverTearsUnderConcurrentWrites()
+    {
+        // Two sites that differ in every word: a torn read would surface as a mixed pair
+        // (A's file with B's line), a has-value with a null path, or similar.
+        var a = new SourceLocation("A.cs", 111);
+        var b = new SourceLocation("Bbbbbbbb.cs", 222222);
+        var slot = new RootMountSiteSlot { Value = a };
+        var stop = 0;
+        var bad = 0;
+        var reads = 0;
+
+        var reader = new Thread(() =>
+        {
+            while (Volatile.Read(ref stop) == 0)
+            {
+                var v = slot.Value;
+                reads++;
+                if (v is { } site && site != a && site != b) Interlocked.Increment(ref bad);
+            }
+        });
+        reader.Start();
+
+        for (int i = 0; i < 200_000; i++)
+            slot.Value = (i % 3) switch { 0 => a, 1 => b, _ => null };
+
+        Volatile.Write(ref stop, 1);
+        reader.Join();
+
+        Assert.True(reads > 0);
+        Assert.Equal(0, bad);
+    }
+
     // ── Component-boundary tagging ───────────────────────────────────────
 
     public static TheoryData<string> ComponentBoundaries => new() { "component", "func", "memo" };

@@ -249,6 +249,93 @@ internal static class HostDiagnosticsFixtures
         }
     }
     /// <summary>
+    /// <c>host?.Mount(...)</c> on a non-null host is intercepted like a plain call: the
+    /// conditional access compiles to a member binding, which the generator now handles.
+    /// (The null-receiver control lives in <c>RootMountInterceptionTests</c>.)
+    /// </summary>
+    internal class ConditionalAccessMountReportsItsSite(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var previous = ReactorSourceMap.Enabled;
+            ReactorSourceMap.Enabled = true;
+            using var created = H.CreateHost();
+            try
+            {
+                ReactorHost? host = created;
+                host?.Mount(new Probe()); var mountLine = Line();
+                await created.WaitForIdleAsync();
+
+                var info = InfoFor(created);
+                H.Check("HostDiagCond_Listed", info is not null);
+#if REACTOR_SOURCEMAP
+                H.Check("HostDiagCond_MountSite",
+                    info?.MountSite?.LineNumber == mountLine,
+                    $"site={info?.MountSite?.ToShortString() ?? "null"} expected line {mountLine}");
+#else
+                _ = mountLine;
+                H.Skip("HostDiagCond_MountSite", SkipReason);
+#endif
+            }
+            finally
+            {
+                ReactorSourceMap.Enabled = previous;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>GetHosts()</c> is documented as callable from any thread. A background reader
+    /// snapshots a real host while the UI thread remounts it with two different sites; every
+    /// site it observes must be one of the two (or none) — never a torn mix.
+    /// </summary>
+    internal class BackgroundSnapshotsDuringRemounts(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var previous = ReactorSourceMap.Enabled;
+            ReactorSourceMap.Enabled = true;
+            using var host = H.CreateHost();
+            try
+            {
+                var a = new SourceLocation("RemountA.cs", 111);
+                var b = new SourceLocation("RemountBbbbbbbb.cs", 222222);
+                var root = new Probe();
+                host.Mount(root, a);
+                await host.WaitForIdleAsync();
+
+                var stop = 0;
+                var reads = 0;
+                var bad = 0;
+                var reader = Task.Run(() =>
+                {
+                    while (Volatile.Read(ref stop) == 0)
+                    {
+                        var info = ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.Host, host));
+                        Interlocked.Increment(ref reads);
+                        if (info?.MountSite is { } site && site != a && site != b)
+                            Interlocked.Increment(ref bad);
+                    }
+                });
+
+                for (int i = 0; i < 5000; i++)
+                    host.Mount(root, (i & 1) == 0 ? b : a);
+
+                Volatile.Write(ref stop, 1);
+                await reader;
+                await host.WaitForIdleAsync();
+
+                H.Check("HostDiagRace_ReaderRan", Volatile.Read(ref reads) > 0, $"reads={reads}");
+                H.Check("HostDiagRace_NoTornSites", bad == 0, $"torn={bad} of {reads}");
+                H.Check("HostDiagRace_FinalSite", InfoFor(host)?.MountSite == a);
+            }
+            finally
+            {
+                ReactorSourceMap.Enabled = previous;
+            }
+        }
+    }
+    /// <summary>
     /// A <c>ReactorHostControl</c> island is listed with itself as the host element and no
     /// window, reports its component root and mount site, and drops out once disposed. A
     /// second island whose root comes from <c>ComponentFactory</c> (the XAML shape) reports

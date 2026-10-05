@@ -142,3 +142,26 @@ public static partial class ReactorSourceMap
         public bool Claimed { get; set; }
     }
 }
+
+/// <summary>
+/// A host's root mount site, published so <c>ReactorDiagnostics.GetHosts()</c> can read it
+/// from any thread. A <see cref="SourceLocation"/>? is several words (a reference, an
+/// <c>int</c> and a has-value flag), so a plain field can be read half-old, half-new while
+/// the UI thread remounts. Storing it behind one immutable box makes every write and read a
+/// single atomic reference operation.
+/// </summary>
+internal sealed class RootMountSiteSlot
+{
+    private sealed class Box(SourceLocation site)
+    {
+        public SourceLocation Site { get; } = site;
+    }
+
+    private Box? _box;
+
+    public SourceLocation? Value
+    {
+        get => Volatile.Read(ref _box)?.Site;
+        set => Volatile.Write(ref _box, value is { } site ? new Box(site) : null);
+    }
+}

@@ -60,7 +60,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     private RenderContext? _funcContext;
 
     // Where app code mounted the root, when source mapping was on. Diagnostics only.
-    private SourceLocation? _mountSite;
+    private readonly Diagnostics.RootMountSiteSlot _mountSite = new();
 
     private Element? _currentTree;
     private UIElement? _currentControl;
@@ -194,7 +194,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             rootControl: _currentControl,
             rootComponent: _rootComponent,
             rootRenderFunction: _rootRenderFunc,
-            mountSite: _mountSite);
+            mountSite: _mountSite.Value);
     }
 
     private bool AnyOverlayFlagOn => ReactorFeatureFlags.HighlightReconcileChanges;
@@ -213,7 +213,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         _rootComponent = null;
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
-        _mountSite = Diagnostics.ReactorSourceMap.KeepIfEnabled(Diagnostics.ReactorSourceMap.TakeRootMountSite());
+        _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(Diagnostics.ReactorSourceMap.TakeRootMountSite());
         RequestRender();
     }
 
@@ -222,7 +222,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         _rootRenderFunc = null;
         _funcContext = null;
         _rootComponent = component;
-        _mountSite = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
+        _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
         RequestRender();
     }
 

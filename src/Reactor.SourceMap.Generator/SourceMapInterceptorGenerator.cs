@@ -187,6 +187,10 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         var name = invocation.Expression switch
         {
             MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+            // `host?.Mount(root)`: inside a conditional access the invoked expression is a
+            // member binding, not a member access. Interceptors can intercept it; the
+            // interceptor then only runs when the receiver is non-null.
+            MemberBindingExpressionSyntax binding => binding.Name.Identifier.ValueText,
             IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
             GenericNameSyntax generic => generic.Identifier.ValueText,
             _ => null,
@@ -205,7 +209,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         method = method.OriginalDefinition;
 
         var owner = method.ContainingType?.ToDisplayString();
-        bool isRoot = owner switch
+        bool isRoot = method.DeclaredAccessibility == Accessibility.Public && owner switch
         {
             ReactorAppMetadataName => method.IsStatic && method.Name is "Run" or "OpenWindow",
             ReactorHostMetadataName or ReactorHostControlMetadataName or ReactorWindowMetadataName => !method.IsStatic && method.Name == "Mount",
