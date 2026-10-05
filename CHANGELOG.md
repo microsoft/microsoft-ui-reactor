@@ -105,7 +105,8 @@ Conventions for contributors:
   a replaced child's effect cleanups and unmount callbacks never run and its refs
   are never cleared. The analyzer points at `Reconciler.Reconcile`, which takes the
   same arguments, does both, and returns the control the slot should hold
-  (`UpdateContext.ReconcileChild` in a handler). Its code fix rewrites
+  (`UpdateContext.ReconcileChild` in a handler). Where the existing control was
+  read from its slot just before the call, the code fix rewrites
   `var x = r.UpdateChild(…); if (x is not null) slot = x;` into
   `var x = r.Reconcile(…); if (!ReferenceEquals(x, existing)) slot = x;`, which
   also empties the slot when the child becomes `Empty()`, and drops a manual
