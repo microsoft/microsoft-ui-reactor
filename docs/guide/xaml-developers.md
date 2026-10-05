@@ -437,7 +437,10 @@ ordinary WinUI control, so it can be declared in the page's markup:
 
 `ComponentType` names a component with a public parameterless constructor; for
 a root that needs constructor arguments or view-model state, declare the host
-with an `x:Name` and call `Mount(...)` from code-behind. If a
+with an `x:Name` and call `Mount(...)` from code-behind. `ComponentType` only
+works for a type named in markup (that is what makes the XAML compiler generate
+its trim-safe activator); set from code, the host shows an error explaining this
+in place of the root, so use `ComponentFactory` or `Mount(...)` there. If a
 contractor's "Reactor XAML compiler" appears in your search results,
 it doesn't exist — the framework's design eliminates the second
 authoring language deliberately.

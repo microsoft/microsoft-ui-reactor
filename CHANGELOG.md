@@ -33,7 +33,10 @@ Conventions for contributors:
   `WMC0100`) and a `ComponentType` property, so a hybrid page can write
   `<reactor:ReactorHostControl ComponentType="local:StatsCard" />`. The root is
   created through the app's generated XAML type information, so it stays trim- and
-  AOT-safe. `samples/ReactorHostControlDemo` and `samples/InteropFirst` now declare
+  AOT-safe. A `ComponentType` that is only assigned from code has no such entry; the
+  host shows an error naming the fix (`ComponentFactory` / `Mount`) instead of mounting,
+  and a throwing `ComponentFactory` is reported the same way rather than escaping the
+  `Loaded` handler and terminating the app. `samples/ReactorHostControlDemo` and `samples/InteropFirst` now declare
   their hosts in markup.
 
 - **Getting Started documents the single-file path.** A Reactor app does not need

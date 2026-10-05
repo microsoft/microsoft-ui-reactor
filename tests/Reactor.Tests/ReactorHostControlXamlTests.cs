@@ -94,6 +94,59 @@ public sealed partial class ReactorHostControlXamlTests
         Assert.Equal(0, provider.Activations);
     }
 
+    [Fact]
+    public void LoadedRoot_CodeOnlyComponentType_ReturnsTheErrorInsteadOfThrowing()
+    {
+        // Thrown out of the Loaded handler this fail-fasts the whole WinUI app (seen under
+        // Native AOT: 0xc000027b in Microsoft.UI.Xaml.dll); the host must get it back to show.
+        var component = ReactorHostControl.TryCreateLoadedRoot(
+            factory: null, typeof(Card), props: null, new FakeProvider(), out var error);
+
+        Assert.Null(component);
+        var ioe = Assert.IsType<InvalidOperationException>(error);
+        Assert.Contains("no XAML activation info", ioe.Message, StringComparison.Ordinal);
+        Assert.Contains("ComponentFactory", ioe.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LoadedRoot_ThrowingFactoryAndWrongProps_ReturnTheError()
+    {
+        var boom = new InvalidOperationException("factory failed");
+        Assert.Null(ReactorHostControl.TryCreateLoadedRoot(
+            () => throw boom, componentType: null, props: null, provider: null, out var factoryError));
+        Assert.Same(boom, factoryError);
+
+        Assert.Null(ReactorHostControl.TryCreateLoadedRoot(
+            () => new Titled(), componentType: null, props: 42, provider: null, out var propsError));
+        Assert.IsType<InvalidCastException>(propsError);
+    }
+
+    [Fact]
+    public void LoadedRoot_CreatesFromXamlInfoAndAppliesProps_FactoryWins()
+    {
+        var provider = new FakeProvider();
+        provider.Add(typeof(Titled), () => new Titled());
+
+        var fromType = ReactorHostControl.TryCreateLoadedRoot(
+            factory: null, typeof(Titled), "markup", provider, out var error);
+        Assert.Null(error);
+        Assert.Equal("markup", Assert.IsType<Titled>(fromType).Props);
+
+        var fromFactory = ReactorHostControl.TryCreateLoadedRoot(
+            () => new Card(), typeof(Titled), props: null, provider, out error);
+        Assert.Null(error);
+        Assert.IsType<Card>(fromFactory);
+        Assert.Equal(1, provider.Activations);
+
+        Assert.Null(ReactorHostControl.TryCreateLoadedRoot(null, null, "unused", provider, out error));
+        Assert.Null(error);
+    }
+
+    public sealed class Titled : Component<string>
+    {
+        public override Element Render() => TextBlock(Props);
+    }
+
     // ── Fakes ────────────────────────────────────────────────────────────
 
     private sealed partial class FakeProvider : IXamlMetadataProvider

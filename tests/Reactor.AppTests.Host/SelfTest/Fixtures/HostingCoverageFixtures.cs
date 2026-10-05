@@ -168,6 +168,36 @@ internal static class HostingCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  3b. ReactorHostControl — ComponentType assigned from code (Loaded path)
+    //      The host app never names PropsComponent in markup, so there is no XAML
+    //      activator. The failure must be shown in the host, not thrown out of
+    //      Loaded (which fail-fasts the process — 0xc000027b under Native AOT).
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class HostControlCodeOnlyComponentType(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var hostControl = new ReactorHostControl { ComponentType = typeof(PropsComponent) };
+
+            var container = new Border { Child = hostControl };
+            H.SetContent(container);
+            await Harness.Render(200);
+
+            var header = FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("Render error:") == true);
+            H.Check("HostCtrlCodeOnlyType_ErrorShown", header is not null);
+            H.Check("HostCtrlCodeOnlyType_ErrorNamesFix",
+                header?.Text?.Contains("no XAML activation info", StringComparison.Ordinal) == true
+                && header.Text.Contains("ComponentFactory", StringComparison.Ordinal));
+            H.Check("HostCtrlCodeOnlyType_NothingMounted",
+                FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("WithProps:") == true) is null);
+
+            hostControl.Dispose();
+            H.SetContent(null);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  4. ReactorHostControl — Reconciler access + OnRenderComplete callback
     //     Targets: Reconciler property, OnRenderComplete
     // ════════════════════════════════════════════════════════════════════════

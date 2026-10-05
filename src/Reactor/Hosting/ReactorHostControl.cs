@@ -140,8 +140,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// (<c>Application.Current</c> as <see cref="Microsoft.UI.Xaml.Markup.IXamlMetadataProvider"/>),
     /// not reflection: naming a type in markup makes the XAML compiler generate an activator
     /// for its public parameterless constructor, so this stays trim- and AOT-safe. A type
-    /// that is only ever assigned from code has no such entry; set
-    /// <see cref="ComponentFactory"/> there instead.</para>
+    /// that is only ever assigned from code has no such entry, and the host shows an
+    /// error saying so in place of the root; set <see cref="ComponentFactory"/> there
+    /// instead.</para>
     /// <para>Read once, at Loaded, like <see cref="ComponentFactory"/>; changing it after the
     /// root has mounted does not remount. Use <see cref="Mount(Component)"/> to swap roots.</para>
     /// </remarks>
@@ -246,18 +247,60 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         if (_rootComponent is not null || _rootRenderFunc is not null)
             return; // Already mounted via Mount()
 
-        Component component;
-        if (ComponentFactory is { } factory)
-            component = factory();
-        else if (ComponentType is { } type)
-            component = CreateComponent(type, Application.Current as Microsoft.UI.Xaml.Markup.IXamlMetadataProvider);
-        else
+        if (ComponentFactory is null && ComponentType is null)
             return;
 
-        if (Props is not null && component is IPropsReceiver receiver)
-            receiver.SetProps(Props);
+        var component = TryCreateLoadedRoot(
+            ComponentFactory, ComponentType, Props,
+            Application.Current as Microsoft.UI.Xaml.Markup.IXamlMetadataProvider,
+            out var error);
+        if (error is not null)
+        {
+            // An exception escaping a Loaded handler fail-fasts the whole WinUI process.
+            // Report it in this host instead, the same way a throwing Render() is reported.
+            _logger?.LogError(error, "ReactorHostControl could not create its root component");
+            ShowErrorFallback(error);
+            return;
+        }
 
-        Mount(component);
+        if (component is not null)
+            Mount(component);
+    }
+
+    /// <summary>
+    /// Creates the Loaded-time root from <see cref="ComponentFactory"/> (which wins) or
+    /// <see cref="ComponentType"/>, and applies <see cref="Props"/>. Never throws: a failure
+    /// (no XAML activation info for a code-only <c>ComponentType</c>, a throwing factory,
+    /// props of the wrong type) comes back in <paramref name="error"/> for the host to show.
+    /// </summary>
+    internal static Component? TryCreateLoadedRoot(
+        Func<Component>? factory,
+        Type? componentType,
+        object? props,
+        Microsoft.UI.Xaml.Markup.IXamlMetadataProvider? provider,
+        out Exception? error)
+    {
+        error = null;
+        try
+        {
+            Component component;
+            if (factory is not null)
+                component = factory();
+            else if (componentType is not null)
+                component = CreateComponent(componentType, provider);
+            else
+                return null;
+
+            if (props is not null && component is IPropsReceiver receiver)
+                receiver.SetProps(props);
+
+            return component;
+        }
+        catch (Exception ex)
+        {
+            error = ex;
+            return null;
+        }
     }
 
     /// <summary>
