@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -18,13 +19,13 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// framework can't make that check, and the two call sites the repository had did neither: a child
 /// that changed type threw <c>InvalidCastException</c>, and a replaced child's effect cleanups and
 /// unmount callbacks never ran and its refs were never cleared. <c>Reconciler.Reconcile</c> takes
-/// the same arguments,
-/// does both and returns the control the slot should hold, so the rule points there and
-/// <see cref="ReconcilerUpdateChildCodeFix"/> rewrites the common shape.
+/// the same arguments, does both and returns the control the slot should hold, so the rule points
+/// there and <see cref="ReconcilerUpdateChildCodeFix"/> rewrites the common shape.
 ///
-/// The rule binds to the one method symbol, so a same-named method elsewhere never trips it. It
-/// stays quiet in the assembly that declares <c>Reconciler</c>, whose own slot owners make the
-/// <c>CanUpdate</c> check first.
+/// The rule resolves <c>Reconciler.UpdateChild</c> once per compilation and binds each candidate call
+/// to it, so a same-named method elsewhere never trips it and a compilation without Reactor pays
+/// nothing per call. It stays quiet in the assembly that declares <c>Reconciler</c>, whose own slot
+/// owners make the <c>CanUpdate</c> check first.
 /// </remarks>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class ReconcilerUpdateChildAnalyzer : DiagnosticAnalyzer
@@ -33,6 +34,7 @@ public sealed class ReconcilerUpdateChildAnalyzer : DiagnosticAnalyzer
 
     internal const string ReconcilerTypeName = "Reconciler";
     internal const string ReconcilerNamespace = "Microsoft.UI.Reactor.Core";
+    internal const string ReconcilerMetadataName = ReconcilerNamespace + "." + ReconcilerTypeName;
     internal const string UpdateChildName = "UpdateChild";
     internal const string UnmountChildName = "UnmountChild";
     internal const string ReconcileName = "Reconcile";
@@ -70,10 +72,28 @@ public sealed class ReconcilerUpdateChildAnalyzer : DiagnosticAnalyzer
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
+        context.RegisterCompilationStartAction(OnCompilationStart);
     }
 
-    private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
+    private static void OnCompilationStart(CompilationStartAnalysisContext context)
+    {
+        // Resolve the method once. Without Reactor there is nothing to match, so no per-node
+        // callback is registered. The framework's own slot owners check CanUpdate before calling
+        // UpdateChild, so the rule also stays quiet in the assembly that declares Reconciler.
+        var reconciler = context.Compilation.GetTypeByMetadataName(ReconcilerMetadataName);
+        if (reconciler is null
+            || SymbolEqualityComparer.Default.Equals(reconciler.ContainingAssembly, context.Compilation.Assembly))
+            return;
+        var updateChild = reconciler.GetMembers(UpdateChildName).OfType<IMethodSymbol>().ToImmutableArray();
+        if (updateChild.IsEmpty)
+            return;
+
+        context.RegisterSyntaxNodeAction(
+            nodeContext => AnalyzeInvocation(nodeContext, updateChild),
+            SyntaxKind.InvocationExpression);
+    }
+
+    private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context, ImmutableArray<IMethodSymbol> updateChild)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
 
@@ -82,20 +102,17 @@ public sealed class ReconcilerUpdateChildAnalyzer : DiagnosticAnalyzer
         if (name is null || name.Identifier.ValueText != UpdateChildName)
             return;
 
-        if (context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken).Symbol
-                is not IMethodSymbol method)
-            return;
-        if (!IsReconcilerMethod(method, UpdateChildName))
-            return;
-
-        // The framework's own slot owners check CanUpdate before calling UpdateChild.
-        if (SymbolEqualityComparer.Default.Equals(method.ContainingAssembly, context.Compilation.Assembly))
+        if (context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken).Symbol is not IMethodSymbol method
+            || !updateChild.Any(candidate => SymbolEqualityComparer.Default.Equals(candidate, method.OriginalDefinition)))
             return;
 
         context.ReportDiagnostic(Diagnostic.Create(Rule, name.GetLocation()));
     }
 
-    /// <summary>True when <paramref name="method"/> is <c>Reconciler.<paramref name="name"/></c>.</summary>
+    /// <summary>
+    /// True when <paramref name="method"/> is <c>Reconciler.<paramref name="name"/></c>. The code fix
+    /// uses it to recognize <c>UnmountChild</c> calls.
+    /// </summary>
     internal static bool IsReconcilerMethod(IMethodSymbol method, string name)
     {
         var containingType = method.ContainingType;
