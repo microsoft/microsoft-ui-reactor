@@ -1237,6 +1237,17 @@ Set<T>(string key, T value) → void
 Trim(int targetCount) → int
 TryGet<T>(string key, ref T value) → bool
 
+### record AppliedProperty
+new(string Modifier, string Property, string Value)
+string Modifier { get; init; }
+string Property { get; init; }
+string Value { get; init; }
+Deconstruct(ref string Modifier, ref string Property, ref string Value) → void
+Equals(AppliedProperty other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
 ### record ArrayTypeMetadata
 new()
 Func<Task<object>> CreateElement { get; init; }
@@ -1729,6 +1740,20 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### record ComponentSnapshot
+new(string Name, string Kind, bool IsRoot, IReadOnlyList<DiagnosticValue> Props, IReadOnlyList<DiagnosticValue> State, IReadOnlyList<DiagnosticValue> Contexts)
+IReadOnlyList<DiagnosticValue> Contexts { get; init; }
+IReadOnlyList<DiagnosticValue> Props { get; init; }
+IReadOnlyList<DiagnosticValue> State { get; init; }
+bool IsRoot { get; init; }
+string Kind { get; init; }
+string Name { get; init; }
+Deconstruct(ref string Name, ref string Kind, ref bool IsRoot, ref IReadOnlyList<DiagnosticValue> Props, ref IReadOnlyList<DiagnosticValue> State, ref IReadOnlyList<DiagnosticValue> Contexts) → void
+Equals(ComponentSnapshot other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
 ### static class ComponentUseMemoCellsExtensions
 Component.UseMemoCells<T>(IReadOnlyList<T> items, Func<T, int, Element> builder, object[] dependencies) → Element[]
 Component.UseMemoCellsByIndex<T>(IReadOnlyList<T> items, IReadOnlyList<int> changedIndices, Func<T, int, Element> builder, object[] dependencies) → Element[]
@@ -1946,6 +1971,22 @@ string ProjectIdentifier { get; init; }
 string ScreenshotOutputPath { get; init; }
 Deconstruct(ref DevtoolsSubverb? Subverb, ref string ComponentName, ref bool VsCodeMode, ref int Fps, ref string ListOutputPath, ref string ScreenshotOutputPath, ref int? McpPort, ref string LogLevel, ref McpTransport Transport, ref bool UsedDeprecatedPreview, ref bool PreviewAndDevtoolsConflict, ref string ProjectIdentifier, ref bool LogsDisabled, ref int? LogsCapacityMb, ref bool EmbedRequested, ref WindowEmbedStyle EmbedStyle, ref int? EmbedHostPid, ref string EmbedValidationError, ref bool EmbedAutoEnabledVsCode, ref double? WindowWidth, ref double? WindowHeight, ref double? WindowX, ref double? WindowY) → void
 Equals(DevtoolsCliOptions other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record DiagnosticValue
+new(int Index, string Name, string Kind, string Type, string Value, bool Editable, bool Redacted, bool MigratedByHotReload)
+bool Editable { get; init; }
+bool MigratedByHotReload { get; init; }
+bool Redacted { get; init; }
+int Index { get; init; }
+string Kind { get; init; }
+string Name { get; init; }
+string Type { get; init; }
+string Value { get; init; }
+Deconstruct(ref int Index, ref string Name, ref string Kind, ref string Type, ref string Value, ref bool Editable, ref bool Redacted, ref bool MigratedByHotReload) → void
+Equals(DiagnosticValue other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
@@ -4553,6 +4594,11 @@ Register(IReactorDevtoolsHost host) → void
 ### static class ReactorDiagnostics
 IReadOnlyList<KeyedListDiagnostic> RecentKeyedListWarnings { get; }
 ClearRecentKeyedListWarnings() → void
+DescribeComponent(UIElement element) → ComponentSnapshot
+GetAppliedProperties(UIElement control) → IReadOnlyList<AppliedProperty>
+GetReferenceEdges(UIElement control) → IReadOnlyList<ReferenceEdgeSnapshot>
+Rerender(UIElement element) → bool
+TrySetState(UIElement element, int hookIndex, string text, ref string error) → bool
 
 ### static class ReactorDisplay
 DisplayInfo Primary { get; }
@@ -4726,6 +4772,21 @@ ToString() → string
 ### class Ref<T>
 new(T initial)
 T Current { get; set; }
+
+### record ReferenceEdgeSnapshot
+new(string Property, bool IsList, int Index, string TargetAutomationId, string ExpectedTargetTypeName, bool IsResolved, UIElement Target)
+UIElement Target { get; init; }
+bool IsList { get; init; }
+bool IsResolved { get; init; }
+int Index { get; init; }
+string ExpectedTargetTypeName { get; init; }
+string Property { get; init; }
+string TargetAutomationId { get; init; }
+Deconstruct(ref string Property, ref bool IsList, ref int Index, ref string TargetAutomationId, ref string ExpectedTargetTypeName, ref bool IsResolved, ref UIElement Target) → void
+Equals(ReferenceEdgeSnapshot other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
 
 ### static class ReflectionTypeMetadataProvider
 CreateDescriptor(PropertyInfo property, int defaultOrder) → FieldDescriptor

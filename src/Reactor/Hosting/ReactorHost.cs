@@ -176,6 +176,42 @@ public sealed class ReactorHost : IDisposable
     internal UIElement? CurrentControl => _currentControl;
 
     /// <summary>
+    /// <see cref="Reconciler.DiagnosticsRootResolver"/> for this host. The root anchor is
+    /// the rendered root control, or — while this host's content is the one installed there —
+    /// the element it installed it into (the <see cref="ContentTarget"/> border or the window
+    /// content) and the dev-overlay wrapper it puts around the root while an overlay is on.
+    /// Several hosts can share one container over time (a replaced, undisposed host keeps
+    /// its stale reference to it), so the container only counts for the host whose content
+    /// is actually in it.
+    /// </summary>
+    private RootComponentSource? ResolveDiagnosticsRoot(UIElement element)
+    {
+        if (_disposed) return null;
+        var control = _currentControl;
+        if (control is null) return null;
+
+        UIElement? container = ContentTarget ?? (_windowClosed ? null : _window.Content as UIElement);
+        UIElement? installed = ContentTarget is { } target ? target.Child : container;
+        var wrapper = _overlayWiring?.WrapperRoot;
+        bool ours = ReferenceEquals(installed, control) || (wrapper is not null && ReferenceEquals(installed, wrapper));
+
+        bool isAnchor = ReferenceEquals(element, control)
+            || (ours && (ReferenceEquals(element, container) || ReferenceEquals(element, installed)));
+        if (!isAnchor) return null;
+
+        var component = _rootComponent;
+        var funcContext = _funcContext;
+        if (component is null && funcContext is null) return null;
+        return new RootComponentSource(
+            component,
+            component is null ? funcContext : null,
+            component is null ? _rootRenderFunc : null,
+            control,
+            _currentTree,
+            () => !_disposed && ReferenceEquals(_rootComponent, component) && ReferenceEquals(_funcContext, funcContext));
+    }
+
+    /// <summary>
     /// Optional: when set, Reactor renders into this Border instead of Window.Content.
     /// Useful for embedding Reactor content in a pre-existing layout (e.g., a test harness
     /// with a persistent TitleBar).
@@ -192,6 +228,7 @@ public sealed class ReactorHost : IDisposable
         // Microsoft.Extensions.Logging call paths.
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
+        _reconciler.DiagnosticsRootResolver = ResolveDiagnosticsRoot;
         _window = window;
         _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();

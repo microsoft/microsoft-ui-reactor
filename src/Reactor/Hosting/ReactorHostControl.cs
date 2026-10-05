@@ -144,6 +144,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // already-constructed controls.
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
+        _reconciler.DiagnosticsRootResolver = ResolveDiagnosticsRoot;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         // A standalone ReactorHostControl has no ReactorApp bootstrap, so nothing else
         // sets ReactorApp.UIDispatcher. Cross-thread setState — including the re-render

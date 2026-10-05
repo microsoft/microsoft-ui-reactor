@@ -336,6 +336,7 @@ public sealed partial class Reconciler : IDisposable
     public Reconciler(ILogger? logger = null)
     {
         _logger = logger;
+        RegisterForDiagnostics();
         // Spec 048 §3.4 — no more bootstrap. Built-in handlers register
         // themselves lazily on first factory call (per-control Reg<>/
         // RegDecorator<> cctor latch in `Dsl.cs`), or callers register
@@ -3156,11 +3157,22 @@ public sealed partial class Reconciler : IDisposable
     public static void ApplyDefaultAutomationName(FrameworkElement fe, string? caption)
     {
         if (fe is null) return;
-        if (string.IsNullOrWhiteSpace(caption)) return;
+        if (DefaultAutomationNameFromCaption(caption) is not { } trimmed) return;
         var existing = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(fe);
         if (!string.IsNullOrEmpty(existing)) return;
-        var trimmed = caption.Length > 100 ? caption.Substring(0, 100) : caption;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, trimmed);
+    }
+
+    /// <summary>
+    /// The name <see cref="ApplyDefaultAutomationName"/> / <see cref="UpdateDefaultAutomationName"/>
+    /// write for <paramref name="caption"/> (null when they write nothing). Shared with
+    /// <c>ReactorDiagnostics.GetAppliedProperties</c> so the reported default cannot drift
+    /// from the one applied.
+    /// </summary>
+    internal static string? DefaultAutomationNameFromCaption(string? caption)
+    {
+        if (string.IsNullOrWhiteSpace(caption)) return null;
+        return caption.Length > 100 ? caption.Substring(0, 100) : caption;
     }
 
     // Update variant: a label change ("+ 1" → "+ 2") should update UIA Name as
@@ -3178,13 +3190,12 @@ public sealed partial class Reconciler : IDisposable
     public static void UpdateDefaultAutomationName(FrameworkElement fe, string? oldCaption, string? newCaption)
     {
         if (fe is null) return;
-        if (string.IsNullOrWhiteSpace(newCaption)) return;
+        if (DefaultAutomationNameFromCaption(newCaption) is not { } trimmed) return;
         var current = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(fe);
         bool authorOverride =
             !string.IsNullOrEmpty(current) &&
             (oldCaption is null || !string.Equals(current, oldCaption, StringComparison.Ordinal));
         if (authorOverride) return;
-        var trimmed = newCaption.Length > 100 ? newCaption.Substring(0, 100) : newCaption;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, trimmed);
     }
 
@@ -6078,6 +6089,8 @@ public sealed partial class Reconciler : IDisposable
 
     public void Dispose()
     {
+        _disposedForDiagnostics = true;
+        UnregisterForDiagnostics();
         foreach (var node in _componentNodes.Values)
         {
             node.Context?.RunCleanups();

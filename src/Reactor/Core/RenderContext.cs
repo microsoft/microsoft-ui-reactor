@@ -2559,70 +2559,73 @@ public sealed class RenderContext
     /// we have access; devtools code consumes the boxed values and does the
     /// JSON shaping. Must be called on the UI dispatcher.
     /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "SnapshotHooks uses reflection on internal hook state types.")]
-    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "SnapshotHooks uses reflection on internal hook state types.")]
     internal IReadOnlyList<HookSnapshot> SnapshotHooks()
     {
+        // Built on the cells' diagnostic members (no reflection): the raw value keeps the
+        // shape reactor.state has always reported (a ref hook's Ref<T> box, a reducer as useState).
         var list = new List<HookSnapshot>(_hooks.Count);
         for (int i = 0; i < _hooks.Count; i++)
         {
             var h = _hooks[i];
-            var t = h.GetType();
-            string hookName;
-            Type? valueType = null;
-            object? value = null;
-
-            if (t.IsGenericType)
+            var kind = h.DiagnosticKind;
+            string hookName = kind switch
             {
-                var def = t.GetGenericTypeDefinition();
-                if (def == typeof(ValueHookState<>))
-                {
-                    valueType = t.GetGenericArguments()[0];
-                    value = t.GetField("Value")!.GetValue(h);
-                    // UseRef uses the same cell, but its value is a Ref<T>.
-                    hookName = valueType.IsGenericType && valueType.GetGenericTypeDefinition() == typeof(Ref<>)
-                        ? "useRef"
-                        : "useState";
-                }
-                else if (def == typeof(MemoHookState<>))
-                {
-                    valueType = t.GetGenericArguments()[0];
-                    value = t.GetField("Value")!.GetValue(h);
-                    hookName = "useMemo";
-                }
-                else if (def == typeof(PersistedHookState<>))
-                {
-                    valueType = t.GetGenericArguments()[0];
-                    value = t.GetField("Value")!.GetValue(h);
-                    hookName = "usePersisted";
-                }
-                else
-                {
-                    hookName = t.Name;
-                }
-            }
-            else if (h is EffectHookState)
-            {
-                hookName = "useEffect";
-            }
-            else if (h is ContextHookState ch)
-            {
-                hookName = "useContext";
-                value = ch.LastValue;
-                valueType = value?.GetType();
-            }
-            else if (h is NavigationLifecycleHookState)
-            {
-                hookName = "useNavigationLifecycle";
-            }
-            else
-            {
-                hookName = t.Name;
-            }
-
+                HookKind.State or HookKind.Reducer => "useState",
+                HookKind.Ref => "useRef",
+                HookKind.Memo => "useMemo",
+                HookKind.Persisted => "usePersisted",
+                HookKind.Effect => "useEffect",
+                HookKind.Context => "useContext",
+                HookKind.NavigationLifecycle => "useNavigationLifecycle",
+                _ => h.GetType().Name,
+            };
+            var value = h.DiagnosticRawValue;
+            var valueType = kind == HookKind.Context ? value?.GetType() : h.DiagnosticRawValueType;
             list.Add(new HookSnapshot(i, hookName, valueType, value, h.Migrated));
         }
         return list;
+    }
+
+    // ── Diagnostics (ReactorDiagnostics.Components) ──────────────────
+    // Read/write seams for out-of-process inspectors. Pure on-demand: nothing
+    // here runs during a render, so apps that never inspect pay nothing.
+
+    internal int DiagnosticHookCount => _hooks.Count;
+
+    internal HookState DiagnosticHookAt(int index) => _hooks[index];
+
+    /// <summary>
+    /// True when the caller is on the thread that last rendered this context, or
+    /// the context has never rendered (a headless/test context, where there is no
+    /// thread to be affine to yet).
+    /// </summary>
+    internal bool IsOnRenderThread =>
+        _requestRerender is null || Environment.CurrentManagedThreadId == _uiThreadId;
+
+    /// <summary>
+    /// Writes a hook cell by index and, when the value changed, requests a
+    /// re-render through the same callback the hook's own setter uses — so the
+    /// owning component (and its ancestors, via the SelfTriggered chain) re-render
+    /// exactly as if the app had called the setter.
+    /// </summary>
+    internal bool TrySetHookValueForDiagnostics(int index, object? value)
+    {
+        if ((uint)index >= (uint)_hooks.Count) return false;
+        if (!_hooks[index].TrySetDiagnosticValue(value, out bool changed)) return false;
+        if (changed) _requestRerender?.Invoke();
+        return true;
+    }
+
+    /// <summary>
+    /// Requests a re-render of the owning component through its own rerender
+    /// callback. Returns false when the context has never rendered.
+    /// </summary>
+    internal bool RequestRerenderForDiagnostics()
+    {
+        var rerender = _requestRerender;
+        if (rerender is null) return false;
+        rerender();
+        return true;
     }
 
     internal abstract class HookState
@@ -2632,10 +2635,104 @@ public sealed class RenderContext
         // pass; surfaced by SnapshotHooks -> reactor.state. Reset to false at
         // the start of every hot-reload pass so it reflects only that pass.
         public bool Migrated;
+
+        // Diagnostics read/write surface (ReactorDiagnostics.Components). Virtual
+        // dispatch on the cell keeps the generic T in scope, so inspecting or
+        // writing a hook needs no reflection and stays trim/AOT-safe. Never
+        // touched by the render path.
+        internal virtual HookKind DiagnosticKind => HookKind.Unknown;
+        internal virtual Type? DiagnosticValueType => null;
+        internal virtual object? DiagnosticValue => null;
+        // The cell's stored value as-is (a ref cell's Ref<T> box rather than its Current), for SnapshotHooks.
+        internal virtual object? DiagnosticRawValue => DiagnosticValue;
+        internal virtual Type? DiagnosticRawValueType => DiagnosticValueType;
+        internal virtual bool DiagnosticCanSet => false;
+
+        /// <summary>
+        /// Writes <paramref name="value"/> into the cell when it is assignable to the
+        /// cell's value type. <paramref name="changed"/> reports whether the stored
+        /// value differs under <see cref="EqualityComparer{T}.Default"/> — the same
+        /// gate the hook's own setter uses before requesting a re-render.
+        /// </summary>
+        internal virtual bool TrySetDiagnosticValue(object? value, out bool changed)
+        {
+            changed = false;
+            return false;
+        }
+
+        private protected static bool TryUnbox<TValue>(object? value, out TValue result)
+        {
+            if (value is TValue typed)
+            {
+                result = typed;
+                return true;
+            }
+            // `null` is assignable to reference types and Nullable<T>, which the
+            // `is` pattern above rejects.
+            if (value is null && default(TValue) is null)
+            {
+                result = default!;
+                return true;
+            }
+            result = default!;
+            return false;
+        }
     }
 
     private class ValueHookState<T> : HookState
     {
+        internal override HookKind DiagnosticKind =>
+            typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Ref<>)
+                ? HookKind.Ref
+                : SetterKind is SetterKindReducer or SetterKindDispatch
+                    ? HookKind.Reducer
+                    : HookKind.State;
+        // A ref cell reports what it points at (Ref<T>.Current, typed T), not the Ref box.
+        internal override Type? DiagnosticValueType => Value is IRefValue r ? r.ValueType : typeof(T);
+        // SnapshotHooks keeps reporting the stored value as-is (the Ref<T> box for a ref).
+        internal override Type? DiagnosticRawValueType => typeof(T);
+        internal override object? DiagnosticRawValue
+        {
+            get
+            {
+                if (!ThreadSafe) return Value;
+                lock (Lock!) return Value;
+            }
+        }
+        internal override object? DiagnosticValue
+        {
+            get
+            {
+                object? v;
+                if (!ThreadSafe) v = Value;
+                else lock (Lock!) v = Value;
+                return v is IRefValue r ? r.CurrentBoxed : v;
+            }
+        }
+        // A Ref is mutated through Ref<T>.Current and never schedules a render,
+        // so replacing the cell's Ref instance would silently detach the author's
+        // captured reference. Only state/reducer cells are writable.
+        internal override bool DiagnosticCanSet => DiagnosticKind != HookKind.Ref;
+        internal override bool TrySetDiagnosticValue(object? value, out bool changed)
+        {
+            changed = false;
+            if (!DiagnosticCanSet || !TryUnbox<T>(value, out var typed)) return false;
+            if (ThreadSafe)
+            {
+                lock (Lock!)
+                {
+                    changed = !EqualityComparer<T>.Default.Equals(Value, typed);
+                    if (changed) Value = typed;
+                }
+            }
+            else
+            {
+                changed = !EqualityComparer<T>.Default.Equals(Value, typed);
+                if (changed) Value = typed;
+            }
+            return true;
+        }
+
         public T Value;
         public readonly bool ThreadSafe;
         // Issue #659 (#42): only allocate the lock when threadSafe was requested.
@@ -2667,6 +2764,7 @@ public sealed class RenderContext
 
     private class EffectHookState : HookState
     {
+        internal override HookKind DiagnosticKind => HookKind.Effect;
         public object[]? Dependencies;
         public Action? Effect;
         public Func<Action>? EffectWithCleanup;
@@ -2677,18 +2775,25 @@ public sealed class RenderContext
 
     private class MemoHookState<T> : HookState
     {
+        internal override HookKind DiagnosticKind => HookKind.Memo;
+        internal override Type? DiagnosticValueType => typeof(T);
+        internal override object? DiagnosticValue => Value;
         public T Value = default!;
         public object[]? Dependencies;
     }
 
     internal class ContextHookState : HookState
     {
+        internal override HookKind DiagnosticKind => HookKind.Context;
+        internal override Type? DiagnosticValueType => Context?.ValueType;
+        internal override object? DiagnosticValue => LastValue;
         public ContextBase Context = default!;
         public object? LastValue;
     }
 
     internal class NavigationLifecycleHookState : HookState
     {
+        internal override HookKind DiagnosticKind => HookKind.NavigationLifecycle;
         public Action<Navigation.NavigatingToContext>? OnNavigatingTo;
         public Action<Navigation.NavigatedToContext>? OnNavigatedTo;
         public Action<Navigation.NavigatingFromContext>? OnNavigatingFrom;
@@ -2708,6 +2813,18 @@ public sealed class RenderContext
 
     private class PersistedHookState<T> : PersistedHookStateBase
     {
+        internal override HookKind DiagnosticKind => HookKind.Persisted;
+        internal override Type? DiagnosticValueType => typeof(T);
+        internal override object? DiagnosticValue => Value;
+        internal override bool DiagnosticCanSet => true;
+        internal override bool TrySetDiagnosticValue(object? value, out bool changed)
+        {
+            changed = false;
+            if (!TryUnbox<T>(value, out var typed)) return false;
+            changed = !EqualityComparer<T>.Default.Equals(Value, typed);
+            if (changed) Value = typed;
+            return true;
+        }
         public T Value;
         // Issue #659 (#53): ref-stable setter cached on first render.
         public Action<T>? CachedSetter;
@@ -2757,8 +2874,18 @@ internal readonly record struct HookSnapshot(int Index, string Hook, Type? Value
 /// <summary>
 /// A mutable reference that persists across renders (like React's useRef).
 /// </summary>
-public class Ref<T>
+public class Ref<T> : IRefValue
 {
     public T Current { get; set; }
     public Ref(T initial) => Current = initial;
+
+    object? IRefValue.CurrentBoxed => Current;
+    Type IRefValue.ValueType => typeof(T);
+}
+
+/// <summary>Non-generic read of a <see cref="Ref{T}"/> for diagnostics (no reflection).</summary>
+internal interface IRefValue
+{
+    object? CurrentBoxed { get; }
+    Type ValueType { get; }
 }

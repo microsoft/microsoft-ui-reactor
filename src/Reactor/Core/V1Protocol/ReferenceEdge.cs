@@ -44,6 +44,40 @@ namespace Microsoft.UI.Reactor.Core
         public const int ModifierRef_XYFocusLeft = 200_012;
         public const int ModifierRef_XYFocusRight = 200_013;
         public const int ModifierRef_ToolTipPlacementTarget = 200_020;
+
+        /// <summary>
+        /// Diagnostics-only pseudo-slot for the AutomationId form of <c>.LabeledBy("id")</c>,
+        /// which resolves through a visual-tree search rather than a reference edge and so has
+        /// no bag entry. Never used as a <see cref="ReferenceEdgeBag"/> key.
+        /// </summary>
+        public const int ModifierRef_LabeledById = 200_030;
+
+        /// <summary>First slot of the imperative <c>ReactorBinding.Reference</c> bridge.</summary>
+        public const int BindingBase = 100_000;
+
+        /// <summary>First slot of the named modifier-level edges above.</summary>
+        public const int ModifierBase = 200_000;
+
+        /// <summary>
+        /// Human-readable name for a slot. Modifier slots are named; descriptor and binding
+        /// slots are allocated in declaration order and carry no author-visible name. Shared by
+        /// <c>ReactorDiagnostics.GetReferenceEdges</c> and the devtools reference overlay.
+        /// </summary>
+        public static string Label(int slot) => slot switch
+        {
+            ModifierRef_LabeledBy or ModifierRef_LabeledById => "LabeledBy",
+            ModifierRef_DescribedBy => "DescribedBy",
+            ModifierRef_FlowsTo => "FlowsTo",
+            ModifierRef_FlowsFrom => "FlowsFrom",
+            ModifierRef_XYFocusUp => "XYFocusUp",
+            ModifierRef_XYFocusDown => "XYFocusDown",
+            ModifierRef_XYFocusLeft => "XYFocusLeft",
+            ModifierRef_XYFocusRight => "XYFocusRight",
+            ModifierRef_ToolTipPlacementTarget => "ToolTipPlacementTarget",
+            >= ModifierBase => $"modifier#{slot}",
+            >= BindingBase => $"binding#{slot - BindingBase}",
+            _ => $"reference#{slot}",
+        };
     }
 }
 

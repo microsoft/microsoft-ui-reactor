@@ -19,6 +19,8 @@ internal static class SelfTestFixtureRegistry
         "SourceMapReadPath_ComponentWrapper",
         "SourceMapReadPath_Decorator",
         "SourceMapReadPath_DecoratorBranch",
+        "Diagnostics_ComponentInspection",
+        "Diagnostics_RootAnchors",
         "ErrorBoundary_CatchesRenderError",
         "ErrorBoundary_Recovery",
         "Reconciler_MountText",
@@ -301,6 +303,7 @@ internal static class SelfTestFixtureRegistry
         "ContentDialogLive_UnmountTearsDownOpenDialog",
         "ContentDialogLive_RoutesClosedToLatestRender",
         "ContentDialogLive_ReopensAfterClose",
+        "Diagnostics_ContentDialogTag",
         // Flyout placement guard — Reactor must never write FlyoutPlacementMode.Auto
         // onto a WinUI FlyoutBase, because the show-time validator rejects it and
         // fail-fasts the process. The Flyout/ContentFlyout/fresh-create fixtures
@@ -1775,6 +1778,7 @@ internal static class SelfTestFixtureRegistry
         "ReferenceOverlay_ResolvedModifierEdge",
         "ReferenceOverlay_UnresolvedDiagnostic",
         "ReferenceOverlay_CycleDiagnostic",
+        "Diagnostics_ReferenceEdges",
         // Spec 057 §10 — first-party TeachingTip.Target reference proof.
         "TeachingTip_TargetReferenceResolvesBothMountOrders",
         "TeachingTip_SurfaceParity",
@@ -2297,6 +2301,7 @@ internal static class SelfTestFixtureRegistry
         "ContentDialogLive_UnmountTearsDownOpenDialog" => new ContentDialogLiveContentFixtures.ContentDialog_UnmountTearsDownOpenDialog(harness),
         "ContentDialogLive_RoutesClosedToLatestRender" => new ContentDialogLiveContentFixtures.ContentDialog_RoutesClosedToLatestRender(harness),
         "ContentDialogLive_ReopensAfterClose" => new ContentDialogLiveContentFixtures.ContentDialog_ReopensAfterClose(harness),
+        "Diagnostics_ContentDialogTag" => new ContentDialogTagFixtures.DialogIsTagged(harness),
         // Flyout placement guard — Auto must never reach FlyoutBase.Placement.
         "FlyoutPlacement_Platform_FlyoutBase_PlacementDefault" => new FlyoutPlacementFixtures.Platform_FlyoutBase_PlacementDefault(harness),
         "FlyoutPlacement_Flyout_DefaultPlacement_Opens" => new FlyoutPlacementFixtures.Flyout_DefaultPlacement_Opens(harness),
@@ -2637,6 +2642,8 @@ internal static class SelfTestFixtureRegistry
         "SourceMapReadPath_ComponentWrapper" => new SourceMapReadPathTests.ComponentWrapperIsResolvable(harness),
         "SourceMapReadPath_Decorator" => new SourceMapReadPathTests.DecoratedControlReportsItsTargetsCallSite(harness),
         "SourceMapReadPath_DecoratorBranch" => new SourceMapReadPathTests.DecoratedTargetBranchSwitchRefreshes(harness),
+        "Diagnostics_ComponentInspection" => new ComponentInspectionFixtures.Inspect(harness),
+        "Diagnostics_RootAnchors" => new ComponentInspectionFixtures.RootAnchors(harness),
         // Animation system — .Animate() modifier
         "Animate_ImplicitAnimationsCreated" => new AnimateModifierTests.ImplicitAnimationsCreated(harness),        "Animate_TargetedProperties" => new AnimateModifierTests.TargetedProperties(harness),
         "Animate_MergesWithLayoutAnimation" => new AnimateModifierTests.MergesWithLayoutAnimation(harness),
@@ -3729,6 +3736,7 @@ internal static class SelfTestFixtureRegistry
         "ReferenceOverlay_ResolvedModifierEdge" => new ReferenceOverlaySelfHostFixtures.ResolvedModifierEdge(harness),
         "ReferenceOverlay_UnresolvedDiagnostic" => new ReferenceOverlaySelfHostFixtures.UnresolvedDiagnostic(harness),
         "ReferenceOverlay_CycleDiagnostic" => new ReferenceOverlaySelfHostFixtures.CycleDiagnostic(harness),
+        "Diagnostics_ReferenceEdges" => new ReferenceEdgeFixtures.PendingThenResolved(harness),
         "TeachingTip_TargetReferenceResolvesBothMountOrders" => new TeachingTipTargetFixtures.TargetReferenceResolvesBothMountOrders(harness),
         "TeachingTip_SurfaceParity" => new RefNodeSurfaceParityFixtures.Execution(harness),
         "RealRef_TeachingTipTarget_CrossSubtree" => new RealRefTortureFixtures.TeachingTipTargetCrossSubtree(harness),

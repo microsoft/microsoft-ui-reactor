@@ -90,6 +90,7 @@ internal static class OverlayLifecycle
         }
 
         SyncContentDialogProps(dialog, n);
+        TagDialogForDiagnostics(dialog, n);
 
         // Reconcile the side-mounted content in place so transient state inside
         // the dialog (focus, scroll, caret) survives the owner's re-renders.
@@ -203,6 +204,33 @@ internal static class OverlayLifecycle
     internal static bool ShouldStartDeferredDialog(Element? tag, bool alreadyShowing)
         => !alreadyShowing && tag is ContentDialogElement { IsOpen: true };
 
+    /// <summary>
+    /// Points the live <see cref="WinUI.ContentDialog"/> back at its element so an inspector
+    /// that picks the dialog's chrome (title, primary/secondary/close buttons) can attribute
+    /// it to the <c>ContentDialog(...)</c> call site: it walks up to the dialog and reads
+    /// <see cref="Reconciler.GetElementTag(UIElement)"/> /
+    /// <see cref="Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource"/>.
+    ///
+    /// <para>The placeholder already carries the tag, but it is collapsed and lives in the
+    /// owner's tree, while the dialog is shown in its own popup root, so no ancestor walk
+    /// from a dialog button can reach it. Tagging the dialog is the only bridge.</para>
+    ///
+    /// <para>Nothing in Reactor reads this tag back (callbacks resolve through the
+    /// placeholder), so it is only written when there is something to attribute — see
+    /// <see cref="ShouldTagDialog"/> — and production pays nothing.</para>
+    /// </summary>
+    private static void TagDialogForDiagnostics(WinUI.ContentDialog dialog, ContentDialogElement element)
+        // Passing null when tagging is off retires a tag an earlier render wrote (the flag
+        // was flipped off while the dialog stayed open), and is a no-op on an untagged dialog.
+        => Reconciler.SetElementTag(dialog, ShouldTagDialog(element) ? element : null);
+
+    /// <summary>
+    /// Tag when the element carries a call site (it was stamped, or hand-stamped) or when
+    /// source mapping is on (so an inspector can still read the element record).
+    /// </summary>
+    internal static bool ShouldTagDialog(ContentDialogElement element)
+        => element.CallSite is not null || Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled;
+
     private static async void ShowContentDialogCore(Reconciler reconciler, ContentDialogElement cdEl, FrameworkElement anchor, XamlRoot? xamlRoot, Action requestRerender)
     {
         var dialog = new WinUI.ContentDialog
@@ -216,6 +244,7 @@ internal static class OverlayLifecycle
         if (cdEl.CloseButtonText is not null) dialog.CloseButtonText = cdEl.CloseButtonText;
         dialog.Content = reconciler.Mount(cdEl.Content, requestRerender);
         if (xamlRoot is not null) dialog.XamlRoot = xamlRoot;
+        TagDialogForDiagnostics(dialog, cdEl);
         // Resolve callbacks through the anchor's live Tag the way Flyout/Popup do,
         // rather than capturing the mount-time element: the dialog re-renders
         // while open so those closures go stale, and clearing the tag is how
