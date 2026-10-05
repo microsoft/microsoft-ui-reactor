@@ -138,7 +138,9 @@ internal sealed class RenderErrorProbeException(string message) : Exception(mess
 /// throw: the component reports at the throw site and the boundary does not report again.
 /// Covers the mount path (first render inside the boundary — class, function and memo
 /// components, plus a throw that passes through an intermediate component) and the update
-/// path (a component inside the boundary that starts throwing on re-render).
+/// path (a component inside the boundary that starts throwing on re-render). The boundary
+/// recovers from every exception, so an explicitly thrown <c>OutOfMemoryException</c> and an
+/// exception whose <c>Message</c> getter throws must be reported too.
 /// </summary>
 internal class RenderErrorNames_ErrorBoundaryCatchIsReported(Harness h) : SelfTestFixtureBase(h)
 {
@@ -149,8 +151,14 @@ internal class RenderErrorNames_ErrorBoundaryCatchIsReported(Harness h) : SelfTe
             e =>
             {
                 if (e.EventName == nameof(ReactorEventSource.RenderError)
-                    && e.Payload[1] as string is nameof(RenderErrorProbeException) or nameof(MessageThrowsProbeException))
-                    lock (names) names.Add((string)e.Payload[0]!);
+                    && e.Payload[1] as string is nameof(RenderErrorProbeException) or nameof(MessageThrowsProbeException)
+                        or nameof(OutOfMemoryException))
+                {
+                    // Tag OOM reports so they don't disturb the per-name counts of the other probes.
+                    var name = (string)e.Payload[0]!;
+                    if (e.Payload[1] as string == nameof(OutOfMemoryException)) name += OomTag;
+                    lock (names) names.Add(name);
+                }
             },
             EventLevel.Error,
             ReactorEventSource.Keywords.Errors);
@@ -188,6 +196,14 @@ internal class RenderErrorNames_ErrorBoundaryCatchIsReported(Harness h) : SelfTe
                 // Reporting must not read the exception's Message: an override that throws
                 // would replace the original exception on the rethrow path.
                 ErrorBoundary(Component<ThrowsBadMessage>(), _ => TextBlock("bad message fallback")),
+                // A boundary recovers from every exception, so every one must be reported —
+                // including an explicitly thrown OutOfMemoryException.
+                ErrorBoundary(Component<ThrowsOutOfMemory>(), _ => TextBlock("oom fallback")),
+                ErrorBoundary(RenderEachTime(_ => throw new OutOfMemoryException("func oom")),
+                    _ => TextBlock("func oom fallback")),
+                ErrorBoundary(Memo(_ => throw new OutOfMemoryException("memo oom"), "stable"),
+                    _ => TextBlock("memo oom fallback")),
+                ErrorBoundary(Component<ThrowsOutOfMemoryOnUpdate, int>(n), _ => TextBlock("update oom fallback")),
                 Button("bump", () => setN(n + 1)));
         });
         await Harness.Render();
@@ -209,6 +225,15 @@ internal class RenderErrorNames_ErrorBoundaryCatchIsReported(Harness h) : SelfTe
         H.Check("RenderErrorNames_Boundary_ThrowingMessage_ReportedOnce",
             H.FindText("bad message fallback") is not null
             && mount.Count(n => n == nameof(ThrowsBadMessage)) == 1);
+        H.Check("RenderErrorNames_Boundary_OutOfMemory_ReportedOnce",
+            H.FindText("oom fallback") is not null
+            && mount.Count(n => n == nameof(ThrowsOutOfMemory) + OomTag) == 1);
+        H.Check("RenderErrorNames_Boundary_FuncOutOfMemory_ReportedOnce",
+            H.FindText("func oom fallback") is not null
+            && mount.Count(n => n == nameof(FuncElement) + OomTag) == 1);
+        H.Check("RenderErrorNames_Boundary_MemoOutOfMemory_ReportedOnce",
+            H.FindText("memo oom fallback") is not null
+            && mount.Count(n => n == nameof(MemoElement) + OomTag) == 1);
 
         H.ClickButton("bump");
         await Harness.Render();
@@ -218,9 +243,14 @@ internal class RenderErrorNames_ErrorBoundaryCatchIsReported(Harness h) : SelfTe
         H.Check("RenderErrorNames_Boundary_Update_FallbackShown", H.FindText("update fallback") is not null);
         H.Check("RenderErrorNames_Boundary_Update_ReportedOnceByName",
             update.Count(n => n == nameof(ThrowOnUpdateCounter)) == 1);
+        H.Check("RenderErrorNames_Boundary_UpdateOutOfMemory_ReportedOnce",
+            H.FindText("update oom fallback") is not null
+            && update.Count(n => n == nameof(ThrowsOutOfMemoryOnUpdate) + OomTag) == 1);
         H.Check("RenderErrorNames_Boundary_NoElementTypeName",
             !mount.Concat(update).Any(n => n.StartsWith("ComponentElement", StringComparison.Ordinal)));
     }
+
+    private const string OomTag = "!oom";
 }
 
 internal sealed class ThrowOnMountCounter : Component<int>
@@ -257,4 +287,15 @@ internal sealed class MessageThrowsProbeException : Exception
 internal sealed class ThrowsBadMessage : Component
 {
     public override Element Render() => throw new MessageThrowsProbeException();
+}
+
+internal sealed class ThrowsOutOfMemory : Component
+{
+    public override Element Render() => throw new OutOfMemoryException("probe");
+}
+
+internal sealed class ThrowsOutOfMemoryOnUpdate : Component<int>
+{
+    public override Element Render()
+        => Props == 0 ? TextBlock("fine") : throw new OutOfMemoryException("update probe");
 }

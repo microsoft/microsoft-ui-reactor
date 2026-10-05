@@ -62,7 +62,7 @@ arguments in C# form (`ItemList<Int32>`, not ``ItemList`1``); function and memo
 components, which have no type of their own, report `FuncElement` and
 `MemoElement`.
 
-![Source attribution: component-name attribution flows Component.GetType().Name into ETW, while per-element attribution stamps each DSL call site with file and line via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource.](images/source-mapping/attribution.svg)
+![Source attribution: component-name attribution flows the component's type name, formatted by ComponentNames (generic components in C# form), into ETW, while per-element attribution stamps each DSL call site with file and line via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource.](images/source-mapping/attribution.svg)
 
 ## Reconcile-pass attribution
 

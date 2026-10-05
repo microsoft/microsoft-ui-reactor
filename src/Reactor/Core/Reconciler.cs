@@ -2169,8 +2169,9 @@ public sealed partial class Reconciler : IDisposable
             // Inside an ErrorBoundary the exception propagates to the boundary, which
             // renders its fallback. Name the failing component here, at the throw site —
             // the boundary itself cannot know which descendant threw — so a listener sees
-            // the error even though the app recovered. Rethrown unchanged.
-            catch (Exception ex) when (_errorBoundaryDepth > 0 && ex is not OutOfMemoryException and not StackOverflowException)
+            // the error even though the app recovered. Rethrown unchanged. No OOM/SO carve-out:
+            // the boundary catches every exception, so every one it recovers from is reported.
+            catch (Exception ex) when (_errorBoundaryDepth > 0)
             {
                 EmitRenderError(componentName ?? Diagnostics.ComponentNames.For(node.Component, newEl), ex);
                 throw;

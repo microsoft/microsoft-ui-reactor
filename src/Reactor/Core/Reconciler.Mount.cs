@@ -867,8 +867,8 @@ public sealed partial class Reconciler
             component.Context.FlushEffects();
         }
         // Inside an ErrorBoundary: name the failing component, then let the boundary
-        // handle it (see ReconcileComponent).
-        catch (Exception ex) when (_errorBoundaryDepth > 0 && ex is not OutOfMemoryException and not StackOverflowException)
+        // handle it (see ReconcileComponent). No exception-type filter, like the boundary's own catch.
+        catch (Exception ex) when (_errorBoundaryDepth > 0)
         {
             EmitRenderError(Diagnostics.ComponentNames.For(component, compElement), ex);
             throw;
@@ -915,8 +915,8 @@ public sealed partial class Reconciler
             ctx.FlushEffects();
         }
         // Inside an ErrorBoundary: name the failing component, then let the boundary
-        // handle it (see ReconcileComponent).
-        catch (Exception ex) when (_errorBoundaryDepth > 0 && ex is not OutOfMemoryException and not StackOverflowException)
+        // handle it (see ReconcileComponent). No exception-type filter, like the boundary's own catch.
+        catch (Exception ex) when (_errorBoundaryDepth > 0)
         {
             EmitRenderError(nameof(FuncElement), ex);
             throw;
@@ -963,8 +963,8 @@ public sealed partial class Reconciler
             ctx.FlushEffects();
         }
         // Inside an ErrorBoundary: name the failing component, then let the boundary
-        // handle it (see ReconcileComponent).
-        catch (Exception ex) when (_errorBoundaryDepth > 0 && ex is not OutOfMemoryException and not StackOverflowException)
+        // handle it (see ReconcileComponent). No exception-type filter, like the boundary's own catch.
+        catch (Exception ex) when (_errorBoundaryDepth > 0)
         {
             EmitRenderError(nameof(MemoElement), ex);
             throw;
