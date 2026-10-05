@@ -1863,9 +1863,11 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// <c>ReactorEventSource.RenderError</c> for a component whose Render() threw and was
     /// replaced by the error fallback. Shared by the mount and update paths so both name
-    /// the component the same way (<see cref="Diagnostics.ComponentNames"/>). The event
-    /// sink drops <paramref name="ex"/>'s message from the ETW payload (TASK-064 PII
-    /// redaction); only the component name and exception type are written.
+    /// the component the same way (<see cref="Diagnostics.ComponentNames"/>). Only the
+    /// component name and exception type are written: the sink redacts the message
+    /// (TASK-064), so <paramref name="ex"/>'s virtual <c>Message</c> is never read here —
+    /// an app exception whose <c>Message</c> override throws must not replace the original
+    /// exception on this error path (the ErrorBoundary arms rethrow it unchanged).
     /// </summary>
     internal static void EmitRenderError(string componentName, Exception ex)
     {
@@ -1873,7 +1875,7 @@ public sealed partial class Reconciler : IDisposable
                 global::System.Diagnostics.Tracing.EventLevel.Error,
                 Diagnostics.ReactorEventSource.Keywords.Errors))
         {
-            Diagnostics.ReactorEventSource.Log.RenderError(componentName, ex.GetType().Name, ex.Message);
+            Diagnostics.ReactorEventSource.Log.RenderError(componentName, ex.GetType().Name, string.Empty);
         }
     }
 

@@ -149,7 +149,7 @@ internal class RenderErrorNames_ErrorBoundaryCatchIsReported(Harness h) : SelfTe
             e =>
             {
                 if (e.EventName == nameof(ReactorEventSource.RenderError)
-                    && e.Payload[1] as string == nameof(RenderErrorProbeException))
+                    && e.Payload[1] as string is nameof(RenderErrorProbeException) or nameof(MessageThrowsProbeException))
                     lock (names) names.Add((string)e.Payload[0]!);
             },
             EventLevel.Error,
@@ -185,6 +185,9 @@ internal class RenderErrorNames_ErrorBoundaryCatchIsReported(Harness h) : SelfTe
                 // The throw passes through an intermediate component on its way to the
                 // boundary; only the component that threw may report it.
                 ErrorBoundary(Component<NestedThrowWrapper>(), _ => TextBlock("nested fallback")),
+                // Reporting must not read the exception's Message: an override that throws
+                // would replace the original exception on the rethrow path.
+                ErrorBoundary(Component<ThrowsBadMessage>(), _ => TextBlock("bad message fallback")),
                 Button("bump", () => setN(n + 1)));
         });
         await Harness.Render();
@@ -203,6 +206,9 @@ internal class RenderErrorNames_ErrorBoundaryCatchIsReported(Harness h) : SelfTe
             H.FindText("nested fallback") is not null
             && mount.Count(n => n == nameof(NestedThrowInner)) == 1
             && !mount.Contains(nameof(NestedThrowWrapper)));
+        H.Check("RenderErrorNames_Boundary_ThrowingMessage_ReportedOnce",
+            H.FindText("bad message fallback") is not null
+            && mount.Count(n => n == nameof(ThrowsBadMessage)) == 1);
 
         H.ClickButton("bump");
         await Harness.Render();
@@ -241,4 +247,14 @@ internal sealed class NestedThrowWrapper : Component
 internal sealed class NestedThrowInner : Component
 {
     public override Element Render() => throw new RenderErrorProbeException("nested");
+}
+
+internal sealed class MessageThrowsProbeException : Exception
+{
+    public override string Message => throw new InvalidOperationException("Message getter threw");
+}
+
+internal sealed class ThrowsBadMessage : Component
+{
+    public override Element Render() => throw new MessageThrowsProbeException();
 }
