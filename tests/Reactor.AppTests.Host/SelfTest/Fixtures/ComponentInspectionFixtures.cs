@@ -181,9 +181,9 @@ internal static class ComponentInspectionFixtures
             // A host without a ContentTarget installs its root as the window content.
             var window = H.Window;
             var previousContent = window.Content;
-            var bare = new ReactorHost(window);
             try
             {
+                using var bare = new ReactorHost(window);
                 bare.Mount(new RootCounter());
                 await Harness.WaitFor(() => bare.CurrentControl is not null && ReferenceEquals(window.Content, bare.CurrentControl),
                     maxPasses: 16, perPassMs: 10);
@@ -192,7 +192,6 @@ internal static class ComponentInspectionFixtures
             }
             finally
             {
-                bare.Dispose();
                 window.Content = previousContent;
                 await Harness.Render();
             }

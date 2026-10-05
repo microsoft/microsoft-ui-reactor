@@ -296,14 +296,12 @@ internal static class DiagnosticText
             return new[] { ("Props", declared ?? type, (object?)props) };
 
         var rows = new List<(string, Type, object?)>();
-        foreach (var property in type.GetProperties(global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Instance))
+        var readable = type.GetProperties(global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Instance)
+            .Where(static p => p.Name != "EqualityContract" && p.GetIndexParameters().Length == 0 && p.CanRead);
+        foreach (var property in readable)
         {
-            if (property.Name == "EqualityContract" || property.GetIndexParameters().Length > 0 || !property.CanRead)
-                continue;
-            object? value;
-            try { value = property.GetValue(props); }
-            catch (global::System.Reflection.TargetInvocationException) { continue; }
-            rows.Add((property.Name, property.PropertyType, value));
+            try { rows.Add((property.Name, property.PropertyType, property.GetValue(props))); }
+            catch (global::System.Reflection.TargetInvocationException) { }
         }
         // No readable members (none declared, or their metadata trimmed away): name the type rather
         // than fall back to ToString(), which for a record would print every member, secrets included.

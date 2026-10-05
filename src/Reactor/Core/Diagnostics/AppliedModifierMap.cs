@@ -147,14 +147,11 @@ internal static class AppliedModifierMap
 
     internal static IReadOnlyList<AppliedModifier> Describe(ElementModifiers modifiers, Type controlType)
     {
-        List<AppliedModifier>? result = null;
-        foreach (var entry in Entries)
-        {
-            if (entry.Get(modifiers) is not { } value) continue;
-            if (entry.Target(controlType) is not { } property) continue;
-            (result ??= new()).Add(new AppliedModifier(entry.Modifier, property, value));
-        }
-        return result is null ? global::System.Array.Empty<AppliedModifier>() : result;
+        var result = Entries
+            .Select(entry => new AppliedModifier(entry.Modifier, entry.Target(controlType) ?? "", entry.Get(modifiers)))
+            .Where(applied => applied.Value is not null && applied.Property.Length > 0)
+            .ToArray();
+        return result.Length == 0 ? global::System.Array.Empty<AppliedModifier>() : result;
     }
 
     /// <summary>Modifier name reported for the caption-derived default name.</summary>

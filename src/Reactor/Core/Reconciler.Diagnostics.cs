@@ -51,8 +51,8 @@ public sealed partial class Reconciler
         lock (s_liveGate)
         {
             var list = new List<Reconciler>(s_live.Count);
-            foreach (var w in s_live)
-                if (w.TryGetTarget(out var r)) list.Add(r);
+            foreach (var r in s_live.Select(static w => w.TryGetTarget(out var target) ? target : null).Where(static r => r is not null))
+                list.Add(r!);
             return list;
         }
     }
@@ -64,9 +64,7 @@ public sealed partial class Reconciler
         {
             lock (s_liveGate)
             {
-                foreach (var w in s_live)
-                    if (w.TryGetTarget(out var r) && ReferenceEquals(r, this)) return true;
-                return false;
+                return s_live.Any(w => w.TryGetTarget(out var r) && ReferenceEquals(r, this));
             }
         }
     }
