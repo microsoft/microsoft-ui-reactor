@@ -23,10 +23,7 @@ public class ReconcilerUpdateChildAnalyzerTests
     private const string ReactorStub = @"#nullable enable
 namespace Microsoft.UI.Xaml
 {
-    public class UIElement
-    {
-        public object? Tag { get; set; }
-    }
+    public class UIElement { }
 }
 
 namespace Microsoft.UI.Reactor.Core
@@ -222,6 +219,9 @@ namespace Microsoft.UI.Reactor.Core
     }
 
     // ── Code fix ────────────────────────────────────────────────────────
+    //
+    // Unless a test is about where the existing control comes from, it reads it from the slot right
+    // before the call, so the fix is declined only for the reason the test names.
 
     [Fact]
     public async Task CodeFix_Rewrites_The_Common_Shape()
@@ -259,8 +259,9 @@ class Host
         await VerifyFixAsync(@"
 class Handler
 {
-    void Update(UpdateContext ctx, Element oldEl, Element newEl, Slot slot, UIElement existing)
+    void Update(UpdateContext ctx, Element oldEl, Element newEl, Slot slot)
     {
+        var existing = slot.Content;
         var replacement = ctx.Reconciler.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, ctx.RequestRerender);
         if (null != replacement)
         {
@@ -271,8 +272,9 @@ class Handler
 }", @"
 class Handler
 {
-    void Update(UpdateContext ctx, Element oldEl, Element newEl, Slot slot, UIElement existing)
+    void Update(UpdateContext ctx, Element oldEl, Element newEl, Slot slot)
     {
+        var existing = slot.Content;
         var replacement = ctx.Reconciler.Reconcile(oldEl, newEl, existing, ctx.RequestRerender);
         if (!ReferenceEquals(replacement, existing))
         {
@@ -317,15 +319,17 @@ class Host
     [Fact]
     public async Task CodeFix_Rewrites_A_Nullable_Slot()
     {
+        // Nullable code passes the existing control as existing!; the comparison uses the variable.
         await VerifyFixAsync(@"
 #nullable enable
 class NullableSlot { public UIElement? Content; }
 
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, NullableSlot slot, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, NullableSlot slot, Action rerender)
     {
-        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        var existing = slot.Content;
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing!, rerender);
         if (replacement is not null)
             slot.Content = replacement;
     }
@@ -335,9 +339,10 @@ class NullableSlot { public UIElement? Content; }
 
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, NullableSlot slot, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, NullableSlot slot, Action rerender)
     {
-        var replacement = r.Reconcile(oldEl, newEl, existing, rerender);
+        var existing = slot.Content;
+        var replacement = r.Reconcile(oldEl, newEl, existing!, rerender);
         if (!ReferenceEquals(replacement, existing))
             slot.Content = replacement;
     }
@@ -352,8 +357,9 @@ class Host
 {
     static new bool ReferenceEquals(object a, object b) => false;
 
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement != null)
             slot.Content = replacement;
@@ -363,8 +369,9 @@ class Host
 {
     static new bool ReferenceEquals(object a, object b) => false;
 
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.Reconcile(oldEl, newEl, existing, rerender);
         if (!object.ReferenceEquals(replacement, existing))
             slot.Content = replacement;
@@ -379,8 +386,9 @@ class Host
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r?.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement is not null)
             slot.Content = replacement;
@@ -397,8 +405,9 @@ class Host
         const string code = @"
 class Host
 {
-    UIElement Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    UIElement Update(Reconciler r, Element oldEl, Element newEl, Slot slot, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement is not null)
             slot.Content = replacement;
@@ -414,8 +423,9 @@ class Host
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl: oldEl, newEl: newEl, control: existing, requestRerender: rerender);
         if (replacement is not null)
             slot.Content = replacement;
@@ -467,8 +477,9 @@ class Host
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, () => existing = null);
         if (replacement is not null)
             slot.Content = replacement;
@@ -483,8 +494,9 @@ class Host
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (slot.Content is not null)
             slot.Content = replacement;
@@ -503,8 +515,9 @@ class Host
 {
     int _patched;
 
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement is not null)
             slot.Content = replacement;
@@ -524,8 +537,9 @@ class Host
 {
     int _swaps;
 
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement is not null)
         {
@@ -544,8 +558,9 @@ class Host
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, UIElement placeholder, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement placeholder, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement is not null)
             slot.Content = placeholder;
@@ -561,11 +576,12 @@ class Host
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, System.Collections.Generic.List<UIElement> children, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, System.Collections.Generic.List<UIElement> log, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement is not null)
-            children.Add(replacement);
+            log.Add(replacement);
     }
 }";
         await VerifyFixAsync(code, code);
@@ -579,28 +595,12 @@ class Host
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, System.Collections.Generic.List<UIElement> children, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, System.Collections.Generic.List<UIElement> children, Action rerender)
     {
+        var existing = children[0];
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement is not null)
             children[0] = replacement;
-    }
-}";
-        await VerifyFixAsync(code, code);
-    }
-
-    [Fact]
-    public async Task CodeFix_Not_Offered_When_The_Install_Writes_Through_The_Result()
-    {
-        // With the result null, the assignment would throw.
-        const string code = @"
-class Host
-{
-    void Update(Reconciler r, Element oldEl, Element newEl, UIElement existing, Action rerender)
-    {
-        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
-        if (replacement is not null)
-            replacement.Tag = replacement;
     }
 }";
         await VerifyFixAsync(code, code);
@@ -616,9 +616,84 @@ class StrictSlot { public UIElement Content = null!; }
 
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, StrictSlot slot, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, StrictSlot slot, Action rerender)
+    {
+        var existing = slot.Content;
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+            slot.Content = replacement;
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Install_Targets_Another_Slot()
+    {
+        // An emptied child would unmount the control from one slot and clear the other.
+        const string code = @"
+class Host
+{
+    void Move(Reconciler r, Element oldEl, Element newEl, Slot from, Slot to, Action rerender)
+    {
+        var existing = from.Content;
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+            to.Content = replacement;
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Existing_Control_Comes_From_Elsewhere()
+    {
+        // Nothing shows that the parameter is what slot.Content holds.
+        const string code = @"
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
     {
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+            slot.Content = replacement;
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Existing_Control_Was_Read_Earlier()
+    {
+        // A statement between the read and the call could change what the slot holds.
+        const string code = @"
+class Host
+{
+    int _reads;
+
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, Action rerender)
+    {
+        var existing = slot.Content;
+        _reads++;
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
+        if (replacement is not null)
+            slot.Content = replacement;
+    }
+}";
+        await VerifyFixAsync(code, code);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_The_Call_Writes_The_Slot()
+    {
+        // After the call, slot may name another slot than the one the existing control came from.
+        const string code = @"
+class Host
+{
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, Slot other)
+    {
+        var existing = slot.Content;
+        var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, () => slot = other);
         if (replacement is not null)
             slot.Content = replacement;
     }
@@ -633,8 +708,9 @@ class Host
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement is not null)
             slot.Content = replacement;
@@ -651,8 +727,9 @@ class Host
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement is not null)
         {
@@ -670,8 +747,9 @@ class Host
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, UIElement sibling, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement sibling, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement is not null)
         {
@@ -691,8 +769,9 @@ class Host
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Reconciler other, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    void Update(Reconciler r, Reconciler other, Element oldEl, Element newEl, Slot slot, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement is not null)
         {
@@ -711,8 +790,9 @@ class Host
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Reconciler other, Element oldEl, Element newEl, Slot slot, UIElement existing)
+    void Update(Reconciler r, Reconciler other, Element oldEl, Element newEl, Slot slot)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, () => r = other);
         if (replacement is not null)
         {
@@ -752,8 +832,9 @@ class Host
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement is not null)
         {
@@ -773,8 +854,9 @@ class Host
         const string code = @"
 class Host
 {
-    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, UIElement existing, Action rerender)
+    void Update(Reconciler r, Element oldEl, Element newEl, Slot slot, Action rerender)
     {
+        var existing = slot.Content;
         var replacement = r.{|REACTOR_LIFECYCLE_003:UpdateChild|}(oldEl, newEl, existing, rerender);
         if (replacement is not null)
         {

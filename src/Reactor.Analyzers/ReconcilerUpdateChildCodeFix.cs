@@ -13,14 +13,16 @@ namespace Microsoft.UI.Reactor.Analyzers;
 
 /// <summary>
 /// Code fix for <c>REACTOR_LIFECYCLE_003</c>: switches a <c>Reconciler.UpdateChild</c> call whose
-/// result is installed in one slot to <c>Reconciler.Reconcile</c>:
+/// result is installed in the slot the existing control came from to <c>Reconciler.Reconcile</c>:
 /// <code>
+/// var existing = slot.Content;
 /// var replacement = r.UpdateChild(oldChild, newChild, existing, rerender);
 /// if (replacement is not null)
 ///     slot.Content = replacement;
 /// </code>
 /// becomes
 /// <code>
+/// var existing = slot.Content;
 /// var replacement = r.Reconcile(oldChild, newChild, existing, rerender);
 /// if (!ReferenceEquals(replacement, existing))
 ///     slot.Content = replacement;
@@ -41,12 +43,13 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// <item>The call is <c>r.UpdateChild(...)</c> with four positional arguments. <c>Reconcile</c> names
 /// its parameters differently, and after <c>r?.</c> a null receiver would empty the slot.</item>
 /// <item>The existing control is a local or parameter that the call doesn't assign, since it is
-/// compared with the result afterwards.</item>
+/// compared with the result afterwards. Nullable code may pass it as <c>existing!</c>.</item>
 /// <item>The result goes into a local read only by the <c>if</c> right after it, whose condition is
 /// <c>x is not null</c>, <c>x != null</c> or <c>null != x</c> and which has no <c>else</c>.</item>
 /// <item>Apart from <c>UnmountChild(existing)</c> statements, the body is one assignment of the result
-/// to a field, property, local or parameter. The target is reached through names and member
-/// accesses only, and can hold null.</item>
+/// to a target that can hold null. The target is where the existing control is kept: the existing
+/// control's own variable, or the slot it was read from by <c>var existing = slot.Content;</c> right
+/// before the call, written with the same names and member accesses.</item>
 /// <item>Each <c>UnmountChild(existing)</c> in the block is a statement of its own in the body, with
 /// no comment or directive in or around it. It goes through the reconciler the call used (the same
 /// local or parameter, or the same handler context's <c>Reconciler</c>). When the result replaces
@@ -174,11 +177,15 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
 
             // The existing control is compared with the result after the call, so it has to be a
             // local or parameter that the call doesn't assign: re-reading anything else could see
-            // another value.
+            // another value. Nullable code may pass it as existing!.
             var callFlow = model.AnalyzeDataFlow(statement);
             if (callFlow is null || !callFlow.Succeeded)
                 return null;
-            if (arguments[2].Expression is not IdentifierNameSyntax existing)
+            var existingArgument = arguments[2].Expression;
+            if (existingArgument is PostfixUnaryExpressionSyntax suppressed
+                && suppressed.IsKind(SyntaxKind.SuppressNullableWarningExpression))
+                existingArgument = suppressed.Operand;
+            if (existingArgument is not IdentifierNameSyntax existing)
                 return null;
             var existingSymbol = model.GetSymbolInfo(existing, ct).Symbol;
             if (existingSymbol is null || !IsLocalTheCallLeaves(existingSymbol, callFlow))
@@ -228,7 +235,11 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
                 || !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
                 || assignment.Right is not IdentifierNameSyntax assigned
                 || !SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(assigned, ct).Symbol, result)
-                || !IsClearableTarget(model, assignment.Left, result, ct))
+                || !CanHoldNull(model, assignment.Left, ct))
+                return null;
+            // The assignment has to write the slot the existing control came from. Otherwise an
+            // emptied child would unmount one slot's control and clear another slot.
+            if (!WritesSlotOfExisting(model, assignment.Left, existingSymbol, block, index, callFlow, ct))
                 return null;
             // When the result replaces the existing control's own variable, an unmount after that
             // assignment received the result, not the control it replaced.
@@ -335,26 +346,46 @@ public sealed class ReconcilerUpdateChildCodeFix : CodeFixProvider
             flow.WrittenInside.Any(written => SymbolEqualityComparer.Default.Equals(written, symbol));
 
         /// <summary>
-        /// True when <paramref name="target"/> is a field, property, local or parameter reached
-        /// through names and member accesses, not through <paramref name="result"/>, that can be
+        /// True when <paramref name="target"/> is where the existing control is kept: the existing
+        /// control's own variable, or the place it was read from by <c>var existing = &lt;slot&gt;;</c>
+        /// right before the call, written as the same names and member accesses. The call must not
+        /// assign a local or parameter the slot is reached through.
+        /// </summary>
+        private static bool WritesSlotOfExisting(SemanticModel model, ExpressionSyntax target, ISymbol existing,
+            BlockSyntax block, int callIndex, DataFlowAnalysis callFlow, CancellationToken ct)
+        {
+            if (SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(target, ct).Symbol, existing))
+                return true;
+
+            var read = block.Statements.Take(callIndex).OfType<LocalDeclarationStatementSyntax>()
+                .LastOrDefault(declaration => declaration.Declaration.Variables.Any(variable =>
+                    SymbolEqualityComparer.Default.Equals(model.GetDeclaredSymbol(variable, ct), existing)));
+            if (read is null || block.Statements.IndexOf(read) != callIndex - 1)
+                return false;
+            if (read.Declaration.Variables.Count != 1 || read.Declaration.Variables[0].Initializer?.Value is not { } slot)
+                return false;
+            if (!IsNameChain(slot, out var root) || !SyntaxFactory.AreEquivalent(slot, target))
+                return false;
+            return !(root is IdentifierNameSyntax rootName
+                && model.GetSymbolInfo(rootName, ct).Symbol is { } rootSymbol and (ILocalSymbol or IParameterSymbol)
+                && IsWritten(callFlow, rootSymbol));
+        }
+
+        /// <summary>A name, <c>this</c>, or a chain of member accesses on one; no call or indexer.</summary>
+        private static bool IsNameChain(ExpressionSyntax expression, out ExpressionSyntax root)
+        {
+            root = expression;
+            while (root is MemberAccessExpressionSyntax member && member.IsKind(SyntaxKind.SimpleMemberAccessExpression))
+                root = member.Expression;
+            return root is IdentifierNameSyntax or ThisExpressionSyntax;
+        }
+
+        /// <summary>
+        /// True when <paramref name="target"/> is a field, property, local or parameter that can be
         /// assigned null without a nullable warning.
         /// </summary>
-        private static bool IsClearableTarget(SemanticModel model, ExpressionSyntax target, ILocalSymbol result,
-            CancellationToken ct)
+        private static bool CanHoldNull(SemanticModel model, ExpressionSyntax target, CancellationToken ct)
         {
-            var node = target;
-            while (node is MemberAccessExpressionSyntax member && member.IsKind(SyntaxKind.SimpleMemberAccessExpression))
-                node = member.Expression;
-            if (node is IdentifierNameSyntax rootName)
-            {
-                if (SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(rootName, ct).Symbol, result))
-                    return false;
-            }
-            else if (node is not ThisExpressionSyntax)
-            {
-                return false;
-            }
-
             var type = model.GetSymbolInfo(target, ct).Symbol switch
             {
                 IFieldSymbol field => field.Type,
