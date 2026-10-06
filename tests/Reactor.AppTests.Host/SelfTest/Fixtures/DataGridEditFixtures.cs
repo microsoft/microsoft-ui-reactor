@@ -1537,6 +1537,159 @@ internal static class DataGridEditFixtures
     }
 
     /// <summary>
+    /// Issue #1340. Entering edit mode must not move the cell's text: the editor's text origin
+    /// has to land where the display TextBlock drew it. Before the fix the TextBox editor used
+    /// <c>.Padding(2)</c> and WinUI's top-anchored content, so the text jumped ~4px up and ~5px
+    /// left. Covers the built-in TextBox (string) and NumberBox (double) editors in both Cell
+    /// and Row edit modes.
+    /// </summary>
+    internal class EditorTextAlignment(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const double Tolerance = 1.0;
+
+        public override async Task RunAsync()
+        {
+            var source = CreateSource(4);
+            var columns = CreateEditableColumns();
+            var registry = new TypeRegistry();
+            var state = new DataGridState<TestProduct>(
+                source, columns, Microsoft.UI.Reactor.Controls.SelectionMode.None);
+            await state.LoadDataAsync();
+            var editMode = EditMode.Cell;
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (_, bump) = ctx.UseReducer(0);
+                ctx.UseEffect(() =>
+                {
+                    void OnChanged() => bump(v => v + 1);
+                    state.StateChanged += OnChanged;
+                    return () => state.StateChanged -= OnChanged;
+                }, global::System.Array.Empty<object>());
+
+                var el = new DataGridElement<TestProduct>
+                {
+                    Source = source,
+                    Columns = columns,
+                    Editable = true,
+                    SelectionMode = Microsoft.UI.Reactor.Controls.SelectionMode.None,
+                    EditMode = editMode,
+                    RowHeight = 36,
+                };
+                return VStack(Enumerable.Range(0, 4)
+                    .Select(i => DataGridComponent<TestProduct>.BuildRowForTests(i, state, columns, el, registry))
+                    .ToArray());
+            });
+
+            await Harness.Render(300);
+
+            var priceText = (int row) => columns[3].FormatValue!(10.0 + row * 5);
+
+            // ── Cell edit: TextBox (Name) ───────────────────────────────────────────────
+            var nameDisplay = DisplayOrigin("Product 1");
+            state.BeginEdit(1, 1);
+            await Harness.WaitFor(() => TextBoxOrigin("Product 1") is not null);
+            CheckAligned("DataGrid_EditorAlign_CellTextBox", nameDisplay, TextBoxOrigin("Product 1"));
+            state.CancelEdit();
+            await Harness.Render();
+
+            // ── Cell edit: NumberBox (Price) ────────────────────────────────────────────
+            var priceDisplay = DisplayOrigin(priceText(1));
+            state.BeginEdit(1, 3);
+            await Harness.WaitFor(() => NumberBoxOrigin() is not null && IsInputRelaxed());
+            CheckAligned("DataGrid_EditorAlign_CellNumberBox", priceDisplay, NumberBoxOrigin());
+            state.CancelEdit();
+            await Harness.Render();
+
+            // ── Row edit: both editors open at once ─────────────────────────────────────
+            editMode = EditMode.Row;
+            var rowNameDisplay = DisplayOrigin("Product 2");
+            var rowPriceDisplay = DisplayOrigin(priceText(2));
+            state.BeginRowEdit(2);
+            await Harness.WaitFor(() => TextBoxOrigin("Product 2") is not null
+                                        && NumberBoxOrigin() is not null && IsInputRelaxed());
+            CheckAligned("DataGrid_EditorAlign_RowTextBox", rowNameDisplay, TextBoxOrigin("Product 2"));
+            CheckAligned("DataGrid_EditorAlign_RowNumberBox", rowPriceDisplay, NumberBoxOrigin());
+            state.CancelRowEdit();
+            await Harness.Render();
+        }
+
+        private bool IsInputRelaxed() =>
+            H.FindControl<NumberBox>(_ => true) is { } nb
+            && FindNamed(nb, "InputBox") is TextBox input
+            && input.MinHeight == 0;
+
+        private global::Windows.Foundation.Point? DisplayOrigin(string text)
+        {
+            var tb = H.FindText(text);
+            if (tb is null) return null;
+            return tb.TransformToVisual(null).TransformPoint(
+                new global::Windows.Foundation.Point(tb.Padding.Left, tb.Padding.Top));
+        }
+
+        private global::Windows.Foundation.Point? TextBoxOrigin(string text)
+            => H.FindControl<TextBox>(tb => tb.Text == text) is { } tb ? TextOrigin(tb) : null;
+
+        private global::Windows.Foundation.Point? NumberBoxOrigin()
+            => H.FindControl<NumberBox>(_ => true) is { } nb && FindNamed(nb, "InputBox") is TextBox input
+                ? TextOrigin(input)
+                : null;
+
+        // The text renders inside the ScrollContentPresenter of the template's ContentElement.
+        private static global::Windows.Foundation.Point? TextOrigin(TextBox tb)
+        {
+            if (FindNamed(tb, "ContentElement") is not ScrollViewer sv) return null;
+            var presenter = FindFirst<ScrollContentPresenter>(sv);
+            if (presenter is null || presenter.ActualHeight <= 0) return null;
+            return presenter.TransformToVisual(null).TransformPoint(new global::Windows.Foundation.Point(0, 0));
+        }
+
+        private void CheckAligned(string name, global::Windows.Foundation.Point? display, global::Windows.Foundation.Point? editor)
+        {
+            // Positive control: both probes must have found real, finite geometry — otherwise a
+            // pair of nulls/NaNs would make the comparison meaningless.
+            var measured = display is { } d && editor is { } e
+                           && double.IsFinite(d.X) && double.IsFinite(d.Y)
+                           && double.IsFinite(e.X) && double.IsFinite(e.Y)
+                           && (d.X != 0 || d.Y != 0);
+            if (!measured)
+            {
+                H.Check($"{name}_Measured (display={display}, editor={editor})", false);
+                return;
+            }
+            var dx = editor!.Value.X - display!.Value.X;
+            var dy = editor.Value.Y - display.Value.Y;
+            H.Check($"{name} (display=({display.Value.X:F1},{display.Value.Y:F1}) editor=({editor.Value.X:F1},{editor.Value.Y:F1}) dx={dx:F1} dy={dy:F1})",
+                global::System.Math.Abs(dx) <= Tolerance && global::System.Math.Abs(dy) <= Tolerance);
+        }
+
+        private static Microsoft.UI.Xaml.FrameworkElement? FindNamed(Microsoft.UI.Xaml.DependencyObject root, string name)
+        {
+            var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+                if (child is Microsoft.UI.Xaml.FrameworkElement fe && fe.Name == name) return fe;
+                if (FindNamed(child, name) is { } found) return found;
+            }
+            return null;
+        }
+
+        private static TElement? FindFirst<TElement>(Microsoft.UI.Xaml.DependencyObject root) where TElement : class
+        {
+            var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+                if (child is TElement match) return match;
+                if (FindFirst<TElement>(child) is { } found) return found;
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Issue #976. Everything in <see cref="EditorRealFocus"/> goes through the happy path: the
     /// built-in editor root IS a focusable <c>Control</c>. A custom <c>col.Editor</c> need not be —
     /// it can hand back a composite whose root is a bare <c>Panel</c>, or something with no
