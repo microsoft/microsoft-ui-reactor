@@ -100,4 +100,38 @@ public class ElementExtrasAllocationTests
         Assert.NotNull(stamped.Extensions);
         Assert.Equal(1, stamped.CallSite!.Value.LineNumber);
     }
+
+    /// <summary>
+    /// Stamping gives every element from a call site the SAME bucket when the call site is
+    /// its only extra: the bucket is immutable, and a per-element ~150 B bucket was the
+    /// largest retained cost of source mapping / diagnostics mode (K perf investigation).
+    /// A bucket that also carries behavior is still per element, and still keeps the site.
+    /// </summary>
+    [Fact]
+    public void StampedLeavesFromOneCallSiteShareTheBucket()
+    {
+        var site = new SourceLocation("Shared.cs", 7) { ColumnNumber = 3 };
+        var a = new TextBlockElement("a") with { CallSite = site };
+        var b = new TextBlockElement("b") with { CallSite = new SourceLocation("Shared.cs", 7) { ColumnNumber = 3 } };
+        var other = new TextBlockElement("c") with { CallSite = new SourceLocation("Shared.cs", 8) };
+
+        Assert.Same(a.Extensions, b.Extensions);
+        Assert.NotSame(a.Extensions, other.Extensions);
+        Assert.Equal(site, b.CallSite);
+
+        var withBehavior = new TextBlockElement("d") { Attached = new Dictionary<Type, object> { [typeof(int)] = 1 } } with { CallSite = site };
+        Assert.NotSame(a.Extensions, withBehavior.Extensions);
+        Assert.Equal(site, withBehavior.CallSite);
+        Assert.NotNull(withBehavior.Attached);
+        Assert.Null(a.Attached);
+
+        // Adding behavior to a stamped element copies the shared bucket; the shared one and
+        // its other users are untouched.
+        var derived = a with { Attached = new Dictionary<Type, object> { [typeof(int)] = 2 } };
+        Assert.NotSame(a.Extensions, derived.Extensions);
+        Assert.Equal(site, derived.CallSite);
+        Assert.Null(a.Attached);
+        Assert.Null(b.Attached);
+        Assert.Same(a.Extensions, b.Extensions);
+    }
 }

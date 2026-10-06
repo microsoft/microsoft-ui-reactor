@@ -161,6 +161,17 @@ Values escape `%` as `%25` and `|` as `%7C`. Readers ignore fields they do not k
 
 Otherwise nothing is written, and a trimmed or AOT build without the switch does not contain the publishing code at all. Like XAML's runtime source info, paths are never absolute developer paths. See the [threat model](../security/threat-model.md) §7.7.
 
+**Cost.** With the switch on but `REACTOR_DIAGNOSTICS` unset (the Debug default), the cost is a
+cached boolean check per control: mount, re-render, memory and first frame stay within run-to-run
+noise of a build without the feature. With publishing on, every realized control carries one string
+value. Measured on a Native AOT app with 50,000 controls, publishing adds about 20 B of managed
+memory and 0.3 KB of native memory per control, and about 2 µs per control at mount. Values are
+cached per call site, so controls without a key from the same call site share one string; a value
+that is unique per control (a keyed control) costs about 0.6 KB. An in-place re-render whose call
+sites and keys did not change writes nothing. Diagnostics mode also stamps call sites, as
+`REACTOR_SOURCEMAP=1` does, and that stamping is the larger share of the overhead (about 0.2 KB
+managed and 1.2 KB native per control).
+
 > **NativeAOT:** the .NET NativeAOT toolchain defaults the `EventSourceSupport`
 > feature switch to `false`, which compiles the whole `EventSource` surface out.
 > A NativeAOT-published app therefore emits none of these events — including
