@@ -735,6 +735,22 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
+    public void AppliedModifierMap_TransformModifiersMapToTheirUIElementFacades()
+    {
+        var m = new ElementModifiers
+        {
+            Scale = new global::System.Numerics.Vector3(2, 2, 1),
+            Rotation = 45f,
+            Translation = new global::System.Numerics.Vector3(1, 0, 0),
+            CenterPoint = new global::System.Numerics.Vector3(5, 5, 0),
+        };
+
+        Assert.Equal(
+            new[] { ("Scale", "UIElement.Scale"), ("Rotation", "UIElement.Rotation"), ("Translation", "UIElement.Translation"), ("CenterPoint", "UIElement.CenterPoint") },
+            AppliedModifierMap.Describe(m, typeof(WinUI.TextBlock)).Select(p => (p.Modifier, p.Property)));
+    }
+
+    [Fact]
     public void AppliedModifierMap_EmptyModifiers_ReportsNothing()
     {
         Assert.Empty(AppliedModifierMap.Describe(new ElementModifiers(), typeof(WinUI.Button)));
@@ -748,7 +764,6 @@ public class ReactorDiagnosticsComponentsTests
     private static readonly HashSet<string> NotPropertyWrites = new(StringComparer.Ordinal)
     {
         "Layout", "Visual", "Accessibility",
-        "Scale", "Rotation", "Translation", "CenterPoint",
         "OnMountAction", "OnUnmountAction",
         "Pan", "Pinch", "Rotate", "LongPress", "DragSource", "DropTarget",
         "Ref", "Backdrop",
