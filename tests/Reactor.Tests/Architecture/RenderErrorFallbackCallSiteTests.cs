@@ -79,15 +79,17 @@ public class RenderErrorFallbackCallSiteTests
         foreach (var typeHandle in reader.TypeDefinitions)
         {
             var callerName = OutermostTypeName(reader, typeHandle);
-            foreach (var method in reader.GetTypeDefinition(typeHandle).GetMethods().Select(reader.GetMethodDefinition))
+            var methodsWithBodies = reader.GetTypeDefinition(typeHandle).GetMethods()
+                .Select(reader.GetMethodDefinition)
+                .Where(method => method.RelativeVirtualAddress != 0);
+            foreach (var method in methodsWithBodies)
             {
-                if (method.RelativeVirtualAddress == 0) continue;
                 var il = pe.GetMethodBody(method.RelativeVirtualAddress).GetILBytes();
-                foreach (var token in MethodTokens(il, opcodes))
-                {
-                    if (TryGetDetailedBuilder(reader, token, out var builder))
-                        results.Add((assemblyName, callerName, builder));
-                }
+                var builders = MethodTokens(il, opcodes)
+                    .Select(token => DetailedBuilderName(reader, token))
+                    .Where(builder => builder is not null);
+                foreach (var builder in builders)
+                    results.Add((assemblyName, callerName, builder!));
             }
         }
         return results;
@@ -95,7 +97,10 @@ public class RenderErrorFallbackCallSiteTests
 
     // Matches a call/ldftn target that is ErrorFallback.BuildPanel/BuildElement, whether
     // defined in this assembly (MethodDefinition) or referenced from a friend assembly
-    // (MemberReference to a TypeReference).
+    // (MemberReference to a TypeReference). Returns the builder's name, or null.
+    private static string? DetailedBuilderName(MetadataReader reader, EntityHandle handle) =>
+        TryGetDetailedBuilder(reader, handle, out var builder) ? builder : null;
+
     private static bool TryGetDetailedBuilder(MetadataReader reader, EntityHandle handle, out string builder)
     {
         builder = "";

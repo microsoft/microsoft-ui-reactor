@@ -63,6 +63,91 @@ public sealed partial class Reconciler : IDisposable
     private int _errorBoundaryDepth;
 
     /// <summary>
+    /// Component and error-boundary wrappers registered while an <see cref="ErrorBoundaryElement"/>
+    /// mounts or retries its child (issue #1291). <c>null</c> when no boundary is doing so,
+    /// so ordinary mounts pay nothing. When the child throws part-way, the partly built
+    /// subtree is discarded without ever being attached, so normal unmount can never reach
+    /// it; <see cref="RollBackBoundaryMount"/> uses this record to run its components' effect
+    /// cleanups instead of leaving their subscriptions alive until host disposal.
+    /// </summary>
+    private List<UIElement>? _boundaryMountJournal;
+
+    /// <summary>
+    /// Starts recording registrations for a boundary's child. Returns the enclosing record,
+    /// which <see cref="EndBoundaryMount"/> restores.
+    /// </summary>
+    private List<UIElement>? BeginBoundaryMount(out List<UIElement> journal)
+    {
+        var outer = _boundaryMountJournal;
+        journal = new List<UIElement>();
+        _boundaryMountJournal = journal;
+        return outer;
+    }
+
+    /// <summary>
+    /// Restores the enclosing record. A child that mounted successfully belongs to the
+    /// enclosing boundary's subtree too, so its registrations move up: if that boundary's
+    /// child fails later, they are discarded with it.
+    /// </summary>
+    private void EndBoundaryMount(List<UIElement>? outer, List<UIElement> journal)
+    {
+        _boundaryMountJournal = outer;
+        if (outer is not null && journal.Count > 0)
+            outer.AddRange(journal);
+        journal.Clear();
+    }
+
+    /// <summary>
+    /// Discards what a failed boundary child registered: drops the wrappers from the node
+    /// tables and runs their components' effect cleanups, deepest first. Wrappers already
+    /// unmounted through the normal path are skipped, so this is safe to run after an
+    /// <see cref="Unmount"/>. A cleanup failure is logged; one the app declined via
+    /// <see cref="RenderError.Propagate"/> is rethrown once every cleanup has run.
+    /// </summary>
+    private void RollBackBoundaryMount(List<UIElement> journal)
+    {
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? propagated = null;
+        void OnCleanupError(Exception ex)
+        {
+            if (RenderErrorDispatch.IsPropagating(ex))
+                propagated ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+            else
+                _logger?.LogWarning(ex, "Effect cleanup threw while discarding a failed ErrorBoundary child");
+        }
+
+        for (int i = journal.Count - 1; i >= 0; i--)
+        {
+            var wrapper = journal[i];
+            _errorBoundaryNodes.Remove(wrapper);
+            if (!_componentNodes.Remove(wrapper, out var node))
+                continue;
+            Diagnostics.ReactorEventSource.Log.ComponentUnmount(
+                node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
+            node.Component?.Context.RunCleanupsIsolated(OnCleanupError);
+            node.Context?.RunCleanupsIsolated(OnCleanupError);
+        }
+        journal.Clear();
+        propagated?.Throw();
+    }
+
+    /// <summary>
+    /// <see cref="RollBackBoundaryMount"/> for a child discarded because an exception is
+    /// escaping the boundary: cleanup failures are logged, never thrown, so they cannot
+    /// replace the exception that is already unwinding.
+    /// </summary>
+    private void RollBackDiscardedBoundaryMount(List<UIElement> journal)
+    {
+        try
+        {
+            RollBackBoundaryMount(journal);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            _logger?.LogWarning(ex, "Effect cleanup threw while discarding an ErrorBoundary child after an escaping exception");
+        }
+    }
+
+    /// <summary>
     /// Supplies the owning host's effective <see cref="RenderErrorHandler"/> (issue #1291).
     /// Set by <c>ReactorHost</c> / <c>ReactorHostControl</c>; a reconciler without a host
     /// falls back to <see cref="ReactorApp.DefaultRenderErrorHandler"/>.
@@ -71,6 +156,28 @@ public sealed partial class Reconciler : IDisposable
 
     private RenderErrorHandler? ResolveRenderErrorHandler() =>
         RenderErrorHandlerProvider is { } provider ? provider() : ReactorApp.DefaultRenderErrorHandler;
+
+    // Nesting depth of the public Reconcile / Mount entry points (issue #1291). The outermost
+    // entry — whichever a caller reaches first — opens a render-error propagation scope, so a
+    // standalone caller (no host render loop) cannot leave propagation markers behind;
+    // recursive mounts and nested passes just count.
+    private int _entryDepth;
+
+    private EntryFrame EnterFrame()
+    {
+        var scope = _entryDepth == 0 ? RenderErrorDispatch.EnterPropagationScope() : default;
+        _entryDepth++;
+        return new EntryFrame(this, scope);
+    }
+
+    private readonly struct EntryFrame(Reconciler owner, RenderErrorDispatch.PropagationScope scope) : IDisposable
+    {
+        public void Dispose()
+        {
+            scope.Dispose();
+            owner._entryDepth--;
+        }
+    }
 
     /// <summary>In-tree placeholder for a component whose render or effect flush threw.</summary>
     private Element BuildInTreeFallback(Exception ex, bool inEffects, string? componentName) =>
@@ -1741,11 +1848,8 @@ public sealed partial class Reconciler : IDisposable
         Action requestRerender)
     {
         // A top-level pass is an outermost Reactor frame for render-error propagation
-        // (issue #1291): a standalone caller (no host render loop) must not leave the
-        // propagation markers behind. Nested passes get the inactive default scope.
-        using var propagationScope = _debugReconcileDepth == 0
-            ? RenderErrorDispatch.EnterPropagationScope()
-            : default;
+        // (issue #1291); see EnterFrame. Nested passes and mounts just count.
+        using var entryFrame = EnterFrame();
         // Declared before the reconcile work so it is disposed after it: validation changes raised by mount,
         // update, or unmount are announced only once the whole pass has finished.
         using var validationScope = Controls.Validation.ValidationRenderScope.BeginReconcile();

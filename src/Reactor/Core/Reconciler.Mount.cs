@@ -44,6 +44,10 @@ public sealed partial class Reconciler
         }
         // </snippet:mount-phase>
 
+        // A direct Mount from outside is an outermost frame for render-error propagation
+        // (issue #1291), like a top-level Reconcile; recursive mounts just count.
+        using var entryFrame = EnterFrame();
+
         // Push context values onto scope before processing children
         var ctxValues = element.ContextValues;
         int ctxCount = 0;
@@ -799,11 +803,14 @@ public sealed partial class Reconciler
         Element renderedElement;
         Exception? caughtEx = null;
 
+        var outerJournal = BeginBoundaryMount(out var journal);
+        bool childMounted = false;
         _errorBoundaryDepth++;
         try
         {
             renderedElement = eb.Child;
             wrapper.Child = Mount(eb.Child, requestRerender);
+            childMounted = true;
         }
         // An exception the app declined via RenderError.Propagate() is on its way out (issue
         // #1291); no boundary, including the internal guard around an app fallback, takes it.
@@ -811,12 +818,21 @@ public sealed partial class Reconciler
         {
             _logger?.LogWarning(ex, "ErrorBoundary caught render error");
             caughtEx = ex;
+            // The partly mounted child is discarded: run its effect cleanups now (issue
+            // #1291), then mount the fallback under the enclosing record.
+            _boundaryMountJournal = outerJournal;
+            RollBackBoundaryMount(journal);
             renderedElement = eb.Fallback(ex);
             wrapper.Child = Mount(renderedElement, requestRerender);
         }
         finally
         {
             _errorBoundaryDepth--;
+            // An exception escaping the boundary (a declined propagation) discards the
+            // partly mounted child as well. Best effort: the escaping exception wins.
+            if (!childMounted && journal.Count > 0)
+                RollBackDiscardedBoundaryMount(journal);
+            EndBoundaryMount(outerJournal, journal);
         }
 
         _errorBoundaryNodes[wrapper] = new ErrorBoundaryNode
@@ -826,6 +842,7 @@ public sealed partial class Reconciler
             CaughtException = caughtEx,
             Fallback = eb.Fallback,
         };
+        _boundaryMountJournal?.Add(wrapper);
 
         // Spec 010 — composition wrappers carry the DSL call site too. Without this
         // an intercepted ErrorBoundary(...) has a non-null Element.CallSite that
@@ -853,6 +870,7 @@ public sealed partial class Reconciler
             PreviousProps = compElement.Props,
         };
         _componentNodes[wrapper] = node;
+        _boundaryMountJournal?.Add(wrapper);
 
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.
@@ -894,6 +912,7 @@ public sealed partial class Reconciler
             Context = ctx, RenderedElement = null, Element = funcElement,
         };
         _componentNodes[wrapper] = node;
+        _boundaryMountJournal?.Add(wrapper);
 
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.
@@ -936,6 +955,7 @@ public sealed partial class Reconciler
             MemoDependencies = memoElement.Dependencies,
         };
         _componentNodes[wrapper] = node;
+        _boundaryMountJournal?.Add(wrapper);
 
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.

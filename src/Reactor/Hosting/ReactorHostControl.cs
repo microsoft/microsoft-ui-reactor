@@ -275,6 +275,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         if (ComponentFactory is null && ComponentType is null)
             return;
 
+        // Loaded-time activation is an outermost Reactor frame for render-error propagation
+        // (issue #1291): the factory can synchronously run another host's first render.
+        using var propagationScope = RenderErrorDispatch.EnterPropagationScope();
         var component = TryCreateLoadedRoot(
             ComponentFactory, ComponentType, Props,
             Application.Current as Microsoft.UI.Xaml.Markup.IXamlMetadataProvider,
@@ -325,7 +328,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
             return component;
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException
+            // A render error the app already declined via RenderError.Propagate() — from nested
+            // Reactor work the factory started — keeps going out (issue #1291) rather than being
+            // reported a second time through this control's own handler.
+            && !RenderErrorDispatch.IsPropagating(ex))
         {
             error = ex;
             return null;

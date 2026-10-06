@@ -55,11 +55,8 @@ public UIElement? Reconcile(
     Action requestRerender)
 {
     // A top-level pass is an outermost Reactor frame for render-error propagation
-    // (issue #1291): a standalone caller (no host render loop) must not leave the
-    // propagation markers behind. Nested passes get the inactive default scope.
-    using var propagationScope = _debugReconcileDepth == 0
-        ? RenderErrorDispatch.EnterPropagationScope()
-        : default;
+    // (issue #1291); see EnterFrame. Nested passes and mounts just count.
+    using var entryFrame = EnterFrame();
     // Declared before the reconcile work so it is disposed after it: validation changes raised by mount,
     // update, or unmount are announced only once the whole pass has finished.
     using var validationScope = Controls.Validation.ValidationRenderScope.BeginReconcile();

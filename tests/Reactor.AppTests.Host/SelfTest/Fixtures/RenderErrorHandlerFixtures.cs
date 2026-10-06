@@ -1082,9 +1082,101 @@ internal static class RenderErrorHandlerFixtures
                         ReferenceEquals(escaped, SameInstanceThrower.Instance), escaped?.Message ?? "(nothing escaped)");
                 }
                 H.Check("RenderErrorHandler_Standalone_HandlerSawBothPasses", handled == 2, $"handled={handled}");
+
+                // The public Mount entry point is an outermost frame too: two direct mounts of
+                // the same throwing instance, with an unrelated Dispose in between, must each
+                // reach the handler.
+                handled = 0;
+                using (var direct = new Reconciler())
+                {
+                    for (int pass = 1; pass <= 2; pass++)
+                    {
+                        Exception? escaped = null;
+                        try { direct.Mount(VStack(Component<SameInstanceThrower>()), () => { }); }
+                        catch (InvalidOperationException ex) { escaped = ex; }
+                        H.Check($"RenderErrorHandler_StandaloneMount_Pass{pass}_Propagated",
+                            ReferenceEquals(escaped, SameInstanceThrower.Instance), escaped?.Message ?? "(nothing escaped)");
+                        if (pass == 1)
+                            new Reconciler().Dispose();
+                    }
+                }
+                H.Check("RenderErrorHandler_StandaloneMount_HandlerSawBothPasses", handled == 2, $"handled={handled}");
                 return Task.CompletedTask;
             });
         });
+    }
+
+    // A component whose first effect opens a "subscription" and whose second effect throws:
+    // it fails part-way through mounting, after a live resource exists.
+    private sealed class PartialEffectComponent : Component
+    {
+        public static int LiveSubscriptions;
+
+        public override Element Render()
+        {
+            UseEffect(() => { LiveSubscriptions++; return () => LiveSubscriptions--; }, Array.Empty<object>());
+            UseEffect(() => throw new InvalidOperationException("second effect boom"), Array.Empty<object>());
+            return TextBlock("PartialEffect");
+        }
+    }
+
+    // A boundary child that fails part-way is discarded without ever being attached, so its
+    // components must be rolled back (effect cleanups run) rather than left alive. Covers the
+    // internal guard around an app fallback (host level, retried on every render) and an
+    // ordinary user ErrorBoundary (mount, then retries on update).
+    internal class Boundary_FailedChildIsRolledBack(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            // App fallback that itself fails part-way, shown for a failing root.
+            PartialEffectComponent.LiveSubscriptions = 0;
+            bool shouldThrow = true;
+            var host = H.CreateHost();
+            host.RenderErrorHandler = _ => Component<PartialEffectComponent>();
+            host.Mount(_ => shouldThrow ? throw new InvalidOperationException("root boom") : TextBlock("RollbackRecovered"));
+            await Harness.Render();
+            H.Check("RenderErrorHandler_Rollback_Guard_FirstFailure", PartialEffectComponent.LiveSubscriptions == 0
+                && H.FindText(ErrorFallback.SafeMessage) is not null,
+                $"live={PartialEffectComponent.LiveSubscriptions}");
+
+            for (int i = 0; i < 3; i++)
+            {
+                host.RequestRender();
+                await Harness.Render();
+            }
+            H.Check("RenderErrorHandler_Rollback_Guard_RetriesDoNotAccumulate", PartialEffectComponent.LiveSubscriptions == 0,
+                $"live={PartialEffectComponent.LiveSubscriptions}");
+
+            shouldThrow = false;
+            host.RequestRender();
+            await Harness.Render();
+            H.Check("RenderErrorHandler_Rollback_Guard_Recovery", PartialEffectComponent.LiveSubscriptions == 0
+                && H.FindText("RollbackRecovered") is not null,
+                $"live={PartialEffectComponent.LiveSubscriptions}");
+
+            // Ordinary user ErrorBoundary: mount, then retries on every re-render.
+            PartialEffectComponent.LiveSubscriptions = 0;
+            int renders = 0;
+            var boundaryHost = H.CreateHost();
+            boundaryHost.Mount(_ =>
+            {
+                renders++;
+                return ErrorBoundary(Component<PartialEffectComponent>(), TextBlock($"BoundaryFallback{renders}"));
+            });
+            await Harness.Render();
+            H.Check("RenderErrorHandler_Rollback_Boundary_Mount", PartialEffectComponent.LiveSubscriptions == 0
+                && H.FindTextContaining("BoundaryFallback") is not null,
+                $"live={PartialEffectComponent.LiveSubscriptions}");
+
+            for (int i = 0; i < 3; i++)
+            {
+                boundaryHost.RequestRender();
+                await Harness.Render();
+            }
+            H.Check("RenderErrorHandler_Rollback_Boundary_RetriesDoNotAccumulate",
+                PartialEffectComponent.LiveSubscriptions == 0 && renders >= 4,
+                $"live={PartialEffectComponent.LiveSubscriptions} renders={renders}");
+        }
     }
 
     // A later failure that falls back to the built-in panel (handler removed, or now returning

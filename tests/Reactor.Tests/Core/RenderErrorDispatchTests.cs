@@ -508,6 +508,34 @@ public class RenderErrorDispatchTests
     }
 
     [Fact]
+    public void TryCreateLoadedRoot_Lets_A_Declined_Propagation_From_The_Factory_Escape()
+    {
+        var nested = new InvalidOperationException("declined in nested work the factory started");
+        WithUnhandledCallback(_ => false, () =>
+        {
+            var escaped = Assert.Throws<InvalidOperationException>(() => global::Microsoft.UI.Reactor.Hosting.ReactorHostControl.TryCreateLoadedRoot(
+                factory: () =>
+                {
+                    // The factory synchronously runs another Reactor frame (e.g. a host's
+                    // inline first render) whose render error the app declines.
+                    using (RenderErrorDispatch.EnterPropagationScope())
+                        RenderErrorDispatch.RaiseUnhandled(nested);
+                    return null!;
+                },
+                componentType: null, props: null, provider: null, out _));
+
+            Assert.Same(nested, escaped);
+        });
+
+        // Positive control: an ordinary factory failure is still returned, not thrown.
+        var ordinary = global::Microsoft.UI.Reactor.Hosting.ReactorHostControl.TryCreateLoadedRoot(
+            factory: () => throw new InvalidOperationException("ordinary"),
+            componentType: null, props: null, provider: null, out var error);
+        Assert.Null(ordinary);
+        Assert.Equal("ordinary", error?.Message);
+    }
+
+    [Fact]
     public void InvokeHandler_A_Declined_Propagation_From_Nested_Work_Escapes_Instead_Of_Failing_The_Handler()
     {
         var nested = new InvalidOperationException("declined in nested work");
