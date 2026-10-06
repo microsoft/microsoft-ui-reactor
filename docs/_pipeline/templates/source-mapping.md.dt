@@ -295,7 +295,12 @@ identified by call-order index and kind. Props are read by reflection: under
 NativeAOT or trimming a props type's members can be trimmed away, and `Props` then
 holds a single `<Type> (members unavailable)` row instead.
 
-Component lookup does not depend on source mapping. `GetAppliedProperties` reads
+Component lookup does not depend on source mapping. When a root renders a component
+directly (`Render() => Component<Shell>()`), its rendered control is also `Shell`'s
+wrapper; that element describes `Shell`, and the root is reached through its
+`ContentTarget`, its `ReactorHostControl` or the dev-overlay wrapper instead. A host
+that installs straight into `Window.Content` has no such anchor, so in that shape its
+root is not reachable. `GetAppliedProperties` reads
 the element back-pointer, so it needs the control to be tagged — turn source
 mapping on for full coverage. It covers common modifiers only; a property set by
 the control's own element record (`TextBlock("hi")` → `Text`) is not listed. The

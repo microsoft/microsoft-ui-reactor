@@ -414,13 +414,17 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
-    public void Props_AThrowingGetterIsSkipped_NotFatal()
+    public void Props_AThrowingGetterIsReportedUnavailable_NotFatal()
     {
         var node = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new ThrowingProps()) };
 
         var props = ComponentHandle.FromNode(node, () => true).Describe().Props;
 
-        Assert.Equal(new[] { new DiagnosticValue(0, "Good", "prop", "int", "1", false, false, false) }, props);
+        Assert.Equal(new[]
+        {
+            new DiagnosticValue(0, "Good", "prop", "int", "1", false, false, false),
+            new DiagnosticValue(1, "Bad", "prop", "int", "<value unavailable>", false, false, false),
+        }, props);
     }
 
     [Fact]

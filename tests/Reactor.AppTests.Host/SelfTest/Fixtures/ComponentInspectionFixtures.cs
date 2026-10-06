@@ -143,10 +143,30 @@ internal static class ComponentInspectionFixtures
         }
     }
 
+    private sealed class ShellChild : Microsoft.UI.Reactor.Core.Component
+    {
+        public override Element Render()
+        {
+            var (s, _) = UseState("c");
+            return TextBlock($"shell-child:{s}");
+        }
+    }
+
+    private sealed class ShellRoot : Microsoft.UI.Reactor.Core.Component
+    {
+        public override Element Render()
+        {
+            var (n, _) = UseState(1);
+            _ = n;
+            return Component<ShellChild>();
+        }
+    }
+
     /// <summary>
     /// Every element a host root is reachable from resolves to the root component: the host's
     /// rendered control, its <c>ContentTarget</c>, the dev-overlay wrapper the host installs in
-    /// that target while an overlay is on, and a <c>ReactorHostControl</c> and its content.
+    /// that target while an overlay is on, and a <c>ReactorHostControl</c> and its content. When the
+    /// rendered control is also a child component's wrapper, the child wins there.
     /// </summary>
     internal class RootAnchors(Harness h) : SelfTestFixtureBase(h)
     {
@@ -184,6 +204,22 @@ internal static class ComponentInspectionFixtures
                 await Harness.Render();
             }
 
+            // A root that renders a component directly: its rendered control is the child's
+            // wrapper, which describes the child; the ContentTarget still reaches the root.
+            host.Mount(new ShellRoot());
+            await Harness.WaitFor(() => H.FindControl<TextBlock>(t => t.Text == "shell-child:c") is not null,
+                maxPasses: 16, perPassMs: 10);
+            var overlap = host.CurrentControl;
+            H.Check("RootAnchor_OverlapRenderedControlIsChild",
+                overlap is not null && ReactorDiagnostics.DescribeComponent(overlap) is { IsRoot: false, Name: "ShellChild", State: [{ Value: "\"c\"" }] });
+            H.Check("RootAnchor_OverlapContentTargetIsRoot",
+                ReactorDiagnostics.DescribeComponent(target) is { IsRoot: true, Name: "ShellRoot", State: [{ Value: "1" }] });
+            H.Check("RootAnchor_OverlapEditsAddressTheChild",
+                overlap is not null && ReactorDiagnostics.TrySetState(overlap, 0, "d", out _));
+            await Harness.WaitFor(() => H.FindControl<TextBlock>(t => t.Text == "shell-child:d") is not null,
+                maxPasses: 16, perPassMs: 10);
+            H.Check("RootAnchor_OverlapChildRerendered", H.FindControl<TextBlock>(t => t.Text == "shell-child:d") is not null);
+
             // A host without a ContentTarget installs its root as the window content.
             var window = H.Window;
             var previousContent = window.Content;
@@ -219,6 +255,14 @@ internal static class ComponentInspectionFixtures
                     viaControl is { IsRoot: true, Kind: "function", State: [{ Value: "\"hc\"" }] }
                     && viaControl.Name.StartsWith("render in ", StringComparison.Ordinal));
                 H.Check("RootAnchor_HostControlContent", viaContent is { IsRoot: true, Kind: "function" });
+
+                // Content is public: an element a consumer swaps in is not attributed to the root.
+                var rendered = hostControl.Content;
+                var foreign = new Border();
+                hostControl.Content = foreign;
+                H.Check("RootAnchor_HostControlForeignContentNotDescribed", ReactorDiagnostics.DescribeComponent(foreign) is null);
+                H.Check("RootAnchor_HostControlStillDescribedAfterSwap", ReactorDiagnostics.DescribeComponent(hostControl) is { IsRoot: true });
+                hostControl.Content = rendered;
 
                 hostControl.Dispose();
                 H.Check("RootAnchor_DisposedHostControlNotDescribed", ReactorDiagnostics.DescribeComponent(hostControl) is null);

@@ -88,7 +88,16 @@ public static partial class ReactorDiagnostics
     /// installed into, or a <c>ReactorHostControl</c> itself). Returns <c>null</c> for any other
     /// element. Works with or without source mapping.
     /// </summary>
-    /// <remarks>Must be called on the UI thread.</remarks>
+    /// <remarks>
+    /// <para>Must be called on the UI thread.</para>
+    /// <para>One element can anchor two components: when a root renders a component directly
+    /// (<c>Render() =&gt; Component&lt;Shell&gt;()</c>), the root's rendered control <em>is</em>
+    /// <c>Shell</c>'s wrapper. The wrapper wins — the element describes <c>Shell</c>, the innermost
+    /// component it hosts — and <see cref="TrySetState"/> / <see cref="Rerender"/> address the same
+    /// component. The root stays reachable through its other anchors: a <c>ContentTarget</c>, a
+    /// <c>ReactorHostControl</c>, or the dev-overlay wrapper. A host that installs straight into
+    /// <c>Window.Content</c> has none of those, so in that one shape its root is not reachable.</para>
+    /// </remarks>
     [Microsoft.UI.Reactor.Hosting.UIThreadOnly]
     public static ComponentSnapshot? DescribeComponent(UIElement element)
     {

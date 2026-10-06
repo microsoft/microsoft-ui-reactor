@@ -300,8 +300,18 @@ internal static class DiagnosticText
             .Where(static p => p.Name != "EqualityContract" && p.GetIndexParameters().Length == 0 && p.CanRead);
         foreach (var property in readable)
         {
-            try { rows.Add((property.Name, property.PropertyType, property.GetValue(props))); }
-            catch (global::System.Reflection.TargetInvocationException) { }
+            object? value;
+            try
+            {
+                value = property.GetValue(props);
+            }
+            catch (global::System.Reflection.TargetInvocationException)
+            {
+                // A throwing getter still gets its row, so the member is visible; the exception
+                // text is not shown because it can carry the value.
+                value = new OpaqueValue("<value unavailable>");
+            }
+            rows.Add((property.Name, property.PropertyType, value));
         }
         // No readable members (none declared, or their metadata trimmed away): name the type rather
         // than fall back to ToString(), which for a record would print every member, secrets included.
