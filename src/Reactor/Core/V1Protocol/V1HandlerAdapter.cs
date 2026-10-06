@@ -13,7 +13,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// the dispatch boundary so the hot path is dictionary lookup + interface
 /// call + cast (the cast is JIT-folded for monomorphic call sites).
 /// </summary>
-internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
+internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV1ChildEnumerator
     where TElement : Element
     where TControl : UIElement
 {
@@ -34,10 +34,40 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
     /// </summary>
     private bool OwnsChildTeardown(UIElement control)
         => Reconciler.SkipsCallSiteOnlyTags
-            && _handler.Children is { } strategy
+            && _handler.ChildrenForUnmount is { } strategy
             && strategy is not None<TElement, TControl>
             && !(strategy is Panel<TElement, TControl> or SingleContent<TElement, TControl>
                 && Reconciler.UnmountWalkReachesChildren(control));
+
+    /// <summary>
+    /// The live children this handler's strategy hosts, the ones its unmount tears down
+    /// (single content, named slots, item-host items). For diagnostics walks that must reach
+    /// Reactor content a control template has not realized yet.
+    /// </summary>
+    public void VisitLiveChildren(UIElement control, Action<UIElement> visit)
+    {
+        if (control is not TControl typed) return;
+        switch (_handler.ChildrenForUnmount)
+        {
+            case SingleContent<TElement, TControl> { GetCurrentChild: { } getCurrent }:
+                if (getCurrent(typed) is UIElement single) visit(single);
+                return;
+            case NamedSlots<TElement, TControl> ns:
+                for (int i = 0; i < ns.Slots.Count; i++)
+                {
+                    if (ns.Slots[i].GetCurrentChild is { } getSlot && getSlot(typed) is UIElement slotChild)
+                        visit(slotChild);
+                }
+                return;
+            case ItemsHost<TElement, TControl> host:
+                var collection = host.GetCollection(typed);
+                for (int i = 0; i < collection.Count; i++)
+                {
+                    if (collection[i] is UIElement item) visit(item);
+                }
+                return;
+        }
+    }
 
     // <snippet:adapter-mount>
     public UIElement Mount(Element element, Action requestRerender, Reconciler reconciler)

@@ -284,38 +284,65 @@ public sealed partial class Reconciler : IDisposable
     private void RenameRootOwner(UIElement? root, string previousOwner, string owner)
     {
         if (root is null) return;
+        var seen = new HashSet<DependencyObject>(ReferenceEqualityComparer.Instance);
         var pending = new Stack<DependencyObject>();
-        pending.Push(root);
+        void Push(DependencyObject? d)
+        {
+            if (d is not null && seen.Add(d)) pending.Push(d);
+        }
+
+        Push(root);
         while (pending.Count > 0)
         {
             var node = pending.Pop();
+            bool componentWrapper = false;
             if (node.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string value)
             {
                 if (Diagnostics.ReactorSourcePublisher.WithOwner(value, previousOwner, owner) is { } renamed)
                     node.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, renamed);
-                if (Diagnostics.ReactorSourcePublisher.IsComponentWrapper(value))
-                    continue;
+                componentWrapper = Diagnostics.ReactorSourcePublisher.IsComponentWrapper(value);
             }
-            int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);
-            for (int i = 0; i < count; i++)
-                pending.Push(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node, i));
 
-            if (node is WinPrim.Popup { Child: { } popupChild })
-                pending.Push(popupChild);
+            // Overlay edges first: a decorator hangs its flyout on its target's control, which
+            // can be a component wrapper (Flyout(Component<T>(), body)) whose own subtree is T's
+            // while the flyout body is the decorator owner's.
             if (node is FrameworkElement fe)
             {
                 if (GetFlyoutOnControl(fe) is WinUI.Flyout flyout)
                 {
-                    if (flyout.Content is { } flyoutContent) pending.Push(flyoutContent);
-                    if (flyout.OverlayInputPassThroughElement is { } passThrough) pending.Push(passThrough);
+                    Push(flyout.Content);
+                    Push(flyout.OverlayInputPassThroughElement);
                 }
-                if (V1Protocol.OverlayLifecycle.PeekLiveContentDialog(fe)?.Content is UIElement dialogContent)
-                    pending.Push(dialogContent);
+                Push(V1Protocol.OverlayLifecycle.PeekLiveContentDialog(fe)?.Content as UIElement);
             }
-            if (node is UIElement ui && _navigationHostNodes.TryGetValue(ui, out var navNode) && navNode.Cache is { } cache)
+            if (componentWrapper) continue;
+
+            if (node is WinPrim.Popup popup) Push(popup.Child);
+            int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);
+            for (int i = 0; i < count; i++)
+                Push(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node, i));
+
+            if (node is not UIElement ui) continue;
+            // Logical children too: content a control template has not realized yet (a closed
+            // flyout's Button content, a collapsed pane slot) is not in the visual tree.
+            ForEachReactorChildControl(ui, child => Push(child));
+            if (ui is FrameworkElement tagged && GetElementTag(tagged) is Element taggedElement
+                && _v1Handlers.TryGet(taggedElement.GetType(), out var entry) && entry is IV1ChildEnumerator children)
+                children.VisitLiveChildren(ui, child => Push(child));
+            if (ui is WinUI.ItemsControl items)
+            {
+                foreach (var item in items.Items)
+                    Push(item as UIElement);
+            }
+            else if (ui is WinUI.TabView tabs)
+            {
+                foreach (var tab in tabs.TabItems)
+                    Push(tab as UIElement);
+            }
+            if (_navigationHostNodes.TryGetValue(ui, out var navNode) && navNode.Cache is { } cache)
             {
                 foreach (var page in cache.SnapshotControls())
-                    pending.Push(page);
+                    Push(page);
             }
         }
     }

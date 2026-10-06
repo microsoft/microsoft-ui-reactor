@@ -490,7 +490,17 @@ internal static class RemountView
     public static Element Body() => VStack(
         TextBlock("remount-leaf"),
         Flyout(Button("remount-flyout-target"), TextBlock("remount-flyout-body")),
+        // The target is a component (its control publishes mounts=), the body is not its.
+        Flyout(Component<RemountFlyoutTarget>(), TextBlock("remount-cflyout-body")),
+        // Never opened: the body Button's template is not applied, so its content TextBlock
+        // is a logical child only.
+        Flyout(Button("remount-nflyout-target"), Button(TextBlock("remount-nflyout-inner"))),
         Component<RemountNested, int>(0));
+}
+
+internal sealed class RemountFlyoutTarget : Component
+{
+    public override Element Render() => TextBlock("remount-cflyout-target");
 }
 
 // Keyed-memo roots: the realized output is kept across the swap (same key), and the host adds
@@ -545,15 +555,42 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
         => H.FindControl<WinUI.TextBlock>(t => t.Text == text) is { } tb ? ReactorDiagnostics.GetSource(tb) : null;
 
     private string? FlyoutBodySource()
-        => H.FindControl<WinUI.Button>(b => b.Content as string == "remount-flyout-target") is { } target
-            && Reconciler.GetFlyoutOnControl(target) is WinUI.Flyout { Content: WinUI.TextBlock body }
+        => FlyoutOf(H.FindControl<WinUI.Button>(b => b.Content as string == "remount-flyout-target"))?.Content is WinUI.TextBlock body
             ? ReactorDiagnostics.GetSource(body)
             : null;
 
+    private string? ComponentFlyoutBodySource()
+        => FlyoutOf(H.FindControl<WinUI.TextBlock>(t => t.Text == "remount-cflyout-target"))?.Content is WinUI.TextBlock body
+            ? ReactorDiagnostics.GetSource(body)
+            : null;
+
+    private string? NestedFlyoutInnerSource()
+        => FlyoutOf(H.FindControl<WinUI.Button>(b => b.Content as string == "remount-nflyout-target"))?.Content
+            is WinUI.Button { Content: WinUI.TextBlock inner }
+            ? ReactorDiagnostics.GetSource(inner)
+            : null;
+
+    // The flyout is attached to the target's control: the target itself, or (for a component
+    // target) the wrapper above the control we can find by text.
+    private static WinUI.Flyout? FlyoutOf(DependencyObject? start)
+    {
+        for (var d = start; d is not null; d = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(d))
+        {
+            if (d is FrameworkElement fe && Reconciler.GetFlyoutOnControl(fe) is WinUI.Flyout flyout)
+                return flyout;
+        }
+        return null;
+    }
+
     private async Task<bool> Owned(string text, string owner)
         => await Harness.WaitFor(
-            () => (text == "remount-flyout-body" ? FlyoutBodySource() : Source(text))
-                ?.Contains($"|owner={owner}|", StringComparison.Ordinal) == true,
+            () => (text switch
+            {
+                "remount-flyout-body" => FlyoutBodySource(),
+                "remount-cflyout-body" => ComponentFlyoutBodySource(),
+                "remount-nflyout-inner" => NestedFlyoutInnerSource(),
+                _ => Source(text),
+            })?.Contains($"|owner={owner}|", StringComparison.Ordinal) == true,
             maxPasses: 32, perPassMs: 10);
 
     public override async Task RunAsync()
@@ -578,6 +615,8 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             Console.WriteLine($"# remount (ReactorHost): {Source("remount-leaf")} / {Source("remount-nested")}");
             H.Check("ReactorSource_RootRemount_Host_LeafRenamed", await Owned("remount-leaf", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_FlyoutContentRenamed", await Owned("remount-flyout-body", nameof(RemountRootB)));
+            H.Check("ReactorSource_RootRemount_Host_ComponentTargetFlyoutRenamed", await Owned("remount-cflyout-body", nameof(RemountRootB)));
+            H.Check("ReactorSource_RootRemount_Host_UnopenedNestedContentRenamed", await Owned("remount-nflyout-inner", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             host.Dispose();
             H.SetContent(null);
@@ -610,6 +649,8 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             hostControl.Mount(new RemountRootB());
             H.Check("ReactorSource_RootRemount_HostControl_LeafRenamed", await Owned("remount-leaf", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_HostControl_FlyoutContentRenamed", await Owned("remount-flyout-body", nameof(RemountRootB)));
+            H.Check("ReactorSource_RootRemount_HostControl_ComponentTargetFlyoutRenamed", await Owned("remount-cflyout-body", nameof(RemountRootB)));
+            H.Check("ReactorSource_RootRemount_HostControl_UnopenedNestedContentRenamed", await Owned("remount-nflyout-inner", nameof(RemountRootB)));
             Console.WriteLine($"# remount (ReactorHostControl): {Source("remount-leaf")} / {Source("remount-nested")}");
             H.Check("ReactorSource_RootRemount_HostControl_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             hostControl.Dispose();
@@ -646,10 +687,16 @@ internal class ReactorSource_AotTagSkipKeepsTeardown(Harness h) : SelfTestFixtur
         var (shown, setShown) = ctx.UseState(true);
         return VStack(
             Button("teardown-toggle", () => setShown(false)),
-            shown ? NavigationView([]).PaneHeader(Component<TeardownProbe>()) : TextBlock("teardown-gone"));
+            shown
+                ? VStack(
+                    NavigationView([]).PaneHeader(Component<TeardownProbe>()),
+                    // An item host (ItemsHost strategy, hidden from Children): its items are
+                    // torn down by the handler too.
+                    ComboBox([Component<TeardownProbe>()], default, null))
+                : TextBlock("teardown-gone"));
     }
 
-    private async Task<(int Cleanups, bool NavTagged, bool ReturnedBefore, bool ReturnedAfter)> RunPath(bool noManagedAgent)
+    private async Task<(int Cleanups, bool NavTagged, bool ComboTagged, bool ReturnedBefore, bool ReturnedAfter)> RunPath(bool noManagedAgent)
     {
         ReactorSourcePublisher.NoManagedAgent = noManagedAgent;
         TeardownProbe.Cleanups = 0;
@@ -659,6 +706,8 @@ internal class ReactorSource_AotTagSkipKeepsTeardown(Harness h) : SelfTestFixtur
         await Harness.Render();
         var nav = H.FindControl<WinUI.NavigationView>(_ => true);
         bool navTagged = nav is not null && Reconciler.GetElementTag(nav) is not null;
+        var combo = H.FindControl<WinUI.ComboBox>(_ => true);
+        bool comboTagged = combo is not null && Reconciler.GetElementTag(combo) is not null;
         H.ClickButton("teardown-toggle");
         await Harness.Render();
         await Harness.Render();
@@ -676,7 +725,7 @@ internal class ReactorSource_AotTagSkipKeepsTeardown(Harness h) : SelfTestFixtur
 
         host.Dispose();
         H.SetContent(null);
-        return (cleanups, navTagged, before, after);
+        return (cleanups, navTagged, comboTagged, before, after);
     }
 
     public override async Task RunAsync()
@@ -698,8 +747,9 @@ internal class ReactorSource_AotTagSkipKeepsTeardown(Harness h) : SelfTestFixtur
             var skipped = await RunPath(noManagedAgent: true);
             Console.WriteLine($"# teardown: tagged {tagged}; skipped {skipped}");
 
-            H.Check("ReactorSource_AotSkipTeardown_PaneHeaderCleanedUp", tagged.Cleanups == 1 && skipped.Cleanups == 1);
+            H.Check("ReactorSource_AotSkipTeardown_PaneHeaderAndItemsCleanedUp", tagged.Cleanups == 2 && skipped.Cleanups == 2);
             H.Check("ReactorSource_AotSkipTeardown_NavigationViewKeepsItsTag", tagged.NavTagged && skipped.NavTagged);
+            H.Check("ReactorSource_AotSkipTeardown_ItemHostKeepsItsTag", tagged.ComboTagged && skipped.ComboTagged);
             H.Check("ReactorSource_AotSkipTeardown_ReturnedControlForgotten",
                 tagged.ReturnedBefore && skipped.ReturnedBefore && tagged.ReturnedAfter && skipped.ReturnedAfter);
         }
