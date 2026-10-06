@@ -257,6 +257,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// </summary>
     public void Mount(Func<RenderContext, Element> renderFunc)
     {
+        // Retire the component root: its effects' cleanups run, as on Dispose.
+        _rootComponent?.Context.RunCleanups();
         _rootComponent = null;
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();

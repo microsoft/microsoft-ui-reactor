@@ -369,7 +369,9 @@ public sealed class ReactorHost : IDisposable
 
     public void Mount(Func<RenderContext, Element> renderFunc)
     {
-        // Clear the component root: the render loop checks it before the function root.
+        // Retire the component root (its effects' cleanups run, as on Dispose) and clear it:
+        // the render loop checks it before the function root.
+        _rootComponent?.Context.RunCleanups();
         _rootComponent = null;
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();

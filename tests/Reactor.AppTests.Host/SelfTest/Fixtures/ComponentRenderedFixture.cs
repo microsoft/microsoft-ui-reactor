@@ -468,11 +468,14 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
 
         // ── Component root → function root on one ReactorHost ──────────────
         var host = H.CreateHost();
+        RenderedSwapComponentRoot.CleanedUp = false;
         host.Mount(new RenderedSwapComponentRoot());
         await Harness.Render();
+        H.Check("ComponentRendered_RootSwap_OldRootAliveBefore", !RenderedSwapComponentRoot.CleanedUp);
         Take();
         host.Mount(_ => TextBlock("swap func root"));
         await Harness.Render();
+        H.Check("ComponentRendered_RootSwap_OldRootEffectsCleanedUp", RenderedSwapComponentRoot.CleanedUp);
         var swap = Take();
         Console.WriteLine("# swap: " + string.Join(", ", swap.Select(e => $"{e.Payload[0]}#{e.Payload[1]}:{e.Payload[2]}")));
         H.Check("ComponentRendered_RootSwap_NewRootShown",
@@ -506,7 +509,13 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
 
 internal sealed class RenderedSwapComponentRoot : Component
 {
-    public override Element Render() => TextBlock("swap component root");
+    public static volatile bool CleanedUp;
+
+    public override Element Render()
+    {
+        UseEffect(() => () => CleanedUp = true);
+        return TextBlock("swap component root");
+    }
 }
 
 internal sealed class RenderedHookShapeRoot : Component
