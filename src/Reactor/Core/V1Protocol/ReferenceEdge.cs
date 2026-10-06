@@ -25,10 +25,11 @@ namespace Microsoft.UI.Reactor.Core
     {
         public readonly List<ElementRef> Cells = new();
         /// <summary>
-        /// The list exactly as last authored (order, duplicates and nulls kept). <see cref="Cells"/>
-        /// is deduplicated subscription bookkeeping; diagnostics project this instead.
+        /// The list as last authored, in order and with repeats, minus null entries (which carry no
+        /// reference; callers drop them before wiring). <see cref="Cells"/> is deduplicated
+        /// subscription bookkeeping; diagnostics project this instead.
         /// </summary>
-        public IReadOnlyList<ElementRef?>? Authored;
+        public IReadOnlyList<ElementRef>? Authored;
         public Action<FrameworkElement?>? Handler;
         public Action<FrameworkElement>? Recompute;
         /// <summary>

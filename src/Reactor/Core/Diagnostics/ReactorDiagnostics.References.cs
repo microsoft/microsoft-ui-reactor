@@ -14,7 +14,8 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 /// <c>"reference#N"</c> / <c>"binding#N"</c>.</param>
 /// <param name="IsList">True for a list-valued reference (<c>DescribedBy</c>, <c>FlowsTo</c>,
 /// <c>FlowsFrom</c>, a descriptor's <c>ReferenceList</c>); each target is its own entry.</param>
-/// <param name="Index">Position of this target within a list-valued reference (0 for a scalar one).</param>
+/// <param name="Index">Position of this target within a list-valued reference (0 for a scalar one),
+/// counting references only: a null entry in the authored list is not a reference and is skipped.</param>
 /// <param name="TargetAutomationId">The AutomationId the author passed to <c>.LabeledBy("id")</c>;
 /// <c>null</c> for an <c>ElementRef</c> reference.</param>
 /// <param name="ExpectedTargetTypeName">For a typed <c>ElementRef&lt;T&gt;</c>, <c>T</c> as C# spells
@@ -70,7 +71,10 @@ public static partial class ReactorDiagnostics
             && source.Modifiers?.Accessibility?.LabeledBy is { } id)
         {
             authoredLabeledBy = id;
-            if (Microsoft.UI.Xaml.Automation.AutomationProperties.GetLabeledBy(control) is { } live
+            // The live property can outlive its target: an unmounted label stays referenced until
+            // something rewrites LabeledBy. Only a target still loaded in the control's own tree counts.
+            if (Microsoft.UI.Xaml.Automation.AutomationProperties.GetLabeledBy(control) is FrameworkElement { IsLoaded: true } live
+                && ReferenceEquals(live.XamlRoot, control.XamlRoot)
                 && string.Equals(Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(live), id, StringComparison.Ordinal))
                 resolvedLabeledBy = live;
         }
@@ -106,14 +110,11 @@ internal static class ReferenceEdgeMap
             foreach (var (slot, listEdge) in bag.ListEdges)
             {
                 // The authored list, not the deduplicated subscription set, so order and repeats
-                // match what the author wrote; Index is the authored position.
+                // match what the author wrote; Index is the position among its references.
                 var authored = listEdge.Authored;
                 if (authored is null) continue;
                 for (int i = 0; i < authored.Count; i++)
-                {
-                    if (authored[i] is not { } cell) continue;
-                    (result ??= new()).Add((slot, ForCell(slot, isList: true, index: i, cell)));
-                }
+                    (result ??= new()).Add((slot, ForCell(slot, isList: true, index: i, authored[i])));
             }
         }
 

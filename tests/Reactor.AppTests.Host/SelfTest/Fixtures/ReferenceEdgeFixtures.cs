@@ -88,4 +88,60 @@ internal static class ReferenceEdgeFixtures
             }
         }
     }
+
+    /// <summary>
+    /// A resolved AutomationId <c>.LabeledBy("id")</c> whose label then unmounts: the live
+    /// <c>LabeledBy</c> property still holds the detached label, but the edge must no longer be
+    /// reported as resolved to it.
+    /// </summary>
+    internal class ResolvedAutomationIdThenUnmounted(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+#if REACTOR_SOURCEMAP
+            var previous = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
+            try
+            {
+                Action<bool>? setShow = null;
+                var host = H.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (show, set) = ctx.UseState(true);
+                    setShow = set;
+                    return VStack(
+                        show ? TextBlock("refedge-label-text").AutomationId("refedge-live-label") : Button("refedge-gone"),
+                        TextBox(placeholderText: "refedge-labelled-live").LabeledBy("refedge-live-label"));
+                });
+                await Harness.Render();
+                await Harness.Render(50);
+
+                var box = H.FindControl<TextBox>(t => t.PlaceholderText == "refedge-labelled-live");
+                var label = H.FindControl<TextBlock>(t => t.Text == "refedge-label-text");
+                H.Check("RefEdges_LiveLabelMounted", box is not null && label is not null);
+                if (box is null || label is null || setShow is null) return;
+
+                var before = ReactorDiagnostics.GetReferenceEdges(box).SingleOrDefault(e => e.Property == "LabeledBy");
+                H.Check("RefEdges_AutomationIdResolved",
+                    before is { TargetAutomationId: "refedge-live-label", IsResolved: true } && ReferenceEquals(before.Target, label));
+
+                setShow(false);
+                await Harness.WaitFor(() => !label.IsLoaded, maxPasses: 16, perPassMs: 10);
+                H.Check("RefEdges_LabelUnmounted", !label.IsLoaded);
+
+                var after = ReactorDiagnostics.GetReferenceEdges(box).SingleOrDefault(e => e.Property == "LabeledBy");
+                H.Check("RefEdges_UnmountedLabelNotResolved",
+                    after is { TargetAutomationId: "refedge-live-label", IsResolved: false, Target: null });
+            }
+            finally
+            {
+                Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = previous;
+            }
+#else
+            H.Skip("RefEdges_UnmountedLabelNotResolved",
+                "assembly built without REACTOR_SOURCEMAP (Release) - the control is not tagged, so the resolved AutomationId form is not recoverable");
+            await Task.CompletedTask;
+#endif
+        }
+    }
 }
