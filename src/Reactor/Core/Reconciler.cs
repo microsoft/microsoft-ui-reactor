@@ -374,6 +374,32 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    /// <summary>
+    /// A per-host <c>RegisterType</c> callback can return the control the reconciler mounted for
+    /// a child element (it keeps that child's tag, see <c>TypeRegistration.TagControl</c>); the
+    /// control's published value is the child's too. Decided from the value itself, so it holds
+    /// where no tag exists (Native AOT diagnostics mode skips call-site-only tags).
+    /// </summary>
+    private static bool ForwardsAnotherElement(UIElement control, Element element)
+        => control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string current
+            && Diagnostics.ReactorSourcePublisher.DescribesAnotherElement(current, element);
+
+    /// <summary>
+    /// Mounts a ContentDialog's body. A dialog opened later (deferred to the placeholder's
+    /// Loaded, or on a state flip handled outside a render) mounts outside any owner scope; the
+    /// placeholder's published <c>owner=</c> is the owner its body was declared under, so it is
+    /// restored for the mount. Nested components still scope their own subtrees.
+    /// </summary>
+    internal UIElement? MountDialogContent(FrameworkElement placeholder, Element content, Action requestRerender)
+    {
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+            && CurrentDiagnosticOwner is null
+            && placeholder.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string published
+            && Diagnostics.ReactorSourcePublisher.Owner(published) is { } owner)
+            return MountUnderOwner(content, requestRerender, owner);
+        return Mount(content, requestRerender);
+    }
+
     private UIElement? MountUnderOwner(Element element, Action requestRerender, string owner)
     {
         var previous = _diagOwner;

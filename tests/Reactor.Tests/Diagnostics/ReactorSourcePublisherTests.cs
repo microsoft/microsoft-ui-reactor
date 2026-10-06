@@ -157,6 +157,20 @@ public sealed class ReactorSourcePublisherTests
         Assert.Null(ReactorSourcePublisher.WithRoot(null, "Root", null));
     }
 
+    [Theory]
+    [InlineData("plain")]
+    [InlineData("keyed")]
+    [InlineData("escaped")]
+    public void Owner_ReadsBackWhatFormatWrote(string shape)
+    {
+        // A deferred dialog body is mounted under the owner read back from its placeholder's
+        // value, and Format escapes it again: the round trip must be the identity.
+        var (element, _) = ShapeOf(shape);
+        Assert.Equal("Ow|n%er", ReactorSourcePublisher.Owner(ReactorSourcePublisher.Format(element, "Ow|n%er")));
+        Assert.Null(ReactorSourcePublisher.Owner(ReactorSourcePublisher.Format(element, null)));
+        Assert.False(ReactorSourcePublisher.DescribesAnotherElement(ReactorSourcePublisher.Format(element, "X"), element));
+    }
+
     [Fact]
     public void WithRoot_ReplacesOrDropsHooksTheHostAddedEarlier()
     {

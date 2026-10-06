@@ -63,6 +63,9 @@ public sealed partial class Reconciler
             ? ownTheme : prevAmbientTheme;
 
         UIElement? control;
+        // A per-host RegisterType callback may return the control it mounted for a child
+        // element; that control already describes the child (see ForwardsAnotherElement).
+        bool registeredType = false;
         // Push stagger scope if this element has StaggerConfig — children mounted
         // inside MountXxx will consume stagger indices for their enter transitions.
         bool pushedStagger = element.StaggerConfig is not null;
@@ -92,6 +95,7 @@ public sealed partial class Reconciler
         else if (_typeRegistry.TryGetValue(element.GetType(), out var reg))
         {
             control = reg.Mount(element, requestRerender, this);
+            registeredType = true;
         }
         else if (TryResolveFromControlRegistry(element.GetType(), out v1Entry))
         {
@@ -134,7 +138,8 @@ public sealed partial class Reconciler
             if (ReactorFeatureFlags.HighlightReconcileChanges
                 && _highlightMounted is not null)
                 _highlightMounted.Add(control);
-            if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
+            if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+                && !(registeredType && ForwardsAnotherElement(control, element)))
                 PublishSource(control, element);
         }
 

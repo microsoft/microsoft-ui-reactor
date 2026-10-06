@@ -180,6 +180,7 @@ public sealed partial class Reconciler
         }
 
         UIElement? result;
+        bool registeredType = false;
         try
         {
         // Publish the effective theme for the subtree now that we're committed to the
@@ -208,6 +209,7 @@ public sealed partial class Reconciler
         else if (_typeRegistry.TryGetValue(newEl.GetType(), out var reg))
         {
             result = reg.Update(oldEl, newEl, control, requestRerender, this);
+            registeredType = true;
         }
         else if (TryResolveFromControlRegistry(newEl.GetType(), out v1Entry))
         {
@@ -253,7 +255,11 @@ public sealed partial class Reconciler
         // published, but a handler may have swapped it without Mount) or a new call site /
         // key / kind. An in-place update of an unchanged element keeps its published value.
         if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
-            && (result is not null || Diagnostics.ReactorSourcePublisher.IdentityChanged(oldEl, newEl)))
+            && (result is not null || Diagnostics.ReactorSourcePublisher.IdentityChanged(oldEl, newEl))
+            // A RegisterType callback that forwards to a child: the control describes the child
+            // (compared with the element whose value it would carry: the new one for a
+            // replacement, the old one for an in-place update).
+            && !(registeredType && ForwardsAnotherElement(target, result is not null ? newEl : oldEl)))
             PublishSource(target, newEl);
 
         // Record the control for highlight overlay only when the element's own

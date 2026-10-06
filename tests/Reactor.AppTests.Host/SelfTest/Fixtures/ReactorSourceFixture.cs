@@ -917,6 +917,13 @@ internal class ReactorSource_LiveDialogPublished(Harness h) : SelfTestFixtureBas
             H.Check("ReactorSource_LiveDialog_PublishedWhenOpenedAtMount",
                 atMountValue?.Contains("|element=ContentDialog", StringComparison.Ordinal) == true
                 && atMountValue.Contains("|owner=FuncElement", StringComparison.Ordinal));
+            // The open was deferred to the placeholder's Loaded, outside the render: the body was
+            // still mounted under the owner it was declared under.
+            var bodyValue = atMount?.Content is WinUI.TextBlock body ? ReactorDiagnostics.GetSource(body) : null;
+            Console.WriteLine($"# live dialog body (mount): {bodyValue}");
+            H.Check("ReactorSource_LiveDialog_DeferredBodyKeepsItsOwner",
+                bodyValue?.Contains("|owner=FuncElement|", StringComparison.Ordinal) == true
+                && bodyValue.Contains("|element=TextBlock", StringComparison.Ordinal));
             atMount?.Hide();
             await Harness.Render(50);
             host.Dispose();
@@ -945,6 +952,89 @@ internal class ReactorSource_LiveDialogPublished(Harness h) : SelfTestFixtureBas
         finally
         {
             ReactorSourcePublisher.IsEnabled = previous;
+        }
+    }
+}
+
+internal sealed record ForwardingElement(string Label) : Element;
+
+/// <summary>
+/// A per-host <c>RegisterType</c> callback that forwards to a child returns the control the
+/// reconciler mounted for that child: the control describes the child (JIT keeps the child's
+/// tag). Its published value must stay the child's too, so that in the Native AOT tag-skip
+/// mode, where neither element is tagged, <c>GetSource</c> still names the child's call site,
+/// exactly as JIT does. Both tag paths, on mount and after an update.
+/// </summary>
+internal class ReactorSource_ForwardingRegistrationKeepsChildSource(Harness h) : SelfTestFixtureBase(h)
+{
+    private async Task<(SourceLocation? Mounted, string? MountedValue, SourceLocation? Updated, string? UpdatedValue)> RunPath(bool noManagedAgent)
+    {
+        ReactorSourcePublisher.NoManagedAgent = noManagedAgent;
+        var host = H.CreateHost();
+        host.Reconciler.RegisterType<ForwardingElement, UIElement>(
+            mount: (r, el, rerender) => r.Mount(TextBlock(el.Label), rerender)!,
+            update: (r, oldEl, newEl, control, rerender) => r.UpdateChild(TextBlock(oldEl.Label), TextBlock(newEl.Label), control, rerender));
+        host.Mount(ctx =>
+        {
+            var (label, setLabel) = ctx.UseState("fwd-a");
+            return VStack(
+                Button("fwd-rename", () => setLabel("fwd-b")),
+                // Hand-stamped, with a call site that moves on the update: the update path's
+                // identity check then re-publishes, so the forwarding guard there is exercised.
+                new ForwardingElement(label) { CallSite = new SourceLocation("Forwarding.cs", label == "fwd-a" ? 1 : 2, 1) });
+        });
+        await Harness.Render();
+        var a = H.FindControl<WinUI.TextBlock>(t => t.Text == "fwd-a");
+        var mounted = a is null ? null : Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(a);
+        var mountedValue = a is null ? null : ReactorDiagnostics.GetSource(a);
+        H.ClickButton("fwd-rename");
+        await Harness.Render();
+        await Harness.Render();
+        var b = H.FindControl<WinUI.TextBlock>(t => t.Text == "fwd-b");
+        var updated = b is null ? null : Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(b);
+        var updatedValue = b is null ? null : ReactorDiagnostics.GetSource(b);
+        host.Dispose();
+        H.SetContent(null);
+        return (mounted, mountedValue, updated, updatedValue);
+    }
+
+    public override async Task RunAsync()
+    {
+        if (!ReactorSourcePublisher.IsSupported)
+        {
+            H.Skip("ReactorSource_ForwardingRegistration", "Reactor.DevtoolsSupport is off in this host");
+            return;
+        }
+
+        var (enabled, noAgent, mapped) = (ReactorSourcePublisher.IsEnabled, ReactorSourcePublisher.NoManagedAgent,
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+        try
+        {
+            ReactorSourcePublisher.IsEnabled = true;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
+            if (TextBlock("forwarding-stamp-probe").CallSite is null)
+            {
+                H.Skip("ReactorSource_ForwardingRegistration", "call sites are not stamped in this host");
+                return;
+            }
+
+            var tagged = await RunPath(noManagedAgent: false);
+            var skipped = await RunPath(noManagedAgent: true);
+            Console.WriteLine($"# forwarding: tagged {tagged}; skipped {skipped}");
+
+            H.Check("ReactorSource_ForwardingRegistration_GetSourceAgreesOnMount",
+                tagged.Mounted is not null && tagged.Mounted == skipped.Mounted);
+            H.Check("ReactorSource_ForwardingRegistration_GetSourceAgreesAfterUpdate",
+                tagged.Updated is not null && tagged.Updated == skipped.Updated);
+            H.Check("ReactorSource_ForwardingRegistration_ValueDescribesTheChild",
+                new[] { tagged.MountedValue, tagged.UpdatedValue, skipped.MountedValue, skipped.UpdatedValue }
+                    .All(v => v?.Contains("|element=TextBlock", StringComparison.Ordinal) == true));
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = enabled;
+            ReactorSourcePublisher.NoManagedAgent = noAgent;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = mapped;
         }
     }
 }

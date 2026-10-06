@@ -238,6 +238,36 @@ internal static class ReactorSourcePublisher
     internal static bool IsComponentWrapper(string value)
         => value.Contains("|mounts=", StringComparison.Ordinal);
 
+    /// <summary>The raw (still escaped) text of field <paramref name="name"/>, or <c>null</c>.</summary>
+    internal static string? Field(string value, string name)
+    {
+        var marker = "|" + name + "=";
+        int start = value.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0) return null;
+        start += marker.Length;
+        int end = value.IndexOf('|', start);
+        return end < 0 ? value.Substring(start) : value.Substring(start, end - start);
+    }
+
+    /// <summary>The unescaped <c>owner=</c> of a published value, or <c>null</c>.</summary>
+    internal static string? Owner(string value)
+        => Field(value, "owner") is { } owner
+            ? owner.Replace("%7C", "|", StringComparison.Ordinal).Replace("%25", "%", StringComparison.Ordinal)
+            : null;
+
+    /// <summary>
+    /// Whether <paramref name="current"/>, a control's published value, describes an element
+    /// other than <paramref name="element"/>: another call site or another kind. A per-host
+    /// <c>RegisterType</c> callback can return the control it mounted for a child element; that
+    /// control's value is the child's (as its tag stays the child's), not the registration's.
+    /// </summary>
+    internal static bool DescribesAnotherElement(string current, Element element)
+    {
+        var mine = Format(element, owner: null);
+        return !string.Equals(AtKey(current), AtKey(mine), StringComparison.Ordinal)
+            || !string.Equals(Field(current, "element"), Field(mine, "element"), StringComparison.Ordinal);
+    }
+
     private static string FieldName(string field)
     {
         int eq = field.IndexOf('=');

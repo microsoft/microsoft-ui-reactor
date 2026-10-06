@@ -218,7 +218,7 @@ internal static class OverlayLifecycle
         };
         if (cdEl.SecondaryButtonText is not null) dialog.SecondaryButtonText = cdEl.SecondaryButtonText;
         if (cdEl.CloseButtonText is not null) dialog.CloseButtonText = cdEl.CloseButtonText;
-        dialog.Content = reconciler.Mount(cdEl.Content, requestRerender);
+        dialog.Content = reconciler.MountDialogContent(anchor, cdEl.Content, requestRerender);
         if (xamlRoot is not null) dialog.XamlRoot = xamlRoot;
         // Resolve callbacks through the anchor's live Tag the way Flyout/Popup do,
         // rather than capturing the mount-time element: the dialog re-renders
