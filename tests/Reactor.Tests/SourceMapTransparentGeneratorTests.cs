@@ -64,10 +64,12 @@ public sealed class SourceMapTransparentGeneratorTests
                 public T UseRef<T>(T initial) => initial;
                 public void UseEffect(global::System.Action effect, params object[] dependencies) { }
                 public bool UseIsActive() => true;
+                public (object Ref, global::System.Action RequestFocus) UseElementFocus() => (new object(), () => { });
             }
             public abstract class Component
             {
                 public abstract Element Render();
+                public RenderContext Context { get; } = new();
                 protected (T Value, global::System.Action<T> Set) UseState<T>(T initial) => (initial, _ => { });
                 protected T UseRef<T>(T initial) => initial;
                 protected void UseEffect(global::System.Action effect, params object[] dependencies) { }
@@ -97,6 +99,16 @@ public sealed class SourceMapTransparentGeneratorTests
                     => children.Length > 0 && children[0] is { } first
                         ? first
                         : new Microsoft.UI.Reactor.Core.EmptyElement();
+            }
+        }
+        namespace Microsoft.UI.Reactor.Hooks
+        {
+            // A component-extension hook: takes the Component, forwards to its RenderContext.
+            public static class UseElementFocusExtensions
+            {
+                public static (object Ref, global::System.Action RequestFocus) UseElementFocus(
+                    this Microsoft.UI.Reactor.Core.Component component)
+                    => component.Context.UseElementFocus();
             }
         }
         namespace Microsoft.UI.Reactor.Diagnostics

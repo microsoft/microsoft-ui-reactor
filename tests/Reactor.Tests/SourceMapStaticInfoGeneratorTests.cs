@@ -340,6 +340,86 @@ public sealed class SourceMapStaticInfoGeneratorTests
     }
 
     [Fact]
+    public void Hooks_ComponentExtensionHook_TakesItsSlot_AndMakesTheRestUnknown()
+    {
+        const string code = """
+            using Microsoft.UI.Reactor.Core;
+            using Microsoft.UI.Reactor.Hooks;
+            using static Microsoft.UI.Reactor.Factories;
+
+            public sealed class RefsPage : Component
+            {
+                public override Element Render()
+                {
+                    var (focusRef, focus) = this.UseElementFocus();
+                    var (query, setQuery) = UseState("");
+                    return TextBlock("x");
+                }
+            }
+            """;
+
+        var (_, generated) = SourceMapTransparentGeneratorTests.Run(code);
+
+        // UseElementFocus takes the Component, not the RenderContext, yet consumes slots
+        // (how many is Reactor's business): it is a hook, and what follows it is unknown.
+        Assert.Equal(
+            $"0:focusRef@{LineOf(code, "this.UseElementFocus()")};?:query@{LineOf(code, "UseState(\"\")")}",
+            Assert.Single(s_componentHooks.Matches(generated)).Groups["hooks"].Value);
+    }
+
+    [Fact]
+    public void Hooks_AbstractOrVirtualCustomHook_MakesTheRestUnknown()
+    {
+        const string code = """
+            using Microsoft.UI.Reactor.Core;
+            using static Microsoft.UI.Reactor.Factories;
+
+            public abstract class AbstractHookPage : Component
+            {
+                protected abstract object UseCustom();
+                public override Element Render()
+                {
+                    var a = UseCustom();
+                    var b = UseRef(1);
+                    return TextBlock("x");
+                }
+            }
+
+            public class VirtualHookPage : Component
+            {
+                protected virtual object UseOverridable() => UseRef(0);
+                public override Element Render()
+                {
+                    var v = UseOverridable();
+                    var w = UseRef(2);
+                    return TextBlock("y");
+                }
+            }
+
+            public sealed class StaticHookPage : Component
+            {
+                private object UseFixed() => UseRef(3);
+                public override Element Render()
+                {
+                    var s = UseFixed();
+                    var t = UseRef(4);
+                    return TextBlock("z");
+                }
+            }
+            """;
+
+        var (_, generated) = SourceMapTransparentGeneratorTests.Run(code);
+        var hooks = s_componentHooks.Matches(generated).ToDictionary(
+            static m => m.Groups["type"].Value, static m => m.Groups["hooks"].Value);
+
+        // The body that runs is picked at run time: an override may take any number of slots.
+        Assert.Equal($"0:a@{LineOf(code, "var a = UseCustom()")};?:b@{LineOf(code, "UseRef(1)")}", hooks["AbstractHookPage"]);
+        Assert.Equal($"0:v@{LineOf(code, "var v = UseOverridable()")};?:w@{LineOf(code, "UseRef(2)")}", hooks["VirtualHookPage"]);
+        // Positive control: a non-virtual custom hook is still counted (one UseRef).
+        Assert.Equal($"0:s@{LineOf(code, "var s = UseFixed()")};1:t@{LineOf(code, "UseRef(4)")}", hooks["StaticHookPage"]);
+    }
+
+    [Fact]
     public void Hooks_ConditionalHook_MakesTheFollowingSlotsUnknown()
     {
         const string code = """

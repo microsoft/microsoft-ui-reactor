@@ -193,6 +193,28 @@ internal static class ReactorSourcePublisher
         return string.Join('|', fields);
     }
 
+    /// <summary>
+    /// Replaces the <c>owner=</c> field of <paramref name="value"/> when it names
+    /// <paramref name="previousOwner"/>; <c>null</c> when it names anyone else (or no one).
+    /// </summary>
+    internal static string? WithOwner(string value, string previousOwner, string owner)
+    {
+        var expected = "owner=" + ReactorSourceFormat.Escape(previousOwner);
+        var fields = value.Split('|');
+        for (int i = 1; i < fields.Length; i++)
+        {
+            if (!fields[i].StartsWith("owner=", StringComparison.Ordinal)) continue;
+            if (!string.Equals(fields[i], expected, StringComparison.Ordinal)) return null;
+            fields[i] = "owner=" + ReactorSourceFormat.Escape(owner);
+            return string.Join('|', fields);
+        }
+        return null;
+    }
+
+    /// <summary>Whether a published value describes a component wrapper (<c>mounts=</c>).</summary>
+    internal static bool IsComponentWrapper(string value)
+        => value.Contains("|mounts=", StringComparison.Ordinal);
+
     private static string FieldName(string field)
     {
         int eq = field.IndexOf('=');

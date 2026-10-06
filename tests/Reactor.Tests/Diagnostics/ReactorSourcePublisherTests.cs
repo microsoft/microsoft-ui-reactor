@@ -156,6 +156,23 @@ public sealed class ReactorSourcePublisherTests
         Assert.Equal(expected, ReactorSourcePublisher.WithRoot(expected, "Ro|ot", "0:n@3;1:x%y@4"));
         Assert.Null(ReactorSourcePublisher.WithRoot(null, "Root", null));
     }
+
+    [Theory]
+    [InlineData("plain")]
+    [InlineData("keyed")]
+    [InlineData("escaped")]
+    public void WithOwner_RewritesOnlyTheNamedOwner(string shape)
+    {
+        // A root swap re-attributes root-owned controls: the result must be what Format gives
+        // the new owner, and a control owned by anyone else is left alone.
+        var (element, _) = ShapeOf(shape);
+        var old = ReactorSourcePublisher.Format(element, "Old|Root");
+
+        Assert.Equal(ReactorSourcePublisher.Format(element, "New%Root"), ReactorSourcePublisher.WithOwner(old, "Old|Root", "New%Root"));
+        Assert.Null(ReactorSourcePublisher.WithOwner(old, "Old", "New"));          // prefix is not a match
+        Assert.Null(ReactorSourcePublisher.WithOwner(ReactorSourcePublisher.Format(element, null), "Old|Root", "New"));
+        Assert.False(ReactorSourcePublisher.IsComponentWrapper(old));
+    }
     [Fact]
     public void Format_UnkeyedSameShape_SharesOneString()
     {

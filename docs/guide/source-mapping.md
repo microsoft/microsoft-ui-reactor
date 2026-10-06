@@ -223,9 +223,10 @@ Hook indices are `RenderContext` slots, which is what an inspector matches again
 
 - `UseState`, `UseReducer`, `UseRef`, `UseEffect`, `UseMemo`, `UseCallback` and `UseContext` take one slot each.
 - A custom hook written in the same project takes the slots of the hooks its straight-line body calls.
-- After a composite built-in (`UseCommand`, `UseResource`, the window hooks), a custom hook from another assembly, or a hook inside a branch or loop (a rules-of-hooks violation), the following indices are reported as `?`.
+- After a composite built-in (`UseCommand`, `UseResource`, the window hooks, component-extension hooks such as `this.UseElementFocus()`), a custom hook from another assembly, an abstract or overridable (`virtual`) custom hook, or a hook inside a branch or loop (a rules-of-hooks violation), the following indices are reported as `?`.
+- A component that inherits `Render()` reports the hooks of the base class that declares it.
 
-Both tables describe the compiled build. Registering them costs one delegate per assembly at startup; they are built on first use. After a hot-reload edit moves a call, its name or hooks are reported as unknown rather than wrong.
+Both tables describe the compiled build. Registering them costs one delegate per assembly at startup; they are built on first use. After a hot-reload edit moves a call, its name or hooks are reported as unknown rather than wrong. If two source-mapped assemblies claim the same location (both mapping their roots to `/_/`) with different facts, that location's name and hooks are unknown.
 
 ### Helper methods and `[ReactorSourceTransparent]`
 

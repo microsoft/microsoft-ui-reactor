@@ -482,3 +482,86 @@ internal class ReactorSource_KeyedMemoRootNamed(Harness h) : SelfTestFixtureBase
         }
     }
 }
+
+internal static class RemountView
+{
+    // Both roots render this, so swapping the root updates the kept content in place and
+    // every call site, key and kind below is unchanged.
+    public static Element Body() => VStack(
+        TextBlock("remount-leaf"),
+        Component<RemountNested, int>(0));
+}
+
+internal sealed class RemountRootA : Component
+{
+    public override Element Render() => RemountView.Body();
+}
+
+internal sealed class RemountRootB : Component
+{
+    public override Element Render() => RemountView.Body();
+}
+
+internal sealed class RemountNested : Component<int>
+{
+    public override Element Render() => TextBlock("remount-nested");
+}
+
+/// <summary>
+/// Mounting a different root over kept content (both hosts allow it) must re-attribute the
+/// root-owned controls the in-place update did not re-publish, while a nested component's
+/// own subtree keeps naming that component.
+/// </summary>
+internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtureBase(h)
+{
+    private string? Source(string text)
+        => H.FindControl<WinUI.TextBlock>(t => t.Text == text) is { } tb ? ReactorDiagnostics.GetSource(tb) : null;
+
+    private async Task<bool> Owned(string text, string owner)
+        => await Harness.WaitFor(
+            () => Source(text)?.Contains($"|owner={owner}|", StringComparison.Ordinal) == true,
+            maxPasses: 32, perPassMs: 10);
+
+    public override async Task RunAsync()
+    {
+        if (!ReactorSourcePublisher.IsSupported)
+        {
+            H.Skip("ReactorSource_RootRemount", "Reactor.DevtoolsSupport is off in this host");
+            return;
+        }
+
+        var previous = ReactorSourcePublisher.IsEnabled;
+        try
+        {
+            ReactorSourcePublisher.IsEnabled = true;
+
+            var host = H.CreateHost();
+            host.Mount(new RemountRootA());
+            await Harness.Render();
+            H.Check("ReactorSource_RootRemount_Host_FirstRoot", await Owned("remount-leaf", nameof(RemountRootA)));
+            host.Mount(new RemountRootB());
+            await Harness.Render();
+            Console.WriteLine($"# remount (ReactorHost): {Source("remount-leaf")} / {Source("remount-nested")}");
+            H.Check("ReactorSource_RootRemount_Host_LeafRenamed", await Owned("remount-leaf", nameof(RemountRootB)));
+            H.Check("ReactorSource_RootRemount_Host_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
+            host.Dispose();
+            H.SetContent(null);
+
+            var hostControl = new Microsoft.UI.Reactor.Hosting.ReactorHostControl();
+            hostControl.Mount(new RemountRootA());
+            H.SetContent(new WinUI.Border { Child = hostControl });
+            // A standalone ReactorHostControl is not ReactorApp.ActiveHost: poll its loop.
+            H.Check("ReactorSource_RootRemount_HostControl_FirstRoot", await Owned("remount-leaf", nameof(RemountRootA)));
+            hostControl.Mount(new RemountRootB());
+            H.Check("ReactorSource_RootRemount_HostControl_LeafRenamed", await Owned("remount-leaf", nameof(RemountRootB)));
+            Console.WriteLine($"# remount (ReactorHostControl): {Source("remount-leaf")} / {Source("remount-nested")}");
+            H.Check("ReactorSource_RootRemount_HostControl_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
+            hostControl.Dispose();
+            H.SetContent(null);
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = previous;
+        }
+    }
+}

@@ -280,7 +280,10 @@ public sealed partial class SourceMapInterceptorGenerator
         {
             return true;
         }
-        return method.Parameters.Any(p => SymbolEqualityComparer.Default.Equals(p.Type, renderContext));
+        // Context hooks take the RenderContext; component-extension hooks
+        // (`this.UseElementFocus()`, `this.UseElementRef<T>()`) take the Component.
+        return method.Parameters.Any(p => SymbolEqualityComparer.Default.Equals(p.Type, renderContext)
+            || (p.Type is INamedTypeSymbol named && DerivesFrom(named, component)));
     }
 
     private static bool DerivesFrom(INamedTypeSymbol type, INamedTypeSymbol baseType)
@@ -377,7 +380,8 @@ public sealed partial class SourceMapInterceptorGenerator
     /// <summary>
     /// How many <c>RenderContext</c> slots a hook call takes: 1 for <see cref="SingleSlotHooks"/>
     /// on Reactor's own types; for a custom hook written in this compilation, the sum over
-    /// the hooks its body calls (straight-line only); otherwise <c>-1</c> (unknown).
+    /// the hooks its body calls (straight-line only); otherwise <c>-1</c> (unknown) — including
+    /// a hook whose body is chosen at run time (abstract / virtual / interface) or absent.
     /// </summary>
     private static int SlotCount(
         IMethodSymbol method,
@@ -391,11 +395,21 @@ public sealed partial class SourceMapInterceptorGenerator
             return SingleSlotHooks.Contains(method.Name) ? 1 : -1;
 
         if (depth >= 8 || method.DeclaringSyntaxReferences.IsDefaultOrEmpty) return -1;
+        method = method.PartialImplementationPart ?? method;
+
+        // The body that runs is chosen at run time (abstract, or overridable), or there is no
+        // body to read (partial / extern): the analyzed declaration says nothing reliable.
+        if (method.IsAbstract || method.IsExtern
+            || ((method.IsVirtual || method.IsOverride) && !method.IsSealed && method.ContainingType is not { IsSealed: true }))
+        {
+            return -1;
+        }
 
         int total = 0;
         foreach (var reference in method.DeclaringSyntaxReferences)
         {
             var declaration = reference.GetSyntax(ct);
+            if (declaration is BaseMethodDeclarationSyntax { Body: null, ExpressionBody: null }) return -1;
             var model = compilation.GetSemanticModel(declaration.SyntaxTree);
             foreach (var call in declaration.DescendantNodes().OfType<InvocationExpressionSyntax>())
             {

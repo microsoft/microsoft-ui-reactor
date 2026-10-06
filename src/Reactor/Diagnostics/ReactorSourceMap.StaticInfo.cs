@@ -17,7 +17,9 @@ namespace Microsoft.UI.Reactor.Diagnostics;
 ///
 /// <para><b>Keys.</b> Names and render-function hooks are keyed by the same
 /// (path, line, column) the generator stamps into <see cref="Element.CallSite"/>, with the
-/// same <c>PathMap</c> applied, so a lookup with an element's call site finds its entry.
+/// same <c>PathMap</c> applied, so a lookup with an element's call site finds its entry. When
+/// two source-mapped assemblies claim one location with different facts (both mapping their
+/// roots to <c>/_/</c>), the location is unknown rather than last-writer-wins.
 /// Class-component hooks are keyed by the assembly and open generic type full name of the type declaring <c>Render()</c>.</para>
 ///
 /// <para><b>Hot reload.</b> The tables describe the build that was compiled. An edit that
@@ -246,13 +248,16 @@ public sealed class ReactorStaticInfoBuilder
         if (ReactorSourceMap.NormalizeDirectory(rootDirectory) is { } root && !RootDirectories.Contains(root))
             RootDirectories.Add(root);
     }
-    internal Dictionary<SourceLocation, string> NameTable { get; } = new();
+    // A null value marks a location two source-mapped assemblies both claim with different
+    // facts (two libraries mapping their roots to /_/ can share a path, line and column):
+    // unknown, never one library's name or hooks on the other's controls.
+    internal Dictionary<SourceLocation, string?> NameTable { get; } = new();
     internal Dictionary<(global::System.Reflection.Assembly Assembly, string FullName), string> ComponentHookTable { get; } = new();
-    internal Dictionary<SourceLocation, string> RenderFunctionHookTable { get; } = new();
+    internal Dictionary<SourceLocation, string?> RenderFunctionHookTable { get; } = new();
 
     /// <summary>Records that the element created at this call site was assigned to <paramref name="name"/>.</summary>
     public void Name(string filePath, int lineNumber, int columnNumber, string name)
-        => NameTable[new SourceLocation(filePath, lineNumber, columnNumber)] = name;
+        => AddUnlessConflicting(NameTable, new SourceLocation(filePath, lineNumber, columnNumber), name);
 
     /// <summary>
     /// Records the <c>hooks=</c> value for a class component (open generic type full name) in
@@ -267,5 +272,13 @@ public sealed class ReactorStaticInfoBuilder
 
     /// <summary>Records the <c>hooks=</c> value for a render function passed to the call at this site.</summary>
     public void RenderFunctionHooks(string filePath, int lineNumber, int columnNumber, string hooks)
-        => RenderFunctionHookTable[new SourceLocation(filePath, lineNumber, columnNumber)] = hooks;
+        => AddUnlessConflicting(RenderFunctionHookTable, new SourceLocation(filePath, lineNumber, columnNumber), hooks);
+
+    private static void AddUnlessConflicting(Dictionary<SourceLocation, string?> table, SourceLocation site, string value)
+    {
+        if (!table.TryGetValue(site, out var existing))
+            table[site] = value;
+        else if (!string.Equals(existing, value, StringComparison.Ordinal))
+            table[site] = null;
+    }
 }

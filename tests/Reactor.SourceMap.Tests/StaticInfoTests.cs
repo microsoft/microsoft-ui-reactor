@@ -194,4 +194,26 @@ public sealed class StaticInfoTests : IDisposable
         Assert.Equal("0:a@1", table.ComponentHookTable[(first, "App.Counter")]);
         Assert.Equal("0:b@2", table.ComponentHookTable[(second, "App.Counter")]);
     }
+
+    [Fact]
+    public void LocationKeyedFacts_ConflictingAcrossAssemblies_AreUnknown()
+    {
+        // Two libraries that both map their roots to /_/ can stamp the same path, line and
+        // column. Neither library's name or hooks may be reported on the other's controls.
+        var table = new ReactorStaticInfoBuilder();
+        table.CurrentAssembly = typeof(object).Assembly;
+        table.Name("/_/Page.cs", 10, 5, "title");
+        table.RenderFunctionHooks("/_/Page.cs", 20, 9, "0:a@21");
+        table.Name("/_/Shared.cs", 3, 1, "same");
+        table.CurrentAssembly = typeof(StaticInfoTests).Assembly;
+        table.Name("/_/Page.cs", 10, 5, "header");
+        table.RenderFunctionHooks("/_/Page.cs", 20, 9, "0:b@21");
+        table.Name("/_/Shared.cs", 3, 1, "same");
+        table.Name("/_/Page.cs", 10, 5, "title"); // a third claim does not revive either
+
+        Assert.Null(table.NameTable[new SourceLocation("/_/Page.cs", 10, 5)]);
+        Assert.Null(table.RenderFunctionHookTable[new SourceLocation("/_/Page.cs", 20, 9)]);
+        // Positive control: agreeing claims (one file compiled into both) keep their fact.
+        Assert.Equal("same", table.NameTable[new SourceLocation("/_/Shared.cs", 3, 1)]);
+    }
 }

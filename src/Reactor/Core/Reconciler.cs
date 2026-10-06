@@ -233,10 +233,16 @@ public sealed partial class Reconciler : IDisposable
             adopted.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, value);
     }
 
+    /// <summary>The root name of the last <see cref="PublishRootSource"/> (a string; no control is retained).</summary>
+    private string? _publishedRootName;
+
     /// <summary>Host hook: describes the root content control, naming the host's root component.</summary>
     internal void PublishRootSource(UIElement? control, Element tree, string rootName, string? rootHooks)
     {
         if (control is null) return;
+        if (_publishedRootName is { } previousRoot && !string.Equals(previousRoot, rootName, StringComparison.Ordinal))
+            RenameRootOwner(control, previousRoot, rootName);
+        _publishedRootName = rootName;
         Component? component = tree is ComponentElement && _componentNodes.TryGetValue(control, out var node)
             ? node.Component
             : null;
@@ -255,6 +261,34 @@ public sealed partial class Reconciler : IDisposable
             return;
         }
         KeepTagIfSourceAmbiguous(control, tree, value);
+    }
+
+    /// <summary>
+    /// Host hook: the host mounted a different root over content it kept (an in-place update).
+    /// Root-owned controls whose call site, key and kind did not change were not re-published,
+    /// so they still name the previous root. Rewrites <c>owner=</c> on the content's root-owned
+    /// controls. A component wrapper (<c>mounts=</c>) is renamed if the root owns it, but not
+    /// entered: its subtree is owned by that component. Rare (only on a root swap), so a walk.
+    /// </summary>
+    internal static void RenameRootOwner(UIElement? root, string previousOwner, string owner)
+    {
+        if (root is null) return;
+        var pending = new Stack<DependencyObject>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var node = pending.Pop();
+            if (node.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string value)
+            {
+                if (Diagnostics.ReactorSourcePublisher.WithOwner(value, previousOwner, owner) is { } renamed)
+                    node.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, renamed);
+                if (Diagnostics.ReactorSourcePublisher.IsComponentWrapper(value))
+                    continue;
+            }
+            int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);
+            for (int i = 0; i < count; i++)
+                pending.Push(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node, i));
+        }
     }
 
     private UIElement? MountUnderOwner(Element element, Action requestRerender, string owner)

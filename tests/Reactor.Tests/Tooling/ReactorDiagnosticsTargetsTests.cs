@@ -172,13 +172,17 @@ public sealed class ReactorDiagnosticsTargetsTests : IDisposable
         Assert.Equal("false", r.Diagnostics);
         Assert.Equal([("false", "true")], r.Switch);
     }
-    [Fact]
-    public void ReleaseProjectBodyOptInAfterTheImport_TurnsOnSwitchAndSourceMap()
+    [Theory]
+    [InlineData("Release", null)]
+    [InlineData("Release", "false")]
+    [InlineData("Debug", "false")] // indistinguishable from the Debug default if the default wrote the property
+    public void ProjectBodyOptInAfterTheImport_TurnsOnSwitchAndSourceMap(string configuration, string? projectSwitch)
     {
-        // In-repo order again, opting IN from the body of a Release project: the switch item
-        // sees the final value at evaluation, and the source-map implication is applied from
-        // the final value at build time (_ReactorApplyLateDiagnosticsOptIn).
-        var r = EvaluateWithBody("Release", projectSwitch: null, switchAfterImport: true,
+        // In-repo order again, opting IN from the project body: the switch item sees the final
+        // value at evaluation, and the source-map implication is applied from the final value at
+        // build time (_ReactorApplyLateDiagnosticsOptIn). An explicit opt-in beats a project-
+        // declared switch-off in both configurations; only the Debug DEFAULT yields to one.
+        var r = EvaluateWithBody(configuration, projectSwitch, switchAfterImport: true,
             bodyAfterImport: "<PropertyGroup><ReactorDiagnostics>true</ReactorDiagnostics></PropertyGroup>");
         Assert.Equal("true", r.Diagnostics);
         Assert.Equal("true", r.SourceMap);

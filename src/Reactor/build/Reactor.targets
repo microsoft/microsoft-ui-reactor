@@ -82,9 +82,13 @@
     -p:ReactorDiagnostics=true for a Release / Native AOT devtools run. Published call
     sites are project-relative paths, but do not ship a build made with it.
   -->
-  <PropertyGroup Condition="'$(ReactorDiagnostics)' == '' and ('$(Configuration)' == 'Debug' or '$(Configuration)' == '')">
-    <ReactorDiagnostics>true</ReactorDiagnostics>
-    <_ReactorDiagnosticsDefaulted>true</_ReactorDiagnosticsDefaulted>
+  <!-- The Debug default is recorded, not written into $(ReactorDiagnostics): an in-repo project
+       imports this file before its body, and a body-level <ReactorDiagnostics>true</…> must stay
+       distinguishable from the default (an explicit opt-in beats a project-declared switch-off;
+       the default does not). Items below see the final value; the property itself is filled in
+       at build time by _ReactorApplyLateDiagnosticsOptIn. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug' or '$(Configuration)' == ''">
+    <_ReactorDiagnosticsDebugDefault>true</_ReactorDiagnosticsDebugDefault>
   </PropertyGroup>
   <PropertyGroup Condition="'$(ReactorDiagnostics)' == 'true' and '$(ReactorSourceMap)' == ''">
     <ReactorSourceMap>true</ReactorSourceMap>
@@ -131,15 +135,19 @@
     import it from Directory.Build.props) a body-level <ReactorDiagnostics>true</ReactorDiagnostics>
     arrives after it. Items already see the final value (the switch item, the analyzer item
     above); this target applies the property half from the final value too, before the
-    analyzer config and the compiler read it.
+    analyzer config and the compiler read it, and fills in the Debug default.
   -->
   <Target Name="_ReactorApplyLateDiagnosticsOptIn"
           BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun;GenerateMSBuildEditorConfigFile;CoreCompile"
-          Condition="'$(ReactorDiagnostics)' == 'true' and '$(ReactorSourceMap)' == ''">
+          Condition="'$(ReactorDiagnostics)' == 'true' or ('$(ReactorDiagnostics)' == '' and '$(_ReactorDiagnosticsDebugDefault)' == 'true')">
     <PropertyGroup>
-      <ReactorSourceMap>true</ReactorSourceMap>
+      <ReactorDiagnostics>true</ReactorDiagnostics>
     </PropertyGroup>
-    <PropertyGroup Condition="Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
+    <PropertyGroup Condition="'$(ReactorSourceMap)' == ''">
+      <ReactorSourceMap>true</ReactorSourceMap>
+      <_ReactorLateSourceMap>true</_ReactorLateSourceMap>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(_ReactorLateSourceMap)' == 'true' and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
       <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
       <DefineConstants>$(DefineConstants);REACTOR_SOURCEMAP</DefineConstants>
     </PropertyGroup>
@@ -186,15 +194,19 @@
                                           Value="true" Trim="true" />.
          SDK uses last-write-wins for duplicate Include keys on
          RuntimeHostConfigurationOption. -->
-    <!-- $(ReactorDiagnostics) (see the property group above) turns the switch on. When it is
-         only the Debug default and the project already declared the switch itself, the
-         project's own item is left to decide. Tagged so _NormalizeReactorDevtoolsSupportSwitch
-         can still tell it from a project-declared item when this file is imported first. -->
+    <!-- $(ReactorDiagnostics) (see the property group above) turns the switch on. An explicit
+         true always does. The Debug DEFAULT (property left empty) does only when the project
+         has not declared the switch itself; tagged so _NormalizeReactorDevtoolsSupportSwitch can
+         still tell it from a project-declared item when this file is imported first. -->
     <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
                                     Value="true"
                                     Trim="true"
-                                    ReactorDiagnosticsDefault="$(_ReactorDiagnosticsDefaulted)"
-                                    Condition="'$(ReactorDiagnostics)' == 'true' and ('$(_ReactorDiagnosticsDefaulted)' != 'true' or '@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport'))' == '')" />
+                                    Condition="'$(ReactorDiagnostics)' == 'true'" />
+    <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                    Value="true"
+                                    Trim="true"
+                                    ReactorDiagnosticsDefault="true"
+                                    Condition="'$(ReactorDiagnostics)' == '' and '$(_ReactorDiagnosticsDebugDefault)' == 'true' and '@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport'))' == ''" />
     <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
                                     Value="false"
                                     Trim="true"
