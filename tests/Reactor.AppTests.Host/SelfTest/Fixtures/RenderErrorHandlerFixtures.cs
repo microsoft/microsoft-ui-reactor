@@ -1402,15 +1402,19 @@ internal static class RenderErrorHandlerFixtures
         }
     }
 
-    // A fallback with its own state, so a re-render it requests is observable.
-    private sealed class StatefulFallback : Component
+    // Where a StatefulFallback hands out its state setter.
+    private sealed class CountSetterSink
     {
-        public static Action<int>? SetCount;
+        public Action<int>? Set;
+    }
 
+    // A fallback with its own state, so a re-render it requests is observable.
+    private sealed class StatefulFallback : Component<CountSetterSink>
+    {
         public override Element Render()
         {
             var (count, setCount) = UseState(0);
-            SetCount = setCount;
+            Props.Set = setCount;
             return TextBlock($"StatefulFallback:{count}");
         }
     }
@@ -1421,12 +1425,12 @@ internal static class RenderErrorHandlerFixtures
     {
         public override async Task RunAsync()
         {
-            StatefulFallback.SetCount = null;
+            var sink = new CountSetterSink();
             var log = new List<RenderError>();
             var control = new ReactorHostControl
             {
                 ComponentFactory = () => throw new InvalidOperationException("activation boom"),
-                RenderErrorHandler = Recording(log, _ => Component<StatefulFallback>()),
+                RenderErrorHandler = Recording(log, _ => Component<StatefulFallback, CountSetterSink>(sink)),
             };
             H.SetContent(control);
             await Harness.Render(50);
@@ -1435,7 +1439,7 @@ internal static class RenderErrorHandlerFixtures
                     && log[0].Source == RenderErrorSource.RootRender && log[0].Exception.Message == "activation boom",
                 Sources(log));
 
-            StatefulFallback.SetCount?.Invoke(1);
+            sink.Set?.Invoke(1);
             await Harness.Render(50);
             H.Check("RenderErrorHandler_Activation_FallbackRerenders",
                 H.FindText("StatefulFallback:1") is not null, $"handled={log.Count}");

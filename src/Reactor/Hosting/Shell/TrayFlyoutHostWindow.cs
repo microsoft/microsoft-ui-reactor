@@ -245,7 +245,11 @@ internal sealed class TrayFlyoutHostWindow : IDisposable
         finally
         {
             // Close even when a declined propagation escapes the host teardown.
-            try { _window.Close(); } catch { /* best effort */ }
+            try { _window.Close(); }
+            catch (Exception ex) when (ex is COMException or InvalidOperationException or ObjectDisposedException)
+            {
+                Debug.WriteLine($"[Reactor] TrayFlyout Close failed: {ex.Message}");
+            }
         }
     }
 }
