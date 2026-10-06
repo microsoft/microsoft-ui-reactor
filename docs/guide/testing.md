@@ -316,6 +316,12 @@ H.Check("HostCtrlIdle_UpdatedWithoutDelay", (host.Content as TextBlock)?.Text ==
     $"content={(host.Content as TextBlock)?.Text ?? "null"}");
 ```
 
+`WaitForIdleAsync` can also complete before the host is idle: after
+`maxYields` dispatcher yields (50 by default), or immediately when the
+dispatcher refuses work during shutdown. When the readback must be
+settled, check `host.IsIdle` after the await, or pass a larger
+`maxYields`.
+
 ## Tips
 
 **Don't drive the unit fixture from `Task.Delay`.** If an effect

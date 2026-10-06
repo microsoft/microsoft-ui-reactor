@@ -1574,6 +1574,8 @@ public sealed partial class Reconciler
     /// against itself: a brush the factory resolved eagerly with <c>ThemeRef.Resolve</c> is
     /// equal on both sides of a self-diff, and diff-based setters would skip writing it.
     /// Falls back to the self-diff when no output was recorded or it can't be updated in place.
+    /// A layer whose output is another memo always self-diffs: the nested memo's own refresh
+    /// then diffs against the recorded (innermost) output.
     /// </summary>
     private UIElement? RefreshKeyedMemo(KeyedMemoElement memo, UIElement control, Action requestRerender)
     {
@@ -1586,7 +1588,7 @@ public sealed partial class Reconciler
             ? recorded
             : inner;
         var replacement = Update(previous, inner, control, requestRerender);
-        if ((replacement ?? control) is FrameworkElement realized)
+        if (inner is not KeyedMemoElement && (replacement ?? control) is FrameworkElement realized)
             GetOrCreateReactorState(realized).KeyedMemoOutput = inner;
         return replacement;
     }

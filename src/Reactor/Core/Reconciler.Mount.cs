@@ -274,7 +274,10 @@ public sealed partial class Reconciler
     {
         var inner = WithWrapperKey(km.Factory() ?? EmptyElement.Instance, km.Key);
         var control = Mount(inner, requestRerender);
-        if (control is FrameworkElement fe) GetOrCreateReactorState(fe).KeyedMemoOutput = inner;
+        // Nested memos share the realized control; only the innermost layer (the one whose
+        // output is not another memo) records, so an outer layer never overwrites it.
+        if (inner is not KeyedMemoElement && control is FrameworkElement fe)
+            GetOrCreateReactorState(fe).KeyedMemoOutput = inner;
         return control;
     }
 
