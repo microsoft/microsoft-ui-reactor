@@ -215,8 +215,8 @@ public sealed class ReactorSourceFormatTests
         var attribute = property.GetCustomAttribute<FeatureSwitchDefinitionAttribute>();
         Assert.Equal("Reactor.DevtoolsSupport", attribute?.SwitchName);
 
-        var expected = AppContext.TryGetSwitch("Reactor.DevtoolsSupport", out var on) && on;
-        Assert.Equal(expected, ReactorSourcePublisher.IsSupported);
+        // The configured value (runtimeconfig), captured before any test could flip the live switch.
+        Assert.Equal(TestSetup.ConfiguredDevtoolsSupport, ReactorSourcePublisher.IsSupported);
     }
 
     [Fact]
