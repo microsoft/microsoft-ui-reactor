@@ -1,0 +1,461 @@
+using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation;
+
+namespace Microsoft.UI.Reactor.Cli.Docs;
+
+/// <summary>
+/// Captures a doc app's window with the winapp UI Automation library (the engine behind
+/// <c>winapp ui</c>, used in-process) and crops it to the client area, so the image matches
+/// what the old in-app <c>PrintWindow</c> capture produced: client area only, physical
+/// pixels, no window frame.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The app is still launched and switched between components by the in-app preview host
+/// (<c>--preview</c>, <c>POST /preview</c>); only the pixels come from winapp. The preview
+/// host's own frame timer starts only when something reads <c>/frame</c>, and nothing
+/// does any more, so the app no longer runs <c>PrintWindow</c> at all.
+/// </para>
+/// <para>
+/// Capture uses only Windows Graphics Capture (<see cref="IWindowCapture.StartFrameGrabber"/>),
+/// which never activates the window, so a capture run does not take input focus. The
+/// library's one-shot screenshot path is deliberately not used: when Graphics Capture fails
+/// it falls back to <c>PrintWindow</c> and, on a blank frame, foregrounds the window. Here a
+/// machine without Graphics Capture fails the screenshot instead.
+/// </para>
+/// </remarks>
+internal static class WinAppCapture
+{
+    /// <summary>The window class every WinUI 3 desktop window registers.</summary>
+    internal const string WinUIWindowClass = "WinUIDesktopWin32WindowClass";
+
+    /// <summary>
+    /// How long one capture attempt waits for Windows Graphics Capture to deliver a frame.
+    /// The caller's deadline (<see cref="CaptureUntilContent"/>) still bounds the attempt.
+    /// </summary>
+    private static readonly TimeSpan FirstFrameTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// The library's window capture, resolved through its own service registration (the
+    /// implementation type is internal). Logging is discarded: failures surface as
+    /// exceptions on the screenshot that hit them.
+    /// </summary>
+    internal static IWindowCapture CreateWindowCapture() =>
+        new ServiceCollection()
+            .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
+            .AddWinAppUiAutomation()
+            .BuildServiceProvider()
+            .GetRequiredService<IWindowCapture>();
+
+    /// <summary>
+    /// Where the client area sits inside the frame Windows Graphics Capture returned.
+    /// </summary>
+    /// <remarks>
+    /// Graphics Capture returns the window's DWM frame bounds (<c>DWMWA_EXTENDED_FRAME_BOUNDS</c>):
+    /// the visible frame including the title bar, without the invisible resize borders.
+    /// The old in-app capture took the client area only, so the crop is the client rect
+    /// expressed relative to those bounds. All four inputs are physical pixels. A
+    /// mismatch between the image and the frame bounds means the two were not taken of
+    /// the same window state (a resize, a DPI change mid-capture), and cropping anyway
+    /// would cut the wrong region, so that is an error rather than a guess.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The geometry does not line up.</exception>
+    internal static Rectangle ComputeClientCrop(Rectangle frameBounds, Point clientOrigin, Size clientSize, Size imageSize)
+    {
+        if (imageSize != frameBounds.Size)
+            throw new InvalidOperationException(
+                $"captured image is {imageSize.Width}x{imageSize.Height} but the window frame is " +
+                $"{frameBounds.Width}x{frameBounds.Height}; the window changed during capture");
+
+        var crop = new Rectangle(
+            clientOrigin.X - frameBounds.X,
+            clientOrigin.Y - frameBounds.Y,
+            clientSize.Width,
+            clientSize.Height);
+
+        if (crop.Width <= 0 || crop.Height <= 0 || !new Rectangle(Point.Empty, imageSize).Contains(crop))
+            throw new InvalidOperationException(
+                $"client area {crop} does not fit inside the {imageSize.Width}x{imageSize.Height} capture");
+        return crop;
+    }
+
+    /// <summary>
+    /// Crops a captured frame (<paramref name="width"/> x <paramref name="height"/>, tightly
+    /// packed BGRA, as <see cref="IFrameGrabber.TryGetLatest"/> returns it) to
+    /// <paramref name="region"/>, squares the window's rounded corners
+    /// (<see cref="SquareRoundedCorners"/>) and encodes it as PNG.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The buffer is not <paramref name="width"/> x <paramref name="height"/> BGRA pixels.
+    /// </exception>
+    internal static byte[] CropBgra(byte[] pixels, int width, int height, Rectangle region)
+    {
+        if (width <= 0 || height <= 0 || pixels.Length != (long)width * height * 4)
+            throw new InvalidOperationException(
+                $"captured frame has {pixels.Length} bytes, not {width}x{height} BGRA pixels");
+
+        // BGRA bytes in memory are exactly GDI+'s 32bpp ARGB layout.
+        using var source = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+        var data = source.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            for (var y = 0; y < height; y++)
+                Marshal.Copy(pixels, y * width * 4, data.Scan0 + (y * data.Stride), width * 4);
+        }
+        finally
+        {
+            source.UnlockBits(data);
+        }
+
+        using var cropped = source.Clone(region, PixelFormat.Format32bppArgb);
+        SquareRoundedCorners(cropped);
+        using var output = new MemoryStream();
+        cropped.Save(output, ImageFormat.Png);
+        return output.ToArray();
+    }
+    /// <summary>
+    /// Replaces every pixel that is not fully opaque with the nearest opaque pixel in the same
+    /// row, searching toward the middle of the row. Returns how many pixels it replaced.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// winapp captures what DWM composes, and on Windows 11 that includes the window's rounded
+    /// corners. The bottom corners fall inside the client area, so the crop carries a few dozen
+    /// semi-transparent pixels (the corner arc and its anti-aliasing) that the old in-app
+    /// <c>PrintWindow</c> capture never had. <c>ImageProcessor</c> reads them as content, so
+    /// content-crop would keep the whole frame and every screenshot would come out
+    /// full-window.
+    /// </para>
+    /// <para>
+    /// A WinUI client area is otherwise fully opaque, so "alpha below 255" picks out exactly
+    /// those pixels, and filling them from the nearest opaque pixel inward reproduces the
+    /// square corner <c>PrintWindow</c> rendered: the window background, in practice. A row
+    /// with no opaque pixel is left alone. Linear per row: a fully transparent frame (a
+    /// headless or not-yet-composed window) costs one pass, not a scan per pixel.
+    /// </para>
+    /// <para>
+    /// The pixels are read and written as 32bpp ARGB. <c>CropPng</c> always passes a
+    /// <see cref="PixelFormat.Format32bppArgb"/> bitmap; any other format is rejected rather
+    /// than silently converted.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="bmp"/> is not 32bpp ARGB.</exception>
+    internal static int SquareRoundedCorners(Bitmap bmp)
+    {
+        if (bmp.PixelFormat != PixelFormat.Format32bppArgb)
+            throw new ArgumentException(
+                $"expected a {PixelFormat.Format32bppArgb} bitmap, got {bmp.PixelFormat}", nameof(bmp));
+        var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
+        var data = bmp.LockBits(rect, ImageLockMode.ReadWrite, PixelFormat.Format32bppArgb);
+        var replaced = 0;
+        try
+        {
+            var row = new int[bmp.Width];
+            var nextOpaque = new int[bmp.Width];
+            var hasNextOpaque = new bool[bmp.Width];
+            for (var y = 0; y < bmp.Height; y++)
+            {
+                var rowPtr = data.Scan0 + (y * data.Stride);
+                Marshal.Copy(rowPtr, row, 0, row.Length);
+                var mid = row.Length / 2;
+
+                // Nearest opaque pixel to the right of each x (left half searches rightward).
+                var haveRight = false;
+                var right = 0;
+                for (var x = row.Length - 1; x >= 0; x--)
+                {
+                    nextOpaque[x] = right;
+                    hasNextOpaque[x] = haveRight;
+                    if ((uint)row[x] >> 24 == 0xFF) { right = row[x]; haveRight = true; }
+                }
+
+                // Right half searches leftward, seeing pixels already filled in this pass.
+                var changed = false;
+                var haveLeft = false;
+                var left = 0;
+                for (var x = 0; x < row.Length; x++)
+                {
+                    if ((uint)row[x] >> 24 != 0xFF)
+                    {
+                        if (x < mid ? hasNextOpaque[x] : haveLeft)
+                        {
+                            row[x] = x < mid ? nextOpaque[x] : left;
+                            replaced++;
+                            changed = true;
+                        }
+                        else continue;
+                    }
+                    left = row[x];
+                    haveLeft = true;
+                }
+                if (changed) Marshal.Copy(row, 0, rowPtr, row.Length);
+            }
+        }
+        finally
+        {
+            bmp.UnlockBits(data);
+        }
+        return replaced;
+    }
+
+    /// <summary>
+    /// Calls <paramref name="capture"/> until it returns a frame with visible content, or the
+    /// deadline expires. Same contract the HTTP <c>/frame</c> poller had (issue #989): a cold
+    /// window's first frame is often blank, so with <paramref name="requireContent"/> a blank
+    /// frame means "not ready yet". If only blank frames arrived, the last one is returned so
+    /// the caller reports <see cref="BlankFrameException"/>; if no frame arrived at all, the
+    /// result is empty and the caller reports "no frame produced".
+    /// </summary>
+    /// <remarks>
+    /// The deadline bounds each attempt, not just the gaps between them: every call gets a
+    /// token cancelled by the time left, and a cancellation the loop asked for ends it.
+    /// </remarks>
+    internal static async Task<byte[]> CaptureUntilContent(
+        Func<CancellationToken, Task<byte[]>> capture,
+        TimeSpan deadline,
+        bool requireContent = true,
+        TimeSpan? interval = null)
+    {
+        var pause = interval ?? TimeSpan.FromMilliseconds(100);
+        var sw = Stopwatch.StartNew();
+        var lastBytes = Array.Empty<byte>();
+        while (true)
+        {
+            var remaining = deadline - sw.Elapsed;
+            if (remaining <= TimeSpan.Zero) break;
+
+            using var cts = new CancellationTokenSource(remaining);
+            try
+            {
+                var bytes = await capture(cts.Token);
+                if (bytes.Length > 0)
+                {
+                    if (!requireContent) return bytes;
+                    lastBytes = bytes;
+                    if (ImageProcessor.FrameHasContent(bytes)) return bytes;
+                }
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+                break;
+            }
+
+            var left = deadline - sw.Elapsed;
+            if (left <= TimeSpan.Zero) break;
+            await Task.Delay(left < pause ? left : pause);
+        }
+        return lastBytes;
+    }
+
+    /// <summary>
+    /// Captures <paramref name="hwnd"/> with Windows Graphics Capture and returns the client
+    /// area as PNG bytes.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Graphics Capture is unavailable or produced no frame, or the geometry did not line up.
+    /// </exception>
+    internal static async Task<byte[]> CaptureClientAreaAsync(IWindowCapture capture, IntPtr hwnd, CancellationToken ct)
+    {
+        if (!capture.IsFrameCaptureSupported)
+            throw new InvalidOperationException(GraphicsCaptureUnavailable);
+
+        IFrameGrabber grabber;
+        try
+        {
+            grabber = capture.StartFrameGrabber(hwnd);
+        }
+        catch (Exception ex) when (ex is PlatformNotSupportedException or COMException or ArgumentException)
+        {
+            throw new InvalidOperationException($"Windows Graphics Capture could not start for this window: {ex.Message}", ex);
+        }
+
+        using (grabber)
+        {
+            if (!await grabber.WaitForFirstFrameAsync(FirstFrameTimeout, ct) || grabber.TryGetLatest() is not { } frame)
+                throw new InvalidOperationException("Windows Graphics Capture delivered no frame for the window");
+
+            var geometry = Native.GetClientGeometry(hwnd);
+            var crop = ComputeClientCrop(
+                geometry.FrameBounds, geometry.ClientOrigin, geometry.ClientSize, new Size(frame.Width, frame.Height));
+            return CropBgra(frame.Pixels, frame.Width, frame.Height, crop);
+        }
+    }
+
+    internal const string GraphicsCaptureUnavailable =
+        "Windows Graphics Capture is not available, so doc screenshots cannot be taken without " +
+        "bringing windows to the foreground. Capture needs Windows 10 version 2004 (build 19041) or later on an " +
+        "interactive desktop session.";
+    /// <summary>
+    /// Waits for the doc app's top-level window to appear. The app is a descendant of the
+    /// <c>dotnet run</c> process <paramref name="rootPid"/>, so the window is matched by
+    /// owning process rather than by title, which the preview host changes when it switches
+    /// components (see <see cref="SelectAppWindow"/>). <see cref="IntPtr.Zero"/> on timeout.
+    /// </summary>
+    internal static async Task<IntPtr> WaitForAppWindowAsync(int rootPid, TimeSpan timeout)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < timeout)
+        {
+            var hwnd = Native.FindAppWindow(Native.GetDescendantProcessIds(rootPid));
+            if (hwnd != IntPtr.Zero) return hwnd;
+            await Task.Delay(200);
+        }
+        return IntPtr.Zero;
+    }
+
+    /// <summary>A visible, unowned top-level window of the doc app's process tree.</summary>
+    internal readonly record struct WindowCandidate(IntPtr Hwnd, string ClassName, bool IsToolWindow);
+
+    /// <summary>
+    /// Picks the window to capture: the WinUI window when there is one, otherwise the app's
+    /// other main window. An app hosted in WinForms has no WinUI <c>Window</c>: its content
+    /// is a XAML island inside an ordinary top-level form, so requiring the WinUI class would
+    /// never find it. (The <c>winforms-interop</c> doc app also never starts the preview host,
+    /// so capture fails before window discovery and this fallback does not make it
+    /// capturable.) Tool windows and console windows are never the app.
+    /// <see cref="IntPtr.Zero"/> when nothing qualifies.
+    /// </summary>
+    internal static IntPtr SelectAppWindow(IReadOnlyList<WindowCandidate> candidates)
+    {
+        foreach (var c in candidates)
+            if (c.ClassName == WinUIWindowClass) return c.Hwnd;
+        foreach (var c in candidates)
+            if (!c.IsToolWindow && c.ClassName is not ("ConsoleWindowClass" or "PseudoConsoleWindow"))
+                return c.Hwnd;
+        return IntPtr.Zero;
+    }
+
+    internal readonly record struct ClientGeometry(Rectangle FrameBounds, Point ClientOrigin, Size ClientSize);
+
+    private static class Native
+    {
+        private static readonly IntPtr PerMonitorAwareV2 = new(-4);
+        private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+        private const uint GW_OWNER = 4;
+        private const int GWL_EXSTYLE = -20;
+        private const long WS_EX_TOOLWINDOW = 0x00000080;
+        private const uint TH32CS_SNAPPROCESS = 0x00000002;
+
+        /// <summary>
+        /// Frame bounds and client rect in physical pixels. The thread switches to
+        /// per-monitor-v2 awareness for the calls, because the pipeline process is DPI-unaware
+        /// and would otherwise get coordinates scaled for a 150% window.
+        /// </summary>
+        public static ClientGeometry GetClientGeometry(IntPtr hwnd)
+        {
+            var previous = SetThreadDpiAwarenessContext(PerMonitorAwareV2);
+            try
+            {
+                if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT frame, Marshal.SizeOf<RECT>()) != 0)
+                    throw new InvalidOperationException("DwmGetWindowAttribute(EXTENDED_FRAME_BOUNDS) failed");
+                if (!GetClientRect(hwnd, out var client))
+                    throw new InvalidOperationException("GetClientRect failed");
+                var origin = new POINT();
+                if (!ClientToScreen(hwnd, ref origin))
+                    throw new InvalidOperationException("ClientToScreen failed");
+
+                return new ClientGeometry(
+                    Rectangle.FromLTRB(frame.Left, frame.Top, frame.Right, frame.Bottom),
+                    new Point(origin.X, origin.Y),
+                    new Size(client.Right - client.Left, client.Bottom - client.Top));
+            }
+            finally
+            {
+                if (previous != IntPtr.Zero) SetThreadDpiAwarenessContext(previous);
+            }
+        }
+
+        public static HashSet<int> GetDescendantProcessIds(int rootPid)
+        {
+            var parentOf = new Dictionary<int, int>();
+            var snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if (snapshot == new IntPtr(-1)) return [rootPid];
+            try
+            {
+                var entry = new PROCESSENTRY32W { dwSize = (uint)Marshal.SizeOf<PROCESSENTRY32W>() };
+                if (Process32FirstW(snapshot, ref entry))
+                {
+                    do { parentOf[(int)entry.th32ProcessID] = (int)entry.th32ParentProcessID; }
+                    while (Process32NextW(snapshot, ref entry));
+                }
+            }
+            finally
+            {
+                CloseHandle(snapshot);
+            }
+
+            var result = new HashSet<int> { rootPid };
+            bool grew;
+            do
+            {
+                grew = false;
+                foreach (var (pid, parent) in parentOf)
+                    if (pid != parent && result.Contains(parent) && result.Add(pid)) grew = true;
+            }
+            while (grew);
+            return result;
+        }
+
+        public static IntPtr FindAppWindow(HashSet<int> pids)
+        {
+            var candidates = new List<WindowCandidate>();
+            var className = new char[256];
+            EnumWindows((hwnd, _) =>
+            {
+                GetWindowThreadProcessId(hwnd, out var pid);
+                if (!pids.Contains((int)pid) || !IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER) != IntPtr.Zero)
+                    return true;
+                var len = GetClassNameW(hwnd, className, className.Length);
+                var exStyle = (long)GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+                candidates.Add(new WindowCandidate(
+                    hwnd, len > 0 ? new string(className, 0, len) : "", (exStyle & WS_EX_TOOLWINDOW) != 0));
+                return true;
+            }, IntPtr.Zero);
+            return SelectAppWindow(candidates);
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT { public int Left, Top, Right, Bottom; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT { public int X, Y; }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct PROCESSENTRY32W
+        {
+            public uint dwSize;
+            public uint cntUsage;
+            public uint th32ProcessID;
+            public IntPtr th32DefaultHeapID;
+            public uint th32ModuleID;
+            public uint cntThreads;
+            public uint th32ParentProcessID;
+            public int pcPriClassBase;
+            public uint dwFlags;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string szExeFile;
+        }
+
+        private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
+
+        [DllImport("user32.dll")] private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
+        [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out RECT value, int size);
+        [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hwnd, out RECT rect);
+        [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr hwnd, ref POINT point);
+        [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+        [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+        [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
+        [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hwnd, uint cmd);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassNameW(IntPtr hwnd, char[] className, int maxCount);
+        [DllImport("user32.dll")] private static extern IntPtr GetWindowLongPtrW(IntPtr hwnd, int index);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern bool Process32FirstW(IntPtr snapshot, ref PROCESSENTRY32W entry);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern bool Process32NextW(IntPtr snapshot, ref PROCESSENTRY32W entry);
+        [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr handle);
+    }
+}

@@ -185,7 +185,7 @@ Everything is C#. No `.xaml` files for UI (except `ReactorApplication.xaml` whic
 
 ### User guide docs are generated
 
-Docs under `docs/guide/` are compiled from `docs/_pipeline/templates/*.md.dt` via `mur docs compile`. Edit the templates, not the compiled output.
+Docs under `docs/guide/` are compiled from `docs/_pipeline/templates/*.md.dt` via `dotnet run --project tools/Reactor.DocPipeline -- compile`. Edit the templates, not the compiled output.
 
 ## Project Layout
 

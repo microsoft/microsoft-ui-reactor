@@ -1,7 +1,7 @@
 namespace Microsoft.UI.Reactor.Cli.Docs;
 
 /// <summary>
-/// <c>mur docs render-diagrams [--topic &lt;id&gt;] [--watch]</c> — fast
+/// <c>render-diagrams [--topic &lt;id&gt;] [--watch]</c> — fast
 /// inner-loop diagram render without running the whole compile pipeline.
 /// The <c>--watch</c> flag is reserved (TODO: FileSystemWatcher plumbing).
 /// </summary>

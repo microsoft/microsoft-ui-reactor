@@ -109,6 +109,20 @@ Conventions for contributors:
 
 ### Changed
 
+- **The doc pipeline moved out of `mur`, and doc screenshots are captured with winapp's
+  Windows Graphics Capture.** `mur docs` is now `dotnet run --project tools/Reactor.DocPipeline --`
+  (`compile`, `check-tier`, `render-diagrams`, `new-diagram`; same options). It is a contributor
+  tool for this repository, so it no longer ships in the `mur` dotnet tool; `mur docs` prints the
+  new command and exits 1. Out of the tool it can target Windows, which `PackAsTool` forbids
+  (NETSDK1146), and capture screenshots in-process with the winapp UI Automation library
+  (`Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation`). The pipeline still launches each doc
+  app through the in-app preview host and switches components with it, but the pixels now come
+  from Windows Graphics Capture instead of the preview host's `PrintWindow` + JPEG frame stream.
+  Images keep the same framing (client area only, physical pixels, the 150% convention), are
+  lossless, and content-crop is typically 1–4 px tighter. Capture no longer waits on the frame
+  stream's warm-up, so a topic is about 8–10 s faster, and it never activates a window: without
+  Graphics Capture a screenshot fails rather than falling back to `PrintWindow`. `mur` also drops
+  its YamlDotNet and System.Drawing.Common dependencies (#1320; spec 013 §4).
 - **`ReactorHostControl.Stats` returns `RenderStats` by value** instead of
   `ref readonly`. The XAML compiler emits type metadata for every public property of
   a control used in markup, and the by-ref property generated
