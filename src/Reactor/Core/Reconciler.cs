@@ -188,24 +188,27 @@ public sealed partial class Reconciler : IDisposable
 
     private void PublishSource(UIElement control, Element element)
     {
+        var kind = element;
+        while (kind is ModifiedElement modified) kind = modified.Inner;
         // A KeyedMemoElement realizes its factory output, which published itself.
-        if (element is KeyedMemoElement) return;
-        Component? component = element is ComponentElement && _componentNodes.TryGetValue(control, out var node)
+        if (kind is KeyedMemoElement) return;
+        Component? component = kind is ComponentElement && _componentNodes.TryGetValue(control, out var node)
             ? node.Component
             : null;
         var value = Diagnostics.ReactorSourcePublisher.Publish(control, element, CurrentDiagnosticOwner, component);
         KeepTagIfSourceAmbiguous(control, element, value);
-        MirrorOntoLiveDialog(control, element, value);
+        MirrorOntoLiveDialog(control, value);
     }
 
     /// <summary>
     /// A ContentDialog element realizes a collapsed placeholder in the tree and shows a separate
-    /// WinUI ContentDialog; the visible dialog carries the element's published value too.
+    /// WinUI ContentDialog; the visible dialog carries the placeholder's published value too.
+    /// Only a ContentDialog placeholder has a live dialog, so no element check is needed (a
+    /// keyed-memo root's realized output is described by its value, not by re-running it).
     /// </summary>
-    private static void MirrorOntoLiveDialog(UIElement control, Element element, string value)
+    private static void MirrorOntoLiveDialog(UIElement control, string value)
     {
-        while (element is ModifiedElement modified) element = modified.Inner;
-        if (element is ContentDialogElement && control is FrameworkElement placeholder
+        if (control is FrameworkElement placeholder
             && V1Protocol.OverlayLifecycle.PeekLiveContentDialog(placeholder) is { } dialog
             && !string.Equals(dialog.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) as string, value, StringComparison.Ordinal))
             dialog.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, value);
@@ -257,25 +260,31 @@ public sealed partial class Reconciler : IDisposable
         if (_publishedRootName is { } previousRoot && !string.Equals(previousRoot, rootName, StringComparison.Ordinal))
             RenameRootOwner(control, previousRoot, rootName);
         _publishedRootName = rootName;
-        Component? component = tree is ComponentElement && _componentNodes.TryGetValue(control, out var node)
+        // A root wrapped in modifiers (ModifiedElement) is still the kind it wraps.
+        var kind = tree;
+        while (kind is ModifiedElement modified) kind = modified.Inner;
+        Component? component = kind is ComponentElement && _componentNodes.TryGetValue(control, out var node)
             ? node.Component
             : null;
         // The control's current value is the baseline: the update path may have rewritten the
         // plain value, so the root value is written whenever it differs. No reference to the
         // root is kept, so a disposed host's previous subtree is not retained.
         var current = control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) as string;
-        if (tree is KeyedMemoElement)
+        if (kind is KeyedMemoElement)
         {
             var withRoot = Diagnostics.ReactorSourcePublisher.WithRoot(
                 current, rootName, rootHooks, _hostAddedRootHooks, out var addedHooks);
             _hostAddedRootHooks = addedHooks ? rootHooks : null;
-            if (withRoot is not null && !string.Equals(withRoot, current, StringComparison.Ordinal))
+            if (withRoot is null) return;
+            if (!string.Equals(withRoot, current, StringComparison.Ordinal))
                 control.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, withRoot);
+            MirrorOntoLiveDialog(control, withRoot);
             return;
         }
         _hostAddedRootHooks = null;
         var value = Diagnostics.ReactorSourcePublisher.Publish(control, tree, rootName, component, rootName, rootHooks, current);
         KeepTagIfSourceAmbiguous(control, tree, value);
+        MirrorOntoLiveDialog(control, value);
     }
 
     /// <summary>

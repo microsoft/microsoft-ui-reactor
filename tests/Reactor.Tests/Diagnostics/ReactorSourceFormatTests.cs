@@ -192,6 +192,20 @@ public sealed class ReactorSourceFormatTests
         => Assert.Equal(expected, ReactorSourcePublisher.IsEnabledByEnvironment(value));
 
     [Fact]
+    public void SourceMapStartsEnabledUnderTheDiagnosticsLaunchOptIn()
+    {
+        // ReactorSourceMap.Enabled's initial value. Diagnostics mode needs call sites on
+        // elements an app builds before its first host exists (a page's field initializers),
+        // so REACTOR_DIAGNOSTICS=1 turns stamping on at startup, not when a host is created,
+        // but only in a build with the switch, like everything else it gates.
+        Assert.True(Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.IsEnabledAtStartup("1", null));
+        Assert.False(Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.IsEnabledAtStartup(null, null));
+        Assert.False(Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.IsEnabledAtStartup("0", "true"));
+        Assert.Equal(ReactorSourcePublisher.IsSupported, Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.IsEnabledAtStartup(null, "1"));
+        Assert.True(ReactorSourcePublisher.IsSupported, "precondition: this suite runs with Reactor.DevtoolsSupport on");
+    }
+
+    [Fact]
     public void BuildSwitch_IsTheTrimmableDevtoolsFeatureSwitch()
     {
         // The trimmer substitutes a [FeatureSwitchDefinition] property with the configured

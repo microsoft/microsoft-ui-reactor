@@ -44,7 +44,24 @@ public static partial class ReactorSourceMap
     /// interceptor, where an unhoistable class-init check would show up.</para>
     /// </summary>
     private static int s_enabled =
-        IsEnabledByEnvironment(global::System.Environment.GetEnvironmentVariable("REACTOR_SOURCEMAP")) ? 1 : 0;
+        IsEnabledAtStartup(
+            global::System.Environment.GetEnvironmentVariable("REACTOR_SOURCEMAP"),
+            // Guarded inline so a build without Reactor.DevtoolsSupport folds the read (and
+            // the variable's name) away.
+            global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+                ? global::System.Environment.GetEnvironmentVariable("REACTOR_DIAGNOSTICS")
+                : null) ? 1 : 0;
+
+    /// <summary>
+    /// The startup value of <see cref="Enabled"/>: <c>REACTOR_SOURCEMAP=1</c>, or the
+    /// diagnostics launch opt-in <c>REACTOR_DIAGNOSTICS=1</c> in a build with the
+    /// <c>Reactor.DevtoolsSupport</c> switch (diagnostics mode needs call sites, including on
+    /// elements an app builds before its first host exists, such as a page's field
+    /// initializers).
+    /// </summary>
+    internal static bool IsEnabledAtStartup(string? sourceMapValue, string? diagnosticsValue)
+        => IsEnabledByEnvironment(sourceMapValue)
+            || (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && IsEnabledByEnvironment(diagnosticsValue));
 
     /// <summary>
     /// The <c>REACTOR_SOURCEMAP</c> contract: exactly <c>"1"</c> enables, anything else

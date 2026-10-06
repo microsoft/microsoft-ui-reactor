@@ -519,6 +519,32 @@ internal sealed class MemoRootB : Component
     public override Element Render() => Memo(1, () => TextBlock("memo-remount"));
 }
 
+// Roots whose output is a ContentDialog: the visible dialog must follow the root swap too.
+internal static class RemountDialog
+{
+    public static Element Open() => ContentDialog("RemountDialog", TextBlock("remount-dialog-body"), "OK") with { IsOpen = true };
+}
+
+internal sealed class DialogRootA : Component
+{
+    public override Element Render() => RemountDialog.Open();
+}
+
+internal sealed class DialogRootB : Component
+{
+    public override Element Render() => RemountDialog.Open();
+}
+
+internal sealed class MemoDialogRootA : Component
+{
+    public override Element Render() => Memo(1, RemountDialog.Open);
+}
+
+internal sealed class MemoDialogRootB : Component
+{
+    public override Element Render() => Memo(1, RemountDialog.Open);
+}
+
 internal sealed class MemoRootC : Component
 {
     public override Element Render()
@@ -593,6 +619,27 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             })?.Contains($"|owner={owner}|", StringComparison.Ordinal) == true,
             maxPasses: 32, perPassMs: 10);
 
+    private async Task CheckDialogFollowsRootSwap(Component first, Component second, string shape)
+    {
+        var host = H.CreateHost();
+        host.Mount(first);
+        var dialog = await ContentDialogProbe.WaitForOpen(H, "RemountDialog", 2_000);
+        var before = dialog is null ? null : ReactorDiagnostics.GetSource(dialog);
+        host.Mount(second);
+        await Harness.Render();
+        await Harness.Render();
+        var after = dialog is null ? null : ReactorDiagnostics.GetSource(dialog);
+        Console.WriteLine($"# dialog root swap ({shape}): {before} -> {after}");
+        H.Check($"ReactorSource_RootRemount_Dialog{shape}_FollowsTheRoot",
+            before?.Contains($"|root={first.GetType().Name}", StringComparison.Ordinal) == true
+            && after?.Contains($"|root={second.GetType().Name}", StringComparison.Ordinal) == true
+            && after.Contains("|element=ContentDialog", StringComparison.Ordinal));
+        dialog?.Hide();
+        await Harness.Render(50);
+        host.Dispose();
+        H.SetContent(null);
+    }
+
     public override async Task RunAsync()
     {
         if (!ReactorSourcePublisher.IsSupported)
@@ -649,6 +696,24 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             }
             memoHost.Dispose();
             H.SetContent(null);
+
+            // A keyed-memo root wrapped in modifiers is still a keyed-memo root: its realized
+            // output keeps describing itself (element=TextBlock), with the host's root fields.
+            var wrappedHost = H.CreateHost();
+            wrappedHost.Mount(_ => new ModifiedElement(
+                Memo(1, () => TextBlock("wrapped-memo-root")),
+                new ElementModifiers { Margin = new Thickness(2) }));
+            await Harness.Render();
+            var wrapped = Source("wrapped-memo-root");
+            Console.WriteLine($"# wrapped keyed-memo root: {wrapped}");
+            H.Check("ReactorSource_RootRemount_WrappedKeyedMemoRootKeepsItsOutput",
+                wrapped?.Contains("|element=TextBlock", StringComparison.Ordinal) == true
+                && wrapped.Contains("|root=FuncElement", StringComparison.Ordinal));
+            wrappedHost.Dispose();
+            H.SetContent(null);
+
+            await CheckDialogFollowsRootSwap(new DialogRootA(), new DialogRootB(), "Plain");
+            await CheckDialogFollowsRootSwap(new MemoDialogRootA(), new MemoDialogRootB(), "KeyedMemo");
 
             var hostControl = new Microsoft.UI.Reactor.Hosting.ReactorHostControl();
             hostControl.Mount(new RemountRootA());
