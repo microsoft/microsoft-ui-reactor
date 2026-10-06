@@ -77,10 +77,11 @@ wakeup, and stop.
 
 ## Phase 1: Prepare
 
-1. **Snapshot the live PR** (if it exists): state, draft, head repo/ref/SHA, base
-   ref/SHA, mergeability, labels, reviews, checks. The commands are in
-   [Reference commands](#reference-commands). Fetch the real head and base; don't trust
-   the local branch or a stale `origin/main`.
+1. **Snapshot the live PR** (if it exists): state, draft, head repository (owner/name —
+   for a fork this is where you fetch from and push to; it isn't `$repo` and may not
+   be owned by the PR author), head ref/SHA, base ref/SHA, mergeability, labels,
+   reviews, checks. The commands are in [Reference commands](#reference-commands).
+   Fetch the real head and base; don't trust the local branch or a stale `origin/main`.
 2. **Preserve other work.** Don't stage unrelated files or discard a dirty tree. If the
    remote head has commits you don't have, inspect them and integrate them before
    editing. Rewrite history only with permission, using
@@ -89,8 +90,9 @@ wakeup, and stop.
    or rebase (match how the author's branch already does it) and resolve conflicts.
    For a stacked PR, compare against its parent branch, not `main`.
 4. **No PR yet?** Create it from `.github/PULL_REQUEST_TEMPLATE.md` (see Phase 3) after
-   Phase 2, so the first CI run and the first Copilot review see the fixed diff.
-5. Set `agent-preparing`.
+   Phase 2, so the first CI run and the first Copilot review see the fixed diff. Set
+   `agent-preparing` right after creating it; there's nothing to label before then.
+5. **Existing PR:** set `agent-preparing` now.
 
 ## Phase 2: One pr-review pass
 
@@ -145,11 +147,13 @@ Request a Copilot review **once per head SHA**:
 gh pr edit $number --repo $repo --add-reviewer "@copilot"
 ```
 
-Confirm the request registered. Copilot does **not** appear in `gh pr view`'s
-`reviewRequests` or in REST `requested_reviewers`; check instead for a
-`review_requested` timeline event whose `requested_reviewer.login` is `Copilot`, or a
-`copilot-pull-request-reviewer` check run on the head (commands in
-[Reference commands](#reference-commands)). If neither shows up, set `agent-blocked`.
+Confirm that **this** request registered. Copilot does **not** appear in `gh pr view`'s
+`reviewRequests` or in REST `requested_reviewers`. Instead, look for a
+`copilot-pull-request-reviewer` check run on the current head SHA (the reliable,
+per-commit signal), or a `review_requested` timeline event for `Copilot` created at or
+after the moment you sent this request. Timeline events carry no commit, so an older
+event from a previous round proves nothing. The commands are in
+[Reference commands](#reference-commands). If neither shows up, set `agent-blocked`.
 
 ### 4b. Wait without burning a turn
 
@@ -325,12 +329,14 @@ fork never has this PR number. A stacked PR changes `baseRefName`, not `$repo`. 
 
 ```powershell
 # Snapshot
-gh pr view $number --repo $repo --json url,state,isDraft,isCrossRepository,author,headRefOid,headRefName,baseRefName,baseRefOid,mergeable,mergeStateStatus,reviewDecision,labels,body   # isCrossRepository/author drive the trust rule
+gh pr view $number --repo $repo --json url,state,isDraft,isCrossRepository,author,headRepository,headRepositoryOwner,headRefOid,headRefName,baseRefName,baseRefOid,mergeable,mergeStateStatus,reviewDecision,labels,body   # isCrossRepository/author drive the trust rule; headRepository.nameWithOwner is the fetch/push remote
 gh pr checks $number --repo $repo --json name,state,bucket,link   # bucket: pass|fail|pending|skipping|cancel
 
-# Did the Copilot review request register? (Copilot is missing from reviewRequests)
-gh api --paginate "repos/$repo/issues/$number/timeline" --jq '.[] | select(.event == "review_requested" and .requested_reviewer.login == "Copilot") | .created_at'
+# Did this round's Copilot request register? (Copilot is missing from reviewRequests.)
+# Per-commit signal first; the timeline fallback must be newer than when you sent the request ($requestedAt = [datetime]::UtcNow, captured just before the request).
 gh api "repos/$repo/commits/$headSha/check-runs?check_name=copilot-pull-request-reviewer" --jq '.check_runs[] | {status, conclusion}'
+gh api --paginate "repos/$repo/issues/$number/timeline" --jq '.[] | select(.event == "review_requested" and .requested_reviewer.login == "Copilot") | .created_at' |
+  Where-Object { ([datetimeoffset]$_).UtcDateTime -ge $requestedAt.AddSeconds(-5) }
 
 # All reviews (bodies matter too: a human can request changes without an inline thread)
 gh api --paginate "repos/$repo/pulls/$number/reviews" --jq '.[] | {id, user: .user.login, state, commit_id, submitted_at, body}'
