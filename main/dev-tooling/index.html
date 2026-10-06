@@ -3890,9 +3890,9 @@ result. The <a href="../recipes/">recipes folder</a> collects more elaborate
 examples that fit this shape.</p>
 <h2 id="the-mur-cli">The <code>mur</code> CLI<a class="headerlink" href="#the-mur-cli" title="Permanent link">&para;</a></h2>
 <p><code>mur</code> is Reactor's repo-aware command-line tool. It is the canonical
-entry point for the doc pipeline, the localization workflow, the
-devtools server, and a handful of repo-maintenance utilities. The
-subcommands map one-to-one to the workflows below.</p>
+entry point for the localization workflow, the devtools server, and a
+handful of repo-maintenance utilities. The subcommands map one-to-one to
+the workflows below.</p>
 <table>
 <thead>
 <tr>
@@ -3902,26 +3902,6 @@ subcommands map one-to-one to the workflows below.</p>
 </tr>
 </thead>
 <tbody>
-<tr>
-<td><code>mur docs compile</code></td>
-<td>Compile the docset (templates + doc apps → <code>docs/guide/</code>)</td>
-<td><code>mur docs compile</code></td>
-</tr>
-<tr>
-<td><code>mur docs check-tier</code></td>
-<td>Run only the tier lint, without cross-link / reference / emit</td>
-<td><code>mur docs check-tier --topic hooks</code></td>
-</tr>
-<tr>
-<td><code>mur docs render-diagrams</code></td>
-<td>Render <code>.mmd</code> Mermaid diagrams to <code>.svg</code> for fast inner-loop iteration</td>
-<td><code>mur docs render-diagrams --topic architecture-overview</code></td>
-</tr>
-<tr>
-<td><code>mur docs new-diagram &lt;topic&gt; &lt;id&gt;</code></td>
-<td>Scaffold a new Mermaid <code>.mmd</code> for a topic</td>
-<td><code>mur docs new-diagram hooks slot-table</code></td>
-</tr>
 <tr>
 <td><code>mur loc</code></td>
 <td>Run the localization pipeline (<code>extract</code>, <code>translate</code>, <code>validate</code>, <code>status</code>, <code>prune</code>)</td>
@@ -3974,7 +3954,12 @@ drives that same command, so a bootstrapped checkout can go straight to
 prints the embedded <code>SKILL.md</code> agent reference, <code>mur --api</code> prints the
 <code>reactor.api.txt</code> signatures index, and <code>mur --regen-api</code> regenerates
 that index from a source checkout.</p>
-<p><code>mur docs compile</code> is the workflow you reach for most often. See
+<p>The doc pipeline is not part of <code>mur</code>: it is a contributor tool for the
+Reactor repository, run from a checkout with
+<code>dotnet run --project tools/Reactor.DocPipeline -- &lt;command&gt;</code>. Its
+commands are <code>compile</code> (templates + doc apps → <code>docs/guide/</code>, the one you
+reach for most often), <code>check-tier</code> (tier lint only), <code>render-diagrams</code>
+and <code>new-diagram</code>. See
 <a href="https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/contributing/doc-pipeline.md">the doc-pipeline contributor guide</a>
 for the full surface and the <code>--validate-only</code>, <code>--no-screenshots</code>
 (alias <code>--skip-screenshots</code>), <code>--skip-diagrams</code>, <code>--no-build</code>,
@@ -4018,7 +4003,6 @@ a side panel that:</p>
   or <code>.XYFocusDown</code> — and flags reference cycles and perpetually-null
   (unresolved) references as diagnostics. See
   <a href="../focus-and-input-internals/">focus &amp; input internals</a>.</li>
-<li>Exposes a "compile docs" button that shells out to <code>mur docs compile</code>.</li>
 </ul>
 <p>The extension talks to the MCP endpoint (above), so a panel session is
 just a long-lived <code>mur devtools</code> process plus a UI on top. Reactor has

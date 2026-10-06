@@ -3482,7 +3482,7 @@ self-test and E2E suites keep VSTest-style <code>--filter</code> expressions:</p
 <!-- /ai:lock -->
 
 <p>The doc apps under <code>docs/_pipeline/apps/</code> are a fourth compile gate
-rather than a test suite: <code>mur docs compile</code> builds every one of them,
+rather than a test suite: <code>dotnet run --project tools/Reactor.DocPipeline -- compile</code> builds every one of them,
 so a snippet in this guide that names a removed API fails the docs
 build.</p>
 <blockquote>

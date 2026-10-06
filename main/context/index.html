@@ -3996,7 +3996,7 @@ every text block re-renders on every state change anywhere in the
 parent tree. The fix is two-fold: (1) wrap the value in
 <a href="../hooks/"><code>UseMemo</code></a> with explicit dependencies so identity is stable
 between updates, or (2) move the construction outside <code>Render()</code> so
-it's a singleton. The performance overlay (<code>mur docs perf-overlay</code>)
+it's a singleton. The performance overlay
 makes this visible — look for high "context-driven re-render" counts
 in the <a href="../dev-tooling/">devtools</a> view.</p>
 </blockquote>
