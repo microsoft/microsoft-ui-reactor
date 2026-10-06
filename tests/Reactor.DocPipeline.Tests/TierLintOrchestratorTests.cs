@@ -8,8 +8,8 @@ namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 
 /// <summary>
 /// Behavioural tests for <see cref="TierLintOrchestrator"/> — the spec
-/// 041 §5.1 standalone tier-lint surface that backs <c>mur docs
-/// check-tier</c>. Each test stands up a temp directory with the
+/// 041 §5.1 standalone tier-lint surface that backs the pipeline's
+/// <c>check-tier</c>. Each test stands up a temp directory with the
 /// minimum file shape the orchestrator expects (an apps dir + a
 /// templates dir) and asserts on the lint findings.
 /// </summary>

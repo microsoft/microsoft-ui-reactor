@@ -61,7 +61,11 @@ if (arg == "loc")
 
 if (arg == "docs")
 {
-    return Microsoft.UI.Reactor.Cli.Docs.DocsCommand.Run(args.Skip(1).ToArray());
+    // The doc pipeline is repository-only and needs a Windows TFM, which a dotnet tool
+    // cannot have (PackAsTool rejects one, NETSDK1146), so it lives in tools/ now.
+    Console.Error.WriteLine("`mur docs` has moved out of mur. From a microsoft-ui-reactor checkout, run:");
+    Console.Error.WriteLine($"  dotnet run --project tools/Reactor.DocPipeline -- {string.Join(' ', args.Skip(1))}".TrimEnd());
+    return 1;
 }
 
 if (arg == "devtools")
@@ -133,7 +137,6 @@ void ShowHelp()
     Console.WriteLine("  loc validate     Check ICU syntax and parameter consistency");
     Console.WriteLine("  loc status       Show translation coverage per locale");
     Console.WriteLine("  loc prune        Find unused localization keys");
-    Console.WriteLine("  docs compile     Compile documentation from templates and doc apps");
     Console.WriteLine("  devtools         Launch project with --devtools run and supervise reloads");
     Console.WriteLine("  check [path]     Build and emit one-line diagnostics with skill-file pointers");
     Console.WriteLine("  pack-local       Pack the in-source framework to <repo>/local-nupkgs/ as 0.0.0-local");

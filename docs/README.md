@@ -8,4 +8,4 @@
 - **_pipeline/** — Internals of the doc-generation pipeline. Not reader-facing.
 
 The `guide/` folder is pre-rendered because screenshot capture requires a running
-WinUI host. To rebuild it locally, run `mur docs compile`.
+WinUI host. To rebuild it locally, run `dotnet run --project tools/Reactor.DocPipeline -- compile`.

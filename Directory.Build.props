@@ -41,7 +41,8 @@
       Single source of truth for the current PUBLIC Microsoft.UI.Reactor package
       version. This is the ONE literal to bump at release time (see
       docs/contributing/release-runbook.md). One consumer reads it:
-        1. `mur docs compile` (VersionSource.ReadPublicVersion) substitutes it
+        1. The doc pipeline's `compile` (tools/Reactor.DocPipeline,
+           VersionSource.ReadPublicVersion) substitutes it
            for the {{reactorVersion}} token in docs/_pipeline/templates/*.md.dt,
            so guide prose needs no per-release hand edits.
       Keep it a real PUBLISHED public version. Every release is a prerelease, so
