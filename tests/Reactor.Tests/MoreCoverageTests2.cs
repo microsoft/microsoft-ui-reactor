@@ -1037,6 +1037,21 @@ public class MoreCoverageTests2
         Assert.NotNull(c.RightItems);
     }
 
+    // Issue #1344 — WinUI rejects a second item in an Execute-mode SwipeItems collection.
+    [Theory]
+    [InlineData(0, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, 0)]
+    [InlineData(1, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, 1)]
+    [InlineData(2, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, 1)]
+    [InlineData(5, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, 1)]
+    [InlineData(0, Microsoft.UI.Xaml.Controls.SwipeMode.Reveal, 0)]
+    [InlineData(1, Microsoft.UI.Xaml.Controls.SwipeMode.Reveal, 1)]
+    [InlineData(5, Microsoft.UI.Xaml.Controls.SwipeMode.Reveal, 5)]
+    public void SwipeControlElement_EffectiveSwipeItemCount_CapsExecuteModeToOne(
+        int length, Microsoft.UI.Xaml.Controls.SwipeMode mode, int expected)
+    {
+        Assert.Equal(expected, SwipeControlElement.EffectiveSwipeItemCount(length, mode));
+    }
+
     [Fact]
     public void AnimatedIconElement_Construction_Defaults()
     {

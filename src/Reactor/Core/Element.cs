@@ -7373,7 +7373,17 @@ public record SwipeItemData(
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("RightItemsMode")]
 public partial record SwipeControlElement(Element Content) : Element
 {
+    /// <summary>
+    /// Items revealed when swiping from the left. When <see cref="LeftItemsMode"/> is
+    /// <see cref="Microsoft.UI.Xaml.Controls.SwipeMode.Execute"/>, WinUI supports only one item:
+    /// Reactor keeps the first and ignores the rest (with a diagnostic warning).
+    /// </summary>
     public SwipeItemData[]? LeftItems { get; init; }
+    /// <summary>
+    /// Items revealed when swiping from the right. When <see cref="RightItemsMode"/> is
+    /// <see cref="Microsoft.UI.Xaml.Controls.SwipeMode.Execute"/>, WinUI supports only one item:
+    /// Reactor keeps the first and ignores the rest (with a diagnostic warning).
+    /// </summary>
     public SwipeItemData[]? RightItems { get; init; }
     public Microsoft.UI.Xaml.Controls.SwipeMode LeftItemsMode { get; init; } = Microsoft.UI.Xaml.Controls.SwipeMode.Reveal;
     public Microsoft.UI.Xaml.Controls.SwipeMode RightItemsMode { get; init; } = Microsoft.UI.Xaml.Controls.SwipeMode.Reveal;
@@ -7392,15 +7402,29 @@ public partial record SwipeControlElement(Element Content) : Element
     private static void ApplySwipeItems(WinUI.SwipeControl control, SwipeControlElement element, bool force)
     {
         if (!force) return;
-        control.LeftItems = CreateSwipeItems(element.LeftItems, element.LeftItemsMode);
-        control.RightItems = CreateSwipeItems(element.RightItems, element.RightItemsMode);
+        control.LeftItems = CreateSwipeItems(element.LeftItems, element.LeftItemsMode, nameof(LeftItems));
+        control.RightItems = CreateSwipeItems(element.RightItems, element.RightItemsMode, nameof(RightItems));
     }
 
-    private static WinUI.SwipeItems? CreateSwipeItems(SwipeItemData[]? data, WinUI.SwipeMode mode)
+    // WinUI's SwipeItems::Append throws E_INVALIDARG for a second item when Mode == Execute
+    // (issue #1344), which would tear down the whole host via the render-error fallback.
+    internal static int EffectiveSwipeItemCount(int length, WinUI.SwipeMode mode)
+        => mode == WinUI.SwipeMode.Execute ? global::System.Math.Min(length, 1) : length;
+
+    private static WinUI.SwipeItems? CreateSwipeItems(SwipeItemData[]? data, WinUI.SwipeMode mode, string side)
     {
         if (data is not { Length: > 0 }) return null;
+        int count = EffectiveSwipeItemCount(data.Length, mode);
+        if (count < data.Length && global::Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.IsWarningEnabled)
+        {
+            global::Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.Warning(
+                global::Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Reactor,
+                "SwipeControl.ExecuteItems",
+                $"SwipeControl.{side} has {data.Length} items but SwipeMode.Execute supports only one; " +
+                $"keeping the first item and ignoring {data.Length - count}.");
+        }
         var items = new WinUI.SwipeItems { Mode = mode };
-        foreach (var entry in data) items.Add(CreateSwipeItem(entry));
+        for (int i = 0; i < count; i++) items.Add(CreateSwipeItem(data[i]));
         return items;
     }
 

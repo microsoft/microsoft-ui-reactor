@@ -1306,6 +1306,34 @@ internal static class CoreCoverageFixtures
         }
     }
 
+    // Issue #1344 — mounting Execute mode with more than one item on either side must keep
+    // only the first item rather than throwing E_INVALIDARG and tearing down the host.
+    internal class SwipeControlExecuteModeMultiItem(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+                SwipeControl(
+                    TextBlock("execute-swipe"),
+                    leftItems: [new SwipeItemData("Pin"), new SwipeItemData("Mark")],
+                    rightItems: [new SwipeItemData("Delete"), new SwipeItemData("Archive"), new SwipeItemData("Flag")])
+                with
+                {
+                    LeftItemsMode = Microsoft.UI.Xaml.Controls.SwipeMode.Execute,
+                    RightItemsMode = Microsoft.UI.Xaml.Controls.SwipeMode.Execute,
+                });
+
+            await Harness.Render();
+            var sc = H.FindControl<Microsoft.UI.Xaml.Controls.SwipeControl>(_ => true);
+            H.Check("SwipeExec_Mounted", sc is not null && H.FindText("execute-swipe") is not null);
+            H.Check("SwipeExec_LeftCapped", sc?.LeftItems is { Count: 1 } l && l[0].Text == "Pin"
+                && l.Mode == Microsoft.UI.Xaml.Controls.SwipeMode.Execute);
+            H.Check("SwipeExec_RightCapped", sc?.RightItems is { Count: 1 } r && r[0].Text == "Delete"
+                && r.Mode == Microsoft.UI.Xaml.Controls.SwipeMode.Execute);
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     //  28. ListBox — mount
     //     Targets: Reconciler.Mount.cs lines 2117-2128
