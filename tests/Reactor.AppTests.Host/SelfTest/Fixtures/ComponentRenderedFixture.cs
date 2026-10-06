@@ -132,6 +132,8 @@ internal class ComponentRendered_ReasonsAndIdsFollowTheReconciler(Harness h) : S
         H.Check("ComponentRendered_Theme_FunctionConsumerIsContext",
             funcConsumerId != 0
             && theme.Any(e => Id(e) == funcConsumerId && Reason(e) == ComponentRenderTrace.Reasons.Context));
+        H.Check("ComponentRendered_Theme_UngatedProplessConsumerIsContext",
+            theme.Any(e => Id(e) == alwaysId && Reason(e) == ComponentRenderTrace.Reasons.Context));
         H.Check("ComponentRendered_Theme_NonConsumersSilent",
             !theme.Any(e => Id(e) == propsChildId || Id(e) == statefulId));
 
@@ -520,7 +522,9 @@ internal sealed class RenderedAlwaysChild : Component
 {
     protected internal override bool ShouldUpdate() => true;
 
-    public override Element Render() => TextBlock("always");
+    // Consumes the theme too: a propless component whose ShouldUpdate() is true reports
+    // "parent" for a plain parent re-render but "context" when the context changed.
+    public override Element Render() => TextBlock($"always {UseContext(RenderedContextChild.Theme)}");
 }
 
 internal sealed class RenderedPropsChild : Component<int>

@@ -407,7 +407,8 @@ instead of a custom compiler.
 > constructor; the generator stamps the column of the invoked method's name (the
 > open paren's when name and paren are on different lines, since the line follows
 > the paren). The two-argument constructor, `Deconstruct`, `ToString` and
-> `ToShortString` are unchanged, and the struct stays 16 bytes.
+> `ToShortString` are unchanged. On 64-bit the column fills existing padding, so the
+> struct stays 16 bytes; on x86 it grows from 8 to 12.
 
 **As shipped** (`src/Reactor/Core/SourceLocation.cs`, abridged — see the file for
 the full doc comments):

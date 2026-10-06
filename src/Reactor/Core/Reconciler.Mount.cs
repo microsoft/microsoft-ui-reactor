@@ -876,8 +876,7 @@ public sealed partial class Reconciler
         }
         // Inside an ErrorBoundary the exception propagates to the boundary; the render
         // still happened, so report it (the wrapper is discarded, so no registry entry).
-        catch (Exception ex) when (traceRendered && _errorBoundaryDepth > 0
-            && ex is not OutOfMemoryException and not StackOverflowException)
+        catch (Exception) when (traceRendered && _errorBoundaryDepth > 0)
         {
             EmitComponentRendered(node, null, compElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
             throw;
@@ -932,8 +931,7 @@ public sealed partial class Reconciler
         }
         // Inside an ErrorBoundary the exception propagates to the boundary; the render
         // still happened, so report it (the wrapper is discarded, so no registry entry).
-        catch (Exception ex) when (traceRendered && _errorBoundaryDepth > 0
-            && ex is not OutOfMemoryException and not StackOverflowException)
+        catch (Exception) when (traceRendered && _errorBoundaryDepth > 0)
         {
             EmitComponentRendered(node, null, funcElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
             throw;
@@ -989,8 +987,7 @@ public sealed partial class Reconciler
         }
         // Inside an ErrorBoundary the exception propagates to the boundary; the render
         // still happened, so report it (the wrapper is discarded, so no registry entry).
-        catch (Exception ex) when (traceRendered && _errorBoundaryDepth > 0
-            && ex is not OutOfMemoryException and not StackOverflowException)
+        catch (Exception) when (traceRendered && _errorBoundaryDepth > 0)
         {
             EmitComponentRendered(node, null, memoElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
             throw;

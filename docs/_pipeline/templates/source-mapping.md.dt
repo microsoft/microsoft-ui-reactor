@@ -5,7 +5,7 @@ order: 37
 audience: advanced
 goal: |
   Document what source attribution Reactor emits: component name in ETW
-  events, exception types in RenderError, and per-element file:line via
+  events, exception types in RenderError, and per-element file:line:column via
   the source-map interceptor generator (spec 010) surfaced through
   Element.CallSite and ReactorSourceMap.GetSource. Solid-tier reference
   covering both the coarse ETW attribution and the per-element chain.
@@ -57,7 +57,7 @@ uses to label overlay frames. Per-component, not per-element — but
 sufficient for the common question "which component is re-rendering
 on every tick".
 
-![Source attribution: component-name attribution flows Component.GetType().Name into ETW, while per-element attribution stamps each DSL call site with file and line via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource.](images/source-mapping/attribution.svg)
+![Source attribution: component-name attribution flows Component.GetType().Name into ETW, while per-element attribution stamps each DSL call site with file, line and column via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource.](images/source-mapping/attribution.svg)
 
 ## Reconcile-pass attribution
 

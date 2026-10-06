@@ -139,10 +139,11 @@ public sealed class ColumnTests : IDisposable
     }
 
     [Fact]
-    public void ColumnDoesNotWidenTheStruct()
+    public void ColumnDoesNotWidenTheStructOn64Bit()
     {
-        // The column packs into the padding after LineNumber, so ElementExtras (which
-        // stores SourceLocation? inline) keeps its measured size.
-        Assert.Equal(16, Unsafe.SizeOf<SourceLocation>());
+        // On 64-bit the column packs into the padding after LineNumber, so ElementExtras
+        // (which stores SourceLocation? inline) keeps its measured size. On x86 there is
+        // no padding to fill: reference (4) + two ints = 12, up from 8.
+        Assert.Equal(IntPtr.Size == 8 ? 16 : 12, Unsafe.SizeOf<SourceLocation>());
     }
 }

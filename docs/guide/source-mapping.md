@@ -65,7 +65,7 @@ uses to label overlay frames. Per-component, not per-element — but
 sufficient for the common question "which component is re-rendering
 on every tick".
 
-![Source attribution: component-name attribution flows Component.GetType().Name into ETW, while per-element attribution stamps each DSL call site with file and line via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource.](images/source-mapping/attribution.svg)
+![Source attribution: component-name attribution flows Component.GetType().Name into ETW, while per-element attribution stamps each DSL call site with file, line and column via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource.](images/source-mapping/attribution.svg)
 
 ## Reconcile-pass attribution
 

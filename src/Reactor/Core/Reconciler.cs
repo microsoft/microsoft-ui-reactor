@@ -2040,6 +2040,9 @@ public sealed partial class Reconciler : IDisposable
         // locals holding interned constants, so they cost nothing when tracing is off.
         bool forcedRender = _forceFullRenderActive;
         string? memoReason = null;
+        // Set when the reason classification below already read the event's gate, so
+        // the render path reuses it instead of checking a second time.
+        bool? traceEnabled = null;
 
         // Hot reload forces every component to re-run Render(); the new method
         // body lives only on the type, not in props/deps, so the memo gate
@@ -2071,10 +2074,15 @@ public sealed partial class Reconciler : IDisposable
 
                 bool contextChanged = HasConsumedContextChanged(node);
                 skipRender = !propsChanged && !contextChanged;
-                memoReason = !propsChanged
-                    ? Diagnostics.ComponentRenderTrace.Reasons.Context
-                    : node.Component is IPropsReceiver
+                // Props components: a props change wins, else it was the context.
+                // Propless components (ShouldUpdate() true or a context change): the
+                // context wins, else nothing could skip it.
+                memoReason = node.Component is IPropsReceiver
+                    ? propsChanged
                         ? Diagnostics.ComponentRenderTrace.Reasons.Props
+                        : Diagnostics.ComponentRenderTrace.Reasons.Context
+                    : contextChanged
+                        ? Diagnostics.ComponentRenderTrace.Reasons.Context
                         : Diagnostics.ComponentRenderTrace.Reasons.Parent;
             }
             else if (node.Context is not null && newEl is MemoElement newMemo)
@@ -2092,7 +2100,7 @@ public sealed partial class Reconciler : IDisposable
                     : Diagnostics.ComponentRenderTrace.Reasons.Context;
             }
             else if (newEl is FuncElement
-                && Diagnostics.ComponentRenderTrace.IsEnabled
+                && (traceEnabled = Diagnostics.ComponentRenderTrace.IsEnabled).Value
                 && HasConsumedContextChanged(node))
             {
                 // No gate can skip a function component, so this only refines the
@@ -2230,8 +2238,7 @@ public sealed partial class Reconciler : IDisposable
             }
             // Inside an ErrorBoundary the exception propagates to the boundary; the
             // render still happened, so report it before letting it go.
-            catch (Exception ex) when (traceRendered && _errorBoundaryDepth > 0
-                && ex is not OutOfMemoryException and not StackOverflowException)
+            catch (Exception) when (traceRendered && _errorBoundaryDepth > 0)
             {
                 EmitComponentRendered(node, null, newEl,
                     Diagnostics.ComponentRenderTrace.ClassifyUpdate(
