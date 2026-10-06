@@ -1,0 +1,311 @@
+---
+name: pr-lifecycle
+description: Take a microsoft/microsoft-ui-reactor PR from "pushed" to "ready for review" without hand-holding. Activate for "get this PR ready", "take this PR through readiness", "run the PR lifecycle", "babysit this PR", "loop Copilot reviews until it's clean", or "prepare this PR for merge". Runs ONE pr-review pass and fixes its findings, then loops GitHub Copilot code review rounds — each round requiring green CI and a reply + resolve on every Copilot, github-code-quality and human thread — until no meaningful findings remain. Keeps fixes in the existing PR, tracks state with lifecycle labels, never merges or enables auto-merge.
+infer: true
+---
+
+# PR lifecycle: Prepare → Review once → Copilot loop → Finish
+
+This skill is contributor tooling for this repository, not a shipped agent-kit skill. It ends
+with a PR whose **current head** has green CI, no unanswered review threads, and an
+accurate lifecycle label. It does not merge.
+
+This is different from [`pr-review`](../pr-review/SKILL.md). `pr-review` is a one-shot,
+report-only review across several dimensions. `pr-lifecycle` runs `pr-review` exactly once,
+applies the fixes, and then repeats GitHub-side review rounds until they converge.
+
+## Authority
+
+- "Get this PR ready" or "run the lifecycle" allows the following, **for this PR only**:
+  in-scope code, test and doc fixes; commits and normal pushes to the PR's head branch;
+  editing the PR body; requesting Copilot review; replying to and resolving review
+  threads; re-running failed CI jobs; and setting the lifecycle labels below.
+- It does **not** allow: merging, enabling auto-merge, bypassing protection,
+  force-pushing without an explicit lease, dismissing a human's review, editing other
+  PRs, or unrelated refactors. "Review this PR" or "draft a PR body" on its own stays
+  read-only. Use `pr-review` for the first and just return text for the second.
+- Fix findings **in the existing PR**. Open a follow-up PR only if the user asks.
+- Never make cosmetic or fake changes to get a better verdict from a reviewer.
+  Never weaken a test, skip a check, or add a suppression just to turn CI green.
+- Prefer host tools when they exist (`create_pull_request`, `update_pull_request`,
+  `reply_and_resolve_review_thread`, `reply_to_review_thread`,
+  `save_session_automation`) and follow their contracts. Use `gh` for everything else.
+
+## State: checkpoint + lifecycle label
+
+Keep operational state in the **session** (artifacts folder or session store). Never
+keep it in the repo or in PR status comments:
+
+```
+repo, number, url, head/base SHAs, pr-review: done@<sha> (findings + dispositions),
+round N: requested@<sha>, verdict, threads handled (id → fixed@<sha> | disputed),
+CI state, blocker/owner/next step, wakeup configured (yes/no)
+```
+
+A PR managed by this skill has exactly one lifecycle label. Leave all other labels alone.
+
+| Label | Meaning |
+|-------|---------|
+| `agent-preparing` | Agent work remains: pr-review fixes, an open review round, pending or failing CI, unanswered threads |
+| `agent-blocked` | Agent can't continue without help (no access, Copilot quota exhausted, needs an author decision). Name the blocker, owner and next step in the final report |
+| `ready-for-review` | Loop exited cleanly on the current head (see [Exit conditions](#exit-conditions)). **Not** an approval and **not** permission to merge |
+
+Set labels with `gh pr edit $number --repo $repo --add-label <new> --remove-label <old1>,<old2>`.
+Re-read labels and `headRefOid` after writing. If the head moved, go back to
+`agent-preparing` and continue the loop. On a merged or closed PR: remove the lifecycle
+labels, clear any wakeup, and stop.
+
+## Phase 1: Prepare
+
+1. **Snapshot the live PR** (if it exists): state, draft, head repo/ref/SHA, base
+   ref/SHA, mergeability, labels, reviews, checks. The commands are in
+   [Reference commands](#reference-commands). Fetch the real head and base; don't trust
+   the local branch or a stale `origin/main`.
+2. **Preserve other work.** Don't stage unrelated files or discard a dirty tree. If the
+   remote head has commits you don't have, inspect them and integrate them before
+   editing. Rewrite history only with permission, using
+   `--force-with-lease=<ref>:<expected-sha>`.
+3. **Integrate the base.** If the PR conflicts with its base or is far behind it, merge
+   or rebase (match how the author's branch already does it) and resolve conflicts.
+   For a stacked PR, compare against its parent branch, not `main`.
+4. **No PR yet?** Create it from `.github/PULL_REQUEST_TEMPLATE.md` (see Phase 3) after
+   Phase 2, so the first CI run and the first Copilot review see the fixed diff.
+5. Set `agent-preparing`.
+
+## Phase 2: One pr-review pass
+
+Run the [`pr-review`](../pr-review/SKILL.md) skill **once** on the PR's full diff
+against its base (scope `branch`). `pr-review` only reports; this skill then acts on
+the report:
+
+- **Fix** every Critical, High and Medium finding. Add a regression test when the
+  finding is a behaviour bug (pick the tier using `AGENTS.md` → *Test tier selection*).
+- **Low**: fix only if the fix is trivial and clearly correct. Otherwise leave it.
+- If you judge a finding to be a false positive, record a one-line disposition with
+  evidence in the checkpoint. Don't drop it silently.
+- **Validate** with the smallest relevant commands from `AGENTS.md` and `TESTING.md`.
+  For example: the targeted `--filter-class` unit run, the relevant selftest filter,
+  the split `restore` + `build -c Release` when C# changed, or the doc pipeline compile
+  for templates you touched. Record the exact commands and their results. A local pass
+  is not a CI pass.
+- Commit (`Address pr-review findings`) and push.
+
+Record `pr-review: done@<sha>` in the checkpoint. **Don't run `pr-review` again in later
+rounds.** The Copilot loop reviews every later change. If the skill is invoked again
+on a PR whose checkpoint shows `pr-review` done, skip to Phase 4. If there's no
+checkpoint but the PR already has a lifecycle label, ask the user whether to repeat
+the pass instead of guessing.
+
+## Phase 3: Present
+
+Write or refresh the PR body from `.github/PULL_REQUEST_TEMPLATE.md`. Keep every
+heading (`Summary`, `Linked issue / spec`, `Test plan`, `Risk / breaking changes`).
+Describe the **final change**, not the agent's rounds: the problem, what's different
+now, the validation commands **with their results**, and real risks. For visual
+changes, use real screenshots (`github-pr-media` when available). Leave out file
+lists, finding IDs, round logs, and transcripts.
+
+Before you edit an existing body, read the live version and keep any human edits. Use
+the update tool's `base_sha` guard. If the edit fails because the body changed, re-read
+it and merge your changes in. Update the body again at the end only if the loop changed
+the feature in a meaningful way.
+
+## Phase 4: Copilot review loop
+
+Repeat rounds until an [exit condition](#exit-conditions) holds. **There is no round
+cap.** The loop ends when no meaningful findings remain, not after a fixed number of
+tries. The no-progress guard below keeps it from spinning.
+
+### 4a. Request
+
+Request a Copilot review **once per head SHA**:
+
+```powershell
+gh pr edit $number --repo $repo --add-reviewer "@copilot"
+```
+
+Confirm the request registered: Copilot appears in the PR's `reviewRequests`, or a
+`copilot-pull-request-reviewer` check run appears for the head. If the request fails,
+set `agent-blocked`.
+
+### 4b. Wait without burning a turn
+
+A round has to wait for Copilot's review, the code-quality analysis, and CI. In this
+repo that's usually 10–40 minutes. Don't poll in a tight loop.
+
+- **Preferred:** set up a session wakeup and **end the turn**. For example, call
+  `save_session_automation` with interval `minutes`, every 10, and the prompt *"Resume
+  pr-lifecycle for `<repo>#<number>`: re-read the checkpoint and continue Phase 4."*
+  Save the checkpoint first.
+- On each wakeup, take a snapshot and check the
+  [round-complete signals](#round-complete-signals). If the round isn't complete, end
+  the turn again (the wakeup fires again later). If it is, go to 4c.
+- **No wakeup mechanism:** wait in bounded steps (about 2, 5, then 10 minutes), then save
+  the checkpoint and tell the user *"Not actively monitoring"* along with the exact
+  prompt to resume. Never claim to be watching indefinitely.
+
+#### Round-complete signals
+
+All of these must be true for the **current** `headRefOid`:
+
+- There's a review from `copilot-pull-request-reviewer[bot]` whose `commit_id` matches
+  the head, or the `copilot-pull-request-reviewer` check run on the head is `completed`.
+- Every check run on the head is `completed`. That includes `Analyze (csharp)`;
+  `github-code-quality[bot]` posts its inline comments after that check finishes.
+
+If Copilot's review body says it was **unable to review** (for example, *"reached their
+quota limit"*), the round did not pass. Set `agent-blocked` and record the reason, the
+owner (whoever requested the review), and the next step (retry after the quota resets).
+
+### 4c. CI gate
+
+The `main` ruleset doesn't declare any required status checks right now, so the gate
+is **every check run on the head**. Each one must be `success`, or `skipped`/`neutral`
+where the workflow intends that (for example, jobs filtered by path). A missing or
+pending check doesn't count as a pass.
+
+When a check fails, read the logs first (`gh run view <run-id> --repo $repo --log-failed`).
+
+- **Deterministic failure** (test, build, analyzer, doc gate, or a stale generated file
+  such as `reactor.api.txt` or the search index): fix it, validate locally, and include
+  it in this round's commit.
+- **Transient failure with evidence in the log** (runner, network, infrastructure):
+  rerun once with `gh run rerun <run-id> --repo $repo --failed` and note why in the
+  checkpoint. If it fails the same way a second time, treat it as deterministic.
+- Never call a failure "flaky" or "environmental" without evidence from the log.
+
+### 4d. Thread gate: reply to and resolve every thread
+
+Read **all** review threads with the paginated GraphQL query. Fetch every page of
+threads and every page of comments, because REST can't see whether a thread is
+resolved. Handle every thread with `isResolved: false`, whoever wrote it, including
+outdated ones:
+
+| Author (GraphQL login) | Source | Handling |
+|------------------------|--------|----------|
+| `copilot-pull-request-reviewer` | Copilot code review | Fix or dispute, reply, then **resolve** |
+| `github-code-quality` | CodeQL code-quality rules | Fix or dispute, reply, then **resolve** |
+| anyone else | Humans and other bots | Fix, reply, then resolve. If you **disagree**, reply with evidence and **leave the thread open** for that person. Never dismiss a human's changes-request review; re-request their review after you address it |
+
+Also read the Copilot review **body**: its overview, its verdict, and any *"comments
+suppressed due to low confidence"*. Fix the real problems and record what you decided
+about the rest in the checkpoint (don't post a status comment). Read new top-level
+comments from `github-actions[bot]` (coverage, perf, and build-metrics reports) and act
+if one reports a regression. Those are reports, not threads to resolve.
+
+Decide each thread on the evidence, not on the reviewer's authority:
+
+- **Fix** a real defect, or a cheap improvement that's clearly better. Add a test when
+  it's a behaviour bug. Fix code-quality nits (for example *"missed opportunity to use
+  Where"* or *"missed `using`"*) when the rewrite doesn't change behaviour and doesn't
+  slow down a hot path. Otherwise dispute them and give the reason (for example, the
+  loop is allocation-free on a reconcile path).
+- **Dispute** a false positive, something out of scope, or something that conflicts
+  with a repo convention. Cite the code, test, spec, or `AGENTS.md` rule that shows it.
+
+Always reply **before** resolving; never resolve a thread silently. Use
+`reply_and_resolve_review_thread`, which needs the thread `id` and the root comment's
+`databaseId`, or the GraphQL fallback in [Reference commands](#reference-commands). Keep
+each reply to one or two sentences:
+
+- `Fixed in <short-sha>: <what changed>.`
+- `Not changing: <reason>. <evidence: file:line / test / spec>.`
+
+The fix commit has no SHA until you push it, so reply to fixed threads after pushing
+in 4e. Don't reply "will fix".
+
+### 4e. Commit, push, decide
+
+- Validate locally with the smallest relevant commands. Commit all of this round's
+  fixes as one commit (`Address review round <N>`) and push normally. Then finish the
+  replies and resolves from 4d using the new SHA.
+- **If you pushed a change,** the head moved, so CI, code quality and Copilot will all run
+  again. Go to 4a.
+- **If you pushed nothing** (every remaining item was disputed or already handled),
+  don't request another review. Go to [Exit conditions](#exit-conditions). Requesting
+  another review on an unchanged head just produces the same comments.
+
+**No-progress guard:** if Copilot raises a point again that you already disputed with
+evidence, reply once pointing to your earlier answer, then resolve the thread. That
+isn't a reason to change code or start another round. If two rounds in a row produce
+only churn (each fix triggers a contradicting comment on the same lines), stop, set
+`agent-blocked`, and put the specific design question to the author.
+
+### Exit conditions
+
+Leave Phase 4 when all of these are true for the **current head**:
+
+1. The latest round is complete (see the round-complete signals above).
+2. The CI gate is green.
+3. There are no unresolved Copilot or code-quality threads, and every human thread is
+   either fixed or answered.
+4. Copilot's verdict is `🟢 Approval recommended`, **or** you've disputed every
+   remaining point in its latest review with evidence, so no meaningful findings are left.
+5. The PR is mergeable with no conflicts against its base (`mergeable: MERGEABLE`).
+   `UNKNOWN` means check again; it doesn't count as a pass.
+
+Copilot reviews always have the state `COMMENTED`, never `APPROVED`. A `🟢` verdict is
+technical evidence, not an approval. The verdicts seen in this repo are
+`🟢 Approval recommended`, `🟡 Changes recommended`, and `🔵 Needs a closer look`.
+
+## Phase 5: Finish
+
+1. Fetch head/base, labels, checks and threads again. If anything changed since the
+   exit check, go back to Phase 4.
+2. Set `ready-for-review` (or `agent-blocked`), replacing the other lifecycle labels.
+3. Clear the session wakeup (`save_session_automation` with `clear: true`). The
+   exception: if you re-requested a human's review and it's still pending, keep the
+   wakeup and keep handling new feedback until they respond.
+4. Give the user a short report: PR link, head SHA, label, final Copilot verdict, number
+   of rounds, CI state, threads fixed vs. disputed, and anything still pending (human
+   approval, or the blocker with its owner and next step). Keep "technically ready",
+   "approved" and "merged" separate. This skill only ever gets a PR to the first one.
+
+## Reference commands
+
+Set `$repo` (`microsoft/microsoft-ui-reactor`, unless the PR comes from a fork or is
+part of a stack) and `$number` from the actual PR.
+
+```powershell
+# Snapshot
+gh pr view $number --repo $repo --json url,state,isDraft,headRefOid,headRefName,baseRefName,baseRefOid,mergeable,mergeStateStatus,reviewDecision,reviewRequests,labels,body
+gh pr checks $number --repo $repo --json name,state,bucket,link   # bucket: pass|fail|pending|skipping|cancel
+
+# Copilot reviews on the current head (the verdict is the first "### " line of the body)
+gh api --paginate "repos/$repo/pulls/$number/reviews" |
+  ConvertFrom-Json | Where-Object { $_.user.login -eq 'copilot-pull-request-reviewer[bot]' } |
+  Select-Object id, state, commit_id, submitted_at, body
+
+# Top-level comments (coverage / perf / build-metrics reports, humans)
+gh api --paginate "repos/$repo/issues/$number/comments"
+
+# Failing GitHub Actions job logs, and the one-time rerun for a transient failure
+gh run view $runId --repo $repo --log-failed
+gh run rerun $runId --repo $repo --failed
+```
+
+Review threads: page through `reviewThreads` with `after: $cursor` while
+`pageInfo.hasNextPage` is true. If a thread's `comments.totalCount` is more than you
+fetched, page through its comments too.
+
+```powershell
+$q = @'
+query($o:String!,$n:String!,$num:Int!,$cursor:String){
+  repository(owner:$o,name:$n){ pullRequest(number:$num){
+    reviewThreads(first:100, after:$cursor){
+      pageInfo{ hasNextPage endCursor }
+      nodes{ id isResolved isOutdated path line
+        comments(first:100){ totalCount nodes{ databaseId author{login} body url } } } } } } }
+'@
+gh api graphql -f query=$q -F o=microsoft -F n=microsoft-ui-reactor -F num=$number
+```
+
+Fallback for replying and resolving when the host tool isn't available:
+
+```powershell
+gh api graphql -f query='mutation($t:ID!,$b:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$t,body:$b}){comment{id}}}' -F t=$threadId -F b=$body
+gh api graphql -f query='mutation($t:ID!){resolveReviewThread(input:{threadId:$t}){thread{isResolved}}}' -F t=$threadId
+```
+
+If GraphQL access fails (for example, SSO isn't authorized), you can't verify the
+thread gate. Set `agent-blocked`; don't fall back to a partial read through REST.
