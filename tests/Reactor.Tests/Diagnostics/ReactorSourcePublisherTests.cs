@@ -138,6 +138,24 @@ public sealed class ReactorSourcePublisherTests
             ReactorSourcePublisher.Format(element, "App", component: null, root: "App", rootHooks: "0:count@3;1:name@4"));
     }
 
+    [Theory]
+    [InlineData("plain")]
+    [InlineData("keyed")]
+    [InlineData("escaped")]
+    [InlineData("nosite")]
+    public void WithRoot_AddsTheSameFieldsFormatWouldForARoot(string shape)
+    {
+        // A Memo(key, …) root: its output published itself; the host adds root= (and hooks=)
+        // without re-running the factory. The result must be what Format gives a root.
+        var (element, _) = ShapeOf(shape);
+        var plain = ReactorSourcePublisher.Format(element, "Ro|ot");
+        var expected = ReactorSourcePublisher.Format(element, "Ro|ot", component: null, root: "Ro|ot", rootHooks: "0:n@3;1:x%y@4");
+
+        Assert.Equal(expected, ReactorSourcePublisher.WithRoot(plain, "Ro|ot", "0:n@3;1:x%y@4"));
+        // Idempotent: a re-render that republishes the root does not stack fields.
+        Assert.Equal(expected, ReactorSourcePublisher.WithRoot(expected, "Ro|ot", "0:n@3;1:x%y@4"));
+        Assert.Null(ReactorSourcePublisher.WithRoot(null, "Root", null));
+    }
     [Fact]
     public void Format_UnkeyedSameShape_SharesOneString()
     {

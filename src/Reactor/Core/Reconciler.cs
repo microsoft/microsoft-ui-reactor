@@ -233,27 +233,28 @@ public sealed partial class Reconciler : IDisposable
             adopted.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, value);
     }
 
-    /// <summary>The host root's last published value, so an unchanged root skips the DP write.</summary>
-    private UIElement? _rootSourceControl;
-    private string? _rootSourceValue;
-
     /// <summary>Host hook: describes the root content control, naming the host's root component.</summary>
     internal void PublishRootSource(UIElement? control, Element tree, string rootName, string? rootHooks)
     {
-        if (control is null || tree is KeyedMemoElement) return;
+        if (control is null) return;
         Component? component = tree is ComponentElement && _componentNodes.TryGetValue(control, out var node)
             ? node.Component
             : null;
-        // A root update republishes the plain value only when its identity changed, so compare
-        // against what the update path last wrote too: rewrite unless this control already
-        // holds exactly this root value.
-        string? previous = ReferenceEquals(control, _rootSourceControl)
-            && string.Equals(control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) as string, _rootSourceValue, StringComparison.Ordinal)
-            ? _rootSourceValue
-            : null;
-        _rootSourceValue = Diagnostics.ReactorSourcePublisher.Publish(control, tree, rootName, component, rootName, rootHooks, previous);
-        _rootSourceControl = control;
-        KeepTagIfSourceAmbiguous(control, tree, _rootSourceValue);
+        // The control's current value is the baseline: the update path may have rewritten the
+        // plain value, so the root value is written whenever it differs. No reference to the
+        // root is kept, so a disposed host's previous subtree is not retained.
+        var current = control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) as string;
+        var value = tree is KeyedMemoElement
+            ? Diagnostics.ReactorSourcePublisher.WithRoot(current, rootName, rootHooks)
+            : Diagnostics.ReactorSourcePublisher.Publish(control, tree, rootName, component, rootName, rootHooks, current);
+        if (value is null) return;
+        if (tree is KeyedMemoElement)
+        {
+            if (!string.Equals(value, current, StringComparison.Ordinal))
+                control.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, value);
+            return;
+        }
+        KeepTagIfSourceAmbiguous(control, tree, value);
     }
 
     private UIElement? MountUnderOwner(Element element, Action requestRerender, string owner)

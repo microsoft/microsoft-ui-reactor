@@ -175,8 +175,10 @@ public static partial class ReactorSourceMap
                 var table = new ReactorStaticInfoBuilder();
                 if (s_static is { } previous) table.CopyFrom(previous);
                 foreach (var fill in pending) fill(table);
-                s_pendingStatic = null;
+                // Publish the table BEFORE clearing the marker: a reader that sees the marker
+                // cleared (lock-free path above) must also see the table it stands for.
                 Volatile.Write(ref s_static, table);
+                Volatile.Write(ref s_pendingStatic, null);
             }
             return s_static;
         }

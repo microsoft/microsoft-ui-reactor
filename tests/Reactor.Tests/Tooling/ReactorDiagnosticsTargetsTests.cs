@@ -40,6 +40,9 @@ public sealed class ReactorDiagnosticsTargetsTests : IDisposable
     private sealed record Result(string? Diagnostics, string? SourceMap, IReadOnlyList<(string Value, string Trim)> Switch);
 
     private Result Evaluate(string configuration, string? projectSwitch = null, bool switchAfterImport = false, params string[] properties)
+        => EvaluateWithBody(configuration, projectSwitch, switchAfterImport, bodyAfterImport: null, properties);
+
+    private Result EvaluateWithBody(string configuration, string? projectSwitch, bool switchAfterImport, string? bodyAfterImport, params string[] properties)
     {
         var item = projectSwitch is null
             ? string.Empty
@@ -50,6 +53,7 @@ public sealed class ReactorDiagnosticsTargetsTests : IDisposable
               {(switchAfterImport ? string.Empty : item)}
               {import}
               {(switchAfterImport ? item : string.Empty)}
+              {bodyAfterImport ?? string.Empty}
             </Project>
             """;
         var path = global::System.IO.Path.Join(_dir, $"p{Guid.NewGuid():N}.proj");
@@ -145,4 +149,27 @@ public sealed class ReactorDiagnosticsTargetsTests : IDisposable
         => Assert.Equal(
             [("true", "true")],
             Evaluate("Release", "false", switchAfterImport, "ReactorDiagnostics=true").Switch);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ExplicitOff_BeatsAProjectDeclaredSwitchOn(bool switchAfterImport)
+        // A scaffolded Debug app declares Reactor.DevtoolsSupport=true itself; opting out of
+        // diagnostics must still turn the switch off (explicit wins, both ways).
+        => Assert.Equal(
+            [("false", "true")],
+            Evaluate("Debug", "true", switchAfterImport, "ReactorDiagnostics=false").Switch);
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("true")]
+    public void ProjectBodyOffAfterTheImport_Wins(string? projectSwitch)
+    {
+        // In-repo order: Directory.Build.props imported the targets (and their Debug default)
+        // before the project body set the property; the final value must decide.
+        var r = EvaluateWithBody("Debug", projectSwitch, switchAfterImport: true,
+            bodyAfterImport: "<PropertyGroup><ReactorDiagnostics>false</ReactorDiagnostics></PropertyGroup>");
+        Assert.Equal("false", r.Diagnostics);
+        Assert.Equal([("false", "true")], r.Switch);
+    }
 }

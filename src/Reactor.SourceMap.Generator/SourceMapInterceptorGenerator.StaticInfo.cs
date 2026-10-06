@@ -238,7 +238,9 @@ public sealed partial class SourceMapInterceptorGenerator
             return new HookCall(
                 owner,
                 invocation.SyntaxTree.FilePath,
-                invocation.SpanStart,
+                // Ordered by where the call ENDS: C# evaluates arguments first, so in
+                // UseState(UseMemo(...)) the inner UseMemo takes the earlier slot.
+                invocation.Span.End,
                 HookVariableName(invocation) ?? method.Name,
                 span.StartLinePosition.Line + 1,
                 SlotCount(method, renderContext, component, compilation, depth: 0, ct),

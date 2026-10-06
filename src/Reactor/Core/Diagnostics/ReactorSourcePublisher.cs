@@ -167,6 +167,38 @@ internal static class ReactorSourcePublisher
         return value;
     }
 
+    /// <summary>
+    /// Adds the host-root fields (<c>root=</c>, and <c>hooks=</c> when the value has none) to a
+    /// value already published for a host's root content control. Used when the root element
+    /// is a <c>Memo(key, …)</c>: its factory output published itself when it mounted, and the
+    /// factory must not run again just to describe it. Fields stay in grammar order; an
+    /// existing <c>root=</c> is replaced. Returns <c>null</c> when nothing was published.
+    /// </summary>
+    internal static string? WithRoot(string? published, string rootName, string? rootHooks)
+    {
+        if (published is null) return null;
+        var fields = new List<string>(published.Split('|'));
+        fields.RemoveAll(static f => f.StartsWith("root=", StringComparison.Ordinal));
+
+        int insertAt = 1;
+        for (int i = 1; i < fields.Count; i++)
+        {
+            var name = FieldName(fields[i]);
+            if (name is "at" or "rel" or "owner" or "element" or "mounts") insertAt = i + 1;
+        }
+        fields.Insert(insertAt, "root=" + ReactorSourceFormat.Escape(rootName));
+
+        if (!string.IsNullOrEmpty(rootHooks) && !fields.Exists(static f => f.StartsWith("hooks=", StringComparison.Ordinal)))
+            fields.Add("hooks=" + ReactorSourceFormat.Escape(rootHooks));
+        return string.Join('|', fields);
+    }
+
+    private static string FieldName(string field)
+    {
+        int eq = field.IndexOf('=');
+        return eq < 0 ? field : field.Substring(0, eq);
+    }
+
     /// <summary>The value <see cref="Publish"/> writes, from the same inputs.</summary>
     internal static string Format(
         Element element,

@@ -189,6 +189,33 @@ public sealed class SourceMapStaticInfoGeneratorTests
     }
 
     [Fact]
+    public void Hooks_NestedInAnArgument_TakeTheEarlierSlot()
+    {
+        // C# evaluates arguments first, so the inner hook runs (and takes its slot) before the
+        // outer one even though it starts later in the source.
+        const string code = """
+            using Microsoft.UI.Reactor.Core;
+            using static Microsoft.UI.Reactor.Factories;
+
+            public sealed class Tabs : Component
+            {
+                public override Element Render()
+                {
+                    var (tabs, setTabs) = UseState(UseRef(3));
+                    var after = UseRef("after");
+                    return TextBlock("tabs");
+                }
+            }
+            """;
+
+        var (_, generated) = SourceMapTransparentGeneratorTests.Run(code);
+        var match = Assert.Single(s_componentHooks.Matches(generated));
+
+        int line = LineOf(code, "UseState(UseRef(3))");
+        Assert.Equal($"0:UseRef@{line};1:tabs@{line};2:after@{LineOf(code, "UseRef(\"after\")")}", match.Groups["hooks"].Value);
+    }
+
+    [Fact]
     public void Hooks_GenericComponent_IsKeyedByItsOpenDefinition()
     {
         const string code = """

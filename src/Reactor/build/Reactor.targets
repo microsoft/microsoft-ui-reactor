@@ -73,10 +73,12 @@
 
     $(ReactorDiagnostics) = true turns the Reactor.DevtoolsSupport switch on (Trim="true",
     so a build without it trims the publishing code) and implies ReactorSourceMap=true.
-    An explicit value always wins: -p:ReactorDiagnostics=false turns the Debug default off,
-    an explicit <ReactorSourceMap>false</ReactorSourceMap> is honoured, and when the value
-    is only the Debug DEFAULT a Reactor.DevtoolsSupport item the project declares itself
-    (Value="false") wins over it (see _NormalizeReactorDevtoolsSupportSwitch). winapp passes
+    An explicit value always wins: -p:ReactorDiagnostics=false (or a project-body
+    <ReactorDiagnostics>false</ReactorDiagnostics>) turns the switch off even over a
+    Reactor.DevtoolsSupport item the project declared itself, -p:ReactorDiagnostics=true turns
+    it on even over a project-declared false, an explicit <ReactorSourceMap>false</ReactorSourceMap>
+    is honoured, and when the value is only the Debug DEFAULT a Reactor.DevtoolsSupport item the
+    project declares itself (Value="false") wins over it (see _NormalizeReactorDevtoolsSupportSwitch). winapp passes
     -p:ReactorDiagnostics=true for a Release / Native AOT devtools run. Published call
     sites are project-relative paths, but do not ship a build made with it.
   -->
@@ -182,16 +184,26 @@
 
   <Target Name="_NormalizeReactorDevtoolsSupportSwitch"
           BeforeTargets="_GenerateRuntimeConfigurationFilesInputCache;GenerateBuildRuntimeConfigurationFiles;PrepareForILLink">
+    <!-- An explicit $(ReactorDiagnostics)=false (the final value, wherever it was set, including
+         a project-body property after this file's import) turns the switch off, even over a
+         Reactor.DevtoolsSupport item the project declared itself: the same "explicit wins" rule
+         that lets -p:ReactorDiagnostics=true beat a project-declared false. -->
+    <ItemGroup Condition="'$(ReactorDiagnostics)' == 'false'">
+      <RuntimeHostConfigurationOption Remove="Reactor.DevtoolsSupport" />
+      <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                      Value="false"
+                                      Trim="true" />
+    </ItemGroup>
     <!-- A project-declared Value="false" beats the Debug DEFAULT of $(ReactorDiagnostics)
          (an explicit -p:ReactorDiagnostics=true is not tagged and still wins). -->
-    <PropertyGroup>
+    <PropertyGroup Condition="'$(ReactorDiagnostics)' != 'false'">
       <_ReactorProjectDevtoolsOff Condition="'%(RuntimeHostConfigurationOption.Identity)' == 'Reactor.DevtoolsSupport' and '%(RuntimeHostConfigurationOption.Value)' == 'false' and '%(RuntimeHostConfigurationOption.ReactorDiagnosticsDefault)' != 'true'">true</_ReactorProjectDevtoolsOff>
     </PropertyGroup>
     <ItemGroup Condition="'$(_ReactorProjectDevtoolsOff)' == 'true'">
       <RuntimeHostConfigurationOption Remove="@(RuntimeHostConfigurationOption)"
                                       Condition="'%(RuntimeHostConfigurationOption.Identity)' == 'Reactor.DevtoolsSupport' and '%(RuntimeHostConfigurationOption.ReactorDiagnosticsDefault)' == 'true' and '%(RuntimeHostConfigurationOption.Value)' == 'true'" />
     </ItemGroup>
-  <ItemGroup Condition="'@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport')->WithMetadataValue('Value', 'true'))' != ''">
+  <ItemGroup Condition="'$(ReactorDiagnostics)' != 'false' and '@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport')->WithMetadataValue('Value', 'true'))' != ''">
       <RuntimeHostConfigurationOption Remove="Reactor.DevtoolsSupport" />
       <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
                                       Value="true"
