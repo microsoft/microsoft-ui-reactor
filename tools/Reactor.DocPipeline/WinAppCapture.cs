@@ -314,10 +314,12 @@ internal static class WinAppCapture
 
     /// <summary>
     /// Picks the window to capture: the WinUI window when there is one, otherwise the app's
-    /// other main window. A doc app hosted in WinForms (<c>winforms-interop</c>) has no WinUI
-    /// <c>Window</c>: its content is a XAML island inside an ordinary top-level form, so
-    /// requiring the WinUI class would never find it. Tool windows and console windows are
-    /// never the app. <see cref="IntPtr.Zero"/> when nothing qualifies.
+    /// other main window. An app hosted in WinForms has no WinUI <c>Window</c>: its content
+    /// is a XAML island inside an ordinary top-level form, so requiring the WinUI class would
+    /// never find it. (The <c>winforms-interop</c> doc app also never starts the preview host,
+    /// so capture fails before window discovery and this fallback does not make it
+    /// capturable.) Tool windows and console windows are never the app.
+    /// <see cref="IntPtr.Zero"/> when nothing qualifies.
     /// </summary>
     internal static IntPtr SelectAppWindow(IReadOnlyList<WindowCandidate> candidates)
     {

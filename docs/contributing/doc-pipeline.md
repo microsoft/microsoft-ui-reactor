@@ -278,7 +278,11 @@ preview host applies as the window's start position.
    unchanged.
 2. After the startup delay, it finds the app's top-level window (by owning process: the
    app is a child of `dotnet run`). That is the WinUI window, or for a WinForms-hosted
-   doc app such as `winforms-interop`, the form hosting the XAML island.
+   app, the form hosting the XAML island. A doc app is only capturable if it starts the
+   in-app preview host: capture waits for the host's port and token before looking for the
+   window. `winforms-interop` calls `XamlIslandBootstrap.Run` directly and never starts the
+   host, so its screenshots cannot currently be refreshed. The run fails with "Timed out
+   waiting for capture port" and leaves its committed images untouched.
 3. For each screenshot it switches component, waits 1 s for layout and transitions to
    settle, and captures the window in-process with the winapp UI Automation library's
    Windows Graphics Capture frame grabber. Graphics Capture never activates the window, so

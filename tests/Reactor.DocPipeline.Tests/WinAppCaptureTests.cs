@@ -90,9 +90,9 @@ public class WinAppCaptureTests
     }
 
     /// <summary>
-    /// The winforms-interop doc app has no WinUI window: its content is a XAML island in a
+    /// A WinForms-hosted app has no WinUI window: its content is a XAML island in a
     /// WinForms form, which must still be found (it was missed when only the WinUI class
-    /// counted, so none of that topic's screenshots could be refreshed).
+    /// counted).
     /// </summary>
     [Fact]
     public void A_WinForms_hosted_app_is_found_by_its_main_form()
