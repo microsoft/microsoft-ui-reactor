@@ -361,7 +361,8 @@
         "tools/Reactor.DocPipeline/ManifestParser.cs",
         "tools/Reactor.DocPipeline/ScreenshotCapture.cs",
         "tools/Reactor.DocPipeline/SnippetExtractor.cs",
-        "tools/Reactor.DocPipeline/TemplateParser.cs"
+        "tools/Reactor.DocPipeline/TemplateParser.cs",
+        "tools/Reactor.DocPipeline/WinAppCapture.cs"
       ],
       "description": "CLI docs toolchain \u2014 file I/O, image processing, process invocation"
     },

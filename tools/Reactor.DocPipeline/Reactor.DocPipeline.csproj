@@ -6,13 +6,17 @@
     from the repository root with `dotnet run` on this project; docs/contributing/doc-pipeline.md
     has the commands.
     Being out of `mur` lets it use a Windows TFM: `PackAsTool` rejects TargetPlatformIdentifier
-    (NETSDK1146), so `mur` must stay plain net10.0. The Windows 10 19041+ TFM is what selects the
+    (NETSDK1146), so `mur` must stay plain net10.0. A Windows 10 19041+ TFM is what selects the
     Windows Graphics Capture build of the winapp UI Automation library, which screenshot capture
     uses in-process (see WinAppCapture.cs).
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <!-- Runs on Windows 10 2004 (19041) and later: the winapp library's Graphics Capture build
+         targets 19041, and Graphics Capture of an arbitrary window needs 1903+. -->
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <Platforms>x64;ARM64</Platforms>
     <AssemblyName>Reactor.DocPipeline</AssemblyName>
     <!-- Kept from its time as `mur docs` so the move stays a pure move. -->

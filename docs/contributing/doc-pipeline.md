@@ -24,7 +24,7 @@ The doc pipeline needs:
 |------------------|----------------------------------------|-----------------------------|
 | .NET 10 SDK      | Building the pipeline + doc apps       | Always                      |
 | Windows App SDK  | Doc apps render WinUI controls         | Screenshot capture          |
-| Windows Graphics Capture | Captures the doc app window (Windows 10 1903+, interactive desktop) | Screenshot capture |
+| Windows Graphics Capture | Captures the doc app window (Windows 10 2004 / build 19041+, interactive desktop) | Screenshot capture |
 | Node.js 20+      | Hosts `mermaid-cli`                    | `.mmd` → `.svg` diagrams    |
 | `mermaid-cli`    | CLI front-end for Mermaid              | `.mmd` → `.svg` diagrams    |
 | Chromium / Edge  | Pulled in by Puppeteer for `mmdc`      | `.mmd` → `.svg` diagrams    |
@@ -264,7 +264,7 @@ primary one (and you cannot change that, e.g. over a remote session), set
 
 ```powershell
 $env:REACTOR_DOCS_CAPTURE_ORIGIN = '2600,0'
-dotnet run --project tools/Reactor.DocPipeline -- compile --screenshots-only
+dotnet run --project tools/Reactor.DocPipeline -- compile --topic <topic>
 ```
 
 The harness forwards that to each doc app as `--x` / `--y`, which the devtools

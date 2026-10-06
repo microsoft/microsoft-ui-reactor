@@ -289,7 +289,7 @@ internal static class WinAppCapture
 
     internal const string GraphicsCaptureUnavailable =
         "Windows Graphics Capture is not available, so doc screenshots cannot be taken without " +
-        "bringing windows to the foreground. Capture needs Windows 10 version 1903 or later on an " +
+        "bringing windows to the foreground. Capture needs Windows 10 version 2004 (build 19041) or later on an " +
         "interactive desktop session.";
     /// <summary>
     /// Waits for the doc app's WinUI window to appear. The app is a descendant of the
