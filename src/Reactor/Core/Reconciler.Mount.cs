@@ -807,13 +807,15 @@ public sealed partial class Reconciler
         Exception? caughtEx = null;
 
         var record = BeginBoundaryMount();
-        bool childMounted = false;
+        // Whether the wrapper ended up with a child (the real one or the fallback); only a
+        // mount that escapes before then leaves something to discard in the finally.
+        bool settled = false;
         _errorBoundaryDepth++;
         try
         {
             renderedElement = eb.Child;
             wrapper.Child = Mount(eb.Child, requestRerender);
-            childMounted = true;
+            settled = true;
         }
         // An exception the app declined via RenderError.Propagate() is on its way out (issue
         // #1291); no boundary, including the internal guard around an app fallback, takes it.
@@ -827,13 +829,14 @@ public sealed partial class Reconciler
             RollBackBoundaryMount(record, attachedChild: null);
             renderedElement = eb.Fallback(ex);
             wrapper.Child = Mount(renderedElement, requestRerender);
+            settled = true;
         }
         finally
         {
             _errorBoundaryDepth--;
-            // An exception escaping the boundary (a declined propagation) discards the
-            // partly mounted child as well. Best effort: the escaping exception wins.
-            if (!childMounted && HasBoundaryMountLeftovers(record))
+            // An exception escaping the boundary (a declined propagation, or a failing
+            // fallback) discards what it left as well. Best effort: the escaping exception wins.
+            if (!settled && HasBoundaryMountLeftovers(record))
                 RollBackDiscardedBoundaryMount(record, attachedChild: null);
             EndBoundaryMount(record);
         }

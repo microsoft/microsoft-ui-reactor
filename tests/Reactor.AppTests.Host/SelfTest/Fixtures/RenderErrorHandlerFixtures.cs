@@ -1294,6 +1294,48 @@ internal static class RenderErrorHandlerFixtures
         }
     }
 
+    // The fallback a boundary installs after its child failed is live content: rolling back
+    // the failed child must not take it too. Its .OnUnmount (the oracle) runs only when it is
+    // actually replaced, on mount and on update.
+    internal class Boundary_RollbackKeepsInstalledFallback(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static Element Fallback() =>
+            TextBlock("KeptFallback").OnMount(StartNativeResource).OnUnmount(StopNativeResource);
+
+        public override async Task RunAsync()
+        {
+            // Mount path: the child fails on first mount.
+            s_nativeResources = 0;
+            bool shouldThrow = true;
+            var host = H.CreateHost();
+            host.Mount(_ => ErrorBoundary(
+                shouldThrow ? Component<ThrowingComponent>() : Border(TextBlock("KeptRecovered")), Fallback()));
+            await Harness.Render();
+            H.Check("RenderErrorHandler_KeepFallback_Mount", s_nativeResources == 1 && H.FindText("KeptFallback") is not null,
+                $"live={s_nativeResources}");
+            shouldThrow = false;
+            host.RequestRender();
+            await Harness.Render();
+            H.Check("RenderErrorHandler_KeepFallback_Mount_RecoveryReleases",
+                s_nativeResources == 0 && H.FindText("KeptRecovered") is not null, $"live={s_nativeResources}");
+
+            // Update path: a healthy child fails on a later render, then keeps failing.
+            s_nativeResources = 0;
+            shouldThrow = false;
+            var updateHost = H.CreateHost();
+            updateHost.Mount(_ => ErrorBoundary(
+                shouldThrow ? Component<ThrowingComponent>() : TextBlock("KeptHealthy"), Fallback()));
+            await Harness.Render();
+            shouldThrow = true;
+            updateHost.RequestRender();
+            await Harness.Render();
+            H.Check("RenderErrorHandler_KeepFallback_Update", s_nativeResources == 1 && H.FindText("KeptFallback") is not null,
+                $"live={s_nativeResources}");
+            updateHost.RequestRender();
+            await Harness.Render();
+            H.Check("RenderErrorHandler_KeepFallback_Update_Retry", s_nativeResources == 1, $"live={s_nativeResources}");
+        }
+    }
     // A fallback that replaces the tree also becomes the window's content for its
     // background-drag hook, which otherwise stays on the released root.
     internal class HostFallback_WindowFollowsContent(Harness h) : SelfTestFixtureBase(h)

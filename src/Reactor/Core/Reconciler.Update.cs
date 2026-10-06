@@ -1506,7 +1506,8 @@ public sealed partial class Reconciler
         Exception? caughtEx = null;
 
         var record = BeginBoundaryMount();
-        bool childReconciled = false;
+        // See MountErrorBoundary: set once the wrapper holds the child or the fallback.
+        bool settled = false;
         _errorBoundaryDepth++;
         try
         {
@@ -1514,7 +1515,7 @@ public sealed partial class Reconciler
             var newControl = Reconcile(node.RenderedElement, newEb.Child, existingChild, requestRerender);
             if (newControl != existingChild)
                 wrapper.Child = newControl;
-            childReconciled = true;
+            settled = true;
         }
         // See MountErrorBoundary: a declined RenderError.Propagate() is not caught (issue #1291).
         catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
@@ -1530,11 +1531,12 @@ public sealed partial class Reconciler
             RollBackBoundaryMount(record, existingChild);
             newRendered = newEb.Fallback(ex);
             wrapper.Child = Mount(newRendered, requestRerender);
+            settled = true;
         }
         finally
         {
             _errorBoundaryDepth--;
-            if (!childReconciled && HasBoundaryMountLeftovers(record))
+            if (!settled && HasBoundaryMountLeftovers(record))
                 RollBackDiscardedBoundaryMount(record, existingChild);
             EndBoundaryMount(record);
         }
