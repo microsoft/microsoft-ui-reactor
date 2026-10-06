@@ -444,11 +444,56 @@ internal class ComponentRendered_RootHookOrderRetryIsHotReload(Harness h) : Self
             H.Check("ComponentRendered_HookOrderRetry_ChildIsHotReload",
                 retry.Any(e => (string)e.Payload[0]! == nameof(RenderedHotReloadLeaf)
                     && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.HotReload));
+            // The aborted attempt ran Render() too, so the root reports twice, same id.
+            var rootRetryEvents = retry.Where(e => (string)e.Payload[0]! == nameof(RenderedHookShapeRoot)).ToList();
+            H.Check("ComponentRendered_HookOrderRetry_RootAbortedAttemptReported",
+                rootRetryEvents.Count == 2
+                && rootRetryEvents.All(e => (string)e.Payload[2]! == ComponentRenderTrace.Reasons.HotReload)
+                && rootRetryEvents.Select(e => (long)e.Payload[1]!).Distinct().Count() == 1);
+
+            // A CHILD whose hook order changes is recovered inside the hot-reload pass by
+            // the reconciler: both the aborted attempt and the retry are reported.
+            RenderedHookShapeChild.Shape = 0;
+            var childHost = H.CreateHost();
+            childHost.Mount(_ => VStack(Component<RenderedHookShapeChild>()));
+            await Harness.Render();
+            Take();
+            RenderedHookShapeChild.Shape = 1;
+            HotReloadService.UpdateApplication(null);
+            childHost.RequestRender(force: true);
+            H.Check("ComponentRendered_HookOrderRetry_ChildEditApplied", await Harness.WaitFor(
+                () => H.FindText("child hook shape v2") is not null, maxPasses: 32, perPassMs: 10));
+            var childEvents = Take().Where(e => (string)e.Payload[0]! == nameof(RenderedHookShapeChild)).ToList();
+            Console.WriteLine("# child hook-order retry: " + string.Join(", ",
+                childEvents.Select(e => $"{e.Payload[0]}#{e.Payload[1]}:{e.Payload[2]}")));
+            H.Check("ComponentRendered_HookOrderRetry_ChildAbortedAttemptReported",
+                childEvents.Count == 2
+                && childEvents.All(e => (string)e.Payload[2]! == ComponentRenderTrace.Reasons.HotReload)
+                && childEvents.Select(e => (long)e.Payload[1]!).Distinct().Count() == 1);
         }
         finally
         {
             RenderedHookShapeRoot.Shape = 0;
+            RenderedHookShapeChild.Shape = 0;
         }
+    }
+}
+
+internal sealed class RenderedHookShapeChild : Component
+{
+    public static volatile int Shape;
+
+    public override Element Render()
+    {
+        if (Shape == 0)
+        {
+            UseState(0);
+            return TextBlock("child hook shape v1");
+        }
+
+        UseEffect(() => { }, "hot-reload");
+        UseState(0);
+        return TextBlock("child hook shape v2");
     }
 }
 
@@ -534,6 +579,14 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
         H.Check("ComponentRendered_RootSwap_RetiredInstanceRemountsFresh",
             thirdRoot.CleanedUp && firstRoot.EffectRuns == 2 && !firstRoot.CleanedUp);
 
+        // A root whose Render() returns null still rendered.
+        var nullHost = H.CreateHost();
+        nullHost.Mount(new RenderedNullRoot());
+        await Harness.Render();
+        H.Check("ComponentRendered_NullRoot_Reported",
+            Take().Any(e => (string)e.Payload[0]! == nameof(RenderedNullRoot)
+                && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Mount));
+
         // ── Content changes while the event is off ──────────────────────────
         var root = new RenderedHostControlRoot();
         var offHost = H.CreateHost();
@@ -555,6 +608,11 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
         H.Check("ComponentRendered_RootOff_ForgottenWhileOff",
             H.FindText("host control root 1") is not null && ReactorTrace.GetComponentControl(rootId) is null);
     }
+}
+
+internal sealed class RenderedNullRoot : Component
+{
+    public override Element Render() => null!;
 }
 
 internal sealed class RenderedSwapComponentRoot : Component

@@ -2254,6 +2254,13 @@ public sealed partial class Reconciler : IDisposable
                     "Hot reload: hook order/type changed in child component — " +
                     "resetting state and re-rendering: {ComponentName}",
                     componentName ?? newEl.GetType().Name);
+                // The aborted attempt still ran Render(); report it, then time the retry
+                // on its own (the retry reports itself after the loop).
+                if (traceRendered)
+                {
+                    EmitComponentRendered(node, null, newEl, Diagnostics.ComponentRenderTrace.Reasons.HotReload, renderedStart);
+                    renderedStart = global::System.Diagnostics.Stopwatch.GetTimestamp();
+                }
                 hotReloadRetried = true;
                 renderCtx.ResetForHotReload();
                 continue;

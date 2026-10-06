@@ -549,6 +549,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             // This path returns without reconciling, so nothing downstream will consume
             // or retire what the aborted render claimed (issue #1262).
             Controls.Validation.ValidationRenderScope.AbandonPendingClaims();
+            // The aborted attempt still ran Render(); report it (the retry reports itself).
+            TraceRootRendered(hotReloadRender: true, _phaseSw.Elapsed.TotalMilliseconds);
             _logger?.LogWarning(ex,
                 "Hot reload: hook order/type changed — resetting {Mode} state and re-rendering",
                 mode);
@@ -612,7 +614,14 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
             double treeBuildMs = _phaseSw.Elapsed.TotalMilliseconds;
 
-            if (newTree is null) return;
+            if (newTree is null)
+            {
+                // A root whose Render() returned null still rendered; there is just no
+                // content to reconcile. (No root at all is not a render.)
+                if (_rootComponent is not null || _rootRenderFunc is not null)
+                    TraceRootRendered(hotReloadRender, treeBuildMs);
+                return;
+            }
             TraceRootRendered(hotReloadRender, treeBuildMs);
 
             _phaseSw.Restart();
