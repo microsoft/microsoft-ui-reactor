@@ -2188,6 +2188,13 @@ public sealed partial class Reconciler : IDisposable
         }
         bool traceRendered = traceEnabled ?? Diagnostics.ComponentRenderTrace.IsEnabled;
         long renderedStart = traceRendered ? global::System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+        // The reason is fixed for this render (its inputs do not change below); computed
+        // only while traced. renderReported: the fallback catch already emitted.
+        string? renderedReason = traceRendered
+            ? Diagnostics.ComponentRenderTrace.ClassifyUpdate(
+                forcedRender, HotReloadService.WithinUpdatePass || _forceFullRenderFromHotReloadRetry, selfTriggered, memoReason)
+            : null;
+        bool renderReported = false;
 
         Element newChildElement;
         // The RenderContext backing whichever branch we render (component or
@@ -2267,6 +2274,13 @@ public sealed partial class Reconciler : IDisposable
             }
             catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
             {
+                // Report before building the fallback: its time is not this render's, and
+                // a fallback that throws must not swallow the event.
+                if (traceRendered)
+                {
+                    EmitComponentRendered(node, control, newEl, renderedReason!, renderedStart);
+                    renderReported = true;
+                }
                 _logger?.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
                 if (Diagnostics.ReactorEventSource.Log.IsEnabled(
                         global::System.Diagnostics.Tracing.EventLevel.Error,
@@ -2277,14 +2291,11 @@ public sealed partial class Reconciler : IDisposable
                 }
                 newChildElement = ErrorFallback.BuildElement(ex);
             }
-            // Inside an ErrorBoundary the exception propagates to the boundary; the
-            // render still happened, so report it before letting it go.
-            catch (Exception) when (traceRendered && _errorBoundaryDepth > 0)
+            // Every other exception propagates (to an enclosing ErrorBoundary, or a fatal
+            // one to the host); the render still happened, so report it and rethrow.
+            catch (Exception) when (traceRendered)
             {
-                EmitComponentRendered(node, null, newEl,
-                    Diagnostics.ComponentRenderTrace.ClassifyUpdate(
-                        forcedRender, HotReloadService.WithinUpdatePass || _forceFullRenderFromHotReloadRetry, selfTriggered, memoReason),
-                    renderedStart);
+                EmitComponentRendered(node, null, newEl, renderedReason!, renderedStart);
                 throw;
             }
             break;
@@ -2296,13 +2307,8 @@ public sealed partial class Reconciler : IDisposable
                 * 1_000_000.0 / global::System.Diagnostics.Stopwatch.Frequency);
             Diagnostics.ReactorEventSource.Log.ComponentRenderStop(componentName!, renderElapsedUs);
         }
-        if (traceRendered)
-        {
-            EmitComponentRendered(node, control, newEl,
-                Diagnostics.ComponentRenderTrace.ClassifyUpdate(
-                    forcedRender, HotReloadService.WithinUpdatePass || _forceFullRenderFromHotReloadRetry, selfTriggered, memoReason),
-                renderedStart);
-        }
+        if (traceRendered && !renderReported)
+            EmitComponentRendered(node, control, newEl, renderedReason!, renderedStart);
 
         // Dereference the Border wrapper to get the actual child control.
         // Each component is wrapped in a Border as an identity anchor, so we

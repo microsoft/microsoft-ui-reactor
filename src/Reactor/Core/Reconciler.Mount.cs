@@ -862,6 +862,7 @@ public sealed partial class Reconciler
         bool traceRendered = Diagnostics.ComponentRenderTrace.IsEnabled;
         long renderedStart = traceRendered ? global::System.Diagnostics.Stopwatch.GetTimestamp() : 0;
 
+        bool renderReported = false;
         Element childElement;
         try
         {
@@ -874,17 +875,25 @@ public sealed partial class Reconciler
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
+            // Report before building the fallback: its time is not this render's, and a
+            // fallback that throws must not swallow the event.
+            if (traceRendered)
+            {
+                EmitComponentRendered(node, null, compElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
+                renderReported = true;
+            }
             _logger?.LogError(ex, "Component Render() threw during mount: {ComponentName}", compElement.GetType().Name);
             childElement = ErrorFallback.BuildElement(ex);
         }
-        // Inside an ErrorBoundary the exception propagates to the boundary; the render
-        // still happened, so report it (the wrapper is discarded, so no registry entry).
-        catch (Exception) when (traceRendered && _errorBoundaryDepth > 0)
+        // Every other exception propagates (to an enclosing ErrorBoundary, or a fatal one
+        // to the host); the render still happened, so report it (the wrapper is
+        // discarded, so no registry entry) and rethrow.
+        catch (Exception) when (traceRendered)
         {
             EmitComponentRendered(node, null, compElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
             throw;
         }
-        if (traceRendered)
+        if (traceRendered && !renderReported)
             EmitComponentRendered(node, null, compElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
         UIElement? childControl = Mount(childElement, componentRerender);
 
@@ -917,6 +926,7 @@ public sealed partial class Reconciler
         bool traceRendered = Diagnostics.ComponentRenderTrace.IsEnabled;
         long renderedStart = traceRendered ? global::System.Diagnostics.Stopwatch.GetTimestamp() : 0;
 
+        bool renderReported = false;
         Element childElement;
         try
         {
@@ -929,17 +939,25 @@ public sealed partial class Reconciler
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
+            // Report before building the fallback: its time is not this render's, and a
+            // fallback that throws must not swallow the event.
+            if (traceRendered)
+            {
+                EmitComponentRendered(node, null, funcElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
+                renderReported = true;
+            }
             _logger?.LogError(ex, "FuncComponent Render() threw during mount");
             childElement = ErrorFallback.BuildElement(ex);
         }
-        // Inside an ErrorBoundary the exception propagates to the boundary; the render
-        // still happened, so report it (the wrapper is discarded, so no registry entry).
-        catch (Exception) when (traceRendered && _errorBoundaryDepth > 0)
+        // Every other exception propagates (to an enclosing ErrorBoundary, or a fatal one
+        // to the host); the render still happened, so report it (the wrapper is
+        // discarded, so no registry entry) and rethrow.
+        catch (Exception) when (traceRendered)
         {
             EmitComponentRendered(node, null, funcElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
             throw;
         }
-        if (traceRendered)
+        if (traceRendered && !renderReported)
             EmitComponentRendered(node, null, funcElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
         UIElement? childControl = Mount(childElement, componentRerender);
 
@@ -973,6 +991,7 @@ public sealed partial class Reconciler
         bool traceRendered = Diagnostics.ComponentRenderTrace.IsEnabled;
         long renderedStart = traceRendered ? global::System.Diagnostics.Stopwatch.GetTimestamp() : 0;
 
+        bool renderReported = false;
         Element childElement;
         try
         {
@@ -985,17 +1004,25 @@ public sealed partial class Reconciler
         }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
         {
+            // Report before building the fallback: its time is not this render's, and a
+            // fallback that throws must not swallow the event.
+            if (traceRendered)
+            {
+                EmitComponentRendered(node, null, memoElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
+                renderReported = true;
+            }
             _logger?.LogError(ex, "MemoComponent Render() threw during mount");
             childElement = ErrorFallback.BuildElement(ex);
         }
-        // Inside an ErrorBoundary the exception propagates to the boundary; the render
-        // still happened, so report it (the wrapper is discarded, so no registry entry).
-        catch (Exception) when (traceRendered && _errorBoundaryDepth > 0)
+        // Every other exception propagates (to an enclosing ErrorBoundary, or a fatal one
+        // to the host); the render still happened, so report it (the wrapper is
+        // discarded, so no registry entry) and rethrow.
+        catch (Exception) when (traceRendered)
         {
             EmitComponentRendered(node, null, memoElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
             throw;
         }
-        if (traceRendered)
+        if (traceRendered && !renderReported)
             EmitComponentRendered(node, null, memoElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
         UIElement? childControl = Mount(childElement, componentRerender);
 

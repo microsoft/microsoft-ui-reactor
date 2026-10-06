@@ -373,7 +373,20 @@ internal class ComponentRendered_ErrorBoundaryCaughtRendersAreReported(Harness h
         H.Check("ComponentRendered_Boundary_SiblingFallbackShown", H.FindText("sibling caught") is not null);
         H.Check("ComponentRendered_Boundary_HealthySiblingReportedButRolledBack",
             healthyId != 0 && ReactorTrace.GetComponentControl(healthyId) is null);
+
+        // An exception the reconciler does not convert to a fallback (OutOfMemoryException),
+        // outside any boundary: it propagates to the host, but the render is still reported.
+        var fatalHost = H.CreateHost();
+        fatalHost.Mount(_ => VStack(Component<RenderedFatalChild>()));
+        await Harness.Render();
+        H.Check("ComponentRendered_FatalChild_ReportedBeforePropagating",
+            For(nameof(RenderedFatalChild)).Any(e => (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Mount));
     }
+}
+
+internal sealed class RenderedFatalChild : Component
+{
+    public override Element Render() => throw new OutOfMemoryException("ComponentRendered selftest: simulated fatal render failure");
 }
 
 internal sealed class RenderedHealthySibling : Component
