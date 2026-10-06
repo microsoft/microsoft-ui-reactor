@@ -33,7 +33,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>mur</ToolCommandName>
     <PackageId>Microsoft.UI.Reactor.Cli</PackageId>
-    <Description>Microsoft.UI.Reactor CLI — scaffolding, doc pipeline, find, check, localization, devtools supervisor, and Roslyn analyzer host.</Description>
+    <Description>Microsoft.UI.Reactor CLI — scaffolding, find, check, localization, devtools supervisor, and Roslyn analyzer host.</Description>
     <Authors>Microsoft</Authors>
     <Company>Microsoft</Company>
     <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
