@@ -1906,6 +1906,36 @@ public sealed partial class Reconciler : IDisposable
             Diagnostics.ComponentRenderTrace.ElapsedMicroseconds(startTimestamp));
     }
 
+    // ComponentRendered ids mapped by mounts inside an ErrorBoundary. A boundary that
+    // catches discards its partial subtree without unmounting it, so it forgets every
+    // mapping made since it started; the outermost boundary clears the list when done.
+    private List<(long Id, UIElement Wrapper)>? _boundaryTracked;
+
+    /// <summary>Maps a freshly mounted component's id to its wrapper (event enabled only).</summary>
+    private void TrackMountedComponent(ComponentNode node, UIElement wrapper)
+    {
+        Diagnostics.ComponentRenderControls.Registry.Track(node.DiagnosticId, wrapper, mapControlToId: true);
+        if (_errorBoundaryDepth > 0)
+            (_boundaryTracked ??= new()).Add((node.DiagnosticId, wrapper));
+    }
+
+    private int BoundaryTrackingMark => _boundaryTracked?.Count ?? 0;
+
+    /// <summary>A boundary caught: forget the mappings its failed subtree made.</summary>
+    private void RollBackBoundaryTracking(int mark)
+    {
+        if (_boundaryTracked is not { } tracked || tracked.Count <= mark) return;
+        for (int i = tracked.Count - 1; i >= mark; i--)
+            Diagnostics.ComponentRenderControls.Registry.Forget(tracked[i].Id, tracked[i].Wrapper);
+        tracked.RemoveRange(mark, tracked.Count - mark);
+    }
+
+    /// <summary>Called after a boundary decrements the depth; the outermost one clears the list.</summary>
+    private void EndBoundaryTracking()
+    {
+        if (_errorBoundaryDepth == 0) _boundaryTracked?.Clear();
+    }
+
     private static void FlushEffectsTraced(RenderContext ctx, string? componentName)
     {
         // Fast path when the Render keyword is off: no Stopwatch, no event emit.

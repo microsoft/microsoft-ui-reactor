@@ -22,7 +22,8 @@ internal static class ComponentRenderTrace
         /// component, or in a descendant component, changed state (or a control/resource
         /// in the subtree asked for a re-render). Reactor re-renders every component on
         /// the path from the host root to the requester, so ancestors report this too.
-        /// A host root reports it for every non-forced re-render.
+        /// A host root reports it for every non-forced re-render, including the ones the
+        /// host requests itself (theme, high-contrast or animation-setting changes).
         /// </summary>
         public const string State = "state";
 

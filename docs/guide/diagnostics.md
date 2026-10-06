@@ -115,6 +115,9 @@ answer *why did this render?*:
 `state` means an update was requested from inside the component's subtree —
 its own hook, or a descendant's: Reactor re-renders every component on the path
 from the root to the one whose state changed, so ancestors report `state` too.
+A host's root component reports `state` for every non-forced re-render, including
+the ones the host requests itself (theme, high-contrast or animation-setting
+changes).
 `parent` means the parent re-rendered and nothing could skip this component (a
 function component, or a propless `Component` whose `ShouldUpdate()` is true). A
 function component whose consumed context changed reports `context` instead.

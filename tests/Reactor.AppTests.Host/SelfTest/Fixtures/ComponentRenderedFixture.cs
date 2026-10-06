@@ -361,7 +361,24 @@ internal class ComponentRendered_ErrorBoundaryCaughtRendersAreReported(Harness h
         H.Check("ComponentRendered_Boundary_SubtreeFallbackShown", H.FindText("subtree caught") is not null);
         H.Check("ComponentRendered_Boundary_DiscardedParentReportedButUnmapped",
             parentId != 0 && ReactorTrace.GetComponentControl(parentId) is null);
+
+        // A healthy component that finished mounting before a later sibling threw: the
+        // boundary discards it too, so its mapping must be rolled back.
+        var siblingHost = H.CreateHost();
+        siblingHost.Mount(_ => ErrorBoundary(
+            VStack(Component<RenderedHealthySibling>(), Component<RenderedThrowOnMountChild>()),
+            _ => TextBlock("sibling caught")));
+        await Harness.Render();
+        var healthyId = For(nameof(RenderedHealthySibling)).Select(e => (long)e.Payload[1]!).FirstOrDefault();
+        H.Check("ComponentRendered_Boundary_SiblingFallbackShown", H.FindText("sibling caught") is not null);
+        H.Check("ComponentRendered_Boundary_HealthySiblingReportedButRolledBack",
+            healthyId != 0 && ReactorTrace.GetComponentControl(healthyId) is null);
     }
+}
+
+internal sealed class RenderedHealthySibling : Component
+{
+    public override Element Render() => TextBlock("healthy sibling");
 }
 
 internal sealed class RenderedThrowingSubtreeParent : Component
@@ -468,14 +485,19 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
 
         // ── Component root → function root on one ReactorHost ──────────────
         var host = H.CreateHost();
-        RenderedSwapComponentRoot.CleanedUp = false;
-        host.Mount(new RenderedSwapComponentRoot());
+        var firstRoot = new RenderedSwapComponentRoot();
+        host.Mount(firstRoot);
         await Harness.Render();
-        H.Check("ComponentRendered_RootSwap_OldRootAliveBefore", !RenderedSwapComponentRoot.CleanedUp);
+        H.Check("ComponentRendered_RootSwap_OldRootAliveBefore", !firstRoot.CleanedUp);
         Take();
-        host.Mount(_ => TextBlock("swap func root"));
+        bool firstFuncCleaned = false;
+        host.Mount(c =>
+        {
+            c.UseEffect(() => () => firstFuncCleaned = true);
+            return TextBlock("swap func root");
+        });
         await Harness.Render();
-        H.Check("ComponentRendered_RootSwap_OldRootEffectsCleanedUp", RenderedSwapComponentRoot.CleanedUp);
+        H.Check("ComponentRendered_RootSwap_OldRootEffectsCleanedUp", firstRoot.CleanedUp);
         var swap = Take();
         Console.WriteLine("# swap: " + string.Join(", ", swap.Select(e => $"{e.Payload[0]}#{e.Payload[1]}:{e.Payload[2]}")));
         H.Check("ComponentRendered_RootSwap_NewRootShown",
@@ -483,6 +505,23 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
         H.Check("ComponentRendered_RootSwap_NewRootReportedNotOld",
             swap.Any(e => (string)e.Payload[0]! == nameof(FuncElement) && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Mount)
             && !swap.Any(e => (string)e.Payload[0]! == nameof(RenderedSwapComponentRoot)));
+
+        // Every remount retires the outgoing root, whichever kind either side is.
+        bool secondFuncCleaned = false;
+        host.Mount(c =>
+        {
+            c.UseEffect(() => () => secondFuncCleaned = true);
+            return TextBlock("swap func root 2");
+        });
+        await Harness.Render();
+        H.Check("ComponentRendered_RootSwap_FuncToFuncCleansUp", firstFuncCleaned && !secondFuncCleaned);
+        var secondRoot = new RenderedSwapComponentRoot();
+        host.Mount(secondRoot);
+        await Harness.Render();
+        H.Check("ComponentRendered_RootSwap_FuncToComponentCleansUp", secondFuncCleaned && !secondRoot.CleanedUp);
+        host.Mount(new RenderedSwapComponentRoot());
+        await Harness.Render();
+        H.Check("ComponentRendered_RootSwap_ComponentToComponentCleansUp", secondRoot.CleanedUp);
 
         // ── Content changes while the event is off ──────────────────────────
         var root = new RenderedHostControlRoot();
@@ -509,7 +548,7 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
 
 internal sealed class RenderedSwapComponentRoot : Component
 {
-    public static volatile bool CleanedUp;
+    public volatile bool CleanedUp;
 
     public override Element Render()
     {

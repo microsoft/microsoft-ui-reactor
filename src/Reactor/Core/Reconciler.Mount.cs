@@ -799,6 +799,7 @@ public sealed partial class Reconciler
         Element renderedElement;
         Exception? caughtEx = null;
 
+        int trackMark = BoundaryTrackingMark;
         _errorBoundaryDepth++;
         try
         {
@@ -807,6 +808,7 @@ public sealed partial class Reconciler
         }
         catch (Exception ex)
         {
+            RollBackBoundaryTracking(trackMark);
             _logger?.LogWarning(ex, "ErrorBoundary caught render error");
             caughtEx = ex;
             renderedElement = eb.Fallback(ex);
@@ -815,6 +817,7 @@ public sealed partial class Reconciler
         finally
         {
             _errorBoundaryDepth--;
+            EndBoundaryTracking();
         }
 
         _errorBoundaryNodes[wrapper] = new ErrorBoundaryNode
@@ -889,7 +892,7 @@ public sealed partial class Reconciler
         // Map the id only once the subtree has mounted: a descendant that throws into an
         // enclosing ErrorBoundary discards this wrapper without unmounting it.
         if (traceRendered)
-            Diagnostics.ComponentRenderControls.Registry.Track(node.DiagnosticId, wrapper, mapControlToId: true);
+            TrackMountedComponent(node, wrapper);
         node.RenderedElement = childElement;
         // Spec 010 - see MountErrorBoundary: the wrapper is the realized control an
         // inspector hits, so it has to carry the call site. Free when unstamped.
@@ -944,7 +947,7 @@ public sealed partial class Reconciler
         // Map the id only once the subtree has mounted: a descendant that throws into an
         // enclosing ErrorBoundary discards this wrapper without unmounting it.
         if (traceRendered)
-            Diagnostics.ComponentRenderControls.Registry.Track(node.DiagnosticId, wrapper, mapControlToId: true);
+            TrackMountedComponent(node, wrapper);
         node.RenderedElement = childElement;
         // Spec 010 - see MountErrorBoundary: the wrapper is the realized control an
         // inspector hits, so it has to carry the call site. Free when unstamped.
@@ -1000,7 +1003,7 @@ public sealed partial class Reconciler
         // Map the id only once the subtree has mounted: a descendant that throws into an
         // enclosing ErrorBoundary discards this wrapper without unmounting it.
         if (traceRendered)
-            Diagnostics.ComponentRenderControls.Registry.Track(node.DiagnosticId, wrapper, mapControlToId: true);
+            TrackMountedComponent(node, wrapper);
         node.RenderedElement = childElement;
         // Spec 010 - see MountErrorBoundary: the wrapper is the realized control an
         // inspector hits, so it has to carry the call site. Free when unstamped.

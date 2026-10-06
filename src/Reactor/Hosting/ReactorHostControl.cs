@@ -241,14 +241,27 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             _reconciler.ForceFullRenderPending, elapsedMilliseconds);
 
     /// <summary>
+    /// Retires the current root before another is mounted: its effects' cleanups run (as on
+    /// Dispose), whichever kind it was, and both root slots are cleared so the render loop
+    /// (which checks the component root first) only sees the new one.
+    /// </summary>
+    private void RetireRoot()
+    {
+        _rootComponent?.Context.RunCleanups();
+        _funcContext?.RunCleanups();
+        _rootComponent = null;
+        _rootRenderFunc = null;
+        _funcContext = null;
+        _rootDiagnostics.Reset();
+    }
+
+    /// <summary>
     /// Mount a Component instance directly. Starts the render loop immediately.
     /// </summary>
     public void Mount(Component component)
     {
-        _rootRenderFunc = null;
-        _funcContext = null;
+        RetireRoot();
         _rootComponent = component;
-        _rootDiagnostics.Reset();
         RequestRender();
     }
 
@@ -257,12 +270,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// </summary>
     public void Mount(Func<RenderContext, Element> renderFunc)
     {
-        // Retire the component root: its effects' cleanups run, as on Dispose.
-        _rootComponent?.Context.RunCleanups();
-        _rootComponent = null;
+        RetireRoot();
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
-        _rootDiagnostics.Reset();
         RequestRender();
     }
 

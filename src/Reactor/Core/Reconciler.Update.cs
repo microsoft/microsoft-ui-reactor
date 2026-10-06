@@ -1505,6 +1505,7 @@ public sealed partial class Reconciler
         Element newRendered;
         Exception? caughtEx = null;
 
+        int trackMark = BoundaryTrackingMark;
         _errorBoundaryDepth++;
         try
         {
@@ -1515,6 +1516,7 @@ public sealed partial class Reconciler
         }
         catch (Exception ex)
         {
+            RollBackBoundaryTracking(trackMark);
             _logger?.LogWarning(ex, "ErrorBoundary caught render error during update");
             caughtEx = ex;
             if (existingChild is not null)
@@ -1525,6 +1527,7 @@ public sealed partial class Reconciler
         finally
         {
             _errorBoundaryDepth--;
+            EndBoundaryTracking();
         }
 
         node.ChildElement = newEb.Child;
