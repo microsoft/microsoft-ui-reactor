@@ -260,6 +260,14 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// </summary>
     public void Mount(Component component)
     {
+        // Re-mounting the active instance keeps it (and its effects) alive: retiring it
+        // would run its cleanups and then reuse the same context, whose unchanged effects
+        // would never be scheduled again.
+        if (ReferenceEquals(component, _rootComponent))
+        {
+            RequestRender();
+            return;
+        }
         RetireRoot();
         _rootComponent = component;
         RequestRender();

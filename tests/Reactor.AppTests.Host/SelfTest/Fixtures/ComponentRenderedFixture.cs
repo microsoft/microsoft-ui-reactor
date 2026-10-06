@@ -519,9 +519,15 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
         host.Mount(secondRoot);
         await Harness.Render();
         H.Check("ComponentRendered_RootSwap_FuncToComponentCleansUp", secondFuncCleaned && !secondRoot.CleanedUp);
-        host.Mount(new RenderedSwapComponentRoot());
+        var thirdRoot = new RenderedSwapComponentRoot();
+        host.Mount(thirdRoot);
         await Harness.Render();
         H.Check("ComponentRendered_RootSwap_ComponentToComponentCleansUp", secondRoot.CleanedUp);
+        // Re-mounting the active instance is not a swap: its effects stay alive.
+        host.Mount(thirdRoot);
+        await Harness.Render();
+        H.Check("ComponentRendered_RootSwap_SameInstanceRemountKeepsEffects",
+            !thirdRoot.CleanedUp && H.FindText("swap component root") is not null);
 
         // ── Content changes while the event is off ──────────────────────────
         var root = new RenderedHostControlRoot();
