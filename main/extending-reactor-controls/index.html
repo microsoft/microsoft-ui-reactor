@@ -4387,10 +4387,40 @@ component instead. <code>unmount</code> runs when Reactor unmounts the control,
 <em>instead of</em> Reactor's own walk over the control's children. If your
 delegates mount child elements through the reconciler, unmount them
 there too (<code>r.UnmountChild(child)</code>); without an <code>unmount</code> delegate,
-Reactor walks the children itself. One gap remains: a control that
-<code>update</code> replaced inside a single-content parent such as <code>Border</code> is
-swapped out without <code>unmount</code>, so don't rely on it for a control your
-<code>update</code> replaces.</p>
+Reactor walks the children itself. A control your <code>update</code> replaced is
+unmounted, and gets <code>unmount</code>, wherever Reactor reconciles the slot that
+holds it: a panel, a <code>Border</code>, a named slot such as <code>SplitView.Pane</code>, a
+tab's content. A few slots that a control fills by hand still swap it out
+without <code>unmount</code>, so don't rely on <code>unmount</code> for a control your <code>update</code>
+replaces inside one of them: <code>CommandBar</code> content, <code>Expander</code> content and
+header template, <code>ContentDialog</code>, <code>Flyout</code> and <code>Popup</code> content, content
+attached with <code>.WithFlyout</code>, <code>.WithContextFlyout</code> or
+<code>.WithToolTip(element)</code>, and the realized item content of <code>ListView</code>,
+<code>GridView</code>, <code>TreeView&lt;T&gt;</code> and templated <code>FlipView</code>.</p>
+<p>To update a child your delegates mounted, pass it to <code>r.Reconcile</code> and
+put what it returns in the slot when it differs:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">reconciler</span><span class="p">.</span><span class="n">RegisterType</span><span class="o">&lt;</span><span class="n">FramedElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">Border</span><span class="o">&gt;</span><span class="p">(</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">    </span><span class="n">mount</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">r</span><span class="p">,</span><span class="w"> </span><span class="n">el</span><span class="p">,</span><span class="w"> </span><span class="n">requestRerender</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">        </span><span class="k">new</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">Border</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Child</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">Mount</span><span class="p">(</span><span class="n">el</span><span class="p">.</span><span class="n">Content</span><span class="p">,</span><span class="w"> </span><span class="n">requestRerender</span><span class="p">)</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="n">update</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">r</span><span class="p">,</span><span class="w"> </span><span class="n">oldEl</span><span class="p">,</span><span class="w"> </span><span class="n">newEl</span><span class="p">,</span><span class="w"> </span><span class="n">frame</span><span class="p">,</span><span class="w"> </span><span class="n">requestRerender</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">        </span><span class="c1">// Patches the child in place, or unmounts it and mounts the new element.</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">next</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">Reconcile</span><span class="p">(</span><span class="n">oldEl</span><span class="p">.</span><span class="n">Content</span><span class="p">,</span><span class="w"> </span><span class="n">newEl</span><span class="p">.</span><span class="n">Content</span><span class="p">,</span><span class="w"> </span><span class="n">frame</span><span class="p">.</span><span class="n">Child</span><span class="p">,</span><span class="w"> </span><span class="n">requestRerender</span><span class="p">);</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">ReferenceEquals</span><span class="p">(</span><span class="n">next</span><span class="p">,</span><span class="w"> </span><span class="n">frame</span><span class="p">.</span><span class="n">Child</span><span class="p">))</span><span class="w"> </span><span class="n">frame</span><span class="p">.</span><span class="n">Child</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">next</span><span class="p">;</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="k">null</span><span class="p">;</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">    </span><span class="p">});</span>
+</code></pre></div>
+<p>When the new element has the same type and key, <code>Reconcile</code> updates the
+child, usually in place. If that update builds a new control instead (a
+<code>ValidationVisualizer</code> remounts on every update, and a <code>RegisterType</code>
+<code>update</code> can return a new control), or the type or key changed,
+<code>Reconcile</code> unmounts the old control and returns the new one. It returns
+<code>null</code> when the new child is empty. A handler class gets the same from
+<code>ctx.ReconcileChild(oldChild, newChild, existing)</code>. Don't use
+<code>r.UpdateChild</code> here. It skips the type check, so a child that changes
+type throws <code>InvalidCastException</code> for a built-in control, and it leaves
+a control it replaced mounted. <code>REACTOR_LIFECYCLE_003</code> flags the call
+and offers to switch it to <code>Reconcile</code>.</p>
 <p>A library that wants eager setup ships an ordinary
 <code>public static void UseAcme(Reconciler reconciler)</code> over one of these —
 Reactor deliberately adds no <code>IReactorLibrary</code> interface or

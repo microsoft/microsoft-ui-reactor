@@ -4047,6 +4047,12 @@ sibling <code>src/Reactor.Analyzers.Internal/</code> project instead; see
 <td><code>EffectCleanupAnalyzer.cs</code></td>
 </tr>
 <tr>
+<td><code>REACTOR_LIFECYCLE_003</code></td>
+<td>Warning</td>
+<td>A custom control updates its hosted child with Reconciler.UpdateChild, which skips the element-type check and leaves a replaced control mounted; use Reconcile (ships a rewrite fix)</td>
+<td><code>ReconcilerUpdateChildAnalyzer.cs</code></td>
+</tr>
+<tr>
 <td><code>REACTOR_MEMO_001</code></td>
 <td>Info</td>
 <td>Modifiers on a keyed Memo(key,factory) wrapper opt the row out of the recycle cache</td>
