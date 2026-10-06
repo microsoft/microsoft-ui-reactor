@@ -925,6 +925,10 @@ public sealed partial class Reconciler : IDisposable
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
             return;
         TeardownReferenceEdges(fe);
+        // A detached component wrapper must stop answering for its ComponentRendered id
+        // (both directions), like the unmount path does before pooling.
+        if (state.ComponentDiagnosticId != 0)
+            Diagnostics.ComponentRenderControls.Registry.Forget(state.ComponentDiagnosticId, fe);
         state.Element = null;
         state.Modifiers?.ClearCurrentHandlers();
         state.Modifiers = null;

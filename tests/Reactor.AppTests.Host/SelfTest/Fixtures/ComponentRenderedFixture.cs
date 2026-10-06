@@ -165,6 +165,18 @@ internal class ComponentRendered_ReasonsAndIdsFollowTheReconciler(Harness h) : S
         H.Check("ComponentRendered_Inner_ChildIsState",
             inner.Any(e => Id(e) == statefulId && Reason(e) == ComponentRenderTrace.Reasons.State));
 
+        // Full detach of a still-mapped wrapper drops its id in both directions.
+        var statefulWrapper = ReactorTrace.GetComponentControl(statefulId) as FrameworkElement;
+        long beforeDetachId = 0;
+        bool mappedBefore = statefulWrapper is not null && ReactorTrace.TryGetComponentId(statefulWrapper, out beforeDetachId);
+        Console.WriteLine($"# detach: statefulId={statefulId} wrapper={statefulWrapper?.GetType().Name ?? "null"} reverse={mappedBefore}:{beforeDetachId}");
+        H.Check("ComponentRendered_Detach_WrapperMappedBefore", mappedBefore && beforeDetachId == statefulId);
+        if (statefulWrapper is not null) Reconciler.DetachReactorState(statefulWrapper);
+        H.Check("ComponentRendered_Detach_ForgetsBothDirections",
+            statefulWrapper is not null
+            && !ReactorTrace.TryGetComponentId(statefulWrapper, out _)
+            && ReactorTrace.GetComponentControl(statefulId) is null);
+
         // ── Unmount drops the id, both directions ────────────────────────
         H.ClickButton("hide");
         await Harness.Render();
