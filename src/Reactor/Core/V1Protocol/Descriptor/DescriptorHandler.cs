@@ -192,17 +192,23 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
         var newItems = ih.GetItems(el);
         var collection = ih.GetCollection(ctrl);
         if (collection.Count > 0) collection.Clear();
+        var entries = new int[newItems.Count];
         for (int i = 0; i < newItems.Count; i++)
         {
+            entries[i] = -1;
             var item = newItems[i];
             if (item is Element childEl)
             {
                 var mounted = ctx.MountChild(childEl);
-                if (mounted is not null) collection.Add(mounted);
+                if (mounted is not null) { collection.Add(mounted); entries[i] = collection.Count - 1; }
             }
             else if (item is not null)
+            {
                 collection.Add(item);
+                entries[i] = collection.Count - 1;
+            }
         }
+        ih.RememberEntries(ctrl, entries);
     }
 
     private static void DispatchItemsHostUpdate(
@@ -242,16 +248,22 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
         }
         var collection = ih.GetCollection(ctrl);
         if (collection.Count > 0) collection.Clear();
+        var entries = new int[newItems.Count];
         for (int i = 0; i < newItems.Count; i++)
         {
+            entries[i] = -1;
             var item = newItems[i];
             if (item is Element childEl)
             {
                 var mounted = ctx.MountChild(childEl);
-                if (mounted is not null) collection.Add(mounted);
+                if (mounted is not null) { collection.Add(mounted); entries[i] = collection.Count - 1; }
             }
             else if (item is not null)
+            {
                 collection.Add(item);
+                entries[i] = collection.Count - 1;
+            }
         }
+        ih.RememberEntries(ctrl, entries);
     }
 }

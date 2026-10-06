@@ -623,6 +623,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, IT
             UIElement? newControl;
             try
             {
+                _reconciler.BeginRootPass();
                 newControl = _reconciler.Reconcile(
                     _currentTree,
                     newTree,

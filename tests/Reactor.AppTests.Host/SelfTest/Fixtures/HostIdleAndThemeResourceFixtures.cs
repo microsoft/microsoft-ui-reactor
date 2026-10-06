@@ -190,7 +190,7 @@ internal static class HostIdleAndThemeResourceFixtures
                     var listItems = ctx.UseMemo<Element[]>(
                         () => [TextBlock("ListItemProbe").Foreground(Theme.Ref(AppKey))]);
                     var gapItems = ctx.UseMemo<Element[]>(
-                        () => [Empty(), TextBlock("GapItemProbe").Foreground(Theme.Ref(AppKey))]);
+                        () => [Empty(), Memo("emptyItem", () => Empty()), TextBlock("GapItemProbe").Foreground(Theme.Ref(AppKey))]);
                     return VStack(
                         TextBlock($"tick:{tick}"),
                         memo,
@@ -203,7 +203,7 @@ internal static class HostIdleAndThemeResourceFixtures
                         Memo("shape", () => ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red
                             ? TextBlock("ShapeProbeBefore")
                             : Border(TextBlock("ShapeProbeAfter"))),
-                        // An Empty item realizes no ComboBox entry, ahead of a themed one.
+                        // Items that realize no ComboBox entry (Empty, a memo of Empty), ahead of a themed one.
                         ComboBox(gapItems, default, null),
                         Memo("outer", () => Memo("inner",
                             () => TextBlock("NestedMemoProbe").Foreground(ThemeRef.Resolve(AppKey, isDark: false)!))),

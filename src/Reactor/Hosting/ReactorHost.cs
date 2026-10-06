@@ -636,6 +636,7 @@ public sealed class ReactorHost : IDisposable, IThemeResourceListener
             UIElement? newControl;
             try
             {
+                _reconciler.BeginRootPass();
                 newControl = _reconciler.Reconcile(
                     _currentTree,
                     newTree,

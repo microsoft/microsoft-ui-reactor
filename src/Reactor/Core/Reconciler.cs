@@ -179,18 +179,30 @@ public sealed partial class Reconciler : IDisposable
     // IsOnDirtyAncestorPath gate alone does not cover this case.
     internal bool ForceFullRenderActive => _forceFullRenderActive;
 
-    // Theme.NotifyResourcesChanged signal: the next top-level pass is a force pass that
+    // Theme.NotifyResourcesChanged signal: the host's next root pass is a force pass that
     // ALSO declines every structural skip, not just the wrapper ones. A reference-equal
     // subtree (a reused or UseMemo'd element) is otherwise skipped wholesale, and its
     // ThemeRef modifiers / ThemeRef-backed resource overrides would never be re-applied
-    // against the edited resources. Implies a force pass. Set from any thread; consumed
-    // atomically at the start of a top-level pass so a request racing that pass is kept
-    // for the next one rather than lost.
+    // against the edited resources. Implies a force pass. Set from any thread; taken
+    // atomically by BeginRootPass, so a request racing that pass is kept for the next one
+    // rather than lost, and only the host's root pass can consume it.
     private int _resourceRefreshPending;
+    private bool _resourceRefreshArmed;
     private bool _resourceRefreshActive;
 
     /// <summary>Requests a resource-refresh pass (see above). Thread-safe.</summary>
     internal void RequestResourceRefresh() => Interlocked.Exchange(ref _resourceRefreshPending, 1);
+
+    /// <summary>
+    /// Called by a host immediately before its root <see cref="Reconcile"/>: moves a pending
+    /// resource refresh onto that pass. Out-of-band top-level reconciles (ElementFactory
+    /// realizing or refreshing a row) don't call it, so they can't consume the request.
+    /// UI thread only.
+    /// </summary>
+    internal void BeginRootPass() => _resourceRefreshArmed |= Interlocked.Exchange(ref _resourceRefreshPending, 0) != 0;
+
+    internal bool ResourceRefreshPendingForTest => Volatile.Read(ref _resourceRefreshPending) != 0;
+    internal bool ResourceRefreshArmedForTest => _resourceRefreshArmed;
 
     // True only during a force pass, for the wrapper elements whose skip would prevent
     // ReconcileComponent from running — and for every element during a resource-refresh
@@ -596,6 +608,13 @@ public sealed partial class Reconciler : IDisposable
         /// <c>CanUpdate</c>.
         /// </summary>
         public Element? KeyedMemoOutput;
+
+        /// <summary>
+        /// For an <c>ItemsHost</c> control: the collection entry each logical item realized
+        /// (-1 when it mounted nothing), recorded when the items are filled, so a resource
+        /// refresh can reconcile kept items in place (<c>ItemsHost.RefreshKeptItems</c>).
+        /// </summary>
+        public int[]? ItemsHostEntries;
     }
 
     internal static class ReactorAttached
@@ -1306,6 +1325,7 @@ public sealed partial class Reconciler : IDisposable
                 rs.PendingEchoMatch = null;
                 rs.PendingLabeledBy = null;
                 rs.KeyedMemoOutput = null;
+                rs.ItemsHostEntries = null;
                 rs.Element = null;
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).
@@ -1792,7 +1812,8 @@ public sealed partial class Reconciler : IDisposable
             // Consume the hot-reload and resource-refresh signals exactly once per
             // top-level pass so every component re-runs Render() even when props/deps
             // are unchanged (and, for a resource refresh, no element is skipped).
-            _resourceRefreshActive = Interlocked.Exchange(ref _resourceRefreshPending, 0) != 0;
+            _resourceRefreshActive = _resourceRefreshArmed;
+            _resourceRefreshArmed = false;
             _forceFullRenderActive = ForceFullRenderPending || _resourceRefreshActive;
             ForceFullRenderPending = false;
 

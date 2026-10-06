@@ -145,6 +145,24 @@ public sealed partial class HostIdleAndThemeResourcesTests
     }
 
     [Fact]
+    public void ResourceRefresh_IsTakenOnlyByTheHostRootPass()
+    {
+        var reconciler = new Reconciler();
+        reconciler.RequestResourceRefresh();
+
+        // An out-of-band top-level reconcile (ElementFactory realizing a row) must leave it pending.
+        reconciler.Reconcile(null, EmptyElement.Instance, null, static () => { });
+        Assert.True(reconciler.ResourceRefreshPendingForTest);
+
+        reconciler.BeginRootPass();
+        Assert.False(reconciler.ResourceRefreshPendingForTest);
+        Assert.True(reconciler.ResourceRefreshArmedForTest);
+
+        reconciler.Reconcile(null, EmptyElement.Instance, null, static () => { });
+        Assert.False(reconciler.ResourceRefreshArmedForTest);
+    }
+
+    [Fact]
     public void ResolutionPublishedAfterAnInvalidation_IsNotServed()
     {
         // A resolve that read the dictionaries before the invalidation and publishes after it.

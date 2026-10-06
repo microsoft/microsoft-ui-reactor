@@ -233,16 +233,23 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                 var newItems = ih.GetItems(element);
                 var collection = ih.GetCollection(control);
                 if (collection.Count > 0) collection.Clear();
+                var entries = new int[newItems.Count];
                 for (int i = 0; i < newItems.Count; i++)
                 {
+                    entries[i] = -1;
                     var item = newItems[i];
                     if (item is Element childEl)
                     {
                         var mounted = ctx.MountChild(childEl);
-                        if (mounted is not null) collection.Add(mounted);
+                        if (mounted is not null) { collection.Add(mounted); entries[i] = collection.Count - 1; }
                     }
-                    else collection.Add(item);
+                    else
+                    {
+                        collection.Add(item);
+                        entries[i] = collection.Count - 1;
+                    }
                 }
+                ih.RememberEntries(control, entries);
                 return;
             }
         }
@@ -398,16 +405,23 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                         reconciler.ReconcileV1Child(oldChild, null, null, requestRerender);
                 }
                 if (collection.Count > 0) collection.Clear();
+                var entries = new int[newItems.Count];
                 for (int i = 0; i < newItems.Count; i++)
                 {
+                    entries[i] = -1;
                     var item = newItems[i];
                     if (item is Element childEl)
                     {
                         var mounted = ctx.MountChild(childEl);
-                        if (mounted is not null) collection.Add(mounted);
+                        if (mounted is not null) { collection.Add(mounted); entries[i] = collection.Count - 1; }
                     }
-                    else collection.Add(item);
+                    else
+                    {
+                        collection.Add(item);
+                        entries[i] = collection.Count - 1;
+                    }
                 }
+                ih.RememberEntries(control, entries);
                 return;
             }
         }

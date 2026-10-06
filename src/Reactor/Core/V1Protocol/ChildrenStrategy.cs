@@ -172,21 +172,19 @@ public sealed record ItemsHost<TElement, TControl>(
         IReadOnlyList<object> oldItems, IReadOnlyList<object> newItems, Action requestRerender)
     {
         if (!reconciler.ResourceRefreshActive) return;
-        if (oldItems.Count != newItems.Count) return;
+        // Which collection entry each item realized (or -1), recorded when the items were
+        // filled. An item that mounted nothing (Empty, a memo of Empty, ...) has no entry.
+        if (oldItems.Count != newItems.Count
+            || control is not FrameworkElement fe
+            || !Reconciler.TryGetReactorState(fe, out var state)
+            || state.ItemsHostEntries is not { } entries
+            || entries.Length != newItems.Count)
+            return;
         var collection = GetCollection(control);
-        // Null and Empty items realize no entry, so the collection skips them. Map each
-        // remaining item to the next entry; if the counts disagree the mapping is unknown,
-        // and the kept items are left as they are.
-        int realizing = 0;
         for (int i = 0; i < newItems.Count; i++)
         {
-            if (RealizesEntry(newItems[i])) realizing++;
-        }
-        if (realizing != collection.Count) return;
-        int entry = 0;
-        for (int i = 0; i < newItems.Count; i++)
-        {
-            if (!RealizesEntry(newItems[i])) continue;
+            int entry = entries[i];
+            if (entry < 0 || entry >= collection.Count) continue;
             if (newItems[i] is Element newChild && oldItems[i] is Element oldChild
                 && collection[entry] is UIElement existing)
             {
@@ -194,11 +192,15 @@ public sealed record ItemsHost<TElement, TControl>(
                 if (updated is not null && !ReferenceEquals(updated, existing))
                     collection[entry] = updated;
             }
-            entry++;
         }
     }
 
-    private static bool RealizesEntry(object? item) => item is not null and not EmptyElement;
+    /// <summary>Records which collection entry each item realized (-1 for none).</summary>
+    internal void RememberEntries(TControl control, int[] entries)
+    {
+        if (control is FrameworkElement fe)
+            Reconciler.GetOrCreateReactorState(fe).ItemsHostEntries = entries;
+    }
 }
 
 /// <summary>Placeholder for future ItemsHost options (virtualization mode,

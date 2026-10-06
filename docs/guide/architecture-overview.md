@@ -301,7 +301,8 @@ public UIElement? Reconcile(
         // Consume the hot-reload and resource-refresh signals exactly once per
         // top-level pass so every component re-runs Render() even when props/deps
         // are unchanged (and, for a resource refresh, no element is skipped).
-        _resourceRefreshActive = Interlocked.Exchange(ref _resourceRefreshPending, 0) != 0;
+        _resourceRefreshActive = _resourceRefreshArmed;
+        _resourceRefreshArmed = false;
         _forceFullRenderActive = ForceFullRenderPending || _resourceRefreshActive;
         ForceFullRenderPending = false;
 
