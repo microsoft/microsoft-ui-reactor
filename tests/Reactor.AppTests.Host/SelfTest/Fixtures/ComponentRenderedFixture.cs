@@ -528,6 +528,11 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
         await Harness.Render();
         H.Check("ComponentRendered_RootSwap_SameInstanceRemountKeepsEffects",
             !thirdRoot.CleanedUp && H.FindText("swap component root") is not null);
+        // A retired instance mounted again later is a fresh mount: its effect runs again.
+        host.Mount(firstRoot);
+        await Harness.Render();
+        H.Check("ComponentRendered_RootSwap_RetiredInstanceRemountsFresh",
+            thirdRoot.CleanedUp && firstRoot.EffectRuns == 2 && !firstRoot.CleanedUp);
 
         // ── Content changes while the event is off ──────────────────────────
         var root = new RenderedHostControlRoot();
@@ -555,10 +560,16 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
 internal sealed class RenderedSwapComponentRoot : Component
 {
     public volatile bool CleanedUp;
+    public int EffectRuns;
 
     public override Element Render()
     {
-        UseEffect(() => () => CleanedUp = true);
+        UseEffect(() =>
+        {
+            EffectRuns++;
+            CleanedUp = false;
+            return () => CleanedUp = true;
+        });
         return TextBlock("swap component root");
     }
 }

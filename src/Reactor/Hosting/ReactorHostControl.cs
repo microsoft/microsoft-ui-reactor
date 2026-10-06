@@ -247,7 +247,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// </summary>
     private void RetireRoot()
     {
-        _rootComponent?.Context.RunCleanups();
+        // Reset (not just clean up) the component's hooks: the caller owns the instance and
+        // may mount it again later, which must then be a fresh mount.
+        _rootComponent?.Context.ResetHookState();
         _funcContext?.RunCleanups();
         _rootComponent = null;
         _rootRenderFunc = null;

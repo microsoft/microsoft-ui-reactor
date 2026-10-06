@@ -2445,7 +2445,14 @@ public sealed class RenderContext
     /// dev loop alive instead of leaving the user staring at an error
     /// fallback.
     /// </summary>
-    internal void ResetForHotReload()
+    internal void ResetForHotReload() => ResetHookState();
+
+    /// <summary>
+    /// Runs every effect cleanup and drops all hook state, so the next render of this
+    /// context is a fresh mount. Used by hot-reload hook-order recovery and when a host
+    /// retires a root component (whose instance may be mounted again later).
+    /// </summary>
+    internal void ResetHookState()
     {
         RunCleanups();
         _hooks.Clear();
