@@ -66,7 +66,7 @@ Developer machine
 |       +-----------+-------------+   +--------+---------+        |
 |       | VS Code "Reactor        |   | Visual Studio    |        |
 |       | Preview" extension      |   | embedded preview |        |
-|       | (vscode-webview origin) |   | / mur docs       |        |
+|       | (vscode-webview origin) |   | / doc pipeline   |        |
 |       +-------------------------+   +------------------+        |
 +----------------------------------------------------------------+
 ```
@@ -224,7 +224,7 @@ The in-app MCP server (`DevtoolsMcpServer`, HTTP at `/mcp` and stdio), its per-p
 
 **File:** `src/Reactor.Cli/`.
 **Activation:** developer command line.
-**Behavior:** `mur docs` spawns doc apps under `dotnet run` and reads frames from the preview endpoint above. `mur devtools` has been removed; it only prints the winapp equivalent of each command.
+**Behavior:** `mur devtools` has been removed; it only prints the winapp equivalent of each command. (The doc pipeline, which spawns doc apps under `dotnet run` and switches components through the preview endpoint above, now lives in the internal `tools/Reactor.DocPipeline` project, not in `mur`.)
 
 **Mitigations:**
 
@@ -271,7 +271,7 @@ The Microsoft-internal security-review intake form gave succinct answers about R
 | "Library code executes in the consuming-domain WinUI/.NET app process, typically unelevated user-mode" | Code review of `ReactorApp.Run` and `ReactorWindow` lifecycle | No `RunAs`, no manifest requesting elevation. Reactor inherits the host process's integrity level. |
 | "CLI/debug tooling runs as developer-invoked user-mode process" | Manifest review of `mur.exe`, install script behavior | No elevation, no scheduled-task install. |
 | "CLI can talk to app as a debugging tool using MCP protocol over HTTP, domain-validated for localhost, with token auth" (the MCP server has since been removed; the preview server remains) | `PreviewCaptureServer.cs` | Listener prefix bound to `http://127.0.0.1:<port>/`; Host header allow-list at `IsAllowedHost`; bearer constant-time compare at `BearerMatches`. |
-| "No outbound network communication beyond the above" | Repo-wide grep | Only `System.Net.*` usage is the preview `HttpListener` server above (in `src/Reactor.Devtools/`) and an `HttpClient` *in CLI Docs subsystem* that targets `127.0.0.1:<port>` of a preview server `mur` itself spawned. |
+| "No outbound network communication beyond the above" | Repo-wide grep | Only `System.Net.*` usage is the preview `HttpListener` server above (in `src/Reactor.Devtools/`) and an `HttpClient` in the internal doc pipeline (`tools/Reactor.DocPipeline`, not shipped) that targets `127.0.0.1:<port>` of a preview server it spawned itself. |
 | "No unsupported or third-party components" | `ThirdPartyNoticeText.txt`, `Directory.Build.props`, `nuget.config` | Six Microsoft.* / MIT NuGet deps; three source-ported MIT/ISC OSS components (Yoga, md4c, D3); no checked-in `.nupkg` binaries; `nuget.config` clears inherited feeds. |
 | "No prior threat models / security reviews" | Repo audit | This document is the first formal one. README references a 275-finding internal code review — engineering review, not a threat model. |
 

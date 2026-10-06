@@ -151,7 +151,7 @@ if (!BearerMatches(ctx.Request.Headers["Authorization"]))
 
 | Endpoint | Used by | What it does |
 |---|---|---|
-| `GET /frame` | VS Code panel, doc screenshot pipeline | Latest captured frame as PNG |
+| `GET /frame` | VS Code panel | Latest captured frame as PNG (the doc screenshot pipeline captures with winapp instead) |
 | `GET /status` | Both extensions | Liveness, port, frame rate and embed protocol version |
 | `POST /focus` | VS Code panel | Brings the preview window forward |
 | `GET /components` | Both extensions | The app's previewable components |
@@ -190,8 +190,9 @@ does not allocate per frame when its flag is off.
 ### Previewing a component from a script
 
 Launch the app the way the doc screenshot pipeline does — `--preview <Component>
---vscode` — read `CAPTURE_PORT` and `CAPTURE_TOKEN` from stdout, then
-`GET /frame` with the bearer token for a PNG of the window, and
+--vscode` — and read `CAPTURE_PORT` and `CAPTURE_TOKEN` from stdout. Then use
+`GET /frame` with the bearer token for a PNG of the window (the doc pipeline itself
+takes its pixels with winapp's screen capture instead), and
 `POST /preview` with `{"component":"<Name>"}` to switch components without a
 relaunch. For anything beyond pixels — the tree, properties, clicks — use the
 WinUI DevTools (`winapp run . --devtools`, then `winapp devtools inspect` or
