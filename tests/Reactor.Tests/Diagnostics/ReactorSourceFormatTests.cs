@@ -129,10 +129,18 @@ public sealed class ReactorSourceFormatTests
         Assert.Equal("0", marker);
     }
 
+    [Fact]
+    public void ToPublishedPath_CurrentDriveRootedPath_IsFileNameOnly()
+    {
+        Assert.Equal("App.cs", Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.ToPublishedPath(@"\Users\me\repo\App.cs", out var marker));
+        Assert.Equal("0", marker);
+    }
+
     [Theory]
     [InlineData(@"C:\src\App.cs", true)]
     [InlineData("C:/src/App.cs", true)]
     [InlineData(@"\\server\share\App.cs", true)]
+    [InlineData(@"\Users\me\App.cs", true)]
     [InlineData("/home/me/App.cs", true)]
     [InlineData("/_/src/App.cs", false)]
     [InlineData("/_1/src/App.cs", false)]

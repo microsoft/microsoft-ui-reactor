@@ -368,3 +368,63 @@ internal class ReactorSource_AdoptedRowRepublished(Harness h) : SelfTestFixtureB
         }
     }
 }
+
+/// <summary>
+/// Rows an ItemsRepeater realizes or reuses during layout (scrolling) are reconciled outside
+/// any render, so their owner is unknown and <c>owner=</c> is omitted, rather than reported
+/// as the host's root (the reuse path runs <c>Reconcile</c>, which used to pick up a stale
+/// root owner).
+/// </summary>
+internal class ReactorSource_LayoutRealizedRowsHaveNoOwner(Harness h) : SelfTestFixtureBase(h)
+{
+    private static readonly int[] Rows = Enumerable.Range(0, 300).ToArray();
+
+    public override async Task RunAsync()
+    {
+        if (!ReactorSourcePublisher.IsSupported)
+        {
+            H.Skip("ReactorSource_LayoutRows", "Reactor.DevtoolsSupport is off in this host");
+            return;
+        }
+
+        var previous = ReactorSourcePublisher.IsEnabled;
+        try
+        {
+            ReactorSourcePublisher.IsEnabled = true;
+            var host = H.CreateHost();
+            host.Mount(ctx => VStack(
+                TextBlock("layout-rows-header"),
+                LazyVStack(Rows, static i => i.ToString(global::System.Globalization.CultureInfo.InvariantCulture),
+                    (i, _) => Component<SourceProbe, int>(i).WithKey($"row-{i}")).Height(150)));
+            await Harness.Render();
+            await Harness.Render();
+
+            var header = ReactorDiagnostics.GetSource(H.FindControl<WinUI.TextBlock>(t => t.Text == "layout-rows-header")!);
+            H.Check("ReactorSource_LayoutRows_RootOwnerKnownInRender",
+                header?.Contains("|owner=FuncElement", StringComparison.Ordinal) == true);
+
+            var viewer = H.FindControl<WinUI.ScrollViewer>(_ => true);
+            for (int step = 1; step <= 6 && viewer is not null; step++)
+            {
+                viewer.ChangeView(null, step * 1200, null, disableAnimation: true);
+                await Harness.Render();
+                await Harness.Render();
+            }
+
+            // Row wrappers (the component Borders) realized or reused while scrolling.
+            var rows = H.FindAllControls<WinUI.TextBlock>(t => t.Text.StartsWith("probe ", StringComparison.Ordinal)
+                    && int.Parse(t.Text.AsSpan("probe ".Length), global::System.Globalization.CultureInfo.InvariantCulture) >= 40)
+                .Select(t => VisualTreeHelper.GetParent(t)).OfType<UIElement>().ToList();
+            var withOwner = rows.Select(r => ReactorDiagnostics.GetSource(r)).Where(v => v?.Contains("|owner=", StringComparison.Ordinal) == true).ToList();
+            Console.WriteLine($"# scrolled rows: {rows.Count}, with owner: {withOwner.Count}{(withOwner.Count > 0 ? " e.g. " + withOwner[0] : "")}; sample {(rows.Count > 0 ? ReactorDiagnostics.GetSource(rows[^1]) : null)}");
+            H.Check("ReactorSource_LayoutRows_Realized", rows.Count > 0);
+            H.Check("ReactorSource_LayoutRows_NoStaleRootOwner", rows.Count > 0 && withOwner.Count == 0);
+            host.Dispose();
+            H.SetContent(null);
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = previous;
+        }
+    }
+}

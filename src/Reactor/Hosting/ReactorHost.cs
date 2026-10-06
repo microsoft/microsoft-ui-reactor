@@ -710,6 +710,9 @@ public sealed class ReactorHost : IDisposable
             }
             finally
             {
+                // The root owner names what this pass renders; a row an ItemsRepeater realizes
+                // or reuses later, during layout, has no known owner (see CurrentDiagnosticOwner).
+                _reconciler.DiagnosticRootOwner = null;
                 if (capturedCurve is not null)
                     AnimationScope.PopScope();
             }

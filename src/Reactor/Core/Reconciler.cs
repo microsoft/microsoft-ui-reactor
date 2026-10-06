@@ -173,16 +173,18 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// Owner name for the host's root render output (the root component, or
-    /// <c>FuncElement</c> for a root render function). Set by the host before each pass.
+    /// <c>FuncElement</c> for a root render function). Set by the host for the duration of
+    /// its render pass only, and cleared after it.
     /// </summary>
     internal string? DiagnosticRootOwner { get; set; }
 
     /// <summary>
-    /// Owner for elements realized now: the component being rendered, else the root while a
-    /// reconcile pass is running. Outside a pass (an ItemsRepeater realizing a row during
-    /// layout) the owner is unknown and the field is omitted rather than guessed.
+    /// Owner for elements realized now: the component being rendered, else the root during
+    /// the host's render pass. Outside it (an ItemsRepeater realizing or reusing a row during
+    /// layout, which also runs <c>Reconcile</c>) the owner is unknown and the field is
+    /// omitted rather than guessed.
     /// </summary>
-    private string? CurrentDiagnosticOwner => _diagOwner ?? (_debugReconcileDepth > 0 ? DiagnosticRootOwner : null);
+    private string? CurrentDiagnosticOwner => _diagOwner ?? DiagnosticRootOwner;
 
     private void PublishSource(UIElement control, Element element)
     {

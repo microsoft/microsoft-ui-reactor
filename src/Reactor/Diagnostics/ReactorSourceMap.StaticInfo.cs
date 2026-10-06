@@ -138,6 +138,9 @@ public static partial class ReactorSourceMap
             return true;
         if (path.StartsWith(@"\\", StringComparison.Ordinal) || path.StartsWith("//", StringComparison.Ordinal))
             return true;
+        // Rooted on the current drive (\Users\me\App.cs): absolute for disclosure purposes.
+        if (path.StartsWith('\\'))
+            return true;
         return path.StartsWith('/') && !IsDeterministicRoot(path);
     }
 
