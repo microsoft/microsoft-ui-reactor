@@ -2156,7 +2156,7 @@ public sealed partial class Reconciler : IDisposable
                 componentName, selfTriggered ? "self" : "parent");
             renderStart = global::System.Diagnostics.Stopwatch.GetTimestamp();
         }
-        bool traceRendered = Diagnostics.ComponentRenderTrace.IsEnabled;
+        bool traceRendered = traceEnabled ?? Diagnostics.ComponentRenderTrace.IsEnabled;
         long renderedStart = traceRendered ? global::System.Diagnostics.Stopwatch.GetTimestamp() : 0;
 
         Element newChildElement;
