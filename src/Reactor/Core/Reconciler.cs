@@ -170,6 +170,13 @@ public sealed partial class Reconciler : IDisposable
     internal volatile bool ForceFullRenderPending;
     private bool _forceFullRenderActive;
 
+    // Diagnostics only: the pending force pass is the retry a host schedules after a
+    // hot-reload hook-order recovery. That retry runs outside a hot-reload pass, so
+    // without this ComponentRendered would attribute it to "forced", not "hotReload".
+    // Consumed together with ForceFullRenderPending; never changes render behaviour.
+    internal volatile bool ForceFullRenderIsHotReloadRetry;
+    private bool _forceFullRenderFromHotReloadRetry;
+
     // True for the duration of a hot-reload force pass. Read by ChildReconciler's
     // positional fast path: while a force pass is active, untouched wrapper cells
     // (Component/Memo/Func) in a memoized range must still re-render through the
@@ -1773,6 +1780,8 @@ public sealed partial class Reconciler : IDisposable
             // every component re-runs Render() even when props/deps are unchanged.
             _forceFullRenderActive = ForceFullRenderPending;
             ForceFullRenderPending = false;
+            _forceFullRenderFromHotReloadRetry = _forceFullRenderActive && ForceFullRenderIsHotReloadRetry;
+            ForceFullRenderIsHotReloadRetry = false;
 
             // Build the dirty-ancestor path. For every component node
             // whose SelfTriggered is true, walk up the realized visual
@@ -1818,6 +1827,7 @@ public sealed partial class Reconciler : IDisposable
             if (--_debugReconcileDepth == 0)
             {
                 _forceFullRenderActive = false;
+                _forceFullRenderFromHotReloadRetry = false;
                 _dirtyAncestorPath?.Clear();
                 _dirtyPathChildren?.Clear();
             }
@@ -2225,7 +2235,7 @@ public sealed partial class Reconciler : IDisposable
             {
                 EmitComponentRendered(node, null, newEl,
                     Diagnostics.ComponentRenderTrace.ClassifyUpdate(
-                        forcedRender, HotReloadService.WithinUpdatePass, selfTriggered, memoReason),
+                        forcedRender, HotReloadService.WithinUpdatePass || _forceFullRenderFromHotReloadRetry, selfTriggered, memoReason),
                     renderedStart);
                 throw;
             }
@@ -2242,7 +2252,7 @@ public sealed partial class Reconciler : IDisposable
         {
             EmitComponentRendered(node, control, newEl,
                 Diagnostics.ComponentRenderTrace.ClassifyUpdate(
-                    forcedRender, HotReloadService.WithinUpdatePass, selfTriggered, memoReason),
+                    forcedRender, HotReloadService.WithinUpdatePass || _forceFullRenderFromHotReloadRetry, selfTriggered, memoReason),
                 renderedStart);
         }
 

@@ -237,7 +237,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private bool TraceRootRendered(bool hotReloadRender, double elapsedMilliseconds)
         => _rootDiagnostics.TraceRendered(
             _rootComponent?.GetType().Name ?? nameof(FuncElement),
-            hotReloadRender, _reconciler.ForceFullRenderPending, elapsedMilliseconds);
+            hotReloadRender || _reconciler.ForceFullRenderIsHotReloadRetry,
+            _reconciler.ForceFullRenderPending, elapsedMilliseconds);
 
     /// <summary>
     /// Mount a Component instance directly. Starts the render loop immediately.
@@ -530,6 +531,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 "Hot reload: hook order/type changed — resetting {Mode} state and re-rendering",
                 mode);
             ctx.ResetForHotReload();
+            // The retry runs outside a hot-reload pass; keep ComponentRendered
+            // attributing it (root and children) to hot reload rather than "forced".
+            _reconciler.ForceFullRenderIsHotReloadRetry = true;
             RequestRender();
         }
 

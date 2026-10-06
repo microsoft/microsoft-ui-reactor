@@ -355,6 +355,95 @@ internal sealed class RenderedThrowingSubtreeParent : Component
     public override Element Render() => VStack(TextBlock("parent"), Component<RenderedThrowOnMountChild>());
 }
 
+/// <summary>
+/// A hot-reload edit that changes the ROOT's hook order: the host resets the root and
+/// retries outside the hot-reload pass. That retry (root and children) is still
+/// reported as <c>hotReload</c>, not <c>forced</c>.
+/// </summary>
+internal class ComponentRendered_RootHookOrderRetryIsHotReload(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var events = new List<ReactorEvent>();
+        using var subscription = ReactorTrace.Subscribe(
+            e => { if (e.EventName == nameof(ReactorEventSource.ComponentRendered)) lock (events) events.Add(e); },
+            EventLevel.Verbose,
+            ReactorEventSource.Keywords.RenderDetail);
+
+        if (!ComponentRenderTrace.IsEnabled)
+        {
+            H.Skip("ComponentRendered_HookOrderRetry", "EventSource disabled (NativeAOT)");
+            return;
+        }
+
+        List<ReactorEvent> Take()
+        {
+            lock (events)
+            {
+                var copy = events.ToList();
+                events.Clear();
+                return copy;
+            }
+        }
+
+        RenderedHookShapeRoot.Shape = 0;
+        try
+        {
+            var host = H.CreateHost();
+            host.Mount(new RenderedHookShapeRoot());
+            await Harness.Render();
+            H.Check("ComponentRendered_HookOrderRetry_InitialShape", H.FindText("hook shape v1") is not null);
+            Take();
+
+            // The "edit": the root's first hook changes type, so the hot-reload render
+            // throws HookOrderException and the host retries.
+            RenderedHookShapeRoot.Shape = 1;
+            HotReloadService.UpdateApplication(null);
+            host.RequestRender(force: true);
+            H.Check("ComponentRendered_HookOrderRetry_EditApplied", await Harness.WaitFor(
+                () => H.FindText("hook shape v2") is not null, maxPasses: 32, perPassMs: 10));
+
+            var retry = Take();
+            Console.WriteLine("# hook-order retry: " + string.Join(", ",
+                retry.Select(e => $"{e.Payload[0]}#{e.Payload[1]}:{e.Payload[2]}")));
+            H.Check("ComponentRendered_HookOrderRetry_RootIsHotReload",
+                retry.Any(e => (string)e.Payload[0]! == nameof(RenderedHookShapeRoot)
+                    && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.HotReload)
+                && !retry.Any(e => (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Forced));
+            H.Check("ComponentRendered_HookOrderRetry_ChildIsHotReload",
+                retry.Any(e => (string)e.Payload[0]! == nameof(RenderedHotReloadLeaf)
+                    && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.HotReload));
+        }
+        finally
+        {
+            RenderedHookShapeRoot.Shape = 0;
+        }
+    }
+}
+
+internal sealed class RenderedHookShapeRoot : Component
+{
+    public static volatile int Shape;
+
+    public override Element Render()
+    {
+        if (Shape == 0)
+        {
+            UseState(0);
+            return VStack(TextBlock("hook shape v1"), Component<RenderedHotReloadLeaf>());
+        }
+
+        UseEffect(() => { }, "hot-reload");
+        UseState(0);
+        return VStack(TextBlock("hook shape v2"), Component<RenderedHotReloadLeaf>());
+    }
+}
+
+internal sealed class RenderedHotReloadLeaf : Component
+{
+    public override Element Render() => TextBlock("hot reload leaf");
+}
+
 internal sealed class RenderedThrowOnMountChild : Component
 {
     public override Element Render() => throw new InvalidOperationException("ComponentRendered selftest: boundary mount failure");
