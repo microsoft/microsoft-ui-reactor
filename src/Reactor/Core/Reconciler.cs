@@ -325,13 +325,11 @@ public sealed partial class Reconciler : IDisposable
                     node.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, renamed);
                 componentWrapper = Diagnostics.ReactorSourcePublisher.IsComponentWrapper(value);
             }
-            // An embedded ReactorHostControl is another host: its island names its own root.
-            if (!ReferenceEquals(node, root) && node is global::Microsoft.UI.Reactor.Hosting.ReactorHostControl)
-                continue;
 
             // Overlay edges first: a decorator hangs its flyout on its target's control, which
-            // can be a component wrapper (Flyout(Component<T>(), body)) whose own subtree is T's
-            // while the flyout body is the decorator owner's.
+            // can be a component wrapper (Flyout(Component<T>(), body)) or an embedded host
+            // whose own content is not this root's, while the flyout body is the decorator
+            // owner's.
             if (node is FrameworkElement fe)
             {
                 if (GetFlyoutOnControl(fe) is WinUI.Flyout flyout)
@@ -341,7 +339,10 @@ public sealed partial class Reconciler : IDisposable
                 }
                 Push(V1Protocol.OverlayLifecycle.PeekLiveContentDialog(fe));
             }
-            if (componentWrapper) continue;
+            // A component wrapper's subtree is that component's. An embedded ReactorHostControl
+            // is another host, even when it is this root's own content (XamlHost(() => island)):
+            // its island names its own root. The node itself was renamed above if this root owns it.
+            if (componentWrapper || node is global::Microsoft.UI.Reactor.Hosting.ReactorHostControl) continue;
 
             if (node is WinPrim.Popup popup) Push(popup.Child);
             int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);

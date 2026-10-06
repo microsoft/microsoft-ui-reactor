@@ -746,6 +746,22 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.Check("ReactorSource_RootRemount_EmbeddedIslandUntouched",
                 (ReactorDiagnostics.GetSource(outerLeaf) as string)?.Contains("|owner=RemountRootB|", StringComparison.Ordinal) == true
                 && ReactorDiagnostics.GetSource(islandLeaf) == OldOwnerValue);
+
+            // The island can be the root's content itself (a root returning XamlHost(() => island)):
+            // the walk renames the host control the root owns and a flyout the root hung on it,
+            // but still does not enter the island.
+            var directLeaf = new WinUI.TextBlock();
+            directLeaf.SetValue(ReactorDiagnostics.SourceProperty, OldOwnerValue);
+            using var directIsland = new Microsoft.UI.Reactor.Hosting.ReactorHostControl { Content = directLeaf };
+            directIsland.SetValue(ReactorDiagnostics.SourceProperty, OldOwnerValue);
+            var islandFlyoutBody = new WinUI.TextBlock();
+            islandFlyoutBody.SetValue(ReactorDiagnostics.SourceProperty, OldOwnerValue);
+            Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.SetAttachedFlyout(directIsland, new WinUI.Flyout { Content = islandFlyoutBody });
+            probeHost.Reconciler.RenameRootOwner(directIsland, nameof(RemountRootA), nameof(RemountRootB));
+            H.Check("ReactorSource_RootRemount_DirectIslandRootUntouched",
+                ReactorDiagnostics.GetSource(directLeaf) == OldOwnerValue
+                && ReactorDiagnostics.GetSource(directIsland)?.Contains("|owner=RemountRootB|", StringComparison.Ordinal) == true
+                && ReactorDiagnostics.GetSource(islandFlyoutBody)?.Contains("|owner=RemountRootB|", StringComparison.Ordinal) == true);
             probeHost.Dispose();
         }
         finally
