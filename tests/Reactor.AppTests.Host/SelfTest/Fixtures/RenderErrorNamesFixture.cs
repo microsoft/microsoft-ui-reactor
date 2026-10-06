@@ -12,7 +12,9 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// record (<c>ComponentElement`1</c>) — on every path that replaces a render with the
 /// error fallback: a child's first render (mount — class, function and memo components),
 /// a child's re-render (update), and the root of both <c>ReactorHost</c> and
-/// <c>ReactorHostControl</c> (component and render function). Before the fix the mount
+/// <c>ReactorHostControl</c> (component and render function). An explicitly thrown
+/// <c>OutOfMemoryException</c> outside any boundary — which the host still recovers from —
+/// is reported too. Before the fix the mount
 /// and root paths emitted nothing at all,
 /// and the update path reported the element type unless the Render keyword was also on.
 ///
@@ -29,8 +31,12 @@ internal class RenderErrorNames_ComponentTypeOnEveryPath(Harness h) : SelfTestFi
             e =>
             {
                 if (e.EventName == nameof(ReactorEventSource.RenderError)
-                    && e.Payload[1] as string == nameof(RenderErrorProbeException))
-                    lock (names) names.Add((string)e.Payload[0]!);
+                    && e.Payload[1] as string is nameof(RenderErrorProbeException) or nameof(OutOfMemoryException))
+                {
+                    var name = (string)e.Payload[0]!;
+                    if (e.Payload[1] as string == nameof(OutOfMemoryException)) name += OomTag;
+                    lock (names) names.Add(name);
+                }
             },
             EventLevel.Error,
             ReactorEventSource.Keywords.Errors);
@@ -84,6 +90,47 @@ internal class RenderErrorNames_ComponentTypeOnEveryPath(Harness h) : SelfTestFi
         H.Check("RenderErrorNames_Update_NoElementTypeName",
             !update.Any(n => n.StartsWith("ComponentElement", StringComparison.Ordinal)));
 
+        // ── Fatal exceptions outside any ErrorBoundary ───────────────────
+        // OOM/SO skip the fallback arm and propagate to the host, whose outer catch shows
+        // its own fallback — a recovery, so they must be reported at the throw site too.
+        // Each case gets its own host: the host-level fallback replaces the whole tree.
+        async Task<List<string>> MountAlone(Element child)
+        {
+            H.CreateHost().Mount(_ => VStack(child));
+            await Harness.Render();
+            return Take();
+        }
+
+        var oomClass = await MountAlone(Component<ThrowsOutOfMemory>());
+        var oomFunc = await MountAlone(RenderEachTime(_ => throw new OutOfMemoryException("func")));
+        var oomMemo = await MountAlone(Memo(_ => throw new OutOfMemoryException("memo"), "stable"));
+        Console.WriteLine("# unbounded OOM mount RenderError: "
+            + string.Join(" | ", new[] { oomClass, oomFunc, oomMemo }.Select(l => string.Join(", ", l))));
+        H.Check("RenderErrorNames_Mount_OutOfMemory_ReportedOnce",
+            oomClass.Count(n => n == nameof(ThrowsOutOfMemory) + OomTag) == 1);
+        H.Check("RenderErrorNames_Mount_FuncOutOfMemory_ReportedOnce",
+            oomFunc.Count(n => n == nameof(FuncElement) + OomTag) == 1);
+        H.Check("RenderErrorNames_Mount_MemoOutOfMemory_ReportedOnce",
+            oomMemo.Count(n => n == nameof(MemoElement) + OomTag) == 1);
+
+        var oomUpdateHost = H.CreateHost();
+        oomUpdateHost.Mount(ctx =>
+        {
+            var (n, setN) = ctx.UseState(0);
+            return VStack(4,
+                Component<ThrowsOutOfMemoryOnUpdate, int>(n),
+                Button("oom bump", () => setN(n + 1)));
+        });
+        await Harness.Render();
+        Take();
+        H.ClickButton("oom bump");
+        await Harness.Render();
+
+        var oomUpdate = Take();
+        Console.WriteLine("# unbounded OOM update RenderError: " + string.Join(", ", oomUpdate));
+        H.Check("RenderErrorNames_Update_OutOfMemory_ReportedOnce",
+            oomUpdate.Count(n => n == nameof(ThrowsOutOfMemoryOnUpdate) + OomTag) == 1);
+
         // ── Host root component ──────────────────────────────────────────
         var rootHost = H.CreateHost();
         rootHost.Mount(new ThrowingRoot());
@@ -127,6 +174,8 @@ internal class RenderErrorNames_ComponentTypeOnEveryPath(Harness h) : SelfTestFi
         funcControl.Dispose();
         H.SetContent(null);
     }
+
+    private const string OomTag = "!oom";
 }
 
 internal sealed class RenderErrorProbeException(string message) : Exception(message);
