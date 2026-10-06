@@ -406,6 +406,13 @@ internal sealed class ComponentHandle
             error = parseError;
             return false;
         }
+        // The same rule that redacts a read refuses a write, so a value the next snapshot would
+        // hide (a string such as "AccessToken=…") is never written from diagnostics either.
+        if (DiagnosticText.Format("", valueType, parsed).Redacted)
+        {
+            error = $"the value for hook {hookIndex} of <{Name}> looks like a secret; it is not written from diagnostics";
+            return false;
+        }
         if (!_context.TrySetHookValueForDiagnostics(hookIndex, parsed))
         {
             error = $"hook {hookIndex} of <{Name}> refused the value";

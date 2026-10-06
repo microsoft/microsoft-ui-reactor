@@ -2570,8 +2570,11 @@ public sealed class RenderContext
             var kind = h.DiagnosticKind;
             string hookName = kind switch
             {
-                HookKind.State or HookKind.Reducer => "useState",
-                HookKind.Ref => "useRef",
+                // reactor.state has always named a value cell by its stored type: a Ref<T> is "useRef".
+                HookKind.State or HookKind.Reducer or HookKind.Ref =>
+                    h.DiagnosticRawValueType is { IsGenericType: true } raw && raw.GetGenericTypeDefinition() == typeof(Ref<>)
+                        ? "useRef"
+                        : "useState",
                 HookKind.Memo => "useMemo",
                 HookKind.Persisted => "usePersisted",
                 HookKind.Effect => "useEffect",
@@ -2681,14 +2684,18 @@ public sealed class RenderContext
 
     private class ValueHookState<T> : HookState
     {
+        private static bool HoldsRef => typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Ref<>);
+
+        // Keyed on origin, not only on T: UseRef never sets SetterKind, while UseState always
+        // does, so a UseState(new Ref<int>()) cell stays an ordinary, settable state hook.
         internal override HookKind DiagnosticKind =>
-            typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Ref<>)
-                ? HookKind.Ref
-                : SetterKind is SetterKindReducer or SetterKindDispatch
-                    ? HookKind.Reducer
+            SetterKind is SetterKindReducer or SetterKindDispatch
+                ? HookKind.Reducer
+                : SetterKind == 0 && HoldsRef
+                    ? HookKind.Ref
                     : HookKind.State;
         // A ref cell reports what it points at (Ref<T>.Current, typed T), not the Ref box.
-        internal override Type? DiagnosticValueType => Value is IRefValue r ? r.ValueType : typeof(T);
+        internal override Type? DiagnosticValueType => DiagnosticKind == HookKind.Ref && Value is IRefValue r ? r.ValueType : typeof(T);
         // SnapshotHooks keeps reporting the stored value as-is (the Ref<T> box for a ref).
         internal override Type? DiagnosticRawValueType => typeof(T);
         internal override object? DiagnosticRawValue
@@ -2706,7 +2713,7 @@ public sealed class RenderContext
                 object? v;
                 if (!ThreadSafe) v = Value;
                 else lock (Lock!) v = Value;
-                return v is IRefValue r ? r.CurrentBoxed : v;
+                return DiagnosticKind == HookKind.Ref && v is IRefValue r ? r.CurrentBoxed : v;
             }
         }
         // A Ref is mutated through Ref<T>.Current and never schedules a render,

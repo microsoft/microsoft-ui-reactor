@@ -207,6 +207,32 @@ internal static class DiagnosticText
     }
 
     /// <summary>
+    /// True when every bit set in a <c>[Flags]</c> value belongs to a declared member, so a
+    /// numeric string cannot inject an undefined combination.
+    /// </summary>
+    private static bool OnlyDefinedFlags(Type enumType, object value)
+    {
+        ulong mask = 0;
+        foreach (var member in Enum.GetValuesAsUnderlyingType(enumType))
+            mask |= ToBits(member);
+        return (ToBits(value) & ~mask) == 0;
+    }
+
+    // A boxed enum unboxes to its underlying integral type.
+    private static ulong ToBits(object value) => Convert.GetTypeCode(value) switch
+    {
+        TypeCode.SByte => (byte)(sbyte)value,
+        TypeCode.Byte => (byte)value,
+        TypeCode.Int16 => (ushort)(short)value,
+        TypeCode.UInt16 => (ushort)value,
+        TypeCode.Int32 => (uint)(int)value,
+        TypeCode.UInt32 => (uint)value,
+        TypeCode.Int64 => unchecked((ulong)(long)value),
+        TypeCode.UInt64 => (ulong)value,
+        _ => ulong.MaxValue,
+    };
+
+    /// <summary>
     /// Parses text to <paramref name="type"/>. No conversion beyond that: a value of any other
     /// type is refused with a reason, because a complex value cannot be typed safely from text.
     /// <c>"null"</c> sets a string or nullable to null.
@@ -238,7 +264,7 @@ internal static class DiagnosticText
             if (target.IsEnum)
             {
                 if (Enum.TryParse(target, text, ignoreCase: true, out var parsed) &&
-                    (Enum.IsDefined(target, parsed!) || target.IsDefined(typeof(FlagsAttribute), false)))
+                    (Enum.IsDefined(target, parsed!) || (target.IsDefined(typeof(FlagsAttribute), false) && OnlyDefinedFlags(target, parsed!))))
                 {
                     value = parsed;
                     return true;

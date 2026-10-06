@@ -260,6 +260,7 @@ public class DiagnosticTextTests
         ["hello world", typeof(string), "hello world"],
         ["friday", typeof(DayOfWeek), DayOfWeek.Friday],
         ["Read, Write", typeof(Access), Access.Read | Access.Write],
+        ["3", typeof(Access), Access.Read | Access.Write],
         ["01:02:03", typeof(TimeSpan), new TimeSpan(1, 2, 3)],
         ["2026-10-05T12:00:00Z", typeof(DateTime), new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc)],
         ["2026-10-05T12:00:00+02:00", typeof(DateTimeOffset), new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.FromHours(2))],
@@ -285,6 +286,8 @@ public class DiagnosticTextTests
     [InlineData("xy", typeof(char), "'xy' is not a single character")]
     [InlineData("Funday", typeof(DayOfWeek), "use one of Sunday, Monday")]
     [InlineData("8", typeof(DayOfWeek), "'8' is not a DayOfWeek")]
+    [InlineData("8", typeof(Access), "'8' is not a Access")]
+    [InlineData("Read, 4", typeof(Access), "is not a Access; use one of None, Read, Write")]
     [InlineData("x", typeof(List<int>), "a List<int> value cannot be typed as text")]
     [InlineData("null", typeof(List<int>), "a List<int> value cannot be typed as text")]
     [InlineData("null", typeof(object), "a object value cannot be typed as text")]

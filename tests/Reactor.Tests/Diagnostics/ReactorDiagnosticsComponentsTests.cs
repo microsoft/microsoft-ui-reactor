@@ -219,6 +219,43 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
+    public void TrySetState_RefusesAValueItsNextSnapshotWouldRedact()
+    {
+        var r = new Renderer();
+        r.Begin();
+        r.Context.UseState("plain");
+        var handle = ForContext(r.Context);
+
+        AssertRefused(handle, 0, "AccessToken=abc123", "looks like a secret; it is not written from diagnostics");
+
+        Assert.Equal("\"plain\"", handle.Describe().State[0].Value);
+        Assert.Equal(0, r.Rerenders);
+        // An ordinary value on the same hook is still written.
+        Assert.True(handle.TrySetState(0, "hello", out var error), error);
+        Assert.Equal("\"hello\"", handle.Describe().State[0].Value);
+    }
+
+    [Fact]
+    public void State_HoldingARef_IsAStateHook_NotARefHook()
+    {
+        var r = new Renderer();
+        r.Begin();
+        var box = new Ref<int>(4);
+        r.Context.UseState(box);
+        r.Context.UseRef(5);
+        var handle = ForContext(r.Context);
+
+        var hooks = handle.Describe().State;
+        Assert.Equal(("state", "Ref<int>", false), (hooks[0].Kind, hooks[0].Type, hooks[0].Editable));
+        Assert.Equal(("ref", "int", "5"), (hooks[1].Kind, hooks[1].Type, hooks[1].Value));
+        // Refused for its type (a Ref<int> cannot be typed as text), not as though it came from UseRef.
+        AssertRefused(handle, 0, "1", "a Ref<int> value cannot be typed as text");
+        AssertRefused(handle, 1, "1", "is a ref hook");
+        // reactor.state keeps naming a Ref<T> cell "useRef", as it always has.
+        Assert.Equal(new[] { "useRef", "useRef" }, r.Context.SnapshotHooks().Select(s => s.Hook));
+    }
+
+    [Fact]
     public void Unmounted_RefusesWritesAndRerender()
     {
         var r = new Renderer();

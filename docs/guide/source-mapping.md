@@ -363,9 +363,11 @@ ending in `Password`, `Secret`, `Credential`, `Token`, `ApiKey`, `PrivateKey` or
 `ConnectionString`; an object whose own text, or a string, names such a member
 with a value (`AccessToken=…`, a record with a `Password` property) — are
 reported as
-`<redacted>` and are never editable.
+`<redacted>` and are never editable; nor is a value written that would read back
+redacted.
 `TrySetState` accepts numbers, single characters, `true`/`false`, enum member
-names, dates, time spans, GUIDs, plain text and their nullables (`null` clears a
+names (a `[Flags]` combination only of declared bits), dates, time spans, GUIDs,
+plain text and their nullables (`null` clears a
 string or nullable); it refuses any other type with a reason rather than guessing.
 Hook names are not recorded, so `State` rows have an empty `Name` and are
 identified by call-order index and kind. Props are read by reflection: under

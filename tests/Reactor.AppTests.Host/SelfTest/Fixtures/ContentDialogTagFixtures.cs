@@ -53,6 +53,15 @@ internal static class ContentDialogTagFixtures
                 H.Skip("ContentDialogTag_GetSourceResolves",
                     "assembly built without REACTOR_SOURCEMAP (Release) - no call site is stamped");
 #endif
+
+                // A caller can keep the dialog (.Set(...)); once closed it must not keep
+                // resolving to its element.
+                var closed = dialog;
+                dialog = null;
+                closed.Hide();
+                await ContentDialogProbe.WaitForNoneOpen(H);
+                await Harness.WaitFor(() => Reconciler.GetElementTag(closed) is null);
+                H.Check("ContentDialogTag_ClearedOnClose", Reconciler.GetElementTag(closed) is null);
             }
             finally
             {
