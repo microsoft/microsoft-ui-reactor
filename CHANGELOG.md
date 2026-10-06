@@ -46,7 +46,7 @@ Conventions for contributors:
     re-rendered.
 
 - **Inspect Reactor apps with no managed agent, Native AOT included: `ReactorSource`
-  on every control** (issue #ISSUE, spec 010):
+  on every control** (issue #1341, spec 010):
   - `ReactorDiagnostics.SourceProperty` (`"ReactorSource"` in XamlDiagnostics) is an
     attached string published on every realized control in diagnostics mode. It is
     readable out of process with no managed code: call site, owner component,
