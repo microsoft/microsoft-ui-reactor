@@ -472,6 +472,35 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
+    public void Props_OfASecretBearingType_AreOneRedactedRow_NotListedMemberByMember()
+    {
+        var node = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new SessionToken("s3cr3t")) };
+
+        var row = Assert.Single(ComponentHandle.FromNode(node, () => true).Describe().Props);
+
+        Assert.Equal(("Props", "<redacted>", true), (row.Name, row.Value, row.Redacted));
+    }
+
+    [Fact]
+    public void Props_SkipAPropertyWhoseGetterIsNotPublic()
+    {
+        var node = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new PrivateGetterProps()) };
+
+        var props = ComponentHandle.FromNode(node, () => true).Describe().Props;
+
+        Assert.Equal(new[] { new DiagnosticValue(0, "Visible", "prop", "string", "\"v\"", false, false, false) }, props);
+    }
+
+    private sealed record SessionToken(string Value);
+
+    private sealed class PrivateGetterProps
+    {
+        public string Visible => "v";
+        public string Session { private get; set; } = "hidden";
+        public override string ToString() => Session;
+    }
+
+    [Fact]
     public void Props_AThrowingGetterIsReportedUnavailable_NotFatal()
     {
         var node = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new ThrowingProps()) };

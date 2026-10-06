@@ -318,12 +318,16 @@ internal static class DiagnosticText
     {
         if (props is null) return global::System.Array.Empty<(string, Type, object?)>();
         var type = props.GetType();
-        if (type.IsPrimitive || props is string or decimal or Enum || IsListLike(props))
+        // A secret-bearing props type stays one row, so Format redacts it whole instead of the
+        // members of, say, a SessionToken(string Value) being listed one by one.
+        if (type.IsPrimitive || props is string or decimal or Enum || IsListLike(props)
+            || HoldsSecretType(declared) || HoldsSecretType(type))
             return new[] { ("Props", declared ?? type, (object?)props) };
 
         var rows = new List<(string, Type, object?)>();
+        // A public getter, not just CanRead: `public string X { private get; set; }` is not readable surface.
         var readable = type.GetProperties(global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Instance)
-            .Where(static p => p.Name != "EqualityContract" && p.GetIndexParameters().Length == 0 && p.CanRead);
+            .Where(static p => p.Name != "EqualityContract" && p.GetIndexParameters().Length == 0 && p.GetMethod is { IsPublic: true });
         foreach (var property in readable)
         {
             object? value;
