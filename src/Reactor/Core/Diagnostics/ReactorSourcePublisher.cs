@@ -128,7 +128,7 @@ internal static class ReactorSourcePublisher
         }
 
         string? name = site?.DeclaredName;
-        var parts = s_parts.GetOrAdd(
+        var parts = Cache.Parts.GetOrAdd(
             new ValueShape(site, owner, effective.GetType(), mounts, root, name, hooks ?? rootHooks),
             static shape => ValueParts.Create(shape));
         var keyText = ReactorSourceFormat.KeyText(effective.Key ?? element.Key);
@@ -145,7 +145,12 @@ internal static class ReactorSourcePublisher
     private readonly record struct ValueShape(
         SourceLocation? Site, string? Owner, Type Kind, string? Mounts, string? Root, string? Name, string? Hooks);
 
-    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<ValueShape, ValueParts> s_parts = new();
+    // In a holder class: the guard on every reconciler call site reads IsEnabled, which runs this
+    // type's static initializer even when publishing is off; the cache is only allocated on first use.
+    private static class Cache
+    {
+        internal static readonly global::System.Collections.Concurrent.ConcurrentDictionary<ValueShape, ValueParts> Parts = new();
+    }
 
     private sealed class ValueParts(string head, string tail)
     {
