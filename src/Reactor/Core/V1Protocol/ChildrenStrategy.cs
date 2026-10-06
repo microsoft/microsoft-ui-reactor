@@ -172,20 +172,33 @@ public sealed record ItemsHost<TElement, TControl>(
         IReadOnlyList<object> oldItems, IReadOnlyList<object> newItems, Action requestRerender)
     {
         if (!reconciler.ResourceRefreshActive) return;
+        if (oldItems.Count != newItems.Count) return;
         var collection = GetCollection(control);
-        // Items map 1:1 onto the collection only when every item realized to an entry.
-        if (oldItems.Count != newItems.Count || collection.Count != newItems.Count) return;
+        // Null and Empty items realize no entry, so the collection skips them. Map each
+        // remaining item to the next entry; if the counts disagree the mapping is unknown,
+        // and the kept items are left as they are.
+        int realizing = 0;
         for (int i = 0; i < newItems.Count; i++)
         {
+            if (RealizesEntry(newItems[i])) realizing++;
+        }
+        if (realizing != collection.Count) return;
+        int entry = 0;
+        for (int i = 0; i < newItems.Count; i++)
+        {
+            if (!RealizesEntry(newItems[i])) continue;
             if (newItems[i] is Element newChild && oldItems[i] is Element oldChild
-                && collection[i] is UIElement existing)
+                && collection[entry] is UIElement existing)
             {
                 var updated = reconciler.ReconcileV1Child(oldChild, newChild, existing, requestRerender);
                 if (updated is not null && !ReferenceEquals(updated, existing))
-                    collection[i] = updated;
+                    collection[entry] = updated;
             }
+            entry++;
         }
     }
+
+    private static bool RealizesEntry(object? item) => item is not null and not EmptyElement;
 }
 
 /// <summary>Placeholder for future ItemsHost options (virtualization mode,

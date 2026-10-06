@@ -1573,22 +1573,35 @@ public sealed partial class Reconciler
     /// diffs the output against what was realized last time (recorded at mount and here), not
     /// against itself: a brush the factory resolved eagerly with <c>ThemeRef.Resolve</c> is
     /// equal on both sides of a self-diff, and diff-based setters would skip writing it.
-    /// Falls back to the self-diff when no output was recorded or it can't be updated in place.
-    /// A layer whose output is another memo always self-diffs: the nested memo's own refresh
-    /// then diffs against the recorded (innermost) output.
+    /// <list type="bullet">
+    /// <item>Output is another memo (nested): self-diff, so the nested memo's own refresh diffs
+    /// against the recorded (innermost) output.</item>
+    /// <item>Output changed shape (root type or key) from the recorded one: remount it; the
+    /// caller swaps the replacement in and unmounts the old control.</item>
+    /// <item>Nothing recorded (a control that is not a FrameworkElement): self-diff.</item>
+    /// <item>Output is Empty: keep the realized control. Update can't express a removal, and
+    /// a same-key factory is pure by contract, so a resource edit that empties it is out of
+    /// contract.</item>
+    /// </list>
     /// </summary>
     private UIElement? RefreshKeyedMemo(KeyedMemoElement memo, UIElement control, Action requestRerender)
     {
         var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
         if (inner is EmptyElement) return null;
-        var previous = control is FrameworkElement fe
-                       && TryGetReactorState(fe, out var state)
-                       && state.KeyedMemoOutput is { } recorded
-                       && CanUpdate(recorded, inner)
-            ? recorded
-            : inner;
-        var replacement = Update(previous, inner, control, requestRerender);
-        if (inner is not KeyedMemoElement && (replacement ?? control) is FrameworkElement realized)
+        if (inner is KeyedMemoElement) return Update(inner, inner, control, requestRerender);
+
+        var recorded = control is FrameworkElement fe && TryGetReactorState(fe, out var state)
+            ? state.KeyedMemoOutput
+            : null;
+        UIElement? replacement;
+        if (recorded is null)
+            replacement = Update(inner, inner, control, requestRerender);
+        else if (CanUpdate(recorded, inner))
+            replacement = Update(recorded, inner, control, requestRerender);
+        else
+            replacement = Mount(inner, requestRerender);
+
+        if ((replacement ?? control) is FrameworkElement realized)
             GetOrCreateReactorState(realized).KeyedMemoOutput = inner;
         return replacement;
     }

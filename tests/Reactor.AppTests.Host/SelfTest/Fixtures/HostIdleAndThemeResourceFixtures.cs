@@ -118,6 +118,16 @@ internal static class HostIdleAndThemeResourceFixtures
                 Theme.NotifyResourcesChanged();
                 await WaitForAllHostsIdleAsync();
                 H.Check("ThemeNotify_NotifiedIsBlue", ProbeColor(host) == Colors.Blue, $"color={ProbeColor(host)}");
+
+                // The source key goes away: the override it wrote must go too.
+                resources.Remove(AppKey);
+                setTick!(2);
+                await host.WaitForIdleAsync();
+                H.Check("ThemeNotify_RemovalRerenderAloneIsStale", ProbeColor(host) == Colors.Blue, $"color={ProbeColor(host)}");
+
+                Theme.NotifyResourcesChanged();
+                await WaitForAllHostsIdleAsync();
+                H.Check("ThemeNotify_RemovedSourceDropsOverride", ProbeColor(host) is null, $"color={ProbeColor(host)}");
             }
             finally
             {
@@ -179,6 +189,8 @@ internal static class HostIdleAndThemeResourceFixtures
                     // unchanged key: both skip their children outside a resource refresh.
                     var listItems = ctx.UseMemo<Element[]>(
                         () => [TextBlock("ListItemProbe").Foreground(Theme.Ref(AppKey))]);
+                    var gapItems = ctx.UseMemo<Element[]>(
+                        () => [Empty(), TextBlock("GapItemProbe").Foreground(Theme.Ref(AppKey))]);
                     return VStack(
                         TextBlock($"tick:{tick}"),
                         memo,
@@ -187,6 +199,12 @@ internal static class HostIdleAndThemeResourceFixtures
                         // sides of a self-diff, so only a diff against the mounted output writes it.
                         Memo("resolved", () => TextBlock("ResolvedMemoProbe").Foreground(ThemeRef.Resolve(AppKey, isDark: false)!)),
                         // Nested keyed memos share one realized control.
+                        // A factory whose output changes shape with the resource.
+                        Memo("shape", () => ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red
+                            ? TextBlock("ShapeProbeBefore")
+                            : Border(TextBlock("ShapeProbeAfter"))),
+                        // An Empty item realizes no ComboBox entry, ahead of a themed one.
+                        ComboBox(gapItems, default, null),
                         Memo("outer", () => Memo("inner",
                             () => TextBlock("NestedMemoProbe").Foreground(ThemeRef.Resolve(AppKey, isDark: false)!))),
                         ComboBox(listItems, default, null));
@@ -199,6 +217,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 await host.WaitForIdleAsync();
                 H.Check("ThemeMemo_Rerendered", FindText(target, "tick:1") is not null);
                 H.Check("ThemeMemo_RerenderAloneIsStale", ProbeColor(target) == Colors.Red, $"color={ProbeColor(target)}");
+                H.Check("ThemeMemo_ShapeRerenderAloneIsStale", FindText(target, "ShapeProbeBefore") is not null);
+                H.Check("ThemeMemo_GapItemRerenderAloneIsStale", ListItemColor(target, "GapItemProbe") == Colors.Red, $"color={ListItemColor(target, "GapItemProbe")}");
                 H.Check("ThemeMemo_NestedMemoRerenderAloneIsStale", ProbeColor(target, "NestedMemoProbe") == Colors.Red, $"color={ProbeColor(target, "NestedMemoProbe")}");
                 H.Check("ThemeMemo_ResolvedMemoRerenderAloneIsStale", ProbeColor(target, "ResolvedMemoProbe") == Colors.Red, $"color={ProbeColor(target, "ResolvedMemoProbe")}");
                 H.Check("ThemeMemo_KeyedMemoRerenderAloneIsStale", ProbeColor(target, "KeyedMemoProbe") == Colors.Red, $"color={ProbeColor(target, "KeyedMemoProbe")}");
@@ -207,6 +227,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 await Task.Run(Theme.NotifyResourcesChanged);
                 await WaitForAllHostsIdleAsync();
                 H.Check("ThemeMemo_NotifiedFromBackgroundIsBlue", ProbeColor(target) == Colors.Blue, $"color={ProbeColor(target)}");
+                H.Check("ThemeMemo_ShapeChangeRemounts", FindText(target, "ShapeProbeAfter") is not null && FindText(target, "ShapeProbeBefore") is null);
+                H.Check("ThemeMemo_GapItemNotifiedIsBlue", ListItemColor(target, "GapItemProbe") == Colors.Blue, $"color={ListItemColor(target, "GapItemProbe")}");
                 H.Check("ThemeMemo_NestedMemoNotifiedIsBlue", ProbeColor(target, "NestedMemoProbe") == Colors.Blue, $"color={ProbeColor(target, "NestedMemoProbe")}");
                 H.Check("ThemeMemo_ResolvedMemoNotifiedIsBlue", ProbeColor(target, "ResolvedMemoProbe") == Colors.Blue, $"color={ProbeColor(target, "ResolvedMemoProbe")}");
                 H.Check("ThemeMemo_KeyedMemoNotifiedIsBlue", ProbeColor(target, "KeyedMemoProbe") == Colors.Blue, $"color={ProbeColor(target, "KeyedMemoProbe")}");
@@ -234,20 +256,18 @@ internal static class HostIdleAndThemeResourceFixtures
 
         // Read through ComboBox.Items: the item is the TextBlock itself, whether or not the
         // drop-down has ever been opened.
-        private static global::Windows.UI.Color? ListItemColor(Border target)
-            => (FindComboBox(target)?.Items.OfType<TextBlock>().FirstOrDefault(t => t.Text == "ListItemProbe")
+        private static global::Windows.UI.Color? ListItemColor(Border target, string probe = "ListItemProbe")
+            => (FindComboBoxes(target).SelectMany(cb => cb.Items.OfType<TextBlock>()).FirstOrDefault(t => t.Text == probe)
                     ?.Foreground as SolidColorBrush)?.Color;
 
-        private static ComboBox? FindComboBox(DependencyObject? root)
+        private static IEnumerable<ComboBox> FindComboBoxes(DependencyObject root)
         {
-            if (root is null) return null;
-            if (root is ComboBox cb) return cb;
+            if (root is ComboBox cb) yield return cb;
             int count = VisualTreeHelper.GetChildrenCount(root);
             for (int i = 0; i < count; i++)
             {
-                if (FindComboBox(VisualTreeHelper.GetChild(root, i)) is { } found) return found;
+                foreach (var found in FindComboBoxes(VisualTreeHelper.GetChild(root, i))) yield return found;
             }
-            return null;
         }
 
         private static TextBlock? FindText(DependencyObject? root, string text)
