@@ -146,4 +146,52 @@ public sealed class StaticInfoTests : IDisposable
     [Fact]
     public void Hooks_NoneForAComponentTheGeneratorDidNotSee()
         => Assert.Null(ReactorSourceMap.GetComponentHooks(typeof(StaticInfoTests)));
+
+    private class BaseHookProbe : Component
+    {
+        public override Element Render()
+        {
+            var (taps, _) = UseState(0); // hook:taps
+            return TextBlock($"{taps}");
+        }
+    }
+
+    private sealed class InheritsRenderProbe : BaseHookProbe;
+
+    private sealed class HookFreeOverrideProbe : BaseHookProbe
+    {
+        public override Element Render() => TextBlock("no hooks");
+    }
+
+    [Fact]
+    public void Hooks_InheritedRender_ResolveFromTheDeclaringBase()
+    {
+        var expected = $"0:taps@{LineOf("hook:taps")}";
+        Assert.Equal(expected, ReactorSourceMap.GetComponentHooks(typeof(BaseHookProbe)));
+        Assert.Equal(expected, ReactorSourceMap.GetComponentHooks(typeof(InheritsRenderProbe)));
+    }
+
+    [Fact]
+    public void Hooks_HookFreeOverride_DoesNotBorrowTheBaseHooks()
+    {
+        Assert.NotNull(ReactorSourceMap.GetComponentHooks(typeof(BaseHookProbe))); // positive control
+        Assert.Null(ReactorSourceMap.GetComponentHooks(typeof(HookFreeOverrideProbe)));
+    }
+
+    [Fact]
+    public void Hooks_AreKeyedByAssembly()
+    {
+        // Full names are only unique within one assembly: two source-mapped libraries can each
+        // define App.Counter. Their entries must not overwrite each other.
+        var table = new ReactorStaticInfoBuilder();
+        var first = typeof(object).Assembly;
+        var second = typeof(StaticInfoTests).Assembly;
+        table.CurrentAssembly = first;
+        table.ComponentHooks("App.Counter", "0:a@1");
+        table.CurrentAssembly = second;
+        table.ComponentHooks("App.Counter", "0:b@2");
+
+        Assert.Equal("0:a@1", table.ComponentHookTable[(first, "App.Counter")]);
+        Assert.Equal("0:b@2", table.ComponentHookTable[(second, "App.Counter")]);
+    }
 }

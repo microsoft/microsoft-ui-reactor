@@ -52,6 +52,17 @@ public sealed partial class SourceMapInterceptorGenerator
             .Where(static x => x is not null)
             .Collect();
 
+        // Every class component that overrides Render(), hooks or not: the runtime walks a
+        // component's base types to the Render() it actually runs, so a hook-free override
+        // must be recorded to stop that walk from borrowing its base class's hooks.
+        var renderOwners = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => node is MethodDeclarationSyntax m
+                    && m.Identifier.ValueText == "Render"
+                    && m.Modifiers.Any(static t => t.IsKind(SyntaxKind.OverrideKeyword)),
+                transform: static (ctx, ct) => RenderOwner(ctx, ct))
+            .Where(static x => x is not null)
+            .Collect();
+
         // Where the project (and its solution) live, so the runtime can publish call sites
         // RELATIVE to them rather than as absolute developer paths. Reactor.targets makes
         // both properties compiler-visible.
@@ -62,14 +73,27 @@ public sealed partial class SourceMapInterceptorGenerator
             return (Project: project ?? string.Empty, Solution: solution ?? string.Empty);
         });
 
-        var input = callSites.Combine(hookCalls).Combine(enabled).Combine(hasApi).Combine(pathMap).Combine(roots);
+        var input = callSites.Combine(hookCalls).Combine(renderOwners).Combine(enabled).Combine(hasApi).Combine(pathMap).Combine(roots);
         context.RegisterSourceOutput(input, static (spc, tuple) =>
         {
-            var (((((sites, hooks), isEnabled), api), map), root) = tuple;
+            var ((((((sites, hooks), owners), isEnabled), api), map), root) = tuple;
             if (!isEnabled || !api) return;
-            var source = EmitStaticInfo(sites, hooks, map, root.Project, root.Solution);
+            var source = EmitStaticInfo(sites, hooks, owners, map, root.Project, root.Solution);
             if (source is not null) spc.AddSource("ReactorSourceMap.StaticInfo.g.cs", source);
         });
+    }
+
+    /// <summary>The CLR full name of a <c>Component</c> subclass that declares this <c>Render()</c> override.</summary>
+    private static string? RenderOwner(GeneratorSyntaxContext ctx, global::System.Threading.CancellationToken ct)
+    {
+        var component = ctx.SemanticModel.Compilation.GetTypeByMetadataName(ComponentMetadataName);
+        if (component is null
+            || ctx.SemanticModel.GetDeclaredSymbol((MethodDeclarationSyntax)ctx.Node, ct) is not { IsOverride: true, ContainingType: { } owner }
+            || !DerivesFrom(owner, component))
+        {
+            return null;
+        }
+        return ClrFullName(owner);
     }
 
     // ── Declared names ────────────────────────────────────────────────────
@@ -430,6 +454,7 @@ public sealed partial class SourceMapInterceptorGenerator
     private static string? EmitStaticInfo(
         ImmutableArray<CallSite?> sites,
         ImmutableArray<HookCall?> hooks,
+        ImmutableArray<string?> renderOwners,
         ImmutableArray<KeyValuePair<string, string>> pathMap,
         string projectDirectory,
         string solutionDirectory)
@@ -450,16 +475,23 @@ public sealed partial class SourceMapInterceptorGenerator
                 $"            b.Name({Literal(ApplyPathMap(site!.FilePath, pathMap))}, {site.Line}, {site.Column}, {Literal(site.DeclaredName!)});");
         }
 
+        var componentsWithHooks = new HashSet<string>(StringComparer.Ordinal);
         foreach (var group in hooks.Where(static h => h is not null).GroupBy(static h => h!.Owner))
         {
             var value = HooksValue(group.OrderBy(static h => h!.SortPath, StringComparer.Ordinal)
                 .ThenBy(static h => h!.SortPosition)
                 .Select(static h => h!));
             var owner = group.Key;
+            if (owner.Kind == HookOwnerKind.Component) componentsWithHooks.Add(owner.Key);
             body.AppendLine(owner.Kind == HookOwnerKind.Component
                 ? $"            b.ComponentHooks({Literal(owner.Key)}, {Literal(value)});"
                 : $"            b.RenderFunctionHooks({Literal(ApplyPathMap(owner.Key, pathMap))}, {owner.Line}, {owner.Column}, {Literal(value)});");
         }
+
+        // A Render() override with no hooks is recorded too (empty), so a component that
+        // inherits it is not given a base class's hooks.
+        foreach (var owner in renderOwners.Where(o => o is not null && !componentsWithHooks.Contains(o)).Distinct(StringComparer.Ordinal).OrderBy(static o => o, StringComparer.Ordinal))
+            body.AppendLine($"            b.ComponentHooks({Literal(owner!)}, {Literal(string.Empty)});");
 
         if (body.Length == 0) return null;
 
@@ -476,7 +508,7 @@ public sealed partial class SourceMapInterceptorGenerator
         // Registering stores the delegate only; the tables are built on the first lookup.
         sb.AppendLine("        [global::System.Runtime.CompilerServices.ModuleInitializer]");
         sb.AppendLine("        internal static void Register()");
-        sb.AppendLine("            => global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.RegisterStaticInfo(Fill);");
+        sb.AppendLine("            => global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.RegisterStaticInfo(typeof(ReactorSourceMapStaticInfo).Assembly, Fill);");
         sb.AppendLine();
         sb.AppendLine("        private static void Fill(global::Microsoft.UI.Reactor.Diagnostics.ReactorStaticInfoBuilder b)");
         sb.AppendLine("        {");

@@ -116,7 +116,7 @@
     project reference, so they add the generator ProjectReference and the
     constant themselves. Only the handful that opt in get either.
   -->
-  <ItemGroup Condition="'$(ReactorSourceMap)' == 'true' and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
+  <ItemGroup Condition="('$(ReactorSourceMap)' == 'true' or ('$(ReactorSourceMap)' == '' and '$(ReactorDiagnostics)' == 'true')) and Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
     <Analyzer Include="$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll" />
   </ItemGroup>
 
@@ -124,6 +124,26 @@
     <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
     <DefineConstants>$(DefineConstants);REACTOR_SOURCEMAP</DefineConstants>
   </PropertyGroup>
+
+  <!--
+    $(ReactorDiagnostics)=true implies ReactorSourceMap=true (property group above), but that
+    group is positional: when this file is imported BEFORE the project body (in-repo projects
+    import it from Directory.Build.props) a body-level <ReactorDiagnostics>true</ReactorDiagnostics>
+    arrives after it. Items already see the final value (the switch item, the analyzer item
+    above); this target applies the property half from the final value too, before the
+    analyzer config and the compiler read it.
+  -->
+  <Target Name="_ReactorApplyLateDiagnosticsOptIn"
+          BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun;GenerateMSBuildEditorConfigFile;CoreCompile"
+          Condition="'$(ReactorDiagnostics)' == 'true' and '$(ReactorSourceMap)' == ''">
+    <PropertyGroup>
+      <ReactorSourceMap>true</ReactorSourceMap>
+    </PropertyGroup>
+    <PropertyGroup Condition="Exists('$(MSBuildThisFileDirectory)sourcemap\Reactor.SourceMap.Generator.dll')">
+      <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.UI.Reactor.Generated</InterceptorsNamespaces>
+      <DefineConstants>$(DefineConstants);REACTOR_SOURCEMAP</DefineConstants>
+    </PropertyGroup>
+  </Target>
 
   <ItemGroup>
     <!-- Lets the generator read $(ReactorSourceMap) via the analyzer config. -->

@@ -1016,6 +1016,19 @@ public sealed partial class Reconciler : IDisposable
     {
         if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
             state.Element = null;
+        ClearPublishedSource(fe);
+    }
+
+    /// <summary>
+    /// A control that leaves Reactor's ownership (pool return, recycle, detach) stops
+    /// describing the element it no longer hosts: the published <c>ReactorSource</c> goes with
+    /// the element pointer, so neither an inspector nor <c>GetSource</c>'s published-value
+    /// fallback reports stale attribution. Applies to controls without a ReactorState too.
+    /// </summary>
+    private static void ClearPublishedSource(FrameworkElement fe)
+    {
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
+            fe.ClearValue(Diagnostics.ReactorDiagnostics.SourceProperty);
     }
 
     /// <summary>
@@ -1055,6 +1068,7 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     public static void DetachReactorState(FrameworkElement fe)
     {
+        ClearPublishedSource(fe);
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
             return;
         TeardownReferenceEdges(fe);

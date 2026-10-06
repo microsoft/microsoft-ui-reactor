@@ -4615,7 +4615,7 @@ Mount(Func<RenderContext, Element> renderFunc) → void
 ### static class ReactorSourceMap
 bool Enabled { get; set; }
 GetSource(UIElement control) → SourceLocation?
-RegisterStaticInfo(Action<ReactorStaticInfoBuilder> fill) → void
+RegisterStaticInfo(Assembly assembly, Action<ReactorStaticInfoBuilder> fill) → void
 
 ### class ReactorSourceTransparentAttribute
 new()

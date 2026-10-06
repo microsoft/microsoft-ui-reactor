@@ -97,7 +97,7 @@ public sealed class ReactorSourceFormatTests
     {
         // Unique fake roots: the static-info table is process-wide.
         var root = $@"Q:\reactor-relpath-{Guid.NewGuid():N}";
-        Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.RegisterStaticInfo(b => b.Roots($@"{root}\src\App\", root));
+        Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.RegisterStaticInfo(typeof(ReactorSourceFormatTests).Assembly, b => b.Roots($@"{root}\src\App\", root));
 
         string? marker;
         Assert.Equal("Pages/Main.cs",

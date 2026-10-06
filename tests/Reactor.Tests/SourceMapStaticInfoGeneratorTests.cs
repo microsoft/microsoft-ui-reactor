@@ -216,6 +216,41 @@ public sealed class SourceMapStaticInfoGeneratorTests
     }
 
     [Fact]
+    public void Hooks_EveryRenderOverrideIsRecorded_InheritingClassesAreNot()
+    {
+        // The runtime walks a component's base types to the Render() it runs; a hook-free
+        // override must be recorded (empty) so it does not borrow its base class's hooks.
+        const string code = """
+            using Microsoft.UI.Reactor.Core;
+            using static Microsoft.UI.Reactor.Factories;
+
+            public class BaseCard : Component
+            {
+                public override Element Render()
+                {
+                    var (taps, _) = UseState(0);
+                    return TextBlock("base");
+                }
+            }
+
+            public sealed class Inherits : BaseCard { }
+
+            public sealed class Plain : BaseCard
+            {
+                public override Element Render() => TextBlock("plain");
+            }
+            """;
+
+        var (_, generated) = SourceMapTransparentGeneratorTests.Run(code);
+        var entries = s_componentHooks.Matches(generated).ToDictionary(m => m.Groups["type"].Value, m => m.Groups["hooks"].Value);
+
+        Assert.Equal($"0:taps@{LineOf(code, "UseState(0)")}", entries["BaseCard"]);
+        Assert.Equal(string.Empty, entries["Plain"]);
+        Assert.False(entries.ContainsKey("Inherits"));
+        Assert.Contains("RegisterStaticInfo(typeof(ReactorSourceMapStaticInfo).Assembly, Fill)", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Hooks_GenericComponent_IsKeyedByItsOpenDefinition()
     {
         const string code = """

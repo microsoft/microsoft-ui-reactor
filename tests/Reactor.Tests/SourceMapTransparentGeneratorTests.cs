@@ -106,7 +106,7 @@ public sealed class SourceMapTransparentGeneratorTests
             public static class ReactorSourceMap
             {
                 public static bool Enabled { get; set; }
-                public static void RegisterStaticInfo(global::System.Action<ReactorStaticInfoBuilder> fill) { }
+                public static void RegisterStaticInfo(global::System.Reflection.Assembly assembly, global::System.Action<ReactorStaticInfoBuilder> fill) { }
             }
             public sealed class ReactorStaticInfoBuilder
             {

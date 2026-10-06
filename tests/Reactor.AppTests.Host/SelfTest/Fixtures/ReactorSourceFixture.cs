@@ -193,6 +193,7 @@ internal class ReactorSource_AotTagSkipKeepsGetSource(Harness h) : SelfTestFixtu
         bool odd = n % 2 == 1;
         return VStack(4,
             TextBlock("aot-plain"),
+            odd ? null : ProgressRing(),
             odd ? TextBlock("aot-flip") : TextBlock("aot-flip"),
             Border(TextBlock("aot-in-border")).Margin(4),
             TextBlock("aot-keyed").WithKey("k|1"),
@@ -225,7 +226,7 @@ internal class ReactorSource_AotTagSkipKeepsGetSource(Harness h) : SelfTestFixtu
         return new Snapshot(list, tagged, resolvedUntagged);
     }
 
-    private async Task<(Snapshot Mounted, Snapshot Rerendered)> RunPath(bool noManagedAgent)
+    private async Task<(Snapshot Mounted, Snapshot Rerendered, SourceLocation? Removed, SourceLocation? RemovedBefore)> RunPath(bool noManagedAgent)
     {
         ReactorSourcePublisher.NoManagedAgent = noManagedAgent;
         var host = H.CreateHost();
@@ -233,13 +234,18 @@ internal class ReactorSource_AotTagSkipKeepsGetSource(Harness h) : SelfTestFixtu
         await Harness.Render();
         await Harness.Render();
         var mounted = Take();
+        // The re-render removes the only ProgressRing, which goes back to the pool: a pooled
+        // control must stop answering for the element it hosted, in both paths.
+        var gone = H.FindControl<WinUI.ProgressRing>(_ => true);
+        var goneBefore = gone is null ? null : Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(gone);
         H.ClickButton("aot-bump");
         await Harness.Render();
         await Harness.Render();
         var rerendered = Take();
+        var removed = gone is null ? null : Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(gone);
         host.Dispose();
         H.SetContent(null);
-        return (mounted, rerendered);
+        return (mounted, rerendered, removed, goneBefore);
     }
 
     private static int Mismatches(Snapshot a, Snapshot b, string label)
@@ -290,6 +296,9 @@ internal class ReactorSource_AotTagSkipKeepsGetSource(Harness h) : SelfTestFixtu
 
             H.Check("ReactorSource_AotSkip_GetSourceUnchanged_Mounted", Mismatches(tagged.Mounted, skipped.Mounted, "mounted") == 0);
             H.Check("ReactorSource_AotSkip_GetSourceUnchanged_Rerendered", Mismatches(tagged.Rerendered, skipped.Rerendered, "rerendered") == 0);
+            Console.WriteLine($"# removed control: tagged {tagged.RemovedBefore} -> {tagged.Removed}; skipped {skipped.RemovedBefore} -> {skipped.Removed}");
+            H.Check("ReactorSource_AotSkip_RemovedControlAgrees",
+                tagged.RemovedBefore is not null && skipped.RemovedBefore is not null && tagged.Removed is null && skipped.Removed is null);
             // The re-render moved call sites, so a stale location would differ from the mount's.
             H.Check("ReactorSource_AotSkip_RerenderMovedCallSites",
                 !tagged.Mounted.Controls.SequenceEqual(tagged.Rerendered.Controls));

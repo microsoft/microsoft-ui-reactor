@@ -159,7 +159,7 @@ Values escape `%` as `%25` and `|` as `%7C`. Readers ignore fields they do not k
 - the `Reactor.DevtoolsSupport` build switch: on by default in Debug through `$(ReactorDiagnostics)`, and `-p:ReactorDiagnostics=true` for a Release / Native AOT build. An explicit `ReactorDiagnostics` value wins over the default and over a `Reactor.DevtoolsSupport` item the project declares itself;
 - `REACTOR_DIAGNOSTICS=1` in the environment at launch.
 
-Otherwise nothing is written, and a trimmed or AOT build without the switch does not contain the publishing code at all. Like XAML's runtime source info, paths are never absolute developer paths. See the [threat model](../security/threat-model.md) §7.7.
+Otherwise nothing is written, and a trimmed or AOT build without the switch does not contain the publishing code at all. Like XAML's runtime source info, paths are never absolute developer paths. See the [threat model](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/security/threat-model.md) §7.7.
 
 **Cost.** With the switch on but `REACTOR_DIAGNOSTICS` unset (the Debug default), the cost is a
 cached boolean check per control: mount, re-render, memory and first frame stay within run-to-run
