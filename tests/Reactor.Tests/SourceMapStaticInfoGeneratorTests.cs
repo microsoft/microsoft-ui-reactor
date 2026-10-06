@@ -420,6 +420,60 @@ public sealed class SourceMapStaticInfoGeneratorTests
     }
 
     [Fact]
+    public void Source_FingerprintCoversAbsentFacts()
+    {
+        // Each pair keeps every call at the same line and column and differs in ONE fact being
+        // absent: a declared name, or a render function's hook.
+        const string named = """
+            using Microsoft.UI.Reactor.Core;
+            using static Microsoft.UI.Reactor.Factories;
+
+            public static class Page
+            {
+                public static Element Build()
+                {
+                    var title = TextBlock("t");
+                    return Memo(ctx => { var n = ctx.UseRef(0); return title; });
+                }
+            }
+            """;
+        const string hookless = """
+            using Microsoft.UI.Reactor.Core;
+            using static Microsoft.UI.Reactor.Factories;
+
+            public static class Page
+            {
+                public static Element Build()
+                {
+                    var title = TextBlock("t");
+                    return Memo(ctx => {                        return title; });
+                }
+            }
+            """;
+
+        static string FingerprintOf(string code)
+        {
+            var match = Regex.Match(SourceMapTransparentGeneratorTests.Run(code).GeneratedSource,
+                @"b\.Source\(@""User\.cs"", @""(?<fp>[0-9a-f]{16})""\);", RegexOptions.CultureInvariant);
+            Assert.True(match.Success, "no b.Source(...) for User.cs");
+            return match.Groups["fp"].Value;
+        }
+
+        Assert.Equal(PositionOf(named, "TextBlock("), PositionOf(hookless, "TextBlock("));
+        Assert.Equal(PositionOf(named, "Memo("), PositionOf(hookless, "Memo("));
+
+        var a = FingerprintOf(named);
+        Assert.Equal(a, FingerprintOf(named)); // deterministic
+        Assert.NotEqual(a, FingerprintOf(hookless));
+        // A discard at the same column: the call is still there, its name is not.
+        var discarded = named.Replace("var title = TextBlock(\"t\");", "_         = TextBlock(\"t\");", StringComparison.Ordinal)
+            .Replace("return title; });", "return null!; });", StringComparison.Ordinal);
+        Assert.Equal(PositionOf(named, "TextBlock("), PositionOf(discarded, "TextBlock("));
+        Assert.DoesNotContain("b.Name(", SourceMapTransparentGeneratorTests.Run(discarded).GeneratedSource, StringComparison.Ordinal);
+        Assert.NotEqual(a, FingerprintOf(discarded));
+    }
+
+    [Fact]
     public void Hooks_ConditionalHook_MakesTheFollowingSlotsUnknown()
     {
         const string code = """

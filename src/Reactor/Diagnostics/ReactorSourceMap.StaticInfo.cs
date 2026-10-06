@@ -51,7 +51,8 @@ public static partial class ReactorSourceMap
     /// <c>null</c>. Prefer <see cref="SourceLocation.DeclaredName"/>.
     /// </summary>
     internal static string? GetDeclaredName(SourceLocation site)
-        => StaticInfo()?.NameTable.TryGetValue(site, out var name) == true ? name : null;
+        => StaticInfo() is { } table && table.IsAttributable(site.FilePath)
+            && table.NameTable.TryGetValue(site, out var name) ? name : null;
 
     /// <summary>
     /// The <c>hooks=</c> value for a class component, or <c>null</c> when unknown or when its
@@ -86,7 +87,8 @@ public static partial class ReactorSourceMap
     /// a root <c>Mount(ctx =&gt; …)</c>), or <c>null</c>.
     /// </summary>
     internal static string? GetRenderFunctionHooks(SourceLocation site)
-        => StaticInfo()?.RenderFunctionHookTable.TryGetValue(site, out var hooks) == true ? hooks : null;
+        => StaticInfo() is { } table && table.IsAttributable(site.FilePath)
+            && table.RenderFunctionHookTable.TryGetValue(site, out var hooks) ? hooks : null;
 
     /// <summary>
     /// The path published in <c>ReactorDiagnostics.SourceProperty</c>'s <c>at=</c> field —
@@ -231,6 +233,7 @@ public sealed class ReactorStaticInfoBuilder
         foreach (var (k, v) in other.NameTable) NameTable[k] = v;
         foreach (var (k, v) in other.ComponentHookTable) ComponentHookTable[k] = v;
         foreach (var (k, v) in other.RenderFunctionHookTable) RenderFunctionHookTable[k] = v;
+        foreach (var (k, v) in other.FileFingerprints) FileFingerprints[k] = v;
         ProjectDirectories.AddRange(other.ProjectDirectories);
         RootDirectories.AddRange(other.RootDirectories);
         Assemblies.UnionWith(other.Assemblies);
@@ -258,6 +261,28 @@ public sealed class ReactorStaticInfoBuilder
     /// <summary>Records that the element created at this call site was assigned to <paramref name="name"/>.</summary>
     public void Name(string filePath, int lineNumber, int columnNumber, string name)
         => AddUnlessConflicting(NameTable, new SourceLocation(filePath, lineNumber, columnNumber), name);
+
+    /// <summary>
+    /// Records the fingerprint of everything the registering assembly knows about one source
+    /// file: every call site with its declared name or none, and every render function with
+    /// its hooks or none. When two assemblies stamp the same path with different fingerprints
+    /// (both mapping their roots to <c>/_/</c>), none of that file's names or render-function
+    /// hooks can be attributed, absent ones included, so all are reported as unknown.
+    /// </summary>
+    public void Source(string filePath, string fingerprint)
+    {
+        if (!FileFingerprints.TryGetValue(filePath, out var existing))
+            FileFingerprints[filePath] = fingerprint;
+        else if (!string.Equals(existing, fingerprint, StringComparison.Ordinal))
+            FileFingerprints[filePath] = null;
+    }
+
+    /// <summary>Per stamped path, its facts' fingerprint; <c>null</c> when assemblies disagree.</summary>
+    internal Dictionary<string, string?> FileFingerprints { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Whether facts keyed by a location in <paramref name="filePath"/> can be trusted.</summary>
+    internal bool IsAttributable(string? filePath)
+        => filePath is null || !FileFingerprints.TryGetValue(filePath, out var fingerprint) || fingerprint is not null;
 
     /// <summary>
     /// Records the <c>hooks=</c> value for a class component (open generic type full name) in

@@ -490,6 +490,23 @@ public sealed partial class SourceMapInterceptorGenerator
         }
 
         var componentsWithHooks = new HashSet<string>(StringComparer.Ordinal);
+        // Per source file: every call site with its declared name (or none) and every render
+        // function with its hooks (or none). Two assemblies can stamp the same path (both
+        // mapping their roots to /_/); the runtime trusts a file's facts only when every
+        // assembly claiming that path agrees on all of them, absent facts included.
+        var fileFacts = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        List<string> FactsOf(string mappedPath)
+        {
+            if (!fileFacts.TryGetValue(mappedPath, out var list)) fileFacts[mappedPath] = list = new List<string>();
+            return list;
+        }
+        foreach (var site in sites)
+        {
+            if (site is null) continue;
+            FactsOf(ApplyPathMap(site.FilePath, pathMap)).Add(
+                $"S{site.Line}:{site.Column}={site.DeclaredName}");
+        }
+
         foreach (var group in hooks.Where(static h => h is not null).GroupBy(static h => h!.Owner))
         {
             var value = HooksValue(group.OrderBy(static h => h!.SortPath, StringComparer.Ordinal)
@@ -497,9 +514,16 @@ public sealed partial class SourceMapInterceptorGenerator
                 .Select(static h => h!));
             var owner = group.Key;
             if (owner.Kind == HookOwnerKind.Component) componentsWithHooks.Add(owner.Key);
+            else FactsOf(ApplyPathMap(owner.Key, pathMap)).Add($"H{owner.Line}:{owner.Column}={value}");
             body.AppendLine(owner.Kind == HookOwnerKind.Component
                 ? $"            b.ComponentHooks({Literal(owner.Key)}, {Literal(value)});"
                 : $"            b.RenderFunctionHooks({Literal(ApplyPathMap(owner.Key, pathMap))}, {owner.Line}, {owner.Column}, {Literal(value)});");
+        }
+
+        foreach (var file in fileFacts.OrderBy(static f => f.Key, StringComparer.Ordinal))
+        {
+            file.Value.Sort(StringComparer.Ordinal);
+            body.AppendLine($"            b.Source({Literal(file.Key)}, {Literal(Fingerprint(file.Value))});");
         }
 
         // A Render() override with no hooks is recorded too (empty), so a component that
@@ -531,6 +555,23 @@ public sealed partial class SourceMapInterceptorGenerator
         sb.AppendLine("    }");
         sb.AppendLine("}");
         return sb.ToString();
+    }
+
+    /// <summary>FNV-1a 64 over the ordered facts: a deterministic, dependency-free file fingerprint.</summary>
+    internal static string Fingerprint(IEnumerable<string> facts)
+    {
+        ulong hash = 14695981039346656037UL;
+        foreach (var fact in facts)
+        {
+            foreach (char c in fact)
+            {
+                hash ^= c;
+                hash *= 1099511628211UL;
+            }
+            hash ^= '\n';
+            hash *= 1099511628211UL;
+        }
+        return hash.ToString("x16", CultureInfo.InvariantCulture);
     }
 
     /// <summary>

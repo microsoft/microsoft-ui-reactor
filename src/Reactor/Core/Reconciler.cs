@@ -250,27 +250,38 @@ public sealed partial class Reconciler : IDisposable
         // plain value, so the root value is written whenever it differs. No reference to the
         // root is kept, so a disposed host's previous subtree is not retained.
         var current = control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) as string;
-        var value = tree is KeyedMemoElement
-            ? Diagnostics.ReactorSourcePublisher.WithRoot(current, rootName, rootHooks)
-            : Diagnostics.ReactorSourcePublisher.Publish(control, tree, rootName, component, rootName, rootHooks, current);
-        if (value is null) return;
         if (tree is KeyedMemoElement)
         {
-            if (!string.Equals(value, current, StringComparison.Ordinal))
-                control.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, value);
+            var withRoot = Diagnostics.ReactorSourcePublisher.WithRoot(
+                current, rootName, rootHooks, _hostAddedRootHooks, out var addedHooks);
+            _hostAddedRootHooks = addedHooks ? rootHooks : null;
+            if (withRoot is not null && !string.Equals(withRoot, current, StringComparison.Ordinal))
+                control.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, withRoot);
             return;
         }
+        _hostAddedRootHooks = null;
+        var value = Diagnostics.ReactorSourcePublisher.Publish(control, tree, rootName, component, rootName, rootHooks, current);
         KeepTagIfSourceAmbiguous(control, tree, value);
     }
+
+    /// <summary>
+    /// The <c>hooks=</c> value <see cref="PublishRootSource"/> added to a keyed-memo root's
+    /// value on its last pass (the realized output had none of its own), so a remounted root
+    /// replaces or removes it instead of keeping the previous root's hooks.
+    /// </summary>
+    private string? _hostAddedRootHooks;
 
     /// <summary>
     /// Host hook: the host mounted a different root over content it kept (an in-place update).
     /// Root-owned controls whose call site, key and kind did not change were not re-published,
     /// so they still name the previous root. Rewrites <c>owner=</c> on the content's root-owned
-    /// controls. A component wrapper (<c>mounts=</c>) is renamed if the root owns it, but not
-    /// entered: its subtree is owned by that component. Rare (only on a root swap), so a walk.
+    /// controls: the visual tree plus the Reactor subtrees hung off it outside the visual tree
+    /// (flyout content and pass-through element, popup child, a showing dialog's content,
+    /// cached navigation pages). A component wrapper (<c>mounts=</c>) is renamed if the root
+    /// owns it, but not entered: its subtree is owned by that component. Rare (only on a root
+    /// swap), so a walk.
     /// </summary>
-    internal static void RenameRootOwner(UIElement? root, string previousOwner, string owner)
+    private void RenameRootOwner(UIElement? root, string previousOwner, string owner)
     {
         if (root is null) return;
         var pending = new Stack<DependencyObject>();
@@ -288,6 +299,24 @@ public sealed partial class Reconciler : IDisposable
             int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);
             for (int i = 0; i < count; i++)
                 pending.Push(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node, i));
+
+            if (node is WinPrim.Popup { Child: { } popupChild })
+                pending.Push(popupChild);
+            if (node is FrameworkElement fe)
+            {
+                if (GetFlyoutOnControl(fe) is WinUI.Flyout flyout)
+                {
+                    if (flyout.Content is { } flyoutContent) pending.Push(flyoutContent);
+                    if (flyout.OverlayInputPassThroughElement is { } passThrough) pending.Push(passThrough);
+                }
+                if (V1Protocol.OverlayLifecycle.PeekLiveContentDialog(fe)?.Content is UIElement dialogContent)
+                    pending.Push(dialogContent);
+            }
+            if (node is UIElement ui && _navigationHostNodes.TryGetValue(ui, out var navNode) && navNode.Cache is { } cache)
+            {
+                foreach (var page in cache.SnapshotControls())
+                    pending.Push(page);
+            }
         }
     }
 
@@ -865,7 +894,30 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Predicate companion to <see cref="SetElementTagIfNeeded"/>. Returns
+    /// V1 adapter variant. <paramref name="ownsChildTeardown"/> says the element's handler
+    /// tears down child slots the generic unmount walk (<see cref="ForEachReactorChildControl(UIElement, Action{UIElement})"/>)
+    /// does not reach, such as NavigationView's <c>PaneHeader</c>. Unmount dispatches to that
+    /// handler through the tag, so in <see cref="SkipsCallSiteOnlyTags"/> mode a stamped
+    /// element keeps it, exactly as every stamped element is tagged outside that mode.
+    /// </summary>
+    internal static void SetElementTagIfNeeded(FrameworkElement control, Element element, bool ownsChildTeardown)
+    {
+        if (ownsChildTeardown && SkipsCallSiteOnlyTags && element.Extensions is not null
+            && control.GetValue(ReactorAttached.StateProperty) is not ReactorState)
+        {
+            control.SetValue(ReactorAttached.StateProperty, new ReactorState { Element = element });
+            return;
+        }
+        SetElementTagIfNeeded(control, element);
+    }
+
+    /// <summary>Whether the generic unmount walk reaches this control's Reactor children by itself.</summary>
+    internal static bool UnmountWalkReachesChildren(UIElement control)
+        => control is WinUI.Panel or WinUI.ItemsRepeater or WinUI.Border or WinUI.ScrollViewer
+            or WinUI.UserControl or WinUI.SplitView or WinUI.Viewbox or WinUI.ContentControl;
+
+    /// <summary>
+    /// Predicate companion to <see cref="SetElementTagIfNeeded(FrameworkElement, Element)"/>. Returns
     /// true when downstream code will read the element back through
     /// <see cref="GetElementTag(FrameworkElement)"/> — see the helper's
     /// summary for the three categories.
@@ -1482,6 +1534,9 @@ public sealed partial class Reconciler : IDisposable
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).
             fe.ClearValue(FrameworkElement.DataContextProperty);
+            // The element pointer is gone; so is what was published about it, even when the
+            // pool then declines the control (pooling disabled, full, or not poolable).
+            ClearPublishedSource(fe);
 
             _pool.Return(fe);
         }

@@ -489,7 +489,34 @@ internal static class RemountView
     // every call site, key and kind below is unchanged.
     public static Element Body() => VStack(
         TextBlock("remount-leaf"),
+        Flyout(Button("remount-flyout-target"), TextBlock("remount-flyout-body")),
         Component<RemountNested, int>(0));
+}
+
+// Keyed-memo roots: the realized output is kept across the swap (same key), and the host adds
+// the root's hooks to it, so a swap must replace or drop hooks the previous root added.
+internal sealed class MemoRootA : Component
+{
+    public override Element Render()
+    {
+        var (a, _) = UseState(0);
+        return Memo(1, () => TextBlock("memo-remount"));
+    }
+}
+
+internal sealed class MemoRootB : Component
+{
+    public override Element Render() => Memo(1, () => TextBlock("memo-remount"));
+}
+
+internal sealed class MemoRootC : Component
+{
+    public override Element Render()
+    {
+        var (c, _) = UseState(0);
+        var (d, _) = UseState(1);
+        return Memo(1, () => TextBlock("memo-remount"));
+    }
 }
 
 internal sealed class RemountRootA : Component
@@ -517,9 +544,16 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
     private string? Source(string text)
         => H.FindControl<WinUI.TextBlock>(t => t.Text == text) is { } tb ? ReactorDiagnostics.GetSource(tb) : null;
 
+    private string? FlyoutBodySource()
+        => H.FindControl<WinUI.Button>(b => b.Content as string == "remount-flyout-target") is { } target
+            && Reconciler.GetFlyoutOnControl(target) is WinUI.Flyout { Content: WinUI.TextBlock body }
+            ? ReactorDiagnostics.GetSource(body)
+            : null;
+
     private async Task<bool> Owned(string text, string owner)
         => await Harness.WaitFor(
-            () => Source(text)?.Contains($"|owner={owner}|", StringComparison.Ordinal) == true,
+            () => (text == "remount-flyout-body" ? FlyoutBodySource() : Source(text))
+                ?.Contains($"|owner={owner}|", StringComparison.Ordinal) == true,
             maxPasses: 32, perPassMs: 10);
 
     public override async Task RunAsync()
@@ -543,8 +577,29 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             await Harness.Render();
             Console.WriteLine($"# remount (ReactorHost): {Source("remount-leaf")} / {Source("remount-nested")}");
             H.Check("ReactorSource_RootRemount_Host_LeafRenamed", await Owned("remount-leaf", nameof(RemountRootB)));
+            H.Check("ReactorSource_RootRemount_Host_FlyoutContentRenamed", await Owned("remount-flyout-body", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             host.Dispose();
+            H.SetContent(null);
+
+            var memoHost = H.CreateHost();
+            memoHost.Mount(new MemoRootA());
+            await Harness.Render();
+            var withA = Source("memo-remount");
+            memoHost.Mount(new MemoRootB());
+            await Harness.Render();
+            var withB = Source("memo-remount");
+            memoHost.Mount(new MemoRootC());
+            await Harness.Render();
+            var withC = Source("memo-remount");
+            Console.WriteLine($"# keyed-memo remount: A {withA} / B {withB} / C {withC}");
+            H.Check("ReactorSource_RootRemount_MemoHooks_FirstRoot",
+                withA?.Contains("|root=MemoRootA", StringComparison.Ordinal) == true && withA.Contains("|hooks=0:a@", StringComparison.Ordinal));
+            H.Check("ReactorSource_RootRemount_MemoHooks_DroppedForAHookFreeRoot",
+                withB?.Contains("|root=MemoRootB", StringComparison.Ordinal) == true && !withB.Contains("|hooks=", StringComparison.Ordinal));
+            H.Check("ReactorSource_RootRemount_MemoHooks_ReplacedByTheNewRoots",
+                withC?.Contains("|hooks=0:c@", StringComparison.Ordinal) == true && !withC.Contains("0:a@", StringComparison.Ordinal));
+            memoHost.Dispose();
             H.SetContent(null);
 
             var hostControl = new Microsoft.UI.Reactor.Hosting.ReactorHostControl();
@@ -554,6 +609,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.Check("ReactorSource_RootRemount_HostControl_FirstRoot", await Owned("remount-leaf", nameof(RemountRootA)));
             hostControl.Mount(new RemountRootB());
             H.Check("ReactorSource_RootRemount_HostControl_LeafRenamed", await Owned("remount-leaf", nameof(RemountRootB)));
+            H.Check("ReactorSource_RootRemount_HostControl_FlyoutContentRenamed", await Owned("remount-flyout-body", nameof(RemountRootB)));
             Console.WriteLine($"# remount (ReactorHostControl): {Source("remount-leaf")} / {Source("remount-nested")}");
             H.Check("ReactorSource_RootRemount_HostControl_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             hostControl.Dispose();
@@ -562,6 +618,96 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
         finally
         {
             ReactorSourcePublisher.IsEnabled = previous;
+        }
+    }
+}
+
+internal sealed class TeardownProbe : Component
+{
+    internal static int Cleanups;
+
+    public override Element Render()
+    {
+        UseEffect(() => () => Cleanups++);
+        return TextBlock("teardown-probe");
+    }
+}
+
+/// <summary>
+/// The Native AOT tag skip must not skip teardown. A callback-free, keyless NavigationView
+/// tears down its named slots (PaneHeader) in its handler's unmount, which is dispatched
+/// through the tag; and a control returned through <c>ReturnControl</c> with pooling disabled
+/// must stop answering <c>GetSource</c> for the element it hosted. Both, in both tag paths.
+/// </summary>
+internal class ReactorSource_AotTagSkipKeepsTeardown(Harness h) : SelfTestFixtureBase(h)
+{
+    private static Element Tree(RenderContext ctx)
+    {
+        var (shown, setShown) = ctx.UseState(true);
+        return VStack(
+            Button("teardown-toggle", () => setShown(false)),
+            shown ? NavigationView([]).PaneHeader(Component<TeardownProbe>()) : TextBlock("teardown-gone"));
+    }
+
+    private async Task<(int Cleanups, bool NavTagged, bool ReturnedBefore, bool ReturnedAfter)> RunPath(bool noManagedAgent)
+    {
+        ReactorSourcePublisher.NoManagedAgent = noManagedAgent;
+        TeardownProbe.Cleanups = 0;
+        var host = H.CreateHost();
+        host.Mount(Tree);
+        await Harness.Render();
+        await Harness.Render();
+        var nav = H.FindControl<WinUI.NavigationView>(_ => true);
+        bool navTagged = nav is not null && Reconciler.GetElementTag(nav) is not null;
+        H.ClickButton("teardown-toggle");
+        await Harness.Render();
+        await Harness.Render();
+        int cleanups = TeardownProbe.Cleanups;
+
+        host.Reconciler.Pool.Enabled = false;
+        var element = TextBlock("returned");
+        var returned = new WinUI.TextBlock();
+        Reconciler.SetElementTagIfNeeded(returned, element);
+        ReactorSourcePublisher.Publish(returned, element, "Owner");
+        bool before = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(returned) is not null;
+        host.Reconciler.ReturnControl(returned);
+        bool after = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(returned) is null;
+        host.Reconciler.Pool.Enabled = true;
+
+        host.Dispose();
+        H.SetContent(null);
+        return (cleanups, navTagged, before, after);
+    }
+
+    public override async Task RunAsync()
+    {
+        if (!ReactorSourcePublisher.IsSupported)
+        {
+            H.Skip("ReactorSource_AotSkipTeardown", "Reactor.DevtoolsSupport is off in this host");
+            return;
+        }
+
+        var (enabled, noAgent, mapped) = (ReactorSourcePublisher.IsEnabled, ReactorSourcePublisher.NoManagedAgent,
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+        try
+        {
+            ReactorSourcePublisher.IsEnabled = true;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
+
+            var tagged = await RunPath(noManagedAgent: false);
+            var skipped = await RunPath(noManagedAgent: true);
+            Console.WriteLine($"# teardown: tagged {tagged}; skipped {skipped}");
+
+            H.Check("ReactorSource_AotSkipTeardown_PaneHeaderCleanedUp", tagged.Cleanups == 1 && skipped.Cleanups == 1);
+            H.Check("ReactorSource_AotSkipTeardown_NavigationViewKeepsItsTag", tagged.NavTagged && skipped.NavTagged);
+            H.Check("ReactorSource_AotSkipTeardown_ReturnedControlForgotten",
+                tagged.ReturnedBefore && skipped.ReturnedBefore && tagged.ReturnedAfter && skipped.ReturnedAfter);
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = enabled;
+            ReactorSourcePublisher.NoManagedAgent = noAgent;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = mapped;
         }
     }
 }

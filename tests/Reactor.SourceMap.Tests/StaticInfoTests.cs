@@ -216,4 +216,31 @@ public sealed class StaticInfoTests : IDisposable
         // Positive control: agreeing claims (one file compiled into both) keep their fact.
         Assert.Equal("same", table.NameTable[new SourceLocation("/_/Shared.cs", 3, 1)]);
     }
+
+    [Fact]
+    public void SharedPath_WithDisagreeingFingerprints_IsUnknownEvenWhereOnlyOneClaimsAFact()
+    {
+        // Assembly A names the call at /_/Clash/Page.cs:10:5; assembly B has an UNNAMED call at
+        // the same path, line and column, so it records no name at all. Only the per-file
+        // fingerprints disagree, and that is what must make A's name unknown there.
+        ReactorSourceMap.RegisterStaticInfo(typeof(object).Assembly, b =>
+        {
+            b.Name("/_/Clash/Page.cs", 10, 5, "title");
+            b.RenderFunctionHooks("/_/Clash/Page.cs", 20, 9, "0:n@21");
+            b.Source("/_/Clash/Page.cs", "aaaaaaaaaaaaaaaa");
+            b.Name("/_/Agree/Page.cs", 3, 1, "kept");
+            b.Source("/_/Agree/Page.cs", "cccccccccccccccc");
+        });
+        ReactorSourceMap.RegisterStaticInfo(typeof(global::System.Uri).Assembly, b =>
+        {
+            b.Source("/_/Clash/Page.cs", "bbbbbbbbbbbbbbbb");
+            b.Name("/_/Agree/Page.cs", 3, 1, "kept");
+            b.Source("/_/Agree/Page.cs", "cccccccccccccccc");
+        });
+
+        Assert.Null(ReactorSourceMap.GetDeclaredName(new SourceLocation("/_/Clash/Page.cs", 10, 5)));
+        Assert.Null(ReactorSourceMap.GetRenderFunctionHooks(new SourceLocation("/_/Clash/Page.cs", 20, 9)));
+        // Positive control: the same file compiled into both assemblies keeps its facts.
+        Assert.Equal("kept", ReactorSourceMap.GetDeclaredName(new SourceLocation("/_/Agree/Page.cs", 3, 1)));
+    }
 }

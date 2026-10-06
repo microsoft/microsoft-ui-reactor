@@ -186,7 +186,7 @@ Hook indices are `RenderContext` slots, which is what an inspector matches again
 - After a composite built-in (`UseCommand`, `UseResource`, the window hooks, component-extension hooks such as `this.UseElementFocus()`), a custom hook from another assembly, an abstract or overridable (`virtual`) custom hook, or a hook inside a branch or loop (a rules-of-hooks violation), the following indices are reported as `?`.
 - A component that inherits `Render()` reports the hooks of the base class that declares it.
 
-Both tables describe the compiled build. Registering them costs one delegate per assembly at startup; they are built on first use. After a hot-reload edit moves a call, its name or hooks are reported as unknown rather than wrong. If two source-mapped assemblies claim the same location (both mapping their roots to `/_/`) with different facts, that location's name and hooks are unknown.
+Both tables describe the compiled build. Registering them costs one delegate per assembly at startup; they are built on first use. After a hot-reload edit moves a call, its name or hooks are reported as unknown rather than wrong. Each assembly also records a fingerprint of every source file's facts, absent names and hooks included. If two source-mapped assemblies stamp the same path (both mapping their roots to `/_/`) with different fingerprints, that file's names and render-function hooks are unknown. The same file compiled into both keeps them.
 
 ### Helper methods and `[ReactorSourceTransparent]`
 

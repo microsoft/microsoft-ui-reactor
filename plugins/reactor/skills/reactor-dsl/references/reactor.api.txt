@@ -4625,6 +4625,7 @@ ComponentHooks(string componentTypeFullName, string hooks) → void
 Name(string filePath, int lineNumber, int columnNumber, string name) → void
 RenderFunctionHooks(string filePath, int lineNumber, int columnNumber, string hooks) → void
 Roots(string projectDirectory, string rootDirectory) → void
+Source(string filePath, string fingerprint) → void
 
 ### static class ReactorTrace
 GetComponentControl(long componentId) → UIElement

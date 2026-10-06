@@ -26,6 +26,19 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
 
     public bool HasUnmount => true; // the default-body call is cheap; no point branching.
 
+    /// <summary>
+    /// Whether this handler tears down children the generic unmount walk does not reach
+    /// (named slots, item hosts, imperative children, or a single-content / panel strategy on
+    /// a control that walk does not know). Only consulted in the Native AOT diagnostics mode
+    /// that skips call-site-only tags, where it keeps the tag unmount dispatch goes through.
+    /// </summary>
+    private bool OwnsChildTeardown(UIElement control)
+        => Reconciler.SkipsCallSiteOnlyTags
+            && _handler.Children is { } strategy
+            && strategy is not None<TElement, TControl>
+            && !(strategy is Panel<TElement, TControl> or SingleContent<TElement, TControl>
+                && Reconciler.UnmountWalkReachesChildren(control));
+
     // <snippet:adapter-mount>
     public UIElement Mount(Element element, Action requestRerender, Reconciler reconciler)
     {
@@ -39,7 +52,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         // skip the ReactorState allocation for them (§4.4 follow-up).
         // <snippet:element-tag-refresh-mount>
         if (control is FrameworkElement fe)
-            Reconciler.SetElementTagIfNeeded(fe, typedEl);
+            Reconciler.SetElementTagIfNeeded(fe, typedEl, OwnsChildTeardown(control));
         // </snippet:element-tag-refresh-mount>
 
         // Strategy dispatch — only when the handler declares a non-None Children strategy.
@@ -86,7 +99,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
 
         // <snippet:element-tag-refresh-update>
         if (control is FrameworkElement fe)
-            Reconciler.SetElementTagIfNeeded(fe, typedNew);
+            Reconciler.SetElementTagIfNeeded(fe, typedNew, OwnsChildTeardown(control));
         // </snippet:element-tag-refresh-update>
 
         var strategy = _handler.Children;

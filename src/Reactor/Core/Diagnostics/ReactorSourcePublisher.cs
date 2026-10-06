@@ -175,10 +175,27 @@ internal static class ReactorSourcePublisher
     /// existing <c>root=</c> is replaced. Returns <c>null</c> when nothing was published.
     /// </summary>
     internal static string? WithRoot(string? published, string rootName, string? rootHooks)
+        => WithRoot(published, rootName, rootHooks, previousHostHooks: null, out _);
+
+    /// <summary>
+    /// <see cref="WithRoot(string?, string, string?)"/> for a host that may have added
+    /// <c>hooks=</c> itself on an earlier pass: <paramref name="previousHostHooks"/> (what it
+    /// added then) is removed first, so a remounted root with different hooks, or none, does
+    /// not keep the previous root's. <paramref name="addedHooks"/> reports whether
+    /// <paramref name="rootHooks"/> was added this time.
+    /// </summary>
+    internal static string? WithRoot(
+        string? published, string rootName, string? rootHooks, string? previousHostHooks, out bool addedHooks)
     {
+        addedHooks = false;
         if (published is null) return null;
         var fields = new List<string>(published.Split('|'));
         fields.RemoveAll(static f => f.StartsWith("root=", StringComparison.Ordinal));
+        if (!string.IsNullOrEmpty(previousHostHooks))
+        {
+            var stale = "hooks=" + ReactorSourceFormat.Escape(previousHostHooks);
+            fields.RemoveAll(f => string.Equals(f, stale, StringComparison.Ordinal));
+        }
 
         int insertAt = 1;
         for (int i = 1; i < fields.Count; i++)
@@ -189,7 +206,10 @@ internal static class ReactorSourcePublisher
         fields.Insert(insertAt, "root=" + ReactorSourceFormat.Escape(rootName));
 
         if (!string.IsNullOrEmpty(rootHooks) && !fields.Exists(static f => f.StartsWith("hooks=", StringComparison.Ordinal)))
+        {
             fields.Add("hooks=" + ReactorSourceFormat.Escape(rootHooks));
+            addedHooks = true;
+        }
         return string.Join('|', fields);
     }
 

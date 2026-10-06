@@ -157,6 +157,30 @@ public sealed class ReactorSourcePublisherTests
         Assert.Null(ReactorSourcePublisher.WithRoot(null, "Root", null));
     }
 
+    [Fact]
+    public void WithRoot_ReplacesOrDropsHooksTheHostAddedEarlier()
+    {
+        const string plain = "v=1|at=A.cs:1|owner=R|element=TextBlock";
+
+        var first = ReactorSourcePublisher.WithRoot(plain, "A", "0:a@3", previousHostHooks: null, out var addedFirst);
+        Assert.True(addedFirst);
+        Assert.EndsWith("|hooks=0:a@3", first, StringComparison.Ordinal);
+
+        // Remounted with a hook-free root: the previous root's hooks go.
+        var hookFree = ReactorSourcePublisher.WithRoot(first, "B", null, previousHostHooks: "0:a@3", out var addedHookFree);
+        Assert.False(addedHookFree);
+        Assert.Equal("v=1|at=A.cs:1|owner=R|element=TextBlock|root=B", hookFree);
+
+        // Remounted with different hooks: replaced, not kept.
+        var replaced = ReactorSourcePublisher.WithRoot(first, "C", "0:c@4", previousHostHooks: "0:a@3", out _);
+        Assert.Equal("v=1|at=A.cs:1|owner=R|element=TextBlock|root=C|hooks=0:c@4", replaced);
+
+        // The realized output's own hooks are not the host's to remove.
+        var own = ReactorSourcePublisher.WithRoot(plain + "|hooks=0:x@9", "C", "0:c@4", previousHostHooks: "0:a@3", out var addedOwn);
+        Assert.False(addedOwn);
+        Assert.EndsWith("|hooks=0:x@9", own, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("plain")]
     [InlineData("keyed")]

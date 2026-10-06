@@ -337,6 +337,7 @@ internal static class SelfTestFixtureRegistry
         "ReactorSource_LayoutRealizedRowsHaveNoOwner",
         "ReactorSource_KeyedMemoRootNamed",
         "ReactorSource_RootRemountRenamesOwner",
+        "ReactorSource_AotTagSkipKeepsTeardown",
         "FocusTrapContentDialog_ContainmentProbe",
         // Issue #487 — RichTextBlock + inline UI inside ScrollViewer scroll anchor
         "Issue487_ScrollOffsetRestoredAfterRunMutation",
@@ -2340,6 +2341,7 @@ internal static class SelfTestFixtureRegistry
         "ReactorSource_LayoutRealizedRowsHaveNoOwner" => new ReactorSource_LayoutRealizedRowsHaveNoOwner(harness),
         "ReactorSource_KeyedMemoRootNamed" => new ReactorSource_KeyedMemoRootNamed(harness),
         "ReactorSource_RootRemountRenamesOwner" => new ReactorSource_RootRemountRenamesOwner(harness),
+        "ReactorSource_AotTagSkipKeepsTeardown" => new ReactorSource_AotTagSkipKeepsTeardown(harness),
         "FocusTrapContentDialog_ContainmentProbe" => new FocusTrapContentDialog_ContainmentProbe(harness),
         "Issue487_ScrollOffsetRestoredAfterRunMutation" => new Issue487ScrollAnchorFixtures.Issue487_ScrollOffsetRestoredAfterRunMutation(harness),
         "Issue487_RepeatedMutationDoesNotDrift" => new Issue487ScrollAnchorFixtures.Issue487_RepeatedMutationDoesNotDrift(harness),

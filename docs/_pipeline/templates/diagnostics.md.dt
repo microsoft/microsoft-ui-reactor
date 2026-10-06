@@ -188,8 +188,10 @@ are cached per call site, so controls without a key from the same call site shar
 value that is unique per control (a keyed control) costs about 0.3 KB more. An in-place re-render
 whose call sites and keys did not change writes nothing. Under JIT, where a managed inspector can
 read call sites from the element, each stamped control also keeps its element tag (about 0.2 KB
-managed and 0.8 KB native more); Native AOT skips that tag, because no managed inspector can load,
-and `ReactorSourceMap.GetSource` reads the published value instead.
+managed and 0.8 KB native more); Native AOT skips that tag when the call site is all it would carry,
+because no managed inspector can load, and `ReactorSourceMap.GetSource` reads the published value
+instead. Controls whose handler tears down child slots itself (NavigationView's pane slots, item
+hosts) keep it, because unmount reaches that handler through the tag.
 
 > **NativeAOT:** the .NET NativeAOT toolchain defaults the `EventSourceSupport`
 > feature switch to `false`, which compiles the whole `EventSource` surface out.

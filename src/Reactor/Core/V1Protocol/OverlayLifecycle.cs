@@ -140,6 +140,10 @@ internal static class OverlayLifecycle
         return dialog;
     }
 
+    /// <summary>The dialog currently showing for <paramref name="anchor"/>, without taking it.</summary>
+    internal static WinUI.ContentDialog? PeekLiveContentDialog(FrameworkElement anchor)
+        => s_liveDialogs.TryGetValue(anchor, out var dialog) ? dialog : null;
+
     private static void ShowContentDialog(Reconciler reconciler, ContentDialogElement cdEl, FrameworkElement anchor, Action requestRerender)
     {
         // Source XamlRoot from the placeholder so the dialog routes to the

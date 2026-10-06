@@ -126,6 +126,7 @@ public sealed class SourceMapTransparentGeneratorTests
                 public void ComponentHooks(string componentTypeFullName, string hooks) { }
                 public void RenderFunctionHooks(string filePath, int lineNumber, int columnNumber, string hooks) { }
                 public void Roots(string projectDirectory, string? rootDirectory) { }
+                public void Source(string filePath, string fingerprint) { }
             }
         }
         """;
