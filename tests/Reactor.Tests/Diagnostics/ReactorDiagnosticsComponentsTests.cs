@@ -473,6 +473,13 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
+    public void PropRows_TypedNullProps_KeepAPropsRow_PropslessHasNone()
+    {
+        Assert.Equal(new[] { ("Props", typeof(string), (object?)null) }, DiagnosticText.PropRows(null, typeof(string)));
+        Assert.Empty(DiagnosticText.PropRows(null, null));
+    }
+
+    [Fact]
     public void Props_OfASecretBearingType_AreOneRedactedRow_NotListedMemberByMember()
     {
         var node = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new SessionToken("s3cr3t")) };

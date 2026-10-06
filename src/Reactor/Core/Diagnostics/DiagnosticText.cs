@@ -35,7 +35,7 @@ internal static class DiagnosticText
         }
         if (type == typeof(object)) return "object";
         if (type.IsArray && type.GetElementType() is { } element)
-            return FriendlyTypeName(element) + "[]";
+            return FriendlyTypeName(element) + "[" + new string(',', type.GetArrayRank() - 1) + "]";
         var name = TypeName(type);
         return type.IsGenericType
             ? $"{name}<{string.Join(", ", type.GetGenericArguments().Select(FriendlyTypeName))}>"
@@ -318,7 +318,12 @@ internal static class DiagnosticText
                         "(never its ToString(), which could print a secret member), so it degrades rather than fails.")]
     internal static IReadOnlyList<(string Name, Type Type, object? Value)> PropRows(object? props, Type? declared)
     {
-        if (props is null) return global::System.Array.Empty<(string, Type, object?)>();
+        // A typed component with null props still has a Props row, so it reads differently from a
+        // propless component.
+        if (props is null)
+            return declared is null
+                ? global::System.Array.Empty<(string, Type, object?)>()
+                : new[] { ("Props", declared, (object?)null) };
         var type = props.GetType();
         // A secret-bearing props type stays one row, so Format redacts it whole instead of the
         // members of, say, a SessionToken(string Value) being listed one by one.

@@ -10,7 +10,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// (title, primary/secondary/close buttons) and walks up to the dialog can attribute it.
 /// The collapsed placeholder carries the tag too, but it lives in the owner's tree while
 /// the dialog is hosted in a popup, so no ancestor walk from a dialog button reaches it.
-/// The tagging gate itself is unit-tested in <c>ReactorDiagnosticsFollowupsTests</c>.
+/// The tagging gate itself is unit-tested in <c>ContentDialogDiagnosticsTagTests</c>.
 /// </summary>
 internal static class ContentDialogTagFixtures
 {

@@ -25,6 +25,8 @@ public class DiagnosticTextTests
     [InlineData(typeof(Dictionary<string, List<bool?>>), "Dictionary<string, List<bool?>>")]
     [InlineData(typeof(DayOfWeek), "DayOfWeek")]
     [InlineData(typeof(DayOfWeek?), "DayOfWeek?")]
+    [InlineData(typeof(int[,]), "int[,]")]
+    [InlineData(typeof(string[,,]), "string[,,]")]
     public void FriendlyTypeName_SpellsTypesAsCSharp(Type type, string expected)
         => Assert.Equal(expected, DiagnosticText.FriendlyTypeName(type));
 
