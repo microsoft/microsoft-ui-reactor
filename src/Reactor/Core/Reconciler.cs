@@ -340,6 +340,11 @@ public sealed partial class Reconciler : IDisposable
                     Push(flyout.Content);
                     Push(flyout.OverlayInputPassThroughElement);
                 }
+                // .WithContextFlyout / .AttachedFlyout / .ToolTip modifiers hang Reactor content
+                // off the control too, outside every child walk until opened.
+                if (fe.ContextFlyout is WinUI.Flyout contextFlyout) Push(contextFlyout.Content);
+                if (WinPrim.FlyoutBase.GetAttachedFlyout(fe) is WinUI.Flyout attachedFlyout) Push(attachedFlyout.Content);
+                Push(WinUI.ToolTipService.GetToolTip(fe) as UIElement);
                 Push(V1Protocol.OverlayLifecycle.PeekLiveContentDialog(fe));
             }
             // A component wrapper's subtree is that component's. An embedded ReactorHostControl
@@ -388,13 +393,20 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// A per-host <c>RegisterType</c> callback can return the control the reconciler mounted for
-    /// a child element (it keeps that child's tag, see <c>TypeRegistration.TagControl</c>); the
-    /// control's published value is the child's too. Decided from the value itself, so it holds
-    /// where no tag exists (Native AOT diagnostics mode skips call-site-only tags).
+    /// a child element; the published value then describes whatever the JIT tag (and so
+    /// <c>GetSource</c>) describes. <c>TypeRegistration.TagControl</c> keeps the child's tag when
+    /// the child is tagged (a stamped child always is, outside the Native AOT skip, so a value
+    /// with a call site counts) and otherwise tags the control with the registration. Decided
+    /// from the value and the tag, so it holds where no tag exists.
     /// </summary>
     private static bool ForwardsAnotherElement(UIElement control, Element element)
-        => control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string current
-            && Diagnostics.ReactorSourcePublisher.DescribesAnotherElement(current, element);
+    {
+        if (control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is not string current
+            || !Diagnostics.ReactorSourcePublisher.DescribesAnotherElement(current, element))
+            return false;
+        return Diagnostics.ReactorSourcePublisher.AtKey(current) is not null
+            || (control is FrameworkElement fe && GetElementTag(fe) is { } tag && tag.GetType() != element.GetType());
+    }
 
     /// <summary>
     /// Mounts a ContentDialog's body. A dialog opened later (deferred to the placeholder's

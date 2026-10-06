@@ -495,6 +495,8 @@ internal static class RemountView
         // Never opened: the body Button's template is not applied, so its content TextBlock
         // is a logical child only.
         Flyout(Button("remount-nflyout-target"), Button(TextBlock("remount-nflyout-inner"))),
+        // A context flyout hangs off the control itself, outside every child walk until opened.
+        Button("remount-ctx-target").WithContextFlyout(TextBlock("remount-ctx-body")),
         Component<RemountNested, int>(0));
 }
 
@@ -615,6 +617,8 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
                 "remount-flyout-body" => FlyoutBodySource(),
                 "remount-cflyout-body" => ComponentFlyoutBodySource(),
                 "remount-nflyout-inner" => NestedFlyoutInnerSource(),
+                "remount-ctx-body" => H.FindControl<WinUI.Button>(b => b.Content as string == "remount-ctx-target")?.ContextFlyout
+                    is WinUI.Flyout { Content: WinUI.TextBlock ctxBody } ? ReactorDiagnostics.GetSource(ctxBody) : null,
                 _ => Source(text),
             })?.Contains($"|owner={owner}|", StringComparison.Ordinal) == true,
             maxPasses: 32, perPassMs: 10);
@@ -664,6 +668,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.Check("ReactorSource_RootRemount_Host_FlyoutContentRenamed", await Owned("remount-flyout-body", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_ComponentTargetFlyoutRenamed", await Owned("remount-cflyout-body", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_UnopenedNestedContentRenamed", await Owned("remount-nflyout-inner", nameof(RemountRootB)));
+            H.Check("ReactorSource_RootRemount_Host_ContextFlyoutRenamed", await Owned("remount-ctx-body", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             host.Dispose();
             H.SetContent(null);
@@ -725,6 +730,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.Check("ReactorSource_RootRemount_HostControl_FlyoutContentRenamed", await Owned("remount-flyout-body", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_HostControl_ComponentTargetFlyoutRenamed", await Owned("remount-cflyout-body", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_HostControl_UnopenedNestedContentRenamed", await Owned("remount-nflyout-inner", nameof(RemountRootB)));
+            H.Check("ReactorSource_RootRemount_HostControl_ContextFlyoutRenamed", await Owned("remount-ctx-body", nameof(RemountRootB)));
             Console.WriteLine($"# remount (ReactorHostControl): {Source("remount-leaf")} / {Source("remount-nested")}");
             H.Check("ReactorSource_RootRemount_HostControl_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             hostControl.Dispose();
@@ -967,13 +973,16 @@ internal sealed record ForwardingElement(string Label) : Element;
 /// </summary>
 internal class ReactorSource_ForwardingRegistrationKeepsChildSource(Harness h) : SelfTestFixtureBase(h)
 {
-    private async Task<(SourceLocation? Mounted, string? MountedValue, SourceLocation? Updated, string? UpdatedValue)> RunPath(bool noManagedAgent)
+    private async Task<(SourceLocation? Mounted, string? MountedValue, SourceLocation? Updated, string? UpdatedValue)> RunPath(bool noManagedAgent, bool unstampedChild = false)
     {
         ReactorSourcePublisher.NoManagedAgent = noManagedAgent;
         var host = H.CreateHost();
+        // An unstamped child (built with a constructor, not a factory) has no call site: JIT then
+        // tags the control with the registration, so GetSource names the registration's location.
+        Element Child(string label) => unstampedChild ? new TextBlockElement(label) : TextBlock(label);
         host.Reconciler.RegisterType<ForwardingElement, UIElement>(
-            mount: (r, el, rerender) => r.Mount(TextBlock(el.Label), rerender)!,
-            update: (r, oldEl, newEl, control, rerender) => r.UpdateChild(TextBlock(oldEl.Label), TextBlock(newEl.Label), control, rerender));
+            mount: (r, el, rerender) => r.Mount(Child(el.Label), rerender)!,
+            update: (r, oldEl, newEl, control, rerender) => r.UpdateChild(Child(oldEl.Label), Child(newEl.Label), control, rerender));
         host.Mount(ctx =>
         {
             var (label, setLabel) = ctx.UseState("fwd-a");
@@ -1072,6 +1081,20 @@ internal class ReactorSource_ForwardingRegistrationKeepsChildSource(Harness h) :
                     .All(v => v?.Contains("|element=TextBlock", StringComparison.Ordinal) == true
                         && v.Contains("|root=FuncElement", StringComparison.Ordinal)
                         && !v.Contains("ForwardingRoot.cs", StringComparison.Ordinal)));
+
+            // Unstamped child: JIT's GetSource names the registration (it tags the control with
+            // itself, as the child has no tag), and the AOT path must too, instead of resolving
+            // nothing from a child value without a call site. (After an update JIT's tag is the
+            // child's: the child's own in-place update refreshes the existing tag to itself,
+            // which its callbacks rely on, so JIT reports null there; the AOT path keeps
+            // naming the registration's moved location.)
+            var unstampedTagged = await RunPath(noManagedAgent: false, unstampedChild: true);
+            var unstampedSkipped = await RunPath(noManagedAgent: true, unstampedChild: true);
+            Console.WriteLine($"# forwarding to an unstamped child: tagged {unstampedTagged}; skipped {unstampedSkipped}");
+            H.Check("ReactorSource_ForwardingRegistration_UnstampedChild_GetSourceAgrees",
+                unstampedTagged.Mounted == new SourceLocation("Forwarding.cs", 1, 1)
+                && unstampedSkipped.Mounted == unstampedTagged.Mounted
+                && unstampedSkipped.Updated == new SourceLocation("Forwarding.cs", 2, 1));
         }
         finally
         {
