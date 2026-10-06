@@ -116,7 +116,8 @@ answer *why did this render?*:
 its own hook, or a descendant's: Reactor re-renders every component on the path
 from the root to the one whose state changed, so ancestors report `state` too.
 `parent` means the parent re-rendered and nothing could skip this component (a
-function component, or a propless `Component` whose `ShouldUpdate()` is true).
+function component, or a propless `Component` whose `ShouldUpdate()` is true). A
+function component whose consumed context changed reports `context` instead.
 
 In process, `ReactorTrace.GetComponentControl(componentId)` resolves an id to the
 control whose bounds are that component's, and `ReactorTrace.TryGetComponentId(control, out id)` goes the other way. Ids

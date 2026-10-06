@@ -50,6 +50,7 @@ internal class ComponentRendered_ReasonsAndIdsFollowTheReconciler(Harness h) : S
                 Component<RenderedStatefulChild>(),
                 Component<RenderedContextChild>(),
                 Component<RenderedAlwaysChild>(),
+                RenderEachTime(c => TextBlock($"func theme {c.UseContext(RenderedContextChild.Theme)}")),
                 Memo(_ => TextBlock("memo constant"), "constant"),
                 Button("bump", () => setN(n + 1)),
                 Button("theme", () => setTheme(theme + 1)),
@@ -91,6 +92,8 @@ internal class ComponentRendered_ReasonsAndIdsFollowTheReconciler(Harness h) : S
         var contextId = Id(mount.First(e => Name(e) == nameof(RenderedContextChild)));
         var alwaysId = Id(mount.First(e => Name(e) == nameof(RenderedAlwaysChild)));
         var rootId = Id(mount.First(e => Name(e) == nameof(FuncElement)));
+        // The host root reports first; the other FuncElement is the context-consuming child.
+        var funcConsumerId = mount.Where(e => Name(e) == nameof(FuncElement)).Select(Id).Skip(1).FirstOrDefault();
 
         // ── Id ↔ control ─────────────────────────────────────────────────
         var wrapper = ReactorTrace.GetComponentControl(propsChildId);
@@ -116,7 +119,8 @@ internal class ComponentRendered_ReasonsAndIdsFollowTheReconciler(Harness h) : S
             && !bump.Any(e => Id(e) == contextId));
         // A propless Component whose ShouldUpdate() is true has no gate that could skip it.
         H.Check("ComponentRendered_Bump_UngatedChildIsParent",
-            bump.Any(e => Id(e) == alwaysId && Reason(e) == ComponentRenderTrace.Reasons.Parent));
+            bump.Any(e => Id(e) == alwaysId && Reason(e) == ComponentRenderTrace.Reasons.Parent)
+            && bump.Any(e => Id(e) == funcConsumerId && Reason(e) == ComponentRenderTrace.Reasons.Parent));
 
         // ── Consumed context change ──────────────────────────────────────
         H.ClickButton("theme");
@@ -125,6 +129,9 @@ internal class ComponentRendered_ReasonsAndIdsFollowTheReconciler(Harness h) : S
         Console.WriteLine("# theme: " + string.Join(", ", theme.Select(e => $"{Name(e)}#{Id(e)}:{Reason(e)}")));
         H.Check("ComponentRendered_Theme_ConsumerIsContext",
             theme.Any(e => Id(e) == contextId && Reason(e) == ComponentRenderTrace.Reasons.Context));
+        H.Check("ComponentRendered_Theme_FunctionConsumerIsContext",
+            funcConsumerId != 0
+            && theme.Any(e => Id(e) == funcConsumerId && Reason(e) == ComponentRenderTrace.Reasons.Context));
         H.Check("ComponentRendered_Theme_NonConsumersSilent",
             !theme.Any(e => Id(e) == propsChildId || Id(e) == statefulId));
 

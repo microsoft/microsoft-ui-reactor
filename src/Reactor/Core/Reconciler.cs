@@ -2081,6 +2081,14 @@ public sealed partial class Reconciler : IDisposable
                     ? Diagnostics.ComponentRenderTrace.Reasons.Props
                     : Diagnostics.ComponentRenderTrace.Reasons.Context;
             }
+            else if (newEl is FuncElement
+                && Diagnostics.ComponentRenderTrace.IsEnabled
+                && HasConsumedContextChanged(node))
+            {
+                // No gate can skip a function component, so this only refines the
+                // ComponentRendered reason (and is only computed while it is traced).
+                memoReason = Diagnostics.ComponentRenderTrace.Reasons.Context;
+            }
 
             if (skipRender)
             {

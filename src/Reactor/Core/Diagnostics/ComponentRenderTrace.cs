@@ -35,7 +35,8 @@ internal static class ComponentRenderTrace
         /// <summary>
         /// The parent re-rendered and this component has no memo gate that could skip it
         /// (a function component, or a propless <c>Component</c> whose
-        /// <c>ShouldUpdate()</c> returned true).
+        /// <c>ShouldUpdate()</c> returned true). A function component whose consumed
+        /// context changed reports <see cref="Context"/> instead.
         /// </summary>
         public const string Parent = "parent";
 
