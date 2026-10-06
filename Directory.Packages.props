@@ -42,12 +42,19 @@
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.0-rc.1.26425.128" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <!-- Roslyn source generator that emits a static (reflection-free / NativeAOT-safe)
-         YamlStaticContext for the CLI's doc-pipeline YAML DTOs. Analyzer-only
-         (PrivateAssets=all) — never shipped in the `mur` tool output. Version tracks
-         YamlDotNet's major (18.x). -->
+         YamlStaticContext for the doc pipeline's YAML DTOs (tools/Reactor.DocPipeline).
+         Analyzer-only (PrivateAssets=all). Version tracks YamlDotNet's major (18.x). -->
     <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.1.0" />
-    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.11" />
-    <PackageVersion Include="MessagePack" Version="2.5.303" />
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.14" />
+    <PackageVersion Include="MessagePack" Version="2.5.305" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Doc pipeline screenshot capture (tools/Reactor.DocPipeline): the library behind
+         `winapp ui`, used in-process. Its Windows Graphics Capture build needs a Windows 10
+         19041+ TFM. The DI container is how the library hands out IWindowCapture. -->
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation" Version="0.7.1" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>
@@ -62,17 +69,17 @@
 
   <ItemGroup>
     <!-- Test infrastructure -->
-    <PackageVersion Include="xunit.v3" Version="4.0.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
-    <PackageVersion Include="MSTest.TestAdapter" Version="4.4.0" />
-    <PackageVersion Include="MSTest.TestFramework" Version="4.4.0" />
+    <PackageVersion Include="MSTest.TestAdapter" Version="4.4.1" />
+    <PackageVersion Include="MSTest.TestFramework" Version="4.4.1" />
     <!-- Microsoft.Testing.Platform extensions. xunit.v3 v4 dropped the VSTest bridge, so
          the repo runs every suite under MTP (see global.json). MTP ships no TRX writer or
          hang detector in the box: these restore the VSTest "logger trx" and "blame hang"
          behaviours CI depended on, via the MTP report-trx / hangdump options. Version
          tracks the MTP that xunit.v3 4.x / MSTest 4.x resolve. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.4.0" />
-    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="2.4.0" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.4.1" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="2.4.1" />
     <PackageVersion Include="SharpFuzz" Version="2.3.0" />
     <PackageVersion Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.2.6" />
   </ItemGroup>

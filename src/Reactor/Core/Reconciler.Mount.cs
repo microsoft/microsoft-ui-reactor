@@ -260,9 +260,10 @@ public sealed partial class Reconciler
     /// found, so it stays unpatched at its old index while its siblings are placed around it,
     /// and a Grid parent then gives it another child's row and column.
     /// <para>The wrapper's key replaces an explicit key on the inner element. The parent diffs
-    /// on the wrapper's key, and the inner element is never diffed against anything: an
-    /// unchanged <see cref="KeyedMemoElement.MemoKey"/> skips it, and a changed one remounts
-    /// it.</para>
+    /// on the wrapper's key, and the inner element is never diffed against a different one: an
+    /// unchanged <see cref="KeyedMemoElement.MemoKey"/> skips it (or, when a component inside it
+    /// updated its own state, walks a fresh factory output against itself to reach that
+    /// component), and a changed one remounts it.</para>
     /// </remarks>
     private static Element WithWrapperKey(Element inner, string? wrapperKey) =>
         wrapperKey is null || inner is EmptyElement || inner.Key == wrapperKey

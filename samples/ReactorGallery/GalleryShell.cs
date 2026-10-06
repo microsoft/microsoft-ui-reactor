@@ -187,6 +187,9 @@ class GalleryShell : Component
                 ),
                 IsPaneToggleButtonVisible = true,
                 OnPaneToggleRequested = () => setIsPaneOpen(!isPaneOpen),
+                // WinUI does not carry the root's RequestedTheme to the system caption
+                // buttons, so declare the matching theme or they keep the system's.
+                PreferredTheme = isDark ? WindowTitleBarTheme.Dark : WindowTitleBarTheme.Light,
                 IsBackButtonVisible = true,
                 IsBackButtonEnabled = prevTag != null,
                 OnBackRequested = prevTag != null ? () =>

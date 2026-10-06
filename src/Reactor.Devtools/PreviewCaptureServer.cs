@@ -2,7 +2,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Net;
-using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -33,7 +32,15 @@ internal enum EmbedAckResult
 
 internal sealed class PreviewCaptureServer : IDisposable
 {
-    private readonly HttpListener _listener;
+    /// <summary>Created and bound by <see cref="Start"/>; null until then.</summary>
+    private HttpListener? _listener;
+    /// <summary>
+    /// Serializes <see cref="Start"/> (bind, publish, announce) with
+    /// <see cref="Dispose"/> (all of its cleanup): a concurrent Start waits for the
+    /// first one's result, and once Dispose returns nothing is bound or announced.
+    /// </summary>
+    private readonly Lock _lifecycleGate = new();
+    private readonly Func<int> _probePort;
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly Window _window;
     private readonly DispatcherQueueTimer? _captureTimer;
@@ -54,11 +61,14 @@ internal sealed class PreviewCaptureServer : IDisposable
     /// <summary>Hard cap on embedded-preview endpoint POST body bytes. Spec 056.</summary>
     internal const int EmbedMaxBodyBytes = 4 * 1024;
     private const string EmbedProtocol = "embed-v1";
-    /// <summary>The TcpListener kept alive across the FindFreePort -&gt;
-    /// HttpListener.Start handoff to close the TOCTOU. TASK-026.</summary>
-    private TcpListener? _portHolder;
 
-    public int Port { get; }
+    /// <summary>
+    /// The capture port. Starts as a probed free port that <see cref="Start"/>
+    /// tries first; if another process takes it before the bind, Start moves to a
+    /// freshly probed port. Final once Start returns, which is when
+    /// <c>CAPTURE_PORT</c> is announced.
+    /// </summary>
+    public int Port { get; private set; }
     public int Fps { get; }
     public int Generation { get; set; } = 1;
     public bool EmbedMode
@@ -100,14 +110,8 @@ internal sealed class PreviewCaptureServer : IDisposable
 
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
 
-        // SECURITY (TASK-026): hold the TcpListener open until HttpListener has
-        // bound the port. Otherwise a hostile local process can race in and
-        // grab the port between our Stop() and HttpListener.Start().
-        var (port, holder) = AcquireFreePortHolding();
-        Port = port;
-        _portHolder = holder;
-        _listener = new HttpListener();
-        _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
+        _probePort = LoopbackHttpListener.ProbeFreePort;
+        Port = _probePort();
 
         var captureTimer = _dispatcherQueue.CreateTimer();
         captureTimer.Interval = TimeSpan.FromMilliseconds(1000.0 / fps);
@@ -115,24 +119,27 @@ internal sealed class PreviewCaptureServer : IDisposable
         _captureTimer = captureTimer;
     }
 
+    /// <remarks>
+    /// <paramref name="probePort"/> supplies probed free ports; it defaults to
+    /// <see cref="LoopbackHttpListener.ProbeFreePort"/>.
+    /// </remarks>
     [RequiresUnreferencedCode("Devtools subsystem test seam; gated by Reactor.DevtoolsSupport.")]
-    internal static PreviewCaptureServer CreateForTests(int port, string authToken)
+    internal static PreviewCaptureServer CreateForTests(string authToken, Func<int>? probePort = null)
     {
-        return new PreviewCaptureServer(port, authToken);
+        return new PreviewCaptureServer(authToken, probePort ?? LoopbackHttpListener.ProbeFreePort);
     }
 
     [RequiresUnreferencedCode("Devtools subsystem test seam; gated by Reactor.DevtoolsSupport.")]
-    private PreviewCaptureServer(int port, string authToken)
+    private PreviewCaptureServer(string authToken, Func<int> probePort)
     {
         _dispatcherQueue = null!;
         _window = null!;
         _captureTimer = null;
         _hwnd = IntPtr.Zero;
         Fps = 10;
-        Port = port;
         _authToken = authToken;
-        _listener = new HttpListener();
-        _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
+        _probePort = probePort;
+        Port = _probePort();
     }
 
     private static string GenerateToken()
@@ -145,48 +152,68 @@ internal sealed class PreviewCaptureServer : IDisposable
             .TrimEnd('=');
     }
 
+    /// <summary>
+    /// Binds the listener (see <see cref="Port"/>), starts serving, and announces
+    /// <c>CAPTURE_PORT</c>. A repeated call is a no-op, as <see cref="HttpListener.Start"/> is;
+    /// a concurrent call waits for the first one's result.
+    /// </summary>
+    /// <exception cref="LoopbackPortUnavailableException">
+    /// Practically never: every probed port was taken before it could be bound.
+    /// </exception>
     public void Start()
     {
-        // SECURITY (TASK-006/006-equiv): bound the IO timers.
+        lock (_lifecycleGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_listener is not null) return;
+
+            // SECURITY (TASK-026): a local process can take a probed port before
+            // HttpListener binds it. A placeholder socket can't be held across the
+            // bind (HTTP.sys refuses a port another socket owns), so bind-and-retry
+            // instead. CAPTURE_PORT is announced only for the port actually bound.
+            var (listener, port) = LoopbackHttpListener.Start(Port, pinned: false, ConfigureTimeouts, _probePort);
+            _listener = listener;
+            Port = port;
+            // TASK-025: don't start the capture timer until a reader attaches.
+            // _captureTimer.Start();
+            _ = ListenAsync(listener).ContinueWith(
+                t => Console.Error.WriteLine($"[devtools:capture] Listener loop failed: {t.Exception!.GetBaseException()}"),
+                TaskContinuationOptions.OnlyOnFaulted);
+
+            Console.WriteLine($"[devtools:capture] Serving on http://127.0.0.1:{Port}");
+            Console.WriteLine($"CAPTURE_PORT={Port}");
+            // TASK-018: emit the token for clients on stdout. The vscode-reactor
+            // extension reads this line; same-machine attackers without stdout
+            // access cannot read it.
+            Console.WriteLine($"CAPTURE_TOKEN={_authToken}");
+            Console.Out.Flush();
+        }
+    }
+
+    public void Dispose()
+    {
+        using var gate = _lifecycleGate.EnterScope();
+        if (_disposed) return;
+        _disposed = true;
+        _captureTimer?.Stop();
+        // Close also stops the listener; HTTP.sys failures surface as HttpListenerException.
+        try { _listener?.Close(); }
+        catch (HttpListenerException ex) { Console.Error.WriteLine($"[devtools:capture] Closing the listener failed: {ex.Message}"); }
+    }
+
+    /// <summary>SECURITY (TASK-006 equivalent): bound the IO timers. Runs on every bind attempt's listener.</summary>
+    private static void ConfigureTimeouts(HttpListener listener)
+    {
         try
         {
-            var tm = _listener.TimeoutManager;
+            var tm = listener.TimeoutManager;
             tm.HeaderWait = TimeSpan.FromSeconds(10);
             tm.EntityBody = TimeSpan.FromSeconds(10);
             tm.IdleConnection = TimeSpan.FromSeconds(15);
             tm.RequestQueue = TimeSpan.FromSeconds(10);
         }
-        catch { /* not all hosts expose TimeoutManager */ }
-        // SECURITY (TASK-026): release the TcpListener placeholder before
-        // binding HttpListener — the kernel only lets one socket own the
-        // loopback port, so we can't keep both alive simultaneously. The
-        // TOCTOU window between Stop() and Start() is microseconds wide
-        // and confined to loopback; not a meaningful local-attack surface.
-        try { _portHolder?.Stop(); } catch { }
-        _portHolder = null;
-        _listener.Start();
-        // TASK-025: don't start the capture timer until a reader attaches.
-        // _captureTimer.Start();
-        _ = ListenAsync().ContinueWith(
-            t => Console.Error.WriteLine($"[devtools:capture] Listener loop failed: {t.Exception!.GetBaseException()}"),
-            TaskContinuationOptions.OnlyOnFaulted);
-
-        Console.WriteLine($"[devtools:capture] Serving on http://127.0.0.1:{Port}");
-        Console.WriteLine($"CAPTURE_PORT={Port}");
-        // TASK-018: emit the token for clients on stdout. The vscode-reactor
-        // extension reads this line; same-machine attackers without stdout
-        // access cannot read it.
-        Console.WriteLine($"CAPTURE_TOKEN={_authToken}");
-        Console.Out.Flush();
-    }
-
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-        _captureTimer?.Stop();
-        try { _listener.Stop(); } catch { }
-        try { _listener.Close(); } catch { }
+        catch (HttpListenerException) { /* HTTP.sys rejected a timeout property */ }
+        catch (PlatformNotSupportedException) { /* not all hosts expose TimeoutManager */ }
     }
 
     // -- Frame Capture (UI thread) -----------------------------------------------
@@ -245,14 +272,14 @@ internal sealed class PreviewCaptureServer : IDisposable
 
     // -- HTTP Server (background thread) -----------------------------------------
 
-    private async Task ListenAsync()
+    private async Task ListenAsync(HttpListener listener)
     {
-        while (!_disposed && _listener.IsListening)
+        while (!_disposed && listener.IsListening)
         {
             HttpListenerContext ctx;
             try
             {
-                ctx = await _listener.GetContextAsync();
+                ctx = await listener.GetContextAsync();
             }
             catch (ObjectDisposedException) { break; }
             catch (HttpListenerException) { break; }
@@ -918,28 +945,6 @@ internal sealed class PreviewCaptureServer : IDisposable
     }
 
     // -- Helpers -----------------------------------------------------------------
-
-    private static int FindFreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
-
-    /// <summary>
-    /// Acquire a free loopback port AND keep the placeholder TcpListener
-    /// alive. The caller must <c>Stop</c> the holder once HttpListener has
-    /// successfully bound, otherwise the port stays reserved. TASK-026.
-    /// </summary>
-    private static (int Port, TcpListener Holder) AcquireFreePortHolding()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        return (port, listener);
-    }
 
     /// <summary>
     /// Bounded-size body reader. TASK-023.

@@ -11,88 +11,6 @@ function Test-ReactorPackageFeedUrl {
         [string]::IsNullOrEmpty($uri.Fragment)
 }
 
-function Resolve-ReactorNpmRegistry {
-    param(
-        [string]$ExplicitRegistry,
-        [string]$UserProfile = $env:USERPROFILE
-    )
-
-    if (-not [string]::IsNullOrWhiteSpace($ExplicitRegistry)) {
-        if (-not (Test-ReactorPackageFeedUrl $ExplicitRegistry)) {
-            throw "-NpmRegistry must be an HTTPS URL without credentials, query, or fragment (HTTP is allowed only for loopback): '$ExplicitRegistry'"
-        }
-        return [pscustomobject]@{
-            Registry = $ExplicitRegistry.Trim().TrimEnd('/')
-            Explicit = $true
-        }
-    }
-
-    $configuredRegistry = $env:NPM_CONFIG_REGISTRY
-    if ([string]::IsNullOrWhiteSpace($configuredRegistry)) {
-        $npmConfigs = New-Object System.Collections.Generic.List[string]
-        if (-not [string]::IsNullOrWhiteSpace($env:NPM_CONFIG_USERCONFIG)) {
-            $npmConfigs.Add($env:NPM_CONFIG_USERCONFIG)
-        } elseif (-not [string]::IsNullOrWhiteSpace($UserProfile)) {
-            $npmConfigs.Add((Join-Path $UserProfile '.npmrc'))
-        }
-
-        foreach ($config in @($npmConfigs | Select-Object -Unique)) {
-            if (-not (Test-Path -LiteralPath $config -PathType Leaf)) { continue }
-            foreach ($line in Get-Content -LiteralPath $config) {
-                if ($line -match '^\s*registry\s*=\s*(\S.*?)\s*$') {
-                    $configuredRegistry = $Matches[1].Trim().Trim('"').Trim("'")
-                }
-            }
-        }
-    }
-
-    if (-not (Test-ReactorPackageFeedUrl $configuredRegistry)) { return $null }
-
-    $uri = [Uri]$configuredRegistry
-    if ($uri.Host -ne 'packagefeedproxy.microsoft.io') { return $null }
-
-    return [pscustomobject]@{
-        Registry = $configuredRegistry.Trim().TrimEnd('/')
-        Explicit = $false
-    }
-}
-
-function Test-ReactorNpmRegistryAccess {
-    param(
-        [Parameter(Mandatory)][string]$Registry,
-        [Parameter(Mandatory)][ValidateSet('win32-x64', 'win32-arm64')][string]$Platform,
-        [int]$TimeoutSec = 20,
-        [scriptblock]$MetadataRequest,
-        [scriptblock]$TarballRequest
-    )
-
-    if (-not (Test-ReactorPackageFeedUrl $Registry)) { return $false }
-
-    try {
-        $normalized = $Registry.Trim().TrimEnd('/')
-        $metadataUrl = "$normalized/@github%2Fcopilot-$Platform"
-        $metadata = if ($MetadataRequest) {
-            & $MetadataRequest $metadataUrl
-        } else {
-            Invoke-RestMethod -Uri $metadataUrl -Method Get -TimeoutSec $TimeoutSec
-        }
-
-        $version = [string]$metadata.'dist-tags'.latest
-        if ([string]::IsNullOrWhiteSpace($version)) { return $false }
-
-        $tarballUrl = "$normalized/@github/copilot-$Platform/-/copilot-$Platform-$version.tgz"
-        if ($TarballRequest) {
-            return [bool](& $TarballRequest $tarballUrl)
-        }
-
-        $response = Invoke-WebRequest -Uri $tarballUrl -Method Get `
-            -Headers @{ Range = 'bytes=0-0' } -UseBasicParsing -TimeoutSec $TimeoutSec
-        return $response.StatusCode -eq 200 -or $response.StatusCode -eq 206
-    } catch {
-        return $false
-    }
-}
-
 function Resolve-ReactorNuGetFeed {
     param(
         [string]$ExplicitConfig,
@@ -229,8 +147,7 @@ function Test-ReactorNuGetSourceAccess {
 function Get-ReactorRestoreArguments {
     param(
         [string]$NuGetConfig,
-        [string]$NuGetSource,
-        [string]$NpmRegistry
+        [string]$NuGetSource
     )
 
     $arguments = New-Object System.Collections.Generic.List[string]
@@ -238,9 +155,6 @@ function Get-ReactorRestoreArguments {
         $arguments.Add("-p:RestoreConfigFile=$NuGetConfig")
     } elseif (-not [string]::IsNullOrWhiteSpace($NuGetSource)) {
         $arguments.Add("-p:RestoreSources=$NuGetSource")
-    }
-    if (-not [string]::IsNullOrWhiteSpace($NpmRegistry)) {
-        $arguments.Add("-p:CopilotNpmRegistryUrl=$NpmRegistry")
     }
     return @($arguments)
 }

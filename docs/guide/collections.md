@@ -455,9 +455,11 @@ instance the old one built.
 **Outside a virtualized list,** `Memo(key, factory)` is a transparent but *keyed*
 wrapper: a re-render with the same key is a no-op (the factory is not re-invoked
 and the subtree is not diffed), and a changed key replaces the inner (unmount +
-fresh mount of a new `factory()` result). The cross-recycle cache only happens
-when a virtualized list's factory owns the cache; as a plain child (say, a
-`VStack` child) it is a safe, keyed no-op.
+fresh mount of a new `factory()` result). The one exception is a component
+inside the subtree that updates its own state: the factory runs again so the
+reconciler can walk down to that component, which is why it has to stay pure.
+The cross-recycle cache only happens when a virtualized list's factory owns the
+cache; as a plain child (say, a `VStack` child) it is a safe, keyed no-op.
 
 ### Escape hatch without the API
 

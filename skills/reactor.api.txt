@@ -830,6 +830,7 @@ TitleBarElement.Icon(string imageUri) → TitleBarElement
 TitleBarElement.NoIcon() → TitleBarElement
 TitleBarElement.PaneToggleButtonVisible(bool visible) → TitleBarElement
 TitleBarElement.PaneToggleRequested(Action handler) → TitleBarElement
+TitleBarElement.PreferredTheme(WindowTitleBarTheme theme) → TitleBarElement
 TitleBarElement.RightHeader(Element rightHeader) → TitleBarElement
 TitleBarElement.Set(Action<TitleBar> configure) → TitleBarElement
 TitleBarElement.Subtitle(string subtitle) → TitleBarElement
@@ -1054,6 +1055,7 @@ WindowStartPosition { Default, CenterOnPrimary, CenterOnOwner, Manual, CenterOnC
 WindowState { Normal, Minimized, Maximized, FullScreen, CompactOverlay }
 WindowStyle { Default, None, ToolWindow }
 WindowTitleBarHeight { Standard, Tall, Collapsed }
+WindowTitleBarTheme { Legacy, UseDefaultAppMode, Light, Dark }
 
 ## Public types (ctors / properties / methods / events)
 # Every public type not already covered above. Members alphabetized within
@@ -4599,14 +4601,16 @@ Mount(Func<RenderContext, Element> renderFunc) → void
 WaitForIdleAsync(int maxYields = 50) → Task
 
 ### class ReactorHostControl
+new()
 new(Component component = null, ILogger logger = null)
 Action<double, double, double> OnRenderComplete { get; set; }
 Func<Component> ComponentFactory { get; set; }
 Reconciler Reconciler { get; }
 RenderErrorHandler EffectiveRenderErrorHandler { get; }
 RenderErrorHandler RenderErrorHandler { get; set; }
+RenderStats Stats { get; }
+Type ComponentType { get; set; }
 object Props { get; set; }
-ref RenderStats Stats { get; }
 Dispose() → void
 Mount(Component component) → void
 Mount(Func<RenderContext, Element> renderFunc) → void
@@ -5895,6 +5899,7 @@ Element Content { get; init; }
 Element RightHeader { get; init; }
 IconData Icon { get; init; }
 WindowTitleBarHeight? HeightOption { get; init; }
+WindowTitleBarTheme? PreferredTheme { get; init; }
 bool AutoRefreshDragRegions { get; init; }
 bool IsBackButtonEnabled { get; init; }
 bool IsBackButtonVisible { get; init; }
@@ -6337,6 +6342,7 @@ WindowStartPosition PersistenceFallback { get; init; }
 WindowStartPosition StartPosition { get; init; }
 WindowStyle Style { get; init; }
 WindowTitleBarHeight? TitleBarHeight { get; init; }
+WindowTitleBarTheme? TitleBarTheme { get; init; }
 bool ActivateOnOpen { get; init; }
 bool IgnorePointerInput { get; init; }
 bool IsMaximizable { get; init; }

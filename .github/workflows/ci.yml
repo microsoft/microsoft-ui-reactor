@@ -78,9 +78,9 @@ jobs:
           fi
           # Spec 041 §5.2: tier-drift triggers when a template or doc-app
           # changes. Templates live under docs/_pipeline/templates/, apps
-          # under docs/_pipeline/apps/, and the doc-pipeline CLI itself
-          # under src/Reactor.Cli/Docs/.
-          if echo "$files" | grep -qE '^(docs/_pipeline/templates/|docs/_pipeline/apps/|src/Reactor\.Cli/Docs/)'; then
+          # under docs/_pipeline/apps/, and the doc pipeline itself under
+          # tools/Reactor.DocPipeline/.
+          if echo "$files" | grep -qE '^(docs/_pipeline/templates/|docs/_pipeline/apps/|tools/Reactor\.DocPipeline/)'; then
             echo "docs-templates=true" >> "$GITHUB_OUTPUT"
           else
             echo "docs-templates=false" >> "$GITHUB_OUTPUT"
@@ -759,9 +759,9 @@ jobs:
 
       # Run the published exe directly (not via `dotnet test`) so we exercise
       # the NativeAOT binary. SelfTestRunner.DefaultAotSkipPatterns gates the
-      # known-failing fixtures (16 entries: PropertyGrid auto-discovery, three
+      # known-failing fixtures (17 entries: PropertyGrid auto-discovery, three
       # Devtools fixtures — `fire`'s handler lookup, `state`'s hook read, and
-      # DependencyProperty discovery for `properties`/`setProperty` — Issue142
+      # DependencyProperty discovery for `properties`/`setProperty` — Issue142-style
       # XAML metadata, hot-reload state migration, and the UseObservableTree
       # property walk); any *new* failure surfaces as exit code 1 and fails the job.
       # See docs/aot-support.md for the skip-list debugging workflow.
@@ -996,7 +996,7 @@ jobs:
       # Phase 5 lint-quality item. Errors (REACTOR_DOC_TIER_001..012)
       # still fail the job. See docs/contributing/doc-pipeline.md §8.
       - name: Tier-lint
-        run: dotnet run --project src/Reactor.Cli -- docs check-tier
+        run: dotnet run --project tools/Reactor.DocPipeline -- check-tier
 
   docs-snippet-gate:
     name: Doc snippet analyzer gate
@@ -1096,7 +1096,7 @@ jobs:
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
-          dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots --ci 2>&1 |
+          dotnet run --project tools/Reactor.DocPipeline -- compile --no-screenshots --ci 2>&1 |
             Tee-Object -FilePath "$env:RUNNER_TEMP/docs-compile.log"
           if ($LASTEXITCODE -ne 0) {
             Write-Error "docs compile failed (exit $LASTEXITCODE)."
@@ -1241,7 +1241,7 @@ jobs:
           }
           if ($dirty) {
             $dirty | ForEach-Object { Write-Host "  $_" }
-            Write-Error 'The files above are generated, and recompiling them produced different output than what is committed. docs/guide is compiled from docs/_pipeline/templates/*.md.dt plus the sources their snippets point at, so editing a page directly does not stick — regenerate instead. Run: dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots  then commit the result. Most often this is a src/ edit that moved a snippet="source:..." region, or a <ReactorPublicVersion> bump in Directory.Build.props that the {{reactorVersion}} pages have not picked up. See docs/contributing/doc-pipeline.md section 10.'
+            Write-Error 'The files above are generated, and recompiling them produced different output than what is committed. docs/guide is compiled from docs/_pipeline/templates/*.md.dt plus the sources their snippets point at, so editing a page directly does not stick — regenerate instead. Run: dotnet run --project tools/Reactor.DocPipeline -- compile --no-screenshots  then commit the result. Most often this is a src/ edit that moved a snippet="source:..." region, or a <ReactorPublicVersion> bump in Directory.Build.props that the {{reactorVersion}} pages have not picked up. See docs/contributing/doc-pipeline.md section 10.'
             exit 1
           }
 

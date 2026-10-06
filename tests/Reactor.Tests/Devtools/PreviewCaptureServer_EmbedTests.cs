@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using Microsoft.UI.Reactor.Hosting.Devtools;
@@ -306,14 +305,15 @@ public sealed class PreviewCaptureServer_EmbedTests
 
         public static ServerHarness Start(bool embedMode = true)
         {
-            var port = GetFreePort();
 #pragma warning disable IL2026
-            var server = PreviewCaptureServer.CreateForTests(port, Token);
+            var server = PreviewCaptureServer.CreateForTests(Token);
 #pragma warning restore IL2026
             server.EmbedMode = embedMode;
             server.Start();
 
-            var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}") };
+            // Read the port only after Start: it may move off the probed port if
+            // another process took that one first.
+            var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{server.Port}") };
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
             return new ServerHarness(server, client);
         }
@@ -322,15 +322,6 @@ public sealed class PreviewCaptureServer_EmbedTests
         {
             Client.Dispose();
             Server.Dispose();
-        }
-
-        private static int GetFreePort()
-        {
-            var listener = new TcpListener(IPAddress.Loopback, 0);
-            listener.Start();
-            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-            listener.Stop();
-            return port;
         }
     }
 }

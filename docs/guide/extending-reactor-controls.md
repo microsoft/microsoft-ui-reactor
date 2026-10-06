@@ -675,10 +675,62 @@ ReactorApp.Run<EditorApp>("Monaco Editor", configure: host =>
 `RegisterType` takes **inline** mount/update/unmount delegates, so a
 one-off control needs no `IElementHandler` class at all; `unmount` is
 optional. Returning `null` from `update` means "I patched the existing
-control" — return a different `UIElement` only when you genuinely
-replaced it. If you *do* have a handler class, `RegisterHandler` takes
-an **instance** of it instead. This is the shape Reactor's own docking
-natives and the Monaco sample use.
+control", and so does returning the control you were handed — return a
+different `UIElement` only when you genuinely replaced it. If you *do*
+have a handler class, `RegisterHandler` takes an **instance** of it
+instead. This is the shape Reactor's own docking natives and the Monaco
+sample use.
+
+Reactor records the element on the control that `mount` or `update`
+returns wherever Reactor itself reads it back — keyed reordering, the
+`unmount` lookup and `.Ref(...)` cleanup — so the delegates don't call
+`Reconciler.SetElementTag` for those. If your own code reads the element
+back with `Reconciler.GetElementTag`, from an event handler for example,
+keep tagging the control yourself. Return a control your registration
+owns: a control Reactor already mounted for another kind of element
+keeps that element's identity, so to wrap built-in elements write a
+component instead. `unmount` runs when Reactor unmounts the control,
+*instead of* Reactor's own walk over the control's children. If your
+delegates mount child elements through the reconciler, unmount them
+there too (`r.UnmountChild(child)`); without an `unmount` delegate,
+Reactor walks the children itself. A control your `update` replaced is
+unmounted, and gets `unmount`, wherever Reactor reconciles the slot that
+holds it: a panel, a `Border`, a named slot such as `SplitView.Pane`, a
+tab's content. A few slots that a control fills by hand still swap it out
+without `unmount`, so don't rely on `unmount` for a control your `update`
+replaces inside one of them: `CommandBar` content, `Expander` content and
+header template, `ContentDialog`, `Flyout` and `Popup` content, content
+attached with `.WithFlyout`, `.WithContextFlyout` or
+`.WithToolTip(element)`, and the realized item content of `ListView`,
+`GridView`, `TreeView<T>` and templated `FlipView`.
+
+To update a child your delegates mounted, pass it to `r.Reconcile` and
+put what it returns in the slot when it differs:
+
+```csharp
+reconciler.RegisterType<FramedElement, WinUI.Border>(
+    mount: static (r, el, requestRerender) =>
+        new WinUI.Border { Child = r.Mount(el.Content, requestRerender) },
+    update: static (r, oldEl, newEl, frame, requestRerender) =>
+    {
+        // Patches the child in place, or unmounts it and mounts the new element.
+        var next = r.Reconcile(oldEl.Content, newEl.Content, frame.Child, requestRerender);
+        if (!ReferenceEquals(next, frame.Child)) frame.Child = next;
+        return null;
+    });
+```
+
+When the new element has the same type and key, `Reconcile` updates the
+child, usually in place. If that update builds a new control instead (a
+`ValidationVisualizer` remounts on every update, and a `RegisterType`
+`update` can return a new control), or the type or key changed,
+`Reconcile` unmounts the old control and returns the new one. It returns
+`null` when the new child is empty. A handler class gets the same from
+`ctx.ReconcileChild(oldChild, newChild, existing)`. Don't use
+`r.UpdateChild` here. It skips the type check, so a child that changes
+type throws `InvalidCastException` for a built-in control, and it leaves
+a control it replaced mounted. `REACTOR_LIFECYCLE_003` flags the call
+and offers to switch it to `Reconcile`.
 
 A library that wants eager setup ships an ordinary
 `public static void UseAcme(Reconciler reconciler)` over one of these —

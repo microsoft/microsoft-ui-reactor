@@ -222,6 +222,80 @@ public sealed partial class Reconciler : IDisposable
     internal bool IsOnDirtyAncestorPath(UIElement? control) =>
         control is not null && _dirtyAncestorPath is { } set && set.Contains(control);
 
+    // For each control on the dirty-ancestor path, the child (a UIElement) or children (a
+    // List<UIElement>, when two self-triggered nodes share an ancestor) the path continues
+    // through. Built by the same walk as _dirtyAncestorPath and cleared with it. It lets
+    // ChildReconciler find which of a panel's children lead to pending work with one IndexOf
+    // per dirty child, so its skip arms never have to read every skipped sibling to ask.
+    private Dictionary<UIElement, object>? _dirtyPathChildren;
+
+    /// <summary>
+    /// Which children of <paramref name="parentControl"/>, held in
+    /// <paramref name="children"/>, lie on the dirty-ancestor path — the children a reconcile of
+    /// this container must descend into even when their elements are unchanged, because a
+    /// component below them updated its own state.
+    /// </summary>
+    /// <remarks>
+    /// Costs one field check when nothing in the pass self-triggered, and one hash lookup when
+    /// something did but this container is not above it. Otherwise each dirty child is located
+    /// with a single <see cref="IChildCollection.IndexOf"/>. When a dirty child can't be located
+    /// in <paramref name="children"/> (a descriptor whose collection is not the parent's own
+    /// <c>Children</c>), or the parent is unknown, the result asks the caller to test each
+    /// skip-eligible child's control instead: slower, but it never skips a pending component.
+    /// </remarks>
+    internal DirtyChildIndices ResolveDirtyChildIndices(UIElement? parentControl, IChildCollection children)
+    {
+        if (_dirtyAncestorPath is not { Count: > 0 } path)
+            return default;
+        if (parentControl is null)
+            return DirtyChildIndices.ProbeEachChild;
+        if (!path.Contains(parentControl))
+            return default;
+        // On the path with no recorded child: the parent is itself a self-triggered control,
+        // and nothing below it is pending.
+        if (_dirtyPathChildren is null || !_dirtyPathChildren.TryGetValue(parentControl, out var recorded))
+            return default;
+
+        if (recorded is UIElement single)
+        {
+            int index = children.IndexOf(single);
+            return index >= 0 ? DirtyChildIndices.At(index) : DirtyChildIndices.ProbeEachChild;
+        }
+
+        var many = (List<UIElement>)recorded;
+        var indices = new int[many.Count];
+        for (int k = 0; k < many.Count; k++)
+        {
+            int index = children.IndexOf(many[k]);
+            if (index < 0)
+                return DirtyChildIndices.ProbeEachChild;
+            indices[k] = index;
+        }
+        return DirtyChildIndices.AtAll(indices);
+    }
+
+    private static void AddDirtyPathChild(Dictionary<UIElement, object> edges, UIElement parent, UIElement child)
+    {
+        if (!edges.TryGetValue(parent, out var existing))
+        {
+            edges[parent] = child;
+            return;
+        }
+        if (existing is UIElement single)
+        {
+            if (!ReferenceEquals(single, child))
+                edges[parent] = new List<UIElement>(2) { single, child };
+            return;
+        }
+        var list = (List<UIElement>)existing;
+        foreach (var known in list)
+        {
+            if (ReferenceEquals(known, child))
+                return;
+        }
+        list.Add(child);
+    }
+
     // ── Reconcile-highlight capture (gated by ReactorFeatureFlags.HighlightReconcileChanges) ──
     private List<UIElement>? _highlightMounted;
     private List<UIElement>? _highlightModified;
@@ -950,6 +1024,43 @@ public sealed partial class Reconciler : IDisposable
     /// The mount and update handlers receive the Reconciler instance so they can
     /// recursively mount/update/unmount child elements without capturing external state.
     ///
+    /// The reconciler records the element on the control it gets back from <c>mount</c> or
+    /// <c>update</c> (the element tag) wherever it reads the tag back itself: keyed
+    /// reconciliation, the <c>unmount</c> lookup, <c>.Ref(...)</c> cleanup and exit
+    /// transitions. The callbacks don't call <see cref="SetElementTag"/> for those. Code of your
+    /// own that reads the element back with <see cref="GetElementTag(FrameworkElement)"/>, such
+    /// as an event handler, still tags the control itself. The tag lives on a
+    /// <see cref="FrameworkElement"/>. <typeparamref name="TControl"/> may be declared as
+    /// <see cref="UIElement"/>, but in WinUI 3 <see cref="FrameworkElement"/> is its only
+    /// subclass, so every control a registration returns is tagged the same way.
+    ///
+    /// <c>mount</c> and <c>update</c> are expected to return a control the registration owns.
+    /// The tag holds one element, so a control that already carries the tag of an element of
+    /// another type (registration is by exact type, so a derived type counts), for example one
+    /// <c>mount</c> got from <see cref="Mount"/> for a child element, keeps that tag:
+    /// overwriting it would silence that element's own callbacks (the collision issue #942
+    /// tracks for target-wrapping decorators). The registration's key, ref, transitions and
+    /// <c>unmount</c> are not tracked for such a control. To wrap built-in elements, compose
+    /// them in a component instead.
+    ///
+    /// <c>update</c> returns null after patching the control in place; returning the control
+    /// it was handed means the same. Return a different control only when you replaced it.
+    ///
+    /// <c>unmount</c> runs when the reconciler unmounts the control, in place of its own walk
+    /// over the control's children: a child the callbacks mounted through the reconciler has to
+    /// be torn down there, for example with <see cref="UnmountChild"/>. Calling
+    /// <see cref="UnmountChild"/> on the control itself from <c>unmount</c> walks its children
+    /// once rather than calling <c>unmount</c> again. Without an <c>unmount</c> callback the
+    /// reconciler walks the control's children itself. A control that <c>update</c> replaced is
+    /// unmounted wherever the reconciler reconciles the slot that holds it: a panel, a
+    /// <c>Border</c>, a named slot such as <c>SplitView.Pane</c>, a tab's content. A few slots
+    /// that a control fills by hand still swap a replaced control out without <c>unmount</c>:
+    /// <c>CommandBar</c> content, <c>Expander</c> content and header template,
+    /// <c>ContentDialog</c>, <c>Flyout</c> and <c>Popup</c> content, content attached with
+    /// <c>.WithFlyout</c>, <c>.WithContextFlyout</c> or <c>.WithToolTip(element)</c>, and the
+    /// realized item content of <c>ListView</c>, <c>GridView</c>, <c>TreeView&lt;T&gt;</c> and
+    /// templated <c>FlipView</c>.
+    ///
     /// Not part of the <c>REACTOR_V1_PREVIEW</c> surface — this is the legacy
     /// type-registry path, public since before Spec 047. The §13 Q17 hardening
     /// (throw on duplicate, no base-class fallback, no open generics) tightens
@@ -1548,16 +1659,30 @@ public sealed partial class Reconciler : IDisposable
         public bool HasUnmount => _unmount is not null;
 
         public UIElement Mount(Element element, Action requestRerender, Reconciler reconciler)
-            => _mount(reconciler, (TElement)element, requestRerender);
+        {
+            var control = _mount(reconciler, (TElement)element, requestRerender);
+            TagControl(control, element);
+            return control;
+        }
 
         public UIElement? Update(Element oldEl, Element newEl, UIElement control, Action requestRerender, Reconciler reconciler)
         {
             // Guard against control type mismatch (e.g., recycled from pool or element type changed at this position).
             // If the existing control isn't our expected type, force a fresh mount instead of crashing.
-            if (control is not TControl typedControl || oldEl is not TElement typedOldEl)
-                return _mount(reconciler, (TElement)newEl, requestRerender);
+            var result = control is not TControl typedControl || oldEl is not TElement typedOldEl
+                ? _mount(reconciler, (TElement)newEl, requestRerender)
+                : _update(reconciler, typedOldEl, (TElement)newEl, typedControl, requestRerender);
 
-            return _update(reconciler, typedOldEl, (TElement)newEl, typedControl, requestRerender);
+            // Returning the control it was handed means the callback patched it in place, the
+            // same as returning null. The child reconcilers read any non-null result as a
+            // replacement and unmount the control they hold, which would run this registration's
+            // unmount callback against a control that stays mounted. A second managed wrapper
+            // for the same native control counts too.
+            if (result is not null && IsSameControl(result, control))
+                result = null;
+
+            TagControl(result ?? control, newEl);
+            return result;
         }
 
         public void Unmount(UIElement control, Reconciler reconciler)
@@ -1565,8 +1690,49 @@ public sealed partial class Reconciler : IDisposable
             if (control is TControl typedControl)
                 _unmount?.Invoke(reconciler, typedControl);
         }
+
+        // The reconciler tags the control so the callbacks don't have to. The keyed-middle
+        // reconcile finds a surviving child by the key on its tag, the unmount path finds this
+        // registration's unmount callback through it, and .Ref(...) cleanup reads it too.
+        // Same allocation gate as SetElementTagIfNeeded, so an unkeyed, extras-free leaf gets
+        // no ReactorState, except that a registration with an unmount callback always tags:
+        // that lookup goes through the tag whatever the element carries.
+        private void TagControl(UIElement control, Element element)
+        {
+            // The tag lives on FrameworkElement, UIElement's only subclass in WinUI 3, so a
+            // TControl declared as UIElement still arrives here as a FrameworkElement.
+            if (control is not FrameworkElement fe) return;
+            if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+            {
+                // The callback returned a control the reconciler mounted for an element of
+                // another type, such as a child's. That element's own event trampolines and
+                // unmount read the tag, so it keeps it. Registration is by exact type, so a
+                // derived element type is another type here too.
+                if (state.Element is { } owner && owner.GetType() != typeof(TElement)) return;
+                state.Element = element;
+                return;
+            }
+            if (HasUnmount || NeedsTag(element))
+                fe.SetValue(ReactorAttached.StateProperty, new ReactorState { Element = element });
+        }
     }
 
+    /// <summary>
+    /// Reconciles one child slot: brings <paramref name="existingControl"/>, the control mounted
+    /// for <paramref name="oldElement"/>, up to date with <paramref name="newElement"/>, and returns
+    /// the control the slot should now hold.
+    /// </summary>
+    /// <remarks>
+    /// When <paramref name="newElement"/> has the element type and key of
+    /// <paramref name="oldElement"/>, the control is patched in place and returned unchanged,
+    /// unless the update had to build a new control. In every other case the old control is
+    /// unmounted before the new one is returned: a changed element type or key, an update that
+    /// built a new control, or a null or empty <paramref name="newElement"/>, which returns null.
+    /// Without an <paramref name="existingControl"/> the new element is mounted. Put the result in
+    /// the slot when it differs from <paramref name="existingControl"/>. A custom control updates
+    /// the child elements it hosts with this method; in an <c>IElementHandler</c>,
+    /// <c>UpdateContext.ReconcileChild</c> does the same.
+    /// </remarks>
     // <snippet:reconciler-entry>
     public UIElement? Reconcile(
         Element? oldElement,
@@ -1674,6 +1840,7 @@ public sealed partial class Reconciler : IDisposable
             {
                 _forceFullRenderActive = false;
                 _dirtyAncestorPath?.Clear();
+                _dirtyPathChildren?.Clear();
             }
         }
         }
@@ -1689,22 +1856,30 @@ public sealed partial class Reconciler : IDisposable
         // pass was triggered by a prop change higher up). Avoid the
         // HashSet allocation entirely until we find one.
         HashSet<UIElement>? set = null;
+        Dictionary<UIElement, object>? edges = null;
         foreach (var (control, node) in _componentNodes)
         {
             if (!node.SelfTriggered) continue;
             set ??= _dirtyAncestorPath ?? new HashSet<UIElement>();
+            edges ??= _dirtyPathChildren ?? new Dictionary<UIElement, object>();
             // Add the control itself first — Update on the wrapper
             // element that owns this control needs to bypass too so it
             // reaches the Component's UpdateComponent path.
             set.Add(control);
+            var child = control;
             var cursor = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(control) as UIElement;
             while (cursor is not null)
             {
+                // Record the edge before the early-out: a second self-triggered node joining
+                // an already-walked path still enters it through a child of its own.
+                AddDirtyPathChild(edges, cursor, child);
                 if (!set.Add(cursor)) break; // already on a previously-walked path
+                child = cursor;
                 cursor = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(cursor) as UIElement;
             }
         }
         _dirtyAncestorPath = set;
+        _dirtyPathChildren = edges;
     }
 
     // Tracks top-level Reconcile() entries so trace start/stop only fires once
@@ -1767,8 +1942,10 @@ public sealed partial class Reconciler : IDisposable
         // caller is out of scope for this fix.
         if (CanUpdate(oldElement, newElement))
         {
-            var replacement = Update(oldElement, newElement, existingControl, requestRerender);
-            if (replacement is not null && replacement != existingControl)
+            // An update that already unmounted the control it replaced (a target-wrapping flyout
+            // whose Target changes element type) is not followed by a second unmount.
+            var replacement = UpdateSlotChild(oldElement, newElement, existingControl, requestRerender, out var unmountedByUpdate);
+            if (replacement is not null && replacement != existingControl && !unmountedByUpdate)
                 Unmount(existingControl);
             return replacement ?? existingControl;
         }
@@ -2208,9 +2385,21 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Updates a single child element. Returns non-null if the child control was replaced.
-    /// Public so registered type handlers can recursively reconcile children.
+    /// Low-level update of one child control, for callers that have already checked the new
+    /// element can update it in place. Code outside the framework should call
+    /// <see cref="Reconcile"/>, which makes that check and unmounts a control it replaces.
     /// </summary>
+    /// <remarks>
+    /// Patches <paramref name="control"/> to match <paramref name="newEl"/> and returns null, or
+    /// returns a new control when the update had to build one. The caller then unmounts
+    /// <paramref name="control"/> with <see cref="UnmountChild"/> and puts the new control in its
+    /// slot, in that order, as <see cref="Reconcile"/> does: unmounting reads state from the control
+    /// while it is still in the tree, such as a connected-animation snapshot. It doesn't check that
+    /// <paramref name="newEl"/> has the element type and key of <paramref name="oldEl"/>: a changed
+    /// type throws <c>InvalidCastException</c> for a built-in control. The analyzer rule
+    /// <c>REACTOR_LIFECYCLE_003</c> flags calls to this method and offers to switch them to
+    /// <see cref="Reconcile"/>.
+    /// </remarks>
     public UIElement? UpdateChild(Element oldEl, Element newEl, UIElement control, Action requestRerender)
     {
         return Update(oldEl, newEl, control, requestRerender);
@@ -2256,6 +2445,8 @@ public sealed partial class Reconciler : IDisposable
 
     private void UnmountRecursive(UIElement control)
     {
+        NoteUnmountDuringSlotUpdate(control);
+
         // Capture connected animation snapshot while element is still in the visual tree
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
             && caEl.ConnectedAnimationKey is not null)
@@ -2332,10 +2523,13 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // Check registered type unmount handlers via the attached element
-        if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl
-            && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount)
+        if (control is FrameworkElement fe && TryGetReactorState(fe, out var regState)
+            && regState.Element is Element tagEl
+            && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount
+            && TryBeginRegisteredUnmount(regState))
         {
-            reg.Unmount(control, this);
+            try { reg.Unmount(control, this); }
+            finally { EndRegisteredUnmount(regState); }
             return;
         }
 
@@ -2354,9 +2548,49 @@ public sealed partial class Reconciler : IDisposable
 
     private static void CleanupReferenceStateForUnmount(FrameworkElement control, Element? element)
     {
-        element?.Modifiers?.Ref?.SetCurrent(null);
+        // Clear the producer ref only while it still names this control. When an update
+        // replaces a control, ApplyModifiers points the element's ref at the replacement
+        // before the caller unmounts the old control, and the ref must keep it.
+        if (element?.Modifiers?.Ref is { } producerRef && producerRef.Current is { } current
+            && IsSameNativeElement(current, control))
+            producerRef.SetCurrent(null);
         TeardownReferenceEdges(control);
     }
+
+    // Two managed wrappers can front one native element (see ReactorAttached.StateProperty), so
+    // identity falls back to the ReactorState that lives on the native object. When b carries no
+    // ReactorState there is nothing native to compare, and only the same wrapper matches.
+    private static bool IsSameNativeElement(FrameworkElement a, FrameworkElement b) =>
+        ReferenceEquals(a, b)
+        || (b.GetValue(ReactorAttached.StateProperty) is ReactorState state
+            && ReferenceEquals(a.GetValue(ReactorAttached.StateProperty), state));
+
+    // True when an update result is the control it was handed, possibly through a second managed
+    // wrapper, which means the update patched it in place. TypeRegistration.Update and
+    // ReconcileV1Child both decide this here. Every wrapper for a native object reads the same
+    // ReactorState, so the handed-in control gets one if it has none and the result is checked
+    // for it. That allocation happens only when the result is a different wrapper, which is
+    // almost always a genuine replacement, and it lands on the control being replaced.
+    private static bool IsSameControl(UIElement result, UIElement control)
+    {
+        if (ReferenceEquals(result, control)) return true;
+        if (result is not FrameworkElement resultFe || control is not FrameworkElement controlFe)
+            return false;
+        var state = GetOrCreateReactorState(controlFe);
+        return ReferenceEquals(resultFe.GetValue(ReactorAttached.StateProperty), state);
+    }
+
+    // Controls whose RegisterType unmount callback is running, by the ReactorState on the native
+    // control so a second managed wrapper for it is recognized too. A callback that tears its own
+    // control down through the reconciler (UnmountChild on the control it was handed, to reach
+    // the children it mounted) re-enters the unmount path for that control; the re-entrant call
+    // takes the default walk over the children instead of calling the callback again.
+    private HashSet<ReactorState>? _registeredUnmountsRunning;
+
+    private bool TryBeginRegisteredUnmount(ReactorState state) =>
+        (_registeredUnmountsRunning ??= new HashSet<ReactorState>(ReferenceEqualityComparer.Instance)).Add(state);
+
+    private void EndRegisteredUnmount(ReactorState state) => _registeredUnmountsRunning?.Remove(state);
 
     private static void ForEachReactorChildControl(UIElement control, Action<UIElement> visit)
         => ForEachReactorChildControl(control, child => { visit(child); return true; });
@@ -2635,6 +2869,8 @@ public sealed partial class Reconciler : IDisposable
 
     private void UnmountAndCollect(UIElement control, List<FrameworkElement> toPool)
     {
+        NoteUnmountDuringSlotUpdate(control);
+
         // Capture connected animation snapshot while element is still in the visual tree
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
             && caEl.ConnectedAnimationKey is not null)
@@ -2707,10 +2943,13 @@ public sealed partial class Reconciler : IDisposable
             }
         }
 
-        if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl
-            && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount)
+        if (control is FrameworkElement fe && TryGetReactorState(fe, out var regState)
+            && regState.Element is Element tagEl
+            && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount
+            && TryBeginRegisteredUnmount(regState))
         {
-            reg.Unmount(control, this);
+            try { reg.Unmount(control, this); }
+            finally { EndRegisteredUnmount(regState); }
             // Collect this control for pooling, but do NOT recurse into children —
             // they were created outside Reactor's tree and must not be pooled.
             // (Mirrors UnmountRecursive which returns early in this case.)
@@ -2892,6 +3131,15 @@ public sealed partial class Reconciler : IDisposable
     /// <see cref="UIElement"/> the caller should write back into the slot
     /// (or null when the slot should be cleared).
     ///
+    /// <para>When the update returns a new control for the slot, the control it
+    /// replaced is unmounted here, as a panel's <c>ChildReconciler</c> and the
+    /// component path (<see cref="ReconcileImperative"/>) do. The caller only swaps
+    /// the slot, so without this the old subtree's effect cleanups, refs,
+    /// <c>.OnUnmount</c> actions and handler unmounts never ran. An update that
+    /// returns the control it was handed patched it in place, and an update that
+    /// already unmounted the control it replaced is not followed by a second
+    /// unmount.</para>
+    ///
     /// <para>This exists because the naive replace in early Phase 1
     /// (<c>MountChild</c> + <c>SetChild</c> without comparing old vs new)
     /// destroys descendant state slots on every parent re-render — see the
@@ -2908,8 +3156,12 @@ public sealed partial class Reconciler : IDisposable
         }
         if (oldChild is not null && existing is not null && CanUpdate(oldChild, newChild))
         {
-            var replacement = Update(oldChild, newChild, existing, requestRerender);
-            return replacement ?? existing;
+            var replacement = UpdateSlotChild(oldChild, newChild, existing, requestRerender, out var unmountedByUpdate);
+            if (replacement is null || IsSameControl(replacement, existing))
+                return existing;
+            if (!unmountedByUpdate)
+                Unmount(existing);
+            return replacement;
         }
         // Hot Reload component-identity migration (spec 049 §7) — preserve the
         // child subtree's state across an edit instead of unmount/mount.
@@ -2919,6 +3171,61 @@ public sealed partial class Reconciler : IDisposable
             return existing;
         if (existing is not null) Unmount(existing);
         return Mount(newChild, requestRerender);
+    }
+
+    // The controls the slot updates now running are working on, outermost first, and whether each
+    // has been unmounted while its update ran. ReconcileV1Child and ReconcileImperative (behind the
+    // public Reconcile) run their updates in these frames. A target-wrapping flyout whose Target
+    // changes element type unmounts the old Target itself before it returns the new one
+    // (OverlayLifecycle.UpdateFlyoutElement and its MenuFlyout / CommandBarFlyout twins), and a
+    // second unmount would run the old subtree's handler and registered unmount callbacks again.
+    // Slot updates nest, and a handler deep inside one can unmount a control an outer slot is
+    // updating, so every frame watching the unmounted control is marked, not just the innermost.
+    private UIElement?[] _slotUpdateControls = Array.Empty<UIElement?>();
+    private bool[] _slotUpdateUnmounted = Array.Empty<bool>();
+    private int _slotUpdateDepth;
+
+    private UIElement? UpdateSlotChild(Element oldChild, Element newChild, UIElement existing,
+        Action requestRerender, out bool unmountedByUpdate)
+    {
+        // Every access goes through the fields: a nested frame may grow the arrays.
+        int frame = _slotUpdateDepth;
+        if (frame == _slotUpdateControls.Length)
+        {
+            int size = frame == 0 ? 8 : frame * 2;
+            Array.Resize(ref _slotUpdateControls, size);
+            Array.Resize(ref _slotUpdateUnmounted, size);
+        }
+        _slotUpdateControls[frame] = existing;
+        _slotUpdateUnmounted[frame] = false;
+        _slotUpdateDepth = frame + 1;
+        try
+        {
+            var replacement = Update(oldChild, newChild, existing, requestRerender);
+            unmountedByUpdate = _slotUpdateUnmounted[frame];
+            return replacement;
+        }
+        finally
+        {
+            _slotUpdateControls[frame] = null;
+            _slotUpdateDepth = frame;
+        }
+    }
+
+    // Matched by reference, not IsSameControl. A frame holds the control it watches, and while a
+    // managed wrapper is alive CsWinRT hands back that same wrapper for its native control, so every
+    // path that reaches the control to unmount it (the reference an update was handed, or a walk of
+    // the visual tree) arrives with this reference. IsSameControl's ReactorState compare is for an
+    // update's result, which user code chooses. Here it would add native reads to every unmount
+    // inside a slot update, which is nearly every unmount, and attach a ReactorState to a watched
+    // control that has none.
+    private void NoteUnmountDuringSlotUpdate(UIElement control)
+    {
+        for (int i = 0; i < _slotUpdateDepth; i++)
+        {
+            if (ReferenceEquals(_slotUpdateControls[i], control))
+                _slotUpdateUnmounted[i] = true;
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -3877,6 +4184,11 @@ public sealed partial class Reconciler : IDisposable
     // start count is the only non-vacuous oracle available to an automated test.
     internal int ConnectedAnimationStartCount;
 
+    // Test-only seam, same visibility: counts unmounting sources that were NOT prepared
+    // because WinUI had not yet rendered a frame since their key was last prepared (see
+    // PrepareConnectedAnimationSource). The settled tree is the same either way.
+    internal int ConnectedAnimationPreparationsSkipped;
+
     // Keys this reconcile pass actually published a snapshot for. The flush resolves
     // queued destinations only against these, because ConnectedAnimationService is
     // view-wide and unclaimed preparations are deliberately left to expire on their own
@@ -3891,8 +4203,8 @@ public sealed partial class Reconciler : IDisposable
     // cause one) and costs a hash lookup, so it stays; but it is NOT test-proven, and a
     // future change here should not assume a test would catch a regression.
     //
-    // Bookkeeping only. Nothing is invoked on the service, which is what made the
-    // withdrawn Cancel()-based cleanup crash.
+    // Bookkeeping only. Nothing is invoked on the service, so an unclaimed preparation is
+    // never cancelled; see PrepareConnectedAnimationSource for why a cancel can crash.
     private readonly HashSet<string> _preparedConnectedAnimationKeys = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -3907,20 +4219,42 @@ public sealed partial class Reconciler : IDisposable
     /// those composited at its source's old position until it times out — roughly a
     /// second of the old list ghosting over the new view.
     ///
-    /// <para>That is a known cosmetic wart, deliberately left alone. Withdrawing an
-    /// unclaimed preparation with <c>ConnectedAnimation.Cancel()</c> faults WinUI natively
-    /// (0xC0000005 in Microsoft.UI.Xaml.dll 3.2.3.0): by flush time the source has been
-    /// unmounted and returned to <see cref="ElementPool"/>, so the animation is holding a
-    /// visual that <c>CleanElement</c> has already reset. A crash is strictly worse than a
-    /// ghost, so the ghosts stay until there is a safe way to withdraw a preparation.
-    /// <c>ConnectedAnimation_OrphanOnlyPassDoesNotCrash</c> pins the no-crash behaviour.</para>
+    /// <para>That is a known cosmetic wart, deliberately left alone, because WinUI faults
+    /// (0xC0000005 at <c>CConnectedAnimationService::PreCommit</c>) when a preparation is
+    /// cancelled before it has rendered a frame and its source left the tree by itself.
+    /// The source is removed in the same pass it is prepared in, so WinUI retains it for
+    /// that frame's commit, and only the preparation gives it a composition node; a cancel
+    /// takes the node away and the commit dereferences null (issue #1152). An earlier
+    /// revision withdrew unclaimed preparations with <c>ConnectedAnimation.Cancel()</c> at
+    /// flush time and crashed this way; <c>ConnectedAnimation_OrphanOnlyPassDoesNotCrash</c>
+    /// pins the no-crash behaviour.</para>
+    ///
+    /// <para>Preparing a key that is still in use cancels its earlier animation the same way.
+    /// That happens when two passes run before WinUI renders a frame and both unmount an
+    /// element with the key, so a key is not prepared again until WinUI has rendered a frame
+    /// since its last preparation (<see cref="ConnectedAnimationFrameGate"/>). The skipped
+    /// source does not animate, and the earlier preparation stands. In the round trip that
+    /// reaches this (Go, Back, Go before one frame), the skipped source was mounted after
+    /// the last frame, so it never reached the screen.
+    /// <c>ConnectedAnimation_RepreparedBeforeFrameDoesNotCrash</c> pins this.</para>
+    ///
+    /// <para>Not covered: WinUI also cancels a started animation when its destination leaves
+    /// the tree. A pass that removes a destination before WinUI has rendered a frame since
+    /// its animation started can still fault.</para>
     /// </remarks>
     private void PrepareConnectedAnimationSource(string key, UIElement control)
     {
+        if (ConnectedAnimationFrameGate.IsAwaitingFrame(key))
+        {
+            ConnectedAnimationPreparationsSkipped++;
+            return;
+        }
+
         try
         {
             ConnectedAnimationService.GetForCurrentView().PrepareToAnimate(key, control);
             _preparedConnectedAnimationKeys.Add(key);
+            ConnectedAnimationFrameGate.Prepared(key);
         }
         catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
         {

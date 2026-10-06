@@ -75,10 +75,10 @@ internal static class DevtoolsStressRunner
             // cycling is hard to see. We still keep stderr (our own progress).
             Console.SetOut(TextWriter.Null);
 
-            // Pick a stable port up front if pinning — FindFreePort allocates a
-            // fresh loopback socket each call, so without pinning ports differ
+            // Pick a stable port up front if pinning — the server probes a fresh
+            // loopback port each construction, so without pinning ports differ
             // every cycle.
-            int? pinnedPort = opts.PinPort ? GrabFreePort() : null;
+            int? pinnedPort = opts.PinPort ? LoopbackHttpListener.ProbeFreePort() : null;
 
             if (opts.Background)
             {
@@ -188,15 +188,6 @@ internal static class DevtoolsStressRunner
     }
 
     // -- Helpers ------------------------------------------------------------
-
-    private static int GrabFreePort()
-    {
-        var l = new global::System.Net.Sockets.TcpListener(global::System.Net.IPAddress.Loopback, 0);
-        l.Start();
-        int port = ((global::System.Net.IPEndPoint)l.LocalEndpoint).Port;
-        l.Stop();
-        return port;
-    }
 
     private static Options ParseArgs(string[] args)
     {

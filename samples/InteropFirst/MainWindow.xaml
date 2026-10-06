@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:InteropFirst.Models"
+    xmlns:reactor="using:Microsoft.UI.Reactor.Hosting"
     Title="Reactor — Interop-first sample (spec 033 §7)">
 
     <Grid Padding="16" RowSpacing="12">
@@ -75,12 +76,12 @@
                                Foreground="{StaticResource AccentSampleBrush}"
                                FontWeight="SemiBold" />
                     <!--
-                        ReactorHostControl is constructed in code-behind and assigned
-                        to this Border's Child. Doing so in markup trips the WinAppSDK
-                        2.0-preview XAML compiler; this is the same pattern used by
-                        samples/ReactorHostControlDemo.
+                        The Reactor host is declared here; its root is mounted from
+                        code-behind because it is a render function fed by the window's
+                        ViewModel. A root with no inputs can be named in markup instead:
+                        <reactor:ReactorHostControl ComponentType="local:MyComponent" />
                     -->
-                    <Border x:Name="ReactorHostContainer" Grid.Row="1" />
+                    <reactor:ReactorHostControl x:Name="ReactorHost" Grid.Row="1" />
                 </Grid>
             </Border>
         </Grid>
