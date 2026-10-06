@@ -1518,8 +1518,12 @@ public sealed partial class Reconciler : IDisposable
 
     internal static void TeardownReferenceEdges(FrameworkElement ctrl)
     {
-        if (ctrl.GetValue(ReactorAttached.StateProperty) is not ReactorState state
-            || state.ReferenceEdges is null)
+        if (ctrl.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
+            return;
+        // A deferred .LabeledBy("id") that never resolved is reference state too: a retained,
+        // unpooled control must not keep reporting it after unmount.
+        state.PendingLabeledBy = null;
+        if (state.ReferenceEdges is null)
             return;
 
         foreach (var edge in state.ReferenceEdges.Edges.Values)

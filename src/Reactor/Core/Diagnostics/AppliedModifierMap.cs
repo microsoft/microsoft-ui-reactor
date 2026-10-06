@@ -175,8 +175,9 @@ internal static class AppliedModifierMap
     /// </summary>
     internal static AppliedModifier? DescribeDefaultAutomationName(Element source, string? liveName)
     {
-        // An explicit .AutomationName(...) is reported as itself and suppresses the default.
-        if (source.Modifiers?.AutomationName is not null) return null;
+        // An explicit, non-empty .AutomationName(...) is reported as itself and suppresses the
+        // default; an empty one does not, because the apply path treats an empty name as absent.
+        if (source.Modifiers?.AutomationName is { Length: > 0 }) return null;
         if (Reconciler.DefaultAutomationNameFromCaption(Reconciler.ResolveCaptionForElement(source)) is not { } name)
             return null;
         if (!string.Equals(liveName, name, StringComparison.Ordinal)) return null;

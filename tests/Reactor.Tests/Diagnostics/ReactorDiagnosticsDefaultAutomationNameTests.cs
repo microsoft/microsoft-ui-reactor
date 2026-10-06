@@ -42,6 +42,16 @@ public class ReactorDiagnosticsDefaultAutomationNameTests
     }
 
     [Fact]
+    public void DefaultAutomationName_AnEmptyExplicitNameDoesNotSuppressTheDefault()
+    {
+        // The apply path treats an empty name as absent and writes the caption over it.
+        var emptyNamed = Button("Save").AutomationName("");
+
+        Assert.Equal(new AppliedModifier("DefaultAutomationName", "AutomationProperties.Name", "Save"),
+            AppliedModifierMap.DescribeDefaultAutomationName(emptyNamed, liveName: "Save"));
+    }
+
+    [Fact]
     public void DefaultAutomationName_UsesTheSameTruncationAsTheApplyPath()
     {
         var caption = new string('x', 140);

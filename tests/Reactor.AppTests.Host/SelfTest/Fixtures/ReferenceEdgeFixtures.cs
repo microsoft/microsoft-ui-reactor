@@ -81,6 +81,19 @@ internal static class ReferenceEdgeFixtures
                 var edge = ReactorDiagnostics.GetReferenceEdges(box).SingleOrDefault(e => e.Property == "LabeledBy");
                 H.Check("RefEdges_PendingAutomationIdAfterLoaded",
                     edge is { TargetAutomationId: "refedge-missing-label", IsResolved: false, Target: null });
+
+                // Unmount drops the pending request: a retained, unpooled control (a CheckBox, so
+                // the pool's own reset is not what clears it) reports no edge afterwards.
+                host.Mount(ctx => VStack(CheckBox(label: "refedge-unmount-check").LabeledBy("refedge-missing-label2")));
+                await Harness.Render();
+                await Harness.Render(50);
+                var check = H.FindControl<CheckBox>(c => c.Content as string == "refedge-unmount-check");
+                H.Check("RefEdges_PendingBeforeUnmount",
+                    check is not null && ReactorDiagnostics.GetReferenceEdges(check).Any(e => e.TargetAutomationId == "refedge-missing-label2"));
+                if (check is null) return;
+                host.Mount(ctx => TextBlock("refedge-replaced"));
+                await Harness.WaitFor(() => H.FindControl<TextBlock>(t => t.Text == "refedge-replaced") is not null, maxPasses: 16, perPassMs: 10);
+                H.Check("RefEdges_NoPendingAfterUnmount", ReactorDiagnostics.GetReferenceEdges(check).Count == 0);
             }
             finally
             {
