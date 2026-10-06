@@ -5,7 +5,7 @@
 // used to be hand-copied into ~8 prose spots across README.md and the guide
 // templates, and drifted every release. The fix pins it ONCE in
 // <ReactorPublicVersion> (root Directory.Build.props) and substitutes it into
-// the guide via the {{reactorVersion}} token at `mur docs compile` time; README
+// the guide via the {{reactorVersion}} token at doc-pipeline compile time; README
 // is made version-agnostic. These tests fail the instant any leg of that wiring
 // is removed or a raw version literal creeps back into docs prose.
 //
@@ -71,7 +71,7 @@ public sealed class VersionSingleSourceTests
         Assert.False(
             match.Success,
             $"'{path}' must stay version-agnostic (name no package version; link to NuGet / Releases instead). " +
-            $"Found the literal '{match.Value}'. `mur docs compile` does not touch README, so a version here " +
+            $"Found the literal '{match.Value}'. The doc pipeline's compile does not touch README, so a version here " +
             "would silently drift every release.");
     }
 

@@ -66,23 +66,26 @@ internal sealed class ResizeGripHandler : IElementHandler<ResizeGripElement, Res
         // by pointer event handlers (hover/drag) attached via OnMount.
         // Re-setting it would overwrite the hover/drag visual state.
 
-        if (newEl.Child is not null && oldEl.Child is not null)
+        // ReconcileChild patches the child in place, or unmounts it and mounts the new
+        // element (a changed element type, a removed child, or an update that built a
+        // new control), and returns the control the grip should hold. The grip holds
+        // nothing but that one child, at index 0.
+        global::System.Diagnostics.Debug.Assert(
+            panel.Children.Count <= 1, $"ResizeGripControl holds {panel.Children.Count} children; it hosts at most one");
+        var existing = panel.Children.Count > 0 ? panel.Children[0] : null;
+        var next = ctx.ReconcileChild(oldEl.Child, newEl.Child, existing);
+        if (next is null)
         {
-            if (panel.Children.Count > 0 && panel.Children[0] is UIElement existingChild)
-            {
-                var replacement = ctx.Reconciler.UpdateChild(oldEl.Child, newEl.Child, existingChild, ctx.RequestRerender);
-                if (replacement is not null)
-                    panel.Children[0] = replacement;
-            }
+            if (existing is not null) panel.Children.RemoveAt(0);
         }
-        else if (newEl.Child is not null && oldEl.Child is null)
+        else if (existing is null)
+            panel.Children.Insert(0, next);
+        else if (!ReferenceEquals(next, existing))
         {
-            var child = ctx.MountChild(newEl.Child);
-            if (child is not null) panel.Children.Add(child);
-        }
-        else if (newEl.Child is null && oldEl.Child is not null)
-        {
-            panel.Children.Clear();
+            // RemoveAt + Insert rather than the indexer: WinUI's Children[i] = x doesn't always
+            // fully disconnect the old element (see PanelChildCollection.Replace).
+            panel.Children.RemoveAt(0);
+            panel.Children.Insert(0, next);
         }
 
         Reconciler.SetElementTag(panel, newEl);
