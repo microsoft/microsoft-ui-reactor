@@ -175,7 +175,7 @@ Values escape `%` as `%25` and `|` as `%7C`. Readers ignore fields they do not k
 **Gating.** Publishing needs both of these:
 
 - the `Reactor.DevtoolsSupport` build switch: on by default in Debug through `$(ReactorDiagnostics)`, and `-p:ReactorDiagnostics=true` for a Release / Native AOT build. An explicit `ReactorDiagnostics` value wins over the default and over a `Reactor.DevtoolsSupport` item the project declares itself;
-- `REACTOR_DIAGNOSTICS=1` in the environment at launch.
+- `REACTOR_DIAGNOSTICS=1` in the environment at launch. It also turns source mapping on from startup, so elements built before the first host (a page's field initializers, say) carry their call sites.
 
 Otherwise nothing is written, and a trimmed or AOT build without the switch does not contain the publishing code at all. Like XAML's runtime source info, paths are never absolute developer paths. See the [threat model](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/security/threat-model.md) §7.7.
 
