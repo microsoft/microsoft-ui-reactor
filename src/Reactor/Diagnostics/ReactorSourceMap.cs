@@ -118,7 +118,19 @@ public static partial class ReactorSourceMap
     public static SourceLocation? GetSource(UIElement control)
     {
         var element = Reconciler.GetElementTag(control);
-        if (element is not null) return UnwrapDecorators(element)?.CallSite;
+        if (element is not null)
+        {
+            // Native AOT diagnostics mode: a forwarding RegisterType registration that needs a
+            // tag (a key, an unmount callback) tags the control with itself, because the stamped
+            // child it forwarded to was not tagged; under JIT the child's tag stays and names the
+            // child. The published value still describes the child, so it answers instead.
+            if (Reconciler.SkipsCallSiteOnlyTags
+                && control.GetValue(global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics.SourceProperty) is string published
+                && global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.AtKey(published) is not null
+                && global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.DescribesAnotherElement(published, element))
+                return global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.ResolvePublishedSource(control);
+            return UnwrapDecorators(element)?.CallSite;
+        }
         return Reconciler.SkipsCallSiteOnlyTags
             ? global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.ResolvePublishedSource(control)
             : null;

@@ -973,7 +973,7 @@ internal sealed record ForwardingElement(string Label) : Element;
 /// </summary>
 internal class ReactorSource_ForwardingRegistrationKeepsChildSource(Harness h) : SelfTestFixtureBase(h)
 {
-    private async Task<(SourceLocation? Mounted, string? MountedValue, SourceLocation? Updated, string? UpdatedValue)> RunPath(bool noManagedAgent, bool unstampedChild = false)
+    private async Task<(SourceLocation? Mounted, string? MountedValue, SourceLocation? Updated, string? UpdatedValue)> RunPath(bool noManagedAgent, bool unstampedChild = false, bool keyed = false, bool withUnmount = false)
     {
         ReactorSourcePublisher.NoManagedAgent = noManagedAgent;
         var host = H.CreateHost();
@@ -982,7 +982,9 @@ internal class ReactorSource_ForwardingRegistrationKeepsChildSource(Harness h) :
         Element Child(string label) => unstampedChild ? new TextBlockElement(label) : TextBlock(label);
         host.Reconciler.RegisterType<ForwardingElement, UIElement>(
             mount: (r, el, rerender) => r.Mount(Child(el.Label), rerender)!,
-            update: (r, oldEl, newEl, control, rerender) => r.UpdateChild(Child(oldEl.Label), Child(newEl.Label), control, rerender));
+            update: (r, oldEl, newEl, control, rerender) => r.UpdateChild(Child(oldEl.Label), Child(newEl.Label), control, rerender),
+            // An unmount callback makes the registration always tag the control (when it has no tag).
+            unmount: withUnmount ? static (_, _) => { } : (Action<Reconciler, UIElement>?)null);
         host.Mount(ctx =>
         {
             var (label, setLabel) = ctx.UseState("fwd-a");
@@ -990,7 +992,7 @@ internal class ReactorSource_ForwardingRegistrationKeepsChildSource(Harness h) :
                 Button("fwd-rename", () => setLabel("fwd-b")),
                 // Hand-stamped, with a call site that moves on the update: the update path's
                 // identity check then re-publishes, so the forwarding guard there is exercised.
-                new ForwardingElement(label) { CallSite = new SourceLocation("Forwarding.cs", label == "fwd-a" ? 1 : 2, 1) });
+                new ForwardingElement(label) { CallSite = new SourceLocation("Forwarding.cs", label == "fwd-a" ? 1 : 2, 1), Key = keyed ? "fwd-key" : null });
         });
         await Harness.Render();
         var a = H.FindControl<WinUI.TextBlock>(t => t.Text == "fwd-a");
@@ -1095,6 +1097,19 @@ internal class ReactorSource_ForwardingRegistrationKeepsChildSource(Harness h) :
                 unstampedTagged.Mounted == new SourceLocation("Forwarding.cs", 1, 1)
                 && unstampedSkipped.Mounted == unstampedTagged.Mounted
                 && unstampedSkipped.Updated == new SourceLocation("Forwarding.cs", 2, 1));
+
+            // Registrations that need a tag of their own (a key, an unmount callback): in the AOT
+            // skip mode they tag the control with themselves, as the stamped child is untagged,
+            // yet GetSource must still name the child, as JIT's kept child tag does.
+            foreach (var (keyed, withUnmount, name) in new[] { (true, false, "Keyed"), (false, true, "UnmountCallback") })
+            {
+                var t = await RunPath(noManagedAgent: false, keyed: keyed, withUnmount: withUnmount);
+                var s = await RunPath(noManagedAgent: true, keyed: keyed, withUnmount: withUnmount);
+                Console.WriteLine($"# forwarding ({name}): tagged {t.Mounted} / {t.Updated}; skipped {s.Mounted} / {s.Updated}");
+                H.Check($"ReactorSource_ForwardingRegistration_{name}_GetSourceNamesTheChild",
+                    t.Mounted is { } tm && tm.FilePath != "Forwarding.cs" && s.Mounted == tm
+                    && t.Updated is { } tu && tu.FilePath != "Forwarding.cs" && s.Updated == tu);
+            }
         }
         finally
         {
