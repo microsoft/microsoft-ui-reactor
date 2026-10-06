@@ -250,6 +250,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// </summary>
     public void Mount(Component component)
     {
+        _activationError = null;
         _rootRenderFunc = null;
         _funcContext = null;
         _rootComponent = component;
@@ -261,11 +262,15 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// </summary>
     public void Mount(Func<RenderContext, Element> renderFunc)
     {
+        _activationError = null;
         _rootComponent = null;
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
         RequestRender();
     }
+
+    // Set when Loaded-time root creation failed (issue #1291); cleared by Mount.
+    private Exception? _activationError;
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -289,6 +294,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             // through the app's RenderErrorHandler as a root-render failure (issue #1291), so
             // its text is kept off screen like any other render error.
             _logger?.LogError(error, "ReactorHostControl could not create its root component");
+            _activationError = error;
             ShowErrorFallback(error, RenderErrorSource.RootRender, ComponentType?.Name);
             return;
         }
@@ -609,6 +615,14 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                     ShowErrorFallback(ex, RenderErrorSource.RootRender);
                     return;
                 }
+            }
+            else if (_activationError is not null)
+            {
+                // Loaded-time activation failed, so there is no root to render. A re-render
+                // requested by the app's fallback (its own state) re-runs the handler like any
+                // failing root render, so the fallback is reconciled in place rather than frozen.
+                ShowErrorFallback(_activationError, RenderErrorSource.RootRender, ComponentType?.Name);
+                return;
             }
 
             double treeBuildMs = _phaseSw.Elapsed.TotalMilliseconds;

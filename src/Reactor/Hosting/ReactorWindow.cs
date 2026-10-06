@@ -258,6 +258,7 @@ public sealed partial class ReactorWindow : IDisposable
     private AspectRatioOverride[] _aspectRatioOverrides = global::System.Array.Empty<AspectRatioOverride>();
     private int _nextAspectRatioOverrideId;
     private UIElement? _backgroundDragRoot;
+    internal UIElement? BackgroundDragRootForTests => _backgroundDragRoot;
     private PointerEventHandler? _backgroundDragHandler;
     private FrameworkElement? _sizeToContentRoot;
     private SizeChangedEventHandler? _sizeToContentSizeChangedHandler;

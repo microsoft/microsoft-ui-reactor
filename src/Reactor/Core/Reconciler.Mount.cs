@@ -47,6 +47,8 @@ public sealed partial class Reconciler
         // A direct Mount from outside is an outermost frame for render-error propagation
         // (issue #1291), like a top-level Reconcile; recursive mounts just count.
         using var entryFrame = EnterFrame();
+        // Where this mount's completed roots start, while an ErrorBoundary records them.
+        int boundaryRootsStart = _boundaryMountRoots?.Count ?? -1;
 
         // Push context values onto scope before processing children
         var ctxValues = element.ContextValues;
@@ -249,6 +251,7 @@ public sealed partial class Reconciler
             _ambientRequestedTheme = prevAmbientTheme;
         }
 
+        NoteMountCompleted(boundaryRootsStart, control);
         return control;
     }
 
@@ -803,7 +806,7 @@ public sealed partial class Reconciler
         Element renderedElement;
         Exception? caughtEx = null;
 
-        var outerJournal = BeginBoundaryMount(out var journal);
+        var record = BeginBoundaryMount();
         bool childMounted = false;
         _errorBoundaryDepth++;
         try
@@ -820,8 +823,8 @@ public sealed partial class Reconciler
             caughtEx = ex;
             // The partly mounted child is discarded: run its effect cleanups now (issue
             // #1291), then mount the fallback under the enclosing record.
-            _boundaryMountJournal = outerJournal;
-            RollBackBoundaryMount(journal);
+            _boundaryMountJournal = record.OuterJournal;
+            RollBackBoundaryMount(record, attachedChild: null);
             renderedElement = eb.Fallback(ex);
             wrapper.Child = Mount(renderedElement, requestRerender);
         }
@@ -830,9 +833,9 @@ public sealed partial class Reconciler
             _errorBoundaryDepth--;
             // An exception escaping the boundary (a declined propagation) discards the
             // partly mounted child as well. Best effort: the escaping exception wins.
-            if (!childMounted && journal.Count > 0)
-                RollBackDiscardedBoundaryMount(journal);
-            EndBoundaryMount(outerJournal, journal);
+            if (!childMounted && HasBoundaryMountLeftovers(record))
+                RollBackDiscardedBoundaryMount(record, attachedChild: null);
+            EndBoundaryMount(record);
         }
 
         _errorBoundaryNodes[wrapper] = new ErrorBoundaryNode

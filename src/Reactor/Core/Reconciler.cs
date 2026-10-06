@@ -73,15 +73,33 @@ public sealed partial class Reconciler : IDisposable
     private List<UIElement>? _boundaryMountJournal;
 
     /// <summary>
-    /// Starts recording registrations for a boundary's child. Returns the enclosing record,
-    /// which <see cref="EndBoundaryMount"/> restores.
+    /// Controls whose <see cref="Mount"/> completed while an <see cref="ErrorBoundaryElement"/>
+    /// mounts or retries its child (issue #1291), collapsed as they nest: when a mount
+    /// completes, the roots its children left are replaced by its own control, which reaches
+    /// them through the normal unmount walk. <c>null</c> when no boundary is doing so. After a
+    /// failure, the roots past the boundary's start are the completed subtrees the partly
+    /// built child left behind; <see cref="RollBackBoundaryMount"/> unmounts them, which tears
+    /// down everything a finished control registered (interaction states, keyframe and
+    /// scroll animations, reference edges, <c>.OnUnmount</c>, handler state), not only the
+    /// entries in <see cref="_boundaryMountJournal"/>.
     /// </summary>
-    private List<UIElement>? BeginBoundaryMount(out List<UIElement> journal)
+    private List<UIElement>? _boundaryMountRoots;
+
+    /// <summary>What <see cref="BeginBoundaryMount"/> started and <see cref="EndBoundaryMount"/> restores.</summary>
+    private readonly record struct BoundaryMountRecord(
+        List<UIElement>? OuterJournal, List<UIElement> Journal, int RootsStart, bool OwnsRoots);
+
+    /// <summary>
+    /// Starts recording registrations and completed roots for a boundary's child.
+    /// </summary>
+    private BoundaryMountRecord BeginBoundaryMount()
     {
         var outer = _boundaryMountJournal;
-        journal = new List<UIElement>();
+        var journal = new List<UIElement>();
         _boundaryMountJournal = journal;
-        return outer;
+        bool ownsRoots = _boundaryMountRoots is null;
+        _boundaryMountRoots ??= new List<UIElement>();
+        return new BoundaryMountRecord(outer, journal, _boundaryMountRoots.Count, ownsRoots);
     }
 
     /// <summary>
@@ -89,25 +107,56 @@ public sealed partial class Reconciler : IDisposable
     /// enclosing boundary's subtree too, so its registrations move up: if that boundary's
     /// child fails later, they are discarded with it.
     /// </summary>
-    private void EndBoundaryMount(List<UIElement>? outer, List<UIElement> journal)
+    private void EndBoundaryMount(BoundaryMountRecord record)
     {
-        _boundaryMountJournal = outer;
-        if (outer is not null && journal.Count > 0)
-            outer.AddRange(journal);
-        journal.Clear();
+        _boundaryMountJournal = record.OuterJournal;
+        if (record.OuterJournal is not null && record.Journal.Count > 0)
+            record.OuterJournal.AddRange(record.Journal);
+        record.Journal.Clear();
+        if (record.OwnsRoots)
+            _boundaryMountRoots = null;
+    }
+
+    /// <summary>True when the boundary's child left anything to roll back.</summary>
+    private bool HasBoundaryMountLeftovers(BoundaryMountRecord record) =>
+        record.Journal.Count > 0 || (_boundaryMountRoots?.Count ?? 0) > record.RootsStart;
+
+    /// <summary>
+    /// Called when a <see cref="Mount"/> completes: its control replaces the roots its
+    /// children recorded, since unmounting it reaches them. No-op unless a boundary is
+    /// recording.
+    /// </summary>
+    private void NoteMountCompleted(int rootsStart, UIElement? control)
+    {
+        if (_boundaryMountRoots is not { } roots || rootsStart < 0) return;
+        if (roots.Count > rootsStart)
+            roots.RemoveRange(rootsStart, roots.Count - rootsStart);
+        if (control is not null)
+            roots.Add(control);
     }
 
     /// <summary>
-    /// Discards what a failed boundary child registered: drops the wrappers from the node
-    /// tables, runs their components' effect cleanups and their <c>.OnUnmount</c> actions,
-    /// and tears down navigation hosts, deepest first. Entries already handled by the
-    /// normal unmount path are skipped, so this is safe to run after an
-    /// <see cref="Unmount"/> and never runs anything twice. Every entry is processed even
-    /// when one fails: failures are logged, and one the app declined via
-    /// <see cref="RenderError.Propagate"/> is rethrown once all have run.
+    /// Discards what a failed boundary child left behind, deepest first: unmounts the
+    /// subtrees that completed (see <see cref="_boundaryMountRoots"/>), then drops the
+    /// remaining wrappers of mounts that never completed from the node tables, running their
+    /// components' effect cleanups and their <c>.OnUnmount</c> actions and tearing down
+    /// navigation hosts. <paramref name="attachedChild"/> is the boundary's previous child on
+    /// a retry, which the caller unmounts itself: completed subtrees attached under it are
+    /// left to that unmount. Entries already handled by the normal unmount path are skipped,
+    /// so nothing runs twice. Every entry is processed even when one fails: failures are
+    /// logged, and one the app declined via <see cref="RenderError.Propagate"/> is rethrown
+    /// once all have run.
     /// </summary>
-    private void RollBackBoundaryMount(List<UIElement> journal)
+    private void RollBackBoundaryMount(BoundaryMountRecord record, UIElement? attachedChild)
     {
+        var journal = record.Journal;
+        List<UIElement>? orphans = null;
+        if (_boundaryMountRoots is { } roots && roots.Count > record.RootsStart)
+        {
+            orphans = roots.GetRange(record.RootsStart, roots.Count - record.RootsStart);
+            roots.RemoveRange(record.RootsStart, orphans.Count);
+        }
+
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? propagated = null;
         void OnCleanupError(Exception ex)
         {
@@ -119,6 +168,24 @@ public sealed partial class Reconciler : IDisposable
 
         using (IsolateUnmountCleanupFailures(OnCleanupError))
         {
+            if (orphans is not null)
+            {
+                for (int i = orphans.Count - 1; i >= 0; i--)
+                {
+                    var orphan = orphans[i];
+                    if (attachedChild is not null && IsAttachedUnder(orphan, attachedChild))
+                        continue;
+                    try
+                    {
+                        UnmountRecursive(orphan);
+                    }
+                    catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+                    {
+                        OnCleanupError(ex);
+                    }
+                }
+            }
+
             for (int i = journal.Count - 1; i >= 0; i--)
             {
                 var wrapper = journal[i];
@@ -198,16 +265,28 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    // True when control sits in ancestor's subtree (logical parent first, then visual).
+    private static bool IsAttachedUnder(UIElement control, UIElement ancestor)
+    {
+        DependencyObject? current = control;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, ancestor)) return true;
+            current = (current as FrameworkElement)?.Parent ?? VisualTreeHelper.GetParent(current);
+        }
+        return false;
+    }
+
     /// <summary>
     /// <see cref="RollBackBoundaryMount"/> for a child discarded because an exception is
     /// escaping the boundary: cleanup failures are logged, never thrown, so they cannot
     /// replace the exception that is already unwinding.
     /// </summary>
-    private void RollBackDiscardedBoundaryMount(List<UIElement> journal)
+    private void RollBackDiscardedBoundaryMount(BoundaryMountRecord record, UIElement? attachedChild)
     {
         try
         {
-            RollBackBoundaryMount(journal);
+            RollBackBoundaryMount(record, attachedChild);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
@@ -3913,6 +3992,9 @@ public sealed partial class Reconciler : IDisposable
     /// Uses a static dictionary keyed by UIElement.
     /// </summary>
     private static readonly Dictionary<UIElement, InteractionStateTracker> _interactionTrackers = new();
+
+    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
+    internal static int InteractionTrackerCountForTests => _interactionTrackers.Count;
 
     private sealed class InteractionStateTracker
     {

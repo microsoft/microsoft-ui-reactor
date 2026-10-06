@@ -1505,7 +1505,7 @@ public sealed partial class Reconciler
         Element newRendered;
         Exception? caughtEx = null;
 
-        var outerJournal = BeginBoundaryMount(out var journal);
+        var record = BeginBoundaryMount();
         bool childReconciled = false;
         _errorBoundaryDepth++;
         try
@@ -1523,20 +1523,20 @@ public sealed partial class Reconciler
             caughtEx = ex;
             if (existingChild is not null)
                 Unmount(existingChild);
-            // Components the failed retry mounted but never attached are out of reach of
-            // that Unmount; run their effect cleanups too (issue #1291). Without this every
-            // failing retry leaks another set of live subscriptions.
-            _boundaryMountJournal = outerJournal;
-            RollBackBoundaryMount(journal);
+            // What the failed retry mounted but never attached is out of reach of that
+            // Unmount; tear it down too (issue #1291). Without this every failing retry
+            // leaks another set of live subscriptions and native registrations.
+            _boundaryMountJournal = record.OuterJournal;
+            RollBackBoundaryMount(record, existingChild);
             newRendered = newEb.Fallback(ex);
             wrapper.Child = Mount(newRendered, requestRerender);
         }
         finally
         {
             _errorBoundaryDepth--;
-            if (!childReconciled && journal.Count > 0)
-                RollBackDiscardedBoundaryMount(journal);
-            EndBoundaryMount(outerJournal, journal);
+            if (!childReconciled && HasBoundaryMountLeftovers(record))
+                RollBackDiscardedBoundaryMount(record, existingChild);
+            EndBoundaryMount(record);
         }
 
         node.ChildElement = newEb.Child;

@@ -257,9 +257,10 @@ Conventions for contributors:
   first effect opened (a subscription, a timer), and a control's `.OnMount(...)` had
   already run. The boundary discarded the half-built subtree without it ever being
   attached, so nothing could unmount it, and every re-render retried the child and
-  leaked another set. The boundary now rolls the failed child back — component effect
-  cleanups, `.OnUnmount(...)` actions and navigation-host route subscriptions — both
-  when it first mounts and on each retry. The same applies to the internal boundary
+  leaked another set. The boundary now rolls the failed child back — the controls
+  that did finish are unmounted (so their interaction states, animations and
+  `.OnUnmount(...)` actions go too), and the components that did not still have their
+  effect cleanups run — both when it first mounts and on each retry. The same applies to the internal boundary
   around a `RenderErrorHandler` fallback, and when a host replaces or releases its tree
   for a render-error outcome every cleanup runs even if one of them throws.
 

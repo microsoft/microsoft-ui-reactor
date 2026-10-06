@@ -1117,8 +1117,12 @@ public sealed class ReactorHost : IDisposable
         // When the handler's outcome replaced (and released) the tree, the theme listener
         // moves to the new content like any content swap, or is detached when there is none,
         // so it neither pins the released root nor misses a ThemeRef-bound app fallback. The
-        // no-handler built-in panel keeps the pre-#1291 behavior.
+        // owning window likewise moves its background-drag and SizeToContent hooks off the
+        // released root. The no-handler built-in panel keeps the pre-#1291 behavior.
         if (replacesTree)
+        {
             AttachThemeListener(errorPanel);
+            OwningWindow?.OnHostContentRendered(errorPanel);
+        }
     }
 }

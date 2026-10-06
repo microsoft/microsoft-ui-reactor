@@ -1227,6 +1227,258 @@ internal static class RenderErrorHandlerFixtures
         }
     }
 
+    // A finished control with interaction states (a registration only unmount removes)
+    // followed by a sibling component that throws.
+    private static Element InteractiveThenThrow() => VStack(
+        Border(TextBlock("Interactive")).InteractionStates(s => s.PointerOver(opacity: 0.85f)),
+        Component<ThrowingComponent>());
+
+    // Rolling back a failed boundary child unmounts the subtrees that did finish, so every
+    // native registration they made goes too, not only the ones the rollback record lists.
+    // Interaction states live in a process-wide table, so a leak there grows with each retry.
+    internal class Boundary_RollbackUnmountsCompletedSubtrees(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int baseline = Reconciler.InteractionTrackerCountForTests;
+
+            // App fallback for a failing root (the internal guard), first failure plus retries.
+            var host = H.CreateHost();
+            host.RenderErrorHandler = _ => InteractiveThenThrow();
+            host.Mount(_ => throw new InvalidOperationException("root boom"));
+            await Harness.Render();
+            for (int i = 0; i < 3; i++)
+            {
+                host.RequestRender();
+                await Harness.Render();
+            }
+            H.Check("RenderErrorHandler_SubtreeRollback_Guard", Reconciler.InteractionTrackerCountForTests == baseline,
+                $"baseline={baseline} now={Reconciler.InteractionTrackerCountForTests}");
+
+            // Ordinary user ErrorBoundary: mount, then retries (the update path, where the
+            // failed retry is a fresh subtree, not part of the boundary's attached child).
+            var boundaryHost = H.CreateHost();
+            boundaryHost.Mount(_ => ErrorBoundary(InteractiveThenThrow(), TextBlock("InteractiveBoundaryFallback")));
+            await Harness.Render();
+            for (int i = 0; i < 3; i++)
+            {
+                boundaryHost.RequestRender();
+                await Harness.Render();
+            }
+            H.Check("RenderErrorHandler_SubtreeRollback_Boundary",
+                Reconciler.InteractionTrackerCountForTests == baseline && H.FindText("InteractiveBoundaryFallback") is not null,
+                $"baseline={baseline} now={Reconciler.InteractionTrackerCountForTests}");
+
+            // Retry that grows the attached child: the new control lands inside it, so the
+            // boundary's own unmount of that child covers it and it is torn down exactly once.
+            s_nativeResources = 0;
+            bool fail = false;
+            var growHost = H.CreateHost();
+            growHost.Mount(_ => ErrorBoundary(
+                fail
+                    ? VStack(
+                        TextBlock("GrowStable"),
+                        Border(TextBlock("GrowNew")).InteractionStates(s => s.PointerOver(opacity: 0.85f))
+                            .OnMount(StartNativeResource).OnUnmount(StopNativeResource),
+                        Component<ThrowingComponent>())
+                    : VStack(TextBlock("GrowStable")),
+                TextBlock("GrowFallback")));
+            await Harness.Render();
+            fail = true;
+            growHost.RequestRender();
+            await Harness.Render();
+            H.Check("RenderErrorHandler_SubtreeRollback_AttachedOnce",
+                Reconciler.InteractionTrackerCountForTests == baseline && s_nativeResources == 0
+                    && H.FindText("GrowFallback") is not null,
+                $"baseline={baseline} now={Reconciler.InteractionTrackerCountForTests} live={s_nativeResources}");
+        }
+    }
+
+    // A fallback that replaces the tree also becomes the window's content for its
+    // background-drag hook, which otherwise stays on the released root.
+    internal class HostFallback_WindowFollowsContent(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            if (ReactorApp.UIDispatcher is null)
+                ReactorApp.UIDispatcher = DispatcherQueue.GetForCurrentThread();
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+
+            bool shouldThrow = false;
+            bool propagate = false;
+            RenderErrorHandler handler = e =>
+            {
+                if (propagate) { e.Propagate(); return null; }
+                return TextBlock("WindowDragFallback");
+            };
+            var win = ReactorApp.OpenWindow(
+                new WindowSpec
+                {
+                    Title = "RenderErrorHandler Drag", Width = 320, Height = 200,
+                    IsMovableByBackground = true, RenderErrorHandler = handler,
+                },
+                (Func<RenderContext, Element>)(_ => shouldThrow
+                    ? throw new InvalidOperationException("window drag boom")
+                    : TextBlock("WindowDragHealthy")));
+            try
+            {
+                await win.Host.WaitForIdleAsync();
+                await Harness.Render(50);
+                var healthyRoot = win.Host.CurrentControl;
+                H.Check("RenderErrorHandler_WindowContent_Precondition",
+                    healthyRoot is not null && ReferenceEquals(win.BackgroundDragRootForTests, healthyRoot));
+
+                shouldThrow = true;
+                win.Host.RequestRender();
+                await win.Host.WaitForIdleAsync();
+                await Harness.Render(50);
+                var fallback = win.Host.CurrentControl;
+                H.Check("RenderErrorHandler_WindowContent_FallbackTakesDrag",
+                    fallback is not null && !ReferenceEquals(fallback, healthyRoot)
+                        && ReferenceEquals(win.BackgroundDragRootForTests, fallback),
+                    win.BackgroundDragRootForTests?.GetType().Name ?? "null");
+
+                // Handled propagation: the tree is released with nothing shown in its place.
+                await WithUnhandledCallback(_ => true, async () =>
+                {
+                    propagate = true;
+                    win.Host.RequestRender();
+                    await win.Host.WaitForIdleAsync();
+                    await Harness.Render(50);
+                });
+                H.Check("RenderErrorHandler_WindowContent_ReleasedDetaches",
+                    win.Host.CurrentControl is null && win.BackgroundDragRootForTests is null,
+                    win.BackgroundDragRootForTests?.GetType().Name ?? "null");
+            }
+            finally
+            {
+                try { win.Close(); }
+                catch (global::System.Runtime.InteropServices.COMException ex) { global::System.Diagnostics.Debug.WriteLine($"[RenderErrorHandler] window close failed: {ex.Message}"); }
+                catch (ObjectDisposedException ex) { global::System.Diagnostics.Debug.WriteLine($"[RenderErrorHandler] window close failed: {ex.Message}"); }
+                await Task.Delay(80);
+            }
+        }
+    }
+
+    // A fallback with its own state, so a re-render it requests is observable.
+    private sealed class StatefulFallback : Component
+    {
+        public static Action<int>? SetCount;
+
+        public override Element Render()
+        {
+            var (count, setCount) = UseState(0);
+            SetCount = setCount;
+            return TextBlock($"StatefulFallback:{count}");
+        }
+    }
+
+    // A ReactorHostControl whose Loaded-time root creation fails has no root to render, but
+    // the app's fallback must still re-render when its own state changes.
+    internal class HostControl_ActivationFailureFallbackRerenders(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            StatefulFallback.SetCount = null;
+            var log = new List<RenderError>();
+            var control = new ReactorHostControl
+            {
+                ComponentFactory = () => throw new InvalidOperationException("activation boom"),
+                RenderErrorHandler = Recording(log, _ => Component<StatefulFallback>()),
+            };
+            H.SetContent(control);
+            await Harness.Render(50);
+            H.Check("RenderErrorHandler_Activation_FallbackShown",
+                H.FindText("StatefulFallback:0") is not null && log.Count == 1
+                    && log[0].Source == RenderErrorSource.RootRender && log[0].Exception.Message == "activation boom",
+                Sources(log));
+
+            StatefulFallback.SetCount?.Invoke(1);
+            await Harness.Render(50);
+            H.Check("RenderErrorHandler_Activation_FallbackRerenders",
+                H.FindText("StatefulFallback:1") is not null, $"handled={log.Count}");
+
+            // A later Mount supplies a root and ends the activation-failure state.
+            control.Mount(_ => TextBlock("ActivationRecovered"));
+            await Harness.Render(50);
+            H.Check("RenderErrorHandler_Activation_MountRecovers", H.FindText("ActivationRecovered") is not null);
+            H.SetContent(null);
+            control.Dispose();
+        }
+    }
+
+    // Content whose root cleanup throws only when armed, so the flyout window's own
+    // light-dismiss (on deactivation) tears it down quietly.
+    private static bool s_flyoutCleanupThrows;
+
+    private static Element FlyoutContent() => Component<FlyoutCleanupComponent>();
+
+    private sealed class FlyoutCleanupComponent : Component
+    {
+        public override Element Render()
+        {
+            UseEffect(() => () =>
+            {
+                if (s_flyoutCleanupThrows) throw new InvalidOperationException("flyout cleanup boom");
+            }, Array.Empty<object>());
+            return TextBlock("FlyoutContent");
+        }
+    }
+
+    // A declined propagation escaping the tray flyout's host teardown must not strand the
+    // flyout: Hide still forgets the disposed host, and Dispose still closes the window.
+    internal class TrayFlyout_DeclinedPropagationFinishesTeardown(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithDefault(e => { e.Propagate(); return null; }, () =>
+            WithUnhandledCallback(_ => false, async () =>
+            {
+                global::Microsoft.UI.Reactor.Hosting.Shell.TrayFlyoutHostWindow.ResetForTests();
+                s_flyoutCleanupThrows = false;
+                try
+                {
+                    var flyout = global::Microsoft.UI.Reactor.Hosting.Shell.TrayFlyoutHostWindow.GetOrCreate();
+                    flyout.Show(FlyoutContent());
+                    await Harness.Render(50);
+                    // Show is idempotent about the host: showing again replaces it.
+                    if (!flyout.IsShowingForTests) flyout.Show(FlyoutContent());
+                    await Harness.Render(20);
+                    H.Check("RenderErrorHandler_TrayFlyout_Precondition",
+                        flyout.IsShowingForTests && flyout.HostForTests is not null);
+
+                    s_flyoutCleanupThrows = true;
+                    Exception? hideEscaped = null;
+                    try { flyout.Hide(); } catch (InvalidOperationException ex) { hideEscaped = ex; }
+                    s_flyoutCleanupThrows = false;
+                    H.Check("RenderErrorHandler_TrayFlyout_HideForgetsHost",
+                        hideEscaped?.Message == "flyout cleanup boom" && flyout.HostForTests is null,
+                        hideEscaped?.Message ?? "(nothing escaped)");
+
+                    flyout.Show(FlyoutContent());
+                    await Harness.Render(50);
+                    if (!flyout.IsShowingForTests) flyout.Show(FlyoutContent());
+                    await Harness.Render(20);
+                    bool closed = false;
+                    flyout.WindowForTests.Closed += (_, _) => closed = true;
+
+                    s_flyoutCleanupThrows = true;
+                    Exception? disposeEscaped = null;
+                    try { global::Microsoft.UI.Reactor.Hosting.Shell.TrayFlyoutHostWindow.ResetForTests(); }
+                    catch (InvalidOperationException ex) { disposeEscaped = ex; }
+                    s_flyoutCleanupThrows = false;
+                    H.Check("RenderErrorHandler_TrayFlyout_DisposeClosesWindow",
+                        disposeEscaped?.Message == "flyout cleanup boom" && closed && flyout.HostForTests is null,
+                        $"escaped={disposeEscaped?.Message ?? "(nothing)"} closed={closed}");
+                    H.Check("RenderErrorHandler_TrayFlyout_SingletonReset",
+                        !ReferenceEquals(global::Microsoft.UI.Reactor.Hosting.Shell.TrayFlyoutHostWindow.GetOrCreate(), flyout));
+                }
+                finally
+                {
+                    s_flyoutCleanupThrows = false;
+                    global::Microsoft.UI.Reactor.Hosting.Shell.TrayFlyoutHostWindow.ResetForTests();
+                }
+            }));
+    }
+
     // Replacing or releasing a failed tree finishes its teardown even when one cleanup throws:
     // the host forgets that tree afterwards, so a cleanup skipped here would leak for good.
     // Covers replacement by an app fallback and release on a handled Propagate().
