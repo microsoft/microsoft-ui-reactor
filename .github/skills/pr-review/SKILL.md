@@ -120,6 +120,7 @@ buckets in this repo:
 | `src/Reactor.Analyzers/`, `src/Reactor.Analyzers.Internal/`, `src/Reactor.Compile.Analyzer/` | api-ergonomics (diagnostic quality), correctness |
 | `src/Reactor.*.Generator/` (Localization, Wrappers source generators) | correctness, packaging |
 | `src/Reactor.Cli/` (`mur`) | api-ergonomics, security, correctness |
+| `tools/Reactor.DocPipeline/` (doc pipeline, screenshot capture) | security, correctness |
 | `src/Reactor.Devtools/`, `src/vscode-reactor/`, `src/vs-reactor/`, `src/Reactor.Interop.WinForms/` | packaging, correctness |
 | `tests/Reactor.Tests/`, `tests/Reactor.SelfTests/`, `tests/Reactor.AppTests*/` | test-coverage |
 | `docs/`, `README.md`, `samples/` | docs-and-samples |
