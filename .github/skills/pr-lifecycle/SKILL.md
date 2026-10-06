@@ -60,9 +60,10 @@ A PR managed by this skill has exactly one lifecycle label. Leave all other labe
 | `ready-for-review` | Loop exited cleanly on the current head (see [Exit conditions](#exit-conditions)). **Not** an approval and **not** permission to merge |
 
 Set labels with `gh pr edit $number --repo $repo --add-label <new> --remove-label <old1>,<old2>`.
-Re-read labels and `headRefOid` after writing. If the head moved, go back to
-`agent-preparing` and continue the loop. On a merged or closed PR: remove the lifecycle
-labels, clear any wakeup, and stop.
+Re-read labels, `headRefOid` and `baseRefOid` after writing. If either SHA moved, go back
+to `agent-preparing` and continue the loop (a moved base means re-checking conflicts
+and CI against it). On a merged or closed PR: remove the lifecycle labels, clear any
+wakeup, and stop.
 
 ## Phase 1: Prepare
 
@@ -97,7 +98,8 @@ the report:
   the split `restore` + `build -c Release` when C# changed, or the doc pipeline compile
   for templates you touched. Record the exact commands and their results. A local pass
   is not a CI pass.
-- Commit (`Address pr-review findings`) and push.
+- If you changed anything, commit (`Address pr-review findings`) and push. If every
+  finding was disputed, there's nothing to commit; go straight to the checkpoint.
 
 Record `pr-review: done@<sha>` in the checkpoint. **Don't run `pr-review` again in later
 rounds.** The Copilot loop reviews every later change. If the skill is invoked again
@@ -133,9 +135,11 @@ Request a Copilot review **once per head SHA**:
 gh pr edit $number --repo $repo --add-reviewer "@copilot"
 ```
 
-Confirm the request registered: Copilot appears in the PR's `reviewRequests`, or a
-`copilot-pull-request-reviewer` check run appears for the head. If the request fails,
-set `agent-blocked`.
+Confirm the request registered. Copilot does **not** appear in `gh pr view`'s
+`reviewRequests` or in REST `requested_reviewers`; check instead for a
+`review_requested` timeline event whose `requested_reviewer.login` is `Copilot`, or a
+`copilot-pull-request-reviewer` check run on the head (commands in
+[Reference commands](#reference-commands)). If neither shows up, set `agent-blocked`.
 
 ### 4b. Wait without burning a turn
 
@@ -168,21 +172,27 @@ owner (whoever requested the review), and the next step (retry after the quota r
 
 ### 4c. CI gate
 
-Read the live policy for the PR's base every round; don't assume it:
+Read the live policy for the PR's base every round; don't assume it. Required checks
+can come from two places, and each endpoint only shows its own:
 
 ```powershell
-gh api "repos/$repo/rules/branches/$([Uri]::EscapeDataString($baseRef))"   # look for type "required_status_checks"
-gh pr checks $number --repo $repo --required
+# Rulesets: look for entries of type "required_status_checks"
+gh api "repos/$repo/rules/branches/$([Uri]::EscapeDataString($baseRef))"
+# Classic branch protection (readable without admin; contexts/checks are the required names)
+gh api "repos/$repo/branches/$([Uri]::EscapeDataString($baseRef))" --jq '.protection.required_status_checks'
 ```
 
-- **Required checks** (from the ruleset or branch protection) must all be present and
-  `success`. A missing or pending required check doesn't count as a pass.
+- **Required checks** (the union of both sources) must each have a run on the head that
+  is `success`. Compare by name against the head's check runs yourself:
+  `gh pr checks --required` can't list a required check that hasn't started, so a
+  missing required check would otherwise look like a pass. Missing or pending means
+  not green.
 - **Every other check run on the head** must also not be failing: `success`, or
   `skipped`/`neutral` where the workflow intends that (for example, path-filtered jobs,
   which a docs-only PR shows as `skipping`). This repo's `main` currently declares no
-  required checks, so in practice this second rule is the whole gate.
-- If the policy can't be read (permissions, SSO), fall back to the second rule alone and
-  note that in the checkpoint.
+  required checks in either place, so in practice this second rule is the whole gate.
+- If either policy source can't be read (permissions, SSO), fall back to the second
+  rule alone and note that in the checkpoint.
 
 When a check fails, read the logs first (`gh run view <run-id> --repo $repo --log-failed`).
 
@@ -207,11 +217,21 @@ outdated ones:
 | `github-code-quality` | CodeQL code-quality rules | Fix or dispute, reply, then **resolve** |
 | anyone else | Humans and other bots | Fix or dispute, then **reply and leave the thread open** for that person to resolve (`reply_to_review_thread`). Never dismiss a human's changes-request review; re-request their review after you address it |
 
-Also read the Copilot review **body**: its overview, its verdict, and any *"comments
-suppressed due to low confidence"*. Fix the real problems and record what you decided
-about the rest in the checkpoint (don't post a status comment). Read new top-level
-comments from `github-actions[bot]` (coverage, perf, and build-metrics reports) and act
-if one reports a regression. Those are reports, not threads to resolve.
+Not all feedback lives in threads. Every round, also read:
+
+- **Every review body**, not just Copilot's. A human can submit a body-only review
+  (including `CHANGES_REQUESTED`) with no inline thread. Treat each actionable point in
+  it like a human thread: fix it or answer it, as a top-level PR comment that quotes
+  the point. Copilot's body holds its overview, its verdict, and any *"comments
+  suppressed due to low confidence"*; fix the real ones and record what you decided
+  about the rest in the checkpoint.
+- **Every top-level PR comment** (`issues/<n>/comments`). Answer substantive human
+  comments the same way. Comments from `github-actions[bot]` (coverage, perf and
+  build-metrics reports) are reports: act if one shows a regression, but they don't need
+  a reply.
+
+Record each non-thread item and how you handled it in the checkpoint, so later rounds
+don't answer it twice. Don't post status comments.
 
 Decide each thread on the evidence, not on the reviewer's authority:
 
@@ -259,8 +279,8 @@ Leave Phase 4 when all of these are true for the **current head**:
 
 1. The latest round is complete (see the round-complete signals above).
 2. The CI gate is green.
-3. There are no unresolved Copilot or code-quality threads, and every human thread is
-   either fixed or answered.
+3. There are no unresolved Copilot or code-quality threads; every human thread, human
+   review body and substantive human top-level comment is either fixed or answered.
 4. Copilot's verdict is `🟢 Approval recommended`, **or** you've disputed every
    remaining point in its latest review with evidence, so no meaningful findings are left.
 5. The PR is mergeable with no conflicts against its base (`mergeable: MERGEABLE`).
@@ -272,8 +292,8 @@ technical evidence, not an approval. The verdicts seen in this repo are
 
 ## Phase 5: Finish
 
-1. Fetch head/base, labels, checks and threads again. If anything changed since the
-   exit check, go back to Phase 4.
+1. Fetch head/base SHAs, labels, checks, threads and comments again. If anything
+   changed since the exit check, go back to Phase 4.
 2. Set `ready-for-review` (or `agent-blocked`), replacing the other lifecycle labels.
 3. Clear the session wakeup (`save_session_automation` with `clear: true`). The
    exception: if you re-requested a human's review and it's still pending, keep the
@@ -285,24 +305,34 @@ technical evidence, not an approval. The verdicts seen in this repo are
 
 ## Reference commands
 
-Set `$repo` (`microsoft/microsoft-ui-reactor`, unless the PR comes from a fork or is
-part of a stack), `$number`, and `$baseRef` (`baseRefName`) from the actual PR.
+`$repo` is the repository that **owns the PR** (its base repository), normally
+`microsoft/microsoft-ui-reactor`. Keep it even when the head branch lives in a fork; a
+fork never has this PR number. A stacked PR changes `baseRefName`, not `$repo`. Set
+`$number` and `$baseRef` (`baseRefName`) from the actual PR, and split `$repo` into
+`$owner`/`$name` for the GraphQL queries.
 
 ```powershell
 # Snapshot
-gh pr view $number --repo $repo --json url,state,isDraft,headRefOid,headRefName,baseRefName,baseRefOid,mergeable,mergeStateStatus,reviewDecision,reviewRequests,labels,body
+gh pr view $number --repo $repo --json url,state,isDraft,headRefOid,headRefName,baseRefName,baseRefOid,mergeable,mergeStateStatus,reviewDecision,labels,body
 gh pr checks $number --repo $repo --json name,state,bucket,link   # bucket: pass|fail|pending|skipping|cancel
+
+# Did the Copilot review request register? (Copilot is missing from reviewRequests)
+gh api --paginate "repos/$repo/issues/$number/timeline" --jq '.[] | select(.event == "review_requested" and .requested_reviewer.login == "Copilot") | .created_at'
+gh api "repos/$repo/commits/$headSha/check-runs?check_name=copilot-pull-request-reviewer" --jq '.check_runs[] | {status, conclusion}'
+
+# All reviews (bodies matter too: a human can request changes without an inline thread)
+gh api --paginate "repos/$repo/pulls/$number/reviews" --jq '.[] | {id, user: .user.login, state, commit_id, submitted_at, body}'
 
 # Copilot reviews with their verdict (the first "### " line of the body); compare commit_id to the head.
 # Use --jq rather than piping --paginate output to ConvertFrom-Json, which breaks once there are multiple pages.
 gh api --paginate "repos/$repo/pulls/$number/reviews" --jq '.[] | select(.user.login == "copilot-pull-request-reviewer[bot]") | {id, state, commit_id, submitted_at, verdict: ((.body | capture("###\\s*(?<v>[^\\r\\n]+)") | .v) // null)}'
 
-# Required-check policy for the base (see 4c)
+# Required-check policy for the base (both sources; see 4c)
 gh api "repos/$repo/rules/branches/$([Uri]::EscapeDataString($baseRef))"
-gh pr checks $number --repo $repo --required
+gh api "repos/$repo/branches/$([Uri]::EscapeDataString($baseRef))" --jq '.protection.required_status_checks'
 
 # Top-level comments (coverage / perf / build-metrics reports, humans)
-gh api --paginate "repos/$repo/issues/$number/comments"
+gh api --paginate "repos/$repo/issues/$number/comments" --jq '.[] | {id, user: .user.login, created_at, body}'
 
 # Failing GitHub Actions job logs, and the one-time rerun for a transient failure
 gh run view $runId --repo $repo --log-failed
@@ -323,7 +353,7 @@ query($o:String!,$n:String!,$num:Int!,$cursor:String){
         comments(first:100){ totalCount pageInfo{ hasNextPage endCursor }
           nodes{ databaseId author{login} body url } } } } } } }
 '@
-gh api graphql -f query=$q -F o=microsoft -F n=microsoft-ui-reactor -F num=$number
+gh api graphql -f query=$q -f o=$owner -f n=$name -F num=$number
 
 # More comments in one thread
 $q2 = @'
