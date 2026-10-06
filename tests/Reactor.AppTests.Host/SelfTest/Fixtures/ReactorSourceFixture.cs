@@ -664,6 +664,24 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.Check("ReactorSource_RootRemount_HostControl_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             hostControl.Dispose();
             H.SetContent(null);
+
+            // An embedded ReactorHostControl is another host: the walk renames what this root owns
+            // around it and leaves the island alone, even when the island's root shares the name.
+            const string OldOwnerValue = "v=1|at=Probe.cs:1|owner=RemountRootA|element=TextBlock";
+            var outerLeaf = new WinUI.TextBlock();
+            outerLeaf.SetValue(ReactorDiagnostics.SourceProperty, OldOwnerValue);
+            var islandLeaf = new WinUI.TextBlock();
+            islandLeaf.SetValue(ReactorDiagnostics.SourceProperty, OldOwnerValue);
+            using var island = new Microsoft.UI.Reactor.Hosting.ReactorHostControl { Content = islandLeaf };
+            var outer = new WinUI.StackPanel();
+            outer.Children.Add(outerLeaf);
+            outer.Children.Add(island);
+            var probeHost = H.CreateHost();
+            probeHost.Reconciler.RenameRootOwner(outer, nameof(RemountRootA), nameof(RemountRootB));
+            H.Check("ReactorSource_RootRemount_EmbeddedIslandUntouched",
+                (ReactorDiagnostics.GetSource(outerLeaf) as string)?.Contains("|owner=RemountRootB|", StringComparison.Ordinal) == true
+                && ReactorDiagnostics.GetSource(islandLeaf) == OldOwnerValue);
+            probeHost.Dispose();
         }
         finally
         {
@@ -694,6 +712,7 @@ internal class ReactorSource_AotTagSkipKeepsTeardown(Harness h) : SelfTestFixtur
     private static Element Tree(RenderContext ctx)
     {
         var (shown, setShown) = ctx.UseState(true);
+        var nav = ctx.UseNavigation("a");
         return VStack(
             Button("teardown-toggle", () => setShown(false)),
             shown
@@ -701,11 +720,14 @@ internal class ReactorSource_AotTagSkipKeepsTeardown(Harness h) : SelfTestFixtur
                     NavigationView([]).PaneHeader(Component<TeardownProbe>()),
                     // An item host (ItemsHost strategy, hidden from Children): its items are
                     // torn down by the handler too.
-                    ComboBox([Component<TeardownProbe>()], default, null))
+                    ComboBox([Component<TeardownProbe>()], default, null),
+                    // A hand-written handler with no children strategy whose Unmount detaches
+                    // the route subscription and clears the page cache.
+                    NavigationHost(nav, route => TextBlock($"teardown-page {route}")))
                 : TextBlock("teardown-gone"));
     }
 
-    private async Task<(int Cleanups, bool NavTagged, bool ComboTagged, bool ReturnedBefore, bool ReturnedAfter)> RunPath(bool noManagedAgent)
+    private async Task<(int Cleanups, bool NavTagged, bool ComboTagged, int HostNodesBefore, int HostNodesAfter, bool ReturnedBefore, bool ReturnedAfter)> RunPath(bool noManagedAgent)
     {
         ReactorSourcePublisher.NoManagedAgent = noManagedAgent;
         TeardownProbe.Cleanups = 0;
@@ -717,10 +739,12 @@ internal class ReactorSource_AotTagSkipKeepsTeardown(Harness h) : SelfTestFixtur
         bool navTagged = nav is not null && Reconciler.GetElementTag(nav) is not null;
         var combo = H.FindControl<WinUI.ComboBox>(_ => true);
         bool comboTagged = combo is not null && Reconciler.GetElementTag(combo) is not null;
+        int hostNodesBefore = host.Reconciler._navigationHostNodes.Count;
         H.ClickButton("teardown-toggle");
         await Harness.Render();
         await Harness.Render();
         int cleanups = TeardownProbe.Cleanups;
+        int hostNodesAfter = host.Reconciler._navigationHostNodes.Count;
 
         host.Reconciler.Pool.Enabled = false;
         var element = TextBlock("returned");
@@ -734,7 +758,7 @@ internal class ReactorSource_AotTagSkipKeepsTeardown(Harness h) : SelfTestFixtur
 
         host.Dispose();
         H.SetContent(null);
-        return (cleanups, navTagged, comboTagged, before, after);
+        return (cleanups, navTagged, comboTagged, hostNodesBefore, hostNodesAfter, before, after);
     }
 
     public override async Task RunAsync()
@@ -766,6 +790,9 @@ internal class ReactorSource_AotTagSkipKeepsTeardown(Harness h) : SelfTestFixtur
             H.Check("ReactorSource_AotSkipTeardown_PaneHeaderAndItemsCleanedUp", tagged.Cleanups == 2 && skipped.Cleanups == 2);
             H.Check("ReactorSource_AotSkipTeardown_NavigationViewKeepsItsTag", tagged.NavTagged && skipped.NavTagged);
             H.Check("ReactorSource_AotSkipTeardown_ItemHostKeepsItsTag", tagged.ComboTagged && skipped.ComboTagged);
+            // NavigationHost's handler-owned teardown ran: its tracked node is gone.
+            H.Check("ReactorSource_AotSkipTeardown_NavigationHostCleanedUp",
+                tagged.HostNodesBefore == 1 && skipped.HostNodesBefore == 1 && tagged.HostNodesAfter == 0 && skipped.HostNodesAfter == 0);
             H.Check("ReactorSource_AotSkipTeardown_ReturnedControlForgotten",
                 tagged.ReturnedBefore && skipped.ReturnedBefore && tagged.ReturnedAfter && skipped.ReturnedAfter);
         }
@@ -774,6 +801,69 @@ internal class ReactorSource_AotTagSkipKeepsTeardown(Harness h) : SelfTestFixtur
             ReactorSourcePublisher.IsEnabled = enabled;
             ReactorSourcePublisher.NoManagedAgent = noAgent;
             Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = mapped;
+        }
+    }
+}
+
+/// <summary>
+/// A ContentDialog element realizes a collapsed placeholder; the dialog the user sees is a
+/// separate WinUI object. An out-of-process inspector sees the dialog, so it carries the
+/// element's published value too: when opened at mount (the reconciler mirrors the value it
+/// publishes) and when opened later by a state change (copied at creation).
+/// </summary>
+internal class ReactorSource_LiveDialogPublished(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        if (!ReactorSourcePublisher.IsSupported)
+        {
+            H.Skip("ReactorSource_LiveDialog", "Reactor.DevtoolsSupport is off in this host");
+            return;
+        }
+
+        var previous = ReactorSourcePublisher.IsEnabled;
+        try
+        {
+            ReactorSourcePublisher.IsEnabled = true;
+
+            var host = H.CreateHost();
+            host.Mount(_ => VStack(
+                TextBlock("live-dialog-anchor"),
+                ContentDialog("SourceAtMount", TextBlock("live-dialog-body"), "OK") with { IsOpen = true }));
+            var atMount = await ContentDialogProbe.WaitForOpen(H, "SourceAtMount", 2_000);
+            var atMountValue = atMount is null ? null : ReactorDiagnostics.GetSource(atMount);
+            Console.WriteLine($"# live dialog (mount): {atMountValue}");
+            H.Check("ReactorSource_LiveDialog_PublishedWhenOpenedAtMount",
+                atMountValue?.Contains("|element=ContentDialog", StringComparison.Ordinal) == true
+                && atMountValue.Contains("|owner=FuncElement", StringComparison.Ordinal));
+            atMount?.Hide();
+            await Harness.Render(50);
+            host.Dispose();
+            H.SetContent(null);
+
+            var flipHost = H.CreateHost();
+            flipHost.Mount(ctx =>
+            {
+                var (open, setOpen) = ctx.UseState(false);
+                return VStack(
+                    Button("live-dialog-open", () => setOpen(true)),
+                    ContentDialog("SourceOnFlip", TextBlock("live-dialog-body"), "OK") with { IsOpen = open });
+            });
+            await Harness.Render();
+            H.ClickButton("live-dialog-open");
+            var onFlip = await ContentDialogProbe.WaitForOpen(H, "SourceOnFlip", 2_000);
+            var onFlipValue = onFlip is null ? null : ReactorDiagnostics.GetSource(onFlip);
+            Console.WriteLine($"# live dialog (flip): {onFlipValue}");
+            H.Check("ReactorSource_LiveDialog_PublishedWhenOpenedLater",
+                onFlipValue?.Contains("|element=ContentDialog", StringComparison.Ordinal) == true);
+            onFlip?.Hide();
+            await Harness.Render(50);
+            flipHost.Dispose();
+            H.SetContent(null);
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = previous;
         }
     }
 }

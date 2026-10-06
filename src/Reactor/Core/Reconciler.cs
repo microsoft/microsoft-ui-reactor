@@ -195,6 +195,20 @@ public sealed partial class Reconciler : IDisposable
             : null;
         var value = Diagnostics.ReactorSourcePublisher.Publish(control, element, CurrentDiagnosticOwner, component);
         KeepTagIfSourceAmbiguous(control, element, value);
+        MirrorOntoLiveDialog(control, element, value);
+    }
+
+    /// <summary>
+    /// A ContentDialog element realizes a collapsed placeholder in the tree and shows a separate
+    /// WinUI ContentDialog; the visible dialog carries the element's published value too.
+    /// </summary>
+    private static void MirrorOntoLiveDialog(UIElement control, Element element, string value)
+    {
+        while (element is ModifiedElement modified) element = modified.Inner;
+        if (element is ContentDialogElement && control is FrameworkElement placeholder
+            && V1Protocol.OverlayLifecycle.PeekLiveContentDialog(placeholder) is { } dialog
+            && !string.Equals(dialog.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) as string, value, StringComparison.Ordinal))
+            dialog.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, value);
     }
 
     /// <summary>
@@ -281,7 +295,7 @@ public sealed partial class Reconciler : IDisposable
     /// owns it, but not entered: its subtree is owned by that component. Rare (only on a root
     /// swap), so a walk.
     /// </summary>
-    private void RenameRootOwner(UIElement? root, string previousOwner, string owner)
+    internal void RenameRootOwner(UIElement? root, string previousOwner, string owner)
     {
         if (root is null) return;
         var seen = new HashSet<DependencyObject>(ReferenceEqualityComparer.Instance);
@@ -302,6 +316,9 @@ public sealed partial class Reconciler : IDisposable
                     node.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, renamed);
                 componentWrapper = Diagnostics.ReactorSourcePublisher.IsComponentWrapper(value);
             }
+            // An embedded ReactorHostControl is another host: its island names its own root.
+            if (!ReferenceEquals(node, root) && node is global::Microsoft.UI.Reactor.Hosting.ReactorHostControl)
+                continue;
 
             // Overlay edges first: a decorator hangs its flyout on its target's control, which
             // can be a component wrapper (Flyout(Component<T>(), body)) whose own subtree is T's
@@ -313,7 +330,7 @@ public sealed partial class Reconciler : IDisposable
                     Push(flyout.Content);
                     Push(flyout.OverlayInputPassThroughElement);
                 }
-                Push(V1Protocol.OverlayLifecycle.PeekLiveContentDialog(fe)?.Content as UIElement);
+                Push(V1Protocol.OverlayLifecycle.PeekLiveContentDialog(fe));
             }
             if (componentWrapper) continue;
 
@@ -921,15 +938,16 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// V1 adapter variant. <paramref name="ownsChildTeardown"/> says the element's handler
-    /// tears down child slots the generic unmount walk (<see cref="ForEachReactorChildControl(UIElement, Action{UIElement})"/>)
-    /// does not reach, such as NavigationView's <c>PaneHeader</c>. Unmount dispatches to that
+    /// V1 adapter variant. <paramref name="ownsTeardown"/> says the element's handler does
+    /// teardown the generic unmount walk (<see cref="ForEachReactorChildControl(UIElement, Action{UIElement})"/>)
+    /// does not, such as NavigationView's <c>PaneHeader</c> or NavigationHost's route
+    /// subscription and page cache. Unmount dispatches to that
     /// handler through the tag, so in <see cref="SkipsCallSiteOnlyTags"/> mode a stamped
     /// element keeps it, exactly as every stamped element is tagged outside that mode.
     /// </summary>
-    internal static void SetElementTagIfNeeded(FrameworkElement control, Element element, bool ownsChildTeardown)
+    internal static void SetElementTagIfNeeded(FrameworkElement control, Element element, bool ownsTeardown)
     {
-        if (ownsChildTeardown && SkipsCallSiteOnlyTags && element.Extensions is not null
+        if (ownsTeardown && SkipsCallSiteOnlyTags && element.Extensions is not null
             && control.GetValue(ReactorAttached.StateProperty) is not ReactorState)
         {
             control.SetValue(ReactorAttached.StateProperty, new ReactorState { Element = element });

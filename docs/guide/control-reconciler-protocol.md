@@ -48,7 +48,7 @@ public UIElement Mount(Element element, Action requestRerender, Reconciler recon
     // Gated: callback-free leaves never dispatch into Reactor code, so we
     // skip the ReactorState allocation for them (§4.4 follow-up).
     if (control is FrameworkElement fe)
-        Reconciler.SetElementTagIfNeeded(fe, typedEl, OwnsChildTeardown(control));
+        Reconciler.SetElementTagIfNeeded(fe, typedEl, OwnsTeardown(control));
 
     // Strategy dispatch — only when the handler declares a non-None Children strategy.
     var strategy = _handler.Children;

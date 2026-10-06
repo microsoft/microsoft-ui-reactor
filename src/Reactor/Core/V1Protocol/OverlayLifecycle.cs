@@ -229,6 +229,14 @@ internal static class OverlayLifecycle
         Reconciler.ApplySetters(cdEl.Setters, dialog);
         // Publish before showing so the very next render can reach the dialog.
         s_liveDialogs.AddOrUpdate(anchor, dialog);
+        // The visible dialog describes the element too, not only its collapsed placeholder: an
+        // out-of-process inspector sees the dialog. A deferred (Loaded) open finds the
+        // placeholder already published; a mount-time open is covered by the reconciler, which
+        // mirrors the placeholder's value onto the live dialog when it publishes it.
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+            && Diagnostics.ReactorSourcePublisher.IsEnabled
+            && anchor.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string published)
+            dialog.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, published);
         // True when this call still owns the placeholder's tracking entry at
         // close time. False once unmount teardown has taken it, or once a
         // re-open has installed a newer dialog over it.

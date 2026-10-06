@@ -27,17 +27,21 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
     public bool HasUnmount => true; // the default-body call is cheap; no point branching.
 
     /// <summary>
-    /// Whether this handler tears down children the generic unmount walk does not reach
-    /// (named slots, item hosts, imperative children, or a single-content / panel strategy on
-    /// a control that walk does not know). Only consulted in the Native AOT diagnostics mode
-    /// that skips call-site-only tags, where it keeps the tag unmount dispatch goes through.
+    /// Whether unmount must reach this handler for teardown the generic unmount walk does not
+    /// do: child slots it does not reach (named slots, item hosts, imperative children, or a
+    /// single-content / panel strategy on a control that walk does not know), or, for a
+    /// hand-written handler, an <c>Unmount</c> body (NavigationHost detaches its route
+    /// subscription and clears its page cache there). A descriptor's own <c>OnUnmount</c>
+    /// already forces its tag at mount. Only consulted in the Native AOT diagnostics mode that
+    /// skips call-site-only tags, where it keeps the tag unmount dispatch goes through.
     /// </summary>
-    private bool OwnsChildTeardown(UIElement control)
+    private bool OwnsTeardown(UIElement control)
         => Reconciler.SkipsCallSiteOnlyTags
-            && _handler.ChildrenForUnmount is { } strategy
-            && strategy is not None<TElement, TControl>
-            && !(strategy is Panel<TElement, TControl> or SingleContent<TElement, TControl>
-                && Reconciler.UnmountWalkReachesChildren(control));
+            && (_handler is not Descriptor.IDescriptorBackedHandler
+                || (_handler.ChildrenForUnmount is { } strategy
+                    && strategy is not None<TElement, TControl>
+                    && !(strategy is Panel<TElement, TControl> or SingleContent<TElement, TControl>
+                        && Reconciler.UnmountWalkReachesChildren(control))));
 
     /// <summary>
     /// The live children this handler's strategy hosts, the ones its unmount tears down
@@ -82,7 +86,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
         // skip the ReactorState allocation for them (§4.4 follow-up).
         // <snippet:element-tag-refresh-mount>
         if (control is FrameworkElement fe)
-            Reconciler.SetElementTagIfNeeded(fe, typedEl, OwnsChildTeardown(control));
+            Reconciler.SetElementTagIfNeeded(fe, typedEl, OwnsTeardown(control));
         // </snippet:element-tag-refresh-mount>
 
         // Strategy dispatch — only when the handler declares a non-None Children strategy.
@@ -129,7 +133,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
 
         // <snippet:element-tag-refresh-update>
         if (control is FrameworkElement fe)
-            Reconciler.SetElementTagIfNeeded(fe, typedNew, OwnsChildTeardown(control));
+            Reconciler.SetElementTagIfNeeded(fe, typedNew, OwnsTeardown(control));
         // </snippet:element-tag-refresh-update>
 
         var strategy = _handler.Children;

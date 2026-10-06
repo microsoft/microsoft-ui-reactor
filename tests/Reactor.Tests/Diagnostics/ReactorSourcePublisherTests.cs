@@ -179,6 +179,12 @@ public sealed class ReactorSourcePublisherTests
         var own = ReactorSourcePublisher.WithRoot(plain + "|hooks=0:x@9", "C", "0:c@4", previousHostHooks: "0:a@3", out var addedOwn);
         Assert.False(addedOwn);
         Assert.EndsWith("|hooks=0:x@9", own, StringComparison.Ordinal);
+
+        // Not even when their text matches what the host added before: a fresh output (a new
+        // memo key mounted new controls) carries no root fields, so nothing on it is the host's.
+        var fresh = ReactorSourcePublisher.WithRoot(plain + "|hooks=0:a@3", "D", null, previousHostHooks: "0:a@3", out var addedFresh);
+        Assert.False(addedFresh);
+        Assert.Equal("v=1|at=A.cs:1|owner=R|element=TextBlock|root=D|hooks=0:a@3", fresh);
     }
 
     [Theory]

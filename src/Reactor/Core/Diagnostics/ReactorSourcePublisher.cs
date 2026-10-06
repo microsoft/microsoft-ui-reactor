@@ -190,8 +190,11 @@ internal static class ReactorSourcePublisher
         addedHooks = false;
         if (published is null) return null;
         var fields = new List<string>(published.Split('|'));
-        fields.RemoveAll(static f => f.StartsWith("root=", StringComparison.Ordinal));
-        if (!string.IsNullOrEmpty(previousHostHooks))
+        bool hadRoot = fields.RemoveAll(static f => f.StartsWith("root=", StringComparison.Ordinal)) > 0;
+        // Only a value that still carries the host's root fields can carry hooks the host
+        // added: a fresh output (a new memo key mounted new controls) has its own hooks only,
+        // even when their text happens to match.
+        if (hadRoot && !string.IsNullOrEmpty(previousHostHooks))
         {
             var stale = "hooks=" + ReactorSourceFormat.Escape(previousHostHooks);
             fields.RemoveAll(f => string.Equals(f, stale, StringComparison.Ordinal));
