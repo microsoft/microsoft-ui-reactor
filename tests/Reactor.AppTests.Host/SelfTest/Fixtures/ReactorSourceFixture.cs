@@ -998,6 +998,37 @@ internal class ReactorSource_ForwardingRegistrationKeepsChildSource(Harness h) :
         return (mounted, mountedValue, updated, updatedValue);
     }
 
+    // The forwarding element as the host's root itself: root publication adds only the
+    // host-root fields to the child's value.
+    private async Task<(SourceLocation? Mounted, string? MountedValue, SourceLocation? Updated, string? UpdatedValue)> RunRootPath(bool noManagedAgent)
+    {
+        ReactorSourcePublisher.NoManagedAgent = noManagedAgent;
+        var host = H.CreateHost();
+        host.Reconciler.RegisterType<ForwardingElement, UIElement>(
+            mount: (r, el, rerender) => r.Mount(TextBlock(el.Label), rerender)!,
+            update: (r, oldEl, newEl, control, rerender) => r.UpdateChild(TextBlock(oldEl.Label), TextBlock(newEl.Label), control, rerender));
+        Action? rename = null;
+        host.Mount(ctx =>
+        {
+            var (label, setLabel) = ctx.UseState("fwd-root-a");
+            rename = () => setLabel("fwd-root-b");
+            return new ForwardingElement(label) { CallSite = new SourceLocation("ForwardingRoot.cs", label == "fwd-root-a" ? 1 : 2, 1) };
+        });
+        await Harness.Render();
+        var a = H.FindControl<WinUI.TextBlock>(t => t.Text == "fwd-root-a");
+        var mounted = a is null ? null : Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(a);
+        var mountedValue = a is null ? null : ReactorDiagnostics.GetSource(a);
+        rename?.Invoke();
+        await Harness.Render();
+        await Harness.Render();
+        var b = H.FindControl<WinUI.TextBlock>(t => t.Text == "fwd-root-b");
+        var updated = b is null ? null : Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(b);
+        var updatedValue = b is null ? null : ReactorDiagnostics.GetSource(b);
+        host.Dispose();
+        H.SetContent(null);
+        return (mounted, mountedValue, updated, updatedValue);
+    }
+
     public override async Task RunAsync()
     {
         if (!ReactorSourcePublisher.IsSupported)
@@ -1029,6 +1060,18 @@ internal class ReactorSource_ForwardingRegistrationKeepsChildSource(Harness h) :
             H.Check("ReactorSource_ForwardingRegistration_ValueDescribesTheChild",
                 new[] { tagged.MountedValue, tagged.UpdatedValue, skipped.MountedValue, skipped.UpdatedValue }
                     .All(v => v?.Contains("|element=TextBlock", StringComparison.Ordinal) == true));
+
+            var rootTagged = await RunRootPath(noManagedAgent: false);
+            var rootSkipped = await RunRootPath(noManagedAgent: true);
+            Console.WriteLine($"# forwarding root: tagged {rootTagged}; skipped {rootSkipped}");
+            H.Check("ReactorSource_ForwardingRegistration_Root_GetSourceAgrees",
+                rootTagged.Mounted is not null && rootTagged.Mounted == rootSkipped.Mounted
+                && rootTagged.Updated is not null && rootTagged.Updated == rootSkipped.Updated);
+            H.Check("ReactorSource_ForwardingRegistration_Root_ValueIsTheChildsWithRootFields",
+                new[] { rootTagged.MountedValue, rootTagged.UpdatedValue, rootSkipped.MountedValue, rootSkipped.UpdatedValue }
+                    .All(v => v?.Contains("|element=TextBlock", StringComparison.Ordinal) == true
+                        && v.Contains("|root=FuncElement", StringComparison.Ordinal)
+                        && !v.Contains("ForwardingRoot.cs", StringComparison.Ordinal)));
         }
         finally
         {

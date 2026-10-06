@@ -270,7 +270,10 @@ public sealed partial class Reconciler : IDisposable
         // plain value, so the root value is written whenever it differs. No reference to the
         // root is kept, so a disposed host's previous subtree is not retained.
         var current = control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) as string;
-        if (kind is KeyedMemoElement)
+        // Keyed-memo roots and forwarding RegisterType roots realize a control that describes
+        // another element (the factory output; the forwarded child): only the host-root fields
+        // are added to its value, never a re-description of the root element.
+        if (kind is KeyedMemoElement || IsForwardingRegisteredRoot(control, kind))
         {
             var withRoot = Diagnostics.ReactorSourcePublisher.WithRoot(
                 current, rootName, rootHooks, _hostAddedRootHooks, out var addedHooks);
@@ -373,6 +376,15 @@ public sealed partial class Reconciler : IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// A root that dispatched to a per-host <c>RegisterType</c> registration (a V1 handler for
+    /// the same type takes precedence, as in Mount) whose control describes another element.
+    /// </summary>
+    private bool IsForwardingRegisteredRoot(UIElement control, Element kind)
+        => !_v1Handlers.TryGet(kind.GetType(), out _)
+            && _typeRegistry.ContainsKey(kind.GetType())
+            && ForwardsAnotherElement(control, kind);
 
     /// <summary>
     /// A per-host <c>RegisterType</c> callback can return the control the reconciler mounted for
