@@ -37,8 +37,9 @@ public sealed record ComponentSnapshot(
 /// <c>"navigationLifecycle"</c> or <c>"unknown"</c>. For a context, <c>"default"</c> when the value
 /// the component read equals the context's default value (no provider, or a provider supplying
 /// that same value), otherwise <c>"provided"</c>.</param>
-/// <param name="Type">The value's type as C# spells it (<c>int</c>, <c>string?</c>,
-/// <c>List&lt;TaskItem&gt;</c>). Empty when the hook has no value.</param>
+/// <param name="Type">The value's type as C# spells it (<c>int</c>, <c>int?</c>,
+/// <c>List&lt;TaskItem&gt;</c>). Nullable reference annotations are not visible at runtime, so a
+/// <c>string?</c> reads <c>string</c>. Empty when the hook has no value.</param>
 /// <param name="Value">The value as text: strings quoted, collections summarised as
 /// <c>List&lt;T&gt; (n items)</c> (<c>(count unknown)</c> for a sequence that does not advertise
 /// its count — it is never enumerated), long values cut at 200 characters, secrets

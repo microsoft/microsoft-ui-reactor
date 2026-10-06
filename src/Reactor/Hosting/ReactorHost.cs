@@ -36,6 +36,8 @@ public sealed class ReactorHost : IDisposable
 
     private Element? _currentTree;
     private UIElement? _currentControl;
+    // The root that produced _currentControl (diagnostics); see RenderedRoot.
+    private RenderedRoot _renderedRoot;
     private int _renderPending;    // 0 or 1 — Interlocked for thread-safe access
     private volatile bool _isRendering;     // only touched on UI thread
     private volatile bool _needsRerender;   // only touched on UI thread
@@ -199,16 +201,17 @@ public sealed class ReactorHost : IDisposable
             || (ours && (ReferenceEquals(element, container) || ReferenceEquals(element, installed)));
         if (!isAnchor) return null;
 
-        var component = _rootComponent;
-        var funcContext = _funcContext;
-        if (component is null && funcContext is null) return null;
+        // The root that produced the displayed control, not the requested one: after Mount and
+        // before its queued render, the old control still shows the previous root.
+        var rendered = _renderedRoot;
+        if (rendered.IsEmpty) return null;
         return new RootComponentSource(
-            component,
-            component is null ? funcContext : null,
-            component is null ? _rootRenderFunc : null,
+            rendered.Component,
+            rendered.FuncContext,
+            rendered.RenderFunc,
             control,
             _currentTree,
-            () => !_disposed && ReferenceEquals(_rootComponent, component) && ReferenceEquals(_funcContext, funcContext));
+            () => !_disposed && _renderedRoot.SameRootAs(rendered));
     }
 
     /// <summary>
@@ -732,6 +735,7 @@ public sealed class ReactorHost : IDisposable
 
             _currentControl = newControl;
             _currentTree = newTree;
+            _renderedRoot = new RenderedRoot(_rootComponent, _funcContext, _rootRenderFunc);
             OwningWindow?.OnHostContentRendered(newControl);
 
             // Spec 033 §6 — apply (or clear) the SystemBackdrop modifier carried on
@@ -1026,6 +1030,7 @@ public sealed class ReactorHost : IDisposable
         _funcContext = null;
         _currentTree = null;
         _currentControl = null;
+        _renderedRoot = default;
 
         try { _overlayWiring?.Dispose(); } catch { /* best effort */ }
         _overlayWiring = null;
@@ -1054,5 +1059,6 @@ public sealed class ReactorHost : IDisposable
         }
         _currentControl = errorPanel;
         _currentTree = null;
+        _renderedRoot = default;
     }
 }

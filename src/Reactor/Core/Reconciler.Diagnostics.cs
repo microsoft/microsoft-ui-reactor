@@ -129,3 +129,26 @@ internal readonly record struct RootComponentSource(
     UIElement? RenderedControl,
     Element? RenderedElement,
     Func<bool> IsAlive);
+
+/// <summary>
+/// The root that produced a host's current control, published by the host in the same step
+/// that publishes the control. <c>Mount</c> swaps the requested root before the queued render
+/// replaces the control, so diagnostics resolve against this rather than the requested root.
+/// </summary>
+internal readonly struct RenderedRoot
+{
+    internal RenderedRoot(Component? component, RenderContext? funcContext, Delegate? renderFunc)
+    {
+        Component = component;
+        FuncContext = component is null ? funcContext : null;
+        RenderFunc = component is null ? renderFunc : null;
+    }
+
+    internal Component? Component { get; }
+    internal RenderContext? FuncContext { get; }
+    internal Delegate? RenderFunc { get; }
+    internal bool IsEmpty => Component is null && FuncContext is null;
+
+    internal bool SameRootAs(in RenderedRoot other)
+        => ReferenceEquals(Component, other.Component) && ReferenceEquals(FuncContext, other.FuncContext);
+}

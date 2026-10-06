@@ -24,15 +24,15 @@ public sealed partial class ReactorHostControl
             || (contentIsOurs && ReferenceEquals(element, content));
         if (!isAnchor) return null;
 
-        var component = _rootComponent;
-        var funcContext = _funcContext;
-        if (component is null && funcContext is null) return null;
+        // The root that produced the displayed control, not the requested one (see RenderedRoot).
+        var rendered = _renderedRoot;
+        if (rendered.IsEmpty) return null;
         return new RootComponentSource(
-            component,
-            component is null ? funcContext : null,
-            component is null ? _rootRenderFunc : null,
+            rendered.Component,
+            rendered.FuncContext,
+            rendered.RenderFunc,
             control,
             _currentTree,
-            () => !_disposed && ReferenceEquals(_rootComponent, component) && ReferenceEquals(_funcContext, funcContext));
+            () => !_disposed && _renderedRoot.SameRootAs(rendered));
     }
 }

@@ -207,6 +207,10 @@ internal static class ComponentInspectionFixtures
             // A root that renders a component directly: its rendered control is the child's
             // wrapper, which describes the child; the ContentTarget still reaches the root.
             host.Mount(new ShellRoot());
+            // Mount swaps the requested root at once but renders later; until then the
+            // displayed control still belongs to — and is described as — the previous root.
+            H.Check("RootAnchor_RemountGapDescribesDisplayedRoot",
+                ReactorDiagnostics.DescribeComponent(target) is { IsRoot: true, Name: "RootCounter", State: [{ Value: "7" }] });
             await Harness.WaitFor(() => H.FindControl<TextBlock>(t => t.Text == "shell-child:c") is not null,
                 maxPasses: 16, perPassMs: 10);
             var overlap = host.CurrentControl;
@@ -263,6 +267,15 @@ internal static class ComponentInspectionFixtures
                 H.Check("RootAnchor_HostControlForeignContentNotDescribed", ReactorDiagnostics.DescribeComponent(foreign) is null);
                 H.Check("RootAnchor_HostControlStillDescribedAfterSwap", ReactorDiagnostics.DescribeComponent(hostControl) is { IsRoot: true });
                 hostControl.Content = rendered;
+
+                // Remount gap: the displayed (function) root is still what is described.
+                hostControl.Mount(new RootCounter());
+                H.Check("RootAnchor_HostControlRemountGap",
+                    ReactorDiagnostics.DescribeComponent(hostControl) is { IsRoot: true, Kind: "function", State: [{ Value: "\"hc\"" }] });
+                await Harness.WaitFor(() => ReactorDiagnostics.DescribeComponent(hostControl) is { Name: "RootCounter" },
+                    maxPasses: 16, perPassMs: 10);
+                H.Check("RootAnchor_HostControlRemounted",
+                    ReactorDiagnostics.DescribeComponent(hostControl) is { IsRoot: true, Name: "RootCounter" });
 
                 hostControl.Dispose();
                 H.Check("RootAnchor_DisposedHostControlNotDescribed", ReactorDiagnostics.DescribeComponent(hostControl) is null);

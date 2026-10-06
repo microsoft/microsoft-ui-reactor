@@ -63,6 +63,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
     private Element? _currentTree;
     private UIElement? _currentControl;
+    // The root that produced _currentControl (diagnostics); see RenderedRoot.
+    private RenderedRoot _renderedRoot;
     private int _renderPending;      // 0 or 1 — Interlocked for thread-safe access
     private volatile bool _isRendering;       // only touched on UI thread
     private volatile bool _needsRerender;     // only touched on UI thread
@@ -635,6 +637,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
             _currentControl = newControl;
             _currentTree = newTree;
+            _renderedRoot = new RenderedRoot(_rootComponent, _funcContext, _rootRenderFunc);
 
             // Spec 033 §6 — Backdrop modifier on the root tree is a no-op for
             // ReactorHostControl, which doesn't own its hosting Window. We
@@ -787,6 +790,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         }
         _currentControl = errorPanel;
         _currentTree = null;
+        _renderedRoot = default;
     }
 
     public void Dispose()
@@ -811,6 +815,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _funcContext = null;
         _currentTree = null;
         _currentControl = null;
+        _renderedRoot = default;
         try { _overlayWiring?.Dispose(); } catch { /* best effort */ }
         _overlayWiring = null;
 
