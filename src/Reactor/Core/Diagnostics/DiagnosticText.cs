@@ -123,10 +123,10 @@ internal static class DiagnosticText
 
     // A member of a secret name followed by a value, inside an object's own text or a string:
     // "Password = …" in a record's compiler-generated ToString(), "ApiSecret: …" in a hand-written
-    // one, "AccessToken=…" in a connection-style string. A bare label ("Password:") has no value
-    // after the separator and does not match.
+    // one, "AccessToken=…" in a connection-style string, "\"Password\":\"…\"" in JSON. A bare label
+    // ("Password:") or an empty quoted value has nothing after the separator and does not match.
     private static readonly global::System.Text.RegularExpressions.Regex s_secretMemberInText = new(
-        @"\b\w*(?:Password|Secret|Credential|Token|ApiKey|PrivateKey|ConnectionString)\s*[=:]\s*[^\s,;}\]]",
+        @"\b\w*(?:Password|Secret|Credential|Token|ApiKey|PrivateKey|ConnectionString)[""']?\s*[=:]\s*[""']?[^\s,;}\]""']",
         global::System.Text.RegularExpressions.RegexOptions.IgnoreCase | global::System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     /// <summary>

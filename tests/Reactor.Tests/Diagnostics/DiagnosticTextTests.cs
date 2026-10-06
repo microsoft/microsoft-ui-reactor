@@ -210,6 +210,8 @@ public class DiagnosticTextTests
     [InlineData("AccessToken=hunter2")]
     [InlineData("Server=db;User Id=me;Password=hunter2;")]
     [InlineData("apiKey: hunter2")]
+    [InlineData("{\"Password\":\"hunter2\"}")]
+    [InlineData("{ 'accessToken': 'hunter2' }")]
     public void Format_RedactsAStringCarryingALabelledSecret(string text)
     {
         var (shown, redacted) = DiagnosticText.Format("", typeof(string), text);
@@ -242,8 +244,9 @@ public class DiagnosticTextTests
         Assert.Equal(("<redacted>", true), DiagnosticText.FormatPlain("ToolTip", "AccessToken=hunter2"));
         Assert.Equal(("<redacted>", true), DiagnosticText.FormatPlain("", new FormattableSecret()));
         Assert.Equal(("<redacted>", true), DiagnosticText.FormatPlain("", new HandWritten("Password = hunter2")));
-        // A bare label is ordinary UI text.
+        // A bare label is ordinary UI text, as is a JSON member with an empty value.
         Assert.Equal(("Password:", false), DiagnosticText.FormatPlain("ToolTip", "Password:"));
+        Assert.Equal(("{\"Password\":\"\"}", false), DiagnosticText.FormatPlain("ToolTip", "{\"Password\":\"\"}"));
     }
 
     // ── Parsing ─────────────────────────────────────────────────────

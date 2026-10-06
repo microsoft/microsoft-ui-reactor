@@ -1199,6 +1199,10 @@ public sealed class RenderContext
                 "Hooks must be called in the same order every render.");
         _hookIndex++;
 
+        // Refreshed every render, like LastValue: a stable slot can be handed a different
+        // Context<T> instance, and readers (memo change detection, diagnostics) must see the
+        // one this render actually read.
+        hook.Context = context;
         var value = _contextScope is not null
             ? _contextScope.Read(context)
             : context.DefaultValue;

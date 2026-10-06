@@ -350,6 +350,27 @@ public class ReactorDiagnosticsComponentsTests
         Assert.DoesNotContain("s3cr3t", snapshot.Contexts.Single().Value + snapshot.State.Single().Value);
     }
 
+    [Fact]
+    public void Contexts_ASlotSwitchedToAnotherContext_IsDescribedByTheOneLastRead()
+    {
+        var theme = new Context<string>("light", "Theme");
+        var apiSecret = new Context<string>("", "ApiSecret");
+        var r = new Renderer();
+        r.Scope.Push(new Dictionary<ContextBase, object?> { [theme] = "dark", [apiSecret] = "s3cr3t" });
+        r.Begin();
+        r.Context.UseContext(theme);
+        Assert.Equal("Theme", ForContext(r.Context).Describe().Contexts.Single().Name);
+
+        r.Begin();
+        r.Context.UseContext(apiSecret);
+
+        var snapshot = ForContext(r.Context).Describe();
+        Assert.Equal("ApiSecret", snapshot.Contexts.Single().Name);
+        Assert.True(snapshot.Contexts.Single().Redacted);
+        Assert.True(snapshot.State.Single().Redacted);
+        Assert.DoesNotContain("s3cr3t", snapshot.Contexts.Single().Value + snapshot.State.Single().Value);
+    }
+
     private sealed class EqualsThrows
     {
         public override bool Equals(object? obj) => throw new InvalidOperationException("boom");
