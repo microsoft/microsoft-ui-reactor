@@ -622,22 +622,31 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.SetContent(null);
 
             var memoHost = H.CreateHost();
-            memoHost.Mount(new MemoRootA());
-            await Harness.Render();
-            var withA = Source("memo-remount");
-            memoHost.Mount(new MemoRootB());
-            await Harness.Render();
-            var withB = Source("memo-remount");
-            memoHost.Mount(new MemoRootC());
-            await Harness.Render();
-            var withC = Source("memo-remount");
-            Console.WriteLine($"# keyed-memo remount: A {withA} / B {withB} / C {withC}");
-            H.Check("ReactorSource_RootRemount_MemoHooks_FirstRoot",
-                withA?.Contains("|root=MemoRootA", StringComparison.Ordinal) == true && withA.Contains("|hooks=0:a@", StringComparison.Ordinal));
-            H.Check("ReactorSource_RootRemount_MemoHooks_DroppedForAHookFreeRoot",
-                withB?.Contains("|root=MemoRootB", StringComparison.Ordinal) == true && !withB.Contains("|hooks=", StringComparison.Ordinal));
-            H.Check("ReactorSource_RootRemount_MemoHooks_ReplacedByTheNewRoots",
-                withC?.Contains("|hooks=0:c@", StringComparison.Ordinal) == true && !withC.Contains("0:a@", StringComparison.Ordinal));
+            if (Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetComponentHooks(typeof(MemoRootA)) is null)
+            {
+                // Hook names come from the source-map generator's static table; a host built
+                // without it has no root hooks to add, replace or drop.
+                H.Skip("ReactorSource_RootRemount_MemoHooks", "this host has no source-map hook table");
+            }
+            else
+            {
+                memoHost.Mount(new MemoRootA());
+                await Harness.Render();
+                var withA = Source("memo-remount");
+                memoHost.Mount(new MemoRootB());
+                await Harness.Render();
+                var withB = Source("memo-remount");
+                memoHost.Mount(new MemoRootC());
+                await Harness.Render();
+                var withC = Source("memo-remount");
+                Console.WriteLine($"# keyed-memo remount: A {withA} / B {withB} / C {withC}");
+                H.Check("ReactorSource_RootRemount_MemoHooks_FirstRoot",
+                    withA?.Contains("|root=MemoRootA", StringComparison.Ordinal) == true && withA.Contains("|hooks=0:a@", StringComparison.Ordinal));
+                H.Check("ReactorSource_RootRemount_MemoHooks_DroppedForAHookFreeRoot",
+                    withB?.Contains("|root=MemoRootB", StringComparison.Ordinal) == true && !withB.Contains("|hooks=", StringComparison.Ordinal));
+                H.Check("ReactorSource_RootRemount_MemoHooks_ReplacedByTheNewRoots",
+                    withC?.Contains("|hooks=0:c@", StringComparison.Ordinal) == true && !withC.Contains("0:a@", StringComparison.Ordinal));
+            }
             memoHost.Dispose();
             H.SetContent(null);
 
@@ -742,6 +751,13 @@ internal class ReactorSource_AotTagSkipKeepsTeardown(Harness h) : SelfTestFixtur
         {
             ReactorSourcePublisher.IsEnabled = true;
             Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
+            // The scenario is a STAMPED element losing its tag; a host without source mapping
+            // stamps nothing, so neither path tags these controls and there is nothing to test.
+            if (TextBlock("teardown-stamp-probe").CallSite is null)
+            {
+                H.Skip("ReactorSource_AotSkipTeardown", "call sites are not stamped in this host");
+                return;
+            }
 
             var tagged = await RunPath(noManagedAgent: false);
             var skipped = await RunPath(noManagedAgent: true);
