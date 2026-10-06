@@ -176,9 +176,14 @@ repo that's usually 10–40 minutes. Don't poll in a tight loop.
 All of these must be true for the **current** `headRefOid`:
 
 - There's a review from `copilot-pull-request-reviewer[bot]` whose `commit_id` matches
-  the head, or the `copilot-pull-request-reviewer` check run on the head is `completed`.
-- Every check run on the head is `completed`. That includes `Analyze (csharp)`;
-  `github-code-quality[bot]` posts its inline comments after that check finishes.
+  the head. A completed `copilot-pull-request-reviewer` check run alone isn't enough;
+  the review (and its threads) is what you act on.
+- Every check run on the head is `completed`. That includes `Analyze (csharp)`.
+- **Settled:** comments can land after the check that produces them finishes (for
+  example, `github-code-quality[bot]` posts its inline comments after `Analyze (csharp)`
+  completes). So once the two signals above are true, wait about 2 minutes, then
+  re-read reviews, threads and top-level comments, and use that re-read for 4c–4e.
+  If the head moved or something new arrived during the wait, handle it in this round.
 
 If Copilot's review body says it was **unable to review** (for example, *"reached their
 quota limit"*), the round did not pass. Set `agent-blocked` and record the reason, the
