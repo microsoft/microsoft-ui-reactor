@@ -65,8 +65,9 @@ public static partial class ReactorDiagnostics
         UIElement? resolvedLabeledBy = null;
         if (pendingLabeledBy is null
             && Reconciler.GetElementTag(control) is { } tag
-            && (Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.UnwrapDecorators(tag) ?? tag)
-                .Modifiers?.Accessibility?.LabeledBy is { } id)
+            && (Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.UnwrapDecorators(tag) ?? tag) is var source
+            && !Microsoft.UI.Reactor.Core.V1Protocol.OverlayLifecycle.IsAttributionOnlyTag(control, source)
+            && source.Modifiers?.Accessibility?.LabeledBy is { } id)
         {
             authoredLabeledBy = id;
             if (Microsoft.UI.Xaml.Automation.AutomationProperties.GetLabeledBy(control) is { } live
@@ -104,8 +105,15 @@ internal static class ReferenceEdgeMap
 
             foreach (var (slot, listEdge) in bag.ListEdges)
             {
-                for (int i = 0; i < listEdge.Cells.Count; i++)
-                    (result ??= new()).Add((slot, ForCell(slot, isList: true, index: i, listEdge.Cells[i])));
+                // The authored list, not the deduplicated subscription set, so order and repeats
+                // match what the author wrote; Index is the authored position.
+                var authored = listEdge.Authored;
+                if (authored is null) continue;
+                for (int i = 0; i < authored.Count; i++)
+                {
+                    if (authored[i] is not { } cell) continue;
+                    (result ??= new()).Add((slot, ForCell(slot, isList: true, index: i, cell)));
+                }
             }
         }
 

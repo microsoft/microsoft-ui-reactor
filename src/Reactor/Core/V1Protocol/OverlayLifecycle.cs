@@ -231,6 +231,15 @@ internal static class OverlayLifecycle
     internal static bool ShouldTagDialog(ContentDialogElement element)
         => element.CallSite is not null || Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled;
 
+    /// <summary>
+    /// True when <paramref name="control"/>'s tag only attributes it to its element: a side-mounted
+    /// <c>ContentDialog</c> tagged for source attribution. The element's modifiers were applied to
+    /// the collapsed placeholder, not to the dialog, so diagnostics must not read them as the
+    /// dialog's own.
+    /// </summary>
+    internal static bool IsAttributionOnlyTag(UIElement control, Element tag)
+        => control is WinUI.ContentDialog && tag is ContentDialogElement;
+
     private static async void ShowContentDialogCore(Reconciler reconciler, ContentDialogElement cdEl, FrameworkElement anchor, XamlRoot? xamlRoot, Action requestRerender)
     {
         var dialog = new WinUI.ContentDialog

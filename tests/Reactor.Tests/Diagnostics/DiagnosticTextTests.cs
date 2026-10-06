@@ -308,6 +308,8 @@ public class DiagnosticTextTests
     [InlineData(typeof(DayOfWeek), true)]
     [InlineData(typeof(string), true)]
     [InlineData(typeof(object), false)]
+    [InlineData(typeof(nint), false)]
+    [InlineData(typeof(nuint?), false)]
     [InlineData(typeof(List<int>), false)]
     public void IsEditable(Type type, bool expected) => Assert.Equal(expected, DiagnosticText.IsEditable(type));
 

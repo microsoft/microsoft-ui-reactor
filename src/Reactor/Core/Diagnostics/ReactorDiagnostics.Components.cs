@@ -180,6 +180,8 @@ public static partial class ReactorDiagnostics
         var tag = Reconciler.GetElementTag(control);
         if (tag is null) return global::System.Array.Empty<AppliedProperty>();
         var source = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.UnwrapDecorators(tag) ?? tag;
+        if (Microsoft.UI.Reactor.Core.V1Protocol.OverlayLifecycle.IsAttributionOnlyTag(control, source))
+            return global::System.Array.Empty<AppliedProperty>();
 
         var applied = new List<AppliedProperty>();
         if (source.Modifiers is { } modifiers)

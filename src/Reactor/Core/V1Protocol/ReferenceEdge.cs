@@ -24,6 +24,11 @@ namespace Microsoft.UI.Reactor.Core
     internal sealed class ReferenceListEdge
     {
         public readonly List<ElementRef> Cells = new();
+        /// <summary>
+        /// The list exactly as last authored (order, duplicates and nulls kept). <see cref="Cells"/>
+        /// is deduplicated subscription bookkeeping; diagnostics project this instead.
+        /// </summary>
+        public IReadOnlyList<ElementRef?>? Authored;
         public Action<FrameworkElement?>? Handler;
         public Action<FrameworkElement>? Recompute;
         /// <summary>

@@ -1484,6 +1484,7 @@ public sealed partial class Reconciler : IDisposable
         var edge = GetOrCreateReferenceListEdge(ctrl, slot);
         edge.Recompute = recompute;
         edge.Clear = clearTarget; // retained so teardown can empty the target list (CR-002)
+        edge.Authored = cells;
         edge.Handler ??= _ => edge.Recompute?.Invoke(ctrl);
 
         var next = new List<Microsoft.UI.Reactor.Input.ElementRef>();
@@ -1540,6 +1541,7 @@ public sealed partial class Reconciler : IDisposable
             // Empty the target relationship list (DescribedBy / FlowsTo / FlowsFrom) — CR-002.
             edge.Clear?.Invoke(ctrl);
             edge.Cells.Clear();
+            edge.Authored = null;
             edge.Handler = null;
             edge.Recompute = null;
             edge.Clear = null;

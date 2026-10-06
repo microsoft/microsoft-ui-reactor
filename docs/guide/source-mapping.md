@@ -390,7 +390,10 @@ control (`Button("Save")`) when you set none: it is reported as
 An open `ContentDialog` is hosted in its own popup, out of reach of an ancestor
 walk from the dialog's buttons, so with source mapping on the realized dialog is
 tagged with its `ContentDialog(...)` element too: `ReactorSourceMap.GetSource(dialog)`
-names the call site.
+names the call site. That tag is for attribution only — the element's modifiers
+apply to the collapsed placeholder — so `GetAppliedProperties` and
+`GetReferenceEdges` report nothing for the dialog itself, and the tag is cleared
+when the dialog closes.
 
 A re-render diffs element against element, not against the live control, so it
 does not undo a property you edited directly on the control unless the element's

@@ -29,7 +29,8 @@ internal static class ContentDialogTagFixtures
                     var (title, setTitle) = ctx.UseState("TagDialog");
                     return VStack(
                         TextBlock("anchor"),
-                        ContentDialog(title, Button("Retitle", () => setTitle("TagDialog2")), "OK") with { IsOpen = true });
+                        (ContentDialog(title, Button("Retitle", () => setTitle("TagDialog2")), "OK") with { IsOpen = true })
+                            .Width(400).LabeledBy("tag-dialog-label"));
                 });
 
                 dialog = await ContentDialogProbe.WaitForOpen(H, "TagDialog");
@@ -38,6 +39,13 @@ internal static class ContentDialogTagFixtures
 
                 var tag = Reconciler.GetElementTag(dialog) as ContentDialogElement;
                 H.Check("ContentDialogTag_DialogCarriesItsElement", tag?.Title == "TagDialog");
+
+                // The tag only attributes the dialog: its modifiers went to the collapsed
+                // placeholder, so they are not reported as the dialog's own.
+                H.Check("ContentDialogTag_NoPhantomAppliedProperties",
+                    Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics.GetAppliedProperties(dialog).Count == 0);
+                H.Check("ContentDialogTag_NoPhantomReferenceEdges",
+                    Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics.GetReferenceEdges(dialog).Count == 0);
 
                 // The tag follows re-renders while the dialog stays open, so attribution
                 // reads the live element rather than the one that opened the dialog.

@@ -75,7 +75,8 @@ internal static class DiagnosticText
     {
         if (type is null) return false;
         type = Nullable.GetUnderlyingType(type) ?? type;
-        return type.IsPrimitive || type.IsEnum || type == typeof(string) || type == typeof(decimal) ||
+        // nint/nuint are primitive but have no text form the parser accepts.
+        return (type.IsPrimitive && type != typeof(nint) && type != typeof(nuint)) || type.IsEnum || type == typeof(string) || type == typeof(decimal) ||
             type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(TimeSpan) || type == typeof(Guid);
     }
 

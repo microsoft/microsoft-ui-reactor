@@ -22,10 +22,30 @@ public class ReactorDiagnosticsReferenceEdgesTests
         => bag.Edges[slot] = new ReferenceEdge { Cell = cell };
 
     private static void AddList(ReferenceEdgeBag bag, int slot, params ElementRef[] cells)
+        => AddList(bag, slot, cells, cells.Distinct().ToArray());
+
+    // `cells` as authored; `subscribed` as WireReferenceListEdge leaves its deduplicated
+    // bookkeeping (which keeps retained cells in their earlier order).
+    private static void AddList(ReferenceEdgeBag bag, int slot, ElementRef[] cells, ElementRef[] subscribed)
     {
-        var edge = new ReferenceListEdge();
-        edge.Cells.AddRange(cells);
+        var edge = new ReferenceListEdge { Authored = cells };
+        edge.Cells.AddRange(subscribed);
         bag.ListEdges[slot] = edge;
+    }
+
+    [Fact]
+    public void ListEdge_ReportsTheAuthoredSequence_NotTheSubscriptionSet()
+    {
+        var a = new ElementRef<WinUI.Button>(new ElementRef());
+        var b = new ElementRef<WinUI.TextBlock>(new ElementRef());
+        var bag = Bag();
+        // Re-authored from [a, b] to [b, a, a]: the subscription set still reads [a, b].
+        AddList(bag, ReferenceSlots.ModifierRef_FlowsTo, cells: [b, a, a], subscribed: [a, b]);
+
+        var edges = ReferenceEdgeMap.Describe(bag, null, null, null);
+
+        Assert.Equal(new[] { ("TextBlock", 0), ("Button", 1), ("Button", 2) },
+            edges.Select(e => (e.ExpectedTargetTypeName!, e.Index)));
     }
 
     [Fact]
