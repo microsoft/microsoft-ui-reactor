@@ -179,21 +179,14 @@ public static partial class ReactorDiagnostics
         EnsureUIThread();
         var tag = Reconciler.GetElementTag(control);
         if (tag is null) return global::System.Array.Empty<AppliedProperty>();
-        var source = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.UnwrapDecorators(tag) ?? tag;
-        if (Microsoft.UI.Reactor.Core.V1Protocol.OverlayLifecycle.IsAttributionOnlyTag(control, source))
+        var chain = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(tag);
+        if (Microsoft.UI.Reactor.Core.V1Protocol.OverlayLifecycle.IsAttributionOnlyTag(control, chain[^1]))
             return global::System.Array.Empty<AppliedProperty>();
 
-        var applied = new List<AppliedProperty>();
-        if (source.Modifiers is { } modifiers)
-        {
-            foreach (var m in AppliedModifierMap.Describe(modifiers, control.GetType()))
-                applied.Add(ToText(m));
-        }
-
-        if (AppliedModifierMap.DescribeDefaultAutomationName(
-                source, Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(control)) is { } defaultName)
-            applied.Add(ToText(defaultName));
-
+        var described = AppliedModifierMap.DescribeChain(
+            chain, control.GetType(), Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(control));
+        var applied = new AppliedProperty[described.Count];
+        for (int i = 0; i < applied.Length; i++) applied[i] = ToText(described[i]);
         return applied;
     }
 

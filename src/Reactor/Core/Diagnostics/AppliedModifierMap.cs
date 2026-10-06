@@ -164,6 +164,37 @@ internal static class AppliedModifierMap
     internal const string DefaultAutomationNameModifier = "DefaultAutomationName";
 
     /// <summary>
+    /// Merges the modifiers of a decorator chain (outermost first, innermost target last) in the
+    /// order Reactor applies them — the target's own, then each decorator's outward — so an outer
+    /// level's value replaces an inner one for the same property. Ends with the caption-derived
+    /// default name when it applies and no level set a non-empty explicit name.
+    /// </summary>
+    internal static IReadOnlyList<AppliedModifier> DescribeChain(IReadOnlyList<Element> chain, Type controlType, string? liveName)
+    {
+        var merged = new List<AppliedModifier>();
+        var byProperty = new Dictionary<string, int>(StringComparer.Ordinal);
+        bool explicitName = false;
+        for (int level = chain.Count - 1; level >= 0; level--)
+        {
+            if (chain[level].Modifiers is not { } modifiers) continue;
+            explicitName |= modifiers.AutomationName is { Length: > 0 };
+            foreach (var m in Describe(modifiers, controlType))
+            {
+                if (byProperty.TryGetValue(m.Property, out var at)) merged[at] = m;
+                else
+                {
+                    byProperty[m.Property] = merged.Count;
+                    merged.Add(m);
+                }
+            }
+        }
+
+        if (!explicitName && DescribeDefaultAutomationName(chain[^1], liveName) is { } defaultName)
+            merged.Add(defaultName);
+        return merged;
+    }
+
+    /// <summary>
     /// The caption-derived <c>AutomationProperties.Name</c> the reconciler writes when the
     /// author sets none (<c>Reconciler.ApplyDefaultAutomationName</c>), or null when it does
     /// not apply.

@@ -49,6 +49,19 @@ public class ReactorDiagnosticsReferenceEdgesTests
     }
 
     [Fact]
+    public void EffectiveLabeledById_TheOutermostDecoratorWins()
+    {
+        var inner = Microsoft.UI.Reactor.Factories.Button("x").LabeledBy("inner-label");
+        var outerOnly = Microsoft.UI.Reactor.Factories.Flyout(Microsoft.UI.Reactor.Factories.Button("x"), Microsoft.UI.Reactor.Factories.TextBlock("m")).LabeledBy("outer-label");
+        var both = Microsoft.UI.Reactor.Factories.Flyout(inner, Microsoft.UI.Reactor.Factories.TextBlock("m")).LabeledBy("outer-label");
+        var innerOnly = Microsoft.UI.Reactor.Factories.Flyout(inner, Microsoft.UI.Reactor.Factories.TextBlock("m"));
+
+        Assert.Equal("outer-label", ReferenceEdgeMap.EffectiveLabeledById(Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(outerOnly)));
+        Assert.Equal("outer-label", ReferenceEdgeMap.EffectiveLabeledById(Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(both)));
+        Assert.Equal("inner-label", ReferenceEdgeMap.EffectiveLabeledById(Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(innerOnly)));
+    }
+
+    [Fact]
     public void PendingModifierRef_IsReportedUnresolved()
     {
         var bag = Bag();

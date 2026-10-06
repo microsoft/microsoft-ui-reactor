@@ -6,6 +6,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Xaml;
 using Xunit;
+using static Microsoft.UI.Reactor.Factories;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.Tests.Diagnostics;
@@ -748,6 +749,37 @@ public class ReactorDiagnosticsComponentsTests
         Assert.Equal(
             new[] { ("Scale", "UIElement.Scale"), ("Rotation", "UIElement.Rotation"), ("Translation", "UIElement.Translation"), ("CenterPoint", "UIElement.CenterPoint") },
             AppliedModifierMap.Describe(m, typeof(WinUI.TextBlock)).Select(p => (p.Modifier, p.Property)));
+    }
+
+    [Fact]
+    public void DescribeChain_MergesDecoratorModifiersInApplicationOrder_OuterWins()
+    {
+        var inner = Button("Go").Width(10).AutomationName("go");
+        var outer = Flyout(inner, TextBlock("menu")).Width(20).Margin(2);
+
+        var chain = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(outer);
+        var merged = AppliedModifierMap.DescribeChain(chain, typeof(WinUI.Button), liveName: "go");
+
+        Assert.Equal(2, chain.Count);
+        Assert.Contains(new AppliedModifier("Width", "FrameworkElement.Width", 20d), merged);
+        Assert.Single(merged, p => p.Property == "FrameworkElement.Width");
+        Assert.Contains(new AppliedModifier("AutomationName", "AutomationProperties.Name", "go"), merged);
+        Assert.Contains(merged, p => p.Property == "FrameworkElement.Margin");
+        Assert.DoesNotContain(merged, p => p.Modifier == "DefaultAutomationName");
+    }
+
+    [Fact]
+    public void DescribeChain_ADecoratorsExplicitNameSuppressesTheTargetsDefault()
+    {
+        var withOuterName = Flyout(Button("Save"), TextBlock("menu")).AutomationName("Save");
+        var withoutName = Flyout(Button("Save"), TextBlock("menu"));
+
+        Assert.DoesNotContain(
+            AppliedModifierMap.DescribeChain(Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(withOuterName), typeof(WinUI.Button), "Save"),
+            p => p.Modifier == "DefaultAutomationName");
+        Assert.Contains(
+            AppliedModifierMap.DescribeChain(Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(withoutName), typeof(WinUI.Button), "Save"),
+            p => p.Modifier == "DefaultAutomationName");
     }
 
     [Fact]

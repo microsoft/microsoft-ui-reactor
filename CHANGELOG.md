@@ -38,9 +38,10 @@ Conventions for contributors:
   `AutomationProperties.Name`); and list the references it declares, including
   pending ones whose target has not mounted. Component snapshots and property
   lists are text — no live component, element or hook object — with secrets
-  redacted; a resolved reference edge carries its mounted target control. On-demand
-  reads only,
-  UI-thread-affine, no render-path cost. With source mapping on, an open
+  redacted; a resolved reference edge carries its mounted target control. Reads
+  are on demand and UI-thread-affine. The render path gains only two reference
+  stores: `UseContext` records the context it read, and reference-list wiring
+  keeps the authored list. With source mapping on, an open
   `ContentDialog` is tagged with its element so its chrome resolves to the
   `ContentDialog(...)` call site (spec 010, spec 057 §3.1).
 

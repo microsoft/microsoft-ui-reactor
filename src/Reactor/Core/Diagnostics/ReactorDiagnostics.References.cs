@@ -66,9 +66,9 @@ public static partial class ReactorDiagnostics
         UIElement? resolvedLabeledBy = null;
         if (pendingLabeledBy is null
             && Reconciler.GetElementTag(control) is { } tag
-            && (Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.UnwrapDecorators(tag) ?? tag) is var source
-            && !Microsoft.UI.Reactor.Core.V1Protocol.OverlayLifecycle.IsAttributionOnlyTag(control, source)
-            && source.Modifiers?.Accessibility?.LabeledBy is { } id)
+            && Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(tag) is var chain
+            && !Microsoft.UI.Reactor.Core.V1Protocol.OverlayLifecycle.IsAttributionOnlyTag(control, chain[^1])
+            && ReferenceEdgeMap.EffectiveLabeledById(chain) is { } id)
         {
             authoredLabeledBy = id;
             // The live property can outlive its target: an unmounted label stays referenced until
@@ -90,6 +90,18 @@ public static partial class ReactorDiagnostics
 /// </summary>
 internal static class ReferenceEdgeMap
 {
+    /// <summary>
+    /// The AutomationId <c>.LabeledBy("id")</c> in effect across a decorator chain (outermost
+    /// first): decorators apply their modifiers after their target's, so the outermost level that
+    /// sets one wins.
+    /// </summary>
+    internal static string? EffectiveLabeledById(IReadOnlyList<Element> chain)
+    {
+        foreach (var element in chain)
+            if (element.Modifiers?.Accessibility?.LabeledBy is { } id) return id;
+        return null;
+    }
+
     internal static IReadOnlyList<ReferenceEdgeSnapshot> Describe(
         ReferenceEdgeBag? bag,
         string? pendingLabeledBy,

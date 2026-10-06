@@ -219,19 +219,20 @@ internal static class DiagnosticText
         return (ToBits(value) & ~mask) == 0;
     }
 
-    // A boxed enum unboxes to its underlying integral type.
-    private static ulong ToBits(object value) => Convert.GetTypeCode(value) switch
+    // Read through IConvertible (which a boxed enum implements for its underlying type) rather
+    // than by unboxing, and widen signed and unsigned alike so a value and the mask agree.
+    private static ulong ToBits(object value)
     {
-        TypeCode.SByte => (byte)(sbyte)value,
-        TypeCode.Byte => (byte)value,
-        TypeCode.Int16 => (ushort)(short)value,
-        TypeCode.UInt16 => (ushort)value,
-        TypeCode.Int32 => (uint)(int)value,
-        TypeCode.UInt32 => (uint)value,
-        TypeCode.Int64 => unchecked((ulong)(long)value),
-        TypeCode.UInt64 => (ulong)value,
-        _ => ulong.MaxValue,
-    };
+        var convertible = (IConvertible)value;
+        return convertible.GetTypeCode() switch
+        {
+            TypeCode.SByte or TypeCode.Int16 or TypeCode.Int32 or TypeCode.Int64
+                => unchecked((ulong)convertible.ToInt64(CultureInfo.InvariantCulture)),
+            TypeCode.Byte or TypeCode.UInt16 or TypeCode.UInt32 or TypeCode.UInt64
+                => convertible.ToUInt64(CultureInfo.InvariantCulture),
+            _ => ulong.MaxValue,
+        };
+    }
 
     /// <summary>
     /// Parses text to <paramref name="type"/>. No conversion beyond that: a value of any other
