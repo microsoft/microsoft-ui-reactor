@@ -183,6 +183,9 @@ internal static class HostIdleAndThemeResourceFixtures
                         TextBlock($"tick:{tick}"),
                         memo,
                         Memo("keyed", () => TextBlock("KeyedMemoProbe").Foreground(Theme.Ref(AppKey))),
+                        // A concrete brush resolved eagerly inside the factory: equal on both
+                        // sides of a self-diff, so only a diff against the mounted output writes it.
+                        Memo("resolved", () => TextBlock("ResolvedMemoProbe").Foreground(ThemeRef.Resolve(AppKey, isDark: false)!)),
                         ComboBox(listItems, default, null));
                 });
                 await host.WaitForIdleAsync();
@@ -193,12 +196,14 @@ internal static class HostIdleAndThemeResourceFixtures
                 await host.WaitForIdleAsync();
                 H.Check("ThemeMemo_Rerendered", FindText(target, "tick:1") is not null);
                 H.Check("ThemeMemo_RerenderAloneIsStale", ProbeColor(target) == Colors.Red, $"color={ProbeColor(target)}");
+                H.Check("ThemeMemo_ResolvedMemoRerenderAloneIsStale", ProbeColor(target, "ResolvedMemoProbe") == Colors.Red, $"color={ProbeColor(target, "ResolvedMemoProbe")}");
                 H.Check("ThemeMemo_KeyedMemoRerenderAloneIsStale", ProbeColor(target, "KeyedMemoProbe") == Colors.Red, $"color={ProbeColor(target, "KeyedMemoProbe")}");
                 H.Check("ThemeMemo_ListItemRerenderAloneIsStale", ListItemColor(target) == Colors.Red, $"color={ListItemColor(target)}");
 
                 await Task.Run(Theme.NotifyResourcesChanged);
                 await WaitForAllHostsIdleAsync();
                 H.Check("ThemeMemo_NotifiedFromBackgroundIsBlue", ProbeColor(target) == Colors.Blue, $"color={ProbeColor(target)}");
+                H.Check("ThemeMemo_ResolvedMemoNotifiedIsBlue", ProbeColor(target, "ResolvedMemoProbe") == Colors.Blue, $"color={ProbeColor(target, "ResolvedMemoProbe")}");
                 H.Check("ThemeMemo_KeyedMemoNotifiedIsBlue", ProbeColor(target, "KeyedMemoProbe") == Colors.Blue, $"color={ProbeColor(target, "KeyedMemoProbe")}");
                 H.Check("ThemeMemo_ListItemNotifiedIsBlue", ListItemColor(target) == Colors.Blue, $"color={ListItemColor(target)}");
 

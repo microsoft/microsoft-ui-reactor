@@ -586,6 +586,16 @@ public sealed partial class Reconciler : IDisposable
         /// pool, so no renter inherits them.
         /// </summary>
         public HashSet<string>? ManagedResourceKeys;
+
+        /// <summary>
+        /// The factory output last realized on this control by a directly reconciled
+        /// <see cref="KeyedMemoElement"/>, so a resource-refresh pass can diff a fresh output
+        /// against what is mounted (<c>RefreshKeyedMemo</c>). Stored here, not in a table keyed
+        /// by the managed wrapper, for the same reason as <see cref="ManagedResourceKeys"/>.
+        /// Cleared on pool return; it is only read for a keyed memo's control, and guarded by
+        /// <c>CanUpdate</c>.
+        /// </summary>
+        public Element? KeyedMemoOutput;
     }
 
     internal static class ReactorAttached
@@ -1295,6 +1305,7 @@ public sealed partial class Reconciler : IDisposable
                 rs.EchoSuppressScopeDepth = 0;
                 rs.PendingEchoMatch = null;
                 rs.PendingLabeledBy = null;
+                rs.KeyedMemoOutput = null;
                 rs.Element = null;
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).

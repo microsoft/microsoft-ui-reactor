@@ -235,9 +235,12 @@ public sealed partial class Reconciler
             // the post-dispatch ApplyModifiers below.
             // The one exception is a component inside the subtree that updated its own state:
             // returning null would leave it un-rendered, so the pass walks down to it instead.
-            // A resource-refresh pass (Theme.NotifyResourcesChanged) walks down the same way,
-            // so theme values inside the memoized subtree are re-applied.
-            (KeyedMemoElement, KeyedMemoElement memo, _) when IsOnDirtyAncestorPath(control) || _resourceRefreshActive
+            // A resource-refresh pass (Theme.NotifyResourcesChanged) re-runs the factory and
+            // diffs it against the output realized last time, so theme values inside the
+            // memoized subtree are re-applied, including brushes the factory resolved eagerly.
+            (KeyedMemoElement, KeyedMemoElement memo, _) when _resourceRefreshActive
+                => RefreshKeyedMemo(memo, control, requestRerender),
+            (KeyedMemoElement, KeyedMemoElement memo, _) when IsOnDirtyAncestorPath(control)
                 => UpdateKeyedMemoTowardDirtyDescendant(memo, control, requestRerender),
             (KeyedMemoElement, KeyedMemoElement, _) => null,
             _ => Mount(newEl, requestRerender),
@@ -1563,6 +1566,29 @@ public sealed partial class Reconciler
     {
         var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
         return inner is EmptyElement ? null : Update(inner, inner, control, requestRerender);
+    }
+
+    /// <summary>
+    /// A same-key <c>Memo(key, …)</c> during a resource-refresh pass. Re-runs the factory and
+    /// diffs the output against what was realized last time (recorded at mount and here), not
+    /// against itself: a brush the factory resolved eagerly with <c>ThemeRef.Resolve</c> is
+    /// equal on both sides of a self-diff, and diff-based setters would skip writing it.
+    /// Falls back to the self-diff when no output was recorded or it can't be updated in place.
+    /// </summary>
+    private UIElement? RefreshKeyedMemo(KeyedMemoElement memo, UIElement control, Action requestRerender)
+    {
+        var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
+        if (inner is EmptyElement) return null;
+        var previous = control is FrameworkElement fe
+                       && TryGetReactorState(fe, out var state)
+                       && state.KeyedMemoOutput is { } recorded
+                       && CanUpdate(recorded, inner)
+            ? recorded
+            : inner;
+        var replacement = Update(previous, inner, control, requestRerender);
+        if ((replacement ?? control) is FrameworkElement realized)
+            GetOrCreateReactorState(realized).KeyedMemoOutput = inner;
+        return replacement;
     }
 
     private static string Truncate(string s, int maxLen) =>
