@@ -74,6 +74,53 @@ public class WinAppCaptureTests
         Assert.Contains("12x8", ex.Message);
     }
 
+    // ── window discovery ───────────────────────────────────────────────────
+
+    [Fact]
+    public void The_WinUI_window_wins_over_other_windows_of_the_app()
+    {
+        var winui = new IntPtr(2);
+        IntPtr hwnd = WinAppCapture.SelectAppWindow(
+        [
+            new(new IntPtr(1), "WindowsForms10.Window.8.app.0.1", false),
+            new(winui, WinAppCapture.WinUIWindowClass, false),
+        ]);
+
+        Assert.Equal(winui, hwnd);
+    }
+
+    /// <summary>
+    /// The winforms-interop doc app has no WinUI window: its content is a XAML island in a
+    /// WinForms form, which must still be found (it was missed when only the WinUI class
+    /// counted, so none of that topic's screenshots could be refreshed).
+    /// </summary>
+    [Fact]
+    public void A_WinForms_hosted_app_is_found_by_its_main_form()
+    {
+        var form = new IntPtr(3);
+        IntPtr hwnd = WinAppCapture.SelectAppWindow(
+        [
+            new(new IntPtr(1), "ConsoleWindowClass", false),
+            new(new IntPtr(2), "tooltips_class32", true),
+            new(form, "WindowsForms10.Window.8.app.0.141b42a_r6_ad1", false),
+        ]);
+
+        Assert.Equal(form, hwnd);
+    }
+
+    [Fact]
+    public void Console_and_tool_windows_alone_are_not_the_app()
+    {
+        IntPtr hwnd = WinAppCapture.SelectAppWindow(
+        [
+            new(new IntPtr(1), "ConsoleWindowClass", false),
+            new(new IntPtr(2), "PseudoConsoleWindow", false),
+            new(new IntPtr(3), "SomeToolWindow", true),
+        ]);
+
+        Assert.Equal(IntPtr.Zero, hwnd);
+    }
+
     // ── Windows Graphics Capture only ──────────────────────────────────────
 
     /// <summary>

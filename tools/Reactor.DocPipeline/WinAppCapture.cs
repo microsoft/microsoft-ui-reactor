@@ -292,20 +292,40 @@ internal static class WinAppCapture
         "bringing windows to the foreground. Capture needs Windows 10 version 2004 (build 19041) or later on an " +
         "interactive desktop session.";
     /// <summary>
-    /// Waits for the doc app's WinUI window to appear. The app is a descendant of the
+    /// Waits for the doc app's top-level window to appear. The app is a descendant of the
     /// <c>dotnet run</c> process <paramref name="rootPid"/>, so the window is matched by
     /// owning process rather than by title, which the preview host changes when it switches
-    /// components. <see cref="IntPtr.Zero"/> on timeout.
+    /// components (see <see cref="SelectAppWindow"/>). <see cref="IntPtr.Zero"/> on timeout.
     /// </summary>
     internal static async Task<IntPtr> WaitForAppWindowAsync(int rootPid, TimeSpan timeout)
     {
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < timeout)
         {
-            var hwnd = Native.FindWinUIWindow(Native.GetDescendantProcessIds(rootPid));
+            var hwnd = Native.FindAppWindow(Native.GetDescendantProcessIds(rootPid));
             if (hwnd != IntPtr.Zero) return hwnd;
             await Task.Delay(200);
         }
+        return IntPtr.Zero;
+    }
+
+    /// <summary>A visible, unowned top-level window of the doc app's process tree.</summary>
+    internal readonly record struct WindowCandidate(IntPtr Hwnd, string ClassName, bool IsToolWindow);
+
+    /// <summary>
+    /// Picks the window to capture: the WinUI window when there is one, otherwise the app's
+    /// other main window. A doc app hosted in WinForms (<c>winforms-interop</c>) has no WinUI
+    /// <c>Window</c>: its content is a XAML island inside an ordinary top-level form, so
+    /// requiring the WinUI class would never find it. Tool windows and console windows are
+    /// never the app. <see cref="IntPtr.Zero"/> when nothing qualifies.
+    /// </summary>
+    internal static IntPtr SelectAppWindow(IReadOnlyList<WindowCandidate> candidates)
+    {
+        foreach (var c in candidates)
+            if (c.ClassName == WinUIWindowClass) return c.Hwnd;
+        foreach (var c in candidates)
+            if (!c.IsToolWindow && c.ClassName is not ("ConsoleWindowClass" or "PseudoConsoleWindow"))
+                return c.Hwnd;
         return IntPtr.Zero;
     }
 
@@ -316,6 +336,8 @@ internal static class WinAppCapture
         private static readonly IntPtr PerMonitorAwareV2 = new(-4);
         private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
         private const uint GW_OWNER = 4;
+        private const int GWL_EXSTYLE = -20;
+        private const long WS_EX_TOOLWINDOW = 0x00000080;
         private const uint TH32CS_SNAPPROCESS = 0x00000002;
 
         /// <summary>
@@ -378,9 +400,9 @@ internal static class WinAppCapture
             return result;
         }
 
-        public static IntPtr FindWinUIWindow(HashSet<int> pids)
+        public static IntPtr FindAppWindow(HashSet<int> pids)
         {
-            var found = IntPtr.Zero;
+            var candidates = new List<WindowCandidate>();
             var className = new char[256];
             EnumWindows((hwnd, _) =>
             {
@@ -388,14 +410,12 @@ internal static class WinAppCapture
                 if (!pids.Contains((int)pid) || !IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER) != IntPtr.Zero)
                     return true;
                 var len = GetClassNameW(hwnd, className, className.Length);
-                if (len > 0 && new string(className, 0, len) == WinUIWindowClass)
-                {
-                    found = hwnd;
-                    return false;
-                }
+                var exStyle = (long)GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+                candidates.Add(new WindowCandidate(
+                    hwnd, len > 0 ? new string(className, 0, len) : "", (exStyle & WS_EX_TOOLWINDOW) != 0));
                 return true;
             }, IntPtr.Zero);
-            return found;
+            return SelectAppWindow(candidates);
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -430,6 +450,7 @@ internal static class WinAppCapture
         [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
         [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hwnd, uint cmd);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassNameW(IntPtr hwnd, char[] className, int maxCount);
+        [DllImport("user32.dll")] private static extern IntPtr GetWindowLongPtrW(IntPtr hwnd, int index);
         [DllImport("kernel32.dll", SetLastError = true)] private static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern bool Process32FirstW(IntPtr snapshot, ref PROCESSENTRY32W entry);
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern bool Process32NextW(IntPtr snapshot, ref PROCESSENTRY32W entry);
