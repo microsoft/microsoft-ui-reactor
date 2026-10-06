@@ -118,6 +118,27 @@ public sealed class ComponentRenderedEventTests
     }
 
     [Fact]
+    public void RootRenderDiagnostics_HotReloadRetryIsReportedOnce()
+    {
+        // ReactorHostControl's hook-order retry is not a forced pass, so its root relies
+        // solely on this marker to report the retry as hotReload rather than state.
+        const string name = "ComponentRenderedEventTests.RootRetry";
+        using var collector = ReactorTraceCollector.Capture(
+            EventLevel.Verbose, ReactorEventSource.Keywords.RenderDetail);
+
+        var root = new RootRenderDiagnostics();
+        root.TraceRendered(name, hotReloadRender: false, forcePending: false, elapsedMilliseconds: 0);
+        root.MarkHotReloadRetry();
+        root.TraceRendered(name, hotReloadRender: false, forcePending: false, elapsedMilliseconds: 0);
+        root.TraceRendered(name, hotReloadRender: false, forcePending: false, elapsedMilliseconds: 0);
+
+        var reasons = collector.ByName(nameof(ReactorEventSource.ComponentRendered))
+            .Where(e => (e.Payload[0] as string) == name)
+            .Select(e => (string)e.Payload[2]!);
+        Assert.Equal(new[] { "mount", "hotReload", "state" }, reasons);
+    }
+
+    [Fact]
     public void EventAttribute_DeclaresVerboseAndBothKeywords()
     {
         var attribute = typeof(ReactorEventSource)

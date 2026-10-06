@@ -284,6 +284,9 @@ internal sealed class RootRenderDiagnostics
     private long _id;
     // False until the current root has rendered once (reason "mount").
     private bool _rendered;
+    // The next root render is the retry a host schedules after a hot-reload hook-order
+    // recovery; that retry runs outside the hot-reload pass but is still hot reload.
+    private bool _hotReloadRetry;
 
     internal long IdForTests => _id;
 
@@ -293,12 +296,20 @@ internal sealed class RootRenderDiagnostics
         if (_id != 0) ComponentRenderControls.Registry.Forget(_id, null);
         _id = 0;
         _rendered = false;
+        _hotReloadRetry = false;
     }
+
+    /// <summary>Marks the next root render as a hot-reload hook-order retry (reported as <c>hotReload</c>).</summary>
+    public void MarkHotReloadRetry() => _hotReloadRetry = true;
 
     /// <summary>See <see cref="ComponentRenderControls.TraceRootRendered"/>. Returns whether the event is enabled.</summary>
     public bool TraceRendered(string componentName, bool hotReloadRender, bool forcePending, double elapsedMilliseconds)
-        => ComponentRenderControls.TraceRootRendered(
-            ref _id, ref _rendered, componentName, hotReloadRender, forcePending, elapsedMilliseconds);
+    {
+        bool hotReload = hotReloadRender || _hotReloadRetry;
+        _hotReloadRetry = false;
+        return ComponentRenderControls.TraceRootRendered(
+            ref _id, ref _rendered, componentName, hotReload, forcePending, elapsedMilliseconds);
+    }
 
     /// <summary>
     /// Keeps the root's id pointing at the control now standing in for its content (the
