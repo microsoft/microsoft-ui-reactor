@@ -82,13 +82,16 @@ internal static class TitleBarIconDefaultFixtures
         // (COMException), already disposed (ObjectDisposedException, which derives from
         // InvalidOperationException), or already closing. Mirrors the predicate
         // ReactorWindow.IsIconApplyFailure uses at the same boundary. Anything outside it
-        // is a genuine bug in the fixture and should surface.
-        try { win?.Close(); }
-        catch (Exception ex) when (ex is COMException or InvalidOperationException or ArgumentException)
+        // is a genuine bug in the fixture and should surface. A native failure reported
+        // asynchronously after Close() returns is handled by the guard (issue #1345).
+        await AsyncTeardownGuard.CloseAndSettleAsync("SelfTest.TitleBarIconDefault.Close", () =>
         {
-            DiagnosticLog.SwallowedError(LogCategory.Hosting, "SelfTest.TitleBarIconDefault.Close", ex);
-        }
-        await Task.Delay(120);
+            try { win?.Close(); }
+            catch (Exception ex) when (ex is COMException or InvalidOperationException or ArgumentException)
+            {
+                DiagnosticLog.SwallowedError(LogCategory.Hosting, "SelfTest.TitleBarIconDefault.Close", ex);
+            }
+        }, settleMs: 120);
     }
 
     private static WindowSpec Spec(string title) =>

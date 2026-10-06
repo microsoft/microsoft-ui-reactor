@@ -376,6 +376,16 @@ internal static class SelfTestRunner
             (e.Message ?? "").ReplaceLineEndings(" "));
         foreach (var line in (ex?.ToString() ?? "").Split('\n'))
             Console.WriteLine("#   " + line.TrimEnd('\r'));
+        // A native-origin failure has no managed frames, so the WinRT restricted-error details
+        // the projection attaches to Exception.Data are the only other clue in the log. (#1345)
+        if (ex?.Data is { Count: > 0 } data)
+        {
+            foreach (global::System.Collections.DictionaryEntry entry in data)
+            {
+                if (entry.Value is string or bool or int or long)
+                    Console.WriteLine($"#   data {entry.Key}: {entry.Value}".ReplaceLineEndings(" "));
+            }
+        }
         Console.Out.Flush();
     }
 

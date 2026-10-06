@@ -277,8 +277,32 @@ jobs:
       - name: Restore
         run: dotnet restore tests/Reactor.PackagedTests/Reactor.PackagedTests.csproj -p:Platform=x64
 
+      # A host that fail-fasts (e.g. STATUS_STOWED_EXCEPTION 0xC000027B, issue #1345) leaves only
+      # a truncated TAP stream, and a native-origin exception has no managed frames to print.
+      # The originating native stack lives only in a dump, so have WER write one for the host
+      # (scoped to its exe name) and upload it when the job fails.
+      - name: Enable crash dumps for the packaged host
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'packaged-host-dumps'
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\Reactor.PackagedTests.Host.exe'
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpFolder -PropertyType ExpandString -Value $dir -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 2 -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 2 -Force | Out-Null
+
       - name: Test
         run: dotnet test tests/Reactor.PackagedTests/Reactor.PackagedTests.csproj --no-restore -p:Platform=x64
+
+      - name: Upload packaged host crash dumps
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: packaged-host-dumps-${{ matrix.shard }}
+          path: ${{ runner.temp }}/packaged-host-dumps
+          if-no-files-found: ignore
+          retention-days: 7
 
       # ClassCleanup removes the registration, but a hard failure (or a killed job) can
       # leave it behind, and a stale registration owning the execution alias would make the
