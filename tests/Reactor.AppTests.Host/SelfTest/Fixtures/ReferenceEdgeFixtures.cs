@@ -145,6 +145,21 @@ internal static class ReferenceEdgeFixtures
                 var after = ReactorDiagnostics.GetReferenceEdges(box).SingleOrDefault(e => e.Property == "LabeledBy");
                 H.Check("RefEdges_UnmountedLabelNotResolved",
                     after is { TargetAutomationId: "refedge-live-label", IsResolved: false, Target: null });
+
+                // The source itself unmounts after resolving: a retained, unpooled control keeps
+                // its tag, but no edge is rebuilt from it.
+                host.Mount(ctx => VStack(
+                    TextBlock("refedge-src-label").AutomationId("refedge-src-label-id"),
+                    CheckBox(label: "refedge-src-check").LabeledBy("refedge-src-label-id")));
+                await Harness.Render();
+                await Harness.Render(50);
+                var srcCheck = H.FindControl<CheckBox>(c => c.Content as string == "refedge-src-check");
+                H.Check("RefEdges_SourceResolvedBeforeUnmount",
+                    srcCheck is not null && ReactorDiagnostics.GetReferenceEdges(srcCheck) is [{ IsResolved: true, TargetAutomationId: "refedge-src-label-id" }]);
+                if (srcCheck is null) return;
+                host.Mount(ctx => TextBlock("refedge-src-replaced"));
+                await Harness.WaitFor(() => !srcCheck.IsLoaded, maxPasses: 16, perPassMs: 10);
+                H.Check("RefEdges_UnmountedSourceReportsNoEdge", ReactorDiagnostics.GetReferenceEdges(srcCheck).Count == 0);
             }
             finally
             {

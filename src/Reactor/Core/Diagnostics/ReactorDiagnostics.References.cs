@@ -45,7 +45,7 @@ public static partial class ReactorDiagnostics
     /// <c>ElementRef</c> references (modifiers such as <c>.LabeledBy(ref)</c> or
     /// <c>.XYFocusRight(ref)</c>, control descriptors and bindings) are always reported. An
     /// AutomationId <c>.LabeledBy("id")</c> is reported while pending; once resolved it is reported
-    /// only when the control is tagged with its element (turn source mapping on). Reads existing
+    /// only while the control is loaded and tagged with its element (turn source mapping on). Reads existing
     /// reconciler state on demand. Must be called on the UI thread.
     /// </remarks>
     [Microsoft.UI.Reactor.Hosting.UIThreadOnly]
@@ -65,6 +65,9 @@ public static partial class ReactorDiagnostics
         string? authoredLabeledBy = null;
         UIElement? resolvedLabeledBy = null;
         if (pendingLabeledBy is null
+            // An unmounted (unpooled) control keeps its tag, but its reference state was torn
+            // down; only a control still in the live tree has an authored edge to recover.
+            && control is FrameworkElement { IsLoaded: true }
             && Reconciler.GetElementTag(control) is { } tag
             && Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(tag) is var chain
             && !Microsoft.UI.Reactor.Core.V1Protocol.OverlayLifecycle.IsAttributionOnlyTag(control, chain[^1])
