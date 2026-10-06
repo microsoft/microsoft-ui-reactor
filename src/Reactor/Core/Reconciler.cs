@@ -99,10 +99,12 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// Discards what a failed boundary child registered: drops the wrappers from the node
-    /// tables and runs their components' effect cleanups, deepest first. Wrappers already
-    /// unmounted through the normal path are skipped, so this is safe to run after an
-    /// <see cref="Unmount"/>. A cleanup failure is logged; one the app declined via
-    /// <see cref="RenderError.Propagate"/> is rethrown once every cleanup has run.
+    /// tables, runs their components' effect cleanups and their <c>.OnUnmount</c> actions,
+    /// and tears down navigation hosts, deepest first. Entries already handled by the
+    /// normal unmount path are skipped, so this is safe to run after an
+    /// <see cref="Unmount"/> and never runs anything twice. Every entry is processed even
+    /// when one fails: failures are logged, and one the app declined via
+    /// <see cref="RenderError.Propagate"/> is rethrown once all have run.
     /// </summary>
     private void RollBackBoundaryMount(List<UIElement> journal)
     {
@@ -112,22 +114,88 @@ public sealed partial class Reconciler : IDisposable
             if (RenderErrorDispatch.IsPropagating(ex))
                 propagated ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
             else
-                _logger?.LogWarning(ex, "Effect cleanup threw while discarding a failed ErrorBoundary child");
+                _logger?.LogWarning(ex, "Teardown threw while discarding a failed ErrorBoundary child");
         }
 
-        for (int i = journal.Count - 1; i >= 0; i--)
+        using (IsolateUnmountCleanupFailures(OnCleanupError))
         {
-            var wrapper = journal[i];
-            _errorBoundaryNodes.Remove(wrapper);
-            if (!_componentNodes.Remove(wrapper, out var node))
-                continue;
-            Diagnostics.ReactorEventSource.Log.ComponentUnmount(
-                node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
-            node.Component?.Context.RunCleanupsIsolated(OnCleanupError);
-            node.Context?.RunCleanupsIsolated(OnCleanupError);
+            for (int i = journal.Count - 1; i >= 0; i--)
+            {
+                var wrapper = journal[i];
+                _errorBoundaryNodes.Remove(wrapper);
+                if (_componentNodes.Remove(wrapper, out var node))
+                {
+                    Diagnostics.ReactorEventSource.Log.ComponentUnmount(
+                        node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
+                    RunUnmountCleanups(node);
+                }
+                if (wrapper is FrameworkElement fe && _onUnmountActions.TryGetValue(fe, out var onUnmount))
+                {
+                    _onUnmountActions.Remove(fe);
+                    RunUnmountAction(onUnmount, fe);
+                }
+                if (_navigationHostNodes.ContainsKey(wrapper))
+                    CleanupNavigationHostNode(wrapper);
+            }
         }
         journal.Clear();
         propagated?.Throw();
+    }
+
+    /// <summary>Records a registration made while a boundary child mounts; see <see cref="_boundaryMountJournal"/>.</summary>
+    internal void NoteBoundaryMountRegistration(UIElement control) => _boundaryMountJournal?.Add(control);
+
+    /// <summary>
+    /// When set, unmount runs every component cleanup and <c>.OnUnmount</c> action and hands
+    /// failures here instead of stopping at the first one (issue #1291). Used where a
+    /// teardown must complete regardless — replacing or releasing a tree for a render-error
+    /// outcome, and rolling back a failed boundary child — because the caller forgets the
+    /// tree afterwards and nothing could finish the job later. <c>null</c> keeps the normal
+    /// behaviour: the first failure escapes.
+    /// </summary>
+    private Action<Exception>? _unmountCleanupErrorSink;
+
+    internal IsolatedUnmountScope IsolateUnmountCleanupFailures(Action<Exception> onError)
+    {
+        var previous = _unmountCleanupErrorSink;
+        _unmountCleanupErrorSink = onError;
+        return new IsolatedUnmountScope(this, previous);
+    }
+
+    internal readonly struct IsolatedUnmountScope(Reconciler owner, Action<Exception>? previous) : IDisposable
+    {
+        public void Dispose() => owner._unmountCleanupErrorSink = previous;
+    }
+
+    private void RunUnmountCleanups(ComponentNode node)
+    {
+        if (_unmountCleanupErrorSink is { } sink)
+        {
+            node.Component?.Context.RunCleanupsIsolated(sink);
+            node.Context?.RunCleanupsIsolated(sink);
+        }
+        else
+        {
+            node.Component?.Context.RunCleanups();
+            node.Context?.RunCleanups();
+        }
+    }
+
+    private void RunUnmountAction(Action<FrameworkElement> onUnmount, FrameworkElement control)
+    {
+        if (_unmountCleanupErrorSink is not { } sink)
+        {
+            onUnmount(control);
+            return;
+        }
+        try
+        {
+            onUnmount(control);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            sink(ex);
+        }
     }
 
     /// <summary>
@@ -2588,7 +2656,7 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
         {
             _onUnmountActions.Remove(umFe);
-            onUnmount(umFe);
+            RunUnmountAction(onUnmount, umFe);
         }
 
         // Issue #917 — a TitleBar going away withdraws both its
@@ -2603,8 +2671,7 @@ public sealed partial class Reconciler : IDisposable
         {
             Diagnostics.ReactorEventSource.Log.ComponentUnmount(
                 node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
-            node.Component?.Context.RunCleanups();
-            node.Context?.RunCleanups();
+            RunUnmountCleanups(node);
             _componentNodes.Remove(control);
         }
 
@@ -3002,7 +3069,7 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
         {
             _onUnmountActions.Remove(umFe);
-            onUnmount(umFe);
+            RunUnmountAction(onUnmount, umFe);
         }
 
         // Issue #917 — mirrors UnmountRecursive: a TitleBar reached through the
@@ -3017,8 +3084,7 @@ public sealed partial class Reconciler : IDisposable
         {
             Diagnostics.ReactorEventSource.Log.ComponentUnmount(
                 node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
-            node.Component?.Context.RunCleanups();
-            node.Context?.RunCleanups();
+            RunUnmountCleanups(node);
             _componentNodes.Remove(control);
         }
 
@@ -4849,7 +4915,10 @@ public sealed partial class Reconciler : IDisposable
         // pooled control reused for a no-OnUnmount element can't fire a stale action
         // (pool reuse remounts with oldM == null, so this can't be gated on oldM).
         if (m.OnUnmountAction is not null)
+        {
             _onUnmountActions.AddOrUpdate(fe, m.OnUnmountAction);
+            _boundaryMountJournal?.Add(fe);
+        }
         else
             _onUnmountActions.Remove(fe);
 

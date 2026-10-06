@@ -508,6 +508,38 @@ public class RenderErrorDispatchTests
     }
 
     [Fact]
+    public void TrayDispatchGuarded_Swallows_Ordinary_Failures_But_Not_A_Declined_Propagation()
+    {
+        // Positive control: an ordinary tray-callback failure is still logged and swallowed.
+        var ordinary = new global::Microsoft.UI.Reactor.Hosting.Shell.TrayCallbackEntry
+        {
+            OnClick = () => throw new InvalidOperationException("ordinary tray callback failure"),
+        };
+        global::Microsoft.UI.Reactor.Hosting.Shell.TrayNotificationRouter.DispatchGuarded(
+            ordinary, global::Microsoft.UI.Reactor.Hosting.Shell.TrayCallbackKind.Click);
+
+        var declined = new InvalidOperationException("declined in a flyout's first render");
+        WithUnhandledCallback(_ => false, () =>
+        {
+            var entry = new global::Microsoft.UI.Reactor.Hosting.Shell.TrayCallbackEntry
+            {
+                // An OnClick that opens a flyout whose synchronous first render propagates
+                // and the app declines.
+                OnClick = () =>
+                {
+                    using (RenderErrorDispatch.EnterPropagationScope())
+                        RenderErrorDispatch.RaiseUnhandled(declined);
+                },
+            };
+
+            var escaped = Assert.Throws<InvalidOperationException>(() =>
+                global::Microsoft.UI.Reactor.Hosting.Shell.TrayNotificationRouter.DispatchGuarded(
+                    entry, global::Microsoft.UI.Reactor.Hosting.Shell.TrayCallbackKind.Click));
+            Assert.Same(declined, escaped);
+        });
+    }
+
+    [Fact]
     public void TryCreateLoadedRoot_Lets_A_Declined_Propagation_From_The_Factory_Escape()
     {
         var nested = new InvalidOperationException("declined in nested work the factory started");

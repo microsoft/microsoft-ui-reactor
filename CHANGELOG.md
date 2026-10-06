@@ -254,12 +254,14 @@ Conventions for contributors:
 - **An `ErrorBoundary` whose child fails part-way through mounting no longer leaves
   that child's effects running** (issue #1291). A component registers before its
   effects run, so a child whose second effect threw had already opened whatever its
-  first effect opened (a subscription, a timer). The boundary discarded the
-  half-built subtree without it ever being attached, so nothing could unmount it,
-  and every re-render retried the child and leaked another set. The boundary now
-  rolls the failed child back, running its components' effect cleanups, both when
-  it first mounts and on each retry. The same applies to the internal boundary
-  around a `RenderErrorHandler` fallback.
+  first effect opened (a subscription, a timer), and a control's `.OnMount(...)` had
+  already run. The boundary discarded the half-built subtree without it ever being
+  attached, so nothing could unmount it, and every re-render retried the child and
+  leaked another set. The boundary now rolls the failed child back — component effect
+  cleanups, `.OnUnmount(...)` actions and navigation-host route subscriptions — both
+  when it first mounts and on each retry. The same applies to the internal boundary
+  around a `RenderErrorHandler` fallback, and when a host replaces or releases its tree
+  for a render-error outcome every cleanup runs even if one of them throws.
 
 - **Dropping an `AutoSuggestBox` right after its text changed can no longer crash
   the app** (PR #1302, supersedes #559). WinUI raises the box's `TextChanged` from

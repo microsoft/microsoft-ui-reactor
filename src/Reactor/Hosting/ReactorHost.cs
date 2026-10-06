@@ -1069,16 +1069,26 @@ public sealed class ReactorHost : IDisposable
         // replace the built-in panel, or ask to propagate.
         var error = new RenderError(ex, source, componentName, isHostLevel: true);
         var rerender = _rerenderAction ??= () => RequestRender();
+        // Replacing or releasing the old tree must finish even when one of its cleanups
+        // throws: the host forgets that tree afterwards, so anything left registered would
+        // stay alive. Every cleanup runs; failures are collected and reported below.
+        var teardownErrors = new RenderErrorDispatch.TeardownErrors(_logger);
         var (content, tree, propagate, replacesTree) = RenderErrorDispatch.BuildHostFallback(
             EffectiveRenderErrorHandler, error, _logger,
-            install: element => _reconciler.Reconcile(_currentTree, element, _currentControl, rerender),
+            install: element =>
+            {
+                using (_reconciler.IsolateUnmountCleanupFailures(teardownErrors.Add))
+                    return _reconciler.Reconcile(_currentTree, element, _currentControl, rerender);
+            },
             releaseCurrent: () =>
             {
-                if (_currentTree is not null)
+                if (_currentTree is null) return;
+                using (_reconciler.IsolateUnmountCleanupFailures(teardownErrors.Add))
                     _reconciler.Reconcile(_currentTree, null, _currentControl, rerender);
             },
             currentIsAppFallback: RenderErrorDispatch.IsAppFallback(_currentTree));
         SetErrorContent(content, tree, replacesTree);
+        teardownErrors.RethrowPropagated();
         // Nothing is shown where the failure happened. Returns only when the app's
         // unhandled-exception callback handled it; otherwise rethrows.
         if (propagate)

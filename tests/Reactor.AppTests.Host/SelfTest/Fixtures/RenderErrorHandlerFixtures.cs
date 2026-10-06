@@ -1179,6 +1179,95 @@ internal static class RenderErrorHandlerFixtures
         }
     }
 
+    // Native-side counterpart of PartialEffectComponent: a control that starts a resource in
+    // .OnMount and stops it in .OnUnmount, followed by a sibling component that throws.
+    private static int s_nativeResources;
+    private static void StartNativeResource(FrameworkElement _) => s_nativeResources++;
+    private static void StopNativeResource(FrameworkElement _) => s_nativeResources--;
+
+    private static Element NativeResourceThenThrow() => VStack(
+        TextBlock("NativeResource").OnMount(StartNativeResource).OnUnmount(StopNativeResource),
+        Component<ThrowingComponent>());
+
+    // Rolling back a failed boundary child also stops native resources its completed controls
+    // started (.OnUnmount), not only component effects.
+    internal class Boundary_RollbackRunsOnUnmount(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            // App fallback for a failing root (the internal guard), first failure plus retries.
+            s_nativeResources = 0;
+            var host = H.CreateHost();
+            host.RenderErrorHandler = _ => NativeResourceThenThrow();
+            host.Mount(_ => throw new InvalidOperationException("root boom"));
+            await Harness.Render();
+            H.Check("RenderErrorHandler_NativeRollback_Guard_FirstFailure", s_nativeResources == 0,
+                $"live={s_nativeResources}");
+            for (int i = 0; i < 3; i++)
+            {
+                host.RequestRender();
+                await Harness.Render();
+            }
+            H.Check("RenderErrorHandler_NativeRollback_Guard_Retries", s_nativeResources == 0,
+                $"live={s_nativeResources}");
+
+            // Ordinary user ErrorBoundary, mount plus retries.
+            s_nativeResources = 0;
+            var boundaryHost = H.CreateHost();
+            boundaryHost.Mount(_ => ErrorBoundary(NativeResourceThenThrow(), TextBlock("NativeBoundaryFallback")));
+            await Harness.Render();
+            for (int i = 0; i < 3; i++)
+            {
+                boundaryHost.RequestRender();
+                await Harness.Render();
+            }
+            H.Check("RenderErrorHandler_NativeRollback_Boundary", s_nativeResources == 0
+                && H.FindText("NativeBoundaryFallback") is not null,
+                $"live={s_nativeResources}");
+        }
+    }
+
+    // Replacing or releasing a failed tree finishes its teardown even when one cleanup throws:
+    // the host forgets that tree afterwards, so a cleanup skipped here would leak for good.
+    // Covers replacement by an app fallback and release on a handled Propagate().
+    internal class HostFallback_TeardownIsolatesThrowingCleanups(Harness h) : SelfTestFixtureBase(h)
+    {
+        private async Task RunCase(string label, RenderErrorHandler handler, string? expectedFallback)
+        {
+            CleanupFlagComponent.CleanupRuns = 0;
+            bool shouldThrow = false;
+            var host = H.CreateHost();
+            host.RenderErrorHandler = handler;
+            host.Mount(_ => shouldThrow
+                ? throw new InvalidOperationException($"{label} boom")
+                : VStack(Component<ThrowingCleanupComponent>(), Component<CleanupFlagComponent>()));
+            await Harness.Render();
+
+            shouldThrow = true;
+            host.RequestRender();
+            await Harness.Render();
+            // The first sibling's cleanup throws; the second's must still have run.
+            H.Check($"RenderErrorHandler_Teardown_{label}_SiblingCleanupRan", CleanupFlagComponent.CleanupRuns == 1,
+                $"runs={CleanupFlagComponent.CleanupRuns}");
+            if (expectedFallback is not null)
+                H.Check($"RenderErrorHandler_Teardown_{label}_OutcomeKept", H.FindText(expectedFallback) is not null);
+
+            // Recovery mounts a fresh tree; nothing from the old one runs again.
+            shouldThrow = false;
+            host.RequestRender();
+            await Harness.Render();
+            H.Check($"RenderErrorHandler_Teardown_{label}_Recovery",
+                CleanupFlagComponent.CleanupRuns == 1 && H.FindText("CleanupFlagChild") is not null,
+                $"runs={CleanupFlagComponent.CleanupRuns}");
+        }
+
+        public override Task RunAsync() => WithUnhandledCallback(_ => true, async () =>
+        {
+            await RunCase("Replace", _ => TextBlock("TeardownFallback"), "TeardownFallback");
+            await RunCase("Release", e => { e.Propagate(); return null; }, expectedFallback: null);
+        });
+    }
+
     // A later failure that falls back to the built-in panel (handler removed, or now returning
     // null) releases an app fallback shown earlier; an ordinary pre-error tree keeps the
     // pre-#1291 behavior (not unmounted).

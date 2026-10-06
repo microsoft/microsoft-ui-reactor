@@ -271,6 +271,33 @@ internal static class RenderErrorDispatch
     }
 
     /// <summary>
+    /// Collects failures from a teardown the host must finish regardless — replacing or
+    /// releasing its tree for a render-error outcome — run under
+    /// <see cref="Reconciler.IsolateUnmountCleanupFailures"/> so every cleanup runs. Ordinary
+    /// failures are logged; the first one the app declined via
+    /// <see cref="RenderError.Propagate"/> is rethrown by <see cref="RethrowPropagated"/>
+    /// once the host has installed its outcome.
+    /// </summary>
+    internal sealed class TeardownErrors(ILogger? logger)
+    {
+        private ExceptionDispatchInfo? _propagated;
+
+        public void Add(Exception ex)
+        {
+            if (IsPropagating(ex))
+            {
+                _propagated ??= ExceptionDispatchInfo.Capture(ex);
+                return;
+            }
+            logger?.LogError(ex, "A cleanup threw while replacing the failed tree; the remaining cleanups still ran");
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[Reactor] Cleanup threw while replacing a failed tree ({ex.GetType().Name}: {ex.Message}); continuing.");
+        }
+
+        public void RethrowPropagated() => _propagated?.Throw();
+    }
+
+    /// <summary>
     /// Reports one cleanup exception thrown during host/reconciler disposal (the handler is
     /// notified with <see cref="RenderErrorSource.Cleanup"/>; its return value is ignored).
     /// Returns the exception to rethrow once disposal has finished when the handler asked to
