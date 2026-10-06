@@ -70,9 +70,12 @@ A PR managed by this skill has exactly one lifecycle label. Leave all other labe
 | `ready-for-review` | Loop exited cleanly on the current head (see [Exit conditions](#exit-conditions)). **Not** an approval and **not** permission to merge |
 
 Set labels with `gh pr edit $number --repo $repo --add-label <new> --remove-label <old1>,<old2>`.
-Re-read labels, `headRefOid` and `baseRefOid` after writing. If either SHA moved, go back
-to `agent-preparing` and continue the loop (a moved base means re-checking conflicts
-and CI against it). On a merged or closed PR: remove the lifecycle labels, clear any
+Re-read labels, `headRefOid` and `baseRefOid` after writing. If the head moved, go back
+to `agent-preparing` and continue the loop. If only the base moved, the checks you
+read are stale: they ran against the old merge result and are keyed to a head that
+didn't change. Go back to `agent-preparing`, integrate the new base (Phase 1 step 3),
+and push. That makes a new head, so CI and the Copilot review run fresh against the
+new base. On a merged or closed PR: remove the lifecycle labels, clear any
 wakeup, and stop.
 
 ## Phase 1: Prepare
@@ -211,6 +214,13 @@ gh api "repos/$repo/branches/$([Uri]::EscapeDataString($baseRef))" --jq '.protec
   legacy contexts). Do this yourself: `gh pr checks --required` can't list a required
   check that hasn't started, so a missing required check would otherwise look like a
   pass. Missing, pending, or a same-named result from a different app means not green.
+- **CI actually ran on the head.** The `Detect changes` job of the `CI` workflow
+  (`.github/workflows/ci.yml`) runs on every pull request, so its successful run on the
+  current head is proof that CI ran at all. With no CI result, the rules below would
+  pass trivially (Copilot's own check would be the only one). If it's absent, CI hasn't
+  run. A fork PR whose workflows are waiting for a maintainer's approval is
+  `agent-blocked`; record the owner (a maintainer) and the next step (approve the
+  workflow run). Otherwise treat it as pending.
 - **Every other check run on the head** must also not be failing: `success`, or
   `skipped`/`neutral` where the workflow intends that (for example, path-filtered jobs,
   which a docs-only PR shows as `skipping`). This repo's `main` currently declares no
