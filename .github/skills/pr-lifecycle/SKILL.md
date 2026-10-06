@@ -196,11 +196,15 @@ gh api "repos/$repo/rules/branches/$([Uri]::EscapeDataString($baseRef))"
 gh api "repos/$repo/branches/$([Uri]::EscapeDataString($baseRef))" --jq '.protection.required_status_checks'
 ```
 
-- **Required checks** (the union of both sources) must each have a run on the head that
-  is `success`. Compare by name against the head's check runs yourself:
-  `gh pr checks --required` can't list a required check that hasn't started, so a
-  missing required check would otherwise look like a pass. Missing or pending means
-  not green.
+- **Required checks** (the union of both sources) must each have a matching result on
+  the head that is `success`. Match on the policy's full identity, not just the name:
+  the context name **plus** the app it pins when there is one (`app_id` in classic
+  protection's `checks`, `integration_id` in a ruleset's `required_status_checks`).
+  Look in both places a result can live: check runs (`commits/<sha>/check-runs`,
+  whose `app.id` you compare) and commit statuses (`commits/<sha>/status`, used by
+  legacy contexts). Do this yourself: `gh pr checks --required` can't list a required
+  check that hasn't started, so a missing required check would otherwise look like a
+  pass. Missing, pending, or a same-named result from a different app means not green.
 - **Every other check run on the head** must also not be failing: `success`, or
   `skipped`/`neutral` where the workflow intends that (for example, path-filtered jobs,
   which a docs-only PR shows as `skipping`). This repo's `main` currently declares no
@@ -348,6 +352,9 @@ gh api --paginate "repos/$repo/pulls/$number/reviews" --jq '.[] | select(.user.l
 # Required-check policy for the base (both sources; see 4c)
 gh api "repos/$repo/rules/branches/$([Uri]::EscapeDataString($baseRef))"
 gh api "repos/$repo/branches/$([Uri]::EscapeDataString($baseRef))" --jq '.protection.required_status_checks'
+# What the head actually reported: check runs (with app id) and commit statuses
+gh api --paginate "repos/$repo/commits/$headSha/check-runs?per_page=100" --jq '.check_runs[] | {name, app_id: .app.id, status, conclusion}'
+gh api "repos/$repo/commits/$headSha/status" --jq '.statuses[] | {context, state}'
 
 # Top-level comments (coverage / perf / build-metrics reports, humans)
 gh api --paginate "repos/$repo/issues/$number/comments" --jq '.[] | {id, user: .user.login, created_at, body}'
