@@ -115,7 +115,8 @@ the report:
 
 Record `pr-review: done@<sha>` in the checkpoint. **Don't run `pr-review` again in later
 rounds.** The Copilot loop reviews every later change. If the skill is invoked again
-on a PR whose checkpoint shows `pr-review` done, skip to Phase 4. If there's no
+on a PR whose checkpoint shows `pr-review` done, resume at Phase 3 (it's safe to repeat
+and makes sure the body is current), then continue to Phase 4. If there's no
 checkpoint but the PR already has a lifecycle label, ask the user whether to repeat
 the pass instead of guessing.
 
@@ -242,8 +243,10 @@ outdated ones:
 
 Not all feedback lives in threads. Every round, also read:
 
-- **Every review body**, not just Copilot's. Skip reviews submitted by your own
-  account: each thread reply you post also shows up as an empty `COMMENTED` review. A
+- **Every review body**, not just Copilot's. Skip only reviews from your own account
+  that are `COMMENTED` with an empty body: each thread reply you post also shows up as
+  one of those. Anything else from your account (for example, a `CHANGES_REQUESTED`
+  review the maintainer running this skill left earlier) is real feedback. A
   human can submit a body-only review
   (including `CHANGES_REQUESTED`) with no inline thread. Treat each actionable point in
   it like a human thread: fix it or answer it, as a top-level PR comment that quotes
@@ -359,7 +362,7 @@ gh api "repos/$repo/rules/branches/$([Uri]::EscapeDataString($baseRef))"
 gh api "repos/$repo/branches/$([Uri]::EscapeDataString($baseRef))" --jq '.protection.required_status_checks'
 # What the head actually reported: check runs (with app id) and commit statuses
 gh api --paginate "repos/$repo/commits/$headSha/check-runs?per_page=100" --jq '.check_runs[] | {name, app_id: .app.id, status, conclusion}'
-gh api "repos/$repo/commits/$headSha/status" --jq '.statuses[] | {context, state}'
+gh api --paginate "repos/$repo/commits/$headSha/status?per_page=100" --jq '.statuses[] | {context, state}'
 
 # Top-level comments (coverage / perf / build-metrics reports, humans)
 gh api --paginate "repos/$repo/issues/$number/comments" --jq '.[] | {id, user: .user.login, created_at, body}'
