@@ -481,6 +481,37 @@ public sealed partial class Reconciler
         }
     }
 
+    /// <summary>
+    /// Visits the Reactor-managed (Route A) inline UI children of a
+    /// <see cref="WinUI.RichTextBlock"/>: the same set <see cref="UnmountInlineUIChildren"/>
+    /// tears down, which a logical walk must reach before the document is realized.
+    /// </summary>
+    internal static void VisitInlineUIChildren(WinUI.RichTextBlock rtb, Action<UIElement> visit)
+    {
+        foreach (var block in rtb.Blocks)
+        {
+            if (block is Microsoft.UI.Xaml.Documents.Paragraph para)
+                VisitInlineUIChildrenInInlines(para.Inlines, visit);
+        }
+    }
+
+    private static void VisitInlineUIChildrenInInlines(
+        Microsoft.UI.Xaml.Documents.InlineCollection inlines, Action<UIElement> visit)
+    {
+        foreach (var inline in inlines)
+        {
+            switch (inline)
+            {
+                case WinDocs.InlineUIContainer { Child: FrameworkElement childFe } when (bool)childFe.GetValue(s_inlineUIRouteAProperty):
+                    visit(childFe);
+                    break;
+                case WinDocs.Span span:
+                    VisitInlineUIChildrenInInlines(span.Inlines, visit);
+                    break;
+            }
+        }
+    }
+
     private void UnmountInlineUIChildrenInInlines(
         Microsoft.UI.Xaml.Documents.InlineCollection inlines)
     {

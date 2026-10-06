@@ -361,6 +361,9 @@ public sealed partial class Reconciler : IDisposable
             // Logical children too: content a control template has not realized yet (a closed
             // flyout's Button content, a collapsed pane slot) is not in the visual tree.
             ForEachReactorChildControl(ui, child => Push(child));
+            // Inline UI in a RichTextBlock document lives in its blocks, not its visual tree.
+            if (ui is WinUI.RichTextBlock richText)
+                VisitInlineUIChildren(richText, child => Push(child));
             if (ui is FrameworkElement tagged && GetElementTag(tagged) is Element taggedElement
                 && _v1Handlers.TryGet(taggedElement.GetType(), out var entry) && entry is IV1ChildEnumerator children)
                 children.VisitLiveChildren(ui, child => Push(child));

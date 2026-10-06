@@ -497,6 +497,8 @@ internal static class RemountView
         Flyout(Button("remount-nflyout-target"), Button(TextBlock("remount-nflyout-inner"))),
         // A context flyout hangs off the control itself, outside every child walk until opened.
         Button("remount-ctx-target").WithContextFlyout(TextBlock("remount-ctx-body")),
+        // Inline UI in a never-opened flyout's RichTextBlock lives in its document blocks only.
+        Flyout(Button("remount-rflyout-target"), RichTextBlock([Paragraph(InlineUI(TextBlock("remount-inline-ui")))])),
         Component<RemountNested, int>(0));
 }
 
@@ -619,6 +621,11 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
                 "remount-nflyout-inner" => NestedFlyoutInnerSource(),
                 "remount-ctx-body" => H.FindControl<WinUI.Button>(b => b.Content as string == "remount-ctx-target")?.ContextFlyout
                     is WinUI.Flyout { Content: WinUI.TextBlock ctxBody } ? ReactorDiagnostics.GetSource(ctxBody) : null,
+                "remount-inline-ui" => FlyoutOf(H.FindControl<WinUI.Button>(b => b.Content as string == "remount-rflyout-target"))?.Content
+                    is WinUI.RichTextBlock rtb
+                    && rtb.Blocks.FirstOrDefault() is Microsoft.UI.Xaml.Documents.Paragraph para
+                    && para.Inlines.FirstOrDefault() is Microsoft.UI.Xaml.Documents.InlineUIContainer { Child: WinUI.TextBlock inlineUi }
+                    ? ReactorDiagnostics.GetSource(inlineUi) : null,
                 _ => Source(text),
             })?.Contains($"|owner={owner}|", StringComparison.Ordinal) == true,
             maxPasses: 32, perPassMs: 10);
@@ -669,6 +676,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.Check("ReactorSource_RootRemount_Host_ComponentTargetFlyoutRenamed", await Owned("remount-cflyout-body", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_UnopenedNestedContentRenamed", await Owned("remount-nflyout-inner", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_ContextFlyoutRenamed", await Owned("remount-ctx-body", nameof(RemountRootB)));
+            H.Check("ReactorSource_RootRemount_Host_UnopenedInlineUIRenamed", await Owned("remount-inline-ui", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             host.Dispose();
             H.SetContent(null);
@@ -731,6 +739,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.Check("ReactorSource_RootRemount_HostControl_ComponentTargetFlyoutRenamed", await Owned("remount-cflyout-body", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_HostControl_UnopenedNestedContentRenamed", await Owned("remount-nflyout-inner", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_HostControl_ContextFlyoutRenamed", await Owned("remount-ctx-body", nameof(RemountRootB)));
+            H.Check("ReactorSource_RootRemount_HostControl_UnopenedInlineUIRenamed", await Owned("remount-inline-ui", nameof(RemountRootB)));
             Console.WriteLine($"# remount (ReactorHostControl): {Source("remount-leaf")} / {Source("remount-nested")}");
             H.Check("ReactorSource_RootRemount_HostControl_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             hostControl.Dispose();
