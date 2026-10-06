@@ -245,7 +245,7 @@ internal static class ChildReconciler
                         Reconciler.SetElementTag(fe, newEl);
                     if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
                         && Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
-                        Reconciler.PublishSourceOnSkip(fe, newEl);
+                        reconciler.PublishSourceOnSkip(fe, newEl);
                     Reconciler.RefreshGestureDragStateOnSkip(fe, oldEl.Modifiers, newEl.Modifiers);
                 }
                 return;
@@ -341,7 +341,7 @@ internal static class ChildReconciler
                         Reconciler.SetElementTag(fe, newEl);
                     if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
                         && Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
-                        Reconciler.PublishSourceOnSkip(fe, newEl);
+                        reconciler.PublishSourceOnSkip(fe, newEl);
                     Reconciler.RefreshGestureDragStateOnSkip(fe, oldEl.Modifiers, newEl.Modifiers);
                 }
                 prefixLen++;
@@ -400,7 +400,7 @@ internal static class ChildReconciler
                         Reconciler.SetElementTag(fe, newEl);
                     if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
                         && Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
-                        Reconciler.PublishSourceOnSkip(fe, newEl);
+                        reconciler.PublishSourceOnSkip(fe, newEl);
                     Reconciler.RefreshGestureDragStateOnSkip(fe, oldEl.Modifiers, newEl.Modifiers);
                 }
                 suffixLen++;

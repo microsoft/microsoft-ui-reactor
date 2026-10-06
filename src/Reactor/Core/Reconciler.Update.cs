@@ -249,7 +249,11 @@ public sealed partial class Reconciler
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
         // stale values (same principle as the flex attached-property fix).
         var target = result ?? control;
-        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
+        // Re-publish only when the value can change: a replaced control (its mount already
+        // published, but a handler may have swapped it without Mount) or a new call site /
+        // key / kind. An in-place update of an unchanged element keeps its published value.
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+            && (result is not null || Diagnostics.ReactorSourcePublisher.IdentityChanged(oldEl, newEl)))
             PublishSource(target, newEl);
 
         // Record the control for highlight overlay only when the element's own

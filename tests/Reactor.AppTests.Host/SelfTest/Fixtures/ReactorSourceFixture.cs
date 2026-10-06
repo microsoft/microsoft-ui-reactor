@@ -43,6 +43,7 @@ internal class ReactorSource_PublishedOnEveryControl(Harness h) : SelfTestFixtur
                 return VStack(4,
                     TextBlock("source-plain"),
                     TextBlock("source-keyed").WithKey("k|1"),
+                    Component<FlipProbe, int>(n),
                     Component<SourceProbe, int>(n),
                     Button("source-bump", () => setN(n + 1)));
             });
@@ -84,12 +85,50 @@ internal class ReactorSource_PublishedOnEveryControl(Harness h) : SelfTestFixtur
             var afterText = H.FindControl<WinUI.TextBlock>(t => t.Text == "probe 1");
             H.Check("ReactorSource_UpdatedChildStillDescribed",
                 Of(afterText)?.Contains("|owner=SourceProbe", StringComparison.Ordinal) == true);
+
+            // ── A skipped element whose call site moved ─────────────────
+            // "source-flip" is equal on every render except for its call site, so the
+            // reconciler skips it and only re-publishes, with the owner of the render it is in.
+            // (The publisher used to recover that owner from a side table keyed by the managed
+            // wrapper, which a GC can collect and re-create; this host happens to keep the wrapper
+            // alive, so the GC below is belt and braces, not a reproduction.)
+            var flip = H.FindControl<WinUI.TextBlock>(t => t.Text == "source-flip");
+            var flipBefore = Of(flip);
+            Console.WriteLine($"# flip before: {flipBefore}");
+            if (flipBefore?.Contains("|at=", StringComparison.Ordinal) != true)
+            {
+                H.Skip("ReactorSource_SkipRepublishKeepsOwner", "call sites are not stamped in this host");
+            }
+            else
+            {
+                flip = null;
+                for (int i = 0; i < 2; i++)
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                }
+                H.ClickButton("source-bump");
+                await Harness.Render();
+                var flipAfter = Of(H.FindControl<WinUI.TextBlock>(t => t.Text == "source-flip"));
+                Console.WriteLine($"# flip after: {flipAfter}");
+                H.Check("ReactorSource_SkipRepublishKeepsOwner",
+                    flipAfter is not null && flipAfter != flipBefore
+                    && flipAfter.Contains("|owner=FlipProbe", StringComparison.Ordinal));
+            }
         }
         finally
         {
             ReactorSourcePublisher.IsEnabled = previous;
         }
     }
+}
+
+/// <summary>Renders an element that differs between renders only in its call site.</summary>
+internal sealed class FlipProbe : Component<int>
+{
+    public override Element Render() => Props % 2 == 0
+        ? TextBlock("source-flip")
+        : TextBlock("source-flip");
 }
 
 internal sealed class SourceProbe : Component<int>

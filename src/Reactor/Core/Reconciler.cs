@@ -196,10 +196,13 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// Shallow-skip refresh: the element was skipped, so only its call site can have moved.
-    /// The control kept its place, so it keeps the owner it was last published with.
+    /// The skip happens inside its parent's reconcile, under the same owner as an update.
     /// </summary>
-    internal static void PublishSourceOnSkip(UIElement control, Element newEl)
-        => Diagnostics.ReactorSourcePublisher.Publish(control, newEl, Diagnostics.ReactorSourcePublisher.LastOwner(control));
+    internal void PublishSourceOnSkip(UIElement control, Element newEl) => PublishSource(control, newEl);
+
+    /// <summary>The host root's last published value, so an unchanged root skips the DP write.</summary>
+    private UIElement? _rootSourceControl;
+    private string? _rootSourceValue;
 
     /// <summary>Host hook: describes the root content control, naming the host's root component.</summary>
     internal void PublishRootSource(UIElement? control, Element tree, string rootName, string? rootHooks)
@@ -208,7 +211,15 @@ public sealed partial class Reconciler : IDisposable
         Component? component = tree is ComponentElement && _componentNodes.TryGetValue(control, out var node)
             ? node.Component
             : null;
-        Diagnostics.ReactorSourcePublisher.Publish(control, tree, rootName, component, rootName, rootHooks);
+        // A root update republishes the plain value only when its identity changed, so compare
+        // against what the update path last wrote too: rewrite unless this control already
+        // holds exactly this root value.
+        string? previous = ReferenceEquals(control, _rootSourceControl)
+            && string.Equals(control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) as string, _rootSourceValue, StringComparison.Ordinal)
+            ? _rootSourceValue
+            : null;
+        _rootSourceValue = Diagnostics.ReactorSourcePublisher.Publish(control, tree, rootName, component, rootName, rootHooks, previous);
+        _rootSourceControl = control;
     }
 
     private UIElement? MountUnderOwner(Element element, Action requestRerender, string owner)
