@@ -194,12 +194,23 @@ public sealed partial class Reconciler : IDisposable
     internal void RequestResourceRefresh() => Interlocked.Exchange(ref _resourceRefreshPending, 1);
 
     /// <summary>
-    /// Called by a host immediately before its root <see cref="Reconcile"/>: moves a pending
-    /// resource refresh onto that pass. Out-of-band top-level reconciles (ElementFactory
+    /// Called by a host before its root render: moves a pending resource refresh onto that
+    /// pass's <see cref="Reconcile"/>. Out-of-band top-level reconciles (ElementFactory
     /// realizing or refreshing a row) don't call it, so they can't consume the request.
-    /// UI thread only.
+    /// UI thread only; pair with <see cref="EndRootPass"/> in a finally.
     /// </summary>
     internal void BeginRootPass() => _resourceRefreshArmed |= Interlocked.Exchange(ref _resourceRefreshPending, 0) != 0;
+
+    /// <summary>
+    /// Ends a host root pass. A request <see cref="BeginRootPass"/> armed that the pass never
+    /// consumed (the render failed or returned before reconciling) goes back to pending.
+    /// </summary>
+    internal void EndRootPass()
+    {
+        if (!_resourceRefreshArmed) return;
+        _resourceRefreshArmed = false;
+        Interlocked.Exchange(ref _resourceRefreshPending, 1);
+    }
 
     internal bool ResourceRefreshPendingForTest => Volatile.Read(ref _resourceRefreshPending) != 0;
     internal bool ResourceRefreshArmedForTest => _resourceRefreshArmed;

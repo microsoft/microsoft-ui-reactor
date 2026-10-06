@@ -160,6 +160,15 @@ public sealed partial class HostIdleAndThemeResourcesTests
 
         reconciler.Reconcile(null, EmptyElement.Instance, null, static () => { });
         Assert.False(reconciler.ResourceRefreshArmedForTest);
+        reconciler.EndRootPass();
+        Assert.False(reconciler.ResourceRefreshPendingForTest);
+
+        // A root pass that aborts before reconciling hands the request back.
+        reconciler.RequestResourceRefresh();
+        reconciler.BeginRootPass();
+        reconciler.EndRootPass();
+        Assert.True(reconciler.ResourceRefreshPendingForTest);
+        Assert.False(reconciler.ResourceRefreshArmedForTest);
     }
 
     [Fact]

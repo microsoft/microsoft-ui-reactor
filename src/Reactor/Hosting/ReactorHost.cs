@@ -547,6 +547,11 @@ public sealed class ReactorHost : IDisposable, IThemeResourceListener
         {
             Element? newTree = null;
 
+            // Before the root render, so a resource notification that lands while the tree is
+            // being built stays pending for the render it queues instead of being taken by this
+            // pass, whose render may already have read the old resources.
+            _reconciler.BeginRootPass();
+
             _phaseSw.Restart();
 
             // Propagate accessibility state to D3Charts thread-statics so all
@@ -636,7 +641,6 @@ public sealed class ReactorHost : IDisposable, IThemeResourceListener
             UIElement? newControl;
             try
             {
-                _reconciler.BeginRootPass();
                 newControl = _reconciler.Reconcile(
                     _currentTree,
                     newTree,
@@ -803,6 +807,7 @@ public sealed class ReactorHost : IDisposable, IThemeResourceListener
         }
         finally
         {
+            _reconciler.EndRootPass();
             _isRendering = false;
             ReactorApp.ActiveHostInternal = prevActiveHost;
         }
