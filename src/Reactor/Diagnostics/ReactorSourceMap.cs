@@ -93,11 +93,18 @@ public static partial class ReactorSourceMap
     /// line — so reporting the decorator's line would name the wrong creator, the same
     /// misattribution the generator avoids for pass-through factories. The walk is a
     /// loop so nested decorators resolve to the innermost target.</para>
+    /// <para>Native AOT in diagnostics mode does not tag a control whose element's only extra
+    /// is its call site (no managed inspector can load to read the tag); there the location
+    /// is resolved from the control's published <c>ReactorSource</c> value and is the same
+    /// <see cref="SourceLocation"/> the tag would give.</para>
     /// </summary>
     public static SourceLocation? GetSource(UIElement control)
     {
         var element = Reconciler.GetElementTag(control);
-        return element is null ? null : UnwrapDecorators(element)?.CallSite;
+        if (element is not null) return UnwrapDecorators(element)?.CallSite;
+        return Reconciler.SkipsCallSiteOnlyTags
+            ? global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.ResolvePublishedSource(control)
+            : null;
     }
 
     /// <summary>

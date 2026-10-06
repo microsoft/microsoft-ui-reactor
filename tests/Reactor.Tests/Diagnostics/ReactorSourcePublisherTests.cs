@@ -10,6 +10,8 @@ namespace Microsoft.UI.Reactor.Tests.Diagnostics;
 /// re-publishes <c>ReactorSource</c>. It must say "unchanged" for an ordinary re-render (so
 /// the update path builds nothing) and "changed" for every input of the published value.
 /// </summary>
+// Mutates ReactorSourcePublisher statics (IsEnabled / NoManagedAgent).
+[Collection("ReactorSourcePublisherGlobals")]
 public sealed class ReactorSourcePublisherTests
 {
     private static readonly SourceLocation SiteA = new("App.cs", 10, 5);
@@ -144,5 +146,76 @@ public sealed class ReactorSourcePublisherTests
 
         Assert.Same(a, b);
         Assert.NotSame(a, ReactorSourcePublisher.Format(TextBlock("one") with { CallSite = new SourceLocation("Share.cs", 1, 1) }, "Other"));
+    }
+
+    // ── Native AOT: the published value stands in for the call-site-only tag ─────
+
+    [Theory]
+    [InlineData("v=1|at=App.cs:3:4|owner=A|element=TextBlock", "at=App.cs:3:4")]
+    [InlineData("v=1|at=App.cs:3:4|rel=root|owner=A|element=TextBlock", "at=App.cs:3:4|rel=root")]
+    [InlineData("v=1|at=File.cs:9|rel=0", "at=File.cs:9|rel=0")]
+    [InlineData("v=1|at=A%7CB.cs:1:1|element=TextBlock", "at=A%7CB.cs:1:1")]
+    [InlineData("v=1|at=/_/src/X.cs:5:2", "at=/_/src/X.cs:5:2")]
+    [InlineData("v=1|owner=A|element=Button", null)]
+    public void AtKey_IsTheAtFieldWithItsRelMarker(string value, string? expected)
+        => Assert.Equal(expected, ReactorSourcePublisher.AtKey(value));
+
+    [Fact]
+    public void PublishedValue_ResolvesToTheFullCallSite()
+    {
+        // The same SourceLocation GetSource reads off a tag: absolute path, line, column.
+        var full = new SourceLocation(@"C:\outside\Probe\Resolve.cs", 41, 7);
+        var keyed = ReactorSourcePublisher.Format(TextBlock("x") with { CallSite = full, Key = "row|3" }, "Card");
+        var plain = ReactorSourcePublisher.Format(Button("y") with { CallSite = full }, null);
+
+        Assert.DoesNotContain(@"C:\outside", keyed, StringComparison.Ordinal);
+        Assert.Equal(full, ReactorSourcePublisher.ResolvePublishedValue(keyed));
+        Assert.Equal(full, ReactorSourcePublisher.ResolvePublishedValue(plain));
+        Assert.Equal(full.ColumnNumber, ReactorSourcePublisher.ResolvePublishedValue(plain)!.Value.ColumnNumber);
+        Assert.Null(ReactorSourcePublisher.ResolvePublishedValue("v=1|at=Never.cs:1:1|element=TextBlock"));
+        Assert.Null(ReactorSourcePublisher.ResolvePublishedValue(ReactorSourcePublisher.Format(TextBlock("z"), "Card")));
+    }
+
+    [Fact]
+    public void SameAtTextFromTwoCallSites_IsAmbiguousAndResolvesToNothing()
+    {
+        // Two files with the same name outside every known root publish the same at= text.
+        var first = new SourceLocation(@"C:\one\Ambig\Same.cs", 5, 3);
+        var second = new SourceLocation(@"D:\two\Ambig\Same.cs", 5, 3);
+        var a = ReactorSourcePublisher.Format(TextBlock("a") with { CallSite = first }, "Card");
+        Assert.False(ReactorSourcePublisher.IsAmbiguous(a));
+        Assert.Equal(first, ReactorSourcePublisher.ResolvePublishedValue(a));
+
+        var b = ReactorSourcePublisher.Format(TextBlock("b") with { CallSite = second }, "Other");
+        Assert.Equal(ReactorSourcePublisher.AtKey(a), ReactorSourcePublisher.AtKey(b));
+        Assert.True(ReactorSourcePublisher.IsAmbiguous(a));
+        Assert.True(ReactorSourcePublisher.IsAmbiguous(b));
+        Assert.Null(ReactorSourcePublisher.ResolvePublishedValue(b));
+
+        // Re-publishing the first site does not "un-ambiguate" it.
+        ReactorSourcePublisher.Format(TextBlock("c") with { CallSite = first }, "Third");
+        Assert.Null(ReactorSourcePublisher.ResolvePublishedValue(a));
+    }
+
+    [Fact]
+    public void SkipsCallSiteOnlyTags_NeedsPublishingAndNoManagedAgent()
+    {
+        var (enabled, noAgent) = (ReactorSourcePublisher.IsEnabled, ReactorSourcePublisher.NoManagedAgent);
+        try
+        {
+            // This test host is JIT: a managed agent could load, so the default keeps tags.
+            Assert.False(ReactorSourcePublisher.NoManagedAgent);
+            foreach (var (on, aot, expected) in new[] { (false, false, false), (true, false, false), (false, true, false), (true, true, true) })
+            {
+                ReactorSourcePublisher.IsEnabled = on;
+                ReactorSourcePublisher.NoManagedAgent = aot;
+                Assert.Equal(expected, ReactorSourcePublisher.SkipsCallSiteOnlyTags);
+            }
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = enabled;
+            ReactorSourcePublisher.NoManagedAgent = noAgent;
+        }
     }
 }

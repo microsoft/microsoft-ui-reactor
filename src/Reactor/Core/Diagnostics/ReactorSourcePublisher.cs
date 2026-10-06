@@ -45,6 +45,72 @@ internal static class ReactorSourcePublisher
     internal static bool IsEnabledByEnvironment(string? value)
         => string.Equals(value, "1", StringComparison.Ordinal);
 
+    /// <summary>
+    /// No managed inspector agent can load into this process: Native AOT has no runtime to
+    /// load one into. Decided once at startup (ILC compiles
+    /// <see cref="global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported"/>
+    /// to a constant). Settable so tests can exercise both tagging paths in one JIT process.
+    /// </summary>
+    internal static bool NoManagedAgent { get; set; } =
+        !global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported;
+
+    /// <summary>
+    /// Publishing replaces the call-site-only element tag (see
+    /// <c>Reconciler.SkipsCallSiteOnlyTags</c>): only when values are being published and
+    /// nothing managed could read the tag instead.
+    /// </summary>
+    internal static bool SkipsCallSiteOnlyTags => IsEnabled && NoManagedAgent;
+
+    /// <summary>
+    /// The full call site behind a control's published value, for
+    /// <c>ReactorSourceMap.GetSource</c> on a control that carries no element tag. Published
+    /// paths are relative, so the value alone cannot name the file; every value is built
+    /// from a cached shape whose full <see cref="SourceLocation"/> is recorded against its
+    /// <c>at=</c> text. Returns <c>null</c> when nothing was published, or when two
+    /// different call sites publish the same <c>at=</c> text (see <see cref="IsAmbiguous"/>).
+    /// </summary>
+    internal static SourceLocation? ResolvePublishedSource(UIElement control)
+        => control.GetValue(ReactorDiagnostics.SourceProperty) is string value ? ResolvePublishedValue(value) : null;
+
+    /// <summary>The full call site a published value was built for (see <see cref="ResolvePublishedSource"/>).</summary>
+    internal static SourceLocation? ResolvePublishedValue(string value)
+        => AtKey(value) is { } key && Cache.Sources.TryGetValue(key, out var site) ? site : null;
+
+    private static int s_anyAmbiguous;
+
+    /// <summary>
+    /// Whether <paramref name="value"/>'s <c>at=</c> text is shared by different call sites
+    /// (the same relative path, line and column from two assemblies, or file-name-only paths
+    /// from two directories). Such a control keeps its element tag so <c>GetSource</c> stays
+    /// exact. A static check first: collisions are rare, so normally this costs one read.
+    /// </summary>
+    internal static bool IsAmbiguous(string value)
+        => Volatile.Read(ref s_anyAmbiguous) != 0
+            && AtKey(value) is { } key
+            && Cache.Sources.TryGetValue(key, out var site)
+            && site is null;
+
+    private static void RecordSource(string atKey, SourceLocation site)
+    {
+        var stored = Cache.Sources.AddOrUpdate(atKey, site, (_, existing) => existing == site ? existing : null);
+        if (stored is null) Volatile.Write(ref s_anyAmbiguous, 1);
+    }
+
+    /// <summary>
+    /// The <c>at=</c> field of a published value, with its <c>rel=</c> marker when present
+    /// (<c>at=Views/Card.cs:12:9|rel=root</c>): the part that identifies the call site.
+    /// </summary>
+    internal static string? AtKey(string value)
+    {
+        int start = value.IndexOf("|at=", StringComparison.Ordinal);
+        if (start < 0) return null;
+        start++;
+        int end = value.IndexOf('|', start);
+        if (end >= 0 && string.CompareOrdinal(value, end, "|rel=", 0, 5) == 0)
+            end = value.IndexOf('|', end + 5);
+        return end < 0 ? value.Substring(start) : value.Substring(start, end - start);
+    }
+
     // No per-control bookkeeping: a side table keyed by the managed UIElement would be keyed by
     // a CsWinRT wrapper, which is collected and re-created for the same native control across
     // GCs (so entries silently vanish), and would cost memory on every control. The reconciler
@@ -150,6 +216,10 @@ internal static class ReactorSourcePublisher
     private static class Cache
     {
         internal static readonly global::System.Collections.Concurrent.ConcurrentDictionary<ValueShape, ValueParts> Parts = new();
+
+        /// <summary><c>at=</c> text → the full call site it was published for; <c>null</c> = shared by several.</summary>
+        internal static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, SourceLocation?> Sources =
+            new(StringComparer.Ordinal);
     }
 
     private sealed class ValueParts(string head, string tail)
@@ -175,6 +245,8 @@ internal static class ReactorSourcePublisher
                 : shape.Site;
             var head = ReactorSourceFormat.Build(
                 published, shape.Owner, ReactorSourceFormat.KindOf(shape.Kind), shape.Mounts, shape.Root, rel: rel);
+            if (shape.Site is { } site && AtKey(head) is { } atKey)
+                RecordSource(atKey, site);
             // Build's fixed "v=1" prefix, then only name/hooks: exactly the fields after key.
             var tail = ReactorSourceFormat.Build(null, null, string.Empty, name: shape.Name, hooks: shape.Hooks)
                 .Substring(("v=" + ReactorSourceFormat.Version).Length);

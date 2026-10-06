@@ -135,3 +135,138 @@ internal sealed class SourceProbe : Component<int>
 {
     public override Element Render() => TextBlock($"probe {Props}");
 }
+
+/// <summary>
+/// Native AOT in diagnostics mode skips the element tag whose only purpose is the call site
+/// (no managed agent can load to read it) and resolves <c>ReactorSourceMap.GetSource</c> from
+/// the published value instead. Runs the same tree through BOTH paths in this JIT host (the
+/// AOT decision is forced with <c>ReactorSourcePublisher.NoManagedAgent</c>) and requires
+/// <c>GetSource</c> to agree on every control, after mount and after a re-render that moves
+/// call sites; and requires the skip to have really happened (fewer tags, and controls that
+/// resolve their location without one), so the comparison is not vacuous.
+/// </summary>
+internal class ReactorSource_AotTagSkipKeepsGetSource(Harness h) : SelfTestFixtureBase(h)
+{
+    private static readonly int[] Rows = [0, 1, 2, 3, 4];
+
+    private static Element Tree(RenderContext ctx)
+    {
+        var (n, setN) = ctx.UseState(0);
+        bool odd = n % 2 == 1;
+        return VStack(4,
+            TextBlock("aot-plain"),
+            odd ? TextBlock("aot-flip") : TextBlock("aot-flip"),
+            Border(TextBlock("aot-in-border")).Margin(4),
+            TextBlock("aot-keyed").WithKey("k|1"),
+            TextBlock("aot-attached").Grid(row: 0, column: 0),
+            Component<SourceProbe, int>(n),
+            Component<FlipProbe, int>(n),
+            Flyout(Button("aot-flyout-target"), TextBlock("aot-flyout-body")),
+            Button("aot-bump", () => setN(n + 1)),
+            LazyVStack(Rows, static i => i.ToString(global::System.Globalization.CultureInfo.InvariantCulture),
+                (i, _) => odd
+                    ? HStack(TextBlock($"aot-row {i}"), TextBlock("aot-cell"))
+                    : HStack(TextBlock($"aot-row {i}"), TextBlock("aot-cell"))).Height(200));
+    }
+
+    private sealed record Snapshot(List<(string Type, SourceLocation? Source)> Controls, int Tagged, int ResolvedUntagged);
+
+    private Snapshot Take()
+    {
+        var all = H.FindAllControls<DependencyObject>(d => d is UIElement);
+        var list = new List<(string, SourceLocation?)>(all.Count);
+        int tagged = 0, resolvedUntagged = 0;
+        foreach (var d in all)
+        {
+            var ui = (UIElement)d;
+            var source = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(ui);
+            list.Add((d.GetType().Name, source));
+            if (Reconciler.GetElementTag(ui) is not null) tagged++;
+            else if (source is not null) resolvedUntagged++;
+        }
+        return new Snapshot(list, tagged, resolvedUntagged);
+    }
+
+    private async Task<(Snapshot Mounted, Snapshot Rerendered)> RunPath(bool noManagedAgent)
+    {
+        ReactorSourcePublisher.NoManagedAgent = noManagedAgent;
+        var host = H.CreateHost();
+        host.Mount(Tree);
+        await Harness.Render();
+        await Harness.Render();
+        var mounted = Take();
+        H.ClickButton("aot-bump");
+        await Harness.Render();
+        await Harness.Render();
+        var rerendered = Take();
+        host.Dispose();
+        H.SetContent(null);
+        return (mounted, rerendered);
+    }
+
+    private static int Mismatches(Snapshot a, Snapshot b, string label)
+    {
+        if (a.Controls.Count != b.Controls.Count)
+        {
+            Console.WriteLine($"# {label}: control count {a.Controls.Count} vs {b.Controls.Count}");
+            return int.MaxValue;
+        }
+        int bad = 0;
+        for (int i = 0; i < a.Controls.Count; i++)
+        {
+            if (a.Controls[i] == b.Controls[i]) continue;
+            if (bad++ < 5)
+                Console.WriteLine($"# {label} #{i}: tagged {a.Controls[i].Type} {a.Controls[i].Source} vs skipped {b.Controls[i].Type} {b.Controls[i].Source}");
+        }
+        return bad;
+    }
+
+    public override async Task RunAsync()
+    {
+        if (!ReactorSourcePublisher.IsSupported)
+        {
+            H.Skip("ReactorSource_AotSkip_GetSourceUnchanged", "Reactor.DevtoolsSupport is off in this host");
+            return;
+        }
+
+        var (enabled, noAgent, mapped) = (ReactorSourcePublisher.IsEnabled, ReactorSourcePublisher.NoManagedAgent,
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+        try
+        {
+            ReactorSourcePublisher.IsEnabled = true;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
+
+            var tagged = await RunPath(noManagedAgent: false);
+            var skipped = await RunPath(noManagedAgent: true);
+
+            int located = tagged.Mounted.Controls.Count(c => c.Source is not null);
+            Console.WriteLine($"# controls={tagged.Mounted.Controls.Count} located={located} " +
+                $"tagged: {tagged.Mounted.Tagged}/{tagged.Rerendered.Tagged}, skipped-path tagged: {skipped.Mounted.Tagged}/{skipped.Rerendered.Tagged}, " +
+                $"resolved without a tag: {skipped.Mounted.ResolvedUntagged}/{skipped.Rerendered.ResolvedUntagged}");
+
+            if (located == 0)
+            {
+                H.Skip("ReactorSource_AotSkip_GetSourceUnchanged", "call sites are not stamped in this host");
+                return;
+            }
+
+            H.Check("ReactorSource_AotSkip_GetSourceUnchanged_Mounted", Mismatches(tagged.Mounted, skipped.Mounted, "mounted") == 0);
+            H.Check("ReactorSource_AotSkip_GetSourceUnchanged_Rerendered", Mismatches(tagged.Rerendered, skipped.Rerendered, "rerendered") == 0);
+            // The re-render moved call sites, so a stale location would differ from the mount's.
+            H.Check("ReactorSource_AotSkip_RerenderMovedCallSites",
+                !tagged.Mounted.Controls.SequenceEqual(tagged.Rerendered.Controls));
+            // Non-vacuous: the skip happened, and the fallback carried real locations.
+            H.Check("ReactorSource_AotSkip_FewerTags",
+                skipped.Mounted.Tagged < tagged.Mounted.Tagged && skipped.Rerendered.Tagged < tagged.Rerendered.Tagged);
+            H.Check("ReactorSource_AotSkip_FallbackResolves",
+                skipped.Mounted.ResolvedUntagged > 0 && skipped.Rerendered.ResolvedUntagged > 0
+                && tagged.Mounted.ResolvedUntagged == 0);
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = enabled;
+            ReactorSourcePublisher.NoManagedAgent = noAgent;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = mapped;
+        }
+    }
+}

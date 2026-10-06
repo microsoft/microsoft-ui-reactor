@@ -13,6 +13,8 @@ namespace Microsoft.UI.Reactor.Tests.Diagnostics;
 /// escaping and gating. Writing the property needs live WinUI controls and is covered by
 /// the <c>ReactorSource_*</c> selftest fixture.
 /// </summary>
+// Mutates ReactorSourcePublisher statics (IsEnabled / NoManagedAgent).
+[Collection("ReactorSourcePublisherGlobals")]
 public sealed class ReactorSourceFormatTests
 {
     private sealed class Counter : Component

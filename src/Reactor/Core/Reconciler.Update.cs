@@ -115,7 +115,7 @@ public sealed partial class Reconciler
             if (newEl.HasCallbacks && control is FrameworkElement tagFeSE)
                 SetElementTag(tagFeSE, newEl);
             else if (CallSiteChangedOnSkip(oldEl, newEl) && control is FrameworkElement srcFeSE)
-                SetElementTag(srcFeSE, newEl);   // spec 010 — keep the reported line live
+                RefreshCallSiteTagOnSkip(srcFeSE, newEl);   // spec 010 — keep the reported line live
             if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
                 && CallSiteChangedOnSkip(oldEl, newEl))
                 PublishSourceOnSkip(control, newEl);

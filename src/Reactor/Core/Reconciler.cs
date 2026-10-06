@@ -191,7 +191,26 @@ public sealed partial class Reconciler : IDisposable
         Component? component = element is ComponentElement && _componentNodes.TryGetValue(control, out var node)
             ? node.Component
             : null;
-        Diagnostics.ReactorSourcePublisher.Publish(control, element, CurrentDiagnosticOwner, component);
+        var value = Diagnostics.ReactorSourcePublisher.Publish(control, element, CurrentDiagnosticOwner, component);
+        KeepTagIfSourceAmbiguous(control, element, value);
+    }
+
+    /// <summary>
+    /// <see cref="SkipsCallSiteOnlyTags"/> mode resolves <c>GetSource</c> from the published
+    /// value. When that value's <c>at=</c> text is shared by different call sites it cannot,
+    /// so such a control is tagged after all — unless it already has an element (a
+    /// decorator's own tag, which must not be replaced).
+    /// </summary>
+    private static void KeepTagIfSourceAmbiguous(UIElement control, Element element, string value)
+    {
+        if (!Diagnostics.ReactorSourcePublisher.SkipsCallSiteOnlyTags
+            || !Diagnostics.ReactorSourcePublisher.IsAmbiguous(value)
+            || control is not FrameworkElement fe)
+            return;
+        if (TryGetReactorState(fe, out var state))
+            state.Element ??= element;
+        else
+            SetElementTag(fe, element);
     }
 
     /// <summary>
@@ -220,6 +239,7 @@ public sealed partial class Reconciler : IDisposable
             : null;
         _rootSourceValue = Diagnostics.ReactorSourcePublisher.Publish(control, tree, rootName, component, rootName, rootHooks, previous);
         _rootSourceControl = control;
+        KeepTagIfSourceAmbiguous(control, tree, _rootSourceValue);
     }
 
     private UIElement? MountUnderOwner(Element element, Action requestRerender, string owner)
@@ -813,8 +833,31 @@ public sealed partial class Reconciler : IDisposable
     private static bool NeedsTag(Element element) =>
         element.HasCallbacks
         || element.Key is not null
-        || element.Extensions is not null
+        || (element.Extensions is { } extras && (!SkipsCallSiteOnlyTags || !extras.IsBehaviorallyEmpty))
         || HasReferenceModifiers(element);
+
+    /// <summary>
+    /// Native AOT in diagnostics mode: an element whose ONLY extra is its call site is not
+    /// tagged. That tag (a <see cref="ReactorState"/> plus its attached DP, ~1.2 KB native
+    /// per control) exists so a managed inspector can read call sites, and no managed agent
+    /// can load into a Native AOT process. The control keeps exactly the state an unstamped
+    /// build gives it (every functional reader already handles that), and
+    /// <c>ReactorSourceMap.GetSource</c> resolves its location from the published
+    /// <see cref="Diagnostics.ReactorDiagnostics.SourceProperty"/> value instead.
+    /// Guarded on the feature switch first, so a build without it folds this to false.
+    /// </summary>
+    internal static bool SkipsCallSiteOnlyTags =>
+        global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+        && Diagnostics.ReactorSourcePublisher.SkipsCallSiteOnlyTags;
+
+    /// <summary>
+    /// Spec 010 shallow-skip refresh when only the call site moved. Refreshes an existing
+    /// back-pointer, and allocates one only when <see cref="NeedsTag"/> says so — which for
+    /// a stamped element is always, except in <see cref="SkipsCallSiteOnlyTags"/> mode
+    /// (there the published value is refreshed instead).
+    /// </summary>
+    internal static void RefreshCallSiteTagOnSkip(FrameworkElement control, Element newEl)
+        => SetElementTagIfNeeded(control, newEl);
 
     /// <summary>
     /// Spec 010 — did the source location change across a shallow skip?

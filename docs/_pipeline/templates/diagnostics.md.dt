@@ -182,13 +182,14 @@ Otherwise nothing is written, and a trimmed or AOT build without the switch does
 **Cost.** With the switch on but `REACTOR_DIAGNOSTICS` unset (the Debug default), the cost is a
 cached boolean check per control: mount, re-render, memory and first frame stay within run-to-run
 noise of a build without the feature. With publishing on, every realized control carries one string
-value. Measured on a Native AOT app with 50,000 controls, publishing adds about 20 B of managed
-memory and 0.3 KB of native memory per control, and about 2 µs per control at mount. Values are
-cached per call site, so controls without a key from the same call site share one string; a value
-that is unique per control (a keyed control) costs about 0.6 KB. An in-place re-render whose call
-sites and keys did not change writes nothing. Diagnostics mode also stamps call sites, as
-`REACTOR_SOURCEMAP=1` does, and that stamping is the larger share of the overhead (about 0.2 KB
-managed and 1.2 KB native per control).
+value. Measured on a Native AOT app with 50,000 controls, diagnostics mode costs about 20 B of
+managed memory and 0.7 KB of native memory per control, and about 3 µs per control at mount. Values
+are cached per call site, so controls without a key from the same call site share one string; a
+value that is unique per control (a keyed control) costs about 0.3 KB more. An in-place re-render
+whose call sites and keys did not change writes nothing. Under JIT, where a managed inspector can
+read call sites from the element, each stamped control also keeps its element tag (about 0.2 KB
+managed and 0.8 KB native more); Native AOT skips that tag, because no managed inspector can load,
+and `ReactorSourceMap.GetSource` reads the published value instead.
 
 > **NativeAOT:** the .NET NativeAOT toolchain defaults the `EventSourceSupport`
 > feature switch to `false`, which compiles the whole `EventSource` surface out.
