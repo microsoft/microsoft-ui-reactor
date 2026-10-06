@@ -776,6 +776,24 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
+    public void DescribeChain_KeepsEveryContributorToAComposedProperty()
+    {
+        var sameLevel = Button("Go").Margin(4).MarginInlineStart(8);
+        var overlayOuter = Flyout(Button("Go").Margin(4), TextBlock("menu")).MarginInlineStart(8);
+        var wholeOuter = Flyout(Button("Go").Margin(4).MarginInlineStart(8), TextBlock("menu")).Margin(2);
+
+        static string[] Margins(Element e) => AppliedModifierMap
+            .DescribeChain(Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(e), typeof(WinUI.Button), null)
+            .Where(p => p.Property == "FrameworkElement.Margin").Select(p => p.Modifier).ToArray();
+
+        Assert.Equal(new[] { "Margin", "MarginInlineStart" }, Margins(sameLevel));
+        // An outer inline edge overlays the inner physical margin, so both contributed.
+        Assert.Equal(new[] { "Margin", "MarginInlineStart" }, Margins(overlayOuter));
+        // An outer physical margin rewrites the whole value, replacing every inner contributor.
+        Assert.Equal(new[] { "Margin" }, Margins(wholeOuter));
+    }
+
+    [Fact]
     public void DescribeChain_ADecoratorsExplicitNameSuppressesTheTargetsDefault()
     {
         var withOuterName = Flyout(Button("Save"), TextBlock("menu")).AutomationName("Save");

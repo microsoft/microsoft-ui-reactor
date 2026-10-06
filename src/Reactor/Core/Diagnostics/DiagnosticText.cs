@@ -127,7 +127,7 @@ internal static class DiagnosticText
     // one, "AccessToken=…" in a connection-style string, "\"Password\":\"…\"" in JSON. A bare label
     // ("Password:") or an empty quoted value has nothing after the separator and does not match.
     private static readonly global::System.Text.RegularExpressions.Regex s_secretMemberInText = new(
-        @"\b\w*(?:Password|Secret|Credential|Token|ApiKey|PrivateKey|ConnectionString)[""']?\s*[=:]\s*[""']?[^\s,;}\]""']",
+        @"\b\w*(?:Password|Secret|Credential|Token|ApiKey|PrivateKey|ConnectionString)[""']?\s*[=:]\s*(?:[""']\s*)?[^\s,;}\]""']",
         global::System.Text.RegularExpressions.RegexOptions.IgnoreCase | global::System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     /// <summary>

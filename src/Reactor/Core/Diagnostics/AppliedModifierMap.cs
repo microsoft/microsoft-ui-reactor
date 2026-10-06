@@ -163,6 +163,10 @@ internal static class AppliedModifierMap
     /// <summary>Modifier name reported for the caption-derived default name.</summary>
     internal const string DefaultAutomationNameModifier = "DefaultAutomationName";
 
+    // MarginInlineStart/End, PaddingInlineStart/End, BorderInlineStart: overlaid onto the
+    // property's existing value rather than replacing it (Reconciler.ApplyModifiers).
+    private static bool IsEdgeOverlay(string modifier) => modifier.Contains("Inline", StringComparison.Ordinal);
+
     /// <summary>
     /// Merges the modifiers of a decorator chain (outermost first, innermost target last) in the
     /// order Reactor applies them — the target's own, then each decorator's outward — so an outer
@@ -172,21 +176,23 @@ internal static class AppliedModifierMap
     internal static IReadOnlyList<AppliedModifier> DescribeChain(IReadOnlyList<Element> chain, Type controlType, string? liveName)
     {
         var merged = new List<AppliedModifier>();
-        var byProperty = new Dictionary<string, int>(StringComparer.Ordinal);
         bool explicitName = false;
         for (int level = chain.Count - 1; level >= 0; level--)
         {
             if (chain[level].Modifiers is not { } modifiers) continue;
             explicitName |= modifiers.AutomationName is { Length: > 0 };
-            foreach (var m in Describe(modifiers, controlType))
+            var levelRows = Describe(modifiers, controlType);
+            // Several modifiers can compose one property (Margin plus MarginInlineStart), and a
+            // level keeps all of its own contributors. Against inner levels: a modifier replaces
+            // its own earlier value; a whole-value modifier (Margin) rewrites the property and
+            // replaces every inner contributor, while an inline-edge overlay builds on it.
+            foreach (var m in levelRows)
             {
-                if (byProperty.TryGetValue(m.Property, out var at)) merged[at] = m;
-                else
-                {
-                    byProperty[m.Property] = merged.Count;
-                    merged.Add(m);
-                }
+                bool wholeValue = !IsEdgeOverlay(m.Modifier);
+                merged.RemoveAll(prior => prior.Modifier == m.Modifier
+                    || (wholeValue && string.Equals(prior.Property, m.Property, StringComparison.Ordinal)));
             }
+            merged.AddRange(levelRows);
         }
 
         if (!explicitName && DescribeDefaultAutomationName(chain[^1], liveName) is { } defaultName)
