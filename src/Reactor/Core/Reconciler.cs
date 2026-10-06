@@ -974,6 +974,10 @@ public sealed partial class Reconciler : IDisposable
         state.EchoSuppressScopeDepth = 0;
         state.PendingEchoMatch = null;
         state.PendingLabeledBy = null;
+        // Both can root an element graph (a keyed memo's realized output holds its
+        // callbacks and setters); a detached, app-held control must not keep it alive.
+        state.KeyedMemoOutput = null;
+        state.ItemsHostEntries = null;
         // Issue #1262 — a retired control must not keep a ValidationContext (or a
         // pending async rule) alive through a binding the normal FormField /
         // ValidationRule unmount path never got to clear. Neutralize before dropping
@@ -3144,6 +3148,11 @@ public sealed partial class Reconciler : IDisposable
         if (oldChild is not null && existing is not null && CanUpdate(oldChild, newChild))
         {
             var replacement = Update(oldChild, newChild, existing, requestRerender);
+            // Update can hand back a different control (a remount). The caller swaps it into
+            // its slot; tear the old one down here, as ReconcileImperative does, so its
+            // components and effects are cleaned up. Unmount leaves the parent slot alone.
+            if (replacement is not null && !ReferenceEquals(replacement, existing))
+                Unmount(existing);
             return replacement ?? existing;
         }
         // Hot Reload component-identity migration (spec 049 §7) — preserve the

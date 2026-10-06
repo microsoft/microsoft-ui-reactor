@@ -174,6 +174,7 @@ internal static class HostIdleAndThemeResourceFixtures
             var previousActiveHost = ReactorApp.ActiveHostInternal;
             var target = new Border();
             H.SetContent(target);
+            bool shapeItemCleanedUp = false;
             try
             {
                 // Disposed at the end of this block, before finally restores the active host.
@@ -190,7 +191,19 @@ internal static class HostIdleAndThemeResourceFixtures
                     var listItems = ctx.UseMemo<Element[]>(
                         () => [TextBlock("ListItemProbe").Foreground(Theme.Ref(AppKey))]);
                     var gapItems = ctx.UseMemo<Element[]>(
-                        () => [Empty(), Memo("emptyItem", () => Empty()), TextBlock("GapItemProbe").Foreground(Theme.Ref(AppKey))]);
+                        () => [
+                            Empty(),
+                            Memo("emptyItem", () => Empty()),
+                            TextBlock("GapItemProbe").Foreground(Theme.Ref(AppKey)),
+                            // Changes shape with the resource: the replaced item must be unmounted.
+                            Memo("shapeItem", () => ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red
+                                ? RenderEachTime(fctx =>
+                                {
+                                    fctx.UseEffect(() => () => shapeItemCleanedUp = true);
+                                    return TextBlock("ShapeItemBefore");
+                                })
+                                : TextBlock("ShapeItemAfter")),
+                        ]);
                     return VStack(
                         TextBlock($"tick:{tick}"),
                         memo,
@@ -218,6 +231,7 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_Rerendered", FindText(target, "tick:1") is not null);
                 H.Check("ThemeMemo_RerenderAloneIsStale", ProbeColor(target) == Colors.Red, $"color={ProbeColor(target)}");
                 H.Check("ThemeMemo_ShapeRerenderAloneIsStale", FindText(target, "ShapeProbeBefore") is not null);
+                H.Check("ThemeMemo_ShapeItemRerenderAloneKeepsIt", !shapeItemCleanedUp && !HasComboText(target, "ShapeItemAfter"));
                 H.Check("ThemeMemo_GapItemRerenderAloneIsStale", ListItemColor(target, "GapItemProbe") == Colors.Red, $"color={ListItemColor(target, "GapItemProbe")}");
                 H.Check("ThemeMemo_NestedMemoRerenderAloneIsStale", ProbeColor(target, "NestedMemoProbe") == Colors.Red, $"color={ProbeColor(target, "NestedMemoProbe")}");
                 H.Check("ThemeMemo_ResolvedMemoRerenderAloneIsStale", ProbeColor(target, "ResolvedMemoProbe") == Colors.Red, $"color={ProbeColor(target, "ResolvedMemoProbe")}");
@@ -228,6 +242,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 await WaitForAllHostsIdleAsync();
                 H.Check("ThemeMemo_NotifiedFromBackgroundIsBlue", ProbeColor(target) == Colors.Blue, $"color={ProbeColor(target)}");
                 H.Check("ThemeMemo_ShapeChangeRemounts", FindText(target, "ShapeProbeAfter") is not null && FindText(target, "ShapeProbeBefore") is null);
+                H.Check("ThemeMemo_ShapeItemReplacedAndUnmounted", shapeItemCleanedUp && HasComboText(target, "ShapeItemAfter"),
+                    $"cleanedUp={shapeItemCleanedUp} after={HasComboText(target, "ShapeItemAfter")}");
                 H.Check("ThemeMemo_GapItemNotifiedIsBlue", ListItemColor(target, "GapItemProbe") == Colors.Blue, $"color={ListItemColor(target, "GapItemProbe")}");
                 H.Check("ThemeMemo_NestedMemoNotifiedIsBlue", ProbeColor(target, "NestedMemoProbe") == Colors.Blue, $"color={ProbeColor(target, "NestedMemoProbe")}");
                 H.Check("ThemeMemo_ResolvedMemoNotifiedIsBlue", ProbeColor(target, "ResolvedMemoProbe") == Colors.Blue, $"color={ProbeColor(target, "ResolvedMemoProbe")}");
@@ -259,6 +275,9 @@ internal static class HostIdleAndThemeResourceFixtures
         private static global::Windows.UI.Color? ListItemColor(Border target, string probe = "ListItemProbe")
             => (FindComboBoxes(target).SelectMany(cb => cb.Items.OfType<TextBlock>()).FirstOrDefault(t => t.Text == probe)
                     ?.Foreground as SolidColorBrush)?.Color;
+
+        private static bool HasComboText(Border target, string text)
+            => FindComboBoxes(target).SelectMany(cb => cb.Items.OfType<TextBlock>()).Any(t => t.Text == text);
 
         private static IEnumerable<ComboBox> FindComboBoxes(DependencyObject root)
         {
