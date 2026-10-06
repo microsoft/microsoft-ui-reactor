@@ -177,7 +177,7 @@ public sealed class ReactorSourcePublisherTests
     }
 
     [Fact]
-    public void SameAtTextFromTwoCallSites_IsAmbiguousAndResolvesToNothing()
+    public void SameAtTextFromTwoCallSites_IsAmbiguous_FirstSiteStillResolves()
     {
         // Two files with the same name outside every known root publish the same at= text.
         var first = new SourceLocation(@"C:\one\Ambig\Same.cs", 5, 3);
@@ -188,13 +188,18 @@ public sealed class ReactorSourcePublisherTests
 
         var b = ReactorSourcePublisher.Format(TextBlock("b") with { CallSite = second }, "Other");
         Assert.Equal(ReactorSourcePublisher.AtKey(a), ReactorSourcePublisher.AtKey(b));
+        // From now on controls with this text keep their tag (the reconciler checks this)...
         Assert.True(ReactorSourcePublisher.IsAmbiguous(a));
         Assert.True(ReactorSourcePublisher.IsAmbiguous(b));
-        Assert.Null(ReactorSourcePublisher.ResolvePublishedValue(b));
+        // ...so an untagged one was published before the collision, for the first site:
+        // that mapping must survive the collision.
+        Assert.Equal(first, ReactorSourcePublisher.ResolvePublishedValue(a));
 
-        // Re-publishing the first site does not "un-ambiguate" it.
+        // Re-publishing either site changes nothing.
         ReactorSourcePublisher.Format(TextBlock("c") with { CallSite = first }, "Third");
-        Assert.Null(ReactorSourcePublisher.ResolvePublishedValue(a));
+        ReactorSourcePublisher.Format(TextBlock("d") with { CallSite = second }, "Fourth");
+        Assert.Equal(first, ReactorSourcePublisher.ResolvePublishedValue(a));
+        Assert.True(ReactorSourcePublisher.IsAmbiguous(b));
     }
 
     [Fact]

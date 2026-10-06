@@ -219,6 +219,18 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal void PublishSourceOnSkip(UIElement control, Element newEl) => PublishSource(control, newEl);
 
+    /// <summary>
+    /// ItemsRepeater adoption (<c>TryAdoptRealizedReplacement</c>) moves a fresh component
+    /// subtree into the still-realized wrapper, but not the wrapper's own attached values.
+    /// The replacement wrapper was published when it mounted; carry that value over so the
+    /// live wrapper describes the element it now hosts (its new key, for one).
+    /// </summary>
+    internal static void AdoptPublishedSource(UIElement adopted, UIElement replacement)
+    {
+        if (replacement.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string value)
+            adopted.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, value);
+    }
+
     /// <summary>The host root's last published value, so an unchanged root skips the DP write.</summary>
     private UIElement? _rootSourceControl;
     private string? _rootSourceValue;

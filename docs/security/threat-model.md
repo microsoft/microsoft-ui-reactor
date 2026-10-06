@@ -264,7 +264,7 @@ Same shape as Boundary A: loopback-only HTTP (`http://127.0.0.1:<port>/mcp`) wit
 | Default | Debug builds | Debug builds (`$(ReactorDiagnostics)`) |
 | Release | Opt-in | Opt-in (`-p:ReactorDiagnostics=true`) |
 | Runtime gate | Debugger / XamlDiagnostics attach | `REACTOR_DIAGNOSTICS=1` at launch (nothing is written otherwise) |
-| Path form | Package-relative (`ms-appx:///Pages/Main.xaml`) | Project-relative (`Pages/Main.cs`). Solution-root-relative with `rel=root` for files outside the project. File name only with `rel=0` for files outside both. Deterministic `/_/…` paths are kept as they are. Never an absolute developer path. |
+| Path form | Package-relative (`ms-appx:///Pages/Main.xaml`) | Project-relative (`Pages/Main.cs`). Solution-root-relative with `rel=root` for files outside the project. File name only with `rel=0` for files outside both. Deterministic PathMap paths (`/_/…`, `/_1/…`) are kept as they are; any other absolute path is reduced to its file name. Never an absolute developer path. |
 | Readers | Processes that can attach XamlDiagnostics: the same user or an administrator | Same |
 | Trimmed when off | — | Yes. The publishing code is removed from trimmed / Native AOT builds without the switch; the AOT Hello-World trim assertions pin this. |
 

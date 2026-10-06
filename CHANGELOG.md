@@ -45,6 +45,29 @@ Conventions for contributors:
     the component's on-screen control and back, so an inspector can flash what
     re-rendered.
 
+- **Inspect Reactor apps with no managed agent, Native AOT included: `ReactorSource`
+  on every control** (issue #ISSUE, spec 010):
+  - `ReactorDiagnostics.SourceProperty` (`"ReactorSource"` in XamlDiagnostics) is an
+    attached string published on every realized control in diagnostics mode. It is
+    readable out of process with no managed code: call site, owner component,
+    element kind, key, mounted component, host root, declared name and hook names,
+    in a versioned `|`-separated grammar (`v=1`). Paths are relative to the
+    project (XAML parity); never absolute.
+  - `SourceLocation.DeclaredName`: the identifier an element was assigned to, like
+    `x:Name`. The source-map generator also records each component render's hook
+    variables (`hooks=0:count@36;…`).
+  - Gating: new MSBuild property `ReactorDiagnostics` (Debug default, `true` for a
+    Release / Native AOT devtools build; turns on the trimmable
+    `Reactor.DevtoolsSupport` switch and implies `ReactorSourceMap`) plus
+    `REACTOR_DIAGNOSTICS=1` at launch. Without the switch, trimmed and AOT builds
+    contain none of it; with it but without the variable, nothing is published.
+  - Source-mapped builds share one call-site bucket per call site instead of
+    one per element. Under Native AOT diagnostics mode, elements whose only extra
+    is their call site are not tagged (no managed agent can read the tag);
+    `ReactorSourceMap.GetSource` resolves them from the published value.
+  - **Changed:** Debug builds now turn `Reactor.DevtoolsSupport` on by default
+    (through `ReactorDiagnostics`); opt out with `-p:ReactorDiagnostics=false`.
+
 - **`ReactorHostControl` can be declared in XAML.** It gains a public parameterless
   constructor (the XAML compiler rejected the old optional-parameter one with
   `WMC0100`) and a `ComponentType` property, so a hybrid page can write

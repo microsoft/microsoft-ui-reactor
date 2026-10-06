@@ -128,8 +128,9 @@ public static partial class ReactorSourceMap
 
     /// <summary>
     /// A drive-rooted, UNC or <c>/</c>-rooted path. A deterministic-build path
-    /// (<c>/_/…</c>, <c>/_1/…</c>) is NOT treated as absolute: it is already relative to an
-    /// anonymous root and carries no developer path.
+    /// (<c>/_/…</c>, <c>/_1/…</c>: the SDK's PathMap roots) is NOT treated as absolute: it is
+    /// already relative to an anonymous root and carries no developer path. Any other
+    /// <c>/_…</c> directory (<c>/_work/…</c>) is an ordinary absolute path.
     /// </summary>
     internal static bool IsAbsolutePath(string path)
     {
@@ -137,7 +138,16 @@ public static partial class ReactorSourceMap
             return true;
         if (path.StartsWith(@"\\", StringComparison.Ordinal) || path.StartsWith("//", StringComparison.Ordinal))
             return true;
-        return path.StartsWith('/') && !path.StartsWith("/_", StringComparison.Ordinal);
+        return path.StartsWith('/') && !IsDeterministicRoot(path);
+    }
+
+    /// <summary><c>/_/</c> or <c>/_&lt;digits&gt;/</c> at the start of the path.</summary>
+    private static bool IsDeterministicRoot(string path)
+    {
+        if (!path.StartsWith("/_", StringComparison.Ordinal)) return false;
+        int i = 2;
+        while (i < path.Length && char.IsAsciiDigit(path[i])) i++;
+        return i < path.Length && path[i] == '/';
     }
 
     /// <summary><c>/</c>-separated with a trailing <c>/</c>, or null for an empty/undefined directory.</summary>

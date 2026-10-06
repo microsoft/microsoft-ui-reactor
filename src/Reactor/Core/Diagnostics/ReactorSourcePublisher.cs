@@ -66,8 +66,10 @@ internal static class ReactorSourcePublisher
     /// <c>ReactorSourceMap.GetSource</c> on a control that carries no element tag. Published
     /// paths are relative, so the value alone cannot name the file; every value is built
     /// from a cached shape whose full <see cref="SourceLocation"/> is recorded against its
-    /// <c>at=</c> text. Returns <c>null</c> when nothing was published, or when two
-    /// different call sites publish the same <c>at=</c> text (see <see cref="IsAmbiguous"/>).
+    /// <c>at=</c> text. Returns <c>null</c> when nothing was published. When two call sites
+    /// share the same <c>at=</c> text (see <see cref="IsAmbiguous"/>) the first one is
+    /// returned: every control published after the collision keeps its element tag, so an
+    /// untagged control with that text was published before it, for the first site.
     /// </summary>
     internal static SourceLocation? ResolvePublishedSource(UIElement control)
         => control.GetValue(ReactorDiagnostics.SourceProperty) is string value ? ResolvePublishedValue(value) : null;
@@ -87,13 +89,16 @@ internal static class ReactorSourcePublisher
     internal static bool IsAmbiguous(string value)
         => Volatile.Read(ref s_anyAmbiguous) != 0
             && AtKey(value) is { } key
-            && Cache.Sources.TryGetValue(key, out var site)
-            && site is null;
+            && Cache.Ambiguous.ContainsKey(key);
 
     private static void RecordSource(string atKey, SourceLocation site)
     {
-        var stored = Cache.Sources.AddOrUpdate(atKey, site, (_, existing) => existing == site ? existing : null);
-        if (stored is null) Volatile.Write(ref s_anyAmbiguous, 1);
+        if (Cache.Sources.TryAdd(atKey, site)
+            || !Cache.Sources.TryGetValue(atKey, out var first)
+            || first == site)
+            return;
+        Cache.Ambiguous.TryAdd(atKey, 0);
+        Volatile.Write(ref s_anyAmbiguous, 1);
     }
 
     /// <summary>
@@ -217,8 +222,12 @@ internal static class ReactorSourcePublisher
     {
         internal static readonly global::System.Collections.Concurrent.ConcurrentDictionary<ValueShape, ValueParts> Parts = new();
 
-        /// <summary><c>at=</c> text → the full call site it was published for; <c>null</c> = shared by several.</summary>
-        internal static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, SourceLocation?> Sources =
+        /// <summary><c>at=</c> text → the full call site first published with it.</summary>
+        internal static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, SourceLocation> Sources =
+            new(StringComparer.Ordinal);
+
+        /// <summary><c>at=</c> texts published by more than one call site.</summary>
+        internal static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, byte> Ambiguous =
             new(StringComparer.Ordinal);
     }
 

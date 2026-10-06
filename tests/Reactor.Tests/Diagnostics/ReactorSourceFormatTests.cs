@@ -122,6 +122,13 @@ public sealed class ReactorSourceFormatTests
         Assert.Null(marker);
     }
 
+    [Fact]
+    public void ToPublishedPath_UnderscoreDirectoryThatIsNotADeterministicRoot_IsFileNameOnly()
+    {
+        Assert.Equal("App.cs", Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.ToPublishedPath("/_work/agent/src/App.cs", out var marker));
+        Assert.Equal("0", marker);
+    }
+
     [Theory]
     [InlineData(@"C:\src\App.cs", true)]
     [InlineData("C:/src/App.cs", true)]
@@ -129,6 +136,11 @@ public sealed class ReactorSourceFormatTests
     [InlineData("/home/me/App.cs", true)]
     [InlineData("/_/src/App.cs", false)]
     [InlineData("/_1/src/App.cs", false)]
+    [InlineData("/_12/src/App.cs", false)]
+    [InlineData("/_work/src/App.cs", true)]
+    [InlineData("/_home/me/App.cs", true)]
+    [InlineData("/_1a/src/App.cs", true)]
+    [InlineData("/_", true)]
     [InlineData("App.cs", false)]
     public void IsAbsolutePath(string path, bool expected)
         => Assert.Equal(expected, Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.IsAbsolutePath(path));

@@ -40,16 +40,39 @@ internal class ReactorSource_PublishedOnEveryControl(Harness h) : SelfTestFixtur
             host.Mount(ctx =>
             {
                 var (n, setN) = ctx.UseState(0);
+                var namedLabel = TextBlock("source-named");
                 return VStack(4,
                     TextBlock("source-plain"),
                     TextBlock("source-keyed").WithKey("k|1"),
+                    namedLabel,
                     Component<FlipProbe, int>(n),
                     Component<SourceProbe, int>(n),
+                    Component<HookProbe>(),
                     Button("source-bump", () => setN(n + 1)));
             });
             await Harness.Render();
 
             string? Of(DependencyObject? d) => d is null ? null : ReactorDiagnostics.GetSource(d);
+
+            // Source-map static info reaches the live value: the declared name, and the
+            // component wrapper's hook names (slot:variable@line).
+            var namedValue = Of(H.FindControl<WinUI.TextBlock>(t => t.Text == "source-named"));
+            var hookText = H.FindControl<WinUI.TextBlock>(t => t.Text.StartsWith("hooks ", StringComparison.Ordinal));
+            var hookWrapperValue = Of(hookText is null ? null : VisualTreeHelper.GetParent(hookText));
+            Console.WriteLine($"# named: {namedValue}");
+            Console.WriteLine($"# hook wrapper: {hookWrapperValue}");
+            if (namedValue?.Contains("|at=", StringComparison.Ordinal) != true)
+            {
+                H.Skip("ReactorSource_DeclaredNameAndHooks", "call sites are not stamped in this host");
+            }
+            else
+            {
+                H.Check("ReactorSource_DeclaredNamePublished",
+                    namedValue.Contains("|name=namedLabel", StringComparison.Ordinal));
+                H.Check("ReactorSource_HookNamesPublished",
+                    hookWrapperValue?.Contains("|mounts=HookProbe", StringComparison.Ordinal) == true
+                    && hookWrapperValue.Contains($"|hooks=0:clicks@{HookProbe.ClicksLine};1:label@{HookProbe.LabelLine}", StringComparison.Ordinal));
+            }
 
             var plain = H.FindControl<WinUI.TextBlock>(t => t.Text == "source-plain");
             var plainValue = Of(plain);
@@ -123,6 +146,21 @@ internal class ReactorSource_PublishedOnEveryControl(Harness h) : SelfTestFixtur
     }
 }
 
+/// <summary>Two named hooks, for the published <c>hooks=</c> field.</summary>
+internal sealed class HookProbe : Component
+{
+    internal static int ClicksLine;
+    internal static int LabelLine;
+
+    public override Element Render()
+    {
+        var (clicks, _) = UseState(0); ClicksLine = Line();
+        var label = UseRef("hooked"); LabelLine = Line();
+        return TextBlock($"hooks {clicks} {label.Current}");
+    }
+
+    private static int Line([global::System.Runtime.CompilerServices.CallerLineNumber] int line = 0) => line;
+}
 /// <summary>Renders an element that differs between renders only in its call site.</summary>
 internal sealed class FlipProbe : Component<int>
 {
@@ -267,6 +305,66 @@ internal class ReactorSource_AotTagSkipKeepsGetSource(Harness h) : SelfTestFixtu
             ReactorSourcePublisher.IsEnabled = enabled;
             ReactorSourcePublisher.NoManagedAgent = noAgent;
             Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = mapped;
+        }
+    }
+}
+
+/// <summary>
+/// ItemsRepeater row adoption (a realized row's key changes, so a fresh component subtree is
+/// moved into the still-parented wrapper) must leave the live wrapper describing the element
+/// it now hosts: its published value carries the NEW key.
+/// </summary>
+internal class ReactorSource_AdoptedRowRepublished(Harness h) : SelfTestFixtureBase(h)
+{
+    private static readonly string[] Ids = ["a"];
+
+    public override async Task RunAsync()
+    {
+        if (!ReactorSourcePublisher.IsSupported)
+        {
+            H.Skip("ReactorSource_AdoptedRow", "Reactor.DevtoolsSupport is off in this host");
+            return;
+        }
+
+        var previous = ReactorSourcePublisher.IsEnabled;
+        try
+        {
+            ReactorSourcePublisher.IsEnabled = true;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (rev, setRev) = ctx.UseState(0);
+                return VStack(
+                    Button("adopt-bump", () => setRev(rev + 1)),
+                    LazyVStack(Ids, static id => id, (id, _) =>
+                        Component<SourceProbe, int>(rev).WithKey($"{id}:{rev}")).Height(200));
+            });
+            await Harness.Render();
+            await Harness.Render();
+
+            var repeater = H.FindControl<Microsoft.UI.Xaml.Controls.ItemsRepeater>(_ => true);
+            var before = repeater?.TryGetElement(0);
+            var beforeValue = before is null ? null : ReactorDiagnostics.GetSource(before);
+            Console.WriteLine($"# row before: {beforeValue}");
+            H.Check("ReactorSource_AdoptedRow_InitialKey", beforeValue?.Contains("|key=a:0", StringComparison.Ordinal) == true);
+
+            H.ClickButton("adopt-bump");
+            await Harness.Render();
+            await Harness.Render();
+
+            var after = repeater?.TryGetElement(0);
+            var afterValue = after is null ? null : ReactorDiagnostics.GetSource(after);
+            Console.WriteLine($"# row after: {afterValue} (same wrapper: {ReferenceEquals(before, after)})");
+            H.Check("ReactorSource_AdoptedRow_WrapperKept", before is not null && ReferenceEquals(before, after));
+            H.Check("ReactorSource_AdoptedRow_NewKeyPublished",
+                afterValue?.Contains("|key=a:1", StringComparison.Ordinal) == true
+                && afterValue.Contains("|mounts=SourceProbe", StringComparison.Ordinal));
+            host.Dispose();
+            H.SetContent(null);
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = previous;
         }
     }
 }

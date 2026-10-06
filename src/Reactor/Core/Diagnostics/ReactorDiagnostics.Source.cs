@@ -12,7 +12,7 @@ public static partial class ReactorDiagnostics
     /// where the control came from — call site, owning component, element kind, key,
     /// declared name, and for component boundaries the component's hooks — in the v1 grammar:
     /// <code>
-    /// v=1|at=path:line[:col][|rel=root or |rel=0]|owner=Comp|element=Kind[|mounts=Comp][|root=Comp][|key=k][|name=n][|hooks=i:name@line;...]
+    /// v=1|at=path:line[:col][|rel=&lt;root|0&gt;]|owner=Comp|element=Kind[|mounts=Comp][|root=Comp][|key=k][|name=n][|hooks=i:name@line;...]
     /// </code>
     /// with <c>%</c> escaped as <c>%25</c> and <c>|</c> as <c>%7C</c> in values. <c>at</c> is never an
     /// absolute developer path: it is relative to the project directory, or to the
