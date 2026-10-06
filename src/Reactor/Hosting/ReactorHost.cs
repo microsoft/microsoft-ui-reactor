@@ -348,13 +348,13 @@ public sealed class ReactorHost : IDisposable
     /// </summary>
     private void ShowRootRenderError(Exception ex, bool hotReloadRender)
     {
-        bool traced = TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
+        TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
         ShowErrorFallback(ex);
-        if (traced) _rootDiagnostics.TrackContent(_currentControl);
+        _rootDiagnostics.TrackContent(_currentControl);
     }
 
     /// <summary>ComponentRendered for the root; must run before Reconcile consumes ForceFullRenderPending.</summary>
-    private bool TraceRootRendered(bool hotReloadRender, double elapsedMilliseconds)
+    private void TraceRootRendered(bool hotReloadRender, double elapsedMilliseconds)
         => _rootDiagnostics.TraceRendered(
             _rootComponent?.GetType().Name ?? nameof(FuncElement),
             hotReloadRender || _reconciler.ForceFullRenderIsHotReloadRetry,
@@ -369,6 +369,8 @@ public sealed class ReactorHost : IDisposable
 
     public void Mount(Func<RenderContext, Element> renderFunc)
     {
+        // Clear the component root: the render loop checks it before the function root.
+        _rootComponent = null;
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
         _rootDiagnostics.Reset();
@@ -628,7 +630,7 @@ public sealed class ReactorHost : IDisposable
             double treeBuildMs = _phaseSw.Elapsed.TotalMilliseconds;
 
             if (newTree is null) return;
-            bool traceRootRendered = TraceRootRendered(hotReloadRender, treeBuildMs);
+            TraceRootRendered(hotReloadRender, treeBuildMs);
 
             _phaseSw.Restart();
 
@@ -721,8 +723,7 @@ public sealed class ReactorHost : IDisposable
 
             _currentControl = newControl;
             _currentTree = newTree;
-            if (traceRootRendered)
-                _rootDiagnostics.TrackContent(newControl);
+            _rootDiagnostics.TrackContent(newControl);
             OwningWindow?.OnHostContentRendered(newControl);
 
             // Spec 033 §6 — apply (or clear) the SystemBackdrop modifier carried on

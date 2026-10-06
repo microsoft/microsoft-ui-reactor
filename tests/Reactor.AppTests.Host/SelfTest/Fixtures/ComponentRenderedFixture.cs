@@ -435,6 +435,87 @@ internal class ComponentRendered_RootHookOrderRetryIsHotReload(Harness h) : Self
     }
 }
 
+/// <summary>
+/// The root id follows host changes: switching a <c>ReactorHost</c> from a component
+/// root to a function root renders (and reports) the new root, and once the event is
+/// switched off a root that changes content stops resolving to the control it left.
+/// </summary>
+internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var events = new List<ReactorEvent>();
+        IDisposable? subscription = ReactorTrace.Subscribe(
+            e => { if (e.EventName == nameof(ReactorEventSource.ComponentRendered)) lock (events) events.Add(e); },
+            EventLevel.Verbose,
+            ReactorEventSource.Keywords.RenderDetail);
+        try
+        {
+            if (!ComponentRenderTrace.IsEnabled)
+            {
+                H.Skip("ComponentRendered_RootMapping", "EventSource disabled (NativeAOT)");
+                return;
+            }
+
+            List<ReactorEvent> Take()
+            {
+                lock (events)
+                {
+                    var copy = events.ToList();
+                    events.Clear();
+                    return copy;
+                }
+            }
+
+            // ── Component root → function root on one ReactorHost ──────────────
+            var host = H.CreateHost();
+            host.Mount(new RenderedSwapComponentRoot());
+            await Harness.Render();
+            Take();
+            host.Mount(_ => TextBlock("swap func root"));
+            await Harness.Render();
+            var swap = Take();
+            Console.WriteLine("# swap: " + string.Join(", ", swap.Select(e => $"{e.Payload[0]}#{e.Payload[1]}:{e.Payload[2]}")));
+            H.Check("ComponentRendered_RootSwap_NewRootShown",
+                H.FindText("swap func root") is not null && H.FindText("swap component root") is null);
+            H.Check("ComponentRendered_RootSwap_NewRootReportedNotOld",
+                swap.Any(e => (string)e.Payload[0]! == nameof(FuncElement) && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Mount)
+                && !swap.Any(e => (string)e.Payload[0]! == nameof(RenderedSwapComponentRoot)));
+
+            // ── Content changes while the event is off ──────────────────────────
+            var root = new RenderedHostControlRoot();
+            var offHost = H.CreateHost();
+            offHost.Mount(root);
+            await Harness.Render();
+            var rootId = Take().Where(e => (string)e.Payload[0]! == nameof(RenderedHostControlRoot))
+                .Select(e => (long)e.Payload[1]!).FirstOrDefault();
+            var before = rootId != 0 ? ReactorTrace.GetComponentControl(rootId) : null;
+            H.Check("ComponentRendered_RootOff_ResolvedWhileOn", before is not null);
+
+            subscription.Dispose();
+            subscription = null;
+            if (ComponentRenderTrace.IsEnabled)
+            {
+                H.Skip("ComponentRendered_RootOff_ForgottenWhileOff", "another ComponentRendered listener is active in this process");
+                return;
+            }
+            root.Bump?.Invoke();
+            await Harness.Render();
+            H.Check("ComponentRendered_RootOff_ForgottenWhileOff",
+                H.FindText("host control root 1") is not null && ReactorTrace.GetComponentControl(rootId) is null);
+        }
+        finally
+        {
+            subscription?.Dispose();
+        }
+    }
+}
+
+internal sealed class RenderedSwapComponentRoot : Component
+{
+    public override Element Render() => TextBlock("swap component root");
+}
+
 internal sealed class RenderedHookShapeRoot : Component
 {
     public static volatile int Shape;

@@ -300,14 +300,19 @@ internal sealed class RootRenderDiagnostics
             ref _id, ref _rendered, componentName, hotReloadRender, forcePending, elapsedMilliseconds);
 
     /// <summary>
-    /// Maps the root's id to the control now standing in for its content (the reconciled
-    /// root, or the error panel when Render() or the pass threw). Never the reverse
-    /// direction: that control is often also a child component's wrapper, whose own id
-    /// must keep winning. A no-op until the root has an id, and while the event is off.
+    /// Keeps the root's id pointing at the control now standing in for its content (the
+    /// reconciled root, or the error panel when Render() or the pass threw). Never the
+    /// reverse direction: that control is often also a child component's wrapper, whose
+    /// own id must keep winning. Called on every content change: while the event is off
+    /// the old mapping is dropped instead, so it can never name a control that left the
+    /// screen; the next traced render maps it again. A no-op until the root has an id.
     /// </summary>
     public void TrackContent(Microsoft.UI.Xaml.UIElement? control)
     {
-        if (_id != 0 && ComponentRenderTrace.IsEnabled)
+        if (_id == 0) return;
+        if (ComponentRenderTrace.IsEnabled)
             ComponentRenderControls.Registry.Track(_id, control, mapControlToId: false);
+        else
+            ComponentRenderControls.Registry.Forget(_id, null);
     }
 }
