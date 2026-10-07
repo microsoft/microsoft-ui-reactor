@@ -1323,15 +1323,28 @@ internal static class CoreCoverageFixtures
             {
                 var host = H.CreateHost();
                 host.Mount(ctx =>
-                    SwipeControl(
-                        TextBlock("execute-swipe"),
-                        leftItems: [new SwipeItemData("Pin"), new SwipeItemData("Mark")],
-                        rightItems: [new SwipeItemData("Delete"), new SwipeItemData("Archive"), new SwipeItemData("Flag")])
-                    with
+                {
+                    var (phase, set) = ctx.UseState(0);
+                    // Inline arrays: a fresh reference every render, as authors typically write them.
+                    // Phase 2 makes the right side valid; phase 3 makes it truncated again.
+                    SwipeItemData[] right = phase switch
                     {
-                        LeftItemsMode = Microsoft.UI.Xaml.Controls.SwipeMode.Execute,
-                        RightItemsMode = Microsoft.UI.Xaml.Controls.SwipeMode.Execute,
-                    });
+                        2 => [new SwipeItemData("Delete")],
+                        3 => [new SwipeItemData("Delete"), new SwipeItemData("Archive")],
+                        _ => [new SwipeItemData("Delete"), new SwipeItemData("Archive"), new SwipeItemData("Flag")],
+                    };
+                    return VStack(
+                        Button("SwipeExecNext", () => set(phase + 1)),
+                        SwipeControl(
+                            TextBlock("execute-swipe"),
+                            leftItems: [new SwipeItemData("Pin"), new SwipeItemData("Mark")],
+                            rightItems: right)
+                        with
+                        {
+                            LeftItemsMode = Microsoft.UI.Xaml.Controls.SwipeMode.Execute,
+                            RightItemsMode = Microsoft.UI.Xaml.Controls.SwipeMode.Execute,
+                        });
+                });
                 await Harness.Render();
 
                 // Assert before the next CreateHost, which replaces this host's content.
@@ -1341,6 +1354,14 @@ internal static class CoreCoverageFixtures
                     && l.Mode == Microsoft.UI.Xaml.Controls.SwipeMode.Execute);
                 H.Check("SwipeExec_RightCapped", sc?.RightItems is { Count: 1 } r && r[0].Text == "Delete"
                     && r.Mode == Microsoft.UI.Xaml.Controls.SwipeMode.Execute);
+
+                for (int i = 0; i < 3; i++)
+                {
+                    H.ClickButton("SwipeExecNext");
+                    await Harness.Render();
+                }
+                sc = H.FindControl<Microsoft.UI.Xaml.Controls.SwipeControl>(_ => true);
+                H.Check("SwipeExec_RerenderStillCapped", sc?.LeftItems is { Count: 1 } && sc.RightItems is { Count: 1 });
 
                 // Negative control: Reveal mode with several items must not warn.
                 var revealHost = H.CreateHost();
@@ -1362,19 +1383,21 @@ internal static class CoreCoverageFixtures
                 return;
             }
 
-            var warnings = new global::System.Collections.Generic.List<string>();
-            foreach (var e in snapshot)
-            {
-                if (e.EventName == "Warning" && e.Payload.Count > 2
+            var warnings = snapshot
+                .Where(e => e.EventName == "Warning" && e.Payload.Count > 2
                     && e.Payload[1] as string == "SwipeControl.ExecuteItems"
-                    && e.Payload[2] is string msg)
-                    warnings.Add(msg);
-            }
-            H.Check("SwipeExec_WarningEmitted", warnings.Count == 2);
+                    && e.Payload[2] is string)
+                .Select(e => (string)e.Payload[2]!)
+                .ToList();
+            // One warning per side on mount, none for the re-render with fresh arrays or while
+            // the left side stays truncated, and one more when the right side re-enters truncation.
+            H.Check("SwipeExec_WarningEmittedOncePerEntry", warnings.Count == 3);
             H.Check("SwipeExec_WarningNamesLeft",
-                warnings.Exists(m => m.Contains("LeftItems has 2 items", global::System.StringComparison.Ordinal)));
+                warnings.Count(m => m.Contains("LeftItems has 2 items", global::System.StringComparison.Ordinal)) == 1);
             H.Check("SwipeExec_WarningNamesRight",
-                warnings.Exists(m => m.Contains("RightItems has 3 items", global::System.StringComparison.Ordinal)));
+                warnings.Count(m => m.Contains("RightItems has 3 items", global::System.StringComparison.Ordinal)) == 1);
+            H.Check("SwipeExec_WarningOnReentry",
+                warnings.Count(m => m.Contains("RightItems has 2 items", global::System.StringComparison.Ordinal)) == 1);
         }
     }
 

@@ -243,7 +243,7 @@ Conventions for contributors:
   only one item in an Execute-mode `SwipeItems` collection and rejects a second with
   `E_INVALIDARG`, which escaped the reconciler. Reactor now keeps the first item,
   ignores the rest, and emits a `SwipeControl.ExecuteItems` diagnostic warning naming
-  the side and how many items were dropped.
+  the side and how many items were dropped, once each time a side becomes truncated.
 
 - **Dropping an `AutoSuggestBox` right after its text changed can no longer crash
   the app** (PR #1302, supersedes #559). WinUI raises the box's `TextChanged` from

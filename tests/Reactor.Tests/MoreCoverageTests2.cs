@@ -1052,6 +1052,27 @@ public class MoreCoverageTests2
         Assert.Equal(expected, SwipeControlElement.EffectiveSwipeItemCount(length, mode));
     }
 
+    [Theory]
+    // Mount (no previous element): warn only when the new side is truncated.
+    [InlineData(null, Microsoft.UI.Xaml.Controls.SwipeMode.Reveal, 2, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, true)]
+    [InlineData(null, Microsoft.UI.Xaml.Controls.SwipeMode.Reveal, 1, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, false)]
+    [InlineData(null, Microsoft.UI.Xaml.Controls.SwipeMode.Reveal, 3, Microsoft.UI.Xaml.Controls.SwipeMode.Reveal, false)]
+    // Already truncated (inline array re-created, or the other side changed): stay quiet.
+    [InlineData(2, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, 2, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, false)]
+    [InlineData(3, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, 2, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, false)]
+    // Entering the truncated state from a valid one: warn.
+    [InlineData(2, Microsoft.UI.Xaml.Controls.SwipeMode.Reveal, 2, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, true)]
+    [InlineData(1, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, 2, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, true)]
+    [InlineData(0, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, 2, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, true)]
+    // Leaving it: nothing to warn about.
+    [InlineData(2, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, 1, Microsoft.UI.Xaml.Controls.SwipeMode.Execute, false)]
+    public void SwipeControlElement_ShouldWarnSwipeItemTruncation_WarnsOnlyOnEnteringTruncation(
+        int? oldLength, Microsoft.UI.Xaml.Controls.SwipeMode oldMode,
+        int newLength, Microsoft.UI.Xaml.Controls.SwipeMode newMode, bool expected)
+    {
+        Assert.Equal(expected, SwipeControlElement.ShouldWarnSwipeItemTruncation(oldLength, oldMode, newLength, newMode));
+    }
+
     [Fact]
     public void AnimatedIconElement_Construction_Defaults()
     {
