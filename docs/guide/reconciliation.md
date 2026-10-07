@@ -54,7 +54,10 @@ public UIElement? Reconcile(
     UIElement? existingControl,
     Action requestRerender)
 {
-    // Declared first so it is disposed last: validation changes raised by mount,
+    // A top-level pass is an outermost Reactor frame for render-error propagation
+    // (issue #1291); see EnterFrame. Nested passes and mounts just count.
+    using var entryFrame = EnterFrame();
+    // Declared before the reconcile work so it is disposed after it: validation changes raised by mount,
     // update, or unmount are announced only once the whole pass has finished.
     using var validationScope = Controls.Validation.ValidationRenderScope.BeginReconcile();
     ReferenceDirtySet.BeginCommit();

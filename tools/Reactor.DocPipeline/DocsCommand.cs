@@ -1,10 +1,16 @@
 namespace Microsoft.UI.Reactor.Cli.Docs;
 
 /// <summary>
-/// Entry point for <c>mur docs</c> subcommands.
+/// Entry point for the doc pipeline's subcommands (<see cref="Invocation"/>).
 /// </summary>
 internal static class DocsCommand
 {
+    /// <summary>
+    /// How contributors run the pipeline. It used to be <c>mur docs</c>; it moved out of the
+    /// shipped <c>mur</c> tool because it is repository-only and needs a Windows TFM.
+    /// </summary>
+    internal const string Invocation = "dotnet run --project tools/Reactor.DocPipeline --";
+
     public static int Run(string[] args)
     {
         if (args.Length == 0)
@@ -35,9 +41,9 @@ internal static class DocsCommand
 
     private static void ShowHelp()
     {
-        Console.WriteLine("mur docs — Documentation CLI");
+        Console.WriteLine("Reactor doc pipeline");
         Console.WriteLine();
-        Console.WriteLine("Usage: mur docs <command> [options]");
+        Console.WriteLine($"Usage: {Invocation} <command> [options]");
         Console.WriteLine();
         Console.WriteLine("Commands:");
         Console.WriteLine("  compile           Compile documentation from templates and doc apps");
@@ -65,7 +71,7 @@ internal static class DocsCommand
 
     private static int Unknown(string cmd)
     {
-        Console.Error.WriteLine($"Unknown command: mur docs {cmd}");
+        Console.Error.WriteLine($"Unknown command: {Invocation} {cmd}");
         Console.Error.WriteLine();
         ShowHelp();
         return 1;

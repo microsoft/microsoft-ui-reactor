@@ -368,7 +368,7 @@ is the same shape as React's
 > parent tree. The fix is two-fold: (1) wrap the value in
 > [`UseMemo`](hooks.md) with explicit dependencies so identity is stable
 > between updates, or (2) move the construction outside `Render()` so
-> it's a singleton. The performance overlay (`mur docs perf-overlay`)
+> it's a singleton. The performance overlay
 > makes this visible — look for high "context-driven re-render" counts
 > in the [devtools](dev-tooling.md) view.
 

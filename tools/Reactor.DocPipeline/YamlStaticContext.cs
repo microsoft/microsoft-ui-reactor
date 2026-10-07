@@ -20,7 +20,7 @@ namespace Microsoft.UI.Reactor.Cli.Docs;
 /// YamlDotNet.Serialization.StaticContext</c>.
 /// </remarks>
 [YamlStaticContext]
-// mur docs manifest (ManifestParser.Parse)
+// doc pipeline manifest (ManifestParser.Parse)
 [YamlSerializable(typeof(DocManifest))]
 [YamlSerializable(typeof(AppConfig))]
 [YamlSerializable(typeof(ScreenshotConfig))]

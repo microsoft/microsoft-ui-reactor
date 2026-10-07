@@ -96,7 +96,7 @@ dotnet test tests/Reactor.Tests --filter-class "*CheckCommandTests*" -p:Platform
 
 - Analyzer docs are generated: edit `docs/_pipeline/templates/analyzer-architecture.md.dt`
   (and any cheat-table template), **not** the compiled `docs/guide/*.md`. Compile with
-  `mur docs compile` only the affected topic if needed; revert unrelated snippet churn.
+  `dotnet run --project tools/Reactor.DocPipeline -- compile` only the affected topic if needed; revert unrelated snippet churn.
 - Update the end-user build/check skill if the rule set changed:
   `plugins/reactor/skills/reactor-build-and-check/SKILL.md`.
 
