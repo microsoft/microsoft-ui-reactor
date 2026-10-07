@@ -1312,25 +1312,69 @@ internal static class CoreCoverageFixtures
     {
         public override async Task RunAsync()
         {
-            var host = H.CreateHost();
-            host.Mount(ctx =>
-                SwipeControl(
-                    TextBlock("execute-swipe"),
-                    leftItems: [new SwipeItemData("Pin"), new SwipeItemData("Mark")],
-                    rightItems: [new SwipeItemData("Delete"), new SwipeItemData("Archive"), new SwipeItemData("Flag")])
-                with
-                {
-                    LeftItemsMode = Microsoft.UI.Xaml.Controls.SwipeMode.Execute,
-                    RightItemsMode = Microsoft.UI.Xaml.Controls.SwipeMode.Execute,
-                });
+            var captured = new global::System.Collections.Generic.List<global::Microsoft.UI.Reactor.Diagnostics.ReactorEvent>();
+            var gate = new object();
 
-            await Harness.Render();
-            var sc = H.FindControl<Microsoft.UI.Xaml.Controls.SwipeControl>(_ => true);
-            H.Check("SwipeExec_Mounted", sc is not null && H.FindText("execute-swipe") is not null);
-            H.Check("SwipeExec_LeftCapped", sc?.LeftItems is { Count: 1 } l && l[0].Text == "Pin"
-                && l.Mode == Microsoft.UI.Xaml.Controls.SwipeMode.Execute);
-            H.Check("SwipeExec_RightCapped", sc?.RightItems is { Count: 1 } r && r[0].Text == "Delete"
-                && r.Mode == Microsoft.UI.Xaml.Controls.SwipeMode.Execute);
+            // Verbose so reconcile/render events also flow: an empty capture then means
+            // EventSource is inert (NativeAOT), not that the warning was dropped.
+            using (global::Microsoft.UI.Reactor.Diagnostics.ReactorTrace.Subscribe(
+                e => { lock (gate) { captured.Add(e); } },
+                global::System.Diagnostics.Tracing.EventLevel.Verbose))
+            {
+                var host = H.CreateHost();
+                host.Mount(ctx =>
+                    SwipeControl(
+                        TextBlock("execute-swipe"),
+                        leftItems: [new SwipeItemData("Pin"), new SwipeItemData("Mark")],
+                        rightItems: [new SwipeItemData("Delete"), new SwipeItemData("Archive"), new SwipeItemData("Flag")])
+                    with
+                    {
+                        LeftItemsMode = Microsoft.UI.Xaml.Controls.SwipeMode.Execute,
+                        RightItemsMode = Microsoft.UI.Xaml.Controls.SwipeMode.Execute,
+                    });
+                await Harness.Render();
+
+                // Assert before the next CreateHost, which replaces this host's content.
+                var sc = H.FindControl<Microsoft.UI.Xaml.Controls.SwipeControl>(_ => true);
+                H.Check("SwipeExec_Mounted", sc is not null && H.FindText("execute-swipe") is not null);
+                H.Check("SwipeExec_LeftCapped", sc?.LeftItems is { Count: 1 } l && l[0].Text == "Pin"
+                    && l.Mode == Microsoft.UI.Xaml.Controls.SwipeMode.Execute);
+                H.Check("SwipeExec_RightCapped", sc?.RightItems is { Count: 1 } r && r[0].Text == "Delete"
+                    && r.Mode == Microsoft.UI.Xaml.Controls.SwipeMode.Execute);
+
+                // Negative control: Reveal mode with several items must not warn.
+                var revealHost = H.CreateHost();
+                revealHost.Mount(ctx =>
+                    SwipeControl(
+                        TextBlock("reveal-swipe"),
+                        leftItems: [new SwipeItemData("A"), new SwipeItemData("B"), new SwipeItemData("C"), new SwipeItemData("D")]));
+                await Harness.Render();
+                H.Check("SwipeExec_RevealKeepsAll",
+                    H.FindControl<Microsoft.UI.Xaml.Controls.SwipeControl>(_ => true)?.LeftItems?.Count == 4);
+            }
+
+            global::Microsoft.UI.Reactor.Diagnostics.ReactorEvent[] snapshot;
+            lock (gate) { snapshot = captured.ToArray(); }
+            if (snapshot.Length == 0)
+            {
+                H.Skip("SwipeExec_WarningEmitted",
+                    "EventSource delivered no events at all; NativeAOT defaults EventSourceSupport=false, so ETW-based assertions cannot run in this configuration.");
+                return;
+            }
+
+            var warnings = new global::System.Collections.Generic.List<string>();
+            foreach (var e in snapshot)
+            {
+                if (e.EventName == "Warning" && e.Payload.Count > 2
+                    && e.Payload[1] as string == "SwipeControl.ExecuteItems"
+                    && e.Payload[2] is string msg)
+                    warnings.Add(msg);
+            }
+            H.Check("SwipeExec_WarningEmitted", warnings.Count == 2);
+            H.Check("SwipeExec_WarningNamesLeft",
+                warnings.Exists(m => m.Contains("LeftItems has 2 items", global::System.StringComparison.Ordinal)));
+            H.Check("SwipeExec_WarningNamesRight",
+                warnings.Exists(m => m.Contains("RightItems has 3 items", global::System.StringComparison.Ordinal)));
         }
     }
 
