@@ -82,6 +82,19 @@ Conventions for contributors:
     the framework had no notion of a submit before, so that policy could never
     display anything.
 
+- **Apps can replace the built-in render-error fallback (issue #1291).** Outside an
+  `ErrorBoundary`, a render failure showed a fallback with the full exception text
+  (type, message, stack trace), which a shipped app could not hide. A
+  `RenderErrorHandler` now replaces it, set app-wide
+  (`ReactorApp.DefaultRenderErrorHandler`), per window (`WindowSpec.RenderErrorHandler`)
+  or per host (`ReactorHost` / `ReactorHostControl.RenderErrorHandler`). It sees the
+  root render, child renders, the reconcile pass, effects and dispose-time cleanups,
+  through a `RenderError` that carries the exception and its `Source`. Return an element
+  to show it, `null` to keep the built-in fallback, or call `Propagate()` to route the
+  exception to `ReactorApplication.OnUnhandledException`. A handler that throws (or whose
+  fallback throws) fails closed to a neutral message without exception details. With no
+  handler, behavior is unchanged.
+
 - **Framework mechanics are searchable in the ReactorGallery index (spec 064,
   issue #1275).** `find-ui --source reactor` answered "what is control X" but not
   "how does mechanism Y work": `UseState hook` and `key down event handler`
@@ -117,8 +130,45 @@ Conventions for contributors:
   wins over the element, and — unlike the caption height — no content extension is
   required. ReactorGallery uses it so its caption buttons follow the gallery theme.
 
+- **`REACTOR_LIFECYCLE_003` — a custom control updates the child it hosts with
+  `Reconciler.UpdateChild` (#1307).** `UpdateChild` is only correct after a check
+  that the new element can update the old control (same element type and key).
+  That check is internal, so code outside the framework can't make it, and
+  `UpdateChild` also leaves a control it replaced mounted for the caller to
+  unmount. A `RegisterType` registration or `IElementHandler` that hosts a child
+  this way throws `InvalidCastException` when the child changes element type, and
+  a replaced child's effect cleanups and unmount callbacks never run and its refs
+  are never cleared. The analyzer points at `Reconciler.Reconcile`, which takes the
+  same arguments, does both, and returns the control the slot should hold
+  (`UpdateContext.ReconcileChild` in a handler). Where the existing control was
+  read from its slot just before the call, the code fix rewrites
+  `var x = r.UpdateChild(…); if (x is not null) slot = x;` into
+  `var x = r.Reconcile(…); if (!ReferenceEquals(x, existing)) slot = x;`, which
+  also empties the slot when the child becomes `Empty()`, and drops a manual
+  `UnmountChild(existing)` made through the same reconciler. It is offered only
+  where that keeps the code's meaning: for instance, not when the body does more
+  than install the result. The rule is silent in the assembly that declares
+  `Reconciler`, whose slot owners make the check first. The repository's two call
+  sites, the data grid's internal `ResizeGrip` and the regedit sample, now use
+  `Reconcile` (neither reached the bad path), and the Extending Reactor Controls
+  guide shows a `RegisterType` host reconciling its child.
+
 ### Changed
 
+- **The doc pipeline moved out of `mur`, and doc screenshots are captured with winapp's
+  Windows Graphics Capture.** `mur docs` is now `dotnet run --project tools/Reactor.DocPipeline --`
+  (`compile`, `check-tier`, `render-diagrams`, `new-diagram`; same options). It is a contributor
+  tool for this repository, so it no longer ships in the `mur` dotnet tool; `mur docs` prints the
+  new command and exits 1. Out of the tool it can target Windows, which `PackAsTool` forbids
+  (NETSDK1146), and capture screenshots in-process with the winapp UI Automation library
+  (`Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation`). The pipeline still launches each doc
+  app through the in-app preview host and switches components with it, but the pixels now come
+  from Windows Graphics Capture instead of the preview host's `PrintWindow` + JPEG frame stream.
+  Images keep the same framing (client area only, physical pixels, the 150% convention), are
+  lossless, and content-crop is typically 1–4 px tighter. Capture no longer waits on the frame
+  stream's warm-up, so a topic is about 8–10 s faster, and it never activates a window: without
+  Graphics Capture a screenshot fails rather than falling back to `PrintWindow`. `mur` also drops
+  its YamlDotNet and System.Drawing.Common dependencies (#1320; spec 013 §4).
 - **`ReactorHostControl.Stats` returns `RenderStats` by value** instead of
   `ref readonly`. The XAML compiler emits type metadata for every public property of
   a control used in markup, and the by-ref property generated
@@ -210,6 +260,19 @@ Conventions for contributors:
   `winapp new --template-version`.
 
 ### Fixed
+
+- **An `ErrorBoundary` whose child fails part-way through mounting no longer leaves
+  that child's effects running** (issue #1291). A component registers before its
+  effects run, so a child whose second effect threw had already opened whatever its
+  first effect opened (a subscription, a timer), and a control's `.OnMount(...)` had
+  already run. The boundary discarded the half-built subtree without it ever being
+  attached, so nothing could unmount it, and every re-render retried the child and
+  leaked another set. The boundary now rolls the failed child back — the controls
+  that did finish are unmounted (so their interaction states, animations and
+  `.OnUnmount(...)` actions go too), and the components that did not still have their
+  effect cleanups run — both when it first mounts and on each retry. The same applies to the internal boundary
+  around a `RenderErrorHandler` fallback, and when a host replaces or releases its tree
+  for a render-error outcome every cleanup runs even if one of them throws.
 
 - **Dropping an `AutoSuggestBox` right after its text changed can no longer crash
   the app** (PR #1302, supersedes #559). WinUI raises the box's `TextChanged` from
@@ -309,6 +372,33 @@ Conventions for contributors:
   siblings still skip without reading a control. A same-key `Memo(key, …)` is
   still a no-op, except that its factory runs again when a component inside it
   updates itself.
+
+- **A child that its update replaces is unmounted in a single-child slot too**
+  (spec 047 §14, #1307). When an update handed back a new control for the one
+  child of a `Border`, a named slot such as `SplitView.Pane`, a tab's content, a
+  generated element slot such as `TabView.TabStripHeader`, or a `RichTextBlock`
+  `InlineUI(...)` child, Reactor swapped the new control in but, unlike a panel,
+  never unmounted the old one. The old subtree's effect cleanups, `.OnUnmount`
+  actions and `RegisterType` `unmount` callbacks never ran, a `ValidationRule`
+  in it kept its message, and a ref to a control in it kept pointing at the
+  detached control. A `ValidationVisualizer` in such a slot did this on every
+  re-render, because its update remounts it, and so did a `RegisterType`
+  `update` that returns a new control. Slots that a control fills by hand still
+  swap a replaced control out without unmounting it: `CommandBar` content,
+  `Expander` content and header template, `ContentDialog`, `Flyout` and `Popup`
+  content, `.WithFlyout`, `.WithContextFlyout` and `.WithToolTip(element)`
+  content, and realized item content in `ListView`, `GridView`, `TreeView<T>`
+  and templated `FlipView`.
+
+- **A flyout's old Target is unmounted once, not twice, when its Target changes
+  element type at a component's root or through `Reconciler.Reconcile`** (#1307).
+  A `Flyout`, `MenuFlyout` or `CommandBarFlyout` that wraps a Target unmounts
+  the old Target itself when the Target's element type changes. The reconcile
+  path behind component roots, `ErrorBoundary`, the app root and the public
+  `Reconciler.Reconcile` then unmounted it again, so the old subtree's
+  `RegisterType` `unmount` callbacks and handler unmounts ran twice. That path
+  now notices the update already unmounted it, as single-child slots do. A
+  panel still unmounts such a Target twice.
 
 - **The Forms guide's "Validation Context" example now works as written**
   (issue #1262). Clicking **Register** on an empty form submitted successfully

@@ -14,7 +14,7 @@ When a public-facing feature (a new factory, modifier, hook, control, CLI
 command, or behavior change) lands, these surfaces may need updating:
 
 - **User guide — generated.** `docs/guide/*.md` is **compiled** from
-  `docs/_pipeline/templates/*.md.dt` via `mur docs compile`. **Edit the
+  `docs/_pipeline/templates/*.md.dt` via `dotnet run --project tools/Reactor.DocPipeline -- compile`. **Edit the
   templates, not the compiled output.** Flag a PR that edits a generated
   `docs/guide/*.md` directly (changes will be overwritten), or that adds a
   public feature with no template update.
@@ -53,7 +53,7 @@ command, or behavior change) lands, these surfaces may need updating:
   behavior, or breaks a sample that uses it.
 - **Edited generated docs.** Changes to `docs/guide/*.md` without the
   corresponding `docs/_pipeline/templates/*.md.dt` edit (will be clobbered by
-  `mur docs compile`).
+  `dotnet run --project tools/Reactor.DocPipeline -- compile`).
 - **New analyzer diagnostic** (`REACTOR_*`) not added to the
   `reactor-build-and-check` cheat table — authors rely on that table to fix it.
 - **New sample directory** under `samples/` without a README explaining it, and
@@ -79,7 +79,7 @@ command, or behavior change) lands, these surfaces may need updating:
 - Generated `docs/guide/*.md` edited directly instead of the template → high
   (the edit will be lost).
 - New sample without a README, or a new guide page not in `mkdocs.yml` → medium.
-- Stale `skills/reactor.api.txt` / missing `mur docs compile` regeneration →
+- Stale `skills/reactor.api.txt` / missing `dotnet run --project tools/Reactor.DocPipeline -- compile` regeneration →
   medium (caught by CI/build, but better before push).
 - New analyzer ID missing from the cheat table → medium.
 - Polish (typo, moved link target) → low.

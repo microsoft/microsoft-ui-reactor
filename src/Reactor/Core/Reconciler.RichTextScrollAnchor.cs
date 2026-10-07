@@ -218,6 +218,14 @@ public sealed partial class Reconciler
     // compositor-frame-timed release.
     internal static int InlineUiPinEngagementCount;
 
+    // Test-only seam (read-only): true while this block's pin has a release scheduled
+    // on CompositionTarget.Rendering. Selftests sample it inside the reconcile (from a
+    // .Set setter, which runs after UpdateRichTextBlocks in the same dispatcher turn)
+    // to prove a release is pending, then wait for it to turn false to prove the
+    // release actually ran — instead of racing the frame-timed release from an await.
+    internal static bool IsInlineUiExtentPinPending(WinUI.RichTextBlock rtb)
+        => s_inlineUiExtentPins.TryGetValue(rtb, out InlineUiExtentPin? pin) && pin.RenderingHandler is not null;
+
     private static void PinExtentAcrossInlineUiMutation(WinUI.RichTextBlock rtb, RichTextBlockElement next)
     {
         if (!HasInlineUi(next)) return;

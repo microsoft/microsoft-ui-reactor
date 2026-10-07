@@ -231,6 +231,15 @@ public sealed record WindowSpec
     public BackdropChoice? Backdrop { get; init; }
 
     /// <summary>
+    /// Optional replacement for the built-in render-error fallback in this window. Applied
+    /// to the window's <see cref="Hosting.ReactorHost.RenderErrorHandler"/> before the first
+    /// render (and again by <see cref="ReactorWindow.Update"/>). <c>null</c> (the default)
+    /// falls through to <see cref="ReactorApp.DefaultRenderErrorHandler"/>. See
+    /// <see cref="RenderErrorHandler"/>. (issue #1291)
+    /// </summary>
+    public RenderErrorHandler? RenderErrorHandler { get; init; }
+
+    /// <summary>
     /// Optional window icon — the Win32 <c>HICON</c> Windows shows in the window's
     /// caption and the Alt-Tab switcher. Build it with <see cref="WindowIcon.FromPath"/>
     /// for a file beside the app or <see cref="WindowIcon.FromResource"/> for a packaged

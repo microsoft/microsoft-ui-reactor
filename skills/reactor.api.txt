@@ -1015,6 +1015,7 @@ KeyedListDiagnosticKind { NullKey, DuplicateKey }
 ReactorHostKind { WindowHost, HostControl }
 ItemsViewLayoutKind { StackLayout, LinedFlowLayout, UniformGridLayout }
 PersistedScope { Window, Application }
+RenderErrorSource { RootRender, ComponentRender, Reconcile, Effects, Cleanup }
 TemplatedControlKind { ListView, GridView, FlipView }
 V1UnmountDisposition { CollectSelf, ContinueDefaultTraversal, SkipPool }
 BlockStatus { Loading, Loaded, Failed }
@@ -4469,6 +4470,7 @@ IReadOnlyList<ReactorTrayIcon> TrayIcons { get; }
 IReadOnlyList<ReactorWindow> Windows { get; }
 IWindowPersistenceStore WindowPersistenceStore { get; set; }
 ReactorWindow PrimaryWindow { get; }
+RenderErrorHandler DefaultRenderErrorHandler { get; set; }
 ShutdownPolicy ShutdownPolicy { get; set; }
 bool DevtoolsEnabled { get; }
 Exit(int exitCode = 0) → void
@@ -4590,6 +4592,8 @@ Action<double, double, double> OnRenderComplete { get; set; }
 Border ContentTarget { get; set; }
 ReactorWindow OwningWindow { get; }
 Reconciler Reconciler { get; }
+RenderErrorHandler EffectiveRenderErrorHandler { get; }
+RenderErrorHandler RenderErrorHandler { get; set; }
 Window Window { get; }
 bool IsIdle { get; }
 ref RenderStats Stats { get; }
@@ -4604,6 +4608,8 @@ new(Component component = null, ILogger logger = null)
 Action<double, double, double> OnRenderComplete { get; set; }
 Func<Component> ComponentFactory { get; set; }
 Reconciler Reconciler { get; }
+RenderErrorHandler EffectiveRenderErrorHandler { get; }
+RenderErrorHandler RenderErrorHandler { get; set; }
 RenderStats Stats { get; }
 Type ComponentType { get; set; }
 object Props { get; set; }
@@ -4854,6 +4860,14 @@ UseWindowPosition() → ValueTuple<double, double>
 UseWindowSize() → ValueTuple<double, double>
 UseWindowSize(Window window) → ValueTuple<double, double>
 UseWindowState() → WindowState
+
+### class RenderError
+Exception Exception { get; }
+RenderErrorSource Source { get; }
+bool IsHostLevel { get; }
+bool IsPropagationRequested { get; }
+string ComponentName { get; }
+Propagate() → void
 
 ### struct RenderStats
 double AvgEffectsMs { get; init; }
@@ -6330,6 +6344,7 @@ BackdropChoice Backdrop { get; init; }
 EmbedRequest Embed { get; init; }
 PresenterKind Presenter { get; init; }
 ReactorWindow Owner { get; init; }
+RenderErrorHandler RenderErrorHandler { get; init; }
 ValueTuple<double, double>? ManualPosition { get; init; }
 WindowCornerStyle CornerStyle { get; init; }
 WindowIcon Icon { get; init; }

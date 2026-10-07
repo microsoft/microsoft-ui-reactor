@@ -320,6 +320,29 @@ public static partial class ReactorApp
         set => Volatile.Write(ref _appLogger, value);
     }
 
+    private static RenderErrorHandler? _defaultRenderErrorHandler;
+
+    /// <summary>
+    /// App-wide replacement for the built-in render-error fallback, which shows the full
+    /// exception text (type, message, stack trace). <c>null</c> (the default) keeps the
+    /// built-in fallback. (issue #1291)
+    /// </summary>
+    /// <remarks>
+    /// <para>Consulted at error time by every <see cref="Hosting.ReactorHost"/> and
+    /// <see cref="Hosting.ReactorHostControl"/> that has no handler of its own — including
+    /// windows opened after this is set, tray flyouts, and embedded host controls. A host
+    /// overrides it with <see cref="Hosting.ReactorHost.RenderErrorHandler"/>, and a window
+    /// with <see cref="WindowSpec.RenderErrorHandler"/>.</para>
+    /// <para>Covers every place Reactor catches a render-time exception outside an
+    /// <c>ErrorBoundary</c>: the root render, child component renders, the reconcile pass,
+    /// effect flushes, and effect cleanups during dispose. See <see cref="RenderErrorHandler"/>.</para>
+    /// </remarks>
+    public static RenderErrorHandler? DefaultRenderErrorHandler
+    {
+        get => Volatile.Read(ref _defaultRenderErrorHandler);
+        set => Volatile.Write(ref _defaultRenderErrorHandler, value);
+    }
+
     // ── XAML control-assembly registration ─────────────────────────────────
     //
     // The lifted XAML loader resolves `local:` namespaces and Generic.xaml type
@@ -764,6 +787,12 @@ public static partial class ReactorApp
         bool excludeFromShutdownPolicy = false,
         Core.SourceLocation? mountSite = null)
     {
+        // The open and its failed-open cleanup are one outermost Reactor frame for render-error
+        // propagation (issue #1291). A synchronous first render can rethrow an error the app
+        // declined via RenderError.Propagate(); the Close/Dispose below must run as nested
+        // frames, not as a new top-level dispatch, or they would clear the "already offered"
+        // mark while that exception is still unwinding.
+        using var propagationScope = RenderErrorDispatch.EnterPropagationScope();
         ReactorWindow window = new ReactorWindow(spec);
         window.ExcludeFromShutdownPolicy = excludeFromShutdownPolicy;
         try
@@ -1415,6 +1444,14 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
     /// Optional callback for unhandled exceptions. If set, called before deciding whether to handle.
     /// Return true to mark the exception as handled; return false (or leave null) to let it crash.
     /// </summary>
+    /// <remarks>
+    /// Also receives render errors an app's <see cref="RenderErrorHandler"/> routes here with
+    /// <see cref="RenderError.Propagate"/>. That call is made by Reactor itself, not by WinUI,
+    /// so it happens even when the app's <c>Application</c> is not a
+    /// <see cref="ReactorApplication"/> (for example a XAML app hosting
+    /// <c>ReactorHostControl</c>). See <see cref="RenderError.Propagate"/> for what happens
+    /// when it returns false.
+    /// </remarks>
     public static Func<Exception, bool>? OnUnhandledException { get; set; }
 
     public ReactorApplication()
@@ -1428,12 +1465,33 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
 
         UnhandledException += (_, e) =>
         {
-            ReactorApp.AppLogger?.LogError(e.Exception, "UnhandledException: {ExceptionType}: {ExceptionMessage}", e.Exception.GetType().Name, e.Exception.Message);
-            if (OnUnhandledException is not null)
-                e.Handled = OnUnhandledException(e.Exception);
+            // A render error the app asked to propagate (RenderError.Propagate) was already
+            // offered to OnUnhandledException, which declined it; don't ask twice.
+            if (RenderErrorDispatch.TryConsumeDeclined(e.Exception))
+                return;
             // Don't set e.Handled = true for unknown exceptions — let the app crash
             // with a useful error rather than silently running in a corrupt state.
+            // Read the callback once: a one-shot callback that unregisters itself before
+            // returning true must still have its decision applied.
+            var callback = OnUnhandledException;
+            bool handled = ReportUnhandled(e.Exception, callback);
+            if (callback is not null)
+                e.Handled = handled;
         };
+    }
+
+    /// <summary>
+    /// The shared unhandled-exception path: logs through <see cref="ReactorApp.AppLogger"/>
+    /// and asks <see cref="OnUnhandledException"/>. Also used for render errors routed here
+    /// by <see cref="RenderError.Propagate"/>, which WinUI would not surface through
+    /// <see cref="Application.UnhandledException"/> on its own.
+    /// </summary>
+    internal static bool ReportUnhandled(Exception ex) => ReportUnhandled(ex, OnUnhandledException);
+
+    private static bool ReportUnhandled(Exception ex, Func<Exception, bool>? callback)
+    {
+        ReactorApp.AppLogger?.LogError(ex, "UnhandledException: {ExceptionType}: {ExceptionMessage}", ex.GetType().Name, ex.Message);
+        return callback is not null && callback(ex);
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
