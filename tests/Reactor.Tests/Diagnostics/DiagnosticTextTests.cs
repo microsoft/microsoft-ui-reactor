@@ -58,7 +58,8 @@ public class DiagnosticTextTests
 
     private sealed class PrivateCountGetter : IEnumerable<int>
     {
-        public int Count { private get => throw new InvalidOperationException("private getter ran"); set { } }
+        private int _count;
+        public int Count { private get => throw new InvalidOperationException("private getter ran " + _count); set => _count = value; }
         public IEnumerator<int> GetEnumerator() { yield break; }
         global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
@@ -108,6 +109,17 @@ public class DiagnosticTextTests
         var text = DiagnosticText.Format("", typeof(string), new string('x', 500)).Text;
         // The payload is cut, and both quote delimiters survive.
         Assert.Equal("\"" + new string('x', DiagnosticText.MaxValueLength) + "...\"", text);
+    }
+
+    [Fact]
+    public void Format_TruncationNeverSplitsASurrogatePair()
+    {
+        // 199 x's then an emoji (two UTF-16 units): the cut would land between its halves.
+        var value = new string('x', DiagnosticText.MaxValueLength - 1) + "\U0001F600tail";
+        var quoted = DiagnosticText.Format("", typeof(string), value).Text;
+        Assert.Equal("\"" + new string('x', DiagnosticText.MaxValueLength - 1) + "...\"", quoted);
+        var plain = DiagnosticText.FormatPlain("Text", value).Text;
+        Assert.Equal(new string('x', DiagnosticText.MaxValueLength - 1) + "...", plain);
     }
 
     [Fact]

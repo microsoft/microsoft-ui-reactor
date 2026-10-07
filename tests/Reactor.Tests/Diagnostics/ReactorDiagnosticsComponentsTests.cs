@@ -495,6 +495,18 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
+    public void PropRows_ScalarValues_AreOneRowShownByValue()
+    {
+        var id = Guid.Parse("0f8fad5b-d9cb-469f-a165-70867728950e");
+        var when = new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);
+        foreach (var scalar in new object[] { id, when, new DateTimeOffset(when), TimeSpan.FromMinutes(5), 1.5m, (nint)7 })
+        {
+            var row = Assert.Single(DiagnosticText.PropRows(scalar, scalar.GetType()));
+            Assert.Equal(("Props", scalar), (row.Name, row.Value));
+        }
+    }
+
+    [Fact]
     public void Props_OfASecretBearingType_AreOneRedactedRow_NotListedMemberByMember()
     {
         var node = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new SessionToken("s3cr3t")) };

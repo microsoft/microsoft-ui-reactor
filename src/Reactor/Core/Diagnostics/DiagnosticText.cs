@@ -327,9 +327,10 @@ internal static class DiagnosticText
                 ? global::System.Array.Empty<(string, Type, object?)>()
                 : new[] { ("Props", declared, (object?)null) };
         var type = props.GetType();
-        // A secret-bearing props type stays one row, so Format redacts it whole instead of the
-        // members of, say, a SessionToken(string Value) being listed one by one.
-        if (type.IsPrimitive || props is string or decimal or Enum || IsListLike(props)
+        // A scalar (anything shown by its value, as Format and TryParse treat it) or a
+        // secret-bearing props type stays one row, so Format shows or redacts it whole instead of
+        // listing members (a Guid's none, a DateTime's Ticks/Kind/…, a SessionToken's Value).
+        if (IsScalar(type) || props is string or Enum || IsListLike(props)
             || HoldsSecretType(declared) || HoldsSecretType(type))
             return new[] { ("Props", declared ?? type, (object?)props) };
 
@@ -410,9 +411,19 @@ internal static class DiagnosticText
         int slashes = 0;
         for (int i = cut.Length - 1; i >= 0 && cut[i] == '\\'; i--) slashes++;
         if (slashes % 2 == 1) cut = cut.Substring(0, cut.Length - 1);
-        return "\"" + cut + "...\"";
+        return "\"" + KeepWholeSurrogates(cut) + "...\"";
     }
 
     private static string Truncate(string text) =>
-        text.Length > MaxValueLength ? text.Substring(0, MaxValueLength) + "..." : text;
+        text.Length > MaxValueLength ? KeepWholeSurrogates(text.Substring(0, MaxValueLength)) + "..." : text;
+
+    // A cut can land between the two halves of a surrogate pair (an emoji); drop the lone high
+    // half rather than emit malformed UTF-16.
+    private static string KeepWholeSurrogates(string cut) =>
+        cut.Length > 0 && char.IsHighSurrogate(cut[^1]) ? cut.Substring(0, cut.Length - 1) : cut;
+
+    /// <summary>A type shown by its value rather than its members: primitives (incl. nint/nuint), decimal, dates, times, GUIDs.</summary>
+    private static bool IsScalar(Type type) =>
+        type.IsPrimitive || type == typeof(decimal) || type == typeof(DateTime) || type == typeof(DateTimeOffset)
+        || type == typeof(TimeSpan) || type == typeof(Guid);
 }
