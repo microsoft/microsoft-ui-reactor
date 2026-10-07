@@ -90,6 +90,20 @@ internal class RenderErrorNames_ComponentTypeOnEveryPath(Harness h) : SelfTestFi
         H.Check("RenderErrorNames_Update_NoElementTypeName",
             !update.Any(n => n.StartsWith("ComponentElement", StringComparison.Ordinal)));
 
+        // ── Derived function / memo element records ──────────────────────
+        // FuncElement / MemoElement are non-sealed; a derived record is named by its own type
+        // on mount, as it is on update and unmount.
+        H.CreateHost().Mount(_ => VStack(4,
+            new DerivedFuncElement(_ => throw new RenderErrorProbeException("derived func")),
+            new DerivedMemoElement(_ => throw new RenderErrorProbeException("derived memo"))));
+        await Harness.Render();
+        var derived = Take();
+        Console.WriteLine("# derived func/memo mount RenderError: " + string.Join(", ", derived));
+        H.Check("RenderErrorNames_Mount_DerivedFuncElementNamed",
+            derived.Count(n => n == nameof(DerivedFuncElement)) == 1);
+        H.Check("RenderErrorNames_Mount_DerivedMemoElementNamed",
+            derived.Count(n => n == nameof(DerivedMemoElement)) == 1);
+
         // ── Fatal exceptions outside any ErrorBoundary ───────────────────
         // OOM/SO skip the fallback arm and propagate to the host, whose outer catch shows
         // its own fallback — a recovery, so they must be reported at the throw site too.
@@ -344,6 +358,10 @@ internal sealed class RollbackThrower<T> : Component
 }
 
 internal sealed class RenderErrorProbeException(string message) : Exception(message);
+
+internal sealed record DerivedFuncElement(Func<RenderContext, Element> Render) : FuncElement(Render);
+
+internal sealed record DerivedMemoElement(Func<RenderContext, Element> Render) : MemoElement(Render, new object?[] { "stable" });
 
 /// <summary>
 /// <c>RenderError</c> and an app's <c>RenderErrorHandler</c> (issue #1291) see the same
