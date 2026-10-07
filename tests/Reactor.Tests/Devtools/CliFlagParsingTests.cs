@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
 
@@ -588,6 +589,31 @@ public class DevtoolsHostCliTests
             AppContext.SetSwitch(switchName, false);
             ReactorDevtoolsBootstrap.RestoreForTests(previous);
         }
+    }
+
+    private sealed class AppRoot : Component
+    {
+        public override Element Render() => Factories.TextBlock("app root");
+    }
+
+    private sealed class OtherComponent : Component
+    {
+        public override Element Render() => Factories.TextBlock("other");
+    }
+
+    // The preview reports Run's call site only for the root that call mounts: its factory,
+    // or the same component type. Any other --component was never mounted by that call.
+    [Fact]
+    public void PreviewRootMountSite_KeepsRunSiteOnlyForTheAppsOwnRoot()
+    {
+        var site = new SourceLocation("App.cs", 12);
+        Func<Component> factory = () => new AppRoot();
+
+        Assert.Equal(site, DevtoolsHost.PreviewRootMountSite(site, typeof(AppRoot), factory, typeof(AppRoot)));
+        Assert.Equal(site, DevtoolsHost.PreviewRootMountSite(site, typeof(AppRoot), hostRootFactory: null, typeof(AppRoot)));
+        Assert.Null(DevtoolsHost.PreviewRootMountSite(site, typeof(AppRoot), hostRootFactory: null, typeof(OtherComponent)));
+        Assert.Null(DevtoolsHost.PreviewRootMountSite(site, hostRoot: null, hostRootFactory: null, typeof(OtherComponent)));
+        Assert.Null(DevtoolsHost.PreviewRootMountSite(runSite: null, typeof(AppRoot), factory, typeof(AppRoot)));
     }
 
     // --x/--y place the capture window on a monitor whose scale matches the

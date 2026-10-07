@@ -245,6 +245,49 @@ your own types declare — not just `string`. Two limits are worth knowing:
   an array you own, whose elements were converted where the array was built, so
   nothing is stamped and your array is never written to.
 
+### Roots, hosts and component boundaries
+
+An inspector needs more than per-control locations: it has to know which Reactor
+trees exist and where each one starts. Three pieces cover that.
+
+**Every live host is enumerable.** `ReactorDiagnostics.GetHosts()`
+(`Microsoft.UI.Reactor.Core.Diagnostics`) returns a snapshot of each live host —
+windows opened through `ReactorApp.Run` / `ReactorApp.OpenWindow`, a
+`new ReactorHost(window)` on any window, and every `ReactorHostControl` island:
+
+```csharp snippet="source:samples/apps/source-map-explorer/App.cs#list-hosts"
+```
+
+Each `ReactorHostInfo` carries the owning `Window` (window hosts), the host element
+(the `ReactorHostControl`, or a window host's `ContentTarget`), the control the root
+currently renders as (`RootControl`), the root's name — `RootComponentName` for a
+component root, `RootRenderFunctionName` (for example `MyApp.Program.Main (lambda)`)
+for a render function — and `MountSite`. It deliberately exposes no reconciler
+internals or live component instances: an inspector reaches the tree on screen through
+`RootControl`. The registry holds hosts weakly and drops them on dispose, so it never
+keeps a window alive; it costs one small allocation per host and nothing per render.
+
+**Root mount sites.** A root is not an element, so it has no `CallSite`. When
+source mapping is on, the generator also intercepts `ReactorApp.Run`,
+`ReactorApp.OpenWindow`, `ReactorWindow.Mount`, `ReactorHost.Mount` and
+`ReactorHostControl.Mount` and records the line that called them. Each of those
+methods claims its own line first thing and hands it to the host it mounts, which
+reports it as `ReactorHostInfo.MountSite`. Anything else that mounts while that
+call is running — a host created in a `configure` callback, a window the framework
+opens itself — reports `null` rather than the outer call's line.
+`Run(Action<ReactorAppContext>)` is left alone: it mounts no root itself, and each
+`OpenWindow` in its startup callback reports its own line. A root created from
+`ReactorHostControl.ComponentFactory` or `ComponentType` (set in XAML) has no call
+site and reports `null`.
+
+**Component boundaries are always tagged while mapping is on.** Every
+`Component<T>()`, `Func(...)` and `Memo(...)` mounts behind a `Border` wrapper. With
+`ReactorSourceMap.Enabled` true, that wrapper always carries the element
+back-pointer — even when the element has no location — so
+`Reconciler.GetElementTag(wrapper)` names the component (`ComponentElement.ComponentType`,
+or the render function) and an inspector can find every boundary. This adds one
+small allocation per *component*, never per leaf, and nothing while the flag is off.
+
 ### Known limitations
 
 - **Unannotated helper methods attribute to themselves.** A helper `MyHeader()`
