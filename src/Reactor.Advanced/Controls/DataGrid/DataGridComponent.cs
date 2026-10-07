@@ -1027,7 +1027,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     // creates a forced gutter between adjacent columns so content — including
     // right-aligned numbers and colored pills — can't visually merge into the
     // neighbor cell.
-    private const double CellPadLeft = 8, CellPadTop = 4, CellPadRight = 12, CellPadBottom = 4;
+    internal const double CellPadLeft = 8, CellPadTop = 4, CellPadRight = 12, CellPadBottom = 4;
 
     private static Element RenderCell(
         FieldDescriptor col, object? value, TypeRegistry registry)
@@ -1070,9 +1070,9 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             editor = registry.ResolveEditor(col.FieldType, EditorTier.Standard);
 
         if (editor is not null)
-            return AlignEditorWithCell(editor(currentValue!, v => state.UpdateEditingValue(v)));
+            return DataGridEditorAlignment.AlignWithCell(editor(currentValue!, v => state.UpdateEditingValue(v)));
 
-        return AlignEditorWithCell(TextBox(currentValue?.ToString() ?? "", s => state.UpdateEditingValue(s)));
+        return DataGridEditorAlignment.AlignWithCell(TextBox(currentValue?.ToString() ?? "", s => state.UpdateEditingValue(s)));
     }
 
     private static Element RenderRowEditingCell(
@@ -1088,77 +1088,9 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
 
         var colName = col.Name;
         if (editor is not null)
-            return AlignEditorWithCell(editor(currentValue!, v => state.UpdateRowEditValue(colName, v)));
+            return DataGridEditorAlignment.AlignWithCell(editor(currentValue!, v => state.UpdateRowEditValue(colName, v)));
 
-        return AlignEditorWithCell(TextBox(currentValue?.ToString() ?? "", s => state.UpdateRowEditValue(colName, s)));
-    }
-
-    // TextControlBorderThemeThickness — the text editors draw a 1px border inside their padding.
-    private const double TextEditorBorder = 1;
-
-    // Symmetric vertical padding for text editors. With MinHeight relaxed the box sizes to its
-    // content, so equal top/bottom padding is what centers the text; 6 keeps the box at roughly
-    // WinUI's standard 32px text-control height (1 + 6 + line + 6 + 1).
-    private const double TextEditorPadV = 6;
-
-    /// <summary>
-    /// Keeps the text of an inline text editor where the display cell drew it, so entering
-    /// edit mode doesn't make the text jump (#1340). A WinUI TextBox top-anchors its text and
-    /// enforces a 32px MinHeight, so with asymmetric/too-small padding the text sat above the
-    /// vertically-centered display TextBlock. Relaxing MinHeight and padding symmetrically lets
-    /// the editor center its text exactly like the cell does, independent of the TextBox
-    /// template version; the horizontal padding matches the cell's (less the border).
-    /// Non-text editors keep the compact padding.
-    /// </summary>
-    private static Element AlignEditorWithCell(Element editor)
-    {
-        const double l = CellPadLeft - TextEditorBorder, r = CellPadRight - TextEditorBorder;
-        return editor switch
-        {
-            TextBoxElement tb => tb.Padding(l, TextEditorPadV, r, TextEditorPadV).MinHeight(0),
-            // NumberBox forwards Padding to its inner InputBox, but the InputBox's own MinHeight
-            // is only reachable through the template.
-            NumberBoxElement nb => nb.Padding(l, TextEditorPadV, r, TextEditorPadV).OnMountAdd(RelaxNumberBoxInputMinHeight),
-            _ => editor.Padding(2),
-        };
-    }
-
-    // Static so the element's mount action is reference-stable across renders. NumberBox is not
-    // pooled, so writing to its private template part can't leak into another usage.
-    private static readonly Action<FrameworkElement> RelaxNumberBoxInputMinHeight = static fe =>
-    {
-        if (fe is not Microsoft.UI.Xaml.Controls.NumberBox nb) return;
-        if (!TryRelaxNumberBoxInputMinHeight(nb))
-            nb.Loaded += OnNumberBoxLoaded;
-    };
-
-    private static void OnNumberBoxLoaded(object sender, RoutedEventArgs e)
-    {
-        var nb = (Microsoft.UI.Xaml.Controls.NumberBox)sender;
-        nb.Loaded -= OnNumberBoxLoaded;
-        TryRelaxNumberBoxInputMinHeight(nb);
-    }
-
-    private static bool TryRelaxNumberBoxInputMinHeight(Microsoft.UI.Xaml.Controls.NumberBox nb)
-    {
-        if (FindNamedDescendant(nb, "InputBox") is not Microsoft.UI.Xaml.Controls.TextBox input)
-            return false;
-        input.MinHeight = 0;
-        return true;
-    }
-
-    private static FrameworkElement? FindNamedDescendant(DependencyObject root, string name)
-    {
-        var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
-        for (int i = 0; i < count; i++)
-        {
-            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
-            if (child is FrameworkElement fe && fe.Name == name)
-                return fe;
-            if (FindNamedDescendant(child, name) is { } found)
-                return found;
-        }
-        return null;
+        return DataGridEditorAlignment.AlignWithCell(TextBox(currentValue?.ToString() ?? "", s => state.UpdateRowEditValue(colName, s)));
     }
 
     // ── Editor focus (#976) ─────────────────────────────────────────
