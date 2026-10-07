@@ -500,6 +500,31 @@ public sealed partial class Reconciler : IDisposable
     // item list is unchanged) so they still reconcile their element children.
     internal bool ResourceRefreshActive => _resourceRefreshActive;
 
+    /// <summary>
+    /// For a ListView/GridView whose item array was kept (same reference) during a resource
+    /// refresh: reconcile each realized container's item in place, so theme values inside
+    /// kept items are re-applied without swapping ItemsSource (which would reset selection
+    /// and scroll). Unrealized items mount later against the already-cleared cache.
+    /// </summary>
+    internal void RefreshRealizedItemContainers(
+        WinUI.ListViewBase list, Element[] items, Action requestRerender)
+    {
+        if (!_resourceRefreshActive) return;
+        for (int i = 0; i < items.Length; i++)
+        {
+            if (list.ContainerFromIndex(i) is not WinUI.Primitives.SelectorItem container
+                || container.ContentTemplateRoot is not WinUI.ContentControl cc
+                || cc.Content is not UIElement existing)
+                continue;
+            var next = ReconcileV1Child(items[i], items[i], existing, requestRerender);
+            if (next is not null && !ReferenceEquals(next, existing))
+            {
+                cc.Content = next;
+                PropagateItemAutomationName(container, next);
+            }
+        }
+    }
+
     // Set of realized UIElements that lie on the path from the root to a
     // ComponentNode whose <see cref="ComponentNode.SelfTriggered"/> is true.
     // Populated at the start of each top-level Reconcile pass by walking

@@ -147,7 +147,7 @@ internal static class HostIdleAndThemeResourceFixtures
     /// A memoized subtree is skipped wholesale by a plain re-render — and by a hot-reload
     /// style force pass, which only declines wrapper skips — so its <c>{ThemeResource}</c>
     /// style setter is never re-applied. The resource-refresh pass must walk into it, and into
-    /// a keyed <c>Memo(key, ...)</c> with an unchanged key and an ItemsHost (ComboBox item elements) whose items
+    /// a keyed <c>Memo(key, ...)</c> with an unchanged key, ListView/GridView items whose array is kept, and an ItemsHost (ComboBox item elements) whose items
     /// are kept, which skip their children by other routes.
     /// "RerenderAloneIsStale" is the negative control.
     /// </summary>
@@ -184,6 +184,12 @@ internal static class HostIdleAndThemeResourceFixtures
                     // unchanged key: both skip their children outside a resource refresh.
                     var listItems = ctx.UseMemo<Element[]>(
                         () => [TextBlock("ListItemProbe").Foreground(Theme.Ref(AppKey))]);
+                    // Virtualized lists whose item array is kept: their handlers realize items in
+                    // containers and skip work when the array reference is unchanged.
+                    var lvItems = ctx.UseMemo<Element[]>(
+                        () => [TextBlock("LvItemProbe").Foreground(Theme.Ref(AppKey)), TextBlock("LvSecond")]);
+                    var gvItems = ctx.UseMemo<Element[]>(
+                        () => [TextBlock("GvItemProbe").Foreground(Theme.Ref(AppKey))]);
                     var gapItems = ctx.UseMemo<Element[]>(
                         () => [
                             Empty(),
@@ -212,18 +218,31 @@ internal static class HostIdleAndThemeResourceFixtures
                             : Border(TextBlock("ShapeProbeAfter"))),
                         // Items that realize no ComboBox entry (Empty, a memo of Empty), ahead of a themed one.
                         ComboBox(gapItems, default, null),
+                        ListView(lvItems),
+                        GridView(gvItems),
                         Memo("outer", () => Memo("inner",
                             () => TextBlock("NestedMemoProbe").Foreground(ThemeRef.Resolve(AppKey, isDark: false)!))),
                         ComboBox(listItems, default, null));
                 });
                 await host.WaitForIdleAsync();
                 H.Check("ThemeMemo_InitialRed", ProbeColor(target) == Colors.Red, $"color={ProbeColor(target)}");
+                // List containers realize during layout; wait for them before editing the resource.
+                bool listsRealized = await Harness.WaitFor(
+                    () => ProbeColor(target, "LvItemProbe") == Colors.Red && ProbeColor(target, "GvItemProbe") == Colors.Red,
+                    maxPasses: 20, perPassMs: 20);
+                H.Check("ThemeMemo_ListsInitialRed", listsRealized,
+                    $"lv={ProbeColor(target, "LvItemProbe")} gv={ProbeColor(target, "GvItemProbe")}");
 
                 resources[AppKey] = new SolidColorBrush(Colors.Blue);
                 setTick!(1);
                 await host.WaitForIdleAsync();
                 H.Check("ThemeMemo_Rerendered", FindText(target, "tick:1") is not null);
                 H.Check("ThemeMemo_RerenderAloneIsStale", ProbeColor(target) == Colors.Red, $"color={ProbeColor(target)}");
+                H.Check("ThemeMemo_ListViewItemRerenderAloneIsStale", ProbeColor(target, "LvItemProbe") == Colors.Red, $"color={ProbeColor(target, "LvItemProbe")}");
+                H.Check("ThemeMemo_GridViewItemRerenderAloneIsStale", ProbeColor(target, "GvItemProbe") == Colors.Red, $"color={ProbeColor(target, "GvItemProbe")}");
+                // A user selection, which an ItemsSource swap would clear.
+                var listView = FindDescendant<ListView>(target);
+                if (listView is not null) listView.SelectedIndex = 1;
                 H.Check("ThemeMemo_ShapeRerenderAloneIsStale", FindText(target, "ShapeProbeBefore") is not null);
                 H.Check("ThemeMemo_ShapeItemRerenderAloneKeepsIt", !shapeItemCleanedUp && !HasComboText(target, "ShapeItemAfter"));
                 H.Check("ThemeMemo_GapItemRerenderAloneIsStale", ListItemColor(target, "GapItemProbe") == Colors.Red, $"color={ListItemColor(target, "GapItemProbe")}");
@@ -235,6 +254,9 @@ internal static class HostIdleAndThemeResourceFixtures
                 await Task.Run(Theme.NotifyResourcesChanged);
                 await host.WaitForIdleAsync();
                 H.Check("ThemeMemo_NotifiedFromBackgroundIsBlue", ProbeColor(target) == Colors.Blue, $"color={ProbeColor(target)}");
+                H.Check("ThemeMemo_ListViewItemNotifiedIsBlue", ProbeColor(target, "LvItemProbe") == Colors.Blue, $"color={ProbeColor(target, "LvItemProbe")}");
+                H.Check("ThemeMemo_GridViewItemNotifiedIsBlue", ProbeColor(target, "GvItemProbe") == Colors.Blue, $"color={ProbeColor(target, "GvItemProbe")}");
+                H.Check("ThemeMemo_ListViewSelectionKept", listView?.SelectedIndex == 1, $"selected={listView?.SelectedIndex}");
                 H.Check("ThemeMemo_ShapeChangeRemounts", FindText(target, "ShapeProbeAfter") is not null && FindText(target, "ShapeProbeBefore") is null);
                 H.Check("ThemeMemo_ShapeItemReplacedAndUnmounted", shapeItemCleanedUp && HasComboText(target, "ShapeItemAfter"),
                     $"cleanedUp={shapeItemCleanedUp} after={HasComboText(target, "ShapeItemAfter")}");
@@ -269,6 +291,17 @@ internal static class HostIdleAndThemeResourceFixtures
         private static global::Windows.UI.Color? ListItemColor(Border target, string probe = "ListItemProbe")
             => (FindComboBoxes(target).SelectMany(cb => cb.Items.OfType<TextBlock>()).FirstOrDefault(t => t.Text == probe)
                     ?.Foreground as SolidColorBrush)?.Color;
+
+        private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
+        {
+            if (root is T match) return match;
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                if (FindDescendant<T>(VisualTreeHelper.GetChild(root, i)) is { } found) return found;
+            }
+            return null;
+        }
 
         private static bool HasComboText(Border target, string text)
             => FindComboBoxes(target).SelectMany(cb => cb.Items.OfType<TextBlock>()).Any(t => t.Text == text);

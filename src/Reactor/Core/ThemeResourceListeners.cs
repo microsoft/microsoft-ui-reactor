@@ -108,13 +108,7 @@ internal static class ThemeResourceListeners
                 var current = s_listeners ?? [];
                 var restored = new List<WeakReference<IThemeResourceListener>>();
                 if (hidden is not null)
-                {
-                    foreach (var weak in hidden)
-                    {
-                        if (weak.TryGetTarget(out var target) && Array.IndexOf(keep, target) < 0)
-                            restored.Add(weak);
-                    }
-                }
+                    restored.AddRange(hidden.Where(weak => weak.TryGetTarget(out var target) && Array.IndexOf(keep, target) < 0));
                 // Kept listeners still registered, and anything registered during the scope.
                 restored.AddRange(current);
                 s_listeners = restored;
