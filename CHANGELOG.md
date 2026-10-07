@@ -238,6 +238,13 @@ Conventions for contributors:
 
 ### Fixed
 
+- **A `SwipeControl` side in `SwipeMode.Execute` with more than one item no longer
+  replaces the whole UI with the render-error panel** (issue #1344). WinUI accepts
+  only one item in an Execute-mode `SwipeItems` collection and rejects a second with
+  `E_INVALIDARG`, which escaped the reconciler. Reactor now keeps the first item,
+  ignores the rest, and emits a `SwipeControl.ExecuteItems` diagnostic warning naming
+  the side and how many items were dropped.
+
 - **Dropping an `AutoSuggestBox` right after its text changed can no longer crash
   the app** (PR #1302, supersedes #559). WinUI raises the box's `TextChanged` from
   an internal timer 150 ms after its text last changed, keeps that timer running
