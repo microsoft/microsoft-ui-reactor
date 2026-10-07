@@ -138,6 +138,7 @@ internal static class DiagnosticText
     /// </summary>
     internal static (string Text, bool Redacted) Format(string name, Type? declared, object? value)
     {
+        if (value is SecretValue) return (Redacted, true);
         if (value is not null && (IsSecretName(name) || HoldsSecretType(declared) || HoldsSecretType(value.GetType())))
             return (Redacted, true);
 
@@ -338,6 +339,14 @@ internal static class DiagnosticText
             || HoldsSecretType(declared) || HoldsSecretType(type))
             return new[] { ("Props", declared ?? type, (object?)props) };
 
+        // A hand-written ToString() that labels a secret ("ApiKey: …") marks the whole object as
+        // secret, the same rule Format applies to a value's own text, so its members are not listed
+        // one by one. A record's compiler-generated text only lists its members, which are already
+        // redacted row by row, so records are not judged by it.
+        if (HasOwnToString(type) && !IsRecord(type)
+            && s_secretMemberInText.IsMatch(OwnText(props, props.ToString)))
+            return new[] { ("Props", declared ?? type, (object?)SecretValue.Instance) };
+
         var rows = new List<(string, Type, object?)>();
         // A public getter, not just CanRead: `public string X { private get; set; }` is not readable surface.
         var readable = type.GetProperties(global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Instance)
@@ -369,6 +378,28 @@ internal static class DiagnosticText
     {
         public override string ToString() => text;
     }
+
+    /// <summary>Stands in for a value withheld as a secret; <see cref="Format"/> reports it redacted.</summary>
+    internal sealed class SecretValue
+    {
+        internal static readonly SecretValue Instance = new();
+        private SecretValue() { }
+        public override string ToString() => Redacted;
+    }
+
+    [UnconditionalSuppressMessage("Trimming", "IL2070",
+        Justification = "Diagnostics-only probe for a ToString override; trimmed metadata reports none, so no own-text check runs.")]
+    private static bool HasOwnToString(Type type)
+        => type.GetMethod(nameof(ToString), global::System.Type.EmptyTypes) is { } m && m.DeclaringType != typeof(object)
+            && m.DeclaringType != typeof(ValueType);
+
+    // Every record class gets a compiler-generated public "<Clone>$" method (and EqualityContract).
+    [UnconditionalSuppressMessage("Trimming", "IL2070",
+        Justification = "Diagnostics-only record probe; if trimmed, the record is judged by its own text, which can only redact more.")]
+    private static bool IsRecord(Type type)
+        => type.GetMethod("<Clone>$", global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Instance) is not null
+            || type.GetProperty("EqualityContract",
+                global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Instance) is not null;
 
     // A collection whose ToString() is object's (prints the type name) is summarised by count; a
     // collection that formats itself (e.g. a record implementing IEnumerable) keeps its own text.

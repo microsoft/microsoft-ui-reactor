@@ -517,6 +517,27 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
+    public void Props_WhoseOwnTextLabelsASecret_AreOneRedactedRow_RecordsStillListMembers()
+    {
+        var labelled = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new ApiConfig()) };
+        var row = Assert.Single(ComponentHandle.FromNode(labelled, () => true).Describe().Props);
+        Assert.Equal(("Props", "<redacted>", true), (row.Name, row.Value, row.Redacted));
+
+        // A record's generated text names AdminPassword too, but its rows are redacted one by one.
+        var record = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new AdminRecord(2, "hunter2")) };
+        var rows = ComponentHandle.FromNode(record, () => true).Describe().Props;
+        Assert.Equal(new[] { ("Step", "2", false), ("AdminPassword", "<redacted>", true) }, rows.Select(r => (r.Name, r.Value, r.Redacted)));
+    }
+
+    private sealed class ApiConfig
+    {
+        public string Value => "hunter2";
+        public override string ToString() => "ApiKey: " + Value;
+    }
+
+    private sealed record AdminRecord(int Step, string AdminPassword);
+
+    [Fact]
     public void PropRows_ScalarValues_AreOneRowShownByValue()
     {
         var id = Guid.Parse("0f8fad5b-d9cb-469f-a165-70867728950e");
