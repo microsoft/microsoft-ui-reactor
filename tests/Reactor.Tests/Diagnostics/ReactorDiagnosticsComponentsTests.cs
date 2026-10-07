@@ -794,6 +794,20 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
+    public void DescribeChain_TheOutermostNameIsInEffect_AnOuterEmptyNameOverridesAnInnerOne()
+    {
+        // The outer "" is applied last; a FlyoutElement has no caption, so no default is
+        // written over it and the live name stays empty.
+        var chain = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(
+            Flyout(Button("Save").AutomationName("Save"), TextBlock("menu")).AutomationName(""));
+
+        var merged = AppliedModifierMap.DescribeChain(chain, typeof(WinUI.Button), liveName: "");
+
+        Assert.Equal(new[] { new AppliedModifier("AutomationName", "AutomationProperties.Name", "") },
+            merged.Where(p => p.Property == "AutomationProperties.Name"));
+    }
+
+    [Fact]
     public void DescribeChain_ADecoratorsExplicitNameSuppressesTheTargetsDefault()
     {
         var withOuterName = Flyout(Button("Save"), TextBlock("menu")).AutomationName("Save");

@@ -171,16 +171,18 @@ internal static class AppliedModifierMap
     /// Merges the modifiers of a decorator chain (outermost first, innermost target last) in the
     /// order Reactor applies them — the target's own, then each decorator's outward — so an outer
     /// level's value replaces an inner one for the same property. Ends with the caption-derived
-    /// default name when it applies and no level set a non-empty explicit name.
+    /// default name when it applies and the name in effect (the outermost level's) is absent or empty.
     /// </summary>
     internal static IReadOnlyList<AppliedModifier> DescribeChain(IReadOnlyList<Element> chain, Type controlType, string? liveName)
     {
         var merged = new List<AppliedModifier>();
-        bool explicitName = false;
+        // The name in effect is the outermost level's (applied last); an empty one counts as
+        // none, so the caption default still applies even over an inner explicit name.
+        string? effectiveName = null;
         for (int level = chain.Count - 1; level >= 0; level--)
         {
             if (chain[level].Modifiers is not { } modifiers) continue;
-            explicitName |= modifiers.AutomationName is { Length: > 0 };
+            if (modifiers.AutomationName is { } levelName) effectiveName = levelName;
             var levelRows = Describe(modifiers, controlType);
             // Several modifiers can compose one property (Margin plus MarginInlineStart), and a
             // level keeps all of its own contributors. Against inner levels: a modifier replaces
@@ -195,7 +197,7 @@ internal static class AppliedModifierMap
             merged.AddRange(levelRows);
         }
 
-        if (!explicitName && DescribeDefaultAutomationName(chain[^1], liveName) is { } defaultName)
+        if (effectiveName is not { Length: > 0 } && DescribeDefaultAutomationName(chain[^1], liveName) is { } defaultName)
             merged.Add(defaultName);
         return merged;
     }

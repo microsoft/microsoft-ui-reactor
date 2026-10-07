@@ -40,18 +40,13 @@ public class DiagnosticTextTests
         Assert.Equal("\"a \\\"b\\\"\\n\\\\c\"", DiagnosticText.Format("", typeof(string), "a \"b\"\n\\c").Text);
     }
 
-    [Fact]
+    // A comma-decimal culture discriminates: invariant output ("1.5") differs from de-DE ("1,5").
+    [CulturedFact(new[] { "de-DE" })]
     public void Format_PrimitivesUseInvariantCulture()
     {
-        var previous = global::System.Globalization.CultureInfo.CurrentCulture;
-        try
-        {
-            global::System.Globalization.CultureInfo.CurrentCulture = new global::System.Globalization.CultureInfo("de-DE");
-            Assert.Equal("1.5", DiagnosticText.Format("", typeof(double), 1.5).Text);
-            Assert.Equal("True", DiagnosticText.Format("", typeof(bool), true).Text);
-            Assert.Equal("null", DiagnosticText.Format("", typeof(string), null).Text);
-        }
-        finally { global::System.Globalization.CultureInfo.CurrentCulture = previous; }
+        Assert.Equal("1.5", DiagnosticText.Format("", typeof(double), 1.5).Text);
+        Assert.Equal("True", DiagnosticText.Format("", typeof(bool), true).Text);
+        Assert.Equal("null", DiagnosticText.Format("", typeof(string), null).Text);
     }
 
     [Fact]
