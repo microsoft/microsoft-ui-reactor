@@ -344,8 +344,9 @@ internal static class HostDiagnosticsFixtures
 
     /// <summary>
     /// <c>GetHosts()</c> is documented as callable from any thread. A background reader
-    /// snapshots a real host while the UI thread remounts it with two different sites; every
-    /// site it observes must be one of the two (or none) — never a torn mix.
+    /// snapshots a real host while the UI thread remounts it with two different sites. The host
+    /// stays alive and every mount passes a non-null site with mapping on, so every snapshot must
+    /// list the host with exactly one of the two sites: never missing, null, or a torn mix.
     /// </summary>
     internal class BackgroundSnapshotsDuringRemounts(Harness h) : SelfTestFixtureBase(h)
     {
@@ -365,6 +366,7 @@ internal static class HostDiagnosticsFixtures
                 var stop = 0;
                 var reads = 0;
                 var bad = 0;
+                var missing = 0;
                 var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 // A dedicated thread, not the pool: on a loaded CI runner a pool task may not be
                 // scheduled before the remount loop ends, and then nothing overlaps.
@@ -375,7 +377,9 @@ internal static class HostDiagnosticsFixtures
                         var info = ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.Host, host));
                         Interlocked.Increment(ref reads);
                         started.TrySetResult();
-                        if (info?.MountSite is { } site && site != a && site != b)
+                        if (info?.MountSite is not { } site)
+                            Interlocked.Increment(ref missing);
+                        else if (site != a && site != b)
                             Interlocked.Increment(ref bad);
                     }
                 }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
@@ -401,6 +405,7 @@ internal static class HostDiagnosticsFixtures
 
                 H.Check("HostDiagRace_ReaderRan", overlapped > 0, $"reads during remounts={overlapped}, total={reads}, remounts={remounts}");
                 H.Check("HostDiagRace_NoTornSites", bad == 0, $"torn={bad} of {reads}");
+                H.Check("HostDiagRace_HostAndSiteAlwaysPresent", missing == 0, $"missing host or site in {missing} of {reads}");
                 H.Check("HostDiagRace_FinalSite", InfoFor(host)?.MountSite == a);
             }
             finally
