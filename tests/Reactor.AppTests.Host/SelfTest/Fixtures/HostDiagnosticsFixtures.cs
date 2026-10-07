@@ -468,6 +468,29 @@ internal static class HostDiagnosticsFixtures
                 H.Check("HostDiagIsland_FactoryIslandHasNoMountSite",
                     factoryInfo is not null && factoryInfo.RootComponentName == ExpectedName<IslandRoot>() && factoryInfo.MountSite is null);
 
+                // Mount(Func<RenderContext, Element>) is a separate overload with its own
+                // root/site bookkeeping: a remount replaces the component root with the render
+                // function and reports the new call's line.
+                island.Mount(_ => TextBlock("hostdiag-island-render")); var renderMountLine = Line();
+                var rerendered = await Harness.WaitFor(
+                    () => H.FindControl<TextBlock>(t => t.Text == "hostdiag-island-render") is not null, maxPasses: 40, perPassMs: 10);
+                H.Check("HostDiagIsland_RenderFuncRemounted", rerendered);
+                var renderInfo = InfoFor(island);
+                H.Check("HostDiagIsland_RenderFuncRoot",
+                    renderInfo is not null && renderInfo.RootComponentName is null
+                        && RenderFunctionNamedFor(renderInfo.RootRenderFunctionName, nameof(RunAsync)),
+                    $"render={renderInfo?.RootRenderFunctionName ?? "null"} component={renderInfo?.RootComponentName ?? "null"}");
+                H.Check("HostDiagIsland_RenderFuncRootControl",
+                    renderInfo?.RootControl is not null && ReferenceEquals(renderInfo.RootControl, island.Content));
+#if REACTOR_SOURCEMAP
+                H.Check("HostDiagIsland_RenderFuncMountSite",
+                    renderInfo?.MountSite?.LineNumber == renderMountLine,
+                    $"site={renderInfo?.MountSite?.ToShortString() ?? "null"} expected line {renderMountLine}");
+#else
+                _ = renderMountLine;
+                H.Skip("HostDiagIsland_RenderFuncMountSite", SkipReason);
+#endif
+
                 island.Dispose();
                 H.Check("HostDiagIsland_DisposedRemoved", InfoFor(island) is null);
             }

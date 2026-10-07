@@ -118,6 +118,16 @@ public sealed class RootMountInterceptionTests : IDisposable
     }
 
     [Fact]
+    public void ReactorHostControlMount_RenderFunctionOverloadIsIntercepted()
+    {
+        ReactorHostControl control = null!;
+
+        Assert.Throws<NullReferenceException>(() => control.Mount(_ => TextBlock("x"))); int expected = Line();
+
+        AssertSingleSiteAt(expected);
+    }
+
+    [Fact]
     public void ReactorWindowMount_InstanceCallIsIntercepted()
     {
         ReactorWindow window = null!;
