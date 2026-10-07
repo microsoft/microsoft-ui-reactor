@@ -461,8 +461,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     /// (which checks the component root first) only sees the new one.
     ///
     /// <para>Cleanup failures are routed like disposal's (issue #1291): with a
-    /// <c>RenderErrorHandler</c> each is reported and the rest still run; with none, the
-    /// first escapes. Either way retirement completes first (a failed cleanup is not left
+    /// <c>RenderErrorHandler</c> each is reported; with none, the first escapes. Every
+    /// cleanup runs either way. Either way retirement completes first (a failed cleanup is not left
     /// armed, and the hook state and root slots are cleared), and the failure to rethrow
     /// is returned so the caller can install the new root before throwing it.</para>
     /// </summary>
@@ -475,14 +475,14 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             using (RenderErrorDispatch.EnterPropagationScope())
             {
                 RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
-                    isHostLevel: true, _logger, ref failure);
+                    isHostLevel: true, _logger, ref failure, drain: true);
                 RenderErrorDispatch.RunCleanups(_funcContext, cleanupHandler, componentName: null,
-                    isHostLevel: true, _logger, ref failure);
+                    isHostLevel: true, _logger, ref failure, drain: true);
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
-            // No handler: the failing cleanup escaped (it is already disarmed).
+            // Defensive: the cleanups drain, so only an unexpected dispatch failure lands here.
             failure ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
         }
         // Drop (not just clean up) the component's hooks: the caller owns the instance and
@@ -1282,7 +1282,10 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         // Replacing or releasing the old tree must finish even when one of its cleanups
         // throws: the host forgets that tree afterwards, so anything left registered would
         // stay alive. Every cleanup runs; failures are collected and reported below.
-        var teardownErrors = new RenderErrorDispatch.TeardownErrors(_logger);
+        // A swapped-out root's tree follows the disposal contract instead: its cleanup
+        // failures are collected and offered to the handler once the outcome is installed.
+        var releasedTreeFailures = _releaseReplacedTreeOnNullRender ? new List<Exception>() : null;
+        var teardownErrors = new RenderErrorDispatch.TeardownErrors(_logger, releasedTreeFailures);
         var (content, tree, propagate, replacesTree) = RenderErrorDispatch.BuildHostFallback(
             EffectiveRenderErrorHandler, error, _logger,
             install: element =>
@@ -1309,6 +1312,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             _reconciler.ForgetComponentDiagnostics();
         _rootDiagnostics.TrackContent(_currentControl);
         teardownErrors.RethrowPropagated();
+        if (releasedTreeFailures is not null)
+            RenderErrorDispatch.ReportReleasedTreeCleanupFailures(
+                releasedTreeFailures, () => EffectiveRenderErrorHandler, _logger)?.Throw();
         // Nothing is shown where the failure happened. Returns only when the app's
         // unhandled-exception callback handled it; otherwise rethrows.
         if (propagate)

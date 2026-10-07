@@ -277,8 +277,13 @@ internal static class RenderErrorDispatch
     /// failures are logged; the first one the app declined via
     /// <see cref="RenderError.Propagate"/> is rethrown by <see cref="RethrowPropagated"/>
     /// once the host has installed its outcome.
+    ///
+    /// <para>When <paramref name="reportable"/> is given, ordinary failures are collected
+    /// into it instead, for the caller to route with
+    /// <see cref="ReportReleasedTreeCleanupFailures"/> (a root swap's outgoing tree, whose
+    /// cleanups follow the disposal contract).</para>
     /// </summary>
-    internal sealed class TeardownErrors(ILogger? logger)
+    internal sealed class TeardownErrors(ILogger? logger, List<Exception>? reportable = null)
     {
         private ExceptionDispatchInfo? _propagated;
 
@@ -287,6 +292,11 @@ internal static class RenderErrorDispatch
             if (IsPropagating(ex))
             {
                 _propagated ??= ExceptionDispatchInfo.Capture(ex);
+                return;
+            }
+            if (reportable is not null)
+            {
+                reportable.Add(ex);
                 return;
             }
             logger?.LogError(ex, "A cleanup threw while replacing the failed tree; the remaining cleanups still ran");
@@ -360,15 +370,40 @@ internal static class RenderErrorDispatch
     }
 
     /// <summary>
+    /// Routes cleanup failures of a swapped-out root's tree that was released while the
+    /// host showed a render-error outcome for its replacement. Each is reported to the
+    /// handler as <see cref="RenderErrorSource.Cleanup"/>, as <see cref="ReportCleanupFailures"/>
+    /// does. With no handler they are logged rather than rethrown: the replacement's render
+    /// error is already on screen, and a rethrow here would replace it (or escape the
+    /// render loop). Returns the propagation to rethrow, if any.
+    /// </summary>
+    internal static ExceptionDispatchInfo? ReportReleasedTreeCleanupFailures(
+        IReadOnlyList<Exception> failures, Func<RenderErrorHandler?> resolveHandler, ILogger? logger)
+    {
+        if (failures.Count == 0) return null;
+        if (resolveHandler() is null)
+        {
+            foreach (var ex in failures)
+                logger?.LogError(ex, "A cleanup threw while releasing the replaced root's tree; the remaining cleanups still ran");
+            return null;
+        }
+        using (EnterPropagationScope())
+            return ReportCleanupFailures(failures, resolveHandler, isHostLevel: false, logger);
+    }
+
+    /// <summary>
     /// Runs <paramref name="context"/>'s cleanups during disposal. Every cleanup runs; the
     /// handler is resolved when each one fails, so a cleanup that sets or clears it affects
     /// the later ones. A failure with no handler at that moment escapes immediately, as
-    /// before #1291. Otherwise it is reported, and the first propagation is kept in
+    /// before #1291, unless <paramref name="drain"/> is set: then the remaining cleanups
+    /// still run and the failure is kept in <paramref name="pending"/> instead (a retired
+    /// root's hook state is dropped afterwards, so a skipped cleanup would never run).
+    /// Otherwise it is reported, and the first propagation is kept in
     /// <paramref name="pending"/> for the caller to rethrow after disposal.
     /// </summary>
     internal static void RunCleanups(
         RenderContext? context, Func<RenderErrorHandler?> resolveHandler, string? componentName, bool isHostLevel,
-        ILogger? logger, ref ExceptionDispatchInfo? pending)
+        ILogger? logger, ref ExceptionDispatchInfo? pending, bool drain = false)
     {
         if (context is null) return;
         ExceptionDispatchInfo? first = null;
@@ -395,6 +430,12 @@ internal static class RenderErrorDispatch
                     // remaining cleanups and teardown still run.
                     propagation = ContinuePropagation(nested);
                 }
+            }
+            else if (drain)
+            {
+                // No handler: it escapes, but only once every cleanup has run.
+                logger?.LogError(ex, "Effect cleanup threw during dispose: {ComponentName}", componentName ?? "(root)");
+                propagation = ExceptionDispatchInfo.Capture(ex);
             }
             else
             {

@@ -720,6 +720,36 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
             ReactorApp.DefaultRenderErrorHandler = previousDefault;
         }
 
+        // A throwing replacement over a tree whose cleanup also throws: the release still
+        // finishes, and the cleanup failure reaches the handler like disposal's.
+        var swapLog = new List<RenderError>();
+        var throwOverThrowHost = H.CreateHost();
+        throwOverThrowHost.RenderErrorHandler = e => { swapLog.Add(e); return null; };
+        throwOverThrowHost.Mount(new RenderedThrowingCleanupTreeRoot());
+        await Harness.Render();
+        throwOverThrowHost.Mount(new RenderedAppThrowingRoot());
+        await Harness.Render();
+        H.Check("ComponentRendered_ThrowingReplacement_ThrowingCleanup_ReportedToHandler",
+            RenderedCleanupProbeChild.Cleanups == 1
+                && swapLog.Any(e => e.Source == RenderErrorSource.RootRender)
+                && swapLog.Any(e => e.Source == RenderErrorSource.Cleanup && e.Exception.Message == RenderedThrowingCleanupChild.Message),
+            $"cleanups={RenderedCleanupProbeChild.Cleanups} log={string.Join(",", swapLog.Select(e => e.Source))}");
+
+        var swapControlLog = new List<RenderError>();
+        var throwOverThrowControl = new ReactorHostControl { RenderErrorHandler = e => { swapControlLog.Add(e); return null; } };
+        throwOverThrowControl.Mount(new RenderedThrowingCleanupTreeRoot());
+        H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = throwOverThrowControl });
+        await Harness.WaitFor(() => H.FindText("cleanup probe child") is not null, maxPasses: 32, perPassMs: 10);
+        throwOverThrowControl.Mount(new RenderedAppThrowingRoot());
+        bool controlReported = await Harness.WaitFor(
+            () => swapControlLog.Any(e => e.Source == RenderErrorSource.Cleanup), maxPasses: 32, perPassMs: 10);
+        H.Check("ComponentRendered_HostControlThrowingReplacement_ThrowingCleanup_ReportedToHandler",
+            controlReported && RenderedCleanupProbeChild.Cleanups == 1
+                && swapControlLog.Any(e => e.Source == RenderErrorSource.RootRender)
+                && swapControlLog.Any(e => e.Source == RenderErrorSource.Cleanup && e.Exception.Message == RenderedThrowingCleanupChild.Message),
+            $"cleanups={RenderedCleanupProbeChild.Cleanups} log={string.Join(",", swapControlLog.Select(e => e.Source))}");
+        throwOverThrowControl.Dispose();
+
         // A root whose Render() returns null still rendered.
         var nullHost = H.CreateHost();
         var nullRoot = new RenderedNullRoot();
@@ -973,11 +1003,112 @@ internal class ComponentRendered_RootReplacementSurvivesThrowingCleanup(Harness 
             await Harness.Render();
             H.Check("ComponentRendered_RetireCleanup_Bare_NotRearmed",
                 second is null && H.FindText("replacement bare 2") is not null, second?.Message ?? "");
+
+            // The throwing cleanup does not stop the root's other cleanups: retirement drops
+            // the hook state afterwards, so a skipped cleanup would never run.
+            var drainRoot = new RenderedThrowingAmongCleanupsRoot();
+            bare.Mount(drainRoot);
+            await Harness.Render();
+            Exception? drainEscape = null;
+            try { bare.Mount(_ => TextBlock("replacement drained")); }
+            catch (InvalidOperationException ex) { drainEscape = ex; }
+            await Harness.Render();
+            H.Check("ComponentRendered_RetireCleanup_Bare_OtherCleanupsStillRun",
+                drainEscape?.Message == RenderedThrowingCleanupRoot.Message && drainRoot.Cleanups == 2
+                    && H.FindText("replacement drained") is not null,
+                $"escaped={drainEscape?.Message ?? "(nothing)"} cleanups={drainRoot.Cleanups}");
+
+            var drainControl = new ReactorHostControl();
+            var controlDrainRoot = new RenderedThrowingAmongCleanupsRoot();
+            drainControl.Mount(controlDrainRoot);
+            H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = drainControl });
+            await Harness.WaitFor(() => controlDrainRoot.EffectsRan, maxPasses: 32, perPassMs: 10);
+            Exception? controlDrainEscape = null;
+            try { drainControl.Mount(_ => TextBlock("control replacement drained")); }
+            catch (InvalidOperationException ex) { controlDrainEscape = ex; }
+            bool controlReplaced = await Harness.WaitFor(
+                () => H.FindText("control replacement drained") is not null, maxPasses: 32, perPassMs: 10);
+            H.Check("ComponentRendered_RetireCleanup_HostControlBare_OtherCleanupsStillRun",
+                controlDrainRoot.EffectsRan && controlDrainEscape?.Message == RenderedThrowingCleanupRoot.Message
+                    && controlDrainRoot.Cleanups == 2 && controlReplaced,
+                $"escaped={controlDrainEscape?.Message ?? "(nothing)"} cleanups={controlDrainRoot.Cleanups}");
+            drainControl.Dispose();
         }
         finally
         {
             ReactorApp.DefaultRenderErrorHandler = previousDefault;
         }
+    }
+}
+
+/// <summary>
+/// The root-swap matrix on a standalone <see cref="ReactorHostControl"/>, which carries its
+/// own copy of the retirement logic: every swap runs the outgoing root's cleanups and shows
+/// the incoming root, whichever kind either side is.
+/// </summary>
+internal class ComponentRendered_HostControlRootSwaps(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var control = new ReactorHostControl();
+        var first = new RenderedSwapComponentRoot();
+        control.Mount(first);
+        H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = control });
+        Task<bool> Shows(string text) => Harness.WaitFor(() => H.FindText(text) is not null, maxPasses: 32, perPassMs: 10);
+
+        H.Check("ComponentRendered_HostControlSwap_ComponentMounted",
+            await Shows("swap component root") && first.EffectRuns == 1 && !first.CleanedUp);
+
+        bool funcCleaned = false;
+        control.Mount(c =>
+        {
+            c.UseEffect(() => () => funcCleaned = true);
+            return TextBlock("control swap func root");
+        });
+        H.Check("ComponentRendered_HostControlSwap_ComponentToFunc",
+            await Shows("control swap func root") && first.CleanedUp && !funcCleaned);
+
+        bool secondFuncCleaned = false;
+        control.Mount(c =>
+        {
+            c.UseEffect(() => () => secondFuncCleaned = true);
+            return TextBlock("control swap func root 2");
+        });
+        H.Check("ComponentRendered_HostControlSwap_FuncToFunc",
+            await Shows("control swap func root 2") && funcCleaned && !secondFuncCleaned);
+
+        var second = new RenderedSwapComponentRoot();
+        control.Mount(second);
+        bool shown = await Harness.WaitFor(() => second.EffectRuns == 1, maxPasses: 32, perPassMs: 10);
+        H.Check("ComponentRendered_HostControlSwap_FuncToComponent",
+            shown && H.FindText("swap component root") is not null && secondFuncCleaned && !second.CleanedUp);
+
+        var third = new RenderedSwapComponentRoot();
+        control.Mount(third);
+        shown = await Harness.WaitFor(() => third.EffectRuns == 1, maxPasses: 32, perPassMs: 10);
+        H.Check("ComponentRendered_HostControlSwap_ComponentToComponent", shown && second.CleanedUp && !third.CleanedUp);
+
+        // The retired instance mounted again is a fresh mount.
+        control.Mount(first);
+        shown = await Harness.WaitFor(() => first.EffectRuns == 2, maxPasses: 32, perPassMs: 10);
+        H.Check("ComponentRendered_HostControlSwap_RetiredInstanceRemountsFresh",
+            shown && third.CleanedUp && !first.CleanedUp, $"effectRuns={first.EffectRuns}");
+        control.Dispose();
+    }
+}
+
+// A throwing cleanup between two that must still run, whichever order they run in.
+internal sealed class RenderedThrowingAmongCleanupsRoot : Component
+{
+    public int Cleanups;
+    public volatile bool EffectsRan;
+
+    public override Element Render()
+    {
+        UseEffect(() => { EffectsRan = true; return () => Cleanups++; });
+        UseEffect(() => () => throw new InvalidOperationException(RenderedThrowingCleanupRoot.Message));
+        UseEffect(() => () => Cleanups++);
+        return TextBlock("throwing among cleanups root");
     }
 }
 

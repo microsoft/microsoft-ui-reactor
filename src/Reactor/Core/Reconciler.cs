@@ -2553,19 +2553,20 @@ public sealed partial class Reconciler : IDisposable
                 && renderCtx is not null
                 && HotReloadService.WithinUpdatePass)
             {
+                // The aborted attempt still ran Render(); report it before logging, so a
+                // slow logger is not charged to it.
+                if (traceRendered)
+                    EmitComponentRendered(node, null, newEl, Diagnostics.ComponentRenderTrace.Reasons.HotReload, renderedStart);
                 _logger?.LogWarning(ex,
                     "Hot reload: hook order/type changed in child component — " +
                     "resetting state and re-rendering: {ComponentName}",
                     componentName ?? newEl.GetType().Name);
-                // The aborted attempt still ran Render(); report it, then time the retry
-                // on its own (the retry reports itself after the loop).
-                if (traceRendered)
-                {
-                    EmitComponentRendered(node, null, newEl, Diagnostics.ComponentRenderTrace.Reasons.HotReload, renderedStart);
-                    renderedStart = global::System.Diagnostics.Stopwatch.GetTimestamp();
-                }
                 hotReloadRetried = true;
                 renderCtx.ResetForHotReload();
+                // Time the retry on its own (it reports itself after the loop), starting
+                // after the reset ran the effect cleanups.
+                if (traceRendered)
+                    renderedStart = global::System.Diagnostics.Stopwatch.GetTimestamp();
                 continue;
             }
             catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
