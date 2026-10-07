@@ -1007,7 +1007,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 using (_reconciler.IsolateUnmountCleanupFailures(teardownErrors.Add))
                     _reconciler.Reconcile(_currentTree, null, _currentControl, rerender);
             },
-            currentIsAppFallback: RenderErrorDispatch.IsAppFallback(_currentTree));
+            // The previous root's tree is still shown after a root swap; like an app fallback,
+            // it must be released rather than abandoned when the replacement fails.
+            currentIsAppFallback: RenderErrorDispatch.IsAppFallback(_currentTree) || _releaseReplacedTreeOnNullRender);
         SetErrorContent(content, tree, replacesTree);
         // ComponentRendered bookkeeping; see ReactorHost.ShowErrorFallback.
         if (tree is null)

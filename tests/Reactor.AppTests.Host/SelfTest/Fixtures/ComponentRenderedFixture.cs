@@ -606,6 +606,29 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
             H.FindText("cleanup probe child") is null && RenderedCleanupProbeChild.Cleanups == 1,
             $"cleanups={RenderedCleanupProbeChild.Cleanups}");
 
+        // A replacement root that throws on its first render (built-in panel, no handler):
+        // the previous root's tree is released, not abandoned with its effects live.
+        var previousDefault = ReactorApp.DefaultRenderErrorHandler;
+        ReactorApp.DefaultRenderErrorHandler = null;
+        try
+        {
+            var throwHost = H.CreateHost();
+            throwHost.Mount(new RenderedCleanupProbeRoot());
+            await Harness.Render();
+            H.Check("ComponentRendered_ThrowingReplacement_OldTreeLiveBefore",
+                H.FindText("cleanup probe child") is not null && RenderedCleanupProbeChild.Cleanups == 0);
+            throwHost.Mount(new RenderedAppThrowingRoot());
+            await Harness.Render();
+            H.Check("ComponentRendered_ThrowingReplacement_OldTreeReleased",
+                H.FindText("cleanup probe child") is null && RenderedCleanupProbeChild.Cleanups == 1
+                    && H.FindTextContaining("Render error: InvalidOperationException") is not null,
+                $"cleanups={RenderedCleanupProbeChild.Cleanups}");
+        }
+        finally
+        {
+            ReactorApp.DefaultRenderErrorHandler = previousDefault;
+        }
+
         // A root whose Render() returns null still rendered.
         var nullHost = H.CreateHost();
         var nullRoot = new RenderedNullRoot();
