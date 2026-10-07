@@ -70,13 +70,15 @@ A PR managed by this skill has exactly one lifecycle label. Leave all other labe
 | `ready-for-review` | Loop exited cleanly on the current head (see [Exit conditions](#exit-conditions)). **Not** an approval and **not** permission to merge |
 
 Set labels with `gh pr edit $number --repo $repo --add-label <new> --remove-label <old1>,<old2>`.
-Re-read labels, `headRefOid` and `baseRefOid` after writing. If the head moved, go back
-to `agent-preparing` and continue the loop. If only the base moved, the checks you
-read are stale: they ran against the old merge result and are keyed to a head that
-didn't change. Go back to `agent-preparing`, integrate the new base (Phase 1 step 3),
-and push. That makes a new head, so CI and the Copilot review run fresh against the
-new base. On a merged or closed PR: remove the lifecycle labels, clear any
-wakeup, and stop.
+Re-read labels, `headRefOid` and `baseRefOid` after writing. For `ready-for-review`, also
+re-read every readiness signal (checks, reviews, threads, top-level comments). If any of
+them changed since the exit check, restore `agent-preparing` and continue the loop. If
+the head moved, go back to `agent-preparing` and continue the loop. If only the base
+moved, the checks you read are stale: they ran against the old merge result and are
+keyed to a head that didn't change. Go back to `agent-preparing`, integrate the new base
+(Phase 1 step 3), and push. That makes a new head, so CI and the Copilot review run
+fresh against the new base. On a merged or closed PR: remove the lifecycle labels,
+clear any wakeup, and stop.
 
 ## Phase 1: Prepare
 
@@ -205,8 +207,10 @@ gh api "repos/$repo/rules/branches/$([Uri]::EscapeDataString($baseRef))"
 gh api "repos/$repo/branches/$([Uri]::EscapeDataString($baseRef))" --jq '.protection.required_status_checks'
 ```
 
-- **Required checks** (the union of both sources) must each have a matching result on
-  the head that is `success`. Match on the policy's full identity, not just the name:
+- **Required checks** (the union of both sources) must each have a passing result on
+  the head. For a check run, `success`, `skipped` and `neutral` all pass (GitHub treats
+  them as satisfying a required check); for a commit status, only `success` passes.
+  Match on the policy's full identity, not just the name:
   the context name **plus** the app it pins when there is one (`app_id` in classic
   protection's `checks`, `integration_id` in a ruleset's `required_status_checks`).
   Look in both places a result can live: check runs (`commits/<sha>/check-runs`,
