@@ -394,13 +394,23 @@ public sealed class ReactorHost : IDisposable
     /// </summary>
     private void ReleaseReplacedTree()
     {
-        _releaseReplacedTreeOnNullRender = false;
+        // Like a render-error release, the teardown finishes even when one of the old tree's
+        // cleanups throws: every cleanup runs, failures are logged, and a propagation the
+        // app requested is rethrown once the release is done.
+        var teardownErrors = new RenderErrorDispatch.TeardownErrors(_logger);
         if (_currentTree is not null)
-            _reconciler.Reconcile(_currentTree, null, _currentControl, _rerenderAction ??= () => RequestRender());
+        {
+            using (_reconciler.IsolateUnmountCleanupFailures(teardownErrors.Add))
+                _reconciler.Reconcile(_currentTree, null, _currentControl, _rerenderAction ??= () => RequestRender());
+        }
+        // Cleared only once the old tree is released: if the release itself failed, the
+        // outer render-error path still sees a pending replacement and releases it there.
+        _releaseReplacedTreeOnNullRender = false;
         // Installs "no content" through the same path as a render-error outcome that shows
         // nothing: clears the content, moves the theme listener and window hooks off it.
         SetErrorContent(null, null, replacesTree: true);
         _rootDiagnostics.TrackContent(null);
+        teardownErrors.RethrowPropagated();
     }
 
     /// <summary>

@@ -606,6 +606,20 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
             H.FindText("cleanup probe child") is null && RenderedCleanupProbeChild.Cleanups == 1,
             $"cleanups={RenderedCleanupProbeChild.Cleanups}");
 
+        // The release finishes even when one of the old tree's cleanups throws: the other
+        // components' cleanups still run and the old content still goes.
+        var throwingReleaseHost = H.CreateHost();
+        throwingReleaseHost.Mount(new RenderedThrowingCleanupTreeRoot());
+        await Harness.Render();
+        H.Check("ComponentRendered_NullReplacement_ThrowingCleanup_LiveBefore",
+            H.FindText("cleanup probe child") is not null && RenderedCleanupProbeChild.Cleanups == 0);
+        throwingReleaseHost.Mount(new RenderedNullRoot());
+        await Harness.Render();
+        H.Check("ComponentRendered_NullReplacement_ThrowingCleanup_RestStillReleased",
+            H.FindText("cleanup probe child") is null && H.FindText("throwing cleanup child") is null
+                && RenderedCleanupProbeChild.Cleanups == 1,
+            $"cleanups={RenderedCleanupProbeChild.Cleanups}");
+
         // A replacement root that throws on its first render (built-in panel, no handler):
         // the previous root's tree is released, not abandoned with its effects live.
         var previousDefault = ReactorApp.DefaultRenderErrorHandler;
@@ -915,6 +929,24 @@ internal sealed class RenderedCleanupProbeRoot : Component
     {
         RenderedCleanupProbeChild.Cleanups = 0;
         return VStack(Component<RenderedCleanupProbeChild>());
+    }
+}
+
+internal sealed class RenderedThrowingCleanupTreeRoot : Component
+{
+    public override Element Render()
+    {
+        RenderedCleanupProbeChild.Cleanups = 0;
+        return VStack(Component<RenderedThrowingCleanupChild>(), Component<RenderedCleanupProbeChild>());
+    }
+}
+
+internal sealed class RenderedThrowingCleanupChild : Component
+{
+    public override Element Render()
+    {
+        UseEffect(() => () => throw new InvalidOperationException("ComponentRendered selftest: child cleanup failure"));
+        return TextBlock("throwing cleanup child");
     }
 }
 
