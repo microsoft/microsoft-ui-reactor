@@ -103,12 +103,12 @@ row gains a column and the gate rejects it.
 
 | Verdict | Sites | Shipped | Deferred |
 |---|---|---|---|
-| `Keep` | 24 | 24 | 0 |
+| `Keep` | 34 | 34 | 0 |
 | `Narrow` | 38 | 38 | 0 |
 | `Propagate` | 7 | 7 | 0 |
 | `TryFinally` | 7 | 7 | 0 |
 | `TryXxx` | 10 | 0 | 10 |
-| `PromoteEvent` | 26 | 18 | 8 |
+| `PromoteEvent` | 30 | 22 | 8 |
 | `Deleted` | 7 | 7 | 0 |
 | `Trace` | 5 | 5 | 0 |
 
@@ -253,7 +253,7 @@ file that exists, unless the heading carries a `(retired …)` marker.
 | `EndOfStreamException` reject | 1 | `PromoteEvent` | shipped | Same. |
 | Outer catches — `Capture`, `Restore` | 2 | `Narrow` | shipped | Narrowed to `IOException`. One clause each on the capture and restore paths; the original entry said "Outer catches" without a count. |
 
-### `src/Reactor/Core/Reconciler.cs` — Phase C.7b (commit `054c53ef`) + Phase C.8 (commit `21cd6ef9`)
+### `src/Reactor/Core/Reconciler.cs` — Phase C.7b (commit `054c53ef`) + Phase C.8 (commit `21cd6ef9`) + render-error reporting (issue #1321)
 
 | Site(s) | Sites | Verdict | Status | Notes |
 |---|---|---|---|---|
@@ -263,12 +263,16 @@ file that exists, unless the heading carries a `(retired …)` marker.
 | ConnectedAnimation `GetAnimation` | 1 | `Keep` | shipped | **fail-safe-to-default.** Same. |
 | ConnectedAnimation `TryStart` | 1 | `Keep` | shipped | **fail-safe-to-default.** Same. |
 | `ApplyThemeBindings` | 1 | `Keep` | shipped | **fail-safe-to-default.** LogCategory.Theme — the catch wraps a XAML `Style.Load` compile. Could narrow to `XamlParseException` in a follow-up. |
+| `ReconcileComponent` render catch outside any `ErrorBoundary` (`_errorBoundaryDepth == 0`) | 1 | `Keep` | shipped | **user-callback isolation** per §6.7.3 — the `try` wraps the app's `Render()` and the effect flush, so the failure class is arbitrary app code and cannot be narrowed. The render is replaced by `ErrorFallback`, and the failure is reported through `ILogger` and the typed `RenderError` event, naming the component (issue #1321, PR #1323), then handed to the app's `RenderErrorHandler` when one is set (issue #1291). `OutOfMemoryException` / `StackOverflowException` are filtered out and propagate (after the report-and-rethrow arm has reported them). Pre-dates the ledger; adjudicated when #1321 touched it. |
+| `ReconcileComponent` report-and-rethrow arm — inside an `ErrorBoundary` (`_errorBoundaryDepth > 0`), or `OutOfMemoryException` / `StackOverflowException` anywhere | 1 | `PromoteEvent` | shipped | Report-and-rethrow, **not a swallow**: emits `RenderError` naming the component that threw — the only frame that knows it — then `throw;` rethrows unchanged to the enclosing boundary, which renders its fallback and does not report again (one event per throw). No exception-type filter — not even the `OutOfMemoryException` / `StackOverflowException` carve-out — because the boundary's own `catch` takes every exception, so every exception it recovers from is reported. Outside a boundary the arm also takes OOM/SO, which skip the fallback arm and reach the host's outer `catch` — itself a recovery — so they are reported once here too. Like every Reactor catch site since issue #1291, it lets an exception the app declined via `RenderError.Propagate()` pass (`!RenderErrorDispatch.IsPropagating(ex)`): its throw site already reported it. Added by issue #1321 / PR #1323. |
 
-### `src/Reactor/Core/Reconciler.Mount.cs` — Phase C.8 (commit `21cd6ef9`)
+### `src/Reactor/Core/Reconciler.Mount.cs` — Phase C.8 (commit `21cd6ef9`) + render-error reporting (issue #1321)
 
 | Site(s) | Sites | Verdict | Status | Notes |
 |---|---|---|---|---|
 | `ContentDialog.ShowAsync + OnClosed` | 1 | `Keep` | shipped | **user-callback isolation** per §6.7.3 — the try wraps both `ShowAsync` AND the user-supplied `OnClosed` delegate. Cannot narrow without splitting the try-catch into two; deferred. |
+| First-render catches outside any `ErrorBoundary` (`_errorBoundaryDepth == 0`) — `MountComponent`, `MountFuncComponent`, `MountMemoComponent` | 3 | `Keep` | shipped | **user-callback isolation** per §6.7.3 — each `try` wraps the app's first `Render()` (class, function or memo component) and its effect flush; arbitrary app code, so no narrowing. The render is replaced by `ErrorFallback` and reported through `ILogger` and, since issue #1321 (PR #1323), the typed `RenderError` event — these arms previously only logged — then handed to the app's `RenderErrorHandler` when one is set (issue #1291). `OutOfMemoryException` / `StackOverflowException` propagate (after the report-and-rethrow arm has reported them). Pre-date the ledger; adjudicated when #1321 touched them. |
+| First-render report-and-rethrow arms — inside an `ErrorBoundary` (`_errorBoundaryDepth > 0`), or `OutOfMemoryException` / `StackOverflowException` anywhere — `MountComponent`, `MountFuncComponent`, `MountMemoComponent` | 3 | `PromoteEvent` | shipped | Report-and-rethrow, **not a swallow**: emits `RenderError` naming the component that threw, then `throw;` rethrows unchanged to the enclosing boundary, which does not report again (one event per throw). Same filter as the update-path arm: every exception inside a boundary, plus OOM/SO outside one (the host recovers from those too), minus a declined propagation. Added by issue #1321 / PR #1323. |
 
 ### `src/Reactor/Core/RenderContext.cs` — Phase C.6 (commit `90d516b0`) + Phase C.9 narrowing
 
@@ -306,6 +310,20 @@ types without making it a narrowing. Same shape as the existing convention at
 |---|---|---|---|---|
 | `CanResolvePageType` resolver probe | 1 | `Keep` | shipped | **fail-safe-to-default.** The method's contract is "true **only if** definitively resolvable". Any failure to answer means we cannot confirm, and returning `false` refuses the navigation — the safe direction, and the one that cannot produce the access violation. Expected types are `COMException` at the WinRT boundary and `InvalidOperationException` / `ArgumentException` from a generated or hand-written `IXamlMetadataProvider`; propagating anything else would convert a third-party provider's bug into a render-loop error **while the navigation is refused either way**, i.e. strictly worse for identical safety. `OutOfMemoryException` / `StackOverflowException` still propagate. |
 | `TryNavigate` around `Frame.Navigate` | 1 | `Keep` | shipped | **user-callback isolation** (§6.7.3). What surfaces here is the **page constructor's** exception — arbitrary application code — and routing it into the element's declared `OnNavigationFailed` channel is the arm's entire purpose. Directly analogous to the `ContentDialog.ShowAsync + OnClosed` entry above. **Narrowing would reintroduce the defect this fix exists to remove:** an unanticipated page-constructor failure would escape the mount pass. **Coverage gap, stated rather than hidden:** reaching this arm needs a target that *resolves* but whose constructor then throws, i.e. a real `.xaml`-backed page. The selftest host ships no XAML, so every target it can offer is either refused before `Navigate` (code-only) or a framework type that constructs fine. The arm is therefore reasoned-about, not exercised — unlike the refusal path, which `FrameNav_CodeOnlyPageRefusedNotFatal` pins directly. |
+
+### `src/Reactor/Hosting/ReactorHost.cs` — render-error reporting (issue #1321)
+
+| Site(s) | Sites | Verdict | Status | Notes |
+|---|---|---|---|---|
+| Root render catches in `Render` — root component `Render()`, root render function | 2 | `Keep` | shipped | **user-callback isolation** per §6.7.3 — each `try` wraps the app's root render, arbitrary app code. The host shows its error fallback — or, since issue #1291, whatever the app's `RenderErrorHandler` returns — and keeps running; the failure is reported through `ILogger` and, since issue #1321 (PR #1323), the typed `RenderError` event — previously these arms only logged. The catch lets an exception the app declined via `RenderError.Propagate()` pass (`!RenderErrorDispatch.IsPropagating(ex)`, issue #1291). A `HookOrderException` during a hot-reload render is handled by the preceding, narrower clause. Pre-date the ledger; adjudicated when #1321 touched them. |
+| Outer render-loop catch in `Render` ("Render FAILED") — reconcile, content install, root effect flush, post-render callbacks | 1 | `Keep` | shipped | **user-callback isolation** per §6.7.3 — the `try` spans the reconcile pass (child renders and effects), the root's effect flush and app callbacks such as `OnRenderComplete`, all of which run app code. The host shows its fallback (or the app's `RenderErrorHandler` result, issue #1291) and keeps running; an exception the app declined via `RenderError.Propagate()` passes (`!RenderErrorDispatch.IsPropagating(ex)`). When the failing phase is the root's effect flush, the root component owns the failure, so since issue #1321 (PR #1323) it is also reported on the typed `RenderError` event, like a child's effect-flush failure; other phases have no failing component and are not. Pre-dates the ledger; adjudicated when #1321 touched it. |
+
+### `src/Reactor/Hosting/ReactorHostControl.cs` — render-error reporting (issue #1321)
+
+| Site(s) | Sites | Verdict | Status | Notes |
+|---|---|---|---|---|
+| Root render catches in `Render` — root component `Render()`, root render function | 2 | `Keep` | shipped | **user-callback isolation** per §6.7.3. Same shape and reporting as `ReactorHost.cs` above. |
+| Outer render-loop catch in `Render` ("Render FAILED") | 1 | `Keep` | shipped | **user-callback isolation** per §6.7.3. Same shape and reporting as `ReactorHost.cs` above. |
 
 ### `src/Reactor/Hosting/ReactorWindow.cs` — Phase C.8 (commit `21cd6ef9`) + Phase C.9 narrowing
 
