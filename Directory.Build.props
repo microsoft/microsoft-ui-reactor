@@ -21,7 +21,19 @@
     shape here.
   -->
   <PropertyGroup>
-    <WindowsAppSDKVersion>2.2.0</WindowsAppSDKVersion>
+    <!--
+      EXPERIMENTAL (public preview) VERSIONS — see the pull request description.
+
+      This branch consumes the code-based DataTemplate constructor
+      (`new DataTemplate(DataTemplateElementFactory)`). The API is on nuget.org
+      but still carries `[feature(Feature_ExperimentalApi)]`, so it exists only on
+      the `-experimental` channel: it landed in Microsoft.WindowsAppSDK.WinUI
+      2.3.10-experimental and is absent from the 2.3.9 stable release.
+
+      Move both values back onto the stable channel once the API graduates; the
+      pairing rule below still applies when you do.
+    -->
+    <WindowsAppSDKVersion>2.5.4-experimental</WindowsAppSDKVersion>
     <!--
       Windows App SDK 2.0 split the monolithic Microsoft.WindowsAppSDK metapackage
       into independently-versioned sub-packages. Framework-dependent projects
@@ -33,7 +45,7 @@
       nuspec dependency on Microsoft.WindowsAppSDK.WinUI for the target version and
       pin that exact value here. (spec 063 §3)
     -->
-    <WindowsAppSDKWinUIVersion>2.2.1</WindowsAppSDKWinUIVersion>
+    <WindowsAppSDKWinUIVersion>2.3.10-experimental</WindowsAppSDKWinUIVersion>
     <Win2DVersion>1.4.0</Win2DVersion>
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
 
@@ -70,6 +82,25 @@
   -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <!--
+    EXPERIMENTAL CHANNEL ONLY — remove together with the experimental Windows App
+    SDK versions above.
+
+    CS8305 is "this API is for evaluation purposes only" ([Experimental]). This
+    branch opts into one such API deliberately (the code-based DataTemplate
+    constructor), but that is not what trips the Release build: the XAML compiler's
+    *generated* XamlTypeInfo.g.cs references the SDK's own experimental metadata
+    providers (XamlControlsCharts/XamlControlsTabular), so every WinUI project in
+    the repo emits CS8305 from code we do not own and cannot annotate.
+
+    Demoted rather than silenced — WarningsNotAsErrors keeps the diagnostic
+    visible in build output, so a newly-introduced experimental dependency is
+    still reported; it just stops generated SDK code from breaking the build.
+  -->
+  <PropertyGroup>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);CS8305</WarningsNotAsErrors>
   </PropertyGroup>
 
   <!--
@@ -157,3 +188,4 @@
           Condition="Exists('$(MSBuildThisFileDirectory)src\Reactor\build\Reactor.targets')" />
 
 </Project>
+
