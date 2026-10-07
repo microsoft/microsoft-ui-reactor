@@ -86,7 +86,18 @@ public sealed partial class HostIdleAndThemeResourcesTests
         while (d.PumpOne()) pumps++;
 
         Assert.True(task.IsCompletedSuccessfully);
-        Assert.Equal(4, pumps);
+        Assert.Equal(3, pumps);
+    }
+
+    [Fact]
+    public void Idle_ZeroCap_CompletesWithoutYielding()
+    {
+        var d = new FakeDispatcher();
+
+        var task = Wait(() => false, d, maxYields: 0);
+
+        Assert.True(task.IsCompletedSuccessfully);
+        Assert.False(d.PumpOne());
     }
 
     [Fact]

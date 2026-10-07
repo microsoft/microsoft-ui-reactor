@@ -188,6 +188,7 @@ internal static class HostIdleAndThemeResourceFixtures
                     // containers and skip work when the array reference is unchanged.
                     var lvItems = ctx.UseMemo<Element[]>(
                         () => [TextBlock("LvItemProbe").Foreground(Theme.Ref(AppKey)), TextBlock("LvSecond")]);
+                    var lazyItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["lazy"]);
                     var gvItems = ctx.UseMemo<Element[]>(
                         () => [TextBlock("GvItemProbe").Foreground(Theme.Ref(AppKey))]);
                     var gapItems = ctx.UseMemo<Element[]>(
@@ -220,6 +221,8 @@ internal static class HostIdleAndThemeResourceFixtures
                         ComboBox(gapItems, default, null),
                         ListView(lvItems),
                         GridView(gvItems),
+                        LazyVStack(lazyItems, static s => s,
+                            static (_, _) => TextBlock("LazyProbe").Foreground(Theme.Ref(AppKey))),
                         Memo("outer", () => Memo("inner",
                             () => TextBlock("NestedMemoProbe").Foreground(ThemeRef.Resolve(AppKey, isDark: false)!))),
                         ComboBox(listItems, default, null));
@@ -228,10 +231,15 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_InitialRed", ProbeColor(target) == Colors.Red, $"color={ProbeColor(target)}");
                 // List containers realize during layout; wait for them before editing the resource.
                 bool listsRealized = await Harness.WaitFor(
-                    () => ProbeColor(target, "LvItemProbe") == Colors.Red && ProbeColor(target, "GvItemProbe") == Colors.Red,
+                    () => ProbeColor(target, "LvItemProbe") == Colors.Red && ProbeColor(target, "GvItemProbe") == Colors.Red
+                          && ProbeColor(target, "LazyProbe") == Colors.Red,
                     maxPasses: 20, perPassMs: 20);
                 H.Check("ThemeMemo_ListsInitialRed", listsRealized,
                     $"lv={ProbeColor(target, "LvItemProbe")} gv={ProbeColor(target, "GvItemProbe")}");
+                // As DataGrid does while scrolling: the factory skips refreshing realized rows.
+                var lazyFactory = FindDescendant<ItemsRepeater>(target)?.ItemTemplate as ElementFactory<string>;
+                H.Check("ThemeMemo_LazyScrollGuardInstalled", lazyFactory is not null);
+                if (lazyFactory is not null) lazyFactory.ShouldSkipRefresh = static () => true;
 
                 resources[AppKey] = new SolidColorBrush(Colors.Blue);
                 setTick!(1);
@@ -240,6 +248,7 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_RerenderAloneIsStale", ProbeColor(target) == Colors.Red, $"color={ProbeColor(target)}");
                 H.Check("ThemeMemo_ListViewItemRerenderAloneIsStale", ProbeColor(target, "LvItemProbe") == Colors.Red, $"color={ProbeColor(target, "LvItemProbe")}");
                 H.Check("ThemeMemo_GridViewItemRerenderAloneIsStale", ProbeColor(target, "GvItemProbe") == Colors.Red, $"color={ProbeColor(target, "GvItemProbe")}");
+                H.Check("ThemeMemo_LazyRowRerenderAloneIsStale", ProbeColor(target, "LazyProbe") == Colors.Red, $"color={ProbeColor(target, "LazyProbe")}");
                 // A user selection, which an ItemsSource swap would clear.
                 var listView = FindDescendant<ListView>(target);
                 if (listView is not null) listView.SelectedIndex = 1;
@@ -256,6 +265,7 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_NotifiedFromBackgroundIsBlue", ProbeColor(target) == Colors.Blue, $"color={ProbeColor(target)}");
                 H.Check("ThemeMemo_ListViewItemNotifiedIsBlue", ProbeColor(target, "LvItemProbe") == Colors.Blue, $"color={ProbeColor(target, "LvItemProbe")}");
                 H.Check("ThemeMemo_GridViewItemNotifiedIsBlue", ProbeColor(target, "GvItemProbe") == Colors.Blue, $"color={ProbeColor(target, "GvItemProbe")}");
+                H.Check("ThemeMemo_LazyRowNotifiedMidScrollIsBlue", ProbeColor(target, "LazyProbe") == Colors.Blue, $"color={ProbeColor(target, "LazyProbe")}");
                 H.Check("ThemeMemo_ListViewSelectionKept", listView?.SelectedIndex == 1, $"selected={listView?.SelectedIndex}");
                 H.Check("ThemeMemo_ShapeChangeRemounts", FindText(target, "ShapeProbeAfter") is not null && FindText(target, "ShapeProbeBefore") is null);
                 H.Check("ThemeMemo_ShapeItemReplacedAndUnmounted", shapeItemCleanedUp && HasComboText(target, "ShapeItemAfter"),

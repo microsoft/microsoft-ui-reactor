@@ -23,13 +23,16 @@ internal static class RenderLoopIdle
         Func<string> describeState)
     {
         if (isIdle()) return Task.CompletedTask;
+        if (maxYields <= 0) return Task.CompletedTask;
 
         // RunContinuationsAsynchronously: TrySetResult is called from a
         // dispatcher callback, and without this flag any await continuation
         // would run inline on the dispatcher at Low priority — re-entering
         // UI logic inside the yield loop and partially defeating its purpose.
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        int yields = 0;
+        // Dispatcher yields queued so far; the initial enqueue below is the first, so the
+        // wait yields at most maxYields times.
+        int yields = 1;
         void CheckIdle()
         {
             if (isIdle())
@@ -37,7 +40,7 @@ internal static class RenderLoopIdle
                 tcs.TrySetResult();
                 return;
             }
-            if (++yields > maxYields)
+            if (yields >= maxYields)
             {
                 // Returning early here is the classic flake source: callers
                 // (e.g. selftest Harness.Render) move on against a half-settled
@@ -49,6 +52,8 @@ internal static class RenderLoopIdle
             // Queue refused the enqueue (shutdown): complete rather than hang the caller.
             if (!tryEnqueue(DispatcherQueuePriority.Low, CheckIdle))
                 tcs.TrySetResult();
+            else
+                yields++;
         }
         if (!tryEnqueue(DispatcherQueuePriority.Low, CheckIdle))
             tcs.TrySetResult();

@@ -504,18 +504,25 @@ public sealed partial class Reconciler : IDisposable
     /// For a ListView/GridView whose item array was kept (same reference) during a resource
     /// refresh: reconcile each realized container's item in place, so theme values inside
     /// kept items are re-applied without swapping ItemsSource (which would reset selection
-    /// and scroll). Unrealized items mount later against the already-cleared cache.
+    /// and scroll). Unrealized items mount later against the already-cleared cache. Walks
+    /// the realized panel children (O(realized)), as <c>RefreshRealizedContainers</c> does,
+    /// rather than probing every index of a virtualized list.
     /// </summary>
     internal void RefreshRealizedItemContainers(
         WinUI.ListViewBase list, Element[] items, Action requestRerender)
     {
-        if (!_resourceRefreshActive) return;
-        for (int i = 0; i < items.Length; i++)
+        if (!_resourceRefreshActive || list.ItemsPanelRoot is not { } panel) return;
+        // Snapshot: reconciling may mount controls, and Children can't change mid-enumeration.
+        var realized = new List<UIElement>(panel.Children.Count);
+        foreach (var child in panel.Children) realized.Add(child);
+        foreach (var child in realized)
         {
-            if (list.ContainerFromIndex(i) is not WinUI.Primitives.SelectorItem container
+            if (child is not WinUI.Primitives.SelectorItem container
                 || container.ContentTemplateRoot is not WinUI.ContentControl cc
                 || cc.Content is not UIElement existing)
                 continue;
+            int i = list.IndexFromContainer(container);
+            if (i < 0 || i >= items.Length) continue;
             var next = ReconcileV1Child(items[i], items[i], existing, requestRerender);
             if (next is not null && !ReferenceEquals(next, existing))
             {
