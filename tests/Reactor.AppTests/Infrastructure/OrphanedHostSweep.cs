@@ -716,7 +716,7 @@ internal static partial class OrphanedHostSweep
     /// </remarks>
     internal static class LayoutRunClaim
     {
-        private static readonly object Gate = new();
+        private static readonly Lock Gate = new();
 
         private static readonly Dictionary<string, (string ExePath, IDisposable Lease)> Held =
             new(StringComparer.Ordinal);

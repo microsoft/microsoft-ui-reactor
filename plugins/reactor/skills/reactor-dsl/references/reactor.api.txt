@@ -1012,6 +1012,7 @@ AnimationKind { None, Default, Spring, EaseIn, EaseOut, EaseInOut }
 BackdropKind { None, Mica, MicaAlt, DesktopAcrylic, AcrylicThin, Transparent }
 ColorScheme { Light, Dark, HighContrast }
 KeyedListDiagnosticKind { NullKey, DuplicateKey }
+ReactorHostKind { WindowHost, HostControl }
 ItemsViewLayoutKind { StackLayout, LinedFlowLayout, UniformGridLayout }
 PersistedScope { Window, Application }
 RenderErrorSource { RootRender, ComponentRender, Reconcile, Effects, Cleanup }
@@ -4555,6 +4556,7 @@ Register(IReactorDevtoolsHost host) → void
 ### static class ReactorDiagnostics
 IReadOnlyList<KeyedListDiagnostic> RecentKeyedListWarnings { get; }
 ClearRecentKeyedListWarnings() → void
+GetHosts() → IReadOnlyList<ReactorHostInfo>
 
 ### static class ReactorDisplay
 DisplayInfo Primary { get; }
@@ -4614,6 +4616,18 @@ object Props { get; set; }
 Dispose() → void
 Mount(Component component) → void
 Mount(Func<RenderContext, Element> renderFunc) → void
+
+### class ReactorHostInfo
+FrameworkElement HostElement { get; }
+ReactorHost Host { get; }
+ReactorHostControl HostControl { get; }
+ReactorHostKind Kind { get; }
+ReactorWindow ReactorWindow { get; }
+SourceLocation? MountSite { get; }
+UIElement RootControl { get; }
+Window Window { get; }
+string RootComponentName { get; }
+string RootRenderFunctionName { get; }
 
 ### static class ReactorSourceMap
 bool Enabled { get; set; }

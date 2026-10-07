@@ -12,7 +12,7 @@ public class ListDataSource<[DynamicallyAccessedMembers(DynamicallyAccessedMembe
 {
     private readonly List<T> _items;
     private readonly Func<T, RowKey> _getRowKey;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     public ListDataSource(IEnumerable<T> items, Func<T, RowKey> getRowKey)
     {

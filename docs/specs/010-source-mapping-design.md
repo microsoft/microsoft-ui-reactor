@@ -653,7 +653,7 @@ When `--preview` is running with dev tools enabled, add an inspect mode:
 | Interceptor generator — generic factories | same | Medium |
 | Packaging: pack as analyzer + `InterceptorsNamespaces` opt-in in `build/Reactor.targets` | `.csproj` / `.targets` | Medium — **see hazard below** |
 | `InterceptsLocationAttribute` polyfill | generator | Small |
-| Runtime flag (`ReactorSourceMap`) + `NeedsTag` arm for unstamped elements | `Reconciler.cs` | Small |
+| Runtime flag (`ReactorSourceMap`); **no** `NeedsTag` arm for unstamped leaves (a stamped element is tagged via its extras bucket). Later amended (#1314): component-boundary wrappers (`Component`/`Func`/`Memo`) are tagged while the flag is on, one `ReactorState` per component | `Reconciler.cs` | Small |
 | ~~`SourceInfo` attached property~~ | — | **Deleted — redundant (§1.3)** |
 | ~~Reconciler mount hook~~ | — | **Deleted — redundant (§1.4)** |
 | Devtools §3.2 wiring: `NodeIdBuilder` rule 2, `SelectorResolver` ReactorSource arm, `includeReactorSource` | `Reactor.Devtools` | Medium |

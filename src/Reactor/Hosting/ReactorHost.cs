@@ -15,7 +15,7 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// Manages the render loop: when state changes, re-renders the component
 /// and reconciles the virtual tree against the real WinUI control tree.
 /// </summary>
-public sealed class ReactorHost : IDisposable
+public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnosticHost
 {
 #pragma warning disable CS0414 // Design constant for render-loop limiting; wiring pending
     private static readonly int MaxRenderIterations = 50;
@@ -35,6 +35,10 @@ public sealed class ReactorHost : IDisposable
     private readonly Microsoft.UI.Reactor.Core.Diagnostics.RootRenderDiagnostics _rootDiagnostics = new();
     private Func<RenderContext, Element>? _rootRenderFunc;
     private RenderContext? _funcContext;
+
+    // Where app code mounted the root (Run / OpenWindow / Mount), when source mapping
+    // was on. Diagnostics only — see ReactorDiagnostics.GetHosts.
+    private readonly Diagnostics.RootMountSiteSlot _mountSite = new();
 
     private Element? _currentTree;
     private UIElement? _currentControl;
@@ -285,6 +289,36 @@ public sealed class ReactorHost : IDisposable
             Dispose();
         };
         _window.Closed += _closedHandler;
+
+        Core.Diagnostics.ReactorHostRegistry.Register(this);
+    }
+
+    void Core.Diagnostics.IReactorDiagnosticHost.TagComponentBoundaries()
+    {
+        if (_disposed) return;
+        if (_dispatcherQueue.HasThreadAccess)
+            _reconciler.TagComponentBoundaries();
+        else
+            _dispatcherQueue.TryEnqueue(() => { if (!_disposed) _reconciler.TagComponentBoundaries(); });
+    }
+
+    Core.Diagnostics.ReactorHostInfo? Core.Diagnostics.IReactorDiagnosticHost.CaptureDiagnosticInfo()
+    {
+        if (_disposed) return null;
+        var contentTarget = ContentTarget;
+        // ForRoot reports the root that actually renders: Render() prefers the component
+        // when both have been mounted on this host.
+        return Core.Diagnostics.ReactorHostInfo.ForRoot(
+            Core.Diagnostics.ReactorHostKind.WindowHost,
+            host: this,
+            hostControl: null,
+            reactorWindow: OwningWindow,
+            window: _window,
+            hostElement: contentTarget,
+            rootControl: _currentControl,
+            rootComponent: _rootComponent,
+            rootRenderFunction: _rootRenderFunc,
+            mountSite: _mountSite.Value);
     }
 
     /// <summary>Ensure the overlay wrapper exists whenever any dev overlay flag is on.</summary>
@@ -465,6 +499,17 @@ public sealed class ReactorHost : IDisposable
     }
 
     public void Mount(Component component)
+        => Mount(component, Diagnostics.ReactorSourceMap.TakeRootMountSite());
+
+    public void Mount(Func<RenderContext, Element> renderFunc)
+        => Mount(renderFunc, Diagnostics.ReactorSourceMap.TakeRootMountSite());
+
+    /// <summary>
+    /// Mount with an explicit diagnostics call site — used by <see cref="ReactorWindow"/>,
+    /// whose own public entry point (<c>ReactorApp.Run</c> / <c>OpenWindow</c> /
+    /// <c>ReactorWindow.Mount</c>) already claimed it.
+    /// </summary>
+    internal void Mount(Component component, SourceLocation? mountSite)
     {
         // Re-mounting the active instance keeps it (and its effects) alive: retiring it
         // would run its cleanups and then reuse the same context, whose unchanged effects
@@ -476,15 +521,18 @@ public sealed class ReactorHost : IDisposable
         }
         var retireFailure = RetireRoot();
         _rootComponent = component;
+        _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
         RequestRender();
         retireFailure?.Throw();
     }
 
-    public void Mount(Func<RenderContext, Element> renderFunc)
+    internal void Mount(Func<RenderContext, Element> renderFunc, SourceLocation? mountSite)
     {
         var retireFailure = RetireRoot();
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
+        // RetireRoot cleared any component root, so the render function is the live root.
+        _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
         RequestRender();
         retireFailure?.Throw();
     }
@@ -1149,6 +1197,8 @@ public sealed class ReactorHost : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+
+        Core.Diagnostics.ReactorHostRegistry.Unregister(this);
 
         _window.Closed -= _closedHandler;
 
