@@ -711,6 +711,72 @@ internal class ComponentRendered_AppFallbackFollowsTheHandler(Harness h) : SelfT
     }
 }
 
+/// <summary>
+/// A root whose <c>Render()</c> is left by an exception the app asked to propagate
+/// (<c>RenderError.Propagate()</c> in nested Reactor work, declined by the app's unhandled
+/// callback) shows no fallback, but its render still ran and is reported.
+/// </summary>
+internal class ComponentRendered_PropagatedRootFailureReported(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var events = new List<ReactorEvent>();
+        using var subscription = ReactorTrace.Subscribe(
+            e => { if (e.EventName == nameof(ReactorEventSource.ComponentRendered)) lock (events) events.Add(e); },
+            EventLevel.Verbose,
+            ReactorEventSource.Keywords.RenderDetail);
+
+        if (!ComponentRenderTrace.IsEnabled)
+        {
+            H.Skip("ComponentRendered_PropagatedRoot", "EventSource disabled (NativeAOT)");
+            return;
+        }
+
+        var previousCallback = ReactorApplication.OnUnhandledException;
+        ReactorApplication.OnUnhandledException = _ => false;
+        var nestedWindow = new Window { Title = "ComponentRendered propagated root" };
+        var created = new List<ReactorHost>();
+        try
+        {
+            nestedWindow.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(300, 200));
+            nestedWindow.Activate();
+            var host = H.CreateHost();
+            Exception? escaped = null;
+            try
+            {
+                host.Mount(new RenderedNestedPropagatingRoot(nestedWindow, created));
+            }
+            catch (InvalidOperationException ex) { escaped = ex; }
+            await Harness.Render();
+
+            List<ReactorEvent> rootEvents;
+            lock (events) rootEvents = events.Where(e => (string)e.Payload[0]! == nameof(RenderedNestedPropagatingRoot)).ToList();
+            H.Check("ComponentRendered_PropagatedRoot_Escaped", escaped is not null, escaped?.Message ?? "(nothing escaped)");
+            H.Check("ComponentRendered_PropagatedRoot_RenderReported",
+                rootEvents.Any(e => (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Mount));
+        }
+        finally
+        {
+            ReactorApplication.OnUnhandledException = previousCallback;
+            foreach (var nested in created) nested.Dispose();
+            nestedWindow.Close();
+        }
+    }
+}
+
+// Starts nested Reactor work during its own render: a host whose first (inline) render
+// fails and whose handler asks to propagate.
+internal sealed class RenderedNestedPropagatingRoot(Window window, List<ReactorHost> created) : Component
+{
+    public override Element Render()
+    {
+        var nested = new ReactorHost(window) { RenderErrorHandler = e => { e.Propagate(); return null; } };
+        created.Add(nested);
+        nested.Mount(_ => throw new InvalidOperationException("ComponentRendered selftest: nested render propagated"));
+        return TextBlock("unreachable");
+    }
+}
+
 internal sealed class RenderedAppThrowingRoot : Component
 {
     public override Element Render() => throw new InvalidOperationException("ComponentRendered selftest: root failure for the app handler");

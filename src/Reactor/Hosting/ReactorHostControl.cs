@@ -251,9 +251,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// The root's Render() threw: report the render (as a throwing child component's is)
     /// and map its id to the error panel that now stands in for the root's content.
     /// </summary>
-    private void ShowRootRenderError(Exception ex, bool hotReloadRender, string? componentName)
+    private void ShowRootRenderError(Exception ex, bool hotReloadRender, string? componentName, double elapsedMilliseconds)
     {
-        TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
+        TraceRootRendered(hotReloadRender, elapsedMilliseconds);
         ShowErrorFallback(ex, RenderErrorSource.RootRender, componentName);
     }
 
@@ -596,11 +596,12 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // additional reset steps, throttling) only need editing here.
         void RecoverFromHookOrder(HookOrderException ex, RenderContext ctx, string mode)
         {
+            double renderMs = _phaseSw.Elapsed.TotalMilliseconds;
             // This path returns without reconciling, so nothing downstream will consume
             // or retire what the aborted render claimed (issue #1262).
             Controls.Validation.ValidationRenderScope.AbandonPendingClaims();
             // The aborted attempt still ran Render(); report it (the retry reports itself).
-            TraceRootRendered(hotReloadRender: true, _phaseSw.Elapsed.TotalMilliseconds);
+            TraceRootRendered(hotReloadRender: true, renderMs);
             _logger?.LogWarning(ex,
                 "Hot reload: hook order/type changed — resetting {Mode} state and re-rendering",
                 mode);
@@ -637,9 +638,18 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 }
                 catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
                 {
+                    // Sampled before logging: this is the render's time.
+                    double renderMs = _phaseSw.Elapsed.TotalMilliseconds;
                     _logger?.LogError(ex, "Component Render() threw");
-                    ShowRootRenderError(ex, hotReloadRender, _rootComponent.GetType().Name);
+                    ShowRootRenderError(ex, hotReloadRender, _rootComponent.GetType().Name, renderMs);
                     return;
+                }
+                // A propagation the app requested (RenderError.Propagate()) leaves without a
+                // fallback; the root's Render() still ran, so report it on the way out.
+                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled)
+                {
+                    TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
+                    throw;
                 }
             }
             else if (_rootRenderFunc is not null && _funcContext is not null)
@@ -659,9 +669,17 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 }
                 catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
                 {
+                    // Sampled before logging: this is the render's time.
+                    double renderMs = _phaseSw.Elapsed.TotalMilliseconds;
                     _logger?.LogError(ex, "Function component threw");
-                    ShowRootRenderError(ex, hotReloadRender, componentName: null);
+                    ShowRootRenderError(ex, hotReloadRender, componentName: null, renderMs);
                     return;
+                }
+                // See the component branch: report an app-requested propagation on the way out.
+                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled)
+                {
+                    TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
+                    throw;
                 }
             }
             else if (_activationError is not null)

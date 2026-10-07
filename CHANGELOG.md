@@ -268,6 +268,16 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Replacing a host's root no longer leaves the old root running** (issue #1326).
+  `ReactorHost.Mount(...)` and `ReactorHostControl.Mount(...)` now retire the
+  outgoing root before installing the new one: its effect cleanups run, and a
+  component root's hook state is reset, so mounting that instance again later starts
+  fresh. Before, the outgoing root's `UseEffect` subscriptions and timers stayed live
+  and could no longer be reached by `Dispose()`. `ReactorHost.Mount(Func<...>)` also
+  clears a previous component root, which the render loop checks first and so kept
+  rendering instead of the new function root. Mounting the instance that is already
+  mounted just re-renders it.
+
 - **An `ErrorBoundary` whose child fails part-way through mounting no longer leaves
   that child's effects running** (issue #1291). A component registers before its
   effects run, so a child whose second effect threw had already opened whatever its
