@@ -302,7 +302,7 @@ internal interface IReactorDiagnosticHost
 /// </summary>
 internal static class ReactorHostRegistry
 {
-    private static readonly global::System.Threading.Lock s_gate = new();
+    private static readonly Lock s_gate = new();
     private static List<WeakReference<IReactorDiagnosticHost>>? s_hosts;
 
     internal static void Register(IReactorDiagnosticHost host)
