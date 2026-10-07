@@ -24,7 +24,7 @@ namespace Microsoft.UI.Reactor.Docking;
 /// </remarks>
 internal static class PreviousContainerTracker
 {
-    private static readonly object _lock = new();
+    private static readonly Lock _lock = new();
     private static ConditionalWeakTable<DockableContent, ContainerRef> _table = new();
 
     /// <summary>

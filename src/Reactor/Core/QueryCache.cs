@@ -60,7 +60,7 @@ public sealed class QueryCache : IDisposable
 
     private readonly ConcurrentDictionary<string, Slot> _slots = new();
     private Timer? _evictionTimer;
-    private readonly object _timerLock = new();
+    private readonly Lock _timerLock = new();
     private int _disposed;
 
     /// <summary>Fires when an entry is added, replaced, invalidated, or evicted.</summary>
@@ -325,7 +325,7 @@ public sealed class QueryCache : IDisposable
     // Untyped slot wrapper — the generic payload lives in Entry (boxed CacheEntry<T>).
     private sealed class Slot
     {
-        public readonly object Lock = new();
+        public readonly Lock Lock = new();
         public object? Entry;
         public int SubscriberCount;
         public TimeSpan CacheTime = TimeSpan.FromMinutes(5);

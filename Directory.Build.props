@@ -73,6 +73,18 @@
   </PropertyGroup>
 
   <!--
+    Run the IDE code-style analyzers during the build, not just in the editor.
+    Without this, IDE-prefixed rules never surface in `dotnet build` / CI no
+    matter what severity .editorconfig gives them. Only rules that .editorconfig
+    raises to `warning` (currently IDE0330, "prefer System.Threading.Lock",
+    issue #1350) affect the build; everything left at `suggestion` stays
+    IDE-only.
+  -->
+  <PropertyGroup>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <!--
     Repository / project URL metadata for every packable project. NuGet.org's
     Microsoft compliance policy (https://aka.ms/Microsoft-NuGet-Compliance)
     REJECTS any Microsoft-signed package that is missing ProjectUrl — the push

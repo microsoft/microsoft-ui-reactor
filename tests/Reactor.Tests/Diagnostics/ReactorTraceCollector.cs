@@ -30,7 +30,7 @@ namespace Microsoft.UI.Reactor.Tests.Diagnostics;
 internal sealed class ReactorTraceCollector : IDisposable
 {
     private readonly List<ReactorEvent> _events = new();
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly IDisposable _subscription;
     private int _disposed;
 
