@@ -14,8 +14,9 @@ public sealed partial class ReactorHostControl
     private RootComponentSource? ResolveDiagnosticsRoot(UIElement element)
     {
         if (_disposed) return null;
+        // Null when the root rendered Empty(): the control itself still anchors it, and the
+        // rendered-root check below rejects pre-render, error and disposed states.
         var control = _currentControl;
-        if (control is null) return null;
         var content = Content;
         var wrapper = _overlayWiring?.WrapperRoot;
         bool contentIsOurs = ReferenceEquals(content, control) || (wrapper is not null && ReferenceEquals(content, wrapper));

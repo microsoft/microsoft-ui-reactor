@@ -191,8 +191,10 @@ public sealed class ReactorHost : IDisposable
     private RootComponentSource? ResolveDiagnosticsRoot(UIElement element)
     {
         if (_disposed) return null;
+        // Null when the root rendered Empty(): the ContentTarget still anchors it (an empty
+        // container is this host's), and the rendered-root check below rejects pre-render,
+        // error and disposed states.
         var control = _currentControl;
-        if (control is null) return null;
 
         UIElement? container = ContentTarget ?? (_windowClosed ? null : _window.Content as UIElement);
         UIElement? installed = ContentTarget is { } target ? target.Child : container;

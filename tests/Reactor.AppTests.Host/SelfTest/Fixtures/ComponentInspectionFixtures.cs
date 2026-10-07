@@ -297,6 +297,24 @@ internal static class ComponentInspectionFixtures
             H.Check("RootAnchor_RecoveredRootDescribed",
                 ReactorDiagnostics.DescribeComponent(fbTarget) is { IsRoot: true, Kind: "function", State: [{ Value: "\"ok\"" }] });
 
+            // A root that renders Empty() has no rendered control; its ContentTarget still anchors
+            // it. A private container keeps other (undisposed) hosts out of the picture.
+            var emptyTarget = new Border();
+            H.SetContent(emptyTarget);
+            using (var emptyHost = new ReactorHost(H.Window) { ContentTarget = emptyTarget })
+            {
+                emptyHost.Mount(ctx =>
+                {
+                    var (s, _) = ctx.UseState("empty-root");
+                    return Empty();
+                });
+                await Harness.Render();
+                H.Check("RootAnchor_EmptyRootViaContentTarget",
+                    emptyHost.CurrentControl is null
+                    && ReactorDiagnostics.DescribeComponent(emptyTarget) is { IsRoot: true, State: [{ Value: "\"empty-root\"" }] });
+            }
+            H.SetContent(null);
+
             // A host without a ContentTarget installs its root as the window content.
             var window = H.Window;
             var previousContent = window.Content;
@@ -349,6 +367,17 @@ internal static class ComponentInspectionFixtures
                     maxPasses: 16, perPassMs: 10);
                 H.Check("RootAnchor_HostControlRemounted",
                     ReactorDiagnostics.DescribeComponent(hostControl) is { IsRoot: true, Name: "RootCounter" });
+
+                // A root that renders Empty() is still anchored at the control itself.
+                hostControl.Mount(ctx =>
+                {
+                    var (s, _) = ctx.UseState("hc-empty");
+                    return Empty();
+                });
+                await Harness.WaitFor(() => ReactorDiagnostics.DescribeComponent(hostControl) is { State: [{ Value: "\"hc-empty\"" }] },
+                    maxPasses: 16, perPassMs: 10);
+                H.Check("RootAnchor_HostControlEmptyRoot",
+                    ReactorDiagnostics.DescribeComponent(hostControl) is { IsRoot: true, Kind: "function", State: [{ Value: "\"hc-empty\"" }] });
 
                 hostControl.Dispose();
                 H.Check("RootAnchor_DisposedHostControlNotDescribed", ReactorDiagnostics.DescribeComponent(hostControl) is null);
