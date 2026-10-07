@@ -238,6 +238,14 @@ Conventions for contributors:
 
 ### Fixed
 
+- **DataGrid inline editors no longer shift the cell's text when editing starts**
+  (issue #1340). The built-in TextBox and NumberBox editors used `.Padding(2)` inside
+  WinUI's 32px minimum height, which draws text at the top, so the text moved about 4px
+  up and 5px left as soon as a cell entered edit mode. Text editors now use the cell's
+  horizontal padding and symmetric vertical padding, with `TextControlThemeMinHeight`
+  overridden to 0, so their text lands exactly where the display cell drew it. A custom
+  `col.Editor` keeps any padding, `MinHeight` or `TextControlThemeMinHeight` it sets.
+
 - **Dropping an `AutoSuggestBox` right after its text changed can no longer crash
   the app** (PR #1302, supersedes #559). WinUI raises the box's `TextChanged` from
   an internal timer 150 ms after its text last changed, keeps that timer running

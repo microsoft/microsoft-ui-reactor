@@ -48,9 +48,23 @@ internal static class DataGridEditorAlignment
             editor = editor.Padding(
                 CellPadLeft - TextEditorBorder, TextEditorPadV, CellPadRight - TextEditorBorder, TextEditorPadV);
         // A theme-resource override rather than .MinHeight(0): it also reaches the TextBox inside
-        // NumberBox's template, which no NumberBox property forwards to.
-        if (editor.Modifiers?.MinHeight is null && editor.ResourceOverrides is null)
-            editor = editor with { ResourceOverrides = RelaxedTextMinHeight };
+        // NumberBox's template, which no NumberBox property forwards to. Merged into any overrides
+        // the editor already has, unless it sized itself via .MinHeight or this same key.
+        if (editor.Modifiers?.MinHeight is null)
+        {
+            var existing = editor.ResourceOverrides;
+            if (existing is null)
+                editor = editor with { ResourceOverrides = RelaxedTextMinHeight };
+            else if (!existing.Literals.ContainsKey(MinHeightResourceKey)
+                     && !existing.ThemeRefs.ContainsKey(MinHeightResourceKey))
+                editor = editor with
+                {
+                    ResourceOverrides = existing with
+                    {
+                        Literals = new Dictionary<string, object>(existing.Literals) { [MinHeightResourceKey] = 0d },
+                    },
+                };
+        }
         return editor;
     }
 }

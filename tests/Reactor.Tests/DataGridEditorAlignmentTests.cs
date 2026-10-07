@@ -49,14 +49,28 @@ public class DataGridEditorAlignmentTests
     }
 
     [Fact]
-    public void Custom_NumberBox_Resource_Overrides_Are_Preserved()
+    public void Custom_NumberBox_Other_Resource_Overrides_Are_Kept_And_MinHeight_Merged_In()
     {
-        var custom = NumberBox(1.5, _ => { }).Resources(r => r.Set("TextControlBorderThemeThickness", 2d));
+        var custom = NumberBox(1.5, _ => { })
+            .Resources(r => r.Set("TextControlBorderThemeThickness", 2d).Set("TextControlForeground", new ThemeRef("AccentKey")));
+
+        var aligned = Align(custom);
+
+        Assert.Equal(2d, aligned.ResourceOverrides!.Literals["TextControlBorderThemeThickness"]);
+        Assert.Equal(new ThemeRef("AccentKey"), aligned.ResourceOverrides.ThemeRefs["TextControlForeground"]);
+        Assert.Equal(0d, aligned.ResourceOverrides.Literals[MinHeightKey]);
+        Assert.False(custom.ResourceOverrides!.Literals.ContainsKey(MinHeightKey));
+    }
+
+    [Fact]
+    public void Custom_MinHeight_Resource_Override_Is_Preserved()
+    {
+        var custom = TextBox("x", _ => { }).Resources(r => r.Set(MinHeightKey, 40d));
 
         var aligned = Align(custom);
 
         Assert.Same(custom.ResourceOverrides, aligned.ResourceOverrides);
-        Assert.False(aligned.ResourceOverrides!.Literals.ContainsKey(MinHeightKey));
+        Assert.Equal(40d, aligned.ResourceOverrides!.Literals[MinHeightKey]);
     }
 
     [Fact]
