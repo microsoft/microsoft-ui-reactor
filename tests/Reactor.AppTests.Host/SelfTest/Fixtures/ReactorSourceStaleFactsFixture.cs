@@ -100,7 +100,7 @@ internal class ReactorSource_StaleFactsDropped(Harness h) : SelfTestFixtureBase(
             var siteFile = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(
                 H.FindControl<WinUI.TextBlock>(t => t.Text == "late-title")!)?.FilePath;
             H.Check("ReactorSource_StaleFacts_RepublishedAfterReset",
-                fresh?.Contains("|name=lateTitle", StringComparison.Ordinal) == true && siteFile is not null, fresh);
+                fresh?.Contains("|name=lateTitle", StringComparison.Ordinal) == true && siteFile is not null, fresh ?? "(no value)");
             Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.RegisterStaticInfo(
                 typeof(object).Assembly, b => b.Source(siteFile!, "0000000000000000"));
             host.RequestRender(force: true);
@@ -112,6 +112,39 @@ internal class ReactorSource_StaleFactsDropped(Harness h) : SelfTestFixtureBase(
                 nameLate is not null && !nameLate.Contains("|name=", StringComparison.Ordinal)
                 && hooksLate is not null && !hooksLate.Contains("|hooks=", StringComparison.Ordinal));
             host.Dispose();
+            H.SetContent(null);
+
+            // ── Two files share one at= text; only the second becomes unattributable. ──
+            // Paths outside the project publish as the file name only (rel=0), so these collide.
+            var siteA = new SourceLocation(@"C:\ReactorAmbiguityProbe\A\Shared.cs", 5, 1);
+            var siteB = new SourceLocation(@"C:\ReactorAmbiguityProbe\B\Shared.cs", 5, 1);
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.RegisterStaticInfo(typeof(object).Assembly, b =>
+            {
+                b.Name(siteA.FilePath, 5, 1, "alpha");
+                b.Source(siteA.FilePath, "aaaaaaaaaaaaaaaa");
+                b.Name(siteB.FilePath, 5, 1, "beta");
+                b.Source(siteB.FilePath, "bbbbbbbbbbbbbbbb");
+            });
+            var ambHost = H.CreateHost();
+            ambHost.Mount(_ => VStack(
+                TextBlock("amb-a") with { CallSite = siteA },
+                TextBlock("amb-b") with { CallSite = siteB }));
+            await Harness.Render();
+            var aBefore = Source("amb-a");
+            var bBefore = Source("amb-b");
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.RegisterStaticInfo(
+                typeof(global::System.Uri).Assembly, b => b.Source(siteB.FilePath, "cccccccccccccccc"));
+            ambHost.RequestRender(force: true);
+            await Harness.Render();
+            var aAfter = Source("amb-a");
+            var bAfter = Source("amb-b");
+            Console.WriteLine($"# stale facts, colliding at=: {aBefore} / {bBefore} -> {aAfter} / {bAfter}");
+            H.Check("ReactorSource_StaleFacts_CollidingLocationOnlyTheStaleOneDropped",
+                aBefore?.Contains("|name=alpha", StringComparison.Ordinal) == true
+                && bBefore?.Contains("|name=beta", StringComparison.Ordinal) == true
+                && aAfter?.Contains("|name=alpha", StringComparison.Ordinal) == true
+                && bAfter is not null && !bAfter.Contains("|name=", StringComparison.Ordinal));
+            ambHost.Dispose();
             H.SetContent(null);
         }
         finally

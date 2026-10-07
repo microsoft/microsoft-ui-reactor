@@ -587,7 +587,11 @@ public sealed partial class Reconciler : IDisposable
         int revision = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.StaticFactsRevision;
         if (revision == _seenFactsRevision) return;
         _seenFactsRevision = revision;
-        WalkPublished(control, stopAtBoundaries: false, Diagnostics.ReactorSourcePublisher.WithoutStaleFacts);
+        // Each control's exact call site (its tag where it has one), not the first site recorded
+        // for its at= text: two files can share that text, and only one may have gone stale.
+        WalkPublished(control, stopAtBoundaries: false, static (node, value) =>
+            Diagnostics.ReactorSourcePublisher.WithoutStaleFacts(value,
+                node is UIElement ui ? global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(ui) : null));
     }
 
     /// <summary>
@@ -624,7 +628,7 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal void RenameRootOwner(UIElement? root, string previousOwner, string owner)
         => WalkPublished(root, stopAtBoundaries: true,
-            value => Diagnostics.ReactorSourcePublisher.WithOwner(value, previousOwner, owner));
+            (_, value) => Diagnostics.ReactorSourcePublisher.WithOwner(value, previousOwner, owner));
 
     /// <summary>
     /// Visits every control under <paramref name="root"/> that carries a published value,
@@ -633,7 +637,7 @@ public sealed partial class Reconciler : IDisposable
     /// (<c>null</c> = unchanged). With <paramref name="stopAtBoundaries"/>, component wrappers
     /// and embedded hosts are not entered (their subtrees have other owners).
     /// </summary>
-    private void WalkPublished(UIElement? root, bool stopAtBoundaries, Func<string, string?> rewrite)
+    private void WalkPublished(UIElement? root, bool stopAtBoundaries, Func<DependencyObject, string, string?> rewrite)
     {
         if (root is null) return;
         var seen = new HashSet<DependencyObject>(ReferenceEqualityComparer.Instance);
@@ -650,7 +654,7 @@ public sealed partial class Reconciler : IDisposable
             bool componentWrapper = false;
             if (node.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string value)
             {
-                if (rewrite(value) is { } rewritten && !string.Equals(rewritten, value, StringComparison.Ordinal))
+                if (rewrite(node, value) is { } rewritten && !string.Equals(rewritten, value, StringComparison.Ordinal))
                     node.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, rewritten);
                 componentWrapper = Diagnostics.ReactorSourcePublisher.IsComponentWrapper(value);
             }

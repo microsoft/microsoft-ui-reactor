@@ -244,14 +244,15 @@ internal static class ReactorSourcePublisher
     /// unknown; otherwise a value whose call site's file has become unattributable (another
     /// source-mapped assembly claims the same path with different facts) loses its
     /// <c>name=</c> and its render-function <c>hooks=</c> (class-component hooks are keyed by
-    /// type, not location, and stay).
+    /// type, not location, and stay). <paramref name="exactSite"/> is the control's own call
+    /// site when known (two files can share one <c>at=</c> text, which resolves to the first).
     /// </summary>
-    internal static string? WithoutStaleFacts(string value)
+    internal static string? WithoutStaleFacts(string value, SourceLocation? exactSite = null)
     {
         bool hotReloaded = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.StaticFactsInvalidatedByHotReload;
         if (!hotReloaded)
         {
-            if (ResolvePublishedValue(value) is not { } site
+            if ((exactSite ?? ResolvePublishedValue(value)) is not { } site
                 || global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.IsFileAttributable(site.FilePath))
                 return null;
         }
