@@ -224,6 +224,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _reconciler.DiagnosticsRootResolver = ResolveDiagnosticsRoot;
         _reconciler.RenderErrorHandlerProvider = () => EffectiveRenderErrorHandler;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        _reconciler.DiagnosticsDispatcher = _dispatcherQueue;
         // A standalone ReactorHostControl has no ReactorApp bootstrap, so nothing else
         // sets ReactorApp.UIDispatcher. Cross-thread setState — including the re-render
         // that UseValidationContext schedules when a background async validator raises

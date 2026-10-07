@@ -260,6 +260,7 @@ public sealed class ReactorHost : IDisposable
         _window = window;
         _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        _reconciler.DiagnosticsDispatcher = _dispatcherQueue;
         // Off-thread rerenders marshal via ReactorApp.UIDispatcher (captured
         // in OnLaunched). For embedded ReactorHostControl scenarios where
         // there's no Reactor.Run, fall back to seeding UIDispatcher with this

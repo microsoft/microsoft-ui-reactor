@@ -27,6 +27,16 @@ public sealed partial class Reconciler
     /// </summary>
     internal Func<UIElement, RootComponentSource?>? DiagnosticsRootResolver { get; set; }
 
+    /// <summary>
+    /// The owning host's UI dispatcher, set alongside <see cref="DiagnosticsRootResolver"/>.
+    /// The registry is process-wide while hosts can live on different UI threads, so a lookup
+    /// skips every reconciler whose dispatcher is not the calling thread's before touching its
+    /// unsynchronized tables or controls. Null (headless) is not filtered.
+    /// </summary>
+    internal Microsoft.UI.Dispatching.DispatcherQueue? DiagnosticsDispatcher { get; set; }
+
+    private bool IsOwnedByAnotherThread => DiagnosticsDispatcher is { HasThreadAccess: false };
+
     private void RegisterForDiagnostics()
     {
         lock (s_liveGate)
@@ -77,6 +87,7 @@ public sealed partial class Reconciler
     {
         foreach (var r in SnapshotLiveReconcilers())
         {
+            if (r.IsOwnedByAnotherThread) continue;
             if (r._componentNodes.TryGetValue(element, out var found))
             {
                 owner = r;
@@ -94,6 +105,7 @@ public sealed partial class Reconciler
     {
         foreach (var r in SnapshotLiveReconcilers())
         {
+            if (r.IsOwnedByAnotherThread) continue;
             if (r.DiagnosticsRootResolver?.Invoke(element) is { } found)
             {
                 root = found;

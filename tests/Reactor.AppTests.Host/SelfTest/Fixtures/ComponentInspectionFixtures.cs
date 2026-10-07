@@ -25,7 +25,10 @@ internal static class ComponentInspectionFixtures
     private static Exception? Record(Action action)
     {
         try { action(); return null; }
-        catch (Exception ex) { return ex; }
+        catch (Exception ex) when (ex is not (OutOfMemoryException or StackOverflowException or AccessViolationException))
+        {
+            return ex;
+        }
     }
 
     private sealed class Counter : Component<CounterProps>
@@ -208,6 +211,22 @@ internal static class ComponentInspectionFixtures
 
             H.Check("RootAnchor_RenderedControl", IsRoot(ReactorDiagnostics.DescribeComponent(host.CurrentControl)));
             H.Check("RootAnchor_ContentTarget", IsRoot(ReactorDiagnostics.DescribeComponent(target)));
+
+            // A reconciler owned by another UI thread is never read: with this host's dispatcher
+            // swapped for a dedicated thread's, its root no longer resolves from here.
+            var ownDispatcher = host.Reconciler.DiagnosticsDispatcher;
+            var foreignThread = Microsoft.UI.Dispatching.DispatcherQueueController.CreateOnDedicatedThread();
+            try
+            {
+                host.Reconciler.DiagnosticsDispatcher = foreignThread.DispatcherQueue;
+                H.Check("RootAnchor_ForeignThreadReconcilerSkipped", ReactorDiagnostics.DescribeComponent(target) is null);
+            }
+            finally
+            {
+                host.Reconciler.DiagnosticsDispatcher = ownDispatcher;
+                await foreignThread.ShutdownQueueAsync();
+            }
+            H.Check("RootAnchor_OwnThreadReconcilerRead", IsRoot(ReactorDiagnostics.DescribeComponent(target)));
 
             // With an overlay on, ContentTarget holds a wrapper around the rendered root.
             var prevOverlay = ReactorFeatureFlags.HighlightReconcileChanges;
