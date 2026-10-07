@@ -1281,7 +1281,7 @@ public sealed class RenderContext
             Comparer = comparer;
         }
 
-        public object Gate { get; } = new();
+        public Lock Gate { get; } = new();
         public TSnapshot Snapshot { get; set; }
         public Func<TSnapshot> GetSnapshot { get; set; }
         public IEqualityComparer<TSnapshot> Comparer { get; set; }
