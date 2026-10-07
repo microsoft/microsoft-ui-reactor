@@ -85,9 +85,8 @@ public sealed partial class Reconciler
     /// </summary>
     internal static bool TryFindComponentNode(UIElement element, out Reconciler owner, out ComponentNode node)
     {
-        foreach (var r in SnapshotLiveReconcilers())
+        foreach (var r in SnapshotLiveReconcilers().Where(static r => !r.IsOwnedByAnotherThread))
         {
-            if (r.IsOwnedByAnotherThread) continue;
             if (r._componentNodes.TryGetValue(element, out var found))
             {
                 owner = r;
@@ -103,9 +102,8 @@ public sealed partial class Reconciler
     /// <summary>Finds the host root component anchored at <paramref name="element"/>.</summary>
     internal static bool TryFindRootComponent(UIElement element, out RootComponentSource root)
     {
-        foreach (var r in SnapshotLiveReconcilers())
+        foreach (var r in SnapshotLiveReconcilers().Where(static r => !r.IsOwnedByAnotherThread))
         {
-            if (r.IsOwnedByAnotherThread) continue;
             if (r.DiagnosticsRootResolver?.Invoke(element) is { } found)
             {
                 root = found;
