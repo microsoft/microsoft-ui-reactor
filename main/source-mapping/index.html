@@ -2996,6 +2996,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#roots-hosts-and-component-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roots, hosts and component boundaries
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#known-limitations" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3373,6 +3384,17 @@
     <span class="md-ellipsis">
       
         Bare strings and other implicit conversions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#roots-hosts-and-component-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roots, hosts and component boundaries
       
     </span>
   </a>
@@ -3771,6 +3793,46 @@ your own types declare — not just <code>string</code>. Two limits are worth kn
   an array you own, whose elements were converted where the array was built, so
   nothing is stamped and your array is never written to.</li>
 </ul>
+<h3 id="roots-hosts-and-component-boundaries">Roots, hosts and component boundaries<a class="headerlink" href="#roots-hosts-and-component-boundaries" title="Permanent link">&para;</a></h3>
+<p>An inspector needs more than per-control locations: it has to know which Reactor
+trees exist and where each one starts. Three pieces cover that.</p>
+<p><strong>Every live host is enumerable.</strong> <code>ReactorDiagnostics.GetHosts()</code>
+(<code>Microsoft.UI.Reactor.Core.Diagnostics</code>) returns a snapshot of each live host —
+windows opened through <code>ReactorApp.Run</code> / <code>ReactorApp.OpenWindow</code>, a
+<code>new ReactorHost(window)</code> on any window, and every <code>ReactorHostControl</code> island:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">foreach</span><span class="w"> </span><span class="p">(</span><span class="kt">var</span><span class="w"> </span><span class="n">host</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">ReactorDiagnostics</span><span class="p">.</span><span class="n">GetHosts</span><span class="p">())</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="p">{</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="kt">var</span><span class="w"> </span><span class="n">root</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">host</span><span class="p">.</span><span class="n">RootComponentName</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="n">host</span><span class="p">.</span><span class="n">RootRenderFunctionName</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="s">&quot;(not mounted)&quot;</span><span class="p">;</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="n">lines</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">$&quot;{host.Kind} {host.ReactorWindow?.Key} &lt;{root}&gt; at {host.MountSite}&quot;</span><span class="p">);</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="p">}</span>
+</code></pre></div>
+<p>Each <code>ReactorHostInfo</code> carries the owning <code>Window</code> (window hosts), the host element
+(the <code>ReactorHostControl</code>, or a window host's <code>ContentTarget</code>), the control the root
+currently renders as (<code>RootControl</code>), the root's name — <code>RootComponentName</code> for a
+component root, <code>RootRenderFunctionName</code> (for example <code>MyApp.Program.Main (lambda)</code>)
+for a render function — and <code>MountSite</code>. It deliberately exposes no reconciler
+internals or live component instances: an inspector reaches the tree on screen through
+<code>RootControl</code>. The registry holds hosts weakly and drops them on dispose, so it never
+keeps a window alive; it costs one small allocation per host and nothing per render.</p>
+<p><strong>Root mount sites.</strong> A root is not an element, so it has no <code>CallSite</code>. When
+source mapping is on, the generator also intercepts <code>ReactorApp.Run</code>,
+<code>ReactorApp.OpenWindow</code>, <code>ReactorWindow.Mount</code>, <code>ReactorHost.Mount</code> and
+<code>ReactorHostControl.Mount</code> and records the line that called them. Each of those
+methods claims its own line first thing and hands it to the host it mounts, which
+reports it as <code>ReactorHostInfo.MountSite</code>. Anything else that mounts while that
+call is running — a host created in a <code>configure</code> callback, a window the framework
+opens itself — reports <code>null</code> rather than the outer call's line.
+<code>Run(Action&lt;ReactorAppContext&gt;)</code> is left alone: it mounts no root itself, and each
+<code>OpenWindow</code> in its startup callback reports its own line. A root created from
+<code>ReactorHostControl.ComponentFactory</code> or <code>ComponentType</code> (set in XAML) has no call
+site and reports <code>null</code>.</p>
+<p><strong>Component boundaries are always tagged while mapping is on.</strong> Every
+<code>Component&lt;T&gt;()</code>, <code>Func(...)</code> and <code>Memo(...)</code> mounts behind a <code>Border</code> wrapper. With
+<code>ReactorSourceMap.Enabled</code> true, that wrapper always carries the element
+back-pointer — even when the element has no location — so
+<code>Reconciler.GetElementTag(wrapper)</code> names the component (<code>ComponentElement.ComponentType</code>,
+or the render function) and an inspector can find every boundary. This adds one
+small allocation per <em>component</em>, never per leaf, and nothing while the flag is off.</p>
 <h3 id="known-limitations">Known limitations<a class="headerlink" href="#known-limitations" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Unannotated helper methods attribute to themselves.</strong> A helper <code>MyHeader()</code>

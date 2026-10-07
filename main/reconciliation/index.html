@@ -3952,7 +3952,11 @@ element has callbacks (<code>Element.HasCallbacks</code>), carries a <code>Key</
 <code>Extensions</code>, or uses a reference modifier — the four cases where
 downstream code reads the element back through <code>GetElementTag</code>. An
 element with none of those never pays for a <code>ReactorState</code> allocation
-or the attached-DP write.</p>
+or the attached-DP write. The one addition is diagnostic: while
+<code>ReactorSourceMap.Enabled</code> is on, the <code>Border</code> wrapper of every
+<code>Component</code>, <code>Func</code> and <code>Memo</code> boundary is tagged too, so an inspector
+can find each component — one allocation per component, never per leaf
+(see <a href="../source-mapping/">Source mapping</a>).</p>
 <p>This is why <code>Element.HasCallbacks</code> is load-bearing in the early-skip
 path of the <a href="#child-reconciler-keyed-vs-positional">child reconciler</a>
 — the skip short-circuits Update, so the tag has to be refreshed
