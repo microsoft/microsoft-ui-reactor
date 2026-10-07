@@ -707,6 +707,18 @@ public sealed partial class Reconciler : IDisposable
                 foreach (var tab in tabs.TabItems)
                     Push(tab as UIElement);
             }
+            else if (ui is WinUI.TreeView tree)
+            {
+                // Node content (legacy TreeViewNodeData.ContentElement) is mounted for every
+                // node, collapsed ones included, and is in no visual or logical child walk.
+                var nodes = new Stack<WinUI.TreeViewNode>(tree.RootNodes);
+                while (nodes.Count > 0)
+                {
+                    var treeNode = nodes.Pop();
+                    Push(treeNode.Content as UIElement);
+                    foreach (var child in treeNode.Children) nodes.Push(child);
+                }
+            }
             if (_navigationHostNodes.TryGetValue(ui, out var navNode) && navNode.Cache is { } cache)
             {
                 foreach (var page in cache.SnapshotControls())
