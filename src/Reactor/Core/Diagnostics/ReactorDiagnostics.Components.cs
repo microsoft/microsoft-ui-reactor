@@ -348,7 +348,9 @@ internal sealed class ComponentHandle
             }
             values[i] = new DiagnosticValue(i, "", HookKindText(cell.DiagnosticKind),
                 valueType is null ? "" : DiagnosticText.FriendlyTypeName(valueType), text,
-                Editable: cell.DiagnosticCanSet && !redacted && DiagnosticText.IsEditable(valueType),
+                // The same type-level gate TrySetState applies, so a null secret-typed value is not
+                // advertised as editable either.
+                Editable: cell.DiagnosticCanSet && !redacted && DiagnosticText.IsEditable(valueType) && !DiagnosticText.IsSecretType(valueType),
                 redacted, cell.Migrated);
         }
         return values;

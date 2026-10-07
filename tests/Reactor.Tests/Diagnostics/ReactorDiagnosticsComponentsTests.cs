@@ -220,6 +220,21 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
+    public void State_ANullSecretTypedValue_IsNotAdvertisedEditable()
+    {
+        var r = new Renderer();
+        r.Begin();
+        r.Context.UseState<ApiSecret?>(null);
+        var handle = ForContext(r.Context);
+
+        var hook = Assert.Single(handle.Describe().State);
+        Assert.Equal(("null", false, false), (hook.Value, hook.Redacted, hook.Editable));
+        AssertRefused(handle, 0, "On", "holds a secret");
+    }
+
+    private enum ApiSecret { Off, On }
+
+    [Fact]
     public void TrySetState_RefusesAValueItsNextSnapshotWouldRedact()
     {
         var r = new Renderer();

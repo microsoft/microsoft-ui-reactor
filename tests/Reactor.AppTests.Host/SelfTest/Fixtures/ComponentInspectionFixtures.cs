@@ -89,14 +89,12 @@ internal static class ComponentInspectionFixtures
 
                 // A reconciler driven directly (no host) records its UI thread the first time it
                 // mounts a component, so foreign-thread lookups can skip it too.
-                var direct = new Reconciler();
-                try
+                using (var direct = new Reconciler())
                 {
                     var directWrapper = direct.Mount(Component<Counter, CounterProps>(new CounterProps(1, "x")), () => { });
                     H.Check("CompInspect_DirectReconcilerCapturesDispatcher",
                         directWrapper is not null && direct.DiagnosticsDispatcher is { HasThreadAccess: true });
                 }
-                finally { direct.Dispose(); }
                 var counter = ReactorDiagnostics.DescribeComponent(wrapper);
                 H.Check("CompInspect_ClassDescribed",
                     counter is { Name: "Counter", Kind: "class", IsRoot: false });
@@ -345,6 +343,11 @@ internal static class ComponentInspectionFixtures
                     return Empty();
                 });
                 await Harness.Render();
+                // Rendering into emptyTarget dropped the claim on the earlier container, so pointing
+                // the host back at it does not resolve it to the root rendered elsewhere.
+                emptyHost.ContentTarget = unrelated;
+                H.Check("RootAnchor_RetargetDropsTheEarlierClaim", ReactorDiagnostics.DescribeComponent(unrelated) is null);
+                emptyHost.ContentTarget = emptyTarget;
 
                 // …and of two empty-root hosts sharing one container, the latest to mount owns it.
                 using var secondEmpty = new ReactorHost(H.Window) { ContentTarget = emptyTarget };

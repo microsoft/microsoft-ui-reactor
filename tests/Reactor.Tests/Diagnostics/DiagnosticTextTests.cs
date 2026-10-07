@@ -50,6 +50,20 @@ public class DiagnosticTextTests
     }
 
     [Fact]
+    public void TryCount_ReadsOnlyAPublicGetter()
+    {
+        Assert.Null(DiagnosticText.TryCount(new PrivateCountGetter()));
+        Assert.Equal("PrivateCountGetter (count unknown)", DiagnosticText.Format("", typeof(PrivateCountGetter), new PrivateCountGetter()).Text);
+    }
+
+    private sealed class PrivateCountGetter : IEnumerable<int>
+    {
+        public int Count { private get => throw new InvalidOperationException("private getter ran"); set { } }
+        public IEnumerator<int> GetEnumerator() { yield break; }
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    [Fact]
     public void Format_SummarisesCollectionsByTheCountTheyAdvertise()
     {
         Assert.Equal("List<int> (3 items)", DiagnosticText.Format("", typeof(List<int>), new List<int> { 1, 2, 3 }).Text);

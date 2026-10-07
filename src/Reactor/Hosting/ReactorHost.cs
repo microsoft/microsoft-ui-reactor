@@ -435,18 +435,28 @@ public sealed class ReactorHost : IDisposable
 
     private void ClaimContentTarget()
     {
-        if (ContentTarget is { } target)
-            s_contentTargetOwner.AddOrUpdate(target, new WeakReference<ReactorHost>(this));
+        if (ContentTarget is not { } target) return;
+        // Retargeted: drop the claim on the previous container so it cannot resolve to a root
+        // this host has since rendered elsewhere.
+        if (_claimedContentTarget is { } previous && !ReferenceEquals(previous, target) && OwnsContentTarget(previous))
+            s_contentTargetOwner.Remove(previous);
+        s_contentTargetOwner.AddOrUpdate(target, new WeakReference<ReactorHost>(this));
+        _claimedContentTarget = target;
     }
+
+    // The container this host last claimed (not necessarily the current ContentTarget).
+    private UIElement? _claimedContentTarget;
 
     private void ReleaseContentTarget()
     {
-        if (ContentTarget is { } target && OwnsContentTarget(target))
+        if (_claimedContentTarget is { } target && OwnsContentTarget(target))
             s_contentTargetOwner.Remove(target);
+        _claimedContentTarget = null;
     }
 
     private bool OwnsContentTarget(UIElement target)
-        => s_contentTargetOwner.TryGetValue(target, out var owner)
+        => ReferenceEquals(_claimedContentTarget, target)
+            && s_contentTargetOwner.TryGetValue(target, out var owner)
             && owner.TryGetTarget(out var host) && ReferenceEquals(host, this);
 
     // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host): whether any live host owns

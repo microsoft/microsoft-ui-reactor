@@ -386,7 +386,9 @@ internal static class DiagnosticText
         {
             if (value is ICollection collection) return collection.Count;
             var count = value.GetType().GetProperty("Count", global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Instance);
-            if (count is not null && count.PropertyType == typeof(int) && count.GetIndexParameters().Length == 0)
+            // A public getter, not just a public property: a private getter is not advertised.
+            if (count is not null && count.PropertyType == typeof(int) && count.GetIndexParameters().Length == 0
+                && count.GetMethod is { IsPublic: true })
                 return (int?)count.GetValue(value);
             return null;
         }
