@@ -22,6 +22,12 @@ internal static class ComponentInspectionFixtures
 
     private sealed record CounterProps(int Step, string AdminPassword);
 
+    private static Exception? Record(Action action)
+    {
+        try { action(); return null; }
+        catch (Exception ex) { return ex; }
+    }
+
     private sealed class Counter : Component<CounterProps>
     {
         public override Element Render()
@@ -60,6 +66,23 @@ internal static class ComponentInspectionFixtures
                 if (wrapper is null) return;
 
                 H.Check("CompInspect_LeafIsNotAComponent", ReactorDiagnostics.DescribeComponent(leaf) is null);
+
+                // Off its UI thread, a read fails even with no process-wide dispatcher captured
+                // (an embedded ReactorHostControl without ReactorApp.Run): the element's own
+                // dispatcher decides.
+                var savedDispatcher = ReactorApp.UIDispatcher;
+                Exception? offThread = null;
+                try
+                {
+                    ReactorApp.UIDispatcher = null;
+                    var reader = new global::System.Threading.Thread(() =>
+                        offThread = Record(() => ReactorDiagnostics.DescribeComponent(wrapper)));
+                    reader.Start();
+                    reader.Join();
+                }
+                finally { ReactorApp.UIDispatcher = savedDispatcher; }
+                H.Check("CompInspect_OffThreadReadThrows", offThread is InvalidOperationException,
+                    offThread?.GetType().Name ?? "no exception");
                 var counter = ReactorDiagnostics.DescribeComponent(wrapper);
                 H.Check("CompInspect_ClassDescribed",
                     counter is { Name: "Counter", Kind: "class", IsRoot: false });

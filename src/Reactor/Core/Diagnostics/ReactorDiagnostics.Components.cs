@@ -103,7 +103,7 @@ public static partial class ReactorDiagnostics
     public static ComponentSnapshot? DescribeComponent(UIElement element)
     {
         ArgumentNullException.ThrowIfNull(element);
-        EnsureUIThread();
+        EnsureUIThread(element);
         return ComponentHandle.TryResolve(element, out var handle) ? handle.Describe() : null;
     }
 
@@ -129,7 +129,7 @@ public static partial class ReactorDiagnostics
     {
         ArgumentNullException.ThrowIfNull(element);
         ArgumentNullException.ThrowIfNull(text);
-        EnsureUIThread();
+        EnsureUIThread(element);
         if (!ComponentHandle.TryResolve(element, out var handle))
         {
             error = "no Reactor component is hosted at this element";
@@ -153,7 +153,7 @@ public static partial class ReactorDiagnostics
     public static bool Rerender(UIElement element)
     {
         ArgumentNullException.ThrowIfNull(element);
-        EnsureUIThread();
+        EnsureUIThread(element);
         return ComponentHandle.TryResolve(element, out var handle) && handle.Rerender();
     }
 
@@ -177,7 +177,7 @@ public static partial class ReactorDiagnostics
     public static IReadOnlyList<AppliedProperty> GetAppliedProperties(UIElement control)
     {
         ArgumentNullException.ThrowIfNull(control);
-        EnsureUIThread();
+        EnsureUIThread(control);
         var tag = Reconciler.GetElementTag(control);
         if (tag is null) return global::System.Array.Empty<AppliedProperty>();
         var chain = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(tag);
@@ -197,11 +197,22 @@ public static partial class ReactorDiagnostics
     /// <summary>
     /// Every public member is UI-thread-affine: component tables are unsynchronized and
     /// hook cells are owned by the render thread. Off-thread calls fail loudly instead of
-    /// racing. Shares <c>ThreadAffinity</c>'s rule: unchecked before a UI dispatcher has
-    /// been captured (headless tests, pre-<c>Run</c>).
+    /// racing. The supplied element's own dispatcher decides (it is set for every live WinUI
+    /// element, including in an embedded <c>ReactorHostControl</c> with no <c>ReactorApp.Run</c>,
+    /// and is right per window thread); <c>ThreadAffinity</c>'s process-wide rule covers the rest.
     /// </summary>
-    internal static void EnsureUIThread()
-        => Microsoft.UI.Reactor.Hosting.ThreadAffinity.ThrowIfNotOnUIThread("ReactorDiagnostics component inspection");
+    internal static void EnsureUIThread(UIElement element)
+    {
+        if (element.DispatcherQueue is { } queue)
+        {
+            if (!queue.HasThreadAccess)
+                throw new InvalidOperationException(
+                    "ReactorDiagnostics must be called on the UI thread that owns the element. " +
+                    "Use element.DispatcherQueue.TryEnqueue(...) to marshal the call.");
+            return;
+        }
+        Microsoft.UI.Reactor.Hosting.ThreadAffinity.ThrowIfNotOnUIThread("ReactorDiagnostics component inspection");
+    }
 }
 
 /// <summary>

@@ -155,7 +155,7 @@ internal static class DiagnosticText
         {
             // A string can carry a labelled secret itself ("AccessToken=…", a connection string).
             if (s_secretMemberInText.IsMatch(s)) return (Redacted, true);
-            return (Truncate(Quote(s)), false);
+            return (Quote(s), false);
         }
 
         return FormatPlain(name, value);
@@ -397,9 +397,19 @@ internal static class DiagnosticText
         }
     }
 
-    private static string Quote(string s) =>
-        "\"" + s.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal)
-            .Replace("\n", "\\n", StringComparison.Ordinal).Replace("\r", "\\r", StringComparison.Ordinal) + "\"";
+    private static string Quote(string s)
+    {
+        var escaped = s.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal).Replace("\r", "\\r", StringComparison.Ordinal);
+        if (escaped.Length <= MaxValueLength) return "\"" + escaped + "\"";
+        // Cut the payload, not the quoted text, so a long value keeps both delimiters; never
+        // leave half of an escape sequence (an odd run of trailing backslashes) at the cut.
+        var cut = escaped.Substring(0, MaxValueLength);
+        int slashes = 0;
+        for (int i = cut.Length - 1; i >= 0 && cut[i] == '\\'; i--) slashes++;
+        if (slashes % 2 == 1) cut = cut.Substring(0, cut.Length - 1);
+        return "\"" + cut + "...\"";
+    }
 
     private static string Truncate(string text) =>
         text.Length > MaxValueLength ? text.Substring(0, MaxValueLength) + "..." : text;

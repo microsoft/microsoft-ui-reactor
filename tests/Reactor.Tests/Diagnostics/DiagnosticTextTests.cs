@@ -89,8 +89,16 @@ public class DiagnosticTextTests
     public void Format_TruncatesLongValues()
     {
         var text = DiagnosticText.Format("", typeof(string), new string('x', 500)).Text;
-        Assert.Equal(DiagnosticText.MaxValueLength + 3, text.Length);
-        Assert.EndsWith("...", text);
+        // The payload is cut, and both quote delimiters survive.
+        Assert.Equal("\"" + new string('x', DiagnosticText.MaxValueLength) + "...\"", text);
+    }
+
+    [Fact]
+    public void Format_TruncationNeverSplitsAnEscapeSequence()
+    {
+        // 199 x's then a backslash: escaped, the cut would land between "\" and "\".
+        var text = DiagnosticText.Format("", typeof(string), new string('x', DiagnosticText.MaxValueLength - 1) + "\\tail").Text;
+        Assert.Equal("\"" + new string('x', DiagnosticText.MaxValueLength - 1) + "...\"", text);
     }
 
     // ── Redaction ───────────────────────────────────────────────────

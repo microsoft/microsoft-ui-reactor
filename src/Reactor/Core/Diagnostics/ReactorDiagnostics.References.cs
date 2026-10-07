@@ -38,8 +38,10 @@ public static partial class ReactorDiagnostics
     /// <summary>
     /// The references <paramref name="control"/> declares to other controls — including pending
     /// ones whose target has not mounted yet, for which the WinUI property itself (e.g.
-    /// <c>XYFocusRight</c>, <c>AutomationProperties.LabeledBy</c>) still reads null. Ordered by
-    /// property, then list position.
+    /// <c>XYFocusRight</c>, <c>AutomationProperties.LabeledBy</c>) still reads null. Grouped by
+    /// property in a fixed order (control-descriptor references, then bindings, then the
+    /// modifier references), then list position; both <c>LabeledBy</c> forms are adjacent, the
+    /// <c>ElementRef</c> one first.
     /// </summary>
     /// <remarks>
     /// <c>ElementRef</c> references (modifiers such as <c>.LabeledBy(ref)</c> or
@@ -52,7 +54,7 @@ public static partial class ReactorDiagnostics
     public static IReadOnlyList<ReferenceEdgeSnapshot> GetReferenceEdges(UIElement control)
     {
         ArgumentNullException.ThrowIfNull(control);
-        EnsureUIThread();
+        EnsureUIThread(control);
 
         Reconciler.ReactorState? state = null;
         if (control is FrameworkElement fe) Reconciler.TryGetReactorState(fe, out state);
@@ -147,7 +149,18 @@ internal static class ReferenceEdgeMap
         }
 
         if (result is null) return global::System.Array.Empty<ReferenceEdgeSnapshot>();
-        result.Sort(static (a, b) => a.Slot != b.Slot ? a.Slot.CompareTo(b.Slot) : a.Edge.Index.CompareTo(b.Edge.Index));
+        // Group by public property: the AutomationId LabeledBy pseudo-slot sorts with the
+        // ElementRef LabeledBy slot (after it), so no other property lands between them.
+        static (int Group, int Sub) Key(int slot) => slot == ReferenceSlots.ModifierRef_LabeledById
+            ? (ReferenceSlots.ModifierRef_LabeledBy, 1)
+            : (slot, 0);
+        result.Sort(static (a, b) =>
+        {
+            var (ka, kb) = (Key(a.Slot), Key(b.Slot));
+            if (ka.Group != kb.Group) return ka.Group.CompareTo(kb.Group);
+            if (ka.Sub != kb.Sub) return ka.Sub.CompareTo(kb.Sub);
+            return a.Edge.Index.CompareTo(b.Edge.Index);
+        });
         var edges = new ReferenceEdgeSnapshot[result.Count];
         for (int i = 0; i < edges.Length; i++) edges[i] = result[i].Edge;
         return edges;

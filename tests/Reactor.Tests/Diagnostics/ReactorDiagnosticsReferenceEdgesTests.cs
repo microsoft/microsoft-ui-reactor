@@ -139,6 +139,20 @@ public class ReactorDiagnosticsReferenceEdgesTests
     }
 
     [Fact]
+    public void BothLabeledByForms_AreAdjacent_BeforeLaterProperties()
+    {
+        var bag = Bag();
+        AddScalar(bag, ReferenceSlots.ModifierRef_LabeledBy, new ElementRef());
+        AddList(bag, ReferenceSlots.ModifierRef_DescribedBy, new ElementRef());
+        AddScalar(bag, ReferenceSlots.ModifierRef_XYFocusUp, new ElementRef());
+
+        var edges = ReferenceEdgeMap.Describe(bag, pendingLabeledBy: "nameLabel", null, null);
+
+        Assert.Equal(new[] { ("LabeledBy", (string?)null), ("LabeledBy", "nameLabel"), ("DescribedBy", null), ("XYFocusUp", null) },
+            edges.Select(e => (e.Property, e.TargetAutomationId)));
+    }
+
+    [Fact]
     public void AutomationIdAndRefLabeledBy_AreReportedAsSeparateEdges()
     {
         var bag = Bag();
