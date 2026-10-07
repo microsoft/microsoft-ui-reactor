@@ -354,6 +354,10 @@ internal static class ComponentInspectionFixtures
                 // the host back at it does not resolve it to the root rendered elsewhere.
                 emptyHost.ContentTarget = unrelated;
                 H.Check("RootAnchor_RetargetDropsTheEarlierClaim", ReactorDiagnostics.DescribeComponent(unrelated) is null);
+                // …and until a render publishes to the new target, the container the root was
+                // rendered into is still its anchor.
+                H.Check("RootAnchor_PublishedContainerAnchorsUntilNextRender",
+                    ReactorDiagnostics.DescribeComponent(emptyTarget) is { IsRoot: true, State: [{ Value: "\"empty-root\"" }] });
                 emptyHost.ContentTarget = emptyTarget;
 
                 // …and of two empty-root hosts sharing one container, the latest to mount owns it.

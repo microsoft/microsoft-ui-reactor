@@ -199,15 +199,22 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         // Null when the root rendered Empty(); see the ownership rule below.
         var control = _currentControl;
 
-        UIElement? container = ContentTarget ?? (_windowClosed ? null : _window.Content as UIElement);
-        UIElement? installed = ContentTarget is { } target ? target.Child : container;
+        // Resolve against where the displayed root was published, not the requested ContentTarget:
+        // retargeting takes effect only when the next render writes the new container, and until
+        // then the previous one is still the root's anchor. A claimed Border is that destination;
+        // with no claim the root went to the window content (a window write releases any claim).
+        var published = _claimedContentTarget as WinUI.Border;
+        if (published is not null && !OwnsContentTarget(published)) published = null; // taken over by another host
+        UIElement? container = published
+            ?? (ContentTarget is null && _claimedContentTarget is null && !_windowClosed ? _window.Content as UIElement : null);
+        UIElement? installed = published is not null ? published.Child : container;
         var wrapper = _overlayWiring?.WrapperRoot;
         // Content identity proves ownership when there is content. An empty container proves
-        // nothing (any empty-root host sharing it would match), so then this host must be the
-        // one that last rendered into the ContentTarget.
+        // nothing (any empty-root host sharing it would match), so then it must be the container
+        // this host published into.
         bool ours = installed is not null
             ? ReferenceEquals(installed, control) || (wrapper is not null && ReferenceEquals(installed, wrapper))
-            : control is null && ContentTarget is { } empty && OwnsContentTarget(empty);
+            : control is null && published is not null;
 
         bool isAnchor = (control is not null && ReferenceEquals(element, control))
             || (ours && (ReferenceEquals(element, container) || ReferenceEquals(element, installed)));
@@ -838,7 +845,10 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
                     ClaimContentTarget();
                 }
                 else
+                {
                     _window.Content = contentToSet;
+                    ReleaseContentTarget();
+                }
                 AttachThemeListener(newControl);
             }
             else if (anyOverlayOn && _overlayWiring!.WrapperRoot is null)
@@ -857,7 +867,10 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
                     ClaimContentTarget();
                 }
                 else
+                {
                     _window.Content = wrapper;
+                    ReleaseContentTarget();
+                }
                 Debug.WriteLine($"[Reactor.Overlay] wrapper installed mid-session; content={newControl?.GetType().Name ?? "null"}");
             }
             else if (!anyOverlayOn && _overlayWiring?.WrapperRoot is not null)
@@ -874,7 +887,10 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
                     ClaimContentTarget();
                 }
                 else
+                {
                     _window.Content = newControl;
+                    ReleaseContentTarget();
+                }
                 _overlayWiring.Dispose();
                 _overlayWiring = null;
             }
@@ -1268,6 +1284,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         else
         {
             _window.Content = errorPanel;
+            ReleaseContentTarget();
         }
         _currentControl = errorPanel;
         _currentTree = errorTree;
