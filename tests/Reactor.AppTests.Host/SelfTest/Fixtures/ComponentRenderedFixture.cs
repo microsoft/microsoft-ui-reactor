@@ -592,6 +592,20 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
         H.Check("ComponentRendered_RootSwap_RetiredInstanceRemountsFresh",
             thirdRoot.CleanedUp && firstRoot.EffectRuns == 2 && !firstRoot.CleanedUp);
 
+        // A replacement root whose first render is null: nothing reconciles the old root's
+        // tree away, so the host releases it (its child's cleanup runs, its content goes).
+        var releaseHost = H.CreateHost();
+        var cleanupProbe = new RenderedCleanupProbeRoot();
+        releaseHost.Mount(cleanupProbe);
+        await Harness.Render();
+        H.Check("ComponentRendered_NullReplacement_OldTreeLiveBefore",
+            H.FindText("cleanup probe child") is not null && RenderedCleanupProbeChild.Cleanups == 0);
+        releaseHost.Mount(new RenderedNullRoot());
+        await Harness.Render();
+        H.Check("ComponentRendered_NullReplacement_OldTreeReleased",
+            H.FindText("cleanup probe child") is null && RenderedCleanupProbeChild.Cleanups == 1,
+            $"cleanups={RenderedCleanupProbeChild.Cleanups}");
+
         // A root whose Render() returns null still rendered.
         var nullHost = H.CreateHost();
         nullHost.Mount(new RenderedNullRoot());
@@ -711,6 +725,154 @@ internal class ComponentRendered_AppFallbackFollowsTheHandler(Harness h) : SelfT
     }
 }
 
+/// <summary>
+/// A root whose <c>Render()</c> is left by an exception the app asked to propagate
+/// (<c>RenderError.Propagate()</c> in nested Reactor work, declined by the app's unhandled
+/// callback) shows no fallback, but its render still ran and is reported.
+/// </summary>
+internal class ComponentRendered_PropagatedRootFailureReported(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var events = new List<ReactorEvent>();
+        using var subscription = ReactorTrace.Subscribe(
+            e => { if (e.EventName == nameof(ReactorEventSource.ComponentRendered)) lock (events) events.Add(e); },
+            EventLevel.Verbose,
+            ReactorEventSource.Keywords.RenderDetail);
+
+        if (!ComponentRenderTrace.IsEnabled)
+        {
+            H.Skip("ComponentRendered_PropagatedRoot", "EventSource disabled (NativeAOT)");
+            return;
+        }
+
+        var previousCallback = ReactorApplication.OnUnhandledException;
+        ReactorApplication.OnUnhandledException = _ => false;
+        using var nestedScope = new NestedWindowScope("ComponentRendered propagated root");
+        var nestedWindow = nestedScope.Window;
+        var created = nestedScope.Hosts;
+        try
+        {
+            var host = H.CreateHost();
+            Exception? escaped = null;
+            try
+            {
+                host.Mount(new RenderedNestedPropagatingRoot(nestedWindow, created));
+            }
+            catch (InvalidOperationException ex) { escaped = ex; }
+            await Harness.Render();
+
+            List<ReactorEvent> rootEvents;
+            lock (events) rootEvents = events.Where(e => (string)e.Payload[0]! == nameof(RenderedNestedPropagatingRoot)).ToList();
+            H.Check("ComponentRendered_PropagatedRoot_Escaped", escaped is not null, escaped?.Message ?? "(nothing escaped)");
+            H.Check("ComponentRendered_PropagatedRoot_RenderReported",
+                rootEvents.Any(e => (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Mount));
+        }
+        finally
+        {
+            ReactorApplication.OnUnhandledException = previousCallback;
+        }
+    }
+}
+
+/// <summary>A secondary window plus the hosts nested work created on it; disposes both.</summary>
+internal sealed class NestedWindowScope : IDisposable
+{
+    public NestedWindowScope(string title)
+    {
+        Window = new Window { Title = title };
+        Window.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(300, 200));
+        Window.Activate();
+    }
+
+    public Window Window { get; }
+    public List<ReactorHost> Hosts { get; } = new();
+
+    public void Dispose()
+    {
+        foreach (var host in Hosts) host.Dispose();
+        Window.Close();
+    }
+}
+
+/// <summary>
+/// Replacing a root whose effect cleanup throws still completes (issue #1291 routing): with
+/// a handler the failure is reported and the new root is installed; with none it escapes
+/// from Mount, but only after the new root is installed, and the failed cleanup is not left
+/// armed to fail again on the next Mount.
+/// </summary>
+internal class ComponentRendered_RootReplacementSurvivesThrowingCleanup(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        // With a handler: reported as a Cleanup failure, Mount does not throw.
+        var log = new List<RenderError>();
+        var handled = H.CreateHost();
+        handled.RenderErrorHandler = e => { log.Add(e); return null; };
+        handled.Mount(new RenderedThrowingCleanupRoot());
+        await Harness.Render();
+        Exception? handledEscape = null;
+        try { handled.Mount(_ => TextBlock("replacement handled")); }
+        catch (InvalidOperationException ex) { handledEscape = ex; }
+        await Harness.Render();
+        H.Check("ComponentRendered_RetireCleanup_Handled_Reported",
+            handledEscape is null && log.Any(e => e.Source == RenderErrorSource.Cleanup),
+            handledEscape?.Message ?? string.Join(",", log.Select(e => e.Source)));
+        H.Check("ComponentRendered_RetireCleanup_Handled_NewRootShown", H.FindText("replacement handled") is not null);
+
+        // Without a handler: the failure escapes Mount, after the new root is installed.
+        var previousDefault = ReactorApp.DefaultRenderErrorHandler;
+        ReactorApp.DefaultRenderErrorHandler = null;
+        try
+        {
+            var bare = H.CreateHost();
+            bare.Mount(new RenderedThrowingCleanupRoot());
+            await Harness.Render();
+            Exception? escaped = null;
+            try { bare.Mount(_ => TextBlock("replacement bare")); }
+            catch (InvalidOperationException ex) { escaped = ex; }
+            await Harness.Render();
+            H.Check("ComponentRendered_RetireCleanup_Bare_Escapes",
+                escaped?.Message == RenderedThrowingCleanupRoot.Message, escaped?.Message ?? "(nothing escaped)");
+            H.Check("ComponentRendered_RetireCleanup_Bare_NewRootShown", H.FindText("replacement bare") is not null);
+            Exception? second = null;
+            try { bare.Mount(_ => TextBlock("replacement bare 2")); }
+            catch (InvalidOperationException ex) { second = ex; }
+            await Harness.Render();
+            H.Check("ComponentRendered_RetireCleanup_Bare_NotRearmed",
+                second is null && H.FindText("replacement bare 2") is not null, second?.Message ?? "");
+        }
+        finally
+        {
+            ReactorApp.DefaultRenderErrorHandler = previousDefault;
+        }
+    }
+}
+
+internal sealed class RenderedThrowingCleanupRoot : Component
+{
+    public const string Message = "ComponentRendered selftest: root cleanup failure";
+
+    public override Element Render()
+    {
+        UseEffect(() => () => throw new InvalidOperationException(Message));
+        return TextBlock("throwing cleanup root");
+    }
+}
+
+// Starts nested Reactor work during its own render: a host whose first (inline) render
+// fails and whose handler asks to propagate.
+internal sealed class RenderedNestedPropagatingRoot(Window window, List<ReactorHost> created) : Component
+{
+    public override Element Render()
+    {
+        var nested = new ReactorHost(window) { RenderErrorHandler = e => { e.Propagate(); return null; } };
+        created.Add(nested);
+        nested.Mount(_ => throw new InvalidOperationException("ComponentRendered selftest: nested render propagated"));
+        return TextBlock("unreachable");
+    }
+}
+
 internal sealed class RenderedAppThrowingRoot : Component
 {
     public override Element Render() => throw new InvalidOperationException("ComponentRendered selftest: root failure for the app handler");
@@ -719,6 +881,26 @@ internal sealed class RenderedAppThrowingRoot : Component
 internal sealed class RenderedAppFallback : Component
 {
     public override Element Render() => TextBlock("app fallback");
+}
+
+internal sealed class RenderedCleanupProbeRoot : Component
+{
+    public override Element Render()
+    {
+        RenderedCleanupProbeChild.Cleanups = 0;
+        return VStack(Component<RenderedCleanupProbeChild>());
+    }
+}
+
+internal sealed class RenderedCleanupProbeChild : Component
+{
+    public static int Cleanups;
+
+    public override Element Render()
+    {
+        UseEffect(() => () => Cleanups++);
+        return TextBlock("cleanup probe child");
+    }
 }
 
 internal sealed class RenderedNullRoot : Component

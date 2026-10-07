@@ -92,11 +92,15 @@ public static class ReactorTrace
     /// re-rendered ("highlight updates").
     ///
     /// <para>Returns <c>null</c> for <c>0</c>, for an id this process never issued,
-    /// once the component has unmounted or its control was collected, and — for a root
-    /// on its first render — until that render's reconcile pass has produced the
-    /// control. Resolve after the pass completes (e.g. on the next dispatcher tick)
-    /// rather than inside the event callback. Ids are only issued, and controls only
-    /// recorded, while the event is enabled, so subscribe first.</para>
+    /// once the component has unmounted or its control was collected, and while the
+    /// control does not exist yet: a component's mount event is raised before its
+    /// subtree mounts (the id is mapped once that finishes), and a root's first event
+    /// before its reconcile pass has produced the content. An id from a render whose
+    /// subtree was then discarded — caught by an <c>ErrorBoundary</c>, or a failure
+    /// that propagated — may never resolve. So resolve after the pass completes (e.g.
+    /// on the next dispatcher tick) rather than inside the event callback, and treat
+    /// <c>null</c> as "nothing on screen for this id". Ids are only issued, and
+    /// controls only recorded, while the event is enabled, so subscribe first.</para>
     ///
     /// <para>Call on the UI thread; the returned control is a live WinUI object.</para>
     /// </summary>
