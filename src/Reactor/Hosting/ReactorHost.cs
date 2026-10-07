@@ -32,7 +32,13 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
 
     private Component? _rootComponent;
     // The root's ReactorEventSource.ComponentRendered bookkeeping (id, first render).
-    private readonly Microsoft.UI.Reactor.Core.Diagnostics.RootRenderDiagnostics _rootDiagnostics = new();
+    // Replaced (not reset) when the root is retired, so a render already in progress keeps
+    // reporting as the root it started with (see _renderingRootDiagnostics).
+    private Microsoft.UI.Reactor.Core.Diagnostics.RootRenderDiagnostics _rootDiagnostics = new();
+    // The root and its diagnostics as of the current Render()'s start: app code in the root's
+    // Render() can Mount() a replacement, and the attempt in progress is still the old root's.
+    private Microsoft.UI.Reactor.Core.Diagnostics.RootRenderDiagnostics? _renderingRootDiagnostics;
+    private Component? _renderingRoot;
     private Func<RenderContext, Element>? _rootRenderFunc;
     private RenderContext? _funcContext;
 
@@ -413,8 +419,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
 
     /// <summary>ComponentRendered for the root; must run before Reconcile consumes ForceFullRenderPending.</summary>
     private void TraceRootRendered(bool hotReloadRender, double elapsedMilliseconds)
-        => _rootDiagnostics.TraceRendered(
-            _rootComponent is null ? nameof(FuncElement) : Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_rootComponent, element: null),
+        => (_renderingRootDiagnostics ?? _rootDiagnostics).TraceRendered(
+            _renderingRoot is null ? nameof(FuncElement) : Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_renderingRoot, element: null),
             hotReloadRender, _reconciler.ForceFullRenderPending, elapsedMilliseconds);
 
     // Set by RetireRoot while the previous root's content is still shown; cleared once the
@@ -494,7 +500,10 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         _rootComponent = null;
         _rootRenderFunc = null;
         _funcContext = null;
-        _rootDiagnostics.Reset();
+        // A fresh instance rather than Reset(): a render of the old root may still be in
+        // progress (it called Mount), and it reports as the old root.
+        _rootDiagnostics.Forget();
+        _rootDiagnostics = new();
         // The old root's content stays on screen until the replacement renders; if that
         // render produces nothing, the old tree must still be released (see Render).
         _releaseReplacedTreeOnNullRender = _currentTree is not null || _currentControl is not null;
@@ -628,10 +637,14 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         {
             try
             {
+                _renderingRoot = _rootComponent;
+                _renderingRootDiagnostics = _rootDiagnostics;
                 Render();
             }
             finally
             {
+                _renderingRoot = null;
+                _renderingRootDiagnostics = null;
                 // Reset the gate so future setState calls can enqueue — also when a render
                 // error the app chose to propagate (RenderError.Propagate) escapes Render().
                 Interlocked.Exchange(ref _renderPending, 0);

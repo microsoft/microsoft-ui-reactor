@@ -761,6 +761,44 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
             Take().Any(e => (string)e.Payload[0]! == nameof(RenderedNullRoot)
                 && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Mount));
 
+        // ── A root that mounts its replacement from its own Render() ───────────
+        // The attempt in progress is still the outgoing root's (its name and id); the
+        // replacement's first render is its own mount, under a new id.
+        void CheckSelfMount(string check, List<ReactorEvent> evs)
+        {
+            Console.WriteLine($"# {check}: " + string.Join(", ", evs.Select(e => $"{e.Payload[0]}#{e.Payload[1]}:{e.Payload[2]}")));
+            var outgoingEvs = evs.Where(e => (string)e.Payload[0]! == nameof(RenderedMountsReplacementRoot)).ToList();
+            var replacementEvs = evs.Where(e => (string)e.Payload[0]! == nameof(RenderedHostControlRoot)).ToList();
+            H.Check(check,
+                outgoingEvs.Count == 1 && (string)outgoingEvs[0].Payload[2]! == ComponentRenderTrace.Reasons.Mount
+                    && replacementEvs.Count >= 1 && (string)replacementEvs[0].Payload[2]! == ComponentRenderTrace.Reasons.Mount
+                    && (long)replacementEvs[0].Payload[1]! != (long)outgoingEvs[0].Payload[1]!);
+        }
+
+        Take();
+        var selfMountHost = H.CreateHost();
+        var hostOutgoing = new RenderedMountsReplacementRoot();
+        hostOutgoing.Replace = () => selfMountHost.Mount(new RenderedHostControlRoot());
+        selfMountHost.Mount(hostOutgoing);
+        await Harness.WaitFor(() => H.FindText("host control root 0") is not null, maxPasses: 32, perPassMs: 10);
+        await Harness.Render();
+        CheckSelfMount("ComponentRendered_RootMountsReplacement_AttemptKeepsOutgoingIdentity", Take());
+
+        var selfMountControl = new ReactorHostControl();
+        var controlOutgoing = new RenderedMountsReplacementRoot();
+        controlOutgoing.Replace = () => selfMountControl.Mount(new RenderedHostControlRoot());
+        selfMountControl.Mount(controlOutgoing);
+        H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = selfMountControl });
+        var controlEvents = new List<ReactorEvent>();
+        await Harness.WaitFor(() =>
+        {
+            controlEvents.AddRange(Take());
+            return controlEvents.Any(e => (string)e.Payload[0]! == nameof(RenderedHostControlRoot));
+        }, maxPasses: 32, perPassMs: 10);
+        CheckSelfMount("ComponentRendered_HostControlRootMountsReplacement_AttemptKeepsOutgoingIdentity", controlEvents);
+        selfMountControl.Dispose();
+        Take();
+
         // ── Generic component classes are named like RenderError names them ─
         var genericHost = H.CreateHost();
         genericHost.Mount(new RenderedGenericRoot<int>());
@@ -1057,6 +1095,48 @@ internal class ComponentRendered_RootReplacementSurvivesThrowingCleanup(Harness 
 }
 
 /// <summary>
+/// A listener that disposes itself from the event's own callback: the mount that reported
+/// the render must not map the new wrapper afterwards, since nothing is mapped while the
+/// event is off.
+/// </summary>
+internal class ComponentRendered_ListenerDisposedInCallback(Harness h) : SelfTestFixtureBase(h)
+{
+    public override Task RunAsync()
+    {
+        IDisposable? subscription = null;
+        int seen = 0;
+        subscription = ReactorTrace.Subscribe(
+            e =>
+            {
+                if (e.EventName != nameof(ReactorEventSource.ComponentRendered)) return;
+                Interlocked.Increment(ref seen);
+                subscription?.Dispose();
+            },
+            EventLevel.Verbose,
+            ReactorEventSource.Keywords.RenderDetail);
+        if (!ComponentRenderTrace.IsEnabled)
+        {
+            subscription.Dispose();
+            H.Skip("ComponentRendered_ListenerDisposedInCallback", "EventSource disabled (NativeAOT)");
+            return Task.CompletedTask;
+        }
+
+        var reconciler = new Reconciler();
+        var wrapper = reconciler.Mount(Component<RenderedStatefulChild>(), static () => { })!;
+        subscription.Dispose();
+        if (ComponentRenderTrace.IsEnabled)
+        {
+            H.Skip("ComponentRendered_ListenerDisposedInCallback", "another ComponentRendered listener is active in this process");
+            return Task.CompletedTask;
+        }
+        H.Check("ComponentRendered_ListenerDisposedInCallback_WrapperUnmapped",
+            seen >= 1 && !ReactorTrace.TryGetComponentId(wrapper, out _), $"seen={seen}");
+        reconciler.Dispose();
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
 /// The root-swap matrix on a standalone <see cref="ReactorHostControl"/>, which carries its
 /// own copy of the retirement logic: every swap runs the outgoing root's cleanups and shows
 /// the incoming root, whichever kind either side is.
@@ -1209,6 +1289,20 @@ internal sealed class RenderedNullRoot : Component
     {
         UseEffect(() => EffectRan = true);
         return null!;
+    }
+}
+
+// Mounts its replacement from inside its first Render(), then finishes rendering.
+internal sealed class RenderedMountsReplacementRoot : Component
+{
+    public Action? Replace;
+
+    public override Element Render()
+    {
+        var replace = Replace;
+        Replace = null;
+        replace?.Invoke();
+        return TextBlock("mounts replacement root");
     }
 }
 
