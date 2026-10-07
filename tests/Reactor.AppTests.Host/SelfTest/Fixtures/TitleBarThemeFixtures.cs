@@ -66,13 +66,18 @@ internal static class TitleBarThemeFixtures
     private static async Task CloseAndSettle(ReactorWindow win)
     {
         // The WinUI TitleBar control can throw teardown-reentry COMExceptions on close
-        // (issue #537); a window may also already be closing or disposed.
-        try { win.Close(); }
-        catch (Exception ex) when (ex is COMException or InvalidOperationException or ObjectDisposedException)
+        // (issue #537); a window may also already be closing or disposed. Those throw
+        // synchronously and are caught below. A native failure WinUI reports *after*
+        // Close() returns cannot be caught here and would fail-fast the whole host; the
+        // guard handles that narrow case for the settle window (issue #1345).
+        await AsyncTeardownGuard.CloseAndSettleAsync("SelfTest.TitleBarTheme.CloseAndSettle", () =>
         {
-            DiagnosticLog.SwallowedError(LogCategory.Hosting, "SelfTest.TitleBarTheme.CloseAndSettle", ex);
-        }
-        await Task.Delay(100);
+            try { win.Close(); }
+            catch (Exception ex) when (ex is COMException or InvalidOperationException or ObjectDisposedException)
+            {
+                DiagnosticLog.SwallowedError(LogCategory.Hosting, "SelfTest.TitleBarTheme.CloseAndSettle", ex);
+            }
+        }, settleMs: 100);
     }
 
     private static TitleBarTheme Caption(ReactorWindow win) => win.AppWindow.TitleBar.PreferredTheme;
