@@ -80,9 +80,12 @@ public class DiagnosticTextTests
     }
 
     [Fact]
-    public void Format_ACollectionThatFormatsItself_KeepsItsText()
+    public void Format_ACollectionIsSummarised_ItsOwnToStringIsNeverCalled()
     {
-        Assert.Equal("Bag[x]", DiagnosticText.Format("", typeof(SelfFormatting), new SelfFormatting()).Text);
+        var bag = new SelfFormatting();
+        Assert.Equal($"{nameof(SelfFormatting)} (count unknown)", DiagnosticText.Format("", typeof(SelfFormatting), bag).Text);
+        Assert.Equal(0, bag.ToStringCalls);
+        Assert.Equal(0, bag.Enumerations);
     }
 
     [Fact]
@@ -167,11 +170,9 @@ public class DiagnosticTextTests
         public override string ToString() => text;
     }
 
-    private sealed class ThrowsOnToString : IEnumerable<int>
+    private sealed class ThrowsOnToString
     {
         public override string ToString() => throw new InvalidOperationException("boom");
-        public IEnumerator<int> GetEnumerator() { yield break; }
-        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     private sealed class FormattableThrows : IFormattable
@@ -334,8 +335,10 @@ public class DiagnosticTextTests
 
     private sealed class SelfFormatting : IEnumerable<string>
     {
-        public IEnumerator<string> GetEnumerator() { yield return "x"; }
+        public int ToStringCalls, Enumerations;
+        public IEnumerator<string> GetEnumerator() { Enumerations++; yield return "x"; }
         global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-        public override string ToString() => "Bag[x]";
+        // A ToString that enumerates, as a custom collection's might.
+        public override string ToString() { ToStringCalls++; return "Bag[" + string.Join(",", this) + "]"; }
     }
 }

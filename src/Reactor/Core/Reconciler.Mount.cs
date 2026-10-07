@@ -875,6 +875,7 @@ public sealed partial class Reconciler
             Component = component, RenderedElement = null, Element = compElement,
             PreviousProps = compElement.Props,
         };
+        CaptureDiagnosticsDispatcher();
         _componentNodes[wrapper] = node;
         _boundaryMountJournal?.Add(wrapper);
 
@@ -917,6 +918,7 @@ public sealed partial class Reconciler
         {
             Context = ctx, RenderedElement = null, Element = funcElement,
         };
+        CaptureDiagnosticsDispatcher();
         _componentNodes[wrapper] = node;
         _boundaryMountJournal?.Add(wrapper);
 
@@ -960,6 +962,7 @@ public sealed partial class Reconciler
             Context = ctx, RenderedElement = null, Element = memoElement,
             MemoDependencies = memoElement.Dependencies,
         };
+        CaptureDiagnosticsDispatcher();
         _componentNodes[wrapper] = node;
         _boundaryMountJournal?.Add(wrapper);
 

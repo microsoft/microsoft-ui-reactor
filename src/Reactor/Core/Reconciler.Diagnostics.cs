@@ -35,6 +35,20 @@ public sealed partial class Reconciler
     /// </summary>
     internal Microsoft.UI.Dispatching.DispatcherQueue? DiagnosticsDispatcher { get; set; }
 
+    private bool _diagnosticsDispatcherProbed;
+
+    /// <summary>
+    /// Records the owning UI thread of a reconciler driven directly (no host to supply it) the
+    /// first time it records a component, which only happens on that thread with a live wrapper.
+    /// One probe per reconciler; a no-op once a host or an earlier probe set it.
+    /// </summary>
+    private void CaptureDiagnosticsDispatcher()
+    {
+        if (_diagnosticsDispatcherProbed) return;
+        _diagnosticsDispatcherProbed = true;
+        DiagnosticsDispatcher ??= Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+    }
+
     private bool IsOwnedByAnotherThread => DiagnosticsDispatcher is { HasThreadAccess: false };
 
     private void RegisterForDiagnostics()

@@ -86,6 +86,17 @@ internal static class ComponentInspectionFixtures
                 finally { ReactorApp.UIDispatcher = savedDispatcher; }
                 H.Check("CompInspect_OffThreadReadThrows", offThread is InvalidOperationException,
                     offThread?.GetType().Name ?? "no exception");
+
+                // A reconciler driven directly (no host) records its UI thread the first time it
+                // mounts a component, so foreign-thread lookups can skip it too.
+                var direct = new Reconciler();
+                try
+                {
+                    var directWrapper = direct.Mount(Component<Counter, CounterProps>(new CounterProps(1, "x")), () => { });
+                    H.Check("CompInspect_DirectReconcilerCapturesDispatcher",
+                        directWrapper is not null && direct.DiagnosticsDispatcher is { HasThreadAccess: true });
+                }
+                finally { direct.Dispose(); }
                 var counter = ReactorDiagnostics.DescribeComponent(wrapper);
                 H.Check("CompInspect_ClassDescribed",
                     counter is { Name: "Counter", Kind: "class", IsRoot: false });
@@ -318,7 +329,22 @@ internal static class ComponentInspectionFixtures
                 var unrelated = new Border();
                 emptyHost.ContentTarget = unrelated;
                 H.Check("RootAnchor_EmptyRootDoesNotClaimUnrelatedContainer", ReactorDiagnostics.DescribeComponent(unrelated) is null);
+                // Re-mounting into it claims the container only together with publishing the new root.
+                emptyHost.Mount(ctx =>
+                {
+                    var (s, _) = ctx.UseState("retargeted");
+                    return Empty();
+                });
+                await Harness.Render();
+                H.Check("RootAnchor_RetargetClaimedWithItsRenderedRoot",
+                    ReactorDiagnostics.DescribeComponent(unrelated) is { IsRoot: true, State: [{ Value: "\"retargeted\"" }] });
                 emptyHost.ContentTarget = emptyTarget;
+                emptyHost.Mount(ctx =>
+                {
+                    var (s, _) = ctx.UseState("empty-root");
+                    return Empty();
+                });
+                await Harness.Render();
 
                 // …and of two empty-root hosts sharing one container, the latest to mount owns it.
                 using var secondEmpty = new ReactorHost(H.Window) { ContentTarget = emptyTarget };

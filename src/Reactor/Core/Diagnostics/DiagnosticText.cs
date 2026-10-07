@@ -368,9 +368,9 @@ internal static class DiagnosticText
     // A collection whose ToString() is object's (prints the type name) is summarised by count; a
     // collection that formats itself (e.g. a record implementing IEnumerable) keeps its own text.
     // Compared against the runtime type name rather than reflected on, so it is trim-safe.
-    private static bool IsListLike(object value) =>
-        value is ICollection ||
-        (value is IEnumerable and not string && OwnText(value, value.ToString) == value.GetType().ToString());
+    // Any non-string sequence is a collection: its own ToString() is never called, because a
+    // custom one can enumerate it (lazy, side-effecting or infinite).
+    private static bool IsListLike(object value) => value is IEnumerable and not string;
 
     /// <summary>
     /// The item count a collection advertises, without enumerating it: a lazy sequence can be

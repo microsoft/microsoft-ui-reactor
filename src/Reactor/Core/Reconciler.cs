@@ -2256,6 +2256,7 @@ public sealed partial class Reconciler : IDisposable
         // node keyed on `realized` was already torn down + removed by the Unmount
         // inside ReconcileImperative; overwrite defensively regardless.
         _componentNodes.Remove(replacement);
+        CaptureDiagnosticsDispatcher();
         _componentNodes[realized] = freshNode;
 
         // Move the fresh visual subtree into the parented wrapper. Assigning

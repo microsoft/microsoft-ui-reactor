@@ -187,7 +187,7 @@ public sealed class ReactorHost : IDisposable
     /// Several hosts can share one container over time (a replaced, undisposed host keeps
     /// its stale reference to it), so the container only counts for the host whose content
     /// is actually in it — or, while it is empty (an <c>Empty()</c> root), for the host that
-    /// last mounted into or wrote it.
+    /// last rendered into it.
     /// </summary>
     private RootComponentSource? ResolveDiagnosticsRoot(UIElement element)
     {
@@ -200,7 +200,7 @@ public sealed class ReactorHost : IDisposable
         var wrapper = _overlayWiring?.WrapperRoot;
         // Content identity proves ownership when there is content. An empty container proves
         // nothing (any empty-root host sharing it would match), so then this host must be the
-        // one that last mounted into or wrote the ContentTarget.
+        // one that last rendered into the ContentTarget.
         bool ours = installed is not null
             ? ReferenceEquals(installed, control) || (wrapper is not null && ReferenceEquals(installed, wrapper))
             : control is null && ContentTarget is { } empty && OwnsContentTarget(empty);
@@ -415,7 +415,6 @@ public sealed class ReactorHost : IDisposable
     public void Mount(Component component)
     {
         _rootComponent = component;
-        ClaimContentTarget();
         RequestRender();
     }
 
@@ -423,14 +422,14 @@ public sealed class ReactorHost : IDisposable
     {
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
-        ClaimContentTarget();
         RequestRender();
     }
 
-    // Diagnostics ownership of a shared ContentTarget: the host that last mounted into it or
-    // wrote its content. Only consulted when the container is empty (the root rendered Empty()),
-    // where content identity cannot say whose it is. Written on Mount and on content changes,
-    // never on an ordinary re-render. The owner is held weakly and released on Dispose, so the
+    // Diagnostics ownership of a shared ContentTarget: the host that last rendered into it
+    // (wrote its content, or published an Empty() root while targeting it) — so ownership and
+    // the published rendered root always change together. Only consulted when the container is
+    // empty, where content identity cannot say whose it is. Not written on an ordinary
+    // re-render that changes nothing. The owner is held weakly and released on Dispose, so the
     // table never keeps a host (or its window and reconciler) alive.
     private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, WeakReference<ReactorHost>> s_contentTargetOwner = new();
 
@@ -821,6 +820,10 @@ public sealed class ReactorHost : IDisposable
             _currentControl = newControl;
             _currentTree = newTree;
             _renderedRoot = new RenderedRoot(_rootComponent, _funcContext, _rootRenderFunc);
+            // An Empty() render may write nothing (the container was already empty), yet the
+            // container now shows this root: claim it alongside the published root.
+            if (newControl is null && ContentTarget is { } emptyTarget && !OwnsContentTarget(emptyTarget))
+                ClaimContentTarget();
             OwningWindow?.OnHostContentRendered(newControl);
 
             // Spec 033 §6 — apply (or clear) the SystemBackdrop modifier carried on
