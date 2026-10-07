@@ -220,9 +220,74 @@ internal class RenderErrorNames_ComponentTypeOnEveryPath(Harness h) : SelfTestFi
         effectControl.Dispose();
         effectFuncControl.Dispose();
         H.SetContent(null);
+
+        // ── A root that mounts a replacement, then throws ────────────────
+        // The failure belongs to the component that threw, not to the root the host holds
+        // by the time the catch runs.
+        var swapHost = H.CreateHost();
+        swapHost.Mount(new RemountThenThrowRoot(() => swapHost.Mount(new ReplacementRoot())));
+        await Harness.Render();
+        var swapRender = Take();
+        var swapEffectHost = H.CreateHost();
+        swapEffectHost.Mount(new RemountThenThrowEffectRoot(() => swapEffectHost.Mount(new ReplacementRoot())));
+        await Harness.Render();
+        var swapEffect = Take();
+        Console.WriteLine("# root replaced then threw RenderError: " + string.Join(", ", swapRender)
+            + " | " + string.Join(", ", swapEffect));
+        H.Check("RenderErrorNames_RootReplacedInRender_NamesTheThrower",
+            swapRender.Count == 1 && swapRender[0] == nameof(RemountThenThrowRoot));
+        H.Check("RenderErrorNames_RootReplacedInEffect_NamesTheThrower",
+            swapEffect.Count == 1 && swapEffect[0] == nameof(RemountThenThrowEffectRoot));
+
+        var swapControl = new ReactorHostControl();
+        swapControl.Mount(new RemountThenThrowRoot(() => swapControl.Mount(new ReplacementRoot())));
+        var swapEffectControl = new ReactorHostControl();
+        swapEffectControl.Mount(new RemountThenThrowEffectRoot(() => swapEffectControl.Mount(new ReplacementRoot())));
+        H.SetContent(new Microsoft.UI.Xaml.Controls.StackPanel
+        {
+            Children = { swapControl, swapEffectControl },
+        });
+        await Harness.Render(200);
+        var swapControls = Take();
+        Console.WriteLine("# host control root replaced then threw RenderError: " + string.Join(", ", swapControls));
+        H.Check("RenderErrorNames_HostControl_RootReplacedInRender_NamesTheThrower",
+            swapControls.Count(n => n == nameof(RemountThenThrowRoot)) == 1);
+        H.Check("RenderErrorNames_HostControl_RootReplacedInEffect_NamesTheThrower",
+            swapControls.Count(n => n == nameof(RemountThenThrowEffectRoot)) == 1
+            && !swapControls.Contains(nameof(ReplacementRoot)));
+
+        swapControl.Dispose();
+        swapEffectControl.Dispose();
+        H.SetContent(null);
     }
 
     private const string OomTag = "!oom";
+}
+
+// Mounts a replacement root from its own Render(), then throws.
+internal sealed class RemountThenThrowRoot(Action remount) : Component
+{
+    public override Element Render()
+    {
+        remount();
+        throw new RenderErrorProbeException("replaced then threw");
+    }
+}
+
+// Mounts a replacement root from its (mount-only) effect, then throws.
+internal sealed class RemountThenThrowEffectRoot(Action remount) : Component
+{
+    public override Element Render()
+    {
+        UseEffect(() => { remount(); throw new RenderErrorProbeException("replaced in effect then threw"); },
+            Array.Empty<object>());
+        return TextBlock("remount effect root rendered");
+    }
+}
+
+internal sealed class ReplacementRoot : Component
+{
+    public override Element Render() => TextBlock("replacement root");
 }
 
 internal sealed class ThrowingRootEffect : Component

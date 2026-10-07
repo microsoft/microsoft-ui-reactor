@@ -566,25 +566,30 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
         // Which phase the outer catch attributes a failure to (issue #1291).
         var failurePhase = RenderErrorSource.Reconcile;
+        // The root whose effects are being flushed, captured before app code runs: an effect
+        // can Mount() a replacement root and then throw, and the failure is the original's.
+        Component? effectsRoot = null;
         try
         {
             Element? newTree = null;
 
             _phaseSw.Restart();
 
-            if (_rootComponent is not null)
+            // Captured before app code runs: the root's Render() can Mount() a replacement
+            // root and then throw, and the failure belongs to the component that threw.
+            if (_rootComponent is { } renderingRoot)
             {
-                _rootComponent.Context.BeginRender(_requestRenderAction ??= RequestRender);
+                renderingRoot.Context.BeginRender(_requestRenderAction ??= RequestRender);
                 try
                 {
                     using (ValidationRenderScope.Begin(null))
                     {
-                        newTree = ValidationRenderScope.ApplyProvide(_rootComponent.Render());
+                        newTree = ValidationRenderScope.ApplyProvide(renderingRoot.Render());
                     }
                 }
                 catch (HookOrderException ex) when (hotReloadRender)
                 {
-                    RecoverFromHookOrder(ex, _rootComponent.Context, "component");
+                    RecoverFromHookOrder(ex, renderingRoot.Context, "component");
                     return;
                 }
                 catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
@@ -592,8 +597,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                     _logger?.LogError(ex, "Component Render() threw");
                     // Before the fallback: the app's handler may call Propagate(), which throws.
                     Reconciler.EmitRenderError(
-                        Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_rootComponent, element: null), ex);
-                    ShowErrorFallback(ex, RenderErrorSource.RootRender, _rootComponent.GetType().Name);
+                        Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(renderingRoot, element: null), ex);
+                    ShowErrorFallback(ex, RenderErrorSource.RootRender, renderingRoot.GetType().Name);
                     return;
                 }
             }
@@ -724,8 +729,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             _phaseSw.Restart();
 
             failurePhase = RenderErrorSource.Effects;
-            if (_rootComponent is not null)
-                _rootComponent.Context.FlushEffects();
+            effectsRoot = _rootComponent;
+            if (effectsRoot is not null)
+                effectsRoot.Context.FlushEffects();
             else if (_funcContext is not null)
                 _funcContext.FlushEffects();
             failurePhase = RenderErrorSource.Reconcile;
@@ -798,13 +804,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             if (failurePhase == RenderErrorSource.Effects)
             {
                 Reconciler.EmitRenderError(
-                    _rootComponent is not null
-                        ? Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_rootComponent, element: null)
+                    effectsRoot is not null
+                        ? Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(effectsRoot, element: null)
                         : nameof(FuncElement),
                     ex);
             }
             ShowErrorFallback(ex, failurePhase,
-                failurePhase == RenderErrorSource.Effects ? _rootComponent?.GetType().Name : null);
+                failurePhase == RenderErrorSource.Effects ? effectsRoot?.GetType().Name : null);
         }
         finally
         {

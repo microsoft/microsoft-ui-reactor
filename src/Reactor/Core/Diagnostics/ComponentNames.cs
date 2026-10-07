@@ -59,6 +59,15 @@ internal static class ComponentNames
 
     private static void Append(global::System.Text.StringBuilder sb, Type type)
     {
+        // An array of a constructed generic is not itself generic, but its metadata name
+        // still carries the arity (List`1[]): format the element type, then the rank.
+        if (type.IsArray)
+        {
+            Append(sb, type.GetElementType()!);
+            sb.Append('[').Append(',', type.GetArrayRank() - 1).Append(']');
+            return;
+        }
+
         var name = type.Name;
         var tick = name.IndexOf('`');
         sb.Append(tick >= 0 ? name.Substring(0, tick) : name);

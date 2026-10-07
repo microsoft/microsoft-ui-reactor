@@ -117,6 +117,17 @@ public sealed class ComponentNamesTests
     }
 
     [Fact]
+    public void ArrayArguments_KeepTheirElementTypeAndRank()
+    {
+        // An array of a constructed generic is not itself generic, but its metadata name
+        // (List`1[]) still carries the arity; it must not be cut down to "List".
+        Assert.Equal("GenericList<List<Int32>[]>", ComponentNames.For(typeof(GenericList<List<int>[]>)));
+        Assert.Equal("GenericList<Int32[]>", ComponentNames.For(typeof(GenericList<int[]>)));
+        Assert.Equal("GenericList<Int32[,]>", ComponentNames.For(typeof(GenericList<int[,]>)));
+        Assert.Equal("GenericList<List<String>[][]>", ComponentNames.For(typeof(GenericList<List<string>[][]>)));
+    }
+
+    [Fact]
     public void NullEverything_IsUnknownRatherThanAThrow()
         => Assert.Equal("unknown", ComponentNames.For(null, null));
 }
