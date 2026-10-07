@@ -14,7 +14,7 @@ public sealed class StepModel
 {
     readonly StringBuilder _code = new();
     readonly StringBuilder _delta = new();
-    readonly object _gate = new();
+    readonly Lock _gate = new();
 
     public StepModel(int number, string title, string prompt)
     {

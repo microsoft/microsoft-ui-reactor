@@ -293,7 +293,7 @@ for state that shouldn't drive UI.
 public sealed class PendingScope
 {
     private readonly Dictionary<object, bool> _loadingByToken = new(capacity: 4);
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     /// <summary>Fires when a resource joins, leaves, or changes its loading state.</summary>
     public event Action? Changed;

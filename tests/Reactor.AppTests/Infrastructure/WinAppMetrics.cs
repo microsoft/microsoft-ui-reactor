@@ -10,7 +10,7 @@ namespace Microsoft.UI.Reactor.AppTests.Infrastructure;
 /// </summary>
 public static class WinAppMetrics
 {
-    private static readonly object Gate = new();
+    private static readonly Lock Gate = new();
     private static readonly string CsvPath = ResolveCsvPath();
     private static bool _headerWritten;
 

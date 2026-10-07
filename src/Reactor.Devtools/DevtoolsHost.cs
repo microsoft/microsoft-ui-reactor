@@ -21,7 +21,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     internal const int McpPortUnavailableExitCode = 43;
 
     private readonly int _embedGeneration = 1;
-    private readonly object _embedResizeLock = new();
+    private readonly Lock _embedResizeLock = new();
     private (int W, int H) _latestEmbedResize;
     private int _embedResizePending;
 

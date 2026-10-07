@@ -216,7 +216,7 @@ internal static class DevtoolsStressRunner
     private sealed class IterLog : IDisposable
     {
         private readonly FileStream _fs;
-        private readonly object _lock = new();
+        private readonly Lock _lock = new();
 
         public IterLog(string path)
         {
