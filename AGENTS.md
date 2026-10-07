@@ -354,6 +354,8 @@ point of return: stop and ship.
 ### Repo skills (`.github/skills/`)
 
 Contributor-facing orchestration skills — read the `SKILL.md` and drive it with your own
-tools: `pr-review` (multi-dimensional branch review), `perf-compare` (stress-harness delta
+tools: `pr-review` (multi-dimensional branch review), `pr-lifecycle` (one `pr-review` pass,
+then Copilot review rounds with green CI and every thread answered until the PR is
+`ready-for-review`; never merges), `perf-compare` (stress-harness delta
 vs `main`), `coverage-uplift` (non-vacuous coverage across tiers), `analyzer-dym`
 (did-you-mean / `mur check` authoring). Not shipped to end users.
