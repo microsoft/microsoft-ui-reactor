@@ -61,6 +61,278 @@ public sealed partial class Reconciler : IDisposable
     // resolve their concrete brush against the correct effective theme at mount.
     private ElementTheme _ambientRequestedTheme = ElementTheme.Default;
     private int _errorBoundaryDepth;
+
+    /// <summary>
+    /// Component and error-boundary wrappers registered while an <see cref="ErrorBoundaryElement"/>
+    /// mounts or retries its child (issue #1291). <c>null</c> when no boundary is doing so,
+    /// so ordinary mounts pay nothing. When the child throws part-way, the partly built
+    /// subtree is discarded without ever being attached, so normal unmount can never reach
+    /// it; <see cref="RollBackBoundaryMount"/> uses this record to run its components' effect
+    /// cleanups instead of leaving their subscriptions alive until host disposal.
+    /// </summary>
+    private List<UIElement>? _boundaryMountJournal;
+
+    /// <summary>
+    /// Controls whose <see cref="Mount"/> completed while an <see cref="ErrorBoundaryElement"/>
+    /// mounts or retries its child (issue #1291), collapsed as they nest: when a mount
+    /// completes, the roots its children left are replaced by its own control, which reaches
+    /// them through the normal unmount walk. <c>null</c> when no boundary is doing so. After a
+    /// failure, the roots past the boundary's start are the completed subtrees the partly
+    /// built child left behind; <see cref="RollBackBoundaryMount"/> unmounts them, which tears
+    /// down everything a finished control registered (interaction states, keyframe and
+    /// scroll animations, reference edges, <c>.OnUnmount</c>, handler state), not only the
+    /// entries in <see cref="_boundaryMountJournal"/>.
+    /// </summary>
+    private List<UIElement>? _boundaryMountRoots;
+
+    /// <summary>What <see cref="BeginBoundaryMount"/> started and <see cref="EndBoundaryMount"/> restores.</summary>
+    private readonly record struct BoundaryMountRecord(
+        List<UIElement>? OuterJournal, List<UIElement> Journal, int RootsStart, bool OwnsRoots);
+
+    /// <summary>
+    /// Starts recording registrations and completed roots for a boundary's child.
+    /// </summary>
+    private BoundaryMountRecord BeginBoundaryMount()
+    {
+        var outer = _boundaryMountJournal;
+        var journal = new List<UIElement>();
+        _boundaryMountJournal = journal;
+        bool ownsRoots = _boundaryMountRoots is null;
+        _boundaryMountRoots ??= new List<UIElement>();
+        return new BoundaryMountRecord(outer, journal, _boundaryMountRoots.Count, ownsRoots);
+    }
+
+    /// <summary>
+    /// Restores the enclosing record. A child that mounted successfully belongs to the
+    /// enclosing boundary's subtree too, so its registrations move up: if that boundary's
+    /// child fails later, they are discarded with it.
+    /// </summary>
+    private void EndBoundaryMount(BoundaryMountRecord record)
+    {
+        _boundaryMountJournal = record.OuterJournal;
+        if (record.OuterJournal is not null && record.Journal.Count > 0)
+            record.OuterJournal.AddRange(record.Journal);
+        record.Journal.Clear();
+        if (record.OwnsRoots)
+            _boundaryMountRoots = null;
+    }
+
+    /// <summary>True when the boundary's child left anything to roll back.</summary>
+    private bool HasBoundaryMountLeftovers(BoundaryMountRecord record) =>
+        record.Journal.Count > 0 || (_boundaryMountRoots?.Count ?? 0) > record.RootsStart;
+
+    /// <summary>
+    /// Called when a <see cref="Mount"/> completes: its control replaces the roots its
+    /// children recorded, since unmounting it reaches them. No-op unless a boundary is
+    /// recording.
+    /// </summary>
+    private void NoteMountCompleted(int rootsStart, UIElement? control)
+    {
+        if (_boundaryMountRoots is not { } roots || rootsStart < 0) return;
+        if (roots.Count > rootsStart)
+            roots.RemoveRange(rootsStart, roots.Count - rootsStart);
+        if (control is not null)
+            roots.Add(control);
+    }
+
+    /// <summary>
+    /// Discards what a failed boundary child left behind, deepest first: unmounts the
+    /// subtrees that completed (see <see cref="_boundaryMountRoots"/>), then drops the
+    /// remaining wrappers of mounts that never completed from the node tables, running their
+    /// components' effect cleanups and their <c>.OnUnmount</c> actions and tearing down
+    /// navigation hosts. <paramref name="attachedChild"/> is the boundary's previous child on
+    /// a retry, which the caller unmounts itself: completed subtrees attached under it are
+    /// left to that unmount. Entries already handled by the normal unmount path are skipped,
+    /// so nothing runs twice. Every entry is processed even when one fails: failures are
+    /// logged, and one the app declined via <see cref="RenderError.Propagate"/> is rethrown
+    /// once all have run.
+    /// </summary>
+    private void RollBackBoundaryMount(BoundaryMountRecord record, UIElement? attachedChild)
+    {
+        var journal = record.Journal;
+        List<UIElement>? orphans = null;
+        if (_boundaryMountRoots is { } roots && roots.Count > record.RootsStart)
+        {
+            orphans = roots.GetRange(record.RootsStart, roots.Count - record.RootsStart);
+            roots.RemoveRange(record.RootsStart, orphans.Count);
+        }
+
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? propagated = null;
+        void OnCleanupError(Exception ex)
+        {
+            if (RenderErrorDispatch.IsPropagating(ex))
+                propagated ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+            else
+                _logger?.LogWarning(ex, "Teardown threw while discarding a failed ErrorBoundary child");
+        }
+
+        using (IsolateUnmountCleanupFailures(OnCleanupError))
+        {
+            if (orphans is not null)
+            {
+                for (int i = orphans.Count - 1; i >= 0; i--)
+                {
+                    var orphan = orphans[i];
+                    if (attachedChild is not null && IsAttachedUnder(orphan, attachedChild))
+                        continue;
+                    try
+                    {
+                        UnmountRecursive(orphan);
+                    }
+                    catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+                    {
+                        OnCleanupError(ex);
+                    }
+                }
+            }
+
+            for (int i = journal.Count - 1; i >= 0; i--)
+            {
+                var wrapper = journal[i];
+                _errorBoundaryNodes.Remove(wrapper);
+                if (_componentNodes.Remove(wrapper, out var node))
+                {
+                    Diagnostics.ReactorEventSource.Log.ComponentUnmount(
+                        node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
+                    RunUnmountCleanups(node);
+                }
+                if (wrapper is FrameworkElement fe && _onUnmountActions.TryGetValue(fe, out var onUnmount))
+                {
+                    _onUnmountActions.Remove(fe);
+                    RunUnmountAction(onUnmount, fe);
+                }
+                if (_navigationHostNodes.ContainsKey(wrapper))
+                    CleanupNavigationHostNode(wrapper);
+            }
+        }
+        journal.Clear();
+        propagated?.Throw();
+    }
+
+    /// <summary>Records a registration made while a boundary child mounts; see <see cref="_boundaryMountJournal"/>.</summary>
+    internal void NoteBoundaryMountRegistration(UIElement control) => _boundaryMountJournal?.Add(control);
+
+    /// <summary>
+    /// When set, unmount runs every component cleanup and <c>.OnUnmount</c> action and hands
+    /// failures here instead of stopping at the first one (issue #1291). Used where a
+    /// teardown must complete regardless — replacing or releasing a tree for a render-error
+    /// outcome, and rolling back a failed boundary child — because the caller forgets the
+    /// tree afterwards and nothing could finish the job later. <c>null</c> keeps the normal
+    /// behaviour: the first failure escapes.
+    /// </summary>
+    private Action<Exception>? _unmountCleanupErrorSink;
+
+    internal IsolatedUnmountScope IsolateUnmountCleanupFailures(Action<Exception> onError)
+    {
+        var previous = _unmountCleanupErrorSink;
+        _unmountCleanupErrorSink = onError;
+        return new IsolatedUnmountScope(this, previous);
+    }
+
+    internal readonly struct IsolatedUnmountScope(Reconciler owner, Action<Exception>? previous) : IDisposable
+    {
+        public void Dispose() => owner._unmountCleanupErrorSink = previous;
+    }
+
+    private void RunUnmountCleanups(ComponentNode node)
+    {
+        if (_unmountCleanupErrorSink is { } sink)
+        {
+            node.Component?.Context.RunCleanupsIsolated(sink);
+            node.Context?.RunCleanupsIsolated(sink);
+        }
+        else
+        {
+            node.Component?.Context.RunCleanups();
+            node.Context?.RunCleanups();
+        }
+    }
+
+    private void RunUnmountAction(Action<FrameworkElement> onUnmount, FrameworkElement control)
+    {
+        if (_unmountCleanupErrorSink is not { } sink)
+        {
+            onUnmount(control);
+            return;
+        }
+        try
+        {
+            onUnmount(control);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            sink(ex);
+        }
+    }
+
+    // True when control sits in ancestor's subtree (logical parent first, then visual).
+    private static bool IsAttachedUnder(UIElement control, UIElement ancestor)
+    {
+        DependencyObject? current = control;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, ancestor)) return true;
+            current = (current as FrameworkElement)?.Parent ?? VisualTreeHelper.GetParent(current);
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// <see cref="RollBackBoundaryMount"/> for a child discarded because an exception is
+    /// escaping the boundary: cleanup failures are logged, never thrown, so they cannot
+    /// replace the exception that is already unwinding.
+    /// </summary>
+    private void RollBackDiscardedBoundaryMount(BoundaryMountRecord record, UIElement? attachedChild)
+    {
+        try
+        {
+            RollBackBoundaryMount(record, attachedChild);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            _logger?.LogWarning(ex, "Effect cleanup threw while discarding an ErrorBoundary child after an escaping exception");
+        }
+    }
+
+    /// <summary>
+    /// Supplies the owning host's effective <see cref="RenderErrorHandler"/> (issue #1291).
+    /// Set by <c>ReactorHost</c> / <c>ReactorHostControl</c>; a reconciler without a host
+    /// falls back to <see cref="ReactorApp.DefaultRenderErrorHandler"/>.
+    /// </summary>
+    internal Func<RenderErrorHandler?>? RenderErrorHandlerProvider { get; set; }
+
+    private RenderErrorHandler? ResolveRenderErrorHandler() =>
+        RenderErrorHandlerProvider is { } provider ? provider() : ReactorApp.DefaultRenderErrorHandler;
+
+    // Nesting depth of the public Reconcile / Mount entry points (issue #1291). The outermost
+    // entry — whichever a caller reaches first — opens a render-error propagation scope, so a
+    // standalone caller (no host render loop) cannot leave propagation markers behind;
+    // recursive mounts and nested passes just count.
+    private int _entryDepth;
+
+    private EntryFrame EnterFrame()
+    {
+        var scope = _entryDepth == 0 ? RenderErrorDispatch.EnterPropagationScope() : default;
+        _entryDepth++;
+        return new EntryFrame(this, scope);
+    }
+
+    private readonly struct EntryFrame(Reconciler owner, RenderErrorDispatch.PropagationScope scope) : IDisposable
+    {
+        public void Dispose()
+        {
+            scope.Dispose();
+            owner._entryDepth--;
+        }
+    }
+
+    /// <summary>In-tree placeholder for a component whose render or effect flush threw.</summary>
+    private Element BuildInTreeFallback(Exception ex, bool inEffects, string? componentName) =>
+        RenderErrorDispatch.BuildInTreeFallback(
+            ResolveRenderErrorHandler(),
+            new RenderError(ex, inEffects ? RenderErrorSource.Effects : RenderErrorSource.ComponentRender,
+                componentName, isHostLevel: false),
+            _logger);
     /// <summary>
     /// Active rerender-callback depth. Throws past
     /// <see cref="MaxRerenderReentrancy"/> so a component that synchronously
@@ -1722,7 +1994,10 @@ public sealed partial class Reconciler : IDisposable
         UIElement? existingControl,
         Action requestRerender)
     {
-        // Declared first so it is disposed last: validation changes raised by mount,
+        // A top-level pass is an outermost Reactor frame for render-error propagation
+        // (issue #1291); see EnterFrame. Nested passes and mounts just count.
+        using var entryFrame = EnterFrame();
+        // Declared before the reconcile work so it is disposed after it: validation changes raised by mount,
         // update, or unmount are announced only once the whole pass has finished.
         using var validationScope = Controls.Validation.ValidationRenderScope.BeginReconcile();
         ReferenceDirtySet.BeginCommit();
@@ -2094,8 +2369,10 @@ public sealed partial class Reconciler : IDisposable
         // hot-reload pass: reset this context's hook state and re-render once.
         RenderContext? renderCtx = node.Component?.Context ?? node.Context;
         bool hotReloadRetried = false;
+        bool inEffects = false;
         while (true)
         {
+            inEffects = false;
             try
             {
                 if (node.Component is not null)
@@ -2112,6 +2389,7 @@ public sealed partial class Reconciler : IDisposable
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(node.Component.Render());
                     }
+                    inEffects = true;
                     FlushEffectsTraced(node.Component.Context, componentName);
                 }
                 else if (node.Context is not null && newEl is FuncElement func)
@@ -2121,6 +2399,7 @@ public sealed partial class Reconciler : IDisposable
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(func.RenderFunc(node.Context));
                     }
+                    inEffects = true;
                     FlushEffectsTraced(node.Context, componentName);
                 }
                 else if (node.Context is not null && newEl is MemoElement memo)
@@ -2130,6 +2409,7 @@ public sealed partial class Reconciler : IDisposable
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(memo.RenderFunc(node.Context));
                     }
+                    inEffects = true;
                     FlushEffectsTraced(node.Context, componentName);
                 }
                 else
@@ -2157,7 +2437,7 @@ public sealed partial class Reconciler : IDisposable
                 renderCtx.ResetForHotReload();
                 continue;
             }
-            catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
+            catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
             {
                 _logger?.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
                 if (Diagnostics.ReactorEventSource.Log.IsEnabled(
@@ -2167,7 +2447,7 @@ public sealed partial class Reconciler : IDisposable
                     Diagnostics.ReactorEventSource.Log.RenderError(
                         componentName ?? newEl.GetType().Name, ex.GetType().Name, ex.Message);
                 }
-                newChildElement = ErrorFallback.BuildElement(ex);
+                newChildElement = BuildInTreeFallback(ex, inEffects, node.Component?.GetType().Name);
             }
             break;
         }
@@ -2455,7 +2735,7 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
         {
             _onUnmountActions.Remove(umFe);
-            onUnmount(umFe);
+            RunUnmountAction(onUnmount, umFe);
         }
 
         // Issue #917 — a TitleBar going away withdraws both its
@@ -2470,8 +2750,7 @@ public sealed partial class Reconciler : IDisposable
         {
             Diagnostics.ReactorEventSource.Log.ComponentUnmount(
                 node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
-            node.Component?.Context.RunCleanups();
-            node.Context?.RunCleanups();
+            RunUnmountCleanups(node);
             _componentNodes.Remove(control);
         }
 
@@ -2869,7 +3148,7 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
         {
             _onUnmountActions.Remove(umFe);
-            onUnmount(umFe);
+            RunUnmountAction(onUnmount, umFe);
         }
 
         // Issue #917 — mirrors UnmountRecursive: a TitleBar reached through the
@@ -2884,8 +3163,7 @@ public sealed partial class Reconciler : IDisposable
         {
             Diagnostics.ReactorEventSource.Log.ComponentUnmount(
                 node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
-            node.Component?.Context.RunCleanups();
-            node.Context?.RunCleanups();
+            RunUnmountCleanups(node);
             _componentNodes.Remove(control);
         }
 
@@ -3714,6 +3992,9 @@ public sealed partial class Reconciler : IDisposable
     /// Uses a static dictionary keyed by UIElement.
     /// </summary>
     private static readonly Dictionary<UIElement, InteractionStateTracker> _interactionTrackers = new();
+
+    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
+    internal static int InteractionTrackerCountForTests => _interactionTrackers.Count;
 
     private sealed class InteractionStateTracker
     {
@@ -4716,7 +4997,10 @@ public sealed partial class Reconciler : IDisposable
         // pooled control reused for a no-OnUnmount element can't fire a stale action
         // (pool reuse remounts with oldM == null, so this can't be gated on oldM).
         if (m.OnUnmountAction is not null)
+        {
             _onUnmountActions.AddOrUpdate(fe, m.OnUnmountAction);
+            _boundaryMountJournal?.Add(fe);
+        }
         else
             _onUnmountActions.Remove(fe);
 
@@ -6187,10 +6471,32 @@ public sealed partial class Reconciler : IDisposable
 
     public void Dispose()
     {
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation;
+        // Standalone disposal is its own outermost frame (issue #1291).
+        using (RenderErrorDispatch.EnterPropagationScope())
+            pendingPropagation = DisposeCollectingPropagation();
+        pendingPropagation?.Throw();
+    }
+
+    /// <summary>
+    /// Disposes and returns, rather than throws, a cleanup exception the app asked to
+    /// propagate. Hosts call this inside their own propagation scope so the root's and the
+    /// reconciler's cleanups share one "only the first propagation is rethrown" decision,
+    /// and the host finishes its own teardown before rethrowing.
+    /// </summary>
+    internal global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? DisposeCollectingPropagation()
+    {
+        // Issue #1291: with a RenderErrorHandler configured, every effect cleanup runs and
+        // each failure is reported (Source = Cleanup). With no handler the first throwing
+        // cleanup escapes as before.
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
+        // Resolved per failure (a cleanup may change the handler), not once per batch.
+        Func<RenderErrorHandler?> cleanupHandler = ResolveRenderErrorHandler;
         foreach (var node in _componentNodes.Values)
         {
-            node.Context?.RunCleanups();
-            node.Component?.Context?.RunCleanups();
+            var name = node.Component?.GetType().Name;
+            RenderErrorDispatch.RunCleanups(node.Context, cleanupHandler, name, isHostLevel: false, _logger, ref pendingPropagation);
+            RenderErrorDispatch.RunCleanups(node.Component?.Context, cleanupHandler, name, isHostLevel: false, _logger, ref pendingPropagation);
         }
         _componentNodes.Clear();
         _errorBoundaryNodes.Clear();
@@ -6205,6 +6511,7 @@ public sealed partial class Reconciler : IDisposable
         }
         _navigationHostNodes.Clear();
         _pool.Clear();
+        return pendingPropagation;
     }
 }
 

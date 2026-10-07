@@ -62,10 +62,16 @@ internal sealed class TrayFlyoutHostWindow : IDisposable
     {
         lock (s_lock)
         {
-            s_instance?.Dispose();
+            var instance = s_instance;
             s_instance = null;
+            instance?.Dispose();
         }
     }
+
+    // Test-only accessors (InternalsVisibleTo Reactor.AppTests.Host).
+    internal Window WindowForTests => _window;
+    internal ReactorHost? HostForTests => _host;
+    internal bool IsShowingForTests => _isShowing;
 
     private TrayFlyoutHostWindow()
     {
@@ -111,7 +117,7 @@ internal sealed class TrayFlyoutHostWindow : IDisposable
 
         // Tear down the previous mount before re-mounting so the flyout gets
         // a fresh hook state per invocation.
-        try { _host?.Dispose(); } catch { /* best effort */ }
+        DisposeHost();
         _host = new ReactorHost(_window);
         _host.Mount(_ => flyoutContent);
 
@@ -168,8 +174,19 @@ internal sealed class TrayFlyoutHostWindow : IDisposable
 
         // Dispose the per-show host so its hook-state cleanups run promptly;
         // the next Show creates a new host on the same window.
-        try { _host?.Dispose(); } catch { /* best effort */ }
+        DisposeHost();
+    }
+
+    /// <summary>
+    /// Detaches and disposes the per-show host. The field is cleared first so a declined
+    /// <c>RenderError.Propagate()</c> escaping <see cref="ReactorHost.Dispose"/> (issue #1291)
+    /// can never leave a disposed host behind for a later Show/Hide/Dispose.
+    /// </summary>
+    private void DisposeHost()
+    {
+        var host = _host;
         _host = null;
+        try { host?.Dispose(); } catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex)) { /* best effort; a declined RenderError.Propagate() keeps going out (issue #1291) */ }
     }
 
     private static uint GetDpiForMonitorSafe(TrayIconComInterop.POINT pt)
@@ -224,8 +241,15 @@ internal sealed class TrayFlyoutHostWindow : IDisposable
         if (_disposed) return;
         _disposed = true;
         try { _window.Activated -= OnActivated; } catch { /* best effort */ }
-        try { _host?.Dispose(); } catch { /* best effort */ }
-        _host = null;
-        try { _window.Close(); } catch { /* best effort */ }
+        try { DisposeHost(); }
+        finally
+        {
+            // Close even when a declined propagation escapes the host teardown.
+            try { _window.Close(); }
+            catch (Exception ex) when (ex is COMException or InvalidOperationException or ObjectDisposedException)
+            {
+                Debug.WriteLine($"[Reactor] TrayFlyout Close failed: {ex.Message}");
+            }
+        }
     }
 }
