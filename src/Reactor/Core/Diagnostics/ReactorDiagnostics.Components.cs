@@ -383,7 +383,7 @@ internal sealed class ComponentHandle
         var cell = _context.DiagnosticHookAt(hookIndex);
         if (!cell.DiagnosticCanSet)
         {
-            error = $"hook {hookIndex} of <{Name}> is a {HookKindText(cell.DiagnosticKind)} hook; only state, reducer and persisted hooks can be set";
+            error = $"hook {hookIndex} of <{Name}> has kind '{HookKindText(cell.DiagnosticKind)}'; only state, reducer and persisted hooks can be set";
             return false;
         }
         var valueType = cell.DiagnosticValueType;

@@ -199,10 +199,10 @@ public class ReactorDiagnosticsComponentsTests
 
         AssertRefused(handle, 0, "abc", "'abc' is not a valid int");
         AssertRefused(handle, 0, "null", "'null' is not a valid int");
-        AssertRefused(handle, 1, "6", "is a ref hook; only state, reducer and persisted hooks can be set");
-        AssertRefused(handle, 2, "1", "is a effect hook");
-        AssertRefused(handle, 3, "x", "a List<int> value cannot be typed as text");
-        AssertRefused(handle, 3, "null", "a List<int> value cannot be typed as text");
+        AssertRefused(handle, 1, "6", "has kind 'ref'; only state, reducer and persisted hooks can be set");
+        AssertRefused(handle, 2, "1", "has kind 'effect'");
+        AssertRefused(handle, 3, "x", "List<int> cannot be set from text");
+        AssertRefused(handle, 3, "null", "List<int> cannot be set from text");
         AssertRefused(handle, 4, "x", "holds a secret");
         AssertRefused(handle, 5, "x", "holds a secret");
         AssertRefused(handle, 6, "1", "has no hook 6");
@@ -250,8 +250,8 @@ public class ReactorDiagnosticsComponentsTests
         Assert.Equal(("state", "Ref<int>", false), (hooks[0].Kind, hooks[0].Type, hooks[0].Editable));
         Assert.Equal(("ref", "int", "5"), (hooks[1].Kind, hooks[1].Type, hooks[1].Value));
         // Refused for its type (a Ref<int> cannot be typed as text), not as though it came from UseRef.
-        AssertRefused(handle, 0, "1", "a Ref<int> value cannot be typed as text");
-        AssertRefused(handle, 1, "1", "is a ref hook");
+        AssertRefused(handle, 0, "1", "Ref<int> cannot be set from text");
+        AssertRefused(handle, 1, "1", "has kind 'ref'");
         // reactor.state keeps naming a Ref<T> cell "useRef", as it always has.
         Assert.Equal(new[] { "useRef", "useRef" }, r.Context.SnapshotHooks().Select(s => s.Hook));
     }

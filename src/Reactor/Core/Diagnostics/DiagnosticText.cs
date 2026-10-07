@@ -251,7 +251,7 @@ internal static class DiagnosticText
         // otherwise not settable from text (a List<T>, a record) — Editable says so.
         if (!IsEditable(type))
         {
-            error = $"a {FriendlyTypeName(type)} value cannot be typed as text; only numbers, characters, text, true/false, enums, dates, times, GUIDs and their nullables can be set";
+            error = $"{FriendlyTypeName(type)} cannot be set from text; only numbers, characters, text, true/false, enums, dates, times, GUIDs and their nullables can be set";
             return false;
         }
         if (text == "null" && (underlying is not null || !type.IsValueType))
@@ -273,7 +273,7 @@ internal static class DiagnosticText
                     value = parsed;
                     return true;
                 }
-                error = $"'{text}' is not a {FriendlyTypeName(target)}; use one of {string.Join(", ", Enum.GetNames(target))}";
+                error = $"'{text}' is not a valid {FriendlyTypeName(target)}; use one of {string.Join(", ", Enum.GetNames(target))}";
                 return false;
             }
             if (target == typeof(bool))

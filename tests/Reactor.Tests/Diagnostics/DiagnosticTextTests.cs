@@ -294,13 +294,13 @@ public class DiagnosticTextTests
     [InlineData("maybe", typeof(bool), "'maybe' is not true or false")]
     [InlineData("xy", typeof(char), "'xy' is not a single character")]
     [InlineData("Funday", typeof(DayOfWeek), "use one of Sunday, Monday")]
-    [InlineData("8", typeof(DayOfWeek), "'8' is not a DayOfWeek")]
-    [InlineData("8", typeof(Access), "'8' is not a Access")]
-    [InlineData("Read, 4", typeof(Access), "is not a Access; use one of None, Read, Write")]
-    [InlineData("x", typeof(List<int>), "a List<int> value cannot be typed as text")]
-    [InlineData("null", typeof(List<int>), "a List<int> value cannot be typed as text")]
-    [InlineData("null", typeof(object), "a object value cannot be typed as text")]
-    [InlineData("x", typeof(UserCredential), "a UserCredential value cannot be typed as text")]
+    [InlineData("8", typeof(DayOfWeek), "'8' is not a valid DayOfWeek")]
+    [InlineData("8", typeof(Access), "'8' is not a valid Access")]
+    [InlineData("Read, 4", typeof(Access), "is not a valid Access; use one of None, Read, Write")]
+    [InlineData("x", typeof(List<int>), "List<int> cannot be set from text")]
+    [InlineData("null", typeof(List<int>), "List<int> cannot be set from text")]
+    [InlineData("null", typeof(object), "object cannot be set from text")]
+    [InlineData("x", typeof(UserCredential), "UserCredential cannot be set from text")]
     public void TryParse_RefusesWithAReason(string text, Type type, string reason)
     {
         Assert.False(DiagnosticText.TryParse(text, type, out var value, out var error));

@@ -39,9 +39,10 @@ Conventions for contributors:
   pending ones whose target has not mounted. Component snapshots and property
   lists are text — no live component, element or hook object — with secrets
   redacted; a resolved reference edge carries its mounted target control. Reads
-  are on demand and UI-thread-affine. The render path gains only two reference
-  stores: `UseContext` records the context it read, and reference-list wiring
-  keeps the authored list. With source mapping on, an open
+  are on demand and UI-thread-affine. The render path gains only reference
+  stores: per component, `UseContext` records the context it read and
+  reference-list wiring keeps the authored list; per host render, the host
+  records which root produced the displayed control. With source mapping on, an open
   `ContentDialog` is tagged with its element so its chrome resolves to the
   `ContentDialog(...)` call site (spec 010, spec 057 §3.1).
 

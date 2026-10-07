@@ -64,7 +64,7 @@ public static class ComponentInspector
 
             // Parsed to the hook's type; same semantics as calling the UseState setter.
             if (!ReactorDiagnostics.TrySetState(wrapper, 0, "42", out var error))
-                Console.WriteLine(error);   // "'abc' is not a valid int", "... is a ref hook; ..."
+                Console.WriteLine(error);   // "'abc' is not a valid int", "... has kind 'ref'; ..."
 
             ReactorDiagnostics.Rerender(wrapper);   // bypasses memoization, like a state change
         }
