@@ -56,7 +56,7 @@ public sealed class DockHostRecord
 /// </summary>
 public static class DockHostRegistry
 {
-    private static readonly object _lock = new();
+    private static readonly Lock _lock = new();
     private static readonly List<DockHostRecord> _records = new();
     private static int _nextId = 1;
 

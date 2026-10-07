@@ -949,7 +949,7 @@ internal static class DockFloatingTracker
     /// </summary>
     internal sealed record Entry(ReactorWindow Window, DockableContent Pane, double InitialWidth, double InitialHeight);
 
-    private static readonly object _lock = new();
+    private static readonly Lock _lock = new();
     private static readonly HashSet<ReactorWindow> _open = new();
     private static readonly Dictionary<ReactorWindow, Entry> _entries = new();
     // Kept separate from _entries (rather than hung off Entry) on purpose:

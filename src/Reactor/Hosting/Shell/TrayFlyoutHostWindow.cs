@@ -28,7 +28,7 @@ namespace Microsoft.UI.Reactor.Hosting.Shell;
 internal sealed class TrayFlyoutHostWindow : IDisposable
 {
     private static TrayFlyoutHostWindow? s_instance;
-    private static readonly object s_lock = new();
+    private static readonly Lock s_lock = new();
 
     private readonly Window _window;
     private readonly AppWindow _appWindow;

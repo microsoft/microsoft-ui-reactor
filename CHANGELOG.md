@@ -251,6 +251,14 @@ Conventions for contributors:
 
 ### Fixed
 
+- **DataGrid inline editors no longer shift the cell's text when editing starts**
+  (issue #1340). The built-in TextBox and NumberBox editors used `.Padding(2)` inside
+  WinUI's 32px minimum height, which draws text at the top, so the text moved about 4px
+  up and 5px left as soon as a cell entered edit mode. Text editors now use the cell's
+  horizontal padding and symmetric vertical padding, with `TextControlThemeMinHeight`
+  overridden to 0, so their text lands exactly where the display cell drew it. A custom
+  `col.Editor` keeps any padding, `MinHeight` or `TextControlThemeMinHeight` it sets.
+
 - **A `SwipeControl` side in `SwipeMode.Execute` with more than one item no longer
   replaces the whole UI with the render-error panel** (issue #1344). WinUI accepts
   only one item in an Execute-mode `SwipeItems` collection and rejects a second with

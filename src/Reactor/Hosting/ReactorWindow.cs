@@ -143,12 +143,12 @@ public sealed partial class ReactorWindow : IDisposable
     private TaskbarOverlay? _taskbarOverlay;
     private TaskbarItem? _taskbarItem;
     private Hosting.Shell.ThumbnailToolbarState? _thumbnailToolbar;
-    private readonly object _shellLock = new();
+    private readonly Lock _shellLock = new();
     // Owned windows (this window's children). Copy-on-write so the cascade
     // path can iterate without holding a lock during user-supplied close
     // handlers / guards.
     private ReactorWindow[] _ownedWindows = global::System.Array.Empty<ReactorWindow>();
-    private readonly object _ownedLock = new();
+    private readonly Lock _ownedLock = new();
     private WindowSpec _spec;
     private uint _dpi = 96;
     private DipPositionSnapshot _position = new(0, 0);
@@ -254,7 +254,7 @@ public sealed partial class ReactorWindow : IDisposable
     private bool _titleBarControlExplicitHeight;
     private bool _titleBarControlHeightOwned;
     private RECT _lastSizingRect;
-    private readonly object _aspectRatioOverrideLock = new();
+    private readonly Lock _aspectRatioOverrideLock = new();
     private AspectRatioOverride[] _aspectRatioOverrides = global::System.Array.Empty<AspectRatioOverride>();
     private int _nextAspectRatioOverrideId;
     private UIElement? _backgroundDragRoot;
@@ -2433,7 +2433,7 @@ public sealed partial class ReactorWindow : IDisposable
         public Func<bool> CanClose { get; }
         public ClosingGuard(Func<bool> fn) { CanClose = fn; }
     }
-    private readonly object _closingGuardsLock = new();
+    private readonly Lock _closingGuardsLock = new();
     private readonly List<ClosingGuard> _closingGuards = new();
 
     /// <summary>

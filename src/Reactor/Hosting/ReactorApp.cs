@@ -355,7 +355,7 @@ public static partial class ReactorApp
     // CopyOnWrite snapshot semantics so reads from GetXamlType (called on the UI
     // thread, hot path) need no locking.
     private static IXamlMetadataProvider[] _registeredXamlMetadataProviders = [];
-    private static readonly object _registeredXamlMetadataProvidersLock = new();
+    private static readonly Lock _registeredXamlMetadataProvidersLock = new();
 
     /// <summary>
     /// Registers a XAML metadata provider so its types are visible to the WinUI

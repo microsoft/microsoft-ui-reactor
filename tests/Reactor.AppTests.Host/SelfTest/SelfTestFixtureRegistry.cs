@@ -1002,6 +1002,8 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_EditorFocusCustomEditors",
         "DataGrid_EditorFocusDebtRepaid",
         "DataGrid_EditorFocusDisconnectedRoot",
+        // Editor text stays where the display cell drew it (issue #1340)
+        "DataGrid_EditorTextAlignment",
         // Parking focus before an editor open destroys the focused element (issue #1288)
         "DataGrid_EditorFocusParkedFromEditButton",
         "DataGrid_EditorFocusParkedOnCommitThenBegin",
@@ -3035,6 +3037,7 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_EditorFocusCustomEditors" => new DataGridEditFixtures.EditorFocusCustomEditors(harness),
         "DataGrid_EditorFocusDebtRepaid" => new DataGridEditFixtures.EditorFocusDebtRepaid(harness),
         "DataGrid_EditorFocusDisconnectedRoot" => new DataGridEditFixtures.EditorFocusDisconnectedRoot(harness),
+        "DataGrid_EditorTextAlignment" => new DataGridEditFixtures.EditorTextAlignment(harness),
         // Parking focus before an editor open destroys the focused element (issue #1288)
         "DataGrid_EditorFocusParkedFromEditButton" => new DataGridEditFixtures.EditorFocusParkedFromEditButton(harness),
         "DataGrid_EditorFocusParkedOnCommitThenBegin" => new DataGridEditFixtures.EditorFocusParkedOnCommitThenBegin(harness),

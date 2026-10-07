@@ -24,7 +24,7 @@ internal readonly record struct NodeLookup(NodeLookupStatus Status, UIElement? E
 /// </summary>
 internal sealed class NodeRegistry
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     // Forward map (id -> weak target) plus a reverse map (element instance -> id)
     // so re-walking the same live element returns the same id. The weak ref is
     // typed as object so test code can inject a sentinel; the public API still

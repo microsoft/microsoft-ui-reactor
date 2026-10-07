@@ -20,7 +20,7 @@ internal sealed class TeeTextWriter : TextWriter
     private readonly LogCaptureBuffer _buffer;
     private readonly LogSource _source;
     private readonly StringBuilder _lineBuf = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     public TeeTextWriter(TextWriter? forward, LogCaptureBuffer buffer, LogSource source)
     {
@@ -117,7 +117,7 @@ internal sealed class BufferTraceListener : TraceListener
     private readonly LogCaptureBuffer _buffer;
     private readonly LogSource _source;
     private readonly StringBuilder _pending = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     public BufferTraceListener(LogCaptureBuffer buffer)
     {
@@ -167,7 +167,7 @@ internal sealed class BufferTraceListener : TraceListener
 /// </summary>
 internal static class LogCaptureInstall
 {
-    private static readonly object _installLock = new();
+    private static readonly Lock _installLock = new();
     private static LogCaptureBuffer? _shared;
     // Owned for process lifetime. Disposing detaches the EventListener and
     // stops the ETW→buffer bridge; we hold the reference so a stray GC pass

@@ -20,7 +20,7 @@ internal sealed class StdioMcpLoop : IDisposable
     private readonly McpDispatcher _dispatcher;
     private readonly TextReader _reader;
     private readonly TextWriter _writer;
-    private readonly object _writeLock = new();
+    private readonly Lock _writeLock = new();
     private CancellationTokenSource? _cts;
     private Thread? _thread;
 
