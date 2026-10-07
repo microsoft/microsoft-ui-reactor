@@ -76,7 +76,7 @@ public static partial class ReactorDiagnostics
     /// Larger duplicate sets are truncated and an ellipsis is appended.</summary>
     public const int MaxSampleKeys = 8;
 
-    private static readonly object _gate = new();
+    private static readonly Lock _gate = new();
     private static readonly LinkedList<KeyedListDiagnostic> _recent = new();
 
     // (control instance) → set of (kind | sample-set hash) keys already

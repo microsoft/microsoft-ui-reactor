@@ -75,12 +75,7 @@ public sealed class SourceMapTransparentGeneratorTests
                 protected void UseEffect(global::System.Action effect, params object[] dependencies) { }
             }
             public record EmptyElement : Element;
-            public readonly record struct SourceLocation(string FilePath, int LineNumber)
-            {
-                public SourceLocation(string FilePath, int LineNumber, int ColumnNumber)
-                    : this(FilePath, LineNumber) => this.ColumnNumber = ColumnNumber;
-                public int ColumnNumber { get; init; }
-            }
+            public readonly record struct SourceLocation(string FilePath, int LineNumber, int ColumnNumber);
         }
         namespace Microsoft.UI.Reactor
         {
@@ -119,6 +114,8 @@ public sealed class SourceMapTransparentGeneratorTests
             {
                 public static bool Enabled { get; set; }
                 public static void RegisterStaticInfo(global::System.Reflection.Assembly assembly, global::System.Action<ReactorStaticInfoBuilder> fill) { }
+                public static object? EnterRootMountSite(string filePath, int lineNumber, int columnNumber) => null;
+                public static void ExitRootMountSite(object? token) { }
             }
             public sealed class ReactorStaticInfoBuilder
             {

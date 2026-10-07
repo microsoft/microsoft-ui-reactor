@@ -67,7 +67,7 @@ public sealed class SearchManager<T> : IDisposable
 {
     // SECURITY (TASK-098): all mutable state accessed under _lock so the
     // threadpool Timer callback and the UI-thread Search call can't race.
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private CancellationTokenSource? _cts;
     private Timer? _debounceTimer;
     private long _generation; // increments per Search; old continuations discard

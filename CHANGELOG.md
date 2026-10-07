@@ -30,8 +30,8 @@ Conventions for contributors:
 
 - **Inspector diagnostics: call-site column and a per-component render event**
   (issue #1326, spec 010 §1.1):
-  - `SourceLocation.ColumnNumber` (1-based, `0` = unknown) plus a
-    `(FilePath, LineNumber, ColumnNumber)` constructor. The source-map generator
+  - `SourceLocation.ColumnNumber` (1-based, `0` = unknown), a third positional
+    member: `new SourceLocation(path, line)` now needs a column. The source-map generator
     stamps the column of the invoked method's name, so several calls on one line
     resolve to distinct positions. `ToString()` stays `file:line`.
   - `ComponentRendered` on the `Microsoft-UI-Reactor` provider (EventId 40,
@@ -44,6 +44,16 @@ Conventions for contributors:
     `ReactorTrace.TryGetComponentId(UIElement, out long)` map a `componentId` to
     the component's on-screen control and back, so an inspector can flash what
     re-rendered.
+
+- **Inspector diagnostics for hosts, roots and component boundaries** (spec 010).
+  `ReactorDiagnostics.GetHosts()` (`Microsoft.UI.Reactor.Core.Diagnostics`) returns
+  a snapshot of every live `ReactorHost` and `ReactorHostControl` — window,
+  host element, root control, root component or render-function name, and
+  `MountSite`, the `ReactorApp.Run` / `OpenWindow` / `Mount` call that mounted the
+  root (recorded by the source-map generator when source mapping is on). While
+  `ReactorSourceMap.Enabled` is true, every component's wrapper is also tagged, so
+  `Reconciler.GetElementTag` finds each component boundary. Provisional API for
+  external inspectors such as `winapp devtools`.
 
 - **Inspect Reactor apps with no managed agent, Native AOT included: `ReactorSource`
   on every control** (issue #1341, spec 010):
@@ -303,6 +313,24 @@ Conventions for contributors:
   releases the previous root's content (and its components' effects) instead of leaving
   it on screen, and a cleanup that throws during the swap is routed like a disposal-time
   cleanup failure without blocking the new root.
+- **`RenderError` names the component that threw, and now reports every render
+  error** (issue #1321, spec 044 §6.2.1). For class components the event reported
+  the element record (``ComponentElement`1`` / `ComponentElement`) instead of the
+  component unless the `Render` keyword was also on, so an Errors-only listener
+  such as `winapp devtools logs` could not tell which component failed. It now
+  reports the component's type name (`Counter`; a generic one as `Foo<Int32>`),
+  and the other per-component events agree on it. **Listeners now also receive
+  errors that were previously silent:** a component (class, function or memo)
+  throwing on its first render, a `ReactorHost` / `ReactorHostControl` root
+  component or render function throwing (in `Render()` or in its effects), and any
+  render error an `ErrorBoundary`
+  catches — reported once, at the throw site, even though the app shows the
+  fallback. Same event, same payload; the message stays redacted. Generic
+  component names change from ``Foo`1`` to `Foo<Int32>` in every component event.
+  For these component failures the event is emitted before any `RenderErrorHandler`
+  runs, so it fires whether the handler replaces the fallback or calls `Propagate()` —
+  once per throw either way. `Reconcile` and `Cleanup` failures are not render errors
+  and are not reported on it.
 
 - **DataGrid inline editors no longer shift the cell's text when editing starts**
   (issue #1340). The built-in TextBox and NumberBox editors used `.Padding(2)` inside
@@ -311,6 +339,13 @@ Conventions for contributors:
   horizontal padding and symmetric vertical padding, with `TextControlThemeMinHeight`
   overridden to 0, so their text lands exactly where the display cell drew it. A custom
   `col.Editor` keeps any padding, `MinHeight` or `TextControlThemeMinHeight` it sets.
+
+- **A `SwipeControl` side in `SwipeMode.Execute` with more than one item no longer
+  replaces the whole UI with the render-error panel** (issue #1344). WinUI accepts
+  only one item in an Execute-mode `SwipeItems` collection and rejects a second with
+  `E_INVALIDARG`, which escaped the reconciler. Reactor now keeps the first item,
+  ignores the rest, and emits a `SwipeControl.ExecuteItems` diagnostic warning naming
+  the side and how many items were dropped, once each time a side becomes truncated.
 
 - **An `ErrorBoundary` whose child fails part-way through mounting no longer leaves
   that child's effects running** (issue #1291). A component registers before its

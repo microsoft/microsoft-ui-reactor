@@ -53,7 +53,7 @@ public sealed class ReactorSourceFormatTests
         Assert.Equal("v=1|element=TextBlock", ReactorSourceFormat.Build(null, null, "TextBlock"));
         Assert.Equal(
             "v=1|at=/_/src/App.cs:12|element=Stack",
-            ReactorSourceFormat.Build(new SourceLocation("/_/src/App.cs", 12), null, "Stack"));
+            ReactorSourceFormat.Build(new SourceLocation("/_/src/App.cs", 12, 0), null, "Stack"));
         Assert.Equal(
             "v=1|element=Stack",
             ReactorSourceFormat.Build(new SourceLocation("", 12, 3), null, "Stack"));

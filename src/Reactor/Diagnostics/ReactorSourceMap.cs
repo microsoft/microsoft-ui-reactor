@@ -13,17 +13,20 @@ namespace Microsoft.UI.Reactor.Diagnostics;
 /// checks before writing a location, so an un-inspected Debug session allocates
 /// nothing extra.</para>
 ///
-/// <para><b>It does not change control tagging.</b> The reconciler attaches a
+/// <para><b>It does not change control tagging for leaves.</b> The reconciler attaches a
 /// <c>ReactorState</c> (the control → element back-pointer) only to controls that
 /// something will read back — callbacks, a key, extras, or reference modifiers
 /// (see <c>Reconciler.NeedsTag</c>), which is the allocation win PR #468 landed.
-/// <c>NeedsTag</c> has no arm for this flag: a stamped element carries its
+/// <c>NeedsTag</c> has no arm for this flag on ordinary elements: a stamped element carries its
 /// <c>CallSite</c> in the <c>Extensions</c> bucket and so already satisfies the
 /// existing <c>Extensions is not null</c> test. Adding one would only tag
 /// <em>unstamped</em> elements, which have no location to return, while
 /// re-introducing the per-leaf allocation. Elements the generator does not reach
 /// (wrapper factories, bare-string children) therefore stay untagged and report
-/// no location rather than a wrong one.</para>
+/// no location rather than a wrong one. The one exception is component boundaries:
+/// while this flag is on, every component's Border wrapper is tagged so an inspector
+/// can find where each component starts — one allocation per component, never per
+/// leaf.</para>
 ///
 /// <para><b>Who turns it on.</b> The devtools session switch. <c>ReactorApp</c>
 /// sets <see cref="Enabled"/> when the process was launched with
@@ -83,7 +86,16 @@ public static partial class ReactorSourceMap
     public static bool Enabled
     {
         get => Volatile.Read(ref s_enabled) != 0;
-        set => Volatile.Write(ref s_enabled, value ? 1 : 0);
+        set
+        {
+            var was = Interlocked.Exchange(ref s_enabled, value ? 1 : 0);
+            // Off → on: component boundaries mounted while mapping was off carry no tag, and
+            // a cached subtree may never be re-rendered to pick one up. Tag them now, on each
+            // host's UI thread, so an inspector that turns mapping on late still sees every
+            // component. A no-op before any host exists (startup) and on repeated sets.
+            if (was == 0 && value)
+                Core.Diagnostics.ReactorHostRegistry.TagComponentBoundariesInAllHosts();
+        }
     }
 
     /// <summary>

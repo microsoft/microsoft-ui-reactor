@@ -345,7 +345,7 @@ internal static class DevtoolsStressE2ERunner
     {
         private readonly int _capacity;
         private readonly Queue<string> _queue;
-        private readonly object _lock = new();
+        private readonly Lock _lock = new();
         public TailBuffer(int capacity) { _capacity = capacity; _queue = new Queue<string>(capacity); }
 
         public void Add(string s)
@@ -368,7 +368,7 @@ internal static class DevtoolsStressE2ERunner
     private sealed class E2ELog : IDisposable
     {
         private readonly FileStream _fs;
-        private readonly object _lock = new();
+        private readonly Lock _lock = new();
 
         public E2ELog(string path)
         {

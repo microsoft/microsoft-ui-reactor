@@ -28,7 +28,7 @@ internal readonly record struct WindowBounds(int X, int Y, int Width, int Height
 /// </summary>
 internal sealed class WindowRegistry
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly WindowIdAllocator _allocator = new();
     private readonly List<Entry> _entries = new();
     private readonly string _buildTag;

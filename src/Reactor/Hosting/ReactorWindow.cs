@@ -143,12 +143,12 @@ public sealed partial class ReactorWindow : IDisposable
     private TaskbarOverlay? _taskbarOverlay;
     private TaskbarItem? _taskbarItem;
     private Hosting.Shell.ThumbnailToolbarState? _thumbnailToolbar;
-    private readonly object _shellLock = new();
+    private readonly Lock _shellLock = new();
     // Owned windows (this window's children). Copy-on-write so the cascade
     // path can iterate without holding a lock during user-supplied close
     // handlers / guards.
     private ReactorWindow[] _ownedWindows = global::System.Array.Empty<ReactorWindow>();
-    private readonly object _ownedLock = new();
+    private readonly Lock _ownedLock = new();
     private WindowSpec _spec;
     private uint _dpi = 96;
     private DipPositionSnapshot _position = new(0, 0);
@@ -254,7 +254,7 @@ public sealed partial class ReactorWindow : IDisposable
     private bool _titleBarControlExplicitHeight;
     private bool _titleBarControlHeightOwned;
     private RECT _lastSizingRect;
-    private readonly object _aspectRatioOverrideLock = new();
+    private readonly Lock _aspectRatioOverrideLock = new();
     private AspectRatioOverride[] _aspectRatioOverrides = global::System.Array.Empty<AspectRatioOverride>();
     private int _nextAspectRatioOverrideId;
     private UIElement? _backgroundDragRoot;
@@ -610,7 +610,10 @@ public sealed partial class ReactorWindow : IDisposable
     /// Mount the supplied root and (optionally) activate the window. Pass
     /// exactly one of <paramref name="rootFactory"/> / <paramref name="renderFunc"/>.
     /// </summary>
-    internal void MountAndActivate(Func<Component>? rootFactory, Func<RenderContext, Element>? renderFunc)
+    internal void MountAndActivate(
+        Func<Component>? rootFactory,
+        Func<RenderContext, Element>? renderFunc,
+        Core.SourceLocation? mountSite = null)
     {
         if ((rootFactory is null) == (renderFunc is null))
             throw new ArgumentException(
@@ -622,9 +625,9 @@ public sealed partial class ReactorWindow : IDisposable
         ApplyTitleBarTheme();
 
         if (rootFactory is not null)
-            _host.Mount(rootFactory());
+            _host.Mount(rootFactory(), mountSite);
         else
-            _host.Mount(renderFunc!);
+            _host.Mount(renderFunc!, mountSite);
 
         if (_spec.ActivateOnOpen && !_disposed && (_spec.Embed is null || _spec.Embed.InitialVisibility))
             _window.Activate();
@@ -2433,7 +2436,7 @@ public sealed partial class ReactorWindow : IDisposable
         public Func<bool> CanClose { get; }
         public ClosingGuard(Func<bool> fn) { CanClose = fn; }
     }
-    private readonly object _closingGuardsLock = new();
+    private readonly Lock _closingGuardsLock = new();
     private readonly List<ClosingGuard> _closingGuards = new();
 
     /// <summary>
@@ -3433,20 +3436,22 @@ public sealed partial class ReactorWindow : IDisposable
     [UIThreadOnly]
     public void Mount(Component root)
     {
+        var mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Mount));
         if (_disposed) throw new ObjectDisposedException(nameof(ReactorWindow));
         ArgumentNullException.ThrowIfNull(root);
-        _host.Mount(root);
+        _host.Mount(root, mountSite);
     }
 
     /// <summary>Mount a new render-function root. UI-thread only.</summary>
     [UIThreadOnly]
     public void Mount(Func<RenderContext, Element> render)
     {
+        var mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Mount));
         if (_disposed) throw new ObjectDisposedException(nameof(ReactorWindow));
         ArgumentNullException.ThrowIfNull(render);
-        _host.Mount(render);
+        _host.Mount(render, mountSite);
     }
 
     // ── teardown ──────────────────────────────────────────────────────

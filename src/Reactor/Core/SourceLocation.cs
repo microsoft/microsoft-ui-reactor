@@ -3,14 +3,8 @@ namespace Microsoft.UI.Reactor.Core;
 /// <summary>
 /// Spec 010 — the C# source location that produced an <see cref="Element"/>.
 ///
-/// <para>The positional shape is <c>(FilePath, LineNumber)</c>: that was the
-/// greatest common denominator of the two candidate providers, because
-/// <c>[CallerFilePath]</c> / <c>[CallerLineNumber]</c> cannot supply a column.
-/// The interceptor provider that shipped does know the column, so it is carried
-/// as the purely additive, non-positional <see cref="ColumnNumber"/> — existing
-/// <c>new SourceLocation(path, line)</c> calls, the two-value
-/// <c>Deconstruct</c>, and <see cref="ToString"/> / <see cref="ToShortString"/>
-/// are unchanged.</para>
+/// <para><see cref="ToString"/> / <see cref="ToShortString"/> keep their
+/// <c>file:line</c> forms; read <see cref="ColumnNumber"/> directly.</para>
 /// </summary>
 /// <param name="FilePath">
 /// Absolute path of the source file at compile time. Under a deterministic
@@ -19,40 +13,25 @@ namespace Microsoft.UI.Reactor.Core;
 /// <c>/_/src/Reactor/Elements/Dsl.cs</c> — not a local disk path.
 /// </param>
 /// <param name="LineNumber">1-based line number of the DSL call site.</param>
-public readonly record struct SourceLocation(string FilePath, int LineNumber)
+/// <param name="ColumnNumber">
+/// 1-based column of the DSL call site on <paramref name="LineNumber"/>, or <c>0</c>
+/// when the provider did not record one.
+///
+/// <para>The source-map generator reports the first character of the invoked
+/// method's name — the <c>B</c> of <c>Button</c> in <c>Row(Button("a"), Button("b"))</c>,
+/// the <c>T</c> of <c>TextBlock</c> in <c>Factories.TextBlock("x")</c> — which is
+/// what tells several factory calls on one line apart. In the rare layout where the
+/// name and its <c>(</c> sit on different lines, <see cref="LineNumber"/> follows the
+/// paren (matching <c>[CallerLineNumber]</c>), so the column is the paren's too and
+/// the pair always names a position on the reported line. For an element stamped
+/// in argument position (a <c>string</c> converted to an element) it is the first
+/// character of the argument expression.</para>
+///
+/// <para>Counted in UTF-16 code units with a tab counting as one, the convention
+/// Roslyn diagnostics and VS Code's <c>file:line:column</c> links use.</para>
+/// </param>
+public readonly record struct SourceLocation(string FilePath, int LineNumber, int ColumnNumber)
 {
-    /// <summary>Creates a location that also records the call site's column.</summary>
-    /// <param name="FilePath">See <see cref="FilePath"/>.</param>
-    /// <param name="LineNumber">See <see cref="LineNumber"/>.</param>
-    /// <param name="ColumnNumber">See <see cref="ColumnNumber"/>.</param>
-    public SourceLocation(string FilePath, int LineNumber, int ColumnNumber)
-        : this(FilePath, LineNumber)
-    {
-        this.ColumnNumber = ColumnNumber;
-    }
-
-    /// <summary>
-    /// 1-based column of the DSL call site on <see cref="LineNumber"/>, or <c>0</c> when
-    /// the provider did not record one (a location built with the two-argument
-    /// constructor).
-    ///
-    /// <para>The source-map generator reports the first character of the invoked
-    /// method's name — the <c>B</c> of <c>Button</c> in <c>Row(Button("a"), Button("b"))</c>,
-    /// the <c>T</c> of <c>TextBlock</c> in <c>Factories.TextBlock("x")</c> — which is
-    /// what tells several factory calls on one line apart. In the rare layout where the
-    /// name and its <c>(</c> sit on different lines, <see cref="LineNumber"/> follows the
-    /// paren (matching <c>[CallerLineNumber]</c>), so the column is the paren's too and
-    /// the pair always names a position on the reported line. For an element stamped
-    /// in argument position (a <c>string</c> converted to an element) it is the first
-    /// character of the argument expression.</para>
-    ///
-    /// <para>Counted in UTF-16 code units with a tab counting as one, the convention
-    /// Roslyn diagnostics and VS Code's <c>file:line:column</c> links use.</para>
-    ///
-    /// <para>Takes part in equality, like every other field of this record.</para>
-    /// </summary>
-    public int ColumnNumber { get; init; }
-
     /// <summary>
     /// The identifier the element created at this call site was assigned to, as the
     /// source-map generator saw it — <c>title</c> for <c>var title = TextBlock("x").Bold()</c>,

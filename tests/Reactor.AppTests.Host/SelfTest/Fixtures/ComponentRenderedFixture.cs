@@ -592,6 +592,55 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
         H.Check("ComponentRendered_RootSwap_RetiredInstanceRemountsFresh",
             thirdRoot.CleanedUp && firstRoot.EffectRuns == 2 && !firstRoot.CleanedUp);
 
+        // A retired root's context lets go of the host: a retained hook setter of either
+        // root kind no longer requests renders of the replacement.
+        var detachHost = H.CreateHost();
+        var retiredComponent = new RenderedHostControlRoot();
+        detachHost.Mount(retiredComponent);
+        await Harness.Render();
+        Action<int>? retiredFuncSet = null;
+        detachHost.Mount(c =>
+        {
+            var (_, set) = c.UseState(0);
+            retiredFuncSet = set;
+            return TextBlock("retiring func root");
+        });
+        await Harness.Render();
+        int replacementRenders = 0;
+        detachHost.Mount(c =>
+        {
+            replacementRenders++;
+            return TextBlock("detach replacement");
+        });
+        await Harness.Render();
+        int rendersBefore = replacementRenders;
+        retiredComponent.Bump?.Invoke();
+        retiredFuncSet?.Invoke(7);
+        bool rerendered = await Harness.WaitFor(() => replacementRenders > rendersBefore, maxPasses: 16, perPassMs: 10);
+        H.Check("ComponentRendered_RootSwap_RetiredSettersDoNotRenderReplacement",
+            retiredComponent.Bump is not null && retiredFuncSet is not null && !rerendered,
+            $"renders {rendersBefore} -> {replacementRenders}");
+
+        var detachControl = new ReactorHostControl();
+        var retiredControlRoot = new RenderedHostControlRoot();
+        detachControl.Mount(retiredControlRoot);
+        H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = detachControl });
+        await Harness.WaitFor(() => H.FindText("host control root 0") is not null, maxPasses: 32, perPassMs: 10);
+        int controlReplacementRenders = 0;
+        detachControl.Mount(c =>
+        {
+            controlReplacementRenders++;
+            return TextBlock("control detach replacement");
+        });
+        bool controlReplaced = await Harness.WaitFor(() => controlReplacementRenders > 0, maxPasses: 32, perPassMs: 10);
+        int controlRendersBefore = controlReplacementRenders;
+        retiredControlRoot.Bump?.Invoke();
+        bool controlRerendered = await Harness.WaitFor(() => controlReplacementRenders > controlRendersBefore, maxPasses: 16, perPassMs: 10);
+        H.Check("ComponentRendered_RootSwap_HostControlRetiredSetterDoesNotRenderReplacement",
+            controlReplaced && retiredControlRoot.Bump is not null && !controlRerendered,
+            $"renders {controlRendersBefore} -> {controlReplacementRenders}");
+        detachControl.Dispose();
+
         // A replacement root whose first render is null: nothing reconciles the old root's
         // tree away, so the host releases it (its child's cleanup runs, its content goes).
         var releaseHost = H.CreateHost();
@@ -671,6 +720,36 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
             ReactorApp.DefaultRenderErrorHandler = previousDefault;
         }
 
+        // A throwing replacement over a tree whose cleanup also throws: the release still
+        // finishes, and the cleanup failure reaches the handler like disposal's.
+        var swapLog = new List<RenderError>();
+        var throwOverThrowHost = H.CreateHost();
+        throwOverThrowHost.RenderErrorHandler = e => { swapLog.Add(e); return null; };
+        throwOverThrowHost.Mount(new RenderedThrowingCleanupTreeRoot());
+        await Harness.Render();
+        throwOverThrowHost.Mount(new RenderedAppThrowingRoot());
+        await Harness.Render();
+        H.Check("ComponentRendered_ThrowingReplacement_ThrowingCleanup_ReportedToHandler",
+            RenderedCleanupProbeChild.Cleanups == 1
+                && swapLog.Any(e => e.Source == RenderErrorSource.RootRender)
+                && swapLog.Any(e => e.Source == RenderErrorSource.Cleanup && e.Exception.Message == RenderedThrowingCleanupChild.Message),
+            $"cleanups={RenderedCleanupProbeChild.Cleanups} log={string.Join(",", swapLog.Select(e => e.Source))}");
+
+        var swapControlLog = new List<RenderError>();
+        var throwOverThrowControl = new ReactorHostControl { RenderErrorHandler = e => { swapControlLog.Add(e); return null; } };
+        throwOverThrowControl.Mount(new RenderedThrowingCleanupTreeRoot());
+        H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = throwOverThrowControl });
+        await Harness.WaitFor(() => H.FindText("cleanup probe child") is not null, maxPasses: 32, perPassMs: 10);
+        throwOverThrowControl.Mount(new RenderedAppThrowingRoot());
+        bool controlReported = await Harness.WaitFor(
+            () => swapControlLog.Any(e => e.Source == RenderErrorSource.Cleanup), maxPasses: 32, perPassMs: 10);
+        H.Check("ComponentRendered_HostControlThrowingReplacement_ThrowingCleanup_ReportedToHandler",
+            controlReported && RenderedCleanupProbeChild.Cleanups == 1
+                && swapControlLog.Any(e => e.Source == RenderErrorSource.RootRender)
+                && swapControlLog.Any(e => e.Source == RenderErrorSource.Cleanup && e.Exception.Message == RenderedThrowingCleanupChild.Message),
+            $"cleanups={RenderedCleanupProbeChild.Cleanups} log={string.Join(",", swapControlLog.Select(e => e.Source))}");
+        throwOverThrowControl.Dispose();
+
         // A root whose Render() returns null still rendered.
         var nullHost = H.CreateHost();
         var nullRoot = new RenderedNullRoot();
@@ -682,6 +761,21 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
             Take().Any(e => (string)e.Payload[0]! == nameof(RenderedNullRoot)
                 && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Mount));
 
+        // ── Generic component classes are named like RenderError names them ─
+        var genericHost = H.CreateHost();
+        genericHost.Mount(new RenderedGenericRoot<int>());
+        await Harness.Render();
+        var generic = Take();
+        Console.WriteLine("# generic: " + string.Join(", ", generic.Select(e => (string)e.Payload[0]!)));
+        string expectedRoot = Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(typeof(RenderedGenericRoot<int>));
+        string expectedChild = Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(typeof(RenderedGenericChild<string>));
+        H.Check("ComponentRendered_GenericNames_MatchComponentNames",
+            expectedRoot == "RenderedGenericRoot<Int32>" && expectedChild == "RenderedGenericChild<String>"
+                && generic.Any(e => (string)e.Payload[0]! == expectedRoot)
+                && generic.Any(e => (string)e.Payload[0]! == expectedChild)
+                && !generic.Any(e => ((string)e.Payload[0]!).Contains('`')),
+            string.Join(", ", generic.Select(e => (string)e.Payload[0]!)));
+
         // ── Content changes while the event is off ──────────────────────────
         var root = new RenderedHostControlRoot();
         var offHost = H.CreateHost();
@@ -692,12 +786,27 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
         var before = rootId != 0 ? ReactorTrace.GetComponentControl(rootId) : null;
         H.Check("ComponentRendered_RootOff_ResolvedWhileOn", before is not null);
 
+        // A realized-replacement adoption that runs after the listener went away (it can be
+        // disabled by the fresh mount's own event callback) must not leave the id on the
+        // replacement wrapper that is about to be discarded.
+        var adoptReconciler = new Reconciler();
+        var realizedWrapper = adoptReconciler.Mount(Component<RenderedStatefulChild>(), static () => { })!;
+        var replacementWrapper = adoptReconciler.Mount(Component<RenderedStatefulChild>(), static () => { })!;
+        bool replacementMapped = ReactorTrace.TryGetComponentId(replacementWrapper, out var replacementId);
+
         subscription.Dispose();   // idempotent; the using disposes again harmlessly
         if (ComponentRenderTrace.IsEnabled)
         {
             H.Skip("ComponentRendered_RootOff_ForgottenWhileOff", "another ComponentRendered listener is active in this process");
+            H.Skip("ComponentRendered_AdoptWhileOff_ReplacementUnmapped", "another ComponentRendered listener is active in this process");
             return;
         }
+        bool adopted = adoptReconciler.TryAdoptRealizedReplacement(realizedWrapper, replacementWrapper);
+        H.Check("ComponentRendered_AdoptWhileOff_ReplacementUnmapped",
+            replacementMapped && adopted
+            && !ReactorTrace.TryGetComponentId(replacementWrapper, out _)
+            && !ReferenceEquals(ReactorTrace.GetComponentControl(replacementId), replacementWrapper),
+            $"mapped={replacementMapped} id={replacementId} adopted={adopted}");
         root.Bump?.Invoke();
         await Harness.Render();
         H.Check("ComponentRendered_RootOff_ForgottenWhileOff",
@@ -909,11 +1018,112 @@ internal class ComponentRendered_RootReplacementSurvivesThrowingCleanup(Harness 
             await Harness.Render();
             H.Check("ComponentRendered_RetireCleanup_Bare_NotRearmed",
                 second is null && H.FindText("replacement bare 2") is not null, second?.Message ?? "");
+
+            // The throwing cleanup does not stop the root's other cleanups: retirement drops
+            // the hook state afterwards, so a skipped cleanup would never run.
+            var drainRoot = new RenderedThrowingAmongCleanupsRoot();
+            bare.Mount(drainRoot);
+            await Harness.Render();
+            Exception? drainEscape = null;
+            try { bare.Mount(_ => TextBlock("replacement drained")); }
+            catch (InvalidOperationException ex) { drainEscape = ex; }
+            await Harness.Render();
+            H.Check("ComponentRendered_RetireCleanup_Bare_OtherCleanupsStillRun",
+                drainEscape?.Message == RenderedThrowingCleanupRoot.Message && drainRoot.Cleanups == 2
+                    && H.FindText("replacement drained") is not null,
+                $"escaped={drainEscape?.Message ?? "(nothing)"} cleanups={drainRoot.Cleanups}");
+
+            var drainControl = new ReactorHostControl();
+            var controlDrainRoot = new RenderedThrowingAmongCleanupsRoot();
+            drainControl.Mount(controlDrainRoot);
+            H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = drainControl });
+            await Harness.WaitFor(() => controlDrainRoot.EffectsRan, maxPasses: 32, perPassMs: 10);
+            Exception? controlDrainEscape = null;
+            try { drainControl.Mount(_ => TextBlock("control replacement drained")); }
+            catch (InvalidOperationException ex) { controlDrainEscape = ex; }
+            bool controlReplaced = await Harness.WaitFor(
+                () => H.FindText("control replacement drained") is not null, maxPasses: 32, perPassMs: 10);
+            H.Check("ComponentRendered_RetireCleanup_HostControlBare_OtherCleanupsStillRun",
+                controlDrainRoot.EffectsRan && controlDrainEscape?.Message == RenderedThrowingCleanupRoot.Message
+                    && controlDrainRoot.Cleanups == 2 && controlReplaced,
+                $"escaped={controlDrainEscape?.Message ?? "(nothing)"} cleanups={controlDrainRoot.Cleanups}");
+            drainControl.Dispose();
         }
         finally
         {
             ReactorApp.DefaultRenderErrorHandler = previousDefault;
         }
+    }
+}
+
+/// <summary>
+/// The root-swap matrix on a standalone <see cref="ReactorHostControl"/>, which carries its
+/// own copy of the retirement logic: every swap runs the outgoing root's cleanups and shows
+/// the incoming root, whichever kind either side is.
+/// </summary>
+internal class ComponentRendered_HostControlRootSwaps(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var control = new ReactorHostControl();
+        var first = new RenderedSwapComponentRoot();
+        control.Mount(first);
+        H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = control });
+        Task<bool> Shows(string text) => Harness.WaitFor(() => H.FindText(text) is not null, maxPasses: 32, perPassMs: 10);
+
+        H.Check("ComponentRendered_HostControlSwap_ComponentMounted",
+            await Shows("swap component root") && first.EffectRuns == 1 && !first.CleanedUp);
+
+        bool funcCleaned = false;
+        control.Mount(c =>
+        {
+            c.UseEffect(() => () => funcCleaned = true);
+            return TextBlock("control swap func root");
+        });
+        H.Check("ComponentRendered_HostControlSwap_ComponentToFunc",
+            await Shows("control swap func root") && first.CleanedUp && !funcCleaned);
+
+        bool secondFuncCleaned = false;
+        control.Mount(c =>
+        {
+            c.UseEffect(() => () => secondFuncCleaned = true);
+            return TextBlock("control swap func root 2");
+        });
+        H.Check("ComponentRendered_HostControlSwap_FuncToFunc",
+            await Shows("control swap func root 2") && funcCleaned && !secondFuncCleaned);
+
+        var second = new RenderedSwapComponentRoot();
+        control.Mount(second);
+        bool shown = await Harness.WaitFor(() => second.EffectRuns == 1, maxPasses: 32, perPassMs: 10);
+        H.Check("ComponentRendered_HostControlSwap_FuncToComponent",
+            shown && H.FindText("swap component root") is not null && secondFuncCleaned && !second.CleanedUp);
+
+        var third = new RenderedSwapComponentRoot();
+        control.Mount(third);
+        shown = await Harness.WaitFor(() => third.EffectRuns == 1, maxPasses: 32, perPassMs: 10);
+        H.Check("ComponentRendered_HostControlSwap_ComponentToComponent", shown && second.CleanedUp && !third.CleanedUp);
+
+        // The retired instance mounted again is a fresh mount.
+        control.Mount(first);
+        shown = await Harness.WaitFor(() => first.EffectRuns == 2, maxPasses: 32, perPassMs: 10);
+        H.Check("ComponentRendered_HostControlSwap_RetiredInstanceRemountsFresh",
+            shown && third.CleanedUp && !first.CleanedUp, $"effectRuns={first.EffectRuns}");
+        control.Dispose();
+    }
+}
+
+// A throwing cleanup between two that must still run, whichever order they run in.
+internal sealed class RenderedThrowingAmongCleanupsRoot : Component
+{
+    public int Cleanups;
+    public volatile bool EffectsRan;
+
+    public override Element Render()
+    {
+        UseEffect(() => { EffectsRan = true; return () => Cleanups++; });
+        UseEffect(() => () => throw new InvalidOperationException(RenderedThrowingCleanupRoot.Message));
+        UseEffect(() => () => Cleanups++);
+        return TextBlock("throwing among cleanups root");
     }
 }
 
@@ -1000,6 +1210,16 @@ internal sealed class RenderedNullRoot : Component
         UseEffect(() => EffectRan = true);
         return null!;
     }
+}
+
+internal sealed class RenderedGenericRoot<T> : Component
+{
+    public override Element Render() => VStack(TextBlock("generic root"), Component<RenderedGenericChild<string>>());
+}
+
+internal sealed class RenderedGenericChild<T> : Component
+{
+    public override Element Render() => TextBlock("generic child");
 }
 
 internal sealed class RenderedSwapComponentRoot : Component

@@ -905,6 +905,19 @@ public sealed partial class Reconciler
             inEffects = true;
             component.Context.FlushEffects();
         }
+        // Inside an ErrorBoundary — or a fatal exception the fallback arm below won't take:
+        // name the failing component, then rethrow unchanged (see ReconcileComponent). An
+        // exception the app declined via RenderError.Propagate() was already reported where
+        // it was thrown, so it passes through unreported (issue #1291).
+        catch (Exception ex) when ((_errorBoundaryDepth > 0 || ex is OutOfMemoryException or StackOverflowException)
+            && !RenderErrorDispatch.IsPropagating(ex))
+        {
+            // The render still happened: report it, as the trailing arm does for the rest.
+            if (traceRendered)
+                EmitComponentRendered(node, null, compElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
+            EmitRenderError(Diagnostics.ComponentNames.For(component, compElement), ex);
+            throw;
+        }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
         {
             // Report before building the fallback: its time is not this render's, and a
@@ -914,7 +927,10 @@ public sealed partial class Reconciler
                 EmitComponentRendered(node, null, compElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
                 renderReported = true;
             }
-            _logger?.LogError(ex, "Component Render() threw during mount: {ComponentName}", compElement.GetType().Name);
+            var failedName = Diagnostics.ComponentNames.For(component, compElement);
+            _logger?.LogError(ex, "Component Render() threw during mount: {ComponentName}", failedName);
+            // Before the fallback: the app's handler may call Propagate(), which throws.
+            EmitRenderError(failedName, ex);
             childElement = BuildInTreeFallback(ex, inEffects, component.GetType().Name);
         }
         // Every other exception propagates (to an enclosing ErrorBoundary, or a fatal one
@@ -974,6 +990,18 @@ public sealed partial class Reconciler
             inEffects = true;
             ctx.FlushEffects();
         }
+        // Inside an ErrorBoundary — or a fatal exception the fallback arm below won't take:
+        // name the failing component, then rethrow unchanged (see ReconcileComponent). An
+        // exception the app declined via RenderError.Propagate() was already reported where
+        // it was thrown, so it passes through unreported (issue #1291).
+        catch (Exception ex) when ((_errorBoundaryDepth > 0 || ex is OutOfMemoryException or StackOverflowException)
+            && !RenderErrorDispatch.IsPropagating(ex))
+        {
+            if (traceRendered)
+                EmitComponentRendered(node, null, funcElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
+            EmitRenderError(Diagnostics.ComponentNames.For(null, funcElement), ex);
+            throw;
+        }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
         {
             // Report before building the fallback: its time is not this render's, and a
@@ -984,6 +1012,8 @@ public sealed partial class Reconciler
                 renderReported = true;
             }
             _logger?.LogError(ex, "FuncComponent Render() threw during mount");
+            // Before the fallback: the app's handler may call Propagate(), which throws.
+            EmitRenderError(Diagnostics.ComponentNames.For(null, funcElement), ex);
             childElement = BuildInTreeFallback(ex, inEffects, componentName: null);
         }
         // Every other exception propagates (to an enclosing ErrorBoundary, or a fatal one
@@ -1044,6 +1074,18 @@ public sealed partial class Reconciler
             inEffects = true;
             ctx.FlushEffects();
         }
+        // Inside an ErrorBoundary — or a fatal exception the fallback arm below won't take:
+        // name the failing component, then rethrow unchanged (see ReconcileComponent). An
+        // exception the app declined via RenderError.Propagate() was already reported where
+        // it was thrown, so it passes through unreported (issue #1291).
+        catch (Exception ex) when ((_errorBoundaryDepth > 0 || ex is OutOfMemoryException or StackOverflowException)
+            && !RenderErrorDispatch.IsPropagating(ex))
+        {
+            if (traceRendered)
+                EmitComponentRendered(node, null, memoElement, Diagnostics.ComponentRenderTrace.Reasons.Mount, renderedStart);
+            EmitRenderError(Diagnostics.ComponentNames.For(null, memoElement), ex);
+            throw;
+        }
         catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
         {
             // Report before building the fallback: its time is not this render's, and a
@@ -1054,6 +1096,8 @@ public sealed partial class Reconciler
                 renderReported = true;
             }
             _logger?.LogError(ex, "MemoComponent Render() threw during mount");
+            // Before the fallback: the app's handler may call Propagate(), which throws.
+            EmitRenderError(Diagnostics.ComponentNames.For(null, memoElement), ex);
             childElement = BuildInTreeFallback(ex, inEffects, componentName: null);
         }
         // Every other exception propagates (to an enclosing ErrorBoundary, or a fatal one

@@ -144,4 +144,68 @@ public sealed class SourceMapColumnGeneratorTests
             new[] { PositionOf(code, "\"first\""), PositionOf(code, "\"second\"") },
             Stamps(s_argumentStamp, generated).OrderBy(static p => p.Column));
     }
+
+    // ── Root mount call sites (ReactorApp.Run / OpenWindow, host Mount) ──────
+
+    private static readonly Regex s_rootMountStamp = new(
+        @"EnterRootMountSite\(@""[^""]*"", (?<line>\d+), (?<col>\d+)\)", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Minimal stand-ins for the root-mount entry points; the generator matches them by
+    /// metadata name. Two candidates on one line prove the column is per call.
+    /// </summary>
+    private const string RootMountCode = """
+        using Microsoft.UI.Reactor.Core;
+        using Microsoft.UI.Reactor.Hosting;
+        using static Microsoft.UI.Reactor.Factories;
+
+        namespace Microsoft.UI.Reactor
+        {
+            public static class ReactorApp
+            {
+                public static void OpenWindow(string title, global::System.Func<Element> root) { }
+            }
+        }
+        namespace Microsoft.UI.Reactor.Hosting
+        {
+            public sealed class ReactorHost
+            {
+                public void Mount(global::System.Func<Element> root) { }
+            }
+        }
+
+        public static class App
+        {
+            public static void Start(ReactorHost host)
+            {
+                Microsoft.UI.Reactor.ReactorApp.OpenWindow("a", () => TextBlock("x")); host.Mount(() => TextBlock("y"));
+                host
+                    .Mount
+                    (() => TextBlock("z"));
+            }
+        }
+        """;
+
+    [Fact]
+    public void RootMounts_StampTheMethodNameColumn()
+    {
+        var (_, generated) = SourceMapTransparentGeneratorTests.Run(RootMountCode);
+        var stamps = Stamps(s_rootMountStamp, generated);
+
+        var openWindow = PositionOf(RootMountCode, "OpenWindow(\"a\"");
+        var sameLineMount = PositionOf(RootMountCode, "Mount(() => TextBlock(\"y\")");
+
+        Assert.Equal(3, stamps.Length);
+        Assert.Equal(openWindow.Line, sameLineMount.Line);
+        Assert.Contains(openWindow, stamps);
+        Assert.Contains(sameLineMount, stamps);
+    }
+
+    [Fact]
+    public void RootMount_NameAndParenOnDifferentLines_ColumnFollowsTheParenLine()
+    {
+        var (_, generated) = SourceMapTransparentGeneratorTests.Run(RootMountCode);
+
+        Assert.Contains(PositionOf(RootMountCode, "(() => TextBlock(\"z\"))"), Stamps(s_rootMountStamp, generated));
+    }
 }

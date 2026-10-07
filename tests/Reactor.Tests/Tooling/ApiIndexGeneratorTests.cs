@@ -68,6 +68,18 @@ public sealed class ApiIndexGeneratorTests
     }
 
     [Fact]
+    public void PublicTypes_Omits_EditorBrowsableNever_Infrastructure()
+    {
+        // ReactorSourceMap's root-mount hooks are public only so generated interceptors
+        // can call them; IntelliSense hides them, and so must the agent-facing index.
+        // GetSource is the positive control: same type, ordinary member, still listed.
+        var block = TypeBlock(Generate(), "ReactorSourceMap");
+        Assert.Contains("GetSource(UIElement control)", block);
+        Assert.DoesNotContain("EnterRootMountSite", block);
+        Assert.DoesNotContain("ExitRootMountSite", block);
+    }
+
+    [Fact]
     public void PublicTypes_Surfaces_Constructors_And_Events()
     {
         var output = Generate();

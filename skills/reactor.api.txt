@@ -1012,6 +1012,7 @@ AnimationKind { None, Default, Spring, EaseIn, EaseOut, EaseInOut }
 BackdropKind { None, Mica, MicaAlt, DesktopAcrylic, AcrylicThin, Transparent }
 ColorScheme { Light, Dark, HighContrast }
 KeyedListDiagnosticKind { NullKey, DuplicateKey }
+ReactorHostKind { WindowHost, HostControl }
 ItemsViewLayoutKind { StackLayout, LinedFlowLayout, UniformGridLayout }
 PersistedScope { Window, Application }
 RenderErrorSource { RootRender, ComponentRender, Reconcile, Effects, Cleanup }
@@ -4557,6 +4558,7 @@ DependencyProperty SourceProperty { get; }
 IReadOnlyList<KeyedListDiagnostic> RecentKeyedListWarnings { get; }
 bool IsSourcePublishingEnabled { get; }
 ClearRecentKeyedListWarnings() → void
+GetHosts() → IReadOnlyList<ReactorHostInfo>
 GetSource(DependencyObject element) → string
 
 ### static class ReactorDisplay
@@ -4618,20 +4620,24 @@ Dispose() → void
 Mount(Component component) → void
 Mount(Func<RenderContext, Element> renderFunc) → void
 
+### class ReactorHostInfo
+FrameworkElement HostElement { get; }
+ReactorHost Host { get; }
+ReactorHostControl HostControl { get; }
+ReactorHostKind Kind { get; }
+ReactorWindow ReactorWindow { get; }
+SourceLocation? MountSite { get; }
+UIElement RootControl { get; }
+Window Window { get; }
+string RootComponentName { get; }
+string RootRenderFunctionName { get; }
+
 ### static class ReactorSourceMap
 bool Enabled { get; set; }
 GetSource(UIElement control) → SourceLocation?
-RegisterStaticInfo(Assembly assembly, Action<ReactorStaticInfoBuilder> fill) → void
 
 ### class ReactorSourceTransparentAttribute
 new()
-
-### class ReactorStaticInfoBuilder
-ComponentHooks(string componentTypeFullName, string hooks) → void
-Name(string filePath, int lineNumber, int columnNumber, string name) → void
-RenderFunctionHooks(string filePath, int lineNumber, int columnNumber, string hooks) → void
-Roots(string projectDirectory, string rootDirectory) → void
-Source(string filePath, string fingerprint) → void
 
 ### static class ReactorTrace
 GetComponentControl(long componentId) → UIElement
@@ -5347,13 +5353,12 @@ GetHashCode() → int
 ToString() → string
 
 ### struct SourceLocation
-new(string FilePath, int LineNumber)
 new(string FilePath, int LineNumber, int ColumnNumber)
 int ColumnNumber { get; init; }
 int LineNumber { get; init; }
 string DeclaredName { get; }
 string FilePath { get; init; }
-Deconstruct(ref string FilePath, ref int LineNumber) → void
+Deconstruct(ref string FilePath, ref int LineNumber, ref int ColumnNumber) → void
 Equals(SourceLocation other) → bool
 Equals(object obj) → bool
 GetHashCode() → int

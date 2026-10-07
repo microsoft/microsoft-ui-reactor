@@ -49,7 +49,7 @@ internal sealed record LogEntry(
 /// </summary>
 internal sealed class LogCaptureBuffer
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly LinkedList<LogEntry> _entries = new();
     private long _nextSeq = 1;
     private long _dropped;

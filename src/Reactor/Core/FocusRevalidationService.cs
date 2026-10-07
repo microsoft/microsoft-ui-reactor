@@ -24,7 +24,7 @@ public sealed class FocusRevalidationService
 {
     private readonly QueryCache _cache;
     private readonly HashSet<string> _enrolled = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private DateTime _lastSweepUtc = DateTime.MinValue;
 
     /// <summary>

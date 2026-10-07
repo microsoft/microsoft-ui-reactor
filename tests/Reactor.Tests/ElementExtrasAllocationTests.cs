@@ -95,7 +95,7 @@ public class ElementExtrasAllocationTests
     [Fact]
     public void AStampedLeafDoesAllocateTheBucket()
     {
-        var stamped = new TextBlockElement("hi") with { CallSite = new SourceLocation("F.cs", 1) };
+        var stamped = new TextBlockElement("hi") with { CallSite = new SourceLocation("F.cs", 1, 0) };
 
         Assert.NotNull(stamped.Extensions);
         Assert.Equal(1, stamped.CallSite!.Value.LineNumber);
@@ -110,10 +110,10 @@ public class ElementExtrasAllocationTests
     [Fact]
     public void StampedLeavesFromOneCallSiteShareTheBucket()
     {
-        var site = new SourceLocation("Shared.cs", 7) { ColumnNumber = 3 };
+        var site = new SourceLocation("Shared.cs", 7, 3);
         var a = new TextBlockElement("a") with { CallSite = site };
-        var b = new TextBlockElement("b") with { CallSite = new SourceLocation("Shared.cs", 7) { ColumnNumber = 3 } };
-        var other = new TextBlockElement("c") with { CallSite = new SourceLocation("Shared.cs", 8) };
+        var b = new TextBlockElement("b") with { CallSite = new SourceLocation("Shared.cs", 7, 3) };
+        var other = new TextBlockElement("c") with { CallSite = new SourceLocation("Shared.cs", 8, 0) };
 
         Assert.Same(a.Extensions, b.Extensions);
         Assert.NotSame(a.Extensions, other.Extensions);

@@ -908,23 +908,23 @@ the plumbing switches on later.
 ## 8.1 Threading model — current state and one rejected alternative
 
 Every mutable type the async system owns is protected by an internal
-`Monitor` lock or a `threadSafe: true` reducer. Today's split:
+`System.Threading.Lock` or a `threadSafe: true` reducer. Today's split:
 
 | Component | Sync mechanism | Reasoning |
 |---|---|---|
-| `QueryCache` slot | Per-slot `Monitor` lock (`QueryCache.cs`) | Cross-cutting shared state; eviction runs on a thread-pool timer; tests use the cache without a dispatcher. Decoupling the cache from UI affinity is a feature. |
-| `QueryCache._timerLock` | `Monitor` + `Interlocked` | Timer create/dispose is rare and can run from any thread. |
-| `MutationHookState._lock` | `Monitor` lock | `RunAsync` is intentionally callable from any thread; the lock protects `_pendingCount` / `_lastResult` / `_error` against the cross-thread caller. |
-| `InfiniteResource._lock` | `Monitor` lock | Documented thread-safe contract; `UseInfiniteResourceThreadingTests` drive `ItemAt` / `EnsureRange` from background threads to verify it. Production callers (virtualized list controls during layout) are UI-thread-affined, but the contract is the broader one. |
-| `PendingScope._lock` | `Monitor` lock | All production callers are UI-thread-affined, but the no-dispatcher edge (headless host, certain test paths) can fire `SetLoading` from a Task completion thread. The lock keeps that path safe in Release as well as DEBUG. |
-| `FocusRevalidationService._lock` | `Monitor` lock | Same shape as `PendingScope`. WinUI's activation/resume callbacks fire on the UI thread, but the lock keeps misuse from corrupting the enrolled set. |
+| `QueryCache` slot | Per-slot `Lock` (`QueryCache.cs`) | Cross-cutting shared state; eviction runs on a thread-pool timer; tests use the cache without a dispatcher. Decoupling the cache from UI affinity is a feature. |
+| `QueryCache._timerLock` | `Lock` + `Interlocked` | Timer create/dispose is rare and can run from any thread. |
+| `MutationHookState._lock` | `Lock` | `RunAsync` is intentionally callable from any thread; the lock protects `_pendingCount` / `_lastResult` / `_error` against the cross-thread caller. |
+| `InfiniteResource._lock` | `Lock` | Documented thread-safe contract; `UseInfiniteResourceThreadingTests` drive `ItemAt` / `EnsureRange` from background threads to verify it. Production callers (virtualized list controls during layout) are UI-thread-affined, but the contract is the broader one. |
+| `PendingScope._lock` | `Lock` | All production callers are UI-thread-affined, but the no-dispatcher edge (headless host, certain test paths) can fire `SetLoading` from a Task completion thread. The lock keeps that path safe in Release as well as DEBUG. |
+| `FocusRevalidationService._lock` | `Lock` | Same shape as `PendingScope`. WinUI's activation/resume callbacks fire on the UI thread, but the lock keeps misuse from corrupting the enrolled set. |
 | `UseResource` / `UseInfiniteResource` / `UseMutation` rerender reducer | `threadSafe: true` | The hook continuation `Apply` runs on the dispatcher thread in production, but the test-suite `InlineDispatcher` runs `Apply` on whatever thread completed the underlying `Task`. The `threadSafe` reducer is what makes those test paths safe. |
 | `Pending`'s rerender reducer | `threadSafe: true` | `PendingScope.Changed` *should* fire on the UI thread, but the no-dispatcher edge can land it on a thread-pool thread; the `threadSafe` reducer is the rerender-path safety net. |
 
 The locks are uniformly uncontested in production — the UI thread reaches
 them through the dispatcher and competing background-thread callers only
 appear in test fixtures that deliberately exercise the thread-safe contract.
-Keeping them is cheap (a few ns per uncontested `Monitor` take) and guarantees
+Keeping them is cheap (a few ns per uncontested `Lock` take) and guarantees
 serialization in **all** builds, not just DEBUG.
 
 ### Rejected alternative: replace UI-affined locks with dispatcher affinity
