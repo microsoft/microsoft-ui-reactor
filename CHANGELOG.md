@@ -28,6 +28,16 @@ Conventions for contributors:
 
 ### Added
 
+- **Inspector diagnostics for hosts, roots and component boundaries** (spec 010).
+  `ReactorDiagnostics.GetHosts()` (`Microsoft.UI.Reactor.Core.Diagnostics`) returns
+  a snapshot of every live `ReactorHost` and `ReactorHostControl` — window,
+  host element, root control, root component or render-function name, and
+  `MountSite`, the `ReactorApp.Run` / `OpenWindow` / `Mount` call that mounted the
+  root (recorded by the source-map generator when source mapping is on). While
+  `ReactorSourceMap.Enabled` is true, every component's wrapper is also tagged, so
+  `Reconciler.GetElementTag` finds each component boundary. Provisional API for
+  external inspectors such as `winapp devtools`.
+
 - **`ReactorHostControl` can be declared in XAML.** It gains a public parameterless
   constructor (the XAML compiler rejected the old optional-parameter one with
   `WMC0100`) and a `ComponentType` property, so a hybrid page can write

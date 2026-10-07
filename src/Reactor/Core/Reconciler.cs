@@ -981,19 +981,38 @@ public sealed partial class Reconciler : IDisposable
     /// summary for the three categories.
     /// </summary>
     /// <remarks>
-    /// Spec 010 deliberately adds NO arm here. A source-mapped element carries
-    /// its <see cref="Element.CallSite"/> in the <see cref="Element.Extensions"/>
+    /// Spec 010 deliberately adds NO arm here for ordinary elements. A source-mapped
+    /// element carries its <see cref="Element.CallSite"/> in the <see cref="Element.Extensions"/>
     /// bucket, so it already satisfies the <c>Extensions is not null</c> test
     /// above and is tagged without further help. An arm keyed on the source-map
     /// flag would only ever tag <em>unstamped</em> elements — which by
     /// definition have no location to read back — while re-introducing exactly
     /// the per-leaf <c>ReactorState</c> allocation PR #468 removed.
+    ///
+    /// <para>The one exception is component boundaries (<see cref="ComponentElement"/>,
+    /// <see cref="FuncElement"/>, <see cref="MemoElement"/>). Their Border wrapper is the
+    /// only realized control that marks where a component starts, so an inspector needs
+    /// the tag to find the boundary — and the component type / render function — even
+    /// when the element carries no location (built while mapping was off, by a factory
+    /// the generator does not reach, or constructed directly). This costs one
+    /// <c>ReactorState</c> per component, never per leaf, and only while
+    /// <see cref="global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/> is on: the type test runs
+    /// first, so leaves never read the flag.</para>
     /// </remarks>
-    private static bool NeedsTag(Element element) =>
+    internal static bool NeedsTag(Element element) =>
         element.HasCallbacks
         || element.Key is not null
         || element.Extensions is not null
-        || HasReferenceModifiers(element);
+        || HasReferenceModifiers(element)
+        || (IsComponentBoundary(element) && global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+
+    /// <summary>
+    /// True for the elements the reconciler mounts behind a component Border wrapper.
+    /// <c>KeyedMemoElement</c> is deliberately absent: it is transparent and mounts its
+    /// factory output directly, with no wrapper of its own.
+    /// </summary>
+    private static bool IsComponentBoundary(Element element) =>
+        element is ComponentElement or FuncElement or MemoElement;
 
     /// <summary>
     /// Spec 010 — did the source location change across a shallow skip?
@@ -6449,6 +6468,29 @@ public sealed partial class Reconciler : IDisposable
             InvokeNavigatingFrom(child, ctx);
             return !ctx.IsCancelled;
         });
+    }
+
+    /// <summary>
+    /// Tags the <c>Border</c> wrapper of every mounted component boundary with its element.
+    /// Called on this reconciler's UI thread when <see cref="global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/>
+    /// turns on, so boundaries mounted while it was off become discoverable too — including
+    /// cached subtrees that later renders skip without ever reaching <see cref="NeedsTag"/>.
+    /// Walks <c>_componentNodes</c>, which holds every mounted Component/Func/Memo.
+    /// Only untagged wrappers are filled in: a wrapper that already carries an element keeps
+    /// it, because an outer decorator (a <c>Flyout</c> on a component target, for example)
+    /// re-tags the wrapper with its own element and resolves its callbacks and unmount
+    /// cleanup through that tag.
+    /// </summary>
+    internal void TagComponentBoundaries()
+    {
+        foreach (var (wrapper, node) in _componentNodes)
+        {
+            if (wrapper is not FrameworkElement fe || node.Element is not { } element || !IsComponentBoundary(element))
+                continue;
+            if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState { Element: not null })
+                continue;
+            SetElementTagIfNeeded(fe, element);
+        }
     }
 
     /// <summary>

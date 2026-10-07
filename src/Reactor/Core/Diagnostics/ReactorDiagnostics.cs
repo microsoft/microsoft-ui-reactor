@@ -66,7 +66,7 @@ public sealed record KeyedListDiagnostic(
 /// Reads are lock-free against a snapshot; writes take a short lock.
 /// </para>
 /// </remarks>
-public static class ReactorDiagnostics
+public static partial class ReactorDiagnostics
 {
     /// <summary>Maximum number of distinct (control, kind, sample-set) entries
     /// retained. New entries beyond this drop the oldest.</summary>
