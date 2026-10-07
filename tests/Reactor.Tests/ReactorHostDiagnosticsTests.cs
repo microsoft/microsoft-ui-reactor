@@ -41,7 +41,7 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
                 ReactorHostKind.HostControl, host: null, hostControl: null, reactorWindow: null,
                 window: null, hostElement: null, rootControl: null,
                 rootComponent: Root, rootRenderFunction: RenderRoot,
-                mountSite: new SourceLocation(Label, 1));
+                mountSite: new SourceLocation(Label, 1, 0));
     }
 
     private sealed class ProbeComponent : Component
@@ -337,7 +337,7 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
         var token = ReactorSourceMap.EnterRootMountSite("App.cs", 12, 0);
         try
         {
-            Assert.Equal(new SourceLocation("App.cs", 12), ReactorSourceMap.TakeRootMountSite());
+            Assert.Equal(new SourceLocation("App.cs", 12, 0), ReactorSourceMap.TakeRootMountSite());
             Assert.Null(ReactorSourceMap.TakeRootMountSite());
         }
         finally
@@ -357,14 +357,14 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
             var inner = ReactorSourceMap.EnterRootMountSite("Startup.cs", 30, 0);
             try
             {
-                Assert.Equal(new SourceLocation("Startup.cs", 30), ReactorSourceMap.TakeRootMountSite());
+                Assert.Equal(new SourceLocation("Startup.cs", 30, 0), ReactorSourceMap.TakeRootMountSite());
             }
             finally
             {
                 ReactorSourceMap.ExitRootMountSite(inner);
             }
 
-            Assert.Equal(new SourceLocation("Program.cs", 5), ReactorSourceMap.TakeRootMountSite());
+            Assert.Equal(new SourceLocation("Program.cs", 5, 0), ReactorSourceMap.TakeRootMountSite());
         }
         finally
         {
@@ -393,7 +393,7 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
 
         ReactorSourceMap.ExitRootMountSite(outer);
         Assert.Equal(1, ReactorSourceMap.OpenRootMountScopeCountForTest);
-        Assert.Equal(new SourceLocation("Inner.cs", 2), ReactorSourceMap.TakeRootMountSite());
+        Assert.Equal(new SourceLocation("Inner.cs", 2, 0), ReactorSourceMap.TakeRootMountSite());
 
         ReactorSourceMap.ExitRootMountSite(inner);
         Assert.Equal(0, ReactorSourceMap.OpenRootMountScopeCountForTest);
@@ -410,13 +410,13 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
         var token = ReactorSourceMap.EnterRootMountSite("Program.cs", 3, 0);
         try
         {
-            SourceLocation? claimedElsewhere = new SourceLocation("sentinel", -1);
+            SourceLocation? claimedElsewhere = new SourceLocation("sentinel", -1, 0);
             var thread = new Thread(() => claimedElsewhere = ReactorSourceMap.TakeRootMountSite());
             thread.Start();
             thread.Join();
 
             Assert.Null(claimedElsewhere);
-            Assert.Equal(new SourceLocation("Program.cs", 3), ReactorSourceMap.TakeRootMountSite());
+            Assert.Equal(new SourceLocation("Program.cs", 3, 0), ReactorSourceMap.TakeRootMountSite());
         }
         finally
         {
@@ -434,7 +434,7 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
         var token = ReactorSourceMap.EnterRootMountSite("App.cs", 40, 0);
         try
         {
-            Assert.Equal(new SourceLocation("App.cs", 40), ReactorSourceMap.TakeRootMountSite());
+            Assert.Equal(new SourceLocation("App.cs", 40, 0), ReactorSourceMap.TakeRootMountSite());
             Assert.Null(ReactorSourceMap.TakeRootMountSite());
         }
         finally
@@ -456,8 +456,8 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
     {
         // Two sites that differ in every word: a torn read would surface as a mixed pair
         // (A's file with B's line), a has-value with a null path, or similar.
-        var a = new SourceLocation("A.cs", 111);
-        var b = new SourceLocation("Bbbbbbbb.cs", 222222);
+        var a = new SourceLocation("A.cs", 111, 0);
+        var b = new SourceLocation("Bbbbbbbb.cs", 222222, 0);
         var slot = new RootMountSiteSlot { Value = a };
         var stop = 0;
         var bad = 0;

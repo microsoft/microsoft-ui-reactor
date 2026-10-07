@@ -357,8 +357,8 @@ internal static class HostDiagnosticsFixtures
             using var host = H.CreateHost();
             try
             {
-                var a = new SourceLocation("RemountA.cs", 111);
-                var b = new SourceLocation("RemountBbbbbbbb.cs", 222222);
+                var a = new SourceLocation("RemountA.cs", 111, 0);
+                var b = new SourceLocation("RemountBbbbbbbb.cs", 222222, 0);
                 var root = new Probe();
                 host.Mount(root, a);
                 await host.WaitForIdleAsync();

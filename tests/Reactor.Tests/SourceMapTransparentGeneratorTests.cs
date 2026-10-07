@@ -57,12 +57,7 @@ public sealed class SourceMapTransparentGeneratorTests
             }
             public record TextBlockElement(string Content) : Element;
             public record EmptyElement : Element;
-            public readonly record struct SourceLocation(string FilePath, int LineNumber)
-            {
-                public SourceLocation(string FilePath, int LineNumber, int ColumnNumber)
-                    : this(FilePath, LineNumber) => this.ColumnNumber = ColumnNumber;
-                public int ColumnNumber { get; init; }
-            }
+            public readonly record struct SourceLocation(string FilePath, int LineNumber, int ColumnNumber);
         }
         namespace Microsoft.UI.Reactor
         {

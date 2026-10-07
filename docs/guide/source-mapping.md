@@ -201,8 +201,8 @@ mapping, or when nothing stamped that element.
 
 `SourceLocation.ColumnNumber` is the 1-based column of the factory's name
 (the `B` of `Button` in `Row(Button("a"), Button("b"))`), which is what tells
-several calls on one line apart. It is `0` for a location built without one
-(`new SourceLocation(path, line)`). `ToString()` keeps the `file:line` shape,
+several calls on one line apart; `0` means the provider did not record one.
+`ToString()` keeps the `file:line` shape,
 so read the column from the property.
 
 ### Helper methods and `[ReactorSourceTransparent]`

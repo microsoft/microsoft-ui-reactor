@@ -95,7 +95,7 @@ public class ElementExtrasAllocationTests
     [Fact]
     public void AStampedLeafDoesAllocateTheBucket()
     {
-        var stamped = new TextBlockElement("hi") with { CallSite = new SourceLocation("F.cs", 1) };
+        var stamped = new TextBlockElement("hi") with { CallSite = new SourceLocation("F.cs", 1, 0) };
 
         Assert.NotNull(stamped.Extensions);
         Assert.Equal(1, stamped.CallSite!.Value.LineNumber);

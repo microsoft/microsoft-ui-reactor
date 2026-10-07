@@ -128,14 +128,13 @@ public sealed class ColumnTests : IDisposable
     }
 
     [Fact]
-    public void TwoArgumentConstructor_LeavesColumnUnknown()
+    public void Column_TakesPartInEquality_ButNotToString()
     {
-        var location = new SourceLocation("F.cs", 3);
+        var location = new SourceLocation("F.cs", 3, 7);
 
-        Assert.Equal(0, location.ColumnNumber);
-        Assert.Equal(new SourceLocation("F.cs", 3, 0), location);
-        Assert.NotEqual(new SourceLocation("F.cs", 3, 7), location);
-        Assert.Equal("F.cs:3", new SourceLocation("F.cs", 3, 7).ToString());
+        Assert.Equal(new SourceLocation("F.cs", 3, 7), location);
+        Assert.NotEqual(new SourceLocation("F.cs", 3, 0), location);
+        Assert.Equal("F.cs:3", location.ToString());
     }
 
     [Fact]

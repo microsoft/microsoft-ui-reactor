@@ -30,8 +30,8 @@ Conventions for contributors:
 
 - **Inspector diagnostics: call-site column and a per-component render event**
   (issue #1326, spec 010 §1.1):
-  - `SourceLocation.ColumnNumber` (1-based, `0` = unknown) plus a
-    `(FilePath, LineNumber, ColumnNumber)` constructor. The source-map generator
+  - `SourceLocation.ColumnNumber` (1-based, `0` = unknown), a third positional
+    member: `new SourceLocation(path, line)` now needs a column. The source-map generator
     stamps the column of the invoked method's name, so several calls on one line
     resolve to distinct positions. `ToString()` stays `file:line`.
   - `ComponentRendered` on the `Microsoft-UI-Reactor` provider (EventId 40,
