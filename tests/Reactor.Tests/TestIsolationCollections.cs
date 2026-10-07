@@ -112,3 +112,12 @@ public sealed class AppBaseDirectoryAssetsCollection { }
 /// </summary>
 [CollectionDefinition("PersistenceEtw", DisableParallelization = true)]
 public sealed class PersistenceEtwCollection { }
+
+/// <summary>
+/// xUnit collection marker for tests that set the process-wide
+/// <see cref="Microsoft.UI.Reactor.ReactorApp.DefaultRenderErrorHandler"/> or
+/// <see cref="Microsoft.UI.Reactor.ReactorApplication.OnUnhandledException"/>, which every
+/// reconciler and host consults at error time. (issue #1291)
+/// </summary>
+[CollectionDefinition("RenderErrorGlobals", DisableParallelization = true)]
+public sealed class RenderErrorGlobalsCollection { }

@@ -187,20 +187,13 @@ internal sealed class TrayHiddenWindow : IDisposable
         // window was created from the captured dispatcher), but TryEnqueue is
         // a cheap safe no-op when same-thread execution is fine.
         _dispatcher.TryEnqueue(() =>
-        {
-            try
-            {
-                // Routing lives in TrayNotificationRouter so the
-                // notification -> interaction mapping is unit-testable without
-                // an HWND or a dispatcher. See its remarks for why the legacy
-                // mouse messages are deliberately not routed (issue #1180).
-                TrayNotificationRouter.Dispatch(hit, TrayNotificationRouter.Classify(mouseMessage));
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[Reactor] TrayCallback dispatch threw: {ex.Message}");
-            }
-        });
+            // Routing lives in TrayNotificationRouter so the
+            // notification -> interaction mapping is unit-testable without
+            // an HWND or a dispatcher. See its remarks for why the legacy
+            // mouse messages are deliberately not routed (issue #1180).
+            // DispatchGuarded swallows ordinary callback failures but lets a
+            // declined RenderError.Propagate() keep going out (issue #1291).
+            TrayNotificationRouter.DispatchGuarded(hit, TrayNotificationRouter.Classify(mouseMessage)));
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall) })]

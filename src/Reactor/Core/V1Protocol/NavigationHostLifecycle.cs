@@ -72,6 +72,10 @@ internal static class NavigationHostLifecycle
         };
 
         reconciler._navigationHostNodes[grid] = node;
+        // Issue #1291 — a navigation host mounted inside a boundary child that then fails is
+        // discarded unattached; record it so the boundary's rollback releases its route
+        // subscription.
+        reconciler.NoteBoundaryMountRegistration(grid);
         return grid;
     }
 

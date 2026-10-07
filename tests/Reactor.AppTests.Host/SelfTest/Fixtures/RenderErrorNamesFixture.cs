@@ -181,6 +181,134 @@ internal class RenderErrorNames_ComponentTypeOnEveryPath(Harness h) : SelfTestFi
 internal sealed class RenderErrorProbeException(string message) : Exception(message);
 
 /// <summary>
+/// <c>RenderError</c> and an app's <c>RenderErrorHandler</c> (issue #1291) see the same
+/// failures. The event is emitted before the handler runs, so it fires once, naming the
+/// component, whatever the handler does: replace the fallback (in-tree and at the root),
+/// or call <c>Propagate()</c>. An exception the app <em>declined</em> keeps going out
+/// through every Reactor frame. The throw site already reported it, so a component frame it
+/// crosses on the way — here one inside an <c>ErrorBoundary</c>, whose report-and-rethrow arm
+/// would otherwise take it — must not report it again.
+/// </summary>
+internal class RenderErrorNames_RenderErrorHandlerOutcomesReportOnce(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var names = new List<string>();
+        using var subscription = ReactorTrace.Subscribe(
+            e =>
+            {
+                if (e.EventName == nameof(ReactorEventSource.RenderError)
+                    && e.Payload[1] as string == nameof(RenderErrorProbeException))
+                    lock (names) names.Add((string)e.Payload[0]!);
+            },
+            EventLevel.Error,
+            ReactorEventSource.Keywords.Errors);
+
+        if (!ReactorEventSource.Log.IsEnabled(EventLevel.Error, ReactorEventSource.Keywords.Errors))
+        {
+            H.Skip("RenderErrorNames_Handler", "EventSource disabled (NativeAOT)");
+            return;
+        }
+
+        List<string> Take()
+        {
+            lock (names)
+            {
+                var copy = names.ToList();
+                names.Clear();
+                return copy;
+            }
+        }
+
+        var previousUnhandled = ReactorApplication.OnUnhandledException;
+        try
+        {
+            // ── App fallback replaces a child's render ───────────────────
+            var appChild = H.CreateHost();
+            appChild.RenderErrorHandler = _ => TextBlock("app child fallback");
+            appChild.Mount(_ => VStack(Component<ThrowOnMountCounter, int>(0)));
+            await Harness.Render();
+            var child = Take();
+            Console.WriteLine("# app fallback (child) RenderError: " + string.Join(", ", child));
+            H.Check("RenderErrorNames_Handler_AppFallbackChild_ReportedOnceByName",
+                H.FindText("app child fallback") is not null
+                && child.Count == 1 && child[0] == nameof(ThrowOnMountCounter));
+
+            // ── App fallback replaces the root render ────────────────────
+            var appRoot = H.CreateHost();
+            appRoot.RenderErrorHandler = _ => TextBlock("app root fallback");
+            appRoot.Mount(new ThrowingRoot());
+            await Harness.Render();
+            var root = Take();
+            Console.WriteLine("# app fallback (root) RenderError: " + string.Join(", ", root));
+            H.Check("RenderErrorNames_Handler_AppFallbackRoot_ReportedOnceByName",
+                H.FindText("app root fallback") is not null
+                && root.Count == 1 && root[0] == nameof(ThrowingRoot));
+
+            // ── Propagate(), handled by the app ──────────────────────────
+            var handled = new List<Exception>();
+            ReactorApplication.OnUnhandledException = ex => { handled.Add(ex); return true; };
+            var propagating = H.CreateHost();
+            propagating.RenderErrorHandler = e => { e.Propagate(); return null; };
+            propagating.Mount(_ => VStack(Component<ThrowOnMountCounter, int>(0)));
+            await Harness.Render();
+            var propagated = Take();
+            Console.WriteLine("# propagate (handled) RenderError: " + string.Join(", ", propagated));
+            H.Check("RenderErrorNames_Handler_PropagateHandled_ReportedOnceByName",
+                handled.Count == 1
+                && propagated.Count == 1 && propagated[0] == nameof(ThrowOnMountCounter));
+
+            // ── Propagate(), declined: escapes through an ErrorBoundary ──
+            // The nested host's root render reports the throw (FuncElement), then the app
+            // declines it and it escapes the nested Mount — out through the outer component's
+            // Render(), which sits inside a boundary.
+            ReactorApplication.OnUnhandledException = _ => false;
+            var nestedWindow = new Microsoft.UI.Xaml.Window { Title = "RenderErrorNames declined propagation" };
+            nestedWindow.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(300, 200));
+            nestedWindow.Activate();
+            var created = new List<ReactorHost>();
+            Exception? escaped = null;
+            try
+            {
+                H.CreateHost().Mount(_ => ErrorBoundary(
+                    Component<NestedDecliningComponent, NestedDecliningProps>(new NestedDecliningProps(nestedWindow, created)),
+                    TextBlock("declined boundary fallback")));
+            }
+            catch (RenderErrorProbeException ex) { escaped = ex; }
+            await Harness.Render();
+            var declined = Take();
+            Console.WriteLine("# propagate (declined, through boundary) RenderError: " + string.Join(", ", declined));
+            H.Check("RenderErrorNames_Handler_PropagateDeclined_ReportedOnceAtThrowSite",
+                escaped is not null
+                && declined.Count == 1 && declined[0] == nameof(FuncElement));
+
+            foreach (var nested in created)
+                nested.Dispose();
+            nestedWindow.Close();
+        }
+        finally
+        {
+            ReactorApplication.OnUnhandledException = previousUnhandled;
+        }
+    }
+}
+
+internal sealed record NestedDecliningProps(Microsoft.UI.Xaml.Window Window, List<ReactorHost> Created);
+
+// Starts nested Reactor work during its own render: a host whose first (inline) render
+// fails and propagates.
+internal sealed class NestedDecliningComponent : Component<NestedDecliningProps>
+{
+    public override Element Render()
+    {
+        var nested = new ReactorHost(Props.Window) { RenderErrorHandler = e => { e.Propagate(); return null; } };
+        Props.Created.Add(nested);
+        nested.Mount(_ => throw new RenderErrorProbeException("nested declined"));
+        return TextBlock("unreachable");
+    }
+}
+
+/// <summary>
 /// An error an <c>ErrorBoundary</c> catches and recovers from must still reach a
 /// <c>RenderError</c> listener — the user sees the fallback, so an inspector must too — and
 /// must name the descendant that threw (the boundary cannot know it). Exactly one event per
