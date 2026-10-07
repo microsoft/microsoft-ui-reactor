@@ -16,11 +16,13 @@ internal static class DiagnosticText
     internal const string Redacted = "<redacted>";
     internal const int MaxValueLength = 200;
 
-    /// <summary><c>int</c>, <c>string?</c>, <c>List&lt;TaskItem&gt;</c>: the type as C# reads it.</summary>
+    /// <summary><c>int</c>, <c>int?</c>, <c>List&lt;TaskItem&gt;</c>: the type as C# reads it.</summary>
     internal static string FriendlyTypeName(Type type)
     {
         if (Nullable.GetUnderlyingType(type) is { } inner)
             return FriendlyTypeName(inner) + "?";
+        if (type == typeof(nint)) return "nint";
+        if (type == typeof(nuint)) return "nuint";
         if (!type.IsEnum)
         {
             var alias = Type.GetTypeCode(type) switch

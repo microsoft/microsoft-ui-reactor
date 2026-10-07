@@ -26,6 +26,8 @@ public class DiagnosticTextTests
     [InlineData(typeof(DayOfWeek), "DayOfWeek")]
     [InlineData(typeof(DayOfWeek?), "DayOfWeek?")]
     [InlineData(typeof(int[,]), "int[,]")]
+    [InlineData(typeof(nint), "nint")]
+    [InlineData(typeof(nuint?), "nuint?")]
     [InlineData(typeof(string[,,]), "string[,,]")]
     public void FriendlyTypeName_SpellsTypesAsCSharp(Type type, string expected)
         => Assert.Equal(expected, DiagnosticText.FriendlyTypeName(type));
