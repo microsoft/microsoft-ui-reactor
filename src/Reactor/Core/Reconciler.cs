@@ -2323,10 +2323,17 @@ public sealed partial class Reconciler : IDisposable
         // inside ReconcileImperative; overwrite defensively regardless.
         _componentNodes.Remove(replacement);
         _componentNodes[realized] = freshNode;
-        // Registry bookkeeping only while ComponentRendered is enabled; if it is off now,
-        // the next traced render of this node re-tracks its id onto the realized wrapper.
-        if (freshNode.DiagnosticId != 0 && Diagnostics.ComponentRenderTrace.IsEnabled)
-            Diagnostics.ComponentRenderControls.Registry.Track(freshNode.DiagnosticId, realized, mapControlToId: true);
+        // Registry bookkeeping: while ComponentRendered is enabled the id moves onto the
+        // realized wrapper. If the listener was disabled (possibly by the fresh mount's own
+        // event callback), drop the mapping the mount gave the soon-discarded replacement
+        // wrapper; the next traced render of this node re-tracks its id onto `realized`.
+        if (freshNode.DiagnosticId != 0)
+        {
+            if (Diagnostics.ComponentRenderTrace.IsEnabled)
+                Diagnostics.ComponentRenderControls.Registry.Track(freshNode.DiagnosticId, realized, mapControlToId: true);
+            else
+                Diagnostics.ComponentRenderControls.Registry.Forget(freshNode.DiagnosticId, replacement);
+        }
 
         // Move the fresh visual subtree into the parented wrapper. Assigning
         // Border.Child detaches it from `replacementWrapper` first (and detaches the

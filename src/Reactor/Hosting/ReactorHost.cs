@@ -486,8 +486,11 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             failure ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
         }
         // Drop (not just clean up) the component's hooks: the caller owns the instance and
-        // may mount it again later, which must then be a fresh mount.
-        _rootComponent?.Context.ClearHookState();
+        // may mount it again later, which must then be a fresh mount. Both contexts also
+        // let go of this host, so a retained instance or hook setter neither pins it nor
+        // requests renders of the replacement root.
+        _rootComponent?.Context.DetachFromHost();
+        _funcContext?.DetachFromHost();
         _rootComponent = null;
         _rootRenderFunc = null;
         _funcContext = null;

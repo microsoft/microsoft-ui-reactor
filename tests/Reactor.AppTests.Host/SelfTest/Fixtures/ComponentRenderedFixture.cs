@@ -592,6 +592,55 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
         H.Check("ComponentRendered_RootSwap_RetiredInstanceRemountsFresh",
             thirdRoot.CleanedUp && firstRoot.EffectRuns == 2 && !firstRoot.CleanedUp);
 
+        // A retired root's context lets go of the host: a retained hook setter of either
+        // root kind no longer requests renders of the replacement.
+        var detachHost = H.CreateHost();
+        var retiredComponent = new RenderedHostControlRoot();
+        detachHost.Mount(retiredComponent);
+        await Harness.Render();
+        Action<int>? retiredFuncSet = null;
+        detachHost.Mount(c =>
+        {
+            var (_, set) = c.UseState(0);
+            retiredFuncSet = set;
+            return TextBlock("retiring func root");
+        });
+        await Harness.Render();
+        int replacementRenders = 0;
+        detachHost.Mount(c =>
+        {
+            replacementRenders++;
+            return TextBlock("detach replacement");
+        });
+        await Harness.Render();
+        int rendersBefore = replacementRenders;
+        retiredComponent.Bump?.Invoke();
+        retiredFuncSet?.Invoke(7);
+        bool rerendered = await Harness.WaitFor(() => replacementRenders > rendersBefore, maxPasses: 16, perPassMs: 10);
+        H.Check("ComponentRendered_RootSwap_RetiredSettersDoNotRenderReplacement",
+            retiredComponent.Bump is not null && retiredFuncSet is not null && !rerendered,
+            $"renders {rendersBefore} -> {replacementRenders}");
+
+        var detachControl = new ReactorHostControl();
+        var retiredControlRoot = new RenderedHostControlRoot();
+        detachControl.Mount(retiredControlRoot);
+        H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = detachControl });
+        await Harness.WaitFor(() => H.FindText("host control root 0") is not null, maxPasses: 32, perPassMs: 10);
+        int controlReplacementRenders = 0;
+        detachControl.Mount(c =>
+        {
+            controlReplacementRenders++;
+            return TextBlock("control detach replacement");
+        });
+        bool controlReplaced = await Harness.WaitFor(() => controlReplacementRenders > 0, maxPasses: 32, perPassMs: 10);
+        int controlRendersBefore = controlReplacementRenders;
+        retiredControlRoot.Bump?.Invoke();
+        bool controlRerendered = await Harness.WaitFor(() => controlReplacementRenders > controlRendersBefore, maxPasses: 16, perPassMs: 10);
+        H.Check("ComponentRendered_RootSwap_HostControlRetiredSetterDoesNotRenderReplacement",
+            controlReplaced && retiredControlRoot.Bump is not null && !controlRerendered,
+            $"renders {controlRendersBefore} -> {controlReplacementRenders}");
+        detachControl.Dispose();
+
         // A replacement root whose first render is null: nothing reconciles the old root's
         // tree away, so the host releases it (its child's cleanup runs, its content goes).
         var releaseHost = H.CreateHost();
@@ -692,12 +741,27 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
         var before = rootId != 0 ? ReactorTrace.GetComponentControl(rootId) : null;
         H.Check("ComponentRendered_RootOff_ResolvedWhileOn", before is not null);
 
+        // A realized-replacement adoption that runs after the listener went away (it can be
+        // disabled by the fresh mount's own event callback) must not leave the id on the
+        // replacement wrapper that is about to be discarded.
+        var adoptReconciler = new Reconciler();
+        var realizedWrapper = adoptReconciler.Mount(Component<RenderedStatefulChild>(), static () => { })!;
+        var replacementWrapper = adoptReconciler.Mount(Component<RenderedStatefulChild>(), static () => { })!;
+        bool replacementMapped = ReactorTrace.TryGetComponentId(replacementWrapper, out var replacementId);
+
         subscription.Dispose();   // idempotent; the using disposes again harmlessly
         if (ComponentRenderTrace.IsEnabled)
         {
             H.Skip("ComponentRendered_RootOff_ForgottenWhileOff", "another ComponentRendered listener is active in this process");
+            H.Skip("ComponentRendered_AdoptWhileOff_ReplacementUnmapped", "another ComponentRendered listener is active in this process");
             return;
         }
+        bool adopted = adoptReconciler.TryAdoptRealizedReplacement(realizedWrapper, replacementWrapper);
+        H.Check("ComponentRendered_AdoptWhileOff_ReplacementUnmapped",
+            replacementMapped && adopted
+            && !ReactorTrace.TryGetComponentId(replacementWrapper, out _)
+            && !ReferenceEquals(ReactorTrace.GetComponentControl(replacementId), replacementWrapper),
+            $"mapped={replacementMapped} id={replacementId} adopted={adopted}");
         root.Bump?.Invoke();
         await Harness.Render();
         H.Check("ComponentRendered_RootOff_ForgottenWhileOff",

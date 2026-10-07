@@ -2496,13 +2496,25 @@ public sealed class RenderContext
 
     /// <summary>
     /// Drops all hook state without running cleanups (the caller already ran them), so the
-    /// next render of this context is a fresh mount. Used when a host retires a root
-    /// component, whose instance may be mounted again later.
+    /// next render of this context is a fresh mount.
     /// </summary>
     internal void ClearHookState()
     {
         _hooks.Clear();
         _hookIndex = 0;
+    }
+
+    /// <summary>
+    /// Detaches a retired root's context from its host (cleanups already ran): drops the
+    /// hook state, and the rerender callback and context scope that point at the host, so
+    /// a retained root instance or hook setter neither pins the host nor schedules renders
+    /// of its replacement. A later mount re-binds both in <see cref="BeginRender(Action)"/>.
+    /// </summary>
+    internal void DetachFromHost()
+    {
+        ClearHookState();
+        _requestRerender = null;
+        _contextScope = null;
     }
 
     /// <summary>
