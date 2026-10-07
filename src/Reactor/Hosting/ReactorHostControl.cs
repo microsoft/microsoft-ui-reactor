@@ -267,17 +267,40 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// Retires the current root before another is mounted: its effects' cleanups run (as on
     /// Dispose), whichever kind it was, and both root slots are cleared so the render loop
     /// (which checks the component root first) only sees the new one.
+    ///
+    /// <para>Cleanup failures are routed like disposal's (issue #1291): with a
+    /// <c>RenderErrorHandler</c> each is reported and the rest still run; with none, the
+    /// first escapes. Either way retirement completes first (a failed cleanup is not left
+    /// armed, and the hook state and root slots are cleared), and the failure to rethrow
+    /// is returned so the caller can install the new root before throwing it.</para>
     /// </summary>
-    private void RetireRoot()
+    private global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? RetireRoot()
     {
-        // Reset (not just clean up) the component's hooks: the caller owns the instance and
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? failure = null;
+        Func<RenderErrorHandler?> cleanupHandler = () => EffectiveRenderErrorHandler;
+        try
+        {
+            using (RenderErrorDispatch.EnterPropagationScope())
+            {
+                RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
+                    isHostLevel: true, _logger, ref failure);
+                RenderErrorDispatch.RunCleanups(_funcContext, cleanupHandler, componentName: null,
+                    isHostLevel: true, _logger, ref failure);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            // No handler: the failing cleanup escaped (it is already disarmed).
+            failure ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+        }
+        // Drop (not just clean up) the component's hooks: the caller owns the instance and
         // may mount it again later, which must then be a fresh mount.
-        _rootComponent?.Context.ResetHookState();
-        _funcContext?.RunCleanups();
+        _rootComponent?.Context.ClearHookState();
         _rootComponent = null;
         _rootRenderFunc = null;
         _funcContext = null;
         _rootDiagnostics.Reset();
+        return failure;
     }
 
     /// <summary>
@@ -294,9 +317,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             RequestRender();
             return;
         }
-        RetireRoot();
+        var retireFailure = RetireRoot();
         _rootComponent = component;
         RequestRender();
+        retireFailure?.Throw();
     }
 
     /// <summary>
@@ -305,10 +329,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     public void Mount(Func<RenderContext, Element> renderFunc)
     {
         _activationError = null;
-        RetireRoot();
+        var retireFailure = RetireRoot();
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
         RequestRender();
+        retireFailure?.Throw();
     }
 
     // Set when Loaded-time root creation failed (issue #1291); cleared by Mount.

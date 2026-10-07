@@ -388,6 +388,7 @@ internal static class SelfTestFixtureRegistry
         "ComponentRendered_RootMappingFollowsHostChanges",
         "ComponentRendered_AppFallbackFollowsTheHandler",
         "ComponentRendered_PropagatedRootFailureReported",
+        "ComponentRendered_RootReplacementSurvivesThrowingCleanup",
         "FocusTrapContentDialog_ContainmentProbe",
         // Issue #487 — RichTextBlock + inline UI inside ScrollViewer scroll anchor
         "Issue487_ScrollOffsetRestoredAfterRunMutation",
@@ -2441,6 +2442,7 @@ internal static class SelfTestFixtureRegistry
         "ComponentRendered_RootMappingFollowsHostChanges" => new ComponentRendered_RootMappingFollowsHostChanges(harness),
         "ComponentRendered_AppFallbackFollowsTheHandler" => new ComponentRendered_AppFallbackFollowsTheHandler(harness),
         "ComponentRendered_PropagatedRootFailureReported" => new ComponentRendered_PropagatedRootFailureReported(harness),
+        "ComponentRendered_RootReplacementSurvivesThrowingCleanup" => new ComponentRendered_RootReplacementSurvivesThrowingCleanup(harness),
         "FocusTrapContentDialog_ContainmentProbe" => new FocusTrapContentDialog_ContainmentProbe(harness),
         "Issue487_ScrollOffsetRestoredAfterRunMutation" => new Issue487ScrollAnchorFixtures.Issue487_ScrollOffsetRestoredAfterRunMutation(harness),
         "Issue487_RepeatedMutationDoesNotDrift" => new Issue487ScrollAnchorFixtures.Issue487_RepeatedMutationDoesNotDrift(harness),

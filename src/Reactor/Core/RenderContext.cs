@@ -2486,12 +2486,21 @@ public sealed class RenderContext
 
     /// <summary>
     /// Runs every effect cleanup and drops all hook state, so the next render of this
-    /// context is a fresh mount. Used by hot-reload hook-order recovery and when a host
-    /// retires a root component (whose instance may be mounted again later).
+    /// context is a fresh mount. Used by hot-reload hook-order recovery.
     /// </summary>
     internal void ResetHookState()
     {
         RunCleanups();
+        ClearHookState();
+    }
+
+    /// <summary>
+    /// Drops all hook state without running cleanups (the caller already ran them), so the
+    /// next render of this context is a fresh mount. Used when a host retires a root
+    /// component, whose instance may be mounted again later.
+    /// </summary>
+    internal void ClearHookState()
+    {
         _hooks.Clear();
         _hookIndex = 0;
     }
