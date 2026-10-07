@@ -182,6 +182,10 @@ internal static class DiagnosticText
             case Microsoft.UI.Reactor.Input.ElementRef r:
                 text = r.ExpectedType is { } t ? $"ElementRef<{FriendlyTypeName(t)}>" : "ElementRef";
                 break;
+            // Round-trip format, so a displayed date can be submitted back to TrySetState unchanged
+            // (keeps DateTime.Kind, the offset and fractional seconds).
+            case DateTime dt: text = dt.ToString("O", CultureInfo.InvariantCulture); break;
+            case DateTimeOffset dto: text = dto.ToString("O", CultureInfo.InvariantCulture); break;
             case IFormattable f:
                 text = OwnText(f, () => f.ToString(null, CultureInfo.InvariantCulture));
                 break;

@@ -65,6 +65,21 @@ public class DiagnosticTextTests
     }
 
     [Fact]
+    public void Format_DatesRoundTripThroughTryParse()
+    {
+        var utc = new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc).AddTicks(1234567);
+        var local = new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.FromHours(-7)).AddTicks(89);
+        foreach (var (type, value) in new (Type, object)[] { (typeof(DateTime), utc), (typeof(DateTimeOffset), local) })
+        {
+            var text = DiagnosticText.Format("", type, value).Text;
+            Assert.True(DiagnosticText.TryParse(text, type, out var parsed, out var error), error);
+            Assert.Equal(value, parsed);
+            if (parsed is DateTime d) Assert.Equal(DateTimeKind.Utc, d.Kind);
+            if (parsed is DateTimeOffset o) Assert.Equal(local.Offset, o.Offset);
+        }
+    }
+
+    [Fact]
     public void Format_SummarisesCollectionsByTheCountTheyAdvertise()
     {
         Assert.Equal("List<int> (3 items)", DiagnosticText.Format("", typeof(List<int>), new List<int> { 1, 2, 3 }).Text);
