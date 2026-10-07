@@ -42,7 +42,8 @@ Conventions for contributors:
   are on demand and UI-thread-affine. The render path gains only reference
   stores: per component, `UseContext` records the context it read and
   reference-list wiring keeps the authored list; per host render, the host
-  records which root produced the displayed control. With source mapping on, an open
+  records which root produced the displayed control (and, on mount or a content
+  change, that it owns its `ContentTarget`). With source mapping on, an open
   `ContentDialog` is tagged with its element so its chrome resolves to the
   `ContentDialog(...)` call site (spec 010, spec 057 §3.1).
 

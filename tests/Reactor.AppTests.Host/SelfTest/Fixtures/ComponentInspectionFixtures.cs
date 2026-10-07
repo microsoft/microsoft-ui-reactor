@@ -312,6 +312,24 @@ internal static class ComponentInspectionFixtures
                 H.Check("RootAnchor_EmptyRootViaContentTarget",
                     emptyHost.CurrentControl is null
                     && ReactorDiagnostics.DescribeComponent(emptyTarget) is { IsRoot: true, State: [{ Value: "\"empty-root\"" }] });
+
+                // An empty container proves nothing by itself: an unrelated empty Border the host
+                // never mounted into is not claimed…
+                var unrelated = new Border();
+                emptyHost.ContentTarget = unrelated;
+                H.Check("RootAnchor_EmptyRootDoesNotClaimUnrelatedContainer", ReactorDiagnostics.DescribeComponent(unrelated) is null);
+                emptyHost.ContentTarget = emptyTarget;
+
+                // …and of two empty-root hosts sharing one container, the latest to mount owns it.
+                using var secondEmpty = new ReactorHost(H.Window) { ContentTarget = emptyTarget };
+                secondEmpty.Mount(ctx =>
+                {
+                    var (s, _) = ctx.UseState("second-empty");
+                    return Empty();
+                });
+                await Harness.Render();
+                H.Check("RootAnchor_SharedEmptyContainerOwnedByLatestMount",
+                    ReactorDiagnostics.DescribeComponent(emptyTarget) is { IsRoot: true, State: [{ Value: "\"second-empty\"" }] });
             }
             H.SetContent(null);
 

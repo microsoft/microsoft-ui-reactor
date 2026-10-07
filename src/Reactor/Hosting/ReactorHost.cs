@@ -186,22 +186,26 @@ public sealed class ReactorHost : IDisposable
     /// content) and the dev-overlay wrapper it puts around the root while an overlay is on.
     /// Several hosts can share one container over time (a replaced, undisposed host keeps
     /// its stale reference to it), so the container only counts for the host whose content
-    /// is actually in it.
+    /// is actually in it — or, while it is empty (an <c>Empty()</c> root), for the host that
+    /// last mounted into or wrote it.
     /// </summary>
     private RootComponentSource? ResolveDiagnosticsRoot(UIElement element)
     {
         if (_disposed) return null;
-        // Null when the root rendered Empty(): the ContentTarget still anchors it (an empty
-        // container is this host's), and the rendered-root check below rejects pre-render,
-        // error and disposed states.
+        // Null when the root rendered Empty(); see the ownership rule below.
         var control = _currentControl;
 
         UIElement? container = ContentTarget ?? (_windowClosed ? null : _window.Content as UIElement);
         UIElement? installed = ContentTarget is { } target ? target.Child : container;
         var wrapper = _overlayWiring?.WrapperRoot;
-        bool ours = ReferenceEquals(installed, control) || (wrapper is not null && ReferenceEquals(installed, wrapper));
+        // Content identity proves ownership when there is content. An empty container proves
+        // nothing (any empty-root host sharing it would match), so then this host must be the
+        // one that last mounted into or wrote the ContentTarget.
+        bool ours = installed is not null
+            ? ReferenceEquals(installed, control) || (wrapper is not null && ReferenceEquals(installed, wrapper))
+            : control is null && ContentTarget is { } empty && OwnsContentTarget(empty);
 
-        bool isAnchor = ReferenceEquals(element, control)
+        bool isAnchor = (control is not null && ReferenceEquals(element, control))
             || (ours && (ReferenceEquals(element, container) || ReferenceEquals(element, installed)));
         if (!isAnchor) return null;
 
@@ -411,6 +415,7 @@ public sealed class ReactorHost : IDisposable
     public void Mount(Component component)
     {
         _rootComponent = component;
+        ClaimContentTarget();
         RequestRender();
     }
 
@@ -418,8 +423,24 @@ public sealed class ReactorHost : IDisposable
     {
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
+        ClaimContentTarget();
         RequestRender();
     }
+
+    // Diagnostics ownership of a shared ContentTarget: the host that last mounted into it or
+    // wrote its content. Only consulted when the container is empty (the root rendered Empty()),
+    // where content identity cannot say whose it is. Written on Mount and on content changes,
+    // never on an ordinary re-render.
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, ReactorHost> s_contentTargetOwner = new();
+
+    private void ClaimContentTarget()
+    {
+        if (ContentTarget is { } target)
+            s_contentTargetOwner.AddOrUpdate(target, this);
+    }
+
+    private bool OwnsContentTarget(UIElement target)
+        => s_contentTargetOwner.TryGetValue(target, out var owner) && ReferenceEquals(owner, this);
 
     /// <summary>
     /// Thread-safe: can be called from any thread. Coalesces multiple calls into
@@ -738,7 +759,10 @@ public sealed class ReactorHost : IDisposable
                 if (anyOverlayOn)
                     contentToSet = _overlayWiring!.SetContentViaWrapper(newControl);
                 if (ContentTarget is not null)
+                {
                     ContentTarget.Child = contentToSet;
+                    ClaimContentTarget();
+                }
                 else
                     _window.Content = contentToSet;
                 AttachThemeListener(newControl);
