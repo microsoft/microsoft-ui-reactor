@@ -378,13 +378,22 @@ internal static class SelfTestRunner
             Console.WriteLine("#   " + line.TrimEnd('\r'));
         // A native-origin failure has no managed frames, so the WinRT restricted-error details
         // the projection attaches to Exception.Data are the only other clue in the log. (#1345)
-        if (ex?.Data is { Count: > 0 } data)
+        // Best-effort: this is the last thing written before a fail-fast, so a Data entry that
+        // fails to enumerate or format must not cost the flush below.
+        try
         {
-            foreach (global::System.Collections.DictionaryEntry entry in data)
+            if (ex?.Data is { Count: > 0 } data)
             {
-                if (entry.Value is string or bool or int or long)
-                    Console.WriteLine($"#   data {entry.Key}: {entry.Value}".ReplaceLineEndings(" "));
+                foreach (global::System.Collections.DictionaryEntry entry in data)
+                {
+                    if (entry.Value is string or bool or int or long)
+                        Console.WriteLine($"#   data {entry.Key}: {entry.Value}".ReplaceLineEndings(" "));
+                }
             }
+        }
+        catch (Exception dataEx)
+        {
+            Console.WriteLine($"#   data <unreadable: {dataEx.GetType().Name}>");
         }
         Console.Out.Flush();
     }

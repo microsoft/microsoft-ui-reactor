@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -43,6 +44,8 @@ internal static class AsyncTeardownGuardFixtures
             // thrown carries no managed stack, like one WinUI hands to UnhandledException.
             H.Check("AsyncTeardownGuard_Predicate_NativeEFail",
                 AsyncTeardownGuard.IsNativeTeardownFailure(new COMException("native", AsyncTeardownGuard.E_FAIL)));
+            H.Check("AsyncTeardownGuard_Predicate_NativeTeardownReentry",
+                AsyncTeardownGuard.IsNativeTeardownFailure(new COMException("native", HResults.RPC_E_DISCONNECTED)));
             H.Check("AsyncTeardownGuard_Predicate_RejectsOtherHResult",
                 !AsyncTeardownGuard.IsNativeTeardownFailure(new COMException("native", E_INVALIDARG)));
             COMException thrown;
@@ -81,6 +84,25 @@ internal static class AsyncTeardownGuardFixtures
             Console.WriteLine($"# report: hr=0x{reportHr:X8} handled={handled} handledSeen={handledSeenAfterGuard}");
             H.Check("AsyncTeardownGuard_ReportDelivered", reportHr >= 0 && handledSeenAfterGuard is not null);
             H.Check("AsyncTeardownGuard_HandledNativeReport", handled == 1 && handledSeenAfterGuard == true);
+
+            // The guard is scoped: once the settle window ends it must stop handling, or it would
+            // silently absorb an unrelated native failure later in the run. The same report, after
+            // the scope, has to reach a subscriber still unhandled. (This channel does not
+            // fail-fast when unhandled, as above, so it is safe to leave this one unhandled.)
+            bool? handledSeenAfterScope = null;
+            void ObserveAfter(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e) =>
+                handledSeenAfterScope = e.Handled;
+            app.UnhandledException += ObserveAfter;
+            try
+            {
+                Console.WriteLine("# probe: the next 'Unhandled exception' line is this fixture's deliberate post-scope report");
+                ReportNativeFailure();
+                await Harness.WaitFor(() => handledSeenAfterScope is not null, maxPasses: 20, perPassMs: 20);
+            }
+            finally { app.UnhandledException -= ObserveAfter; }
+
+            Console.WriteLine($"# postScope: handledSeen={handledSeenAfterScope?.ToString() ?? "<not delivered>"}");
+            H.Check("AsyncTeardownGuard_StopsHandlingAfterScope", handledSeenAfterScope == false);
         }
     }
 }

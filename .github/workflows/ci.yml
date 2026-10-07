@@ -281,6 +281,13 @@ jobs:
       # a truncated TAP stream, and a native-origin exception has no managed frames to print.
       # The originating native stack lives only in a dump, so have WER write one for the host
       # (scoped to its exe name) and upload it when the job fails.
+      #
+      # A custom minidump, not a full one: the artifact is downloadable from PR runs, so it
+      # must not carry the whole heap or the process environment. The flags keep what a
+      # stowed-exception triage needs: thread stacks and info, memory referenced from them
+      # (which reaches the stowed exception records), unloaded modules, and the memory map.
+      # MiniDumpWithIndirectlyReferencedMemory 0x40 | MiniDumpWithUnloadedModules 0x20 |
+      # MiniDumpWithFullMemoryInfo 0x800 | MiniDumpWithThreadInfo 0x1000 = 0x1860.
       - name: Enable crash dumps for the packaged host
         shell: pwsh
         run: |
@@ -289,7 +296,8 @@ jobs:
           $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\Reactor.PackagedTests.Host.exe'
           New-Item -Path $key -Force | Out-Null
           New-ItemProperty -Path $key -Name DumpFolder -PropertyType ExpandString -Value $dir -Force | Out-Null
-          New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 2 -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 0 -Force | Out-Null
+          New-ItemProperty -Path $key -Name CustomDumpFlags -PropertyType DWord -Value 0x1860 -Force | Out-Null
           New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 2 -Force | Out-Null
 
       - name: Test
