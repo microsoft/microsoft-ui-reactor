@@ -244,7 +244,7 @@ internal static class ChildReconciler
                     if (newEl.HasCallbacks)
                         Reconciler.SetElementTag(fe, newEl);
                     else if (Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
-                        Reconciler.RefreshCallSiteTagOnSkip(fe, newEl);
+                        reconciler.RefreshCallSiteTagOnSkip(fe, newEl);
                     if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
                         && Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
                         reconciler.PublishSourceOnSkip(fe, newEl);
@@ -342,7 +342,7 @@ internal static class ChildReconciler
                     if (newEl.HasCallbacks)
                         Reconciler.SetElementTag(fe, newEl);
                     else if (Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
-                        Reconciler.RefreshCallSiteTagOnSkip(fe, newEl);
+                        reconciler.RefreshCallSiteTagOnSkip(fe, newEl);
                     if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
                         && Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
                         reconciler.PublishSourceOnSkip(fe, newEl);
@@ -403,7 +403,7 @@ internal static class ChildReconciler
                     if (newEl.HasCallbacks)
                         Reconciler.SetElementTag(fe, newEl);
                     else if (Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
-                        Reconciler.RefreshCallSiteTagOnSkip(fe, newEl);
+                        reconciler.RefreshCallSiteTagOnSkip(fe, newEl);
                     if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
                         && Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
                         reconciler.PublishSourceOnSkip(fe, newEl);

@@ -66,6 +66,16 @@ internal interface IV1ChildEnumerator
 }
 
 /// <summary>
+/// Whether unmount must reach a handler through the control's element tag (its teardown is
+/// not covered by the generic unmount walk). Consulted only in the Native AOT diagnostics mode
+/// that skips call-site-only tags.
+/// </summary>
+internal interface IV1TeardownOwner
+{
+    bool OwnsTeardown(UIElement control);
+}
+
+/// <summary>
 /// Spec 047 §14 Phase 1 (1.1) — v1 handler registry. Exact-type keyed
 /// dictionary; throws on duplicate (matches §13 Q17 and the 1.9 rules).
 /// External <c>RegisterType</c> callers continue to populate

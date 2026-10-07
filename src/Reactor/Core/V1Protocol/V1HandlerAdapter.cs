@@ -13,7 +13,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// the dispatch boundary so the hot path is dictionary lookup + interface
 /// call + cast (the cast is JIT-folded for monomorphic call sites).
 /// </summary>
-internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV1ChildEnumerator
+internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV1ChildEnumerator, IV1TeardownOwner
     where TElement : Element
     where TControl : UIElement
 {
@@ -35,7 +35,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
     /// already forces its tag at mount. Only consulted in the Native AOT diagnostics mode that
     /// skips call-site-only tags, where it keeps the tag unmount dispatch goes through.
     /// </summary>
-    private bool OwnsTeardown(UIElement control)
+    public bool OwnsTeardown(UIElement control)
         => Reconciler.SkipsCallSiteOnlyTags
             && (_handler is not Descriptor.IDescriptorBackedHandler
                 || (_handler.ChildrenForUnmount is { } strategy

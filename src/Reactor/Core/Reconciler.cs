@@ -1393,10 +1393,15 @@ public sealed partial class Reconciler : IDisposable
     /// Spec 010 shallow-skip refresh when only the call site moved. Refreshes an existing
     /// back-pointer, and allocates one only when <see cref="NeedsTag"/> says so — which for
     /// a stamped element is always, except in <see cref="SkipsCallSiteOnlyTags"/> mode
-    /// (there the published value is refreshed instead).
+    /// (there the published value is refreshed instead) — or when the element's handler owns
+    /// teardown that unmount reaches through the tag (the same rule as its mount and update).
     /// </summary>
-    internal static void RefreshCallSiteTagOnSkip(FrameworkElement control, Element newEl)
-        => SetElementTagIfNeeded(control, newEl);
+    internal void RefreshCallSiteTagOnSkip(FrameworkElement control, Element newEl)
+        => SetElementTagIfNeeded(control, newEl,
+            SkipsCallSiteOnlyTags
+            && _v1Handlers.TryGet(newEl.GetType(), out var entry)
+            && entry is IV1TeardownOwner owner
+            && owner.OwnsTeardown(control));
 
     /// <summary>
     /// Spec 010 — did the source location change across a shallow skip?

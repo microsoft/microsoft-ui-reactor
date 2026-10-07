@@ -1201,3 +1201,83 @@ internal class ReactorSource_AppFallbackNamesTheRoot(Harness h) : SelfTestFixtur
         }
     }
 }
+
+/// <summary>
+/// An unstamped, keyless, callback-free item host (a ComboBox with component items) is
+/// untagged. When a later render stamps it with the same props it takes a shallow skip, whose
+/// tag refresh must honour handler-owned teardown in the Native AOT skip mode as mount and
+/// update do; otherwise removing it never reaches the handler and the items' effect cleanups
+/// never run. Root, positional and mixed-key skip paths, both tag modes.
+/// </summary>
+internal class ReactorSource_SkipStampedItemHostKeepsTeardown(Harness h) : SelfTestFixtureBase(h)
+{
+    private static readonly Element[] Items = [Component<TeardownProbe>()];
+
+    // Phase 0: unstamped. Phase 1: the same props, stamped (a shallow skip). Phase 2: removed.
+    private static Element Combo(int phase)
+    {
+        var combo = ComboBox(Items, default, null) with { CallSite = new SourceLocation("SkipStamp.cs", 1, 1) };
+        return phase == 0 ? combo with { CallSite = null } : combo;
+    }
+
+    private static Element Layout(string layout, int phase) => layout switch
+    {
+        "Root" => phase == 2 ? TextBlock("skip-stamp-gone") : Combo(phase),
+        "Positional" => phase == 2 ? VStack(TextBlock("skip-stamp-head")) : VStack(TextBlock("skip-stamp-head"), Combo(phase)),
+        _ => phase == 2
+            ? VStack(TextBlock("k1").WithKey("k1"), TextBlock("k2").WithKey("k2"))
+            : VStack(TextBlock("k1").WithKey("k1"), Combo(phase), TextBlock("k2").WithKey("k2")),
+    };
+
+    private async Task<int> Run(string layout, bool noManagedAgent)
+    {
+        ReactorSourcePublisher.NoManagedAgent = noManagedAgent;
+        TeardownProbe.Cleanups = 0;
+        Action<int>? setPhase = null;
+        var host = H.CreateHost();
+        host.Mount(ctx =>
+        {
+            var (phase, set) = ctx.UseState(0);
+            setPhase = set;
+            return Layout(layout, phase);
+        });
+        await Harness.Render();
+        setPhase!(1);
+        await Harness.Render();
+        await Harness.Render();
+        setPhase!(2);
+        await Harness.Render();
+        await Harness.Render();
+        int cleanups = TeardownProbe.Cleanups;
+        host.Dispose();
+        H.SetContent(null);
+        return cleanups;
+    }
+
+    public override async Task RunAsync()
+    {
+        if (!ReactorSourcePublisher.IsSupported)
+        {
+            H.Skip("ReactorSource_SkipStampedItemHost", "Reactor.DevtoolsSupport is off in this host");
+            return;
+        }
+
+        var (enabled, noAgent) = (ReactorSourcePublisher.IsEnabled, ReactorSourcePublisher.NoManagedAgent);
+        try
+        {
+            ReactorSourcePublisher.IsEnabled = true;
+            foreach (var layout in new[] { "Root", "Positional", "MixedKeys" })
+            {
+                int tagged = await Run(layout, noManagedAgent: false);
+                int skipped = await Run(layout, noManagedAgent: true);
+                Console.WriteLine($"# skip-stamped item host ({layout}): cleanups tagged {tagged}, skipped {skipped}");
+                H.Check($"ReactorSource_SkipStampedItemHost_{layout}_ItemsCleanedUp", tagged == 1 && skipped == 1);
+            }
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = enabled;
+            ReactorSourcePublisher.NoManagedAgent = noAgent;
+        }
+    }
+}
