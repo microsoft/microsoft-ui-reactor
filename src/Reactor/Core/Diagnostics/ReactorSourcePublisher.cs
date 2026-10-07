@@ -238,6 +238,31 @@ internal static class ReactorSourcePublisher
     internal static bool IsComponentWrapper(string value)
         => value.Contains("|mounts=", StringComparison.Ordinal);
 
+    /// <summary>
+    /// <paramref name="value"/> without the static facts that no longer hold, or <c>null</c>
+    /// when all still do. After a hot-reload update every <c>name=</c> and <c>hooks=</c> is
+    /// unknown; otherwise a value whose call site's file has become unattributable (another
+    /// source-mapped assembly claims the same path with different facts) loses its
+    /// <c>name=</c> and its render-function <c>hooks=</c> (class-component hooks are keyed by
+    /// type, not location, and stay).
+    /// </summary>
+    internal static string? WithoutStaleFacts(string value)
+    {
+        bool hotReloaded = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.StaticFactsInvalidatedByHotReload;
+        if (!hotReloaded)
+        {
+            if (ResolvePublishedValue(value) is not { } site
+                || global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.IsFileAttributable(site.FilePath))
+                return null;
+        }
+        var mounts = Field(value, "mounts");
+        bool dropHooks = hotReloaded || mounts is "FuncElement" or "MemoElement";
+        var fields = new List<string>(value.Split('|'));
+        int removed = fields.RemoveAll(f => f.StartsWith("name=", StringComparison.Ordinal)
+            || (dropHooks && f.StartsWith("hooks=", StringComparison.Ordinal)));
+        return removed == 0 ? null : string.Join('|', fields);
+    }
+
     /// <summary>The raw (still escaped) text of field <paramref name="name"/>, or <c>null</c>.</summary>
     internal static string? Field(string value, string name)
     {

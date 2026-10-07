@@ -152,6 +152,12 @@ internal static class HotReloadService
 
         Volatile.Write(ref _updatePending, 1);
 
+        // The source map's static tables describe the compiled build; after an edit their
+        // location-keyed names and hook lists can point at the wrong element. Guarded inline
+        // so a build without Reactor.DevtoolsSupport drops the call.
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported)
+            global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.InvalidateStaticFactsForHotReload();
+
         // force: true bypasses component memo (Props/deps equality) for this
         // pass — the updated Render() body would otherwise be skipped because
         // props and hook deps haven't changed.

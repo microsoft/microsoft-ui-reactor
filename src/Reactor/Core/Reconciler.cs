@@ -531,6 +531,7 @@ public sealed partial class Reconciler : IDisposable
     internal void PublishRootSource(UIElement? control, Element tree, string rootName, string? rootHooks)
     {
         if (control is null) return;
+        RefreshStaleFacts(control);
         if (_publishedRootName is { } previousRoot && !string.Equals(previousRoot, rootName, StringComparison.Ordinal))
             RenameRootOwner(control, previousRoot, rootName);
         _publishedRootName = rootName;
@@ -571,6 +572,24 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     private string? _hostAddedRootHooks;
 
+    /// <summary>The <c>ReactorSourceMap.StaticFactsRevision</c> this host's published values reflect.</summary>
+    private int _seenFactsRevision;
+
+    /// <summary>
+    /// Static facts (names, hooks) already published may have gone stale since the last pass: a
+    /// late source-mapped assembly made a file unattributable, or a hot-reload update made them
+    /// all unknown. Controls whose call site, key and kind did not change, and skipped
+    /// subtrees, are not re-published, so the whole tree is walked once per change (rare) and
+    /// the stale fields are dropped.
+    /// </summary>
+    private void RefreshStaleFacts(UIElement control)
+    {
+        int revision = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.StaticFactsRevision;
+        if (revision == _seenFactsRevision) return;
+        _seenFactsRevision = revision;
+        WalkPublished(control, stopAtBoundaries: false, Diagnostics.ReactorSourcePublisher.WithoutStaleFacts);
+    }
+
     /// <summary>
     /// Host hook: the root threw and the app's <c>RenderErrorHandler</c> supplied a fallback
     /// tree, which now stands in for the root's content. Its controls describe the fallback
@@ -581,6 +600,7 @@ public sealed partial class Reconciler : IDisposable
     internal void PublishFallbackRootSource(UIElement? control, string rootName, string? rootHooks)
     {
         if (control is null) return;
+        RefreshStaleFacts(control);
         _publishedRootName = rootName;
         var current = control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) as string;
         var withRoot = Diagnostics.ReactorSourcePublisher.WithRoot(
@@ -603,6 +623,17 @@ public sealed partial class Reconciler : IDisposable
     /// swap), so a walk.
     /// </summary>
     internal void RenameRootOwner(UIElement? root, string previousOwner, string owner)
+        => WalkPublished(root, stopAtBoundaries: true,
+            value => Diagnostics.ReactorSourcePublisher.WithOwner(value, previousOwner, owner));
+
+    /// <summary>
+    /// Visits every control under <paramref name="root"/> that carries a published value,
+    /// through the visual tree and the Reactor subtrees outside it (see
+    /// <see cref="RenameRootOwner"/>), writing back what <paramref name="rewrite"/> returns
+    /// (<c>null</c> = unchanged). With <paramref name="stopAtBoundaries"/>, component wrappers
+    /// and embedded hosts are not entered (their subtrees have other owners).
+    /// </summary>
+    private void WalkPublished(UIElement? root, bool stopAtBoundaries, Func<string, string?> rewrite)
     {
         if (root is null) return;
         var seen = new HashSet<DependencyObject>(ReferenceEqualityComparer.Instance);
@@ -619,8 +650,8 @@ public sealed partial class Reconciler : IDisposable
             bool componentWrapper = false;
             if (node.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string value)
             {
-                if (Diagnostics.ReactorSourcePublisher.WithOwner(value, previousOwner, owner) is { } renamed)
-                    node.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, renamed);
+                if (rewrite(value) is { } rewritten && !string.Equals(rewritten, value, StringComparison.Ordinal))
+                    node.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, rewritten);
                 componentWrapper = Diagnostics.ReactorSourcePublisher.IsComponentWrapper(value);
             }
 
@@ -645,7 +676,7 @@ public sealed partial class Reconciler : IDisposable
             // A component wrapper's subtree is that component's. An embedded ReactorHostControl
             // is another host, even when it is this root's own content (XamlHost(() => island)):
             // its island names its own root. The node itself was renamed above if this root owns it.
-            if (componentWrapper || node is global::Microsoft.UI.Reactor.Hosting.ReactorHostControl) continue;
+            if (stopAtBoundaries && (componentWrapper || node is global::Microsoft.UI.Reactor.Hosting.ReactorHostControl)) continue;
 
             if (node is WinPrim.Popup popup) Push(popup.Child);
             int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);

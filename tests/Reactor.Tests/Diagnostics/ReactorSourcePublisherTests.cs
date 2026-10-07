@@ -172,6 +172,36 @@ public sealed class ReactorSourcePublisherTests
     }
 
     [Fact]
+    public void StaleFacts_HotReloadAndLateRegistration()
+    {
+        // A late registration (after the table was built) bumps the revision hosts compare.
+        _ = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.StaticFactsRevision;
+        Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.RegisterStaticInfo(
+            typeof(ReactorSourcePublisherTests).Assembly, static b => b.Name("/_/StaleProbe/Page.cs", 4, 9, "probe"));
+        int afterLoad = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.StaticFactsRevision;
+        var site = new SourceLocation("/_/StaleProbe/Page.cs", 4, 9);
+        Assert.Equal("probe", Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetDeclaredName(site));
+
+        const string value = "v=1|at=A.cs:1|owner=R|element=TextBlock|mounts=MemoElement|name=t|hooks=0:a@1";
+        Assert.Null(ReactorSourcePublisher.WithoutStaleFacts(value)); // nothing stale: unchanged
+        try
+        {
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.InvalidateStaticFactsForHotReload();
+            Assert.True(Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.StaticFactsRevision > afterLoad);
+            // The compiled tables no longer describe the running code: unknown, never wrong.
+            Assert.Null(Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetDeclaredName(site));
+            Assert.Equal("v=1|at=A.cs:1|owner=R|element=TextBlock|mounts=MemoElement",
+                ReactorSourcePublisher.WithoutStaleFacts(value));
+            Assert.Null(ReactorSourcePublisher.WithoutStaleFacts("v=1|at=A.cs:1|element=TextBlock"));
+        }
+        finally
+        {
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.ResetHotReloadInvalidationForTests();
+        }
+        Assert.Equal("probe", Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetDeclaredName(site));
+    }
+
+    [Fact]
     public void WithRoot_ReplacesOrDropsHooksTheHostAddedEarlier()
     {
         const string plain = "v=1|at=A.cs:1|owner=R|element=TextBlock";

@@ -22,15 +22,58 @@ namespace Microsoft.UI.Reactor.Diagnostics;
 /// roots to <c>/_/</c>), the location is unknown rather than last-writer-wins.
 /// Class-component hooks are keyed by the assembly and open generic type full name of the type declaring <c>Render()</c>.</para>
 ///
-/// <para><b>Hot reload.</b> The tables describe the build that was compiled. An edit that
-/// moves a call site yields a <c>CallSite</c> with no table entry, so the name or hooks are
-/// reported as unknown rather than wrong.</para>
+/// <para><b>Hot reload.</b> The tables describe the build that was compiled, and an edit can
+/// move a call onto a location the table gives another element. After a hot-reload update every
+/// lookup is unknown rather than wrong (<see cref="InvalidateStaticFactsForHotReload"/>), and
+/// hosts drop the facts already published on their next render (<see cref="StaticFactsRevision"/>).</para>
 /// </summary>
 public static partial class ReactorSourceMap
 {
     private static readonly object s_staticGate = new();
     private static List<(global::System.Reflection.Assembly Assembly, Action<ReactorStaticInfoBuilder> Fill)>? s_pendingStatic;
     private static ReactorStaticInfoBuilder? s_static;
+    private static int s_factsRevision;
+    private static int s_hotReloaded;
+
+    /// <summary>
+    /// Bumped whenever facts already published on controls may have gone stale: a source-mapped
+    /// assembly registered after the table was built (it can make another assembly's file
+    /// unattributable), or a hot-reload update. Applies pending registrations first, so a
+    /// reader always compares against the current table.
+    /// </summary>
+    internal static int StaticFactsRevision
+    {
+        get
+        {
+            _ = StaticInfo();
+            return Volatile.Read(ref s_factsRevision);
+        }
+    }
+
+    /// <summary>
+    /// A hot-reload update was applied. The tables describe the compiled build; an edit can
+    /// move a call onto a location the table assigns to another element, and can change a
+    /// render's hooks, so from now on every name and hook list is unknown rather than wrong.
+    /// </summary>
+    internal static void InvalidateStaticFactsForHotReload()
+    {
+        if (Interlocked.Exchange(ref s_hotReloaded, 1) == 0)
+            Interlocked.Increment(ref s_factsRevision);
+    }
+
+    /// <summary>Whether a hot-reload update made every static fact unknown.</summary>
+    internal static bool StaticFactsInvalidatedByHotReload => Volatile.Read(ref s_hotReloaded) != 0;
+
+    /// <summary>Test seam: undoes <see cref="InvalidateStaticFactsForHotReload"/>.</summary>
+    internal static void ResetHotReloadInvalidationForTests()
+    {
+        if (Interlocked.Exchange(ref s_hotReloaded, 0) != 0)
+            Interlocked.Increment(ref s_factsRevision);
+    }
+
+    /// <summary>Whether facts keyed by locations in <paramref name="filePath"/> can be attributed.</summary>
+    internal static bool IsFileAttributable(string? filePath)
+        => !StaticFactsInvalidatedByHotReload && (StaticInfo() is not { } table || table.IsAttributable(filePath));
 
     /// <summary>
     /// Infrastructure for the generated source-map module initializer; not intended to be
@@ -51,7 +94,7 @@ public static partial class ReactorSourceMap
     /// <c>null</c>. Prefer <see cref="SourceLocation.DeclaredName"/>.
     /// </summary>
     internal static string? GetDeclaredName(SourceLocation site)
-        => StaticInfo() is { } table && table.IsAttributable(site.FilePath)
+        => !StaticFactsInvalidatedByHotReload && StaticInfo() is { } table && table.IsAttributable(site.FilePath)
             && table.NameTable.TryGetValue(site, out var name) ? name : null;
 
     /// <summary>
@@ -68,6 +111,7 @@ public static partial class ReactorSourceMap
     /// </remarks>
     internal static string? GetComponentHooks(Type componentType)
     {
+        if (StaticFactsInvalidatedByHotReload) return null;
         var table = StaticInfo();
         if (table is null || table.ComponentHookTable.Count == 0) return null;
         for (Type? type = componentType; type is not null; type = type.BaseType)
@@ -87,7 +131,7 @@ public static partial class ReactorSourceMap
     /// a root <c>Mount(ctx =&gt; …)</c>), or <c>null</c>.
     /// </summary>
     internal static string? GetRenderFunctionHooks(SourceLocation site)
-        => StaticInfo() is { } table && table.IsAttributable(site.FilePath)
+        => !StaticFactsInvalidatedByHotReload && StaticInfo() is { } table && table.IsAttributable(site.FilePath)
             && table.RenderFunctionHookTable.TryGetValue(site, out var hooks) ? hooks : null;
 
     /// <summary>
@@ -192,7 +236,13 @@ public static partial class ReactorSourceMap
                 // the published table, which they read without the lock. Build a fresh one
                 // and swap it in, so a published table is never mutated.
                 var table = new ReactorStaticInfoBuilder();
-                if (s_static is { } previous) table.CopyFrom(previous);
+                if (s_static is { } previous)
+                {
+                    table.CopyFrom(previous);
+                    // Facts may already be published on controls; a new assembly can make a
+                    // file unattributable, so they are re-checked (see StaticFactsRevision).
+                    Interlocked.Increment(ref s_factsRevision);
+                }
                 foreach (var (assembly, fill) in pending)
                 {
                     table.CurrentAssembly = assembly;
