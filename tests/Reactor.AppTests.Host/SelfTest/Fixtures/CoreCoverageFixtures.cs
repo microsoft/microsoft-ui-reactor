@@ -1313,7 +1313,7 @@ internal static class CoreCoverageFixtures
         public override async Task RunAsync()
         {
             var captured = new global::System.Collections.Generic.List<global::Microsoft.UI.Reactor.Diagnostics.ReactorEvent>();
-            var gate = new object();
+            var gate = new global::System.Threading.Lock();
 
             // Verbose so reconcile/render events also flow: an empty capture then means
             // EventSource is inert (NativeAOT), not that the warning was dropped.
