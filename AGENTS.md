@@ -342,6 +342,13 @@ point of return: stop and ship.
 - A new common-element modifier touches every seam: the `ElementModifiers` field, skip
   equality, `Merge`, `ApplyModifiers`, and the fluent extension. Pair a `.HasValue` write
   with `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling.
+- **Lock gates are `System.Threading.Lock`, not `object`** (issue #1350):
+  `private readonly Lock _gate = new();`. IDE0330 is a build `warning` (enforced via
+  `EnforceCodeStyleInBuild`), so an `object` gate fails the Release build. Keep `object` only
+  where `Lock` does not exist (the `netstandard2.0` analyzers/generators, net472 `src/vs-reactor`)
+  or the lock is also used with `Monitor.*`, escapes its class, or is `this`/a collection —
+  `Monitor` on a `Lock` silently falls back to plain object locking (CS9216). IDE0330 skips
+  non-private fields, so convert a gate on a private nested class by hand.
 
 ### Environment
 

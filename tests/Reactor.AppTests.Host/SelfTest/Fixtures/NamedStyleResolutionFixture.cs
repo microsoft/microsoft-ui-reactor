@@ -192,7 +192,7 @@ internal static class NamedStyleResolutionFixture
             var key = "ReactorMissingStyle_" + global::System.Guid.NewGuid().ToString("N");
 
             var captured = new global::System.Collections.Generic.List<ReactorEvent>();
-            var gate = new object();
+            var gate = new Lock();
 
             // Subscribing also flips ReactorEventSource.IsEnabled on, which is
             // what lets DiagnosticLog.Warning emit at all — the same gate a real
@@ -300,7 +300,7 @@ internal static class NamedStyleResolutionFixture
             {
                 var run = global::System.Guid.NewGuid().ToString("N");
                 var captured = new global::System.Collections.Generic.List<ReactorEvent>();
-                var gate = new object();
+                var gate = new Lock();
 
                 using (ReactorTrace.Subscribe(
                     e => { lock (gate) { captured.Add(e); } },

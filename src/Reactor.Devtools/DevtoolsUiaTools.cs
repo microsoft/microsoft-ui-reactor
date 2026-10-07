@@ -433,7 +433,7 @@ internal static class DevtoolsUiaTools
     /// </summary>
     private static long s_lastScreenshotTicks;
     private const int ScreenshotMinIntervalMs = 100;
-    private static readonly object s_screenshotGate = new();
+    private static readonly Lock s_screenshotGate = new();
 
     private static void Register_Screenshot(DevtoolsMcpServer server, SelectorResolver resolver, WindowRegistry windows)
     {
