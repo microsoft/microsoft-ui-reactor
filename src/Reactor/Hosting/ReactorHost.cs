@@ -406,6 +406,18 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     private void PushChartingState()
         => s_chartingBridge?.PushAccessibilityState(_isForcedColors, _isReducedMotion, _forcedColorsTheme);
 
+    /// <summary>
+    /// <c>hooks=</c> for this host's root on ReactorDiagnostics.SourceProperty: a root component's
+    /// <c>Render()</c> hooks, or a root render function's, which the source map keys by the call
+    /// the function was passed to: exactly the recorded root mount site.
+    /// </summary>
+    private string? DiagnosticRootHooks()
+        => _rootComponent is not null
+            ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetComponentHooks(_rootComponent.GetType())
+            : _mountSite.Value is { } rootSite
+                ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetRenderFunctionHooks(rootSite)
+                : null;
+
     /// <summary>Owner / root= name of this host's root component for ReactorDiagnostics.SourceProperty.</summary>
     private string DiagnosticRootName()
         => _rootComponent is not null
@@ -973,9 +985,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
                 && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
                 _reconciler.PublishRootSource(
                     newControl, newTree, DiagnosticRootName(),
-                    _rootComponent is not null
-                        ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetComponentHooks(_rootComponent.GetType())
-                        : null);
+                    DiagnosticRootHooks());
             _rootDiagnostics.TrackContent(newControl);
             OwningWindow?.OnHostContentRendered(newControl);
 
@@ -1356,9 +1366,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
             _reconciler.PublishFallbackRootSource(
                 _currentControl, DiagnosticRootName(),
-                _rootComponent is not null
-                    ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetComponentHooks(_rootComponent.GetType())
-                    : null);
+                DiagnosticRootHooks());
         // ComponentRendered bookkeeping. A built-in or neutral panel is a raw control, so no
         // Reactor component is on screen any more; the built-in panel's path also leaves the
         // previous tree unmounted, so its ids must be dropped here. An app fallback was

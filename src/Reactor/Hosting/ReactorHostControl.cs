@@ -282,6 +282,18 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
     private bool AnyOverlayFlagOn => ReactorFeatureFlags.HighlightReconcileChanges;
 
+    /// <summary>
+    /// <c>hooks=</c> for this host's root on ReactorDiagnostics.SourceProperty: a root component's
+    /// <c>Render()</c> hooks, or a root render function's, which the source map keys by the call
+    /// the function was passed to: exactly the recorded root mount site.
+    /// </summary>
+    private string? DiagnosticRootHooks()
+        => _rootComponent is not null
+            ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetComponentHooks(_rootComponent.GetType())
+            : _mountSite.Value is { } rootSite
+                ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetRenderFunctionHooks(rootSite)
+                : null;
+
     /// <summary>Owner / root= name of this host's root component for ReactorDiagnostics.SourceProperty.</summary>
     private string DiagnosticRootName()
         => _rootComponent is not null
@@ -920,9 +932,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                 && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
                 _reconciler.PublishRootSource(
                     newControl, newTree, DiagnosticRootName(),
-                    _rootComponent is not null
-                        ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetComponentHooks(_rootComponent.GetType())
-                        : null);
+                    DiagnosticRootHooks());
             _rootDiagnostics.TrackContent(newControl);
 
             // Spec 033 §6 — Backdrop modifier on the root tree is a no-op for
@@ -1125,9 +1135,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
             _reconciler.PublishFallbackRootSource(
                 _currentControl, DiagnosticRootName(),
-                _rootComponent is not null
-                    ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetComponentHooks(_rootComponent.GetType())
-                    : null);
+                DiagnosticRootHooks());
         // ComponentRendered bookkeeping; see ReactorHost.ShowErrorFallback.
         if (tree is null)
             _reconciler.ForgetComponentDiagnostics();

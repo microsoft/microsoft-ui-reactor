@@ -209,6 +209,39 @@ public sealed class RootMountInterceptionTests : IDisposable
         Assert.Contains($"RootMountInterceptionTests.cs\", {expected}, {column})", text, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void RootRenderFunctionHooks_ResolveFromTheMountSite()
+    {
+        ReactorHost host = null!;
+
+        // The lambda never runs (the call throws first); only the generator's static
+        // table and the recorded site are exercised.
+        Assert.Throws<NullReferenceException>(() => host.Mount(ctx =>
+        {
+            var (rootCount, _) = ctx.UseState(0); // hook:root-count
+            return TextBlock($"{rootCount}");
+        }));
+
+        var site = Assert.Single(_entered);
+        Assert.Equal($"0:rootCount@{MarkerLine("hook:root-count")}", ReactorSourceMap.GetRenderFunctionHooks(site));
+    }
+
+    private static int MarkerLine(string marker)
+    {
+        var dir = new global::System.IO.DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = global::System.IO.Path.Combine(dir.FullName, "tests", "Reactor.SourceMap.Tests", "RootMountInterceptionTests.cs");
+            if (global::System.IO.File.Exists(candidate))
+            {
+                var lines = global::System.IO.File.ReadAllLines(candidate);
+                return Array.FindIndex(lines, l => l.Contains("// " + marker, StringComparison.Ordinal)) + 1;
+            }
+            dir = dir.Parent;
+        }
+        throw new InvalidOperationException("could not locate RootMountInterceptionTests.cs");
+    }
+
     /// <summary>
     /// The multi-window startup overload mounts no root of its own, so it is
     /// deliberately left alone: an app-lifetime scope there would be claimed by the

@@ -29,7 +29,7 @@ namespace Microsoft.UI.Reactor.Diagnostics;
 /// </summary>
 public static partial class ReactorSourceMap
 {
-    private static readonly object s_staticGate = new();
+    private static readonly global::System.Threading.Lock s_staticGate = new();
     private static List<(global::System.Reflection.Assembly Assembly, Action<ReactorStaticInfoBuilder> Fill)>? s_pendingStatic;
     private static ReactorStaticInfoBuilder? s_static;
     private static int s_factsRevision;

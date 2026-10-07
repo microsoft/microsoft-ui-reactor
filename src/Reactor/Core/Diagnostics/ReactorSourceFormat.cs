@@ -115,49 +115,14 @@ internal static class ReactorSourceFormat
     }
 
     /// <summary>
-    /// Component display name: the type's simple name, with a generic component's
-    /// arguments in C# form (<c>ItemList&lt;Int32&gt;</c>) instead of its metadata arity.
+    /// Component display name — the same name the component events report
+    /// (<see cref="ComponentNames"/>), so a reader can correlate this property with
+    /// <c>RenderError</c> / <c>ComponentRendered</c>.
     /// </summary>
-    internal static string ComponentName(Type type)
-    {
-        if (!type.IsGenericType) return type.Name;
-        var sb = new StringBuilder();
-        AppendComponentName(sb, type);
-        return sb.ToString();
-    }
+    internal static string ComponentName(Type type) => ComponentNames.For(type);
 
-    private static void AppendComponentName(StringBuilder sb, Type type)
-    {
-        var name = type.Name;
-        var tick = name.IndexOf('`');
-        sb.Append(tick >= 0 ? name.Substring(0, tick) : name);
-        if (!type.IsGenericType || tick < 0) return;
-
-        var args = type.GetGenericArguments();
-        int own = int.TryParse(name.AsSpan(tick + 1), out var arity) ? arity : 0;
-        if (own == 0) return;
-        sb.Append('<');
-        for (int i = args.Length - own; i < args.Length; i++)
-        {
-            if (i > args.Length - own) sb.Append(", ");
-            AppendComponentName(sb, args[i]);
-        }
-        sb.Append('>');
-    }
-
-    /// <summary>
-    /// Owner/mounts name for a component element or live instance. Matches the name the
-    /// component events (<c>RenderError</c>, <c>ComponentRendered</c>) report, so a reader can
-    /// correlate them: function and memo components are <c>FuncElement</c> /
-    /// <c>MemoElement</c>.
-    /// </summary>
-    internal static string ComponentName(Component? instance, Element? element)
-    {
-        if (instance is not null) return ComponentName(instance.GetType());
-        if (element is ComponentElement ce) return ComponentName(ce.ComponentType);
-        return element?.GetType().Name ?? "unknown";
-    }
-
+    /// <summary>Owner/mounts name for a component element or live instance; see <see cref="ComponentNames.For(Component?, Element?)"/>.</summary>
+    internal static string ComponentName(Component? instance, Element? element) => ComponentNames.For(instance, element);
     /// <summary>
     /// Key text: the key's invariant string form. <c>null</c> for no key.
     /// </summary>
