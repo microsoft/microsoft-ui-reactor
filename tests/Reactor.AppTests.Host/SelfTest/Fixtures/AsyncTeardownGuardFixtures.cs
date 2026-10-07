@@ -58,12 +58,10 @@ internal static class AsyncTeardownGuardFixtures
 
             // End to end through WinRT's unhandled-error channel. This delivers the exact #1345
             // signature to Application.UnhandledException (COMException 0x80004005 with no managed
-            // frames), but unlike a native XAML callback failure it does not fail-fast when left
-            // unhandled, so surviving it proves nothing on its own. The oracle is therefore what
-            // the guard did to the event: a subscriber added after the guard's sees Handled set.
-            // (That Handled is what stops the fail-fast was measured when the guard landed: a
-            // native-origin exception from XAML's own callback path ended the host with
-            // 0xC000027B unguarded and was survived with the guard.)
+            // frames). Left unhandled it fail-fasts the host with 0xC000027B on CI runners (seen
+            // on #1348's first run) but not on every developer machine, so surviving it is not a
+            // portable oracle. The oracle is what the guard did to the event: a subscriber added
+            // after the guard's sees Handled set.
             var reportHr = 0;
             bool? handledSeenAfterGuard = null;
             void Observe(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e) =>
@@ -87,17 +85,20 @@ internal static class AsyncTeardownGuardFixtures
 
             // The guard is scoped: once the settle window ends it must stop handling, or it would
             // silently absorb an unrelated native failure later in the run. The same report, after
-            // the scope, has to reach a subscriber still unhandled. (This channel does not
-            // fail-fast when unhandled, as above, so it is safe to leave this one unhandled.)
+            // the scope, has to reach this observer still unhandled. The observer records that,
+            // then handles the report itself, because unhandled it would end the run (see above).
             bool? handledSeenAfterScope = null;
-            void ObserveAfter(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e) =>
+            void ObserveAfter(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+            {
                 handledSeenAfterScope = e.Handled;
+                e.Handled = true;
+            }
             app.UnhandledException += ObserveAfter;
             try
             {
                 Console.WriteLine("# probe: the next 'Unhandled exception' line is this fixture's deliberate post-scope report");
                 ReportNativeFailure();
-                await Harness.WaitFor(() => handledSeenAfterScope is not null, maxPasses: 20, perPassMs: 20);
+                await Harness.WaitFor(() => handledSeenAfterScope is not null, maxPasses: 100, perPassMs: 20);
             }
             finally { app.UnhandledException -= ObserveAfter; }
 
