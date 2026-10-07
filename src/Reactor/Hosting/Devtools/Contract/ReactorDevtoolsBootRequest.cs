@@ -11,4 +11,11 @@ public sealed record ReactorDevtoolsBootRequest(
     Type? HostRoot,
     Func<Component>? HostRootFactory,
     Func<RenderContext, Element>? RootRenderFunc,
-    Action<ReactorHost>? Configure);
+    Action<ReactorHost>? Configure)
+{
+    /// <summary>
+    /// The source-mapped <c>ReactorApp.Run</c> call that requested the boot, so a preview
+    /// that mounts the app's own root still reports it as that root's mount site.
+    /// </summary>
+    internal SourceLocation? RootMountSite { get; init; }
+}

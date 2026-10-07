@@ -21,7 +21,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     internal const int McpPortUnavailableExitCode = 43;
 
     private readonly int _embedGeneration = 1;
-    private readonly object _embedResizeLock = new();
+    private readonly Lock _embedResizeLock = new();
     private (int W, int H) _latestEmbedResize;
     private int _embedResizePending;
 
@@ -68,7 +68,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                 return RunListSubverb(options);
             case DevtoolsSubverb.Run:
                 ReactorApp.DevtoolsEnabled = true;
-                return RunRunSubverb(options, request.Title, request.Width, request.Height, request.FullScreen, request.Configure, request.HostRoot, request.HostRootFactory);
+                return RunRunSubverb(options, request.Title, request.Width, request.Height, request.FullScreen, request.Configure, request.HostRoot, request.HostRootFactory, request.RootMountSite);
             case DevtoolsSubverb.Screenshot:
                 return RunScreenshotSubverb(options, request.Width, request.Height, request.Configure, request.HostRoot);
             case DevtoolsSubverb.Tree:
@@ -190,7 +190,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     }
 
     [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes() and Activator.CreateInstance.")]
-    private bool RunRunSubverb(DevtoolsCliOptions options, string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null)
+    private bool RunRunSubverb(DevtoolsCliOptions options, string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, SourceLocation? rootMountSite = null)
     {
         string? componentName = options.ComponentName;
         Type? componentType = null;
@@ -399,6 +399,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                 WindowWidth: width,
                 WindowHeight: height,
                 FullScreen: fullScreen,
+                RootMountSite: PreviewRootMountSite(rootMountSite, hostRoot, hostRootFactory, initialComponentType),
                 InitialWindowSpec: options.EmbedRequested
                     ? BuildEmbedWindowSpec(options, $"Preview — {initialComponentName}", width, height)
                     : BuildPositionedWindowSpec(options, $"Preview — {initialComponentName}", width, height, fullScreen));
@@ -414,6 +415,14 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
         return true;
     }
 
+
+    /// <summary>
+    /// The mount site the preview reports for its first root: the app's <c>Run</c> call when the
+    /// preview mounts that call's own root (its factory, or the same component type), and
+    /// <c>null</c> for any other component, which that call never mounted.
+    /// </summary>
+    internal static SourceLocation? PreviewRootMountSite(SourceLocation? runSite, Type? hostRoot, Func<Component>? hostRootFactory, Type previewedType)
+        => hostRootFactory is not null || previewedType == hostRoot ? runSite : null;
 
     /// <summary>
     /// Builds the initial spec for a non-embedded preview window when <c>--x</c>/<c>--y</c>

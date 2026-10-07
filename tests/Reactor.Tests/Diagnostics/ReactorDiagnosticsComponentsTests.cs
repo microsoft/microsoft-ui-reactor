@@ -690,16 +690,16 @@ public class ReactorDiagnosticsComponentsTests
         Assert.Null(snap[4].ValueType);
     }
 
-    // ── Reconciler registry ─────────────────────────────────────────
+    // ── Host registry ───────────────────────────────────────────────
 
     [Fact]
-    public void Reconciler_RegistersOnConstruction_AndUnregistersOnDispose()
+    public void Lookup_ReadsNoReconcilerOutsideTheHostRegistry()
     {
-        var reconciler = new Reconciler();
-        Assert.True(reconciler.IsRegisteredForDiagnostics);
-
-        reconciler.Dispose();
-        Assert.False(reconciler.IsRegisteredForDiagnostics);
+        // A reconciler that no host owns is not in ReactorHostRegistry, so even with its
+        // dispatcher recorded (headless: none exists) it is never returned by a lookup.
+        using var reconciler = new Reconciler();
+        Assert.DoesNotContain(Microsoft.UI.Reactor.Core.Diagnostics.ReactorHostRegistry.Snapshot(),
+            h => ReferenceEquals(h.DiagnosticReconciler, reconciler));
     }
 
     // ── Applied modifier map ────────────────────────────────────────

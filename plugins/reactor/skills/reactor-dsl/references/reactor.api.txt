@@ -1012,6 +1012,7 @@ AnimationKind { None, Default, Spring, EaseIn, EaseOut, EaseInOut }
 BackdropKind { None, Mica, MicaAlt, DesktopAcrylic, AcrylicThin, Transparent }
 ColorScheme { Light, Dark, HighContrast }
 KeyedListDiagnosticKind { NullKey, DuplicateKey }
+ReactorHostKind { WindowHost, HostControl }
 ItemsViewLayoutKind { StackLayout, LinedFlowLayout, UniformGridLayout }
 PersistedScope { Window, Application }
 RenderErrorSource { RootRender, ComponentRender, Reconcile, Effects, Cleanup }
@@ -4598,6 +4599,7 @@ IReadOnlyList<KeyedListDiagnostic> RecentKeyedListWarnings { get; }
 ClearRecentKeyedListWarnings() → void
 DescribeComponent(UIElement element) → ComponentSnapshot
 GetAppliedProperties(UIElement control) → IReadOnlyList<AppliedProperty>
+GetHosts() → IReadOnlyList<ReactorHostInfo>
 GetReferenceEdges(UIElement control) → IReadOnlyList<ReferenceEdgeSnapshot>
 Rerender(UIElement element) → bool
 TrySetState(UIElement element, int hookIndex, string text, ref string error) → bool
@@ -4660,6 +4662,18 @@ object Props { get; set; }
 Dispose() → void
 Mount(Component component) → void
 Mount(Func<RenderContext, Element> renderFunc) → void
+
+### class ReactorHostInfo
+FrameworkElement HostElement { get; }
+ReactorHost Host { get; }
+ReactorHostControl HostControl { get; }
+ReactorHostKind Kind { get; }
+ReactorWindow ReactorWindow { get; }
+SourceLocation? MountSite { get; }
+UIElement RootControl { get; }
+Window Window { get; }
+string RootComponentName { get; }
+string RootRenderFunctionName { get; }
 
 ### static class ReactorSourceMap
 bool Enabled { get; set; }

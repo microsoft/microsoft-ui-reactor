@@ -62,6 +62,10 @@
     <InternalsVisibleTo Include="Reactor.AppTests.Host" />
     <InternalsVisibleTo Include="Reactor.PackagedTests.Host" />
     <InternalsVisibleTo Include="Reactor.Fuzz" />
+    <!-- Root mount call sites: the generator tests observe that an intercepted
+         Run / OpenWindow / Mount opened (and closed) a root mount scope through the
+         internal ReactorSourceMap test seam, since a headless test cannot reach a host. -->
+    <InternalsVisibleTo Include="Reactor.SourceMap.Tests" />
     <!-- Spec 062 §7 Track B (B1/B2): the charting, docking, and markdown
          subsystems moved from this assembly into Reactor.Advanced. Each reaches
          the REST of core only through small, cleanly expressible seams:

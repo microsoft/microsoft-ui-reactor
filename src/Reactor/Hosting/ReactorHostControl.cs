@@ -41,7 +41,7 @@ namespace Microsoft.UI.Reactor.Hosting;
 ///   - Error boundary with fallback UI
 ///   - Clean lifecycle via Loaded/Unloaded
 /// </summary>
-public sealed partial class ReactorHostControl : ContentControl, IDisposable
+public sealed partial class ReactorHostControl : ContentControl, IDisposable, Core.Diagnostics.IReactorDiagnosticHost
 {
 #pragma warning disable CS0414 // Design constant for render-loop limiting; wiring pending
     private static readonly int MaxRenderIterations = 50;
@@ -60,6 +60,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private Component? _rootComponent;
     private Func<RenderContext, Element>? _rootRenderFunc;
     private RenderContext? _funcContext;
+
+    // Where app code mounted the root, when source mapping was on. Diagnostics only.
+    private readonly Diagnostics.RootMountSiteSlot _mountSite = new();
 
     private Element? _currentTree;
     private UIElement? _currentControl;
@@ -243,8 +246,37 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
 
+        Core.Diagnostics.ReactorHostRegistry.Register(this);
+
         if (component is not null)
-            Mount(component);
+            MountRoot(component, mountSite: null);
+    }
+
+    void Core.Diagnostics.IReactorDiagnosticHost.TagComponentBoundaries()
+    {
+        if (_disposed) return;
+        if (_dispatcherQueue.HasThreadAccess)
+            _reconciler.TagComponentBoundaries();
+        else
+            _dispatcherQueue.TryEnqueue(() => { if (!_disposed) _reconciler.TagComponentBoundaries(); });
+    }
+
+    Reconciler? Core.Diagnostics.IReactorDiagnosticHost.DiagnosticReconciler => _disposed ? null : _reconciler;
+
+    Core.Diagnostics.ReactorHostInfo? Core.Diagnostics.IReactorDiagnosticHost.CaptureDiagnosticInfo()
+    {
+        if (_disposed) return null;
+        return Core.Diagnostics.ReactorHostInfo.ForRoot(
+            Core.Diagnostics.ReactorHostKind.HostControl,
+            host: null,
+            hostControl: this,
+            reactorWindow: null,
+            window: null,
+            hostElement: this,
+            rootControl: _currentControl,
+            rootComponent: _rootComponent,
+            rootRenderFunction: _rootRenderFunc,
+            mountSite: _mountSite.Value);
     }
 
     private bool AnyOverlayFlagOn => ReactorFeatureFlags.HighlightReconcileChanges;
@@ -253,13 +285,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// Mount a Component instance directly. Starts the render loop immediately.
     /// </summary>
     public void Mount(Component component)
-    {
-        _activationError = null;
-        _rootRenderFunc = null;
-        _funcContext = null;
-        _rootComponent = component;
-        RequestRender();
-    }
+        => MountRoot(component, Diagnostics.ReactorSourceMap.TakeRootMountSite());
 
     /// <summary>
     /// Mount a function component. Starts the render loop immediately.
@@ -270,6 +296,17 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _rootComponent = null;
         _rootRenderFunc = renderFunc;
         _funcContext = new RenderContext();
+        _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(Diagnostics.ReactorSourceMap.TakeRootMountSite());
+        RequestRender();
+    }
+
+    private void MountRoot(Component component, SourceLocation? mountSite)
+    {
+        _activationError = null;
+        _rootRenderFunc = null;
+        _funcContext = null;
+        _rootComponent = component;
+        _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
         RequestRender();
     }
 
@@ -303,8 +340,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             return;
         }
 
+        // A ComponentFactory / ComponentType root has no call site in app code (it is usually
+        // set in XAML), and must not claim a root mount scope some unrelated in-flight call opened.
         if (component is not null)
-            Mount(component);
+            MountRoot(component, mountSite: null);
     }
 
     /// <summary>
@@ -921,6 +960,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+
+        Core.Diagnostics.ReactorHostRegistry.Unregister(this);
 
         Loaded -= OnLoaded;
         Unloaded -= OnUnloaded;

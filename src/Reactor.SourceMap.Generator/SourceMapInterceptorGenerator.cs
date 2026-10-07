@@ -151,6 +151,170 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                 spc.ReportDiagnostic(problem!.ToDiagnostic());
             }
         });
+
+        // Root mount sites: ReactorApp.Run / ReactorApp.OpenWindow / ReactorWindow.Mount /
+        // ReactorHost.Mount / ReactorHostControl.Mount. A root is not an element, so there
+        // is nothing to stamp; the interceptor instead brackets the call with a scope that
+        // the intercepted method claims as its first statement and hands down to the host
+        // it mounts (see ReactorSourceMap.RootMount.cs). A separate pass with a
+        // syntactic NAME pre-filter, so the overwhelming majority of invocations never
+        // reach the semantic model a second time.
+        var rootMountSites = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => IsRootMountCandidate(node),
+                transform: static (ctx, ct) => TryDescribeRootMount(ctx, ct))
+            .Where(static x => x is not null)
+            .Collect();
+
+        context.RegisterSourceOutput(rootMountSites.Combine(enabled).Combine(needsPolyfill).Combine(pathMap), static (spc, tuple) =>
+        {
+            var (((sites, isEnabled), polyfill), map) = tuple;
+            if (!isEnabled || sites.IsDefaultOrEmpty) return;
+            spc.AddSource("ReactorSourceMap.RootMounts.g.cs", EmitRootMounts(sites!, polyfill, map));
+        });
+    }
+
+    // ── Root mount sites ──────────────────────────────────────────────────
+
+    private const string ReactorAppMetadataName = "Microsoft.UI.Reactor.ReactorApp";
+    private const string ReactorHostMetadataName = "Microsoft.UI.Reactor.Hosting.ReactorHost";
+    private const string ReactorHostControlMetadataName = "Microsoft.UI.Reactor.Hosting.ReactorHostControl";
+    private const string ReactorWindowMetadataName = "Microsoft.UI.Reactor.ReactorWindow";
+    private const string ReactorAppContextMetadataName = "Microsoft.UI.Reactor.ReactorAppContext";
+
+    private static bool IsRootMountCandidate(SyntaxNode node)
+    {
+        if (node is not InvocationExpressionSyntax invocation) return false;
+        var name = invocation.Expression switch
+        {
+            MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+            // `host?.Mount(root)`: inside a conditional access the invoked expression is a
+            // member binding, not a member access. Interceptors can intercept it; the
+            // interceptor then only runs when the receiver is non-null.
+            MemberBindingExpressionSyntax binding => binding.Name.Identifier.ValueText,
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            GenericNameSyntax generic => generic.Identifier.ValueText,
+            _ => null,
+        };
+        return name is "Run" or "OpenWindow" or "Mount";
+    }
+
+    private static RootMountSite? TryDescribeRootMount(GeneratorSyntaxContext ctx, System.Threading.CancellationToken ct)
+    {
+        var invocation = (InvocationExpressionSyntax)ctx.Node;
+        if (ctx.SemanticModel.GetSymbolInfo(invocation, ct).Symbol is not IMethodSymbol method) return null;
+        if (method.MethodKind != MethodKind.Ordinary) return null;
+
+        // Same open-definition rule as TryDescribe: the interceptor restates the
+        // declared signature, never the caller's substituted type arguments.
+        method = method.OriginalDefinition;
+
+        var owner = method.ContainingType?.ToDisplayString();
+        bool isRoot = method.DeclaredAccessibility == Accessibility.Public && owner switch
+        {
+            ReactorAppMetadataName => method.IsStatic && method.Name is "Run" or "OpenWindow",
+            ReactorHostMetadataName or ReactorHostControlMetadataName or ReactorWindowMetadataName => !method.IsStatic && method.Name == "Mount",
+            _ => false,
+        };
+        if (!isRoot) return null;
+
+        // Run(Action<ReactorAppContext>) mounts no root of its own; its startup callback
+        // opens windows, each through its own (intercepted) OpenWindow. Bracketing it
+        // would leave a site open for the app's lifetime that the first window opened
+        // through an UNintercepted path (a library, framework-created windows) would
+        // claim — a confidently wrong answer instead of "unknown".
+        if (method.Parameters.Any(p => p.Type is INamedTypeSymbol { IsGenericType: true } t
+                && t.TypeArguments.Any(a => a.ToDisplayString() == ReactorAppContextMetadataName)))
+        {
+            return null;
+        }
+
+        if (method.Parameters.Any(p => p.RefKind != RefKind.None)) return null;
+        if (method.IsGenericMethod && method.TypeParameters.Any(HasUnrenderableConstraint)) return null;
+
+        var compilation = ctx.SemanticModel.Compilation;
+        if (compilation.GetTypeByMetadataName(ElementMetadataName) is not { } elementSymbol) return null;
+
+        var location = ctx.SemanticModel.GetInterceptableLocation(invocation, ct);
+        if (location is null) return null;
+
+        // Same position rule as element call sites: the argument list's opening paren,
+        // which is what [CallerLineNumber] would report.
+        var parenSpan = invocation.ArgumentList.OpenParenToken.Span;
+        var lineSpan = invocation.SyntaxTree.GetMappedLineSpan(parenSpan, ct);
+
+        return new RootMountSite(
+            attribute: location.GetInterceptsLocationAttributeSyntax(),
+            filePath: ResolveMappedPath(lineSpan, invocation.SyntaxTree.FilePath),
+            line: lineSpan.StartLinePosition.Line + 1,
+            signature: Signature.From(method, elementSymbol, emptyElementSymbol: null),
+            isInstance: !method.IsStatic,
+            returnsVoid: method.ReturnsVoid);
+    }
+
+    private static string EmitRootMounts(
+        ImmutableArray<RootMountSite?> sites,
+        bool needsPolyfill,
+        ImmutableArray<KeyValuePair<string, string>> pathMap)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("// Reactor source map — root mount call sites (ReactorApp.Run / OpenWindow, ReactorWindow / ReactorHost / ReactorHostControl.Mount).");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine();
+
+        if (needsPolyfill)
+        {
+            sb.AppendLine("namespace System.Runtime.CompilerServices");
+            sb.AppendLine("{");
+            sb.AppendLine("    [global::System.AttributeUsage(global::System.AttributeTargets.Method, AllowMultiple = true)]");
+            sb.AppendLine("    file sealed class InterceptsLocationAttribute : global::System.Attribute");
+            sb.AppendLine("    {");
+            sb.AppendLine("        public InterceptsLocationAttribute(int version, string data) { _ = version; _ = data; }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine($"namespace {InterceptorNamespace}");
+        sb.AppendLine("{");
+        sb.AppendLine("    file static class ReactorSourceMapRootMountInterceptors");
+        sb.AppendLine("    {");
+
+        int index = 0;
+        foreach (var site in sites.Where(static s => s is not null))
+        {
+            var sig = site!.Signature;
+            var mapped = ApplyPathMap(site.FilePath, pathMap);
+            var name = $"__ReactorRoot_{sig.MethodName}_{index}";
+            var parameters = site.IsInstance
+                ? (sig.ParameterList.Length == 0 ? $"this {sig.OwnerType} __self" : $"this {sig.OwnerType} __self, {sig.ParameterList}")
+                : sig.ParameterList;
+            var target = site.IsInstance
+                ? $"__self.{sig.MethodName}{sig.TypeArgumentList}({sig.ArgumentList})"
+                : $"{sig.OwnerType}.{sig.MethodName}{sig.TypeArgumentList}({sig.ArgumentList})";
+
+            sb.AppendLine($"        {site.Attribute}");
+            sb.AppendLine($"        public static {sig.ReturnType} {name}{sig.TypeParameterList}({parameters})");
+            foreach (var clause in sig.ConstraintClauses)
+                sb.AppendLine($"            {clause}");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            var __scope = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.EnterRootMountSite({Literal(mapped)}, {site.Line});");
+            sb.AppendLine("            try");
+            sb.AppendLine("            {");
+            sb.AppendLine(site.ReturnsVoid ? $"                {target};" : $"                return {target};");
+            sb.AppendLine("            }");
+            sb.AppendLine("            finally");
+            sb.AppendLine("            {");
+            sb.AppendLine("                global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.ExitRootMountSite(__scope);");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+            index++;
+        }
+
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        return sb.ToString();
     }
 
     // ── Call-site discovery ───────────────────────────────────────────────
@@ -850,6 +1014,51 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
     private static string Literal(string value) => "@\"" + value.Replace("\"", "\"\"") + "\"";
 
     // ── Models ────────────────────────────────────────────────────────────
+
+    /// <summary>One intercepted root mount call (<c>Run</c> / <c>OpenWindow</c> / <c>Mount</c>).</summary>
+    private sealed class RootMountSite : IEquatable<RootMountSite>
+    {
+        public RootMountSite(string attribute, string filePath, int line, Signature signature, bool isInstance, bool returnsVoid)
+        {
+            Attribute = attribute;
+            FilePath = filePath;
+            Line = line;
+            Signature = signature;
+            IsInstance = isInstance;
+            ReturnsVoid = returnsVoid;
+        }
+
+        public string Attribute { get; }
+        public string FilePath { get; }
+        public int Line { get; }
+        public Signature Signature { get; }
+        public bool IsInstance { get; }
+        public bool ReturnsVoid { get; }
+
+        public bool Equals(RootMountSite? other)
+            => other is not null
+               && Attribute == other.Attribute
+               && FilePath == other.FilePath
+               && Line == other.Line
+               && Signature.Equals(other.Signature)
+               && IsInstance == other.IsInstance
+               && ReturnsVoid == other.ReturnsVoid;
+
+        public override bool Equals(object? obj) => Equals(obj as RootMountSite);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int h = Attribute.GetHashCode();
+                h = (h * 397) ^ FilePath.GetHashCode();
+                h = (h * 397) ^ Line;
+                h = (h * 397) ^ Signature.GetHashCode();
+                h = (h * 397) ^ (IsInstance ? 1 : 0);
+                return (h * 397) ^ (ReturnsVoid ? 1 : 0);
+            }
+        }
+    }
 
     private sealed class CallSite : IEquatable<CallSite>
     {

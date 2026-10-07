@@ -8,17 +8,14 @@ namespace Microsoft.UI.Reactor.Core;
 /// reconciler state that owns it.
 ///
 /// <para>Each host owns its own <see cref="Reconciler"/>, and a component node lives
-/// in that reconciler's private <c>_componentNodes</c> table, so a lookup has to know
-/// every live reconciler. The registry below is the only cost this adds to a running
-/// app: one weak reference per reconciler (i.e. per host), taken at construction and
-/// dropped at <see cref="Dispose"/>. Nothing is recorded per component or per render;
-/// every query is resolved on demand.</para>
+/// in that reconciler's private <c>_componentNodes</c> table, so a lookup walks every live
+/// host. It reuses the host registry behind <c>ReactorDiagnostics.GetHosts()</c>
+/// (<see cref="Diagnostics.ReactorHostRegistry"/>) rather than keeping a second one, so
+/// nothing is recorded per component or per render and every query is resolved on demand.
+/// A reconciler used directly, without a host, is not inspected.</para>
 /// </summary>
 public sealed partial class Reconciler
 {
-    private static readonly object s_liveGate = new();
-    private static readonly List<WeakReference<Reconciler>> s_live = new();
-
     /// <summary>
     /// Set by the owning host (<c>ReactorHost</c> / <c>ReactorHostControl</c>). The root
     /// component is rendered by the host, not mounted through <see cref="MountComponent"/>,
@@ -29,80 +26,26 @@ public sealed partial class Reconciler
 
     /// <summary>
     /// The owning host's UI dispatcher, set alongside <see cref="DiagnosticsRootResolver"/>.
-    /// The registry is process-wide while hosts can live on different UI threads, so a lookup
-    /// skips every reconciler whose dispatcher is not the calling thread's before touching its
-    /// unsynchronized tables or controls. A reconciler with no dispatcher recorded is not inspected.
+    /// Hosts can live on different UI threads, so a lookup skips every reconciler whose
+    /// dispatcher is not the calling thread's before touching its unsynchronized tables or
+    /// controls. A reconciler with no dispatcher recorded is not inspected.
     /// </summary>
     internal Microsoft.UI.Dispatching.DispatcherQueue? DiagnosticsDispatcher { get; set; }
 
-    private bool _diagnosticsDispatcherProbed;
-
-    /// <summary>
-    /// Records the owning UI thread of a reconciler driven directly (no host to supply it) the
-    /// first time it records a component, which only happens on that thread with a live wrapper.
-    /// One probe per reconciler; a no-op once a host or an earlier probe set it.
-    /// </summary>
-    private void CaptureDiagnosticsDispatcher()
-    {
-        if (_diagnosticsDispatcherProbed) return;
-        _diagnosticsDispatcherProbed = true;
-        DiagnosticsDispatcher ??= Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-    }
-
-    // Inspectable only from the UI thread it has recorded. A reconciler with no dispatcher yet
-    // (constructed, not yet hosted or mounting) is skipped: it has no live element to resolve,
-    // and its first mount may be mutating its tables on another thread.
     private bool IsInspectableFromThisThread => DiagnosticsDispatcher is { HasThreadAccess: true };
 
-    private void RegisterForDiagnostics()
-    {
-        lock (s_liveGate)
-        {
-            // Prune collected entries on the way in so the list tracks live hosts,
-            // not every reconciler a long-running process (or test run) ever created.
-            s_live.RemoveAll(static w => !w.TryGetTarget(out _));
-            s_live.Add(new WeakReference<Reconciler>(this));
-        }
-    }
-
-    private void UnregisterForDiagnostics()
-    {
-        lock (s_liveGate)
-        {
-            s_live.RemoveAll(w => !w.TryGetTarget(out var r) || ReferenceEquals(r, this));
-        }
-    }
-
-    private static List<Reconciler> SnapshotLiveReconcilers()
-    {
-        lock (s_liveGate)
-        {
-            var list = new List<Reconciler>(s_live.Count);
-            foreach (var r in s_live.Select(static w => w.TryGetTarget(out var target) ? target : null).Where(static r => r is not null))
-                list.Add(r!);
-            return list;
-        }
-    }
-
-    /// <summary>Test seam: whether this reconciler is in the live registry.</summary>
-    internal bool IsRegisteredForDiagnostics
-    {
-        get
-        {
-            lock (s_liveGate)
-            {
-                return s_live.Any(w => w.TryGetTarget(out var r) && ReferenceEquals(r, this));
-            }
-        }
-    }
-
+    /// <summary>The reconcilers of live hosts that the calling thread may inspect.</summary>
+    private static IEnumerable<Reconciler> InspectableReconcilers()
+        => Diagnostics.ReactorHostRegistry.Snapshot()
+            .Select(static host => host.DiagnosticReconciler)
+            .Where(static r => r is { IsInspectableFromThisThread: true })!;
     /// <summary>
     /// Finds the component whose wrapper is <paramref name="element"/> in any live
     /// reconciler. Must be called on the UI thread (the node tables are not locked).
     /// </summary>
     internal static bool TryFindComponentNode(UIElement element, out Reconciler owner, out ComponentNode node)
     {
-        foreach (var r in SnapshotLiveReconcilers().Where(static r => r.IsInspectableFromThisThread))
+        foreach (var r in InspectableReconcilers())
         {
             if (r._componentNodes.TryGetValue(element, out var found))
             {
@@ -119,7 +62,7 @@ public sealed partial class Reconciler
     /// <summary>Finds the host root component anchored at <paramref name="element"/>.</summary>
     internal static bool TryFindRootComponent(UIElement element, out RootComponentSource root)
     {
-        foreach (var r in SnapshotLiveReconcilers().Where(static r => r.IsInspectableFromThisThread))
+        foreach (var r in InspectableReconcilers())
         {
             if (r.DiagnosticsRootResolver?.Invoke(element) is { } found)
             {

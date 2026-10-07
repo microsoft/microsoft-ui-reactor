@@ -1285,7 +1285,7 @@ public sealed class RenderContext
             Comparer = comparer;
         }
 
-        public object Gate { get; } = new();
+        public Lock Gate { get; } = new();
         public TSnapshot Snapshot { get; set; }
         public Func<TSnapshot> GetSnapshot { get; set; }
         public IEqualityComparer<TSnapshot> Comparer { get; set; }
@@ -1776,7 +1776,7 @@ public sealed class RenderContext
     /// </summary>
     private sealed class DebounceSlot
     {
-        public readonly object Gate = new();
+        public readonly Lock Gate = new();
         public bool InWindow;
         /// <summary>Absolute time (per the context's <see cref="TimeProvider"/>) at which the
         /// current window expires. Acceptance is decided against this deadline rather than purely on
@@ -2786,7 +2786,7 @@ public sealed class RenderContext
         // Issue #659 (#42): only allocate the lock when threadSafe was requested.
         // The default (false) path never touches Lock, so most state cells now
         // carry no per-hook Lock object.
-        public readonly object? Lock;
+        public readonly Lock? Lock;
         // Issue #659 (#43/#44): the ref-stable setter/updater/dispatch delegate,
         // built once on first render and reused every render thereafter (was a
         // fresh closure per render). Typed as Delegate so one field serves
@@ -2806,7 +2806,7 @@ public sealed class RenderContext
         {
             Value = value;
             ThreadSafe = threadSafe;
-            Lock = threadSafe ? new object() : null;
+            Lock = threadSafe ? new Lock() : null;
         }
     }
 

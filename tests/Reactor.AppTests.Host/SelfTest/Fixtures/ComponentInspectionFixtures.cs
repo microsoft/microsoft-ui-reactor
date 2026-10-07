@@ -87,22 +87,19 @@ internal static class ComponentInspectionFixtures
                 H.Check("CompInspect_OffThreadReadThrows", offThread is InvalidOperationException,
                     offThread?.GetType().Name ?? "no exception");
 
-                // A reconciler driven directly (no host) records its UI thread the first time it
-                // mounts a component, so foreign-thread lookups can skip it too.
+                // Only hosted reconcilers are inspected: lookups walk the host registry behind
+                // GetHosts(), so a reconciler driven directly is never read.
                 using (var direct = new Reconciler())
                 {
                     var directWrapper = direct.Mount(Component<Counter, CounterProps>(new CounterProps(1, "x")), () => { });
-                    H.Check("CompInspect_DirectReconcilerCapturesDispatcher",
-                        directWrapper is not null && direct.DiagnosticsDispatcher is { HasThreadAccess: true });
-                    H.Check("CompInspect_DirectReconcilerDescribed",
-                        directWrapper is not null && ReactorDiagnostics.DescribeComponent(directWrapper) is { Name: "Counter" });
-                    // With no dispatcher recorded, a reconciler is never inspected from any thread.
-                    var recorded = direct.DiagnosticsDispatcher;
-                    direct.DiagnosticsDispatcher = null;
-                    H.Check("CompInspect_UncapturedReconcilerNotInspected",
+                    H.Check("CompInspect_UnhostedReconcilerNotInspected",
                         directWrapper is not null && ReactorDiagnostics.DescribeComponent(directWrapper) is null);
-                    direct.DiagnosticsDispatcher = recorded;
                 }
+                // A hosted reconciler with no dispatcher recorded is never inspected from any thread.
+                var recorded = host.Reconciler.DiagnosticsDispatcher;
+                host.Reconciler.DiagnosticsDispatcher = null;
+                H.Check("CompInspect_UncapturedReconcilerNotInspected", ReactorDiagnostics.DescribeComponent(wrapper) is null);
+                host.Reconciler.DiagnosticsDispatcher = recorded;
                 var counter = ReactorDiagnostics.DescribeComponent(wrapper);
                 H.Check("CompInspect_ClassDescribed",
                     counter is { Name: "Counter", Kind: "class", IsRoot: false });

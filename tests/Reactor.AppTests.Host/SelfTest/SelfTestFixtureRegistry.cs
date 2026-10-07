@@ -10,6 +10,14 @@ internal static class SelfTestFixtureRegistry
     public static readonly string[] AllFixtures =
     [
         "SourceMapReadPath_Enabled",
+        "HostDiag_WindowHostIsListedAndBoundariesAreTagged",
+        "HostDiag_FlagOffLeavesBoundariesUntagged",
+        "HostDiag_HostControlIsListed",
+        "HostDiag_LateEnableTagsCachedBoundaries",
+        "HostDiag_LateEnableKeepsDecoratorTag",
+        "HostDiag_ConditionalAccessMountReportsItsSite",
+        "HostDiag_BackgroundSnapshotsDuringRemounts",
+        "HostDiag_ReactorWindowReportsItsMountSites",
         "SourceMapReadPath_DistinctLines",
         "SourceMapReadPath_Disabled",
         "SourceMapReadPath_HandStamped",
@@ -803,6 +811,7 @@ internal static class SelfTestFixtureRegistry
         "CoreCov_RelativePanelUpdate",
         "CoreCov_KeyframeCompositorAnimations",
         "CoreCov_SwipeControlMount",
+        "CoreCov_SwipeControlExecuteModeMultiItem",
         "CoreCov_ListBoxMount",
         "CoreCov_SelectorBarPipsPagerMount",
         "CoreCov_ThemeRefResolution",
@@ -1004,6 +1013,8 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_EditorFocusCustomEditors",
         "DataGrid_EditorFocusDebtRepaid",
         "DataGrid_EditorFocusDisconnectedRoot",
+        // Editor text stays where the display cell drew it (issue #1340)
+        "DataGrid_EditorTextAlignment",
         // Parking focus before an editor open destroys the focused element (issue #1288)
         "DataGrid_EditorFocusParkedFromEditButton",
         "DataGrid_EditorFocusParkedOnCommitThenBegin",
@@ -2747,6 +2758,14 @@ internal static class SelfTestFixtureRegistry
         "AnimScope_WithAnimationIntegration" => new AnimationScopeTests.WithAnimationIntegration(harness),
         // Spec 010 — source-map read path (UIElement → ReactorState → Element.CallSite)
         "SourceMapReadPath_Enabled" => new SourceMapReadPathTests.LeafIsReadableWhenEnabled(harness),
+        "HostDiag_WindowHostIsListedAndBoundariesAreTagged" => new HostDiagnosticsFixtures.WindowHostIsListedAndBoundariesAreTagged(harness),
+        "HostDiag_FlagOffLeavesBoundariesUntagged" => new HostDiagnosticsFixtures.FlagOffLeavesBoundariesUntagged(harness),
+        "HostDiag_HostControlIsListed" => new HostDiagnosticsFixtures.HostControlIsListed(harness),
+        "HostDiag_LateEnableTagsCachedBoundaries" => new HostDiagnosticsFixtures.LateEnableTagsCachedBoundaries(harness),
+        "HostDiag_LateEnableKeepsDecoratorTag" => new HostDiagnosticsFixtures.LateEnableKeepsDecoratorTag(harness),
+        "HostDiag_ConditionalAccessMountReportsItsSite" => new HostDiagnosticsFixtures.ConditionalAccessMountReportsItsSite(harness),
+        "HostDiag_BackgroundSnapshotsDuringRemounts" => new HostDiagnosticsFixtures.BackgroundSnapshotsDuringRemounts(harness),
+        "HostDiag_ReactorWindowReportsItsMountSites" => new HostDiagnosticsFixtures.ReactorWindowReportsItsMountSites(harness),
         "SourceMapReadPath_DistinctLines" => new SourceMapReadPathTests.DistinctLeavesReportDistinctLines(harness),
         "SourceMapReadPath_Disabled" => new SourceMapReadPathTests.LeafIsNotTaggedWhenDisabled(harness),
         "SourceMapReadPath_HandStamped" => new SourceMapReadPathTests.HandStampedLeafIsTaggedWithFlagOff(harness),
@@ -2847,6 +2866,7 @@ internal static class SelfTestFixtureRegistry
         "CoreCov_RelativePanelUpdate" => new CoreCoverageFixtures.RelativePanelUpdate(harness),
         "CoreCov_KeyframeCompositorAnimations" => new CoreCoverageFixtures.KeyframeCompositorAnimations(harness),
         "CoreCov_SwipeControlMount" => new CoreCoverageFixtures.SwipeControlMount(harness),
+        "CoreCov_SwipeControlExecuteModeMultiItem" => new CoreCoverageFixtures.SwipeControlExecuteModeMultiItem(harness),
         "CoreCov_ListBoxMount" => new CoreCoverageFixtures.ListBoxMount(harness),
         "CoreCov_SelectorBarPipsPagerMount" => new CoreCoverageFixtures.SelectorBarPipsPagerMount(harness),
         "CoreCov_ThemeRefResolution" => new CoreCoverageFixtures.ThemeRefResolution(harness),
@@ -3042,6 +3062,7 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_EditorFocusCustomEditors" => new DataGridEditFixtures.EditorFocusCustomEditors(harness),
         "DataGrid_EditorFocusDebtRepaid" => new DataGridEditFixtures.EditorFocusDebtRepaid(harness),
         "DataGrid_EditorFocusDisconnectedRoot" => new DataGridEditFixtures.EditorFocusDisconnectedRoot(harness),
+        "DataGrid_EditorTextAlignment" => new DataGridEditFixtures.EditorTextAlignment(harness),
         // Parking focus before an editor open destroys the focused element (issue #1288)
         "DataGrid_EditorFocusParkedFromEditButton" => new DataGridEditFixtures.EditorFocusParkedFromEditButton(harness),
         "DataGrid_EditorFocusParkedOnCommitThenBegin" => new DataGridEditFixtures.EditorFocusParkedOnCommitThenBegin(harness),

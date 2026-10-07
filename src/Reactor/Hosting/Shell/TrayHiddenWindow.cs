@@ -33,14 +33,14 @@ namespace Microsoft.UI.Reactor.Hosting.Shell;
 internal sealed class TrayHiddenWindow : IDisposable
 {
     private static TrayHiddenWindow? s_instance;
-    private static readonly object s_singletonLock = new();
+    private static readonly Lock s_singletonLock = new();
 
     private readonly nint _hwnd;
     private readonly DispatcherQueue _dispatcher;
     // Strongly-typed callback collection for the static WndProc to dispatch
     // into. A copy-on-write dictionary keyed by NIN icon id (uID slot).
     private TrayCallbackEntry[] _entries = global::System.Array.Empty<TrayCallbackEntry>();
-    private readonly object _entriesLock = new();
+    private readonly Lock _entriesLock = new();
     private GCHandle _selfHandle;
     private bool _disposed;
     // RegisterWindowMessageW("TaskbarCreated") — Explorer broadcasts this to

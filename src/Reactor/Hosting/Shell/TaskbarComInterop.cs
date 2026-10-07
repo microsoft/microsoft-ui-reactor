@@ -140,7 +140,7 @@ internal enum ThumbButtonFlags : uint
 internal static partial class TaskbarComSingleton
 {
     private static ITaskbarList3? s_instance;
-    private static readonly object s_lock = new();
+    private static readonly Lock s_lock = new();
     private static int s_initFailed;
 
     // CLSID_TaskbarList — the shell coclass that implements ITaskbarList3.
