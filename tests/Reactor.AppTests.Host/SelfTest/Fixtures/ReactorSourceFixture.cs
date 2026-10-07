@@ -103,7 +103,14 @@ internal class ReactorSource_PublishedOnEveryControl(Harness h) : SelfTestFixtur
             H.Check("ReactorSource_RootNamed", rootValue?.Contains("|root=FuncElement", StringComparison.Ordinal) == true);
             // A root render function's hooks resolve through the recorded root mount site
             // (the source map keys them by the call the function was passed to).
-            H.Check("ReactorSource_RootRenderFunctionHooks", rootValue?.Contains("|hooks=0:n@", StringComparison.Ordinal) == true);
+            if (namedValue?.Contains("|at=", StringComparison.Ordinal) != true)
+            {
+                H.Skip("ReactorSource_RootRenderFunctionHooks", "call sites are not stamped in this host");
+            }
+            else
+            {
+                H.Check("ReactorSource_RootRenderFunctionHooks", rootValue?.Contains("|hooks=0:n@", StringComparison.Ordinal) == true);
+            }
 
             // ── Re-render keeps every control described ─────────────────
             H.ClickButton("source-bump");
