@@ -1584,7 +1584,7 @@ internal static class DataGridEditFixtures
 
             await Harness.Render(300);
 
-            var priceText = (int row) => columns[3].FormatValue!(10.0 + row * 5);
+            var priceText = (int row) => columns[3].FormatValue!(10.0 + row * 5.0);
 
             // ── Cell edit: TextBox (Name) ───────────────────────────────────────────────
             var nameDisplay = DisplayOrigin("Product 1");
