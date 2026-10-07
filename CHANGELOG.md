@@ -304,6 +304,14 @@ Conventions for contributors:
   it on screen, and a cleanup that throws during the swap is routed like a disposal-time
   cleanup failure without blocking the new root.
 
+- **DataGrid inline editors no longer shift the cell's text when editing starts**
+  (issue #1340). The built-in TextBox and NumberBox editors used `.Padding(2)` inside
+  WinUI's 32px minimum height, which draws text at the top, so the text moved about 4px
+  up and 5px left as soon as a cell entered edit mode. Text editors now use the cell's
+  horizontal padding and symmetric vertical padding, with `TextControlThemeMinHeight`
+  overridden to 0, so their text lands exactly where the display cell drew it. A custom
+  `col.Editor` keeps any padding, `MinHeight` or `TextControlThemeMinHeight` it sets.
+
 - **An `ErrorBoundary` whose child fails part-way through mounting no longer leaves
   that child's effects running** (issue #1291). A component registers before its
   effects run, so a child whose second effect threw had already opened whatever its

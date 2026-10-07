@@ -240,6 +240,33 @@ public class RenderErrorDispatchTests
                 new InvalidOperationException("cleanup"), "Probe", isHostLevel: true, logger: null)));
     }
 
+    [Fact]
+    public void ReportCleanupFailures_Reports_Every_Collected_Failure_As_Cleanup()
+    {
+        var a = new InvalidOperationException("a");
+        var b = new InvalidOperationException("b");
+        var seen = new List<RenderError>();
+
+        var pending = RenderErrorDispatch.ReportCleanupFailures(
+            new[] { a, b }, () => e => { seen.Add(e); return null; }, isHostLevel: false, logger: null);
+
+        Assert.Null(pending);
+        Assert.Equal(new[] { a, b }, seen.Select(e => e.Exception));
+        Assert.All(seen, e => Assert.Equal(RenderErrorSource.Cleanup, e.Source));
+    }
+
+    [Fact]
+    public void ReportCleanupFailures_Without_A_Handler_Returns_The_First_Failure()
+    {
+        var a = new InvalidOperationException("a");
+
+        var pending = RenderErrorDispatch.ReportCleanupFailures(
+            new[] { a, new InvalidOperationException("b") }, () => null, isHostLevel: false, logger: null);
+
+        Assert.NotNull(pending);
+        Assert.Same(a, pending!.SourceException);
+    }
+
     private static RenderContext ContextWithCleanups(params Action[] cleanups)
     {
         var ctx = new RenderContext();

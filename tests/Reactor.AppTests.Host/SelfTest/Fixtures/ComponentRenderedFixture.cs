@@ -608,7 +608,10 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
 
         // The release finishes even when one of the old tree's cleanups throws: the other
         // components' cleanups still run and the old content still goes.
+        // With a handler, the failure is reported to it as a Cleanup error.
+        var releaseLog = new List<RenderError>();
         var throwingReleaseHost = H.CreateHost();
+        throwingReleaseHost.RenderErrorHandler = e => { releaseLog.Add(e); return null; };
         throwingReleaseHost.Mount(new RenderedThrowingCleanupTreeRoot());
         await Harness.Render();
         H.Check("ComponentRendered_NullReplacement_ThrowingCleanup_LiveBefore",
@@ -619,6 +622,31 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
             H.FindText("cleanup probe child") is null && H.FindText("throwing cleanup child") is null
                 && RenderedCleanupProbeChild.Cleanups == 1,
             $"cleanups={RenderedCleanupProbeChild.Cleanups}");
+        H.Check("ComponentRendered_NullReplacement_ThrowingCleanup_ReportedToHandler",
+            releaseLog.Any(e => e.Source == RenderErrorSource.Cleanup
+                && e.Exception.Message == RenderedThrowingCleanupChild.Message),
+            string.Join(",", releaseLog.Select(e => e.Source)));
+
+        // With no handler, the release still completes, then the failure leaves the release
+        // like any render-time failure: the render loop shows the built-in panel for it.
+        var priorDefault = ReactorApp.DefaultRenderErrorHandler;
+        ReactorApp.DefaultRenderErrorHandler = null;
+        try
+        {
+            var bareReleaseHost = H.CreateHost();
+            bareReleaseHost.Mount(new RenderedThrowingCleanupTreeRoot());
+            await Harness.Render();
+            bareReleaseHost.Mount(new RenderedNullRoot());
+            await Harness.Render();
+            H.Check("ComponentRendered_NullReplacement_ThrowingCleanup_NoHandlerSurfacesAfterRelease",
+                RenderedCleanupProbeChild.Cleanups == 1 && H.FindText("cleanup probe child") is null
+                    && H.FindTextContaining(RenderedThrowingCleanupChild.Message) is not null,
+                $"cleanups={RenderedCleanupProbeChild.Cleanups}");
+        }
+        finally
+        {
+            ReactorApp.DefaultRenderErrorHandler = priorDefault;
+        }
 
         // A replacement root that throws on its first render (built-in panel, no handler):
         // the previous root's tree is released, not abandoned with its effects live.
@@ -943,9 +971,11 @@ internal sealed class RenderedThrowingCleanupTreeRoot : Component
 
 internal sealed class RenderedThrowingCleanupChild : Component
 {
+    public const string Message = "ComponentRendered selftest: child cleanup failure";
+
     public override Element Render()
     {
-        UseEffect(() => () => throw new InvalidOperationException("ComponentRendered selftest: child cleanup failure"));
+        UseEffect(() => () => throw new InvalidOperationException(Message));
         return TextBlock("throwing cleanup child");
     }
 }

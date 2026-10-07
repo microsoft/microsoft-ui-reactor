@@ -320,6 +320,46 @@ internal static class RenderErrorDispatch
     }
 
     /// <summary>
+    /// Routes failures collected while a tree was torn down under
+    /// <see cref="Reconciler.IsolateUnmountCleanupFailures"/> with the same contract as
+    /// <see cref="RunCleanups"/>, once the teardown has finished: each is reported to the
+    /// handler (resolved per failure) as <see cref="RenderErrorSource.Cleanup"/>; with no
+    /// handler the first is rethrown. A failure the app already declined in a nested frame
+    /// keeps going out. Returns the propagation to rethrow, if any.
+    /// </summary>
+    internal static ExceptionDispatchInfo? ReportCleanupFailures(
+        IReadOnlyList<Exception> failures, Func<RenderErrorHandler?> resolveHandler, bool isHostLevel, ILogger? logger)
+    {
+        ExceptionDispatchInfo? first = null;
+        foreach (var ex in failures)
+        {
+            ExceptionDispatchInfo? propagation;
+            if (IsPropagating(ex))
+            {
+                propagation = ContinuePropagation(ex);
+            }
+            else if (resolveHandler() is { } handler)
+            {
+                try
+                {
+                    propagation = ReportCleanup(handler, ex, componentName: null, isHostLevel, logger);
+                }
+                catch (Exception nested) when (IsPropagating(nested))
+                {
+                    propagation = ContinuePropagation(nested);
+                }
+            }
+            else
+            {
+                // No handler: the pre-#1291 outcome, the first failure escapes.
+                return first ?? ExceptionDispatchInfo.Capture(ex);
+            }
+            first ??= propagation;
+        }
+        return first;
+    }
+
+    /// <summary>
     /// Runs <paramref name="context"/>'s cleanups during disposal. Every cleanup runs; the
     /// handler is resolved when each one fails, so a cleanup that sets or clears it affects
     /// the later ones. A failure with no handler at that moment escapes immediately, as

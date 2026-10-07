@@ -405,13 +405,14 @@ public sealed class ReactorHost : IDisposable
     /// </summary>
     private void ReleaseReplacedTree()
     {
-        // Like a render-error release, the teardown finishes even when one of the old tree's
-        // cleanups throws: every cleanup runs, failures are logged, and a propagation the
-        // app requested is rethrown once the release is done.
-        var teardownErrors = new RenderErrorDispatch.TeardownErrors(_logger);
+        // The teardown finishes even when one of the old tree's cleanups throws: every
+        // cleanup runs and failures are collected, then routed like disposal's (issue
+        // #1291) once the release is done: reported to the RenderErrorHandler as Cleanup,
+        // or with none the first is rethrown.
+        var cleanupFailures = new List<Exception>();
         if (_currentTree is not null)
         {
-            using (_reconciler.IsolateUnmountCleanupFailures(teardownErrors.Add))
+            using (_reconciler.IsolateUnmountCleanupFailures(cleanupFailures.Add))
                 _reconciler.Reconcile(_currentTree, null, _currentControl, _rerenderAction ??= () => RequestRender());
         }
         // Cleared only once the old tree is released: if the release itself failed, the
@@ -421,7 +422,14 @@ public sealed class ReactorHost : IDisposable
         // nothing: clears the content, moves the theme listener and window hooks off it.
         SetErrorContent(null, null, replacesTree: true);
         _rootDiagnostics.TrackContent(null);
-        teardownErrors.RethrowPropagated();
+        if (cleanupFailures.Count > 0)
+        {
+            global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? failure;
+            using (RenderErrorDispatch.EnterPropagationScope())
+                failure = RenderErrorDispatch.ReportCleanupFailures(
+                    cleanupFailures, () => EffectiveRenderErrorHandler, isHostLevel: false, _logger);
+            failure?.Throw();
+        }
     }
 
     /// <summary>
