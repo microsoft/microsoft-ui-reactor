@@ -3516,14 +3516,19 @@ consumers can subscribe to just the render channel:</p>
 <a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">HotReload</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x2000</span><span class="p">;</span><span class="w">   </span><span class="c1">// spec 049 — state migration across edits</span>
 <a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="p">}</span>
 </code></pre></div>
-<p><code>ComponentRenderStart</code> / <code>ComponentRenderStop</code> fire with
-<code>componentName = node.Component?.GetType().Name</code>. That string is the
+<p><code>ComponentRenderStart</code> / <code>ComponentRenderStop</code> fire with the component's
+type name — <code>Counter</code> for a <code>Counter : Component&lt;CounterProps&gt;</code>, whichever
+factory created it. That string is the
 attribution token that flows into PerfView / <code>dotnet-trace</code> /
 <code>xperf</code>, and it is the same string <a href="../devtools-internals/"><code>devtools-internals</code></a>
 uses to label overlay frames. Per-component, not per-element — but
 sufficient for the common question "which component is re-rendering
-on every tick".</p>
-<p><img alt="Source attribution: component-name attribution flows Component.GetType().Name into ETW, while per-element attribution stamps each DSL call site with file and line via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource." src="../images/source-mapping/attribution.svg" /></p>
+on every tick". <code>RenderError</code>, <code>EffectsFlushStart</code> / <code>Stop</code> and
+<code>ComponentUnmount</code> use the same name. A generic component reports its type
+arguments in C# form (<code>ItemList&lt;Int32&gt;</code>, not <code>ItemList`1</code>); function and memo
+components, which have no type of their own, report <code>FuncElement</code> and
+<code>MemoElement</code>.</p>
+<p><img alt="Source attribution: component-name attribution flows the component's type name, formatted by ComponentNames (generic components in C# form), into ETW, while per-element attribution stamps each DSL call site with file and line via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource." src="../images/source-mapping/attribution.svg" /></p>
 <h2 id="reconcile-pass-attribution">Reconcile-pass attribution<a class="headerlink" href="#reconcile-pass-attribution" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -3556,7 +3561,7 @@ on every tick".</p>
 </tr>
 <tr>
 <td><code>RenderError</code></td>
-<td>Component name + exception type only (message redacted)</td>
+<td>Component name + exception type only (message redacted); emitted when a component's <code>Render()</code> or effect flush throws — on mount, update and at the host root — including errors an <code>ErrorBoundary</code> catches (named at the throw site, once)</td>
 <td>ETW <code>Errors</code> keyword</td>
 </tr>
 <tr>

@@ -4134,6 +4134,15 @@ and if it throws again the handler is called again — once per re-render of a
 failing child, once per host render for a host-level failure. De-duplicate side
 effects such as telemetry, for example by remembering the exceptions you have
 already recorded.</p>
+<p>Independently of the handler, every component failure — a <code>Render()</code> or an
+effect flush that throws, at any depth including the host's root — is also
+reported on the <code>Microsoft-UI-Reactor</code> ETW <code>RenderError</code> event (<code>Errors</code>
+keyword), naming the component — see <a href="../diagnostics/">diagnostics</a>. The event is
+emitted before the handler runs, so it fires once per throw whatever the handler
+does, including when it calls <code>Propagate()</code>. Errors an <code>ErrorBoundary</code> catches
+are reported there too, even though they never reach the handler. <code>Reconcile</code>
+and <code>Cleanup</code> failures have no failing render and are not reported on that
+event.</p>
 <p><code>Cleanup</code> reports an effect cleanup that threw while a host was being
 disposed — a window closing, or a <code>ReactorHostControl</code> being disposed. There
 is nothing left to display, so the return value is ignored and the handler only
