@@ -285,13 +285,23 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     /// </summary>
     private void ReleaseReplacedTree()
     {
-        _releaseReplacedTreeOnNullRender = false;
+        // Like a render-error release, the teardown finishes even when one of the old tree's
+        // cleanups throws: every cleanup runs, failures are logged, and a propagation the
+        // app requested is rethrown once the release is done.
+        var teardownErrors = new RenderErrorDispatch.TeardownErrors(_logger);
         if (_currentTree is not null)
-            _reconciler.Reconcile(_currentTree, null, _currentControl, _requestRenderAction ??= RequestRender);
+        {
+            using (_reconciler.IsolateUnmountCleanupFailures(teardownErrors.Add))
+                _reconciler.Reconcile(_currentTree, null, _currentControl, _requestRenderAction ??= RequestRender);
+        }
+        // Cleared only once the old tree is released: if the release itself failed, the
+        // outer render-error path still sees a pending replacement and releases it there.
+        _releaseReplacedTreeOnNullRender = false;
         // Installs "no content" through the same path as a render-error outcome that shows
         // nothing: clears the content, moves the theme listener and window hooks off it.
         SetErrorContent(null, null, replacesTree: true);
         _rootDiagnostics.TrackContent(null);
+        teardownErrors.RethrowPropagated();
     }
 
     /// <summary>
@@ -760,6 +770,14 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                     TraceRootRendered(hotReloadRender, treeBuildMs);
                 if (_releaseReplacedTreeOnNullRender)
                     ReleaseReplacedTree();
+                // Commit the render like any other: the root's effects still run, and a
+                // failure among them is routed as an effect failure by the outer catch.
+                failurePhase = RenderErrorSource.Effects;
+                if (_rootComponent is not null)
+                    _rootComponent.Context.FlushEffects();
+                else if (_funcContext is not null)
+                    _funcContext.FlushEffects();
+                failurePhase = RenderErrorSource.Reconcile;
                 return;
             }
             TraceRootRendered(hotReloadRender, treeBuildMs);
@@ -1025,7 +1043,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                 using (_reconciler.IsolateUnmountCleanupFailures(teardownErrors.Add))
                     _reconciler.Reconcile(_currentTree, null, _currentControl, rerender);
             },
-            currentIsAppFallback: RenderErrorDispatch.IsAppFallback(_currentTree));
+            // The previous root's tree is still shown after a root swap; like an app fallback,
+            // it must be released rather than abandoned when the replacement fails.
+            currentIsAppFallback: RenderErrorDispatch.IsAppFallback(_currentTree) || _releaseReplacedTreeOnNullRender);
         SetErrorContent(content, tree, replacesTree);
         // An app-supplied fallback tree stands in for the root's content: name the root on it.
         if (tree is not null

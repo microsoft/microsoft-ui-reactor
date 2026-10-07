@@ -31,7 +31,7 @@ per span and a complete hierarchy you can sort.
 
 ## The provider and its keywords
 
-The Reactor provider's events split across seven keywords. A consumer
+The Reactor provider's events split across fifteen keywords. A consumer
 masks in only the ones it wants, so a "just reconcile" trace doesn't
 pay for state writes, MCP traffic, or trampoline dispatches:
 
@@ -59,15 +59,18 @@ public static class Keywords
 }
 ```
 
-`Reconcile` covers reconcile-pass boundaries and the child-list diff,
-`Render` covers per-component render timing and the effect-flush
-boundary, `State` covers `UseState` writes, `Mcp` covers
-[devtools](dev-tooling.md) tool dispatch, `Lifecycle` covers mount and
-unmount, `Errors` is severity-Error events, and `EventDispatch` covers
-the trampoline that fans WinUI routed events out to your Reactor
-callbacks. The values are power-of-two flags on `EventKeywords`, so
-`Reconcile | Render` is `0x3` and `Reconcile | Render | EventDispatch`
-is `0x43`.
+The seven that cover the render loop: `Reconcile` covers reconcile-pass
+boundaries and the child-list diff, `Render` covers per-component render
+timing and the effect-flush boundary, `State` covers `UseState` writes,
+`Mcp` covers [devtools](dev-tooling.md) tool dispatch, `Lifecycle` covers
+mount and unmount, `Errors` is severity-Error events, and `EventDispatch`
+covers the trampoline that fans WinUI routed events out to your Reactor
+callbacks. The rest (`Hosting` through `HotReload`, and `RenderDetail` for
+the per-component `ComponentRendered` notification) are covered in
+[Perf instrumentation](perf-instrumentation.md) and
+[Diagnostics](diagnostics.md). The values are power-of-two flags on
+`EventKeywords`, so `Reconcile | Render` is `0x3` and
+`Reconcile | Render | EventDispatch` is `0x43`.
 
 ![Top-down profile flow — from running app through dotnet-trace or PerfView into a Reactor span hierarchy](images/performance/top-down-flow.svg)
 
