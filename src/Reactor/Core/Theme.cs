@@ -282,7 +282,7 @@ public static class Theme
     /// thread. Await a host's <c>WaitForIdleAsync()</c> to observe the result.</para>
     /// <para>On a host's UI thread, a host that has no content yet re-renders inline, and its
     /// render can throw. Every other host is still notified; then the exception is rethrown
-    /// (an <see cref="System.AggregateException"/> when several hosts threw).</para>
+    /// (an <see cref="global::System.AggregateException"/> when several hosts threw).</para>
     /// </remarks>
     public static void NotifyResourcesChanged()
     {

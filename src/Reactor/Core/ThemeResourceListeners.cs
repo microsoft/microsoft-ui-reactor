@@ -45,7 +45,7 @@ internal static class ThemeResourceListeners
     /// Notifies every live listener, outside the lock. A listener can render inline (a host
     /// with no content renders synchronously on its UI thread), so one that throws must not
     /// keep the rest from being notified: every listener runs, then the failure is rethrown
-    /// (an <see cref="AggregateException"/> when several failed).
+    /// (an <see cref="global::System.AggregateException"/> when several failed).
     /// </summary>
     /// <returns>How many listeners were notified.</returns>
     internal static int NotifyAll()
