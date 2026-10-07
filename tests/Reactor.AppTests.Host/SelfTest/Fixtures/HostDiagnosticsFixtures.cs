@@ -437,7 +437,7 @@ internal static class HostDiagnosticsFixtures
                 // An unrelated root-mount scope left open while the factory island loads.
                 // ComponentFactory has no call site in app code, so it must not borrow this
                 // one; the sentinel being still unclaimed afterwards is what proves it.
-                sentinel = ReactorSourceMap.EnterRootMountSite("Sentinel.cs", 123);
+                sentinel = ReactorSourceMap.EnterRootMountSite("Sentinel.cs", 123, 0);
                 H.SetContent(new StackPanel { Children = { island, factoryIsland } });
                 var rendered = await Harness.WaitFor(
                     () => island.Content is not null && factoryIsland.Content is not null, maxPasses: 40, perPassMs: 10);

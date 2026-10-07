@@ -237,8 +237,9 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         var location = ctx.SemanticModel.GetInterceptableLocation(invocation, ct);
         if (location is null) return null;
 
-        // Same position rule as element call sites: the argument list's opening paren,
-        // which is what [CallerLineNumber] would report.
+        // Same position rule as element call sites: the line follows the argument list's
+        // opening paren (what [CallerLineNumber] would report) and the column is the
+        // method name's (the paren's when the two sit on different lines).
         var parenSpan = invocation.ArgumentList.OpenParenToken.Span;
         var lineSpan = invocation.SyntaxTree.GetMappedLineSpan(parenSpan, ct);
 
@@ -246,6 +247,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             attribute: location.GetInterceptsLocationAttributeSyntax(),
             filePath: ResolveMappedPath(lineSpan, invocation.SyntaxTree.FilePath),
             line: lineSpan.StartLinePosition.Line + 1,
+            column: CallSiteColumn(invocation, lineSpan, ct),
             signature: Signature.From(method, elementSymbol, emptyElementSymbol: null),
             isInstance: !method.IsStatic,
             returnsVoid: method.ReturnsVoid);
@@ -298,7 +300,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             foreach (var clause in sig.ConstraintClauses)
                 sb.AppendLine($"            {clause}");
             sb.AppendLine("        {");
-            sb.AppendLine($"            var __scope = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.EnterRootMountSite({Literal(mapped)}, {site.Line});");
+            sb.AppendLine($"            var __scope = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.EnterRootMountSite({Literal(mapped)}, {site.Line}, {site.Column});");
             sb.AppendLine("            try");
             sb.AppendLine("            {");
             sb.AppendLine(site.ReturnsVoid ? $"                {target};" : $"                return {target};");
@@ -1059,11 +1061,12 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
     /// <summary>One intercepted root mount call (<c>Run</c> / <c>OpenWindow</c> / <c>Mount</c>).</summary>
     private sealed class RootMountSite : IEquatable<RootMountSite>
     {
-        public RootMountSite(string attribute, string filePath, int line, Signature signature, bool isInstance, bool returnsVoid)
+        public RootMountSite(string attribute, string filePath, int line, int column, Signature signature, bool isInstance, bool returnsVoid)
         {
             Attribute = attribute;
             FilePath = filePath;
             Line = line;
+            Column = column;
             Signature = signature;
             IsInstance = isInstance;
             ReturnsVoid = returnsVoid;
@@ -1072,6 +1075,9 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         public string Attribute { get; }
         public string FilePath { get; }
         public int Line { get; }
+
+        /// <summary>1-based column; see <c>CallSiteColumn</c>.</summary>
+        public int Column { get; }
         public Signature Signature { get; }
         public bool IsInstance { get; }
         public bool ReturnsVoid { get; }
@@ -1081,6 +1087,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                && Attribute == other.Attribute
                && FilePath == other.FilePath
                && Line == other.Line
+               && Column == other.Column
                && Signature.Equals(other.Signature)
                && IsInstance == other.IsInstance
                && ReturnsVoid == other.ReturnsVoid;
@@ -1094,6 +1101,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                 int h = Attribute.GetHashCode();
                 h = (h * 397) ^ FilePath.GetHashCode();
                 h = (h * 397) ^ Line;
+                h = (h * 397) ^ Column;
                 h = (h * 397) ^ Signature.GetHashCode();
                 h = (h * 397) ^ (IsInstance ? 1 : 0);
                 return (h * 397) ^ (ReturnsVoid ? 1 : 0);

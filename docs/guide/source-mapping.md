@@ -338,7 +338,8 @@ keeps a window alive; it costs one small allocation per host and nothing per ren
 **Root mount sites.** A root is not an element, so it has no `CallSite`. When
 source mapping is on, the generator also intercepts `ReactorApp.Run`,
 `ReactorApp.OpenWindow`, `ReactorWindow.Mount`, `ReactorHost.Mount` and
-`ReactorHostControl.Mount` and records the line that called them. Each of those
+`ReactorHostControl.Mount` and records the line and column that called them (the
+column of the method name, as for element call sites). Each of those
 methods claims its own line first thing and hands it to the host it mounts, which
 reports it as `ReactorHostInfo.MountSite`. Anything else that mounts while that
 call is running — a host created in a `configure` callback, a window the framework

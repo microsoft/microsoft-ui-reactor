@@ -82,7 +82,12 @@ public sealed class SourceMapTransparentGeneratorTests
         {
             [global::System.AttributeUsage(global::System.AttributeTargets.Method, Inherited = false)]
             public sealed class ReactorSourceTransparentAttribute : global::System.Attribute { }
-            public static class ReactorSourceMap { public static bool Enabled { get; set; } }
+            public static class ReactorSourceMap
+            {
+                public static bool Enabled { get; set; }
+                public static object? EnterRootMountSite(string filePath, int lineNumber, int columnNumber) => null;
+                public static void ExitRootMountSite(object? token) { }
+            }
         }
         """;
 
