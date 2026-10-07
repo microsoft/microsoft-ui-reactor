@@ -37,7 +37,7 @@ internal static class ComponentNames
     {
         if (instance is not null) return For(instance.GetType());
         if (element is ComponentElement componentElement) return For(componentElement.ComponentType);
-        return element?.GetType().Name ?? "unknown";
+        return element is null ? "unknown" : For(element.GetType());
     }
 
     /// <summary>Display name of a component type; see the class remarks for the shape.</summary>

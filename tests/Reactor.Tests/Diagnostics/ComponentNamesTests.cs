@@ -94,6 +94,19 @@ public sealed class ComponentNamesTests
         Assert.Equal("MemoElement", ComponentNames.For(null, Memo(_ => TextBlock("m"), 1)));
     }
 
+    private sealed record DerivedFunc<T>(Func<RenderContext, Element> Body) : FuncElement(Body);
+
+    private sealed record DerivedMemo<T>(Func<RenderContext, Element> Body) : MemoElement(Body);
+
+    [Fact]
+    public void GenericDerivedElements_UseTheGenericFormat()
+    {
+        // A derived element record carries no component type, so the element's own type is
+        // the name — formatted like any other generic, not as the raw DerivedFunc`1.
+        Assert.Equal("DerivedFunc<Int32>", ComponentNames.For(null, new DerivedFunc<int>(_ => TextBlock("f"))));
+        Assert.Equal("DerivedMemo<String>", ComponentNames.For(null, new DerivedMemo<string>(_ => TextBlock("m"))));
+    }
+
     [Fact]
     public void NonGenericName_IsTheSimpleTypeNameAsBefore()
     {
