@@ -958,6 +958,15 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             },
             currentIsAppFallback: RenderErrorDispatch.IsAppFallback(_currentTree));
         SetErrorContent(content, tree, replacesTree);
+        // An app-supplied fallback tree stands in for the root's content: name the root on it.
+        if (tree is not null
+            && global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+            && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
+            _reconciler.PublishFallbackRootSource(
+                _currentControl, DiagnosticRootName(),
+                _rootComponent is not null
+                    ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetComponentHooks(_rootComponent.GetType())
+                    : null);
         // ComponentRendered bookkeeping; see ReactorHost.ShowErrorFallback.
         if (tree is null)
             _reconciler.ForgetComponentDiagnostics();

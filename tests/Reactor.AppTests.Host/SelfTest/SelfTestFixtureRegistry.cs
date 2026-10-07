@@ -396,6 +396,7 @@ internal static class SelfTestFixtureRegistry
         "ReactorSource_AotTagSkipKeepsTeardown",
         "ReactorSource_LiveDialogPublished",
         "ReactorSource_ForwardingRegistrationKeepsChildSource",
+        "ReactorSource_AppFallbackNamesTheRoot",
         "ComponentRendered_AppFallbackFollowsTheHandler",
         "FocusTrapContentDialog_ContainmentProbe",
         // Issue #487 — RichTextBlock + inline UI inside ScrollViewer scroll anchor
@@ -2457,6 +2458,7 @@ internal static class SelfTestFixtureRegistry
         "ReactorSource_AotTagSkipKeepsTeardown" => new ReactorSource_AotTagSkipKeepsTeardown(harness),
         "ReactorSource_LiveDialogPublished" => new ReactorSource_LiveDialogPublished(harness),
         "ReactorSource_ForwardingRegistrationKeepsChildSource" => new ReactorSource_ForwardingRegistrationKeepsChildSource(harness),
+        "ReactorSource_AppFallbackNamesTheRoot" => new ReactorSource_AppFallbackNamesTheRoot(harness),
         "ComponentRendered_AppFallbackFollowsTheHandler" => new ComponentRendered_AppFallbackFollowsTheHandler(harness),
         "FocusTrapContentDialog_ContainmentProbe" => new FocusTrapContentDialog_ContainmentProbe(harness),
         "Issue487_ScrollOffsetRestoredAfterRunMutation" => new Issue487ScrollAnchorFixtures.Issue487_ScrollOffsetRestoredAfterRunMutation(harness),

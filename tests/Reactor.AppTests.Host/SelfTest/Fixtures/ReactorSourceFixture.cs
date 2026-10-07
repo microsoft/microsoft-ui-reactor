@@ -1128,3 +1128,76 @@ internal class ReactorSource_ForwardingRegistrationKeepsChildSource(Harness h) :
         }
     }
 }
+
+internal sealed class ThrowingSourceRoot : Component
+{
+    public override Element Render()
+    {
+        var (n, _) = UseState(0);
+        throw new InvalidOperationException("source root boom " + n);
+    }
+}
+
+/// <summary>
+/// A root that throws, with an app <c>RenderErrorHandler</c> supplying the fallback: the
+/// fallback stands in for the root's content, so its content root still names the root
+/// (<c>root=</c>) while describing the fallback itself. Both host types.
+/// </summary>
+internal class ReactorSource_AppFallbackNamesTheRoot(Harness h) : SelfTestFixtureBase(h)
+{
+    private static string? Value(DependencyObject? d) => d is null ? null : ReactorDiagnostics.GetSource(d);
+
+    // The fallback is installed inside an internal guard (an error boundary), whose wrapper is the
+    // host's content root: that carries root=, and the app's own control keeps describing itself.
+    private void Check(string name, WinUI.TextBlock? fallback)
+    {
+        var own = Value(fallback);
+        var contentRoot = Value(fallback is null ? null : Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(fallback));
+        Console.WriteLine($"# {name}: content root {contentRoot}; fallback {own}");
+        H.Check(name,
+            contentRoot?.Contains("|root=ThrowingSourceRoot", StringComparison.Ordinal) == true
+            && own?.Contains("|element=TextBlock", StringComparison.Ordinal) == true
+            && !own.Contains("|root=", StringComparison.Ordinal),
+            contentRoot ?? "(no value)");
+    }
+
+    public override async Task RunAsync()
+    {
+        if (!ReactorSourcePublisher.IsSupported)
+        {
+            H.Skip("ReactorSource_AppFallback", "Reactor.DevtoolsSupport is off in this host");
+            return;
+        }
+
+        var previous = ReactorSourcePublisher.IsEnabled;
+        try
+        {
+            ReactorSourcePublisher.IsEnabled = true;
+
+            var host = H.CreateHost();
+            host.RenderErrorHandler = _ => TextBlock("source-fallback-host");
+            host.Mount(new ThrowingSourceRoot());
+            await Harness.Render();
+            Check("ReactorSource_AppFallback_Host_NamesTheRoot", H.FindControl<WinUI.TextBlock>(t => t.Text == "source-fallback-host"));
+            host.Dispose();
+            H.SetContent(null);
+
+            var control = new Microsoft.UI.Reactor.Hosting.ReactorHostControl
+            {
+                RenderErrorHandler = _ => TextBlock("source-fallback-control"),
+            };
+            H.SetContent(new WinUI.Border { Child = control });
+            control.Mount(new ThrowingSourceRoot());
+            // A standalone ReactorHostControl is not ReactorApp.ActiveHost: poll its loop.
+            await Harness.WaitFor(() => H.FindControl<WinUI.TextBlock>(t => t.Text == "source-fallback-control") is not null,
+                maxPasses: 32, perPassMs: 10);
+            Check("ReactorSource_AppFallback_HostControl_NamesTheRoot", H.FindControl<WinUI.TextBlock>(t => t.Text == "source-fallback-control"));
+            control.Dispose();
+            H.SetContent(null);
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = previous;
+        }
+    }
+}

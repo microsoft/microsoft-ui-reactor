@@ -572,6 +572,27 @@ public sealed partial class Reconciler : IDisposable
     private string? _hostAddedRootHooks;
 
     /// <summary>
+    /// Host hook: the root threw and the app's <c>RenderErrorHandler</c> supplied a fallback
+    /// tree, which now stands in for the root's content. Its controls describe the fallback
+    /// (published as it mounted); the content root additionally gets the host-root fields, so
+    /// an inspector still sees which root failed. Same shape as a keyed-memo root: only
+    /// <c>root=</c> (and the root's <c>hooks=</c>, when the value has none) are added.
+    /// </summary>
+    internal void PublishFallbackRootSource(UIElement? control, string rootName, string? rootHooks)
+    {
+        if (control is null) return;
+        _publishedRootName = rootName;
+        var current = control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) as string;
+        var withRoot = Diagnostics.ReactorSourcePublisher.WithRoot(
+            current, rootName, rootHooks, _hostAddedRootHooks, out var addedHooks);
+        _hostAddedRootHooks = addedHooks ? rootHooks : null;
+        if (withRoot is null) return;
+        if (!string.Equals(withRoot, current, StringComparison.Ordinal))
+            control.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, withRoot);
+        MirrorOntoLiveDialog(control, withRoot);
+    }
+
+    /// <summary>
     /// Host hook: the host mounted a different root over content it kept (an in-place update).
     /// Root-owned controls whose call site, key and kind did not change were not re-published,
     /// so they still name the previous root. Rewrites <c>owner=</c> on the content's root-owned
