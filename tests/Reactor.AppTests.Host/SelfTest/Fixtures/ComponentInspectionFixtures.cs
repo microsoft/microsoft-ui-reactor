@@ -330,6 +330,34 @@ internal static class ComponentInspectionFixtures
                 await Harness.Render();
                 H.Check("RootAnchor_SharedEmptyContainerOwnedByLatestMount",
                     ReactorDiagnostics.DescribeComponent(emptyTarget) is { IsRoot: true, State: [{ Value: "\"second-empty\"" }] });
+
+                // Overlay teardown writes the (empty) raw content back and reclaims the container,
+                // even though another host claimed it while the wrapper was installed.
+                var overlayBefore = ReactorFeatureFlags.HighlightReconcileChanges;
+                try
+                {
+                    ReactorFeatureFlags.HighlightReconcileChanges = true;
+                    emptyHost.RequestRender();
+                    await Harness.Render();
+                    H.Check("RootAnchor_EmptyRootWrapperInstalled", emptyTarget.Child is not null);
+                    ReactorFeatureFlags.HighlightReconcileChanges = false;
+                    secondEmpty.Mount(ctx =>
+                    {
+                        var (s, _) = ctx.UseState("second-empty");
+                        return Empty();
+                    });
+                    emptyHost.RequestRender();
+                    await Harness.Render();
+                    await Harness.Render();
+                    H.Check("RootAnchor_OverlayTeardownReclaimsEmptyContainer",
+                        emptyTarget.Child is null
+                        && ReactorDiagnostics.DescribeComponent(emptyTarget) is { IsRoot: true, State: [{ Value: "\"empty-root\"" }] });
+                }
+                finally { ReactorFeatureFlags.HighlightReconcileChanges = overlayBefore; }
+
+                // Disposing the owner releases its claim, so the table holds no disposed host.
+                emptyHost.Dispose();
+                H.Check("RootAnchor_DisposeReleasesContainerOwnership", !ReactorHost.HasContentTargetOwnerForTest(emptyTarget));
             }
             H.SetContent(null);
 

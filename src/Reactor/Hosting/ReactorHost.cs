@@ -430,17 +430,30 @@ public sealed class ReactorHost : IDisposable
     // Diagnostics ownership of a shared ContentTarget: the host that last mounted into it or
     // wrote its content. Only consulted when the container is empty (the root rendered Empty()),
     // where content identity cannot say whose it is. Written on Mount and on content changes,
-    // never on an ordinary re-render.
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, ReactorHost> s_contentTargetOwner = new();
+    // never on an ordinary re-render. The owner is held weakly and released on Dispose, so the
+    // table never keeps a host (or its window and reconciler) alive.
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, WeakReference<ReactorHost>> s_contentTargetOwner = new();
 
     private void ClaimContentTarget()
     {
         if (ContentTarget is { } target)
-            s_contentTargetOwner.AddOrUpdate(target, this);
+            s_contentTargetOwner.AddOrUpdate(target, new WeakReference<ReactorHost>(this));
+    }
+
+    private void ReleaseContentTarget()
+    {
+        if (ContentTarget is { } target && OwnsContentTarget(target))
+            s_contentTargetOwner.Remove(target);
     }
 
     private bool OwnsContentTarget(UIElement target)
-        => s_contentTargetOwner.TryGetValue(target, out var owner) && ReferenceEquals(owner, this);
+        => s_contentTargetOwner.TryGetValue(target, out var owner)
+            && owner.TryGetTarget(out var host) && ReferenceEquals(host, this);
+
+    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host): whether any live host owns
+    // the container in the diagnostics ownership table.
+    internal static bool HasContentTargetOwnerForTest(UIElement target)
+        => s_contentTargetOwner.TryGetValue(target, out var owner) && owner.TryGetTarget(out _);
 
     /// <summary>
     /// Thread-safe: can be called from any thread. Coalesces multiple calls into
@@ -778,7 +791,10 @@ public sealed class ReactorHost : IDisposable
                     _window.Content = null;
                 var wrapper = _overlayWiring.SetContentViaWrapper(newControl);
                 if (ContentTarget is not null)
+                {
                     ContentTarget.Child = wrapper;
+                    ClaimContentTarget();
+                }
                 else
                     _window.Content = wrapper;
                 Debug.WriteLine($"[Reactor.Overlay] wrapper installed mid-session; content={newControl?.GetType().Name ?? "null"}");
@@ -792,7 +808,10 @@ public sealed class ReactorHost : IDisposable
                 // window.
                 _overlayWiring.DetachContent();
                 if (ContentTarget is not null)
+                {
                     ContentTarget.Child = newControl;
+                    ClaimContentTarget();
+                }
                 else
                     _window.Content = newControl;
                 _overlayWiring.Dispose();
@@ -1119,6 +1138,7 @@ public sealed class ReactorHost : IDisposable
         _currentTree = null;
         _currentControl = null;
         _renderedRoot = default;
+        ReleaseContentTarget();
 
         try { _overlayWiring?.Dispose(); } catch { /* best effort */ }
         _overlayWiring = null;
@@ -1176,6 +1196,7 @@ public sealed class ReactorHost : IDisposable
         else if (ContentTarget is not null)
         {
             ContentTarget.Child = errorPanel;
+            ClaimContentTarget();
         }
         else
         {
