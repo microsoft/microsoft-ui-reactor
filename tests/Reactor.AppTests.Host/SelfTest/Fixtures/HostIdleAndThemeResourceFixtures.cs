@@ -62,58 +62,13 @@ internal static class HostIdleAndThemeResourceFixtures
     }
 
     /// <summary>
-    /// <see cref="Theme.NotifyResourcesChanged"/> re-renders every live host, including hosts earlier
-    /// fixtures left in a deliberately failing state (RenderErrorHandlerFixtures leaves roots that
-    /// throw under a <c>Propagate()</c> handler). Their propagated errors are not under test here, so
-    /// while a notification settles they are recorded as a TAP comment instead of crashing this
-    /// fixture. This fixture's own hosts never throw, and its checks read their output directly.
+    /// <see cref="Theme.NotifyResourcesChanged"/> re-renders every live host, and the harness keeps
+    /// other fixtures' hosts alive, some deliberately left failing (RenderErrorHandlerFixtures) or
+    /// on windows whose re-render touches shared app state. Hide them for the fixture, so it
+    /// measures only its own hosts. Fan-out to several hosts is covered by unit tests.
     /// </summary>
-    private sealed class OtherHostErrorScope : IDisposable
-    {
-        private readonly Func<Exception, bool>? _previous = ReactorApplication.OnUnhandledException;
-        private readonly List<string> _ignored = [];
-
-        public OtherHostErrorScope()
-            => ReactorApplication.OnUnhandledException = ex => { _ignored.Add(ex.Message); return true; };
-
-        /// <summary>
-        /// Runs a notification. A host with no content re-renders inline, so its failure
-        /// surfaces from the call itself, after every host was notified.
-        /// </summary>
-        public async Task NotifyAsync(Func<Task> notify)
-        {
-            try { await notify(); }
-            catch (Exception ex) { Record(ex); }
-        }
-
-        public void Record(Exception ex)
-        {
-            if (ex is AggregateException agg) _ignored.AddRange(agg.InnerExceptions.Select(e => e.Message));
-            else _ignored.Add(ex.Message);
-        }
-
-        public void Dispose()
-        {
-            ReactorApplication.OnUnhandledException = _previous;
-            if (_ignored.Count > 0)
-                Console.WriteLine($"# NotifyResourcesChanged: ignored {_ignored.Count} error(s) propagated by other fixtures' hosts: {string.Join(" | ", _ignored)}");
-        }
-    }
-
-    /// <summary>
-    /// <see cref="Theme.NotifyResourcesChanged"/> reaches every live host, and the harness
-    /// keeps earlier fixtures' hosts alive on the shared content area. Wait for all of them
-    /// to settle so their re-renders land before this fixture (or the next) reads anything.
-    /// </summary>
-    private static async Task WaitForAllHostsIdleAsync()
-    {
-        foreach (var listener in ThemeResourceListeners.LiveListenersForTest())
-        {
-            if (listener is ReactorHost windowHost) await windowHost.WaitForIdleAsync();
-            else if (listener is ReactorHostControl island) await island.WaitForIdleAsync();
-        }
-    }
-
+    private static IDisposable OnlyTheseHostsListen(params IThemeResourceListener[] hosts)
+        => ThemeResourceListeners.IsolateForTest(hosts);
     /// <summary>
     /// A runtime edit of an app resource is invisible to a ThemeRef resource override until
     /// <see cref="Theme.NotifyResourcesChanged"/> — the (key, theme) resolution cache is only
@@ -144,6 +99,7 @@ internal static class HostIdleAndThemeResourceFixtures
                     .Resources(r => r.Set("ProbeBrush", Theme.Ref(AppKey)));
             });
             H.SetContent(new Border { Child = host });
+            using var isolation = OnlyTheseHostsListen(host);
             try
             {
                 await host.WaitForIdleAsync();
@@ -154,11 +110,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 await host.WaitForIdleAsync();
                 H.Check("ThemeNotify_RerenderAloneIsStale", ProbeColor(host) == Colors.Red, $"color={ProbeColor(host)}");
 
-                using (var scope = new OtherHostErrorScope())
-                {
-                    await scope.NotifyAsync(() => { Theme.NotifyResourcesChanged(); return Task.CompletedTask; });
-                    await WaitForAllHostsIdleAsync();
-                }
+                Theme.NotifyResourcesChanged();
+                await host.WaitForIdleAsync();
                 H.Check("ThemeNotify_NotifiedIsBlue", ProbeColor(host) == Colors.Blue, $"color={ProbeColor(host)}");
 
                 // The source key goes away: the override it wrote must go too.
@@ -167,11 +120,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 await host.WaitForIdleAsync();
                 H.Check("ThemeNotify_RemovalRerenderAloneIsStale", ProbeColor(host) == Colors.Blue, $"color={ProbeColor(host)}");
 
-                using (var scope = new OtherHostErrorScope())
-                {
-                    await scope.NotifyAsync(() => { Theme.NotifyResourcesChanged(); return Task.CompletedTask; });
-                    await WaitForAllHostsIdleAsync();
-                }
+                Theme.NotifyResourcesChanged();
+                await host.WaitForIdleAsync();
                 H.Check("ThemeNotify_RemovedSourceDropsOverride", ProbeColor(host) is null, $"color={ProbeColor(host)}");
             }
             finally
@@ -213,9 +163,7 @@ internal static class HostIdleAndThemeResourceFixtures
             // </snippet:runtime-resource-dictionary>
             ThemeRef.InvalidateResolutionCache();
 
-            // A private ContentTarget on the (already settled) harness window: the other
-            // hosts this notification re-renders write into the shared content area, never
-            // into this Border, which is read directly.
+            // A private ContentTarget on the (already settled) harness window, read directly.
             var previousActiveHost = ReactorApp.ActiveHostInternal;
             var target = new Border();
             H.SetContent(target);
@@ -224,6 +172,7 @@ internal static class HostIdleAndThemeResourceFixtures
             {
                 // Disposed at the end of this block, before finally restores the active host.
                 using var host = new ReactorHost(H.Window) { ContentTarget = target };
+                using var isolation = OnlyTheseHostsListen(host);
                 Action<int>? setTick = null;
                 host.Mount(ctx =>
                 {
@@ -283,11 +232,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_KeyedMemoRerenderAloneIsStale", ProbeColor(target, "KeyedMemoProbe") == Colors.Red, $"color={ProbeColor(target, "KeyedMemoProbe")}");
                 H.Check("ThemeMemo_ListItemRerenderAloneIsStale", ListItemColor(target) == Colors.Red, $"color={ListItemColor(target)}");
 
-                using (var scope = new OtherHostErrorScope())
-                {
-                    await scope.NotifyAsync(() => Task.Run(Theme.NotifyResourcesChanged));
-                    await WaitForAllHostsIdleAsync();
-                }
+                await Task.Run(Theme.NotifyResourcesChanged);
+                await host.WaitForIdleAsync();
                 H.Check("ThemeMemo_NotifiedFromBackgroundIsBlue", ProbeColor(target) == Colors.Blue, $"color={ProbeColor(target)}");
                 H.Check("ThemeMemo_ShapeChangeRemounts", FindText(target, "ShapeProbeAfter") is not null && FindText(target, "ShapeProbeBefore") is null);
                 H.Check("ThemeMemo_ShapeItemReplacedAndUnmounted", shapeItemCleanedUp && HasComboText(target, "ShapeItemAfter"),
@@ -299,18 +245,11 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_ListItemNotifiedIsBlue", ListItemColor(target) == Colors.Blue, $"color={ListItemColor(target)}");
 
                 // A second edit, notified from the UI thread: the call is repeatable.
-                using (var scope = new OtherHostErrorScope())
-                {
-                    try
-                    {
-                        // <snippet:runtime-resource-edit>
-                        resources[AppKey] = new SolidColorBrush(Colors.Green);
-                        Theme.NotifyResourcesChanged();
-                        // </snippet:runtime-resource-edit>
-                    }
-                    catch (Exception ex) { scope.Record(ex); }
-                    await WaitForAllHostsIdleAsync();
-                }
+                // <snippet:runtime-resource-edit>
+                resources[AppKey] = new SolidColorBrush(Colors.Green);
+                Theme.NotifyResourcesChanged();
+                // </snippet:runtime-resource-edit>
+                await host.WaitForIdleAsync();
                 H.Check("ThemeMemo_SecondEditIsGreen", ProbeColor(target) == Colors.Green, $"color={ProbeColor(target)}");
             }
             finally

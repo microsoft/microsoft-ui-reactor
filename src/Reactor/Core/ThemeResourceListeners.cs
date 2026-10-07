@@ -77,24 +77,57 @@ internal static class ThemeResourceListeners
         return live.Length;
     }
 
+    /// <summary>
+    /// Test-only: hides every listener except <paramref name="keep"/> until disposed, so a
+    /// selftest's notification re-renders only its own hosts, never ones other fixtures left
+    /// behind (some deliberately in a failing state). On dispose the hidden listeners come
+    /// back, minus any kept listener that unregistered meanwhile.
+    /// </summary>
+    internal static IDisposable IsolateForTest(params IThemeResourceListener[] keep)
+    {
+        List<WeakReference<IThemeResourceListener>>? hidden;
+        lock (s_gate)
+        {
+            hidden = s_listeners;
+            s_listeners = [.. keep.Select(static k => new WeakReference<IThemeResourceListener>(k))];
+        }
+        return new IsolationScope(hidden, keep);
+    }
+
+    private sealed class IsolationScope(
+        List<WeakReference<IThemeResourceListener>>? hidden, IThemeResourceListener[] keep) : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            lock (s_gate)
+            {
+                var current = s_listeners ?? [];
+                var restored = new List<WeakReference<IThemeResourceListener>>();
+                if (hidden is not null)
+                {
+                    foreach (var weak in hidden)
+                    {
+                        if (weak.TryGetTarget(out var target) && Array.IndexOf(keep, target) < 0)
+                            restored.Add(weak);
+                    }
+                }
+                // Kept listeners still registered, and anything registered during the scope.
+                restored.AddRange(current);
+                s_listeners = restored;
+            }
+        }
+    }
+
     /// <summary>Test-only: whether <paramref name="listener"/> is currently registered.</summary>
     internal static bool IsRegisteredForTest(IThemeResourceListener listener)
     {
         lock (s_gate)
         {
             return s_listeners?.Exists(w => w.TryGetTarget(out var t) && ReferenceEquals(t, listener)) == true;
-        }
-    }
-
-    /// <summary>
-    /// Test-only: the live listeners, so a selftest can wait for every host a
-    /// notification reached to settle before it reads the shared window back.
-    /// </summary>
-    internal static IThemeResourceListener[] LiveListenersForTest()
-    {
-        lock (s_gate)
-        {
-            return SnapshotLiveLocked();
         }
     }
 

@@ -284,6 +284,38 @@ public sealed partial class HostIdleAndThemeResourcesTests
     }
 
     [Fact]
+    public void IsolateForTest_HidesOthersAndRestoresThem()
+    {
+        var other = new FakeListener();
+        var kept = new FakeListener();
+        var keptThenDisposed = new FakeListener();
+        ThemeResourceListeners.Register(other);
+        ThemeResourceListeners.Register(kept);
+        ThemeResourceListeners.Register(keptThenDisposed);
+        try
+        {
+            using (ThemeResourceListeners.IsolateForTest(kept, keptThenDisposed))
+            {
+                ThemeResourceListeners.Unregister(keptThenDisposed);
+                Theme.NotifyResourcesChanged();
+                Assert.Equal(0, other.Notified);
+                Assert.Equal(1, kept.Notified);
+            }
+
+            Assert.True(ThemeResourceListeners.IsRegisteredForTest(other));
+            Assert.True(ThemeResourceListeners.IsRegisteredForTest(kept));
+            // A kept listener that unregistered during the scope is not resurrected.
+            Assert.False(ThemeResourceListeners.IsRegisteredForTest(keptThenDisposed));
+        }
+        finally
+        {
+            ThemeResourceListeners.Unregister(other);
+            ThemeResourceListeners.Unregister(kept);
+            ThemeResourceListeners.Unregister(keptThenDisposed);
+        }
+    }
+
+    [Fact]
     public void Listeners_DoNotKeepHostsAlive()
     {
         var weak = RegisterUnreferencedListener();
