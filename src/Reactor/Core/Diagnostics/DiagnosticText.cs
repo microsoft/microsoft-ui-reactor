@@ -127,9 +127,11 @@ internal static class DiagnosticText
     // A member of a secret name followed by a value, inside an object's own text or a string:
     // "Password = …" in a record's compiler-generated ToString(), "ApiSecret: …" in a hand-written
     // one, "AccessToken=…" in a connection-style string, "\"Password\":\"…\"" in JSON. A bare label
-    // ("Password:") or an empty quoted value has nothing after the separator and does not match.
+    // ("Password:") or an empty or whitespace-only quoted value has nothing after the separator and
+    // does not match. Inside quotes any non-space character is a value (",hunter2" included);
+    // unquoted, a delimiter (",", ";", "}", "]") ends the label instead.
     private static readonly global::System.Text.RegularExpressions.Regex s_secretMemberInText = new(
-        @"\b\w*(?:Password|Secret|Credential|Token|ApiKey|PrivateKey|ConnectionString)[""']?\s*[=:]\s*(?:[""']\s*)?[^\s,;}\]""']",
+        @"\b\w*(?:Password|Secret|Credential|Token|ApiKey|PrivateKey|ConnectionString)[""']?\s*[=:]\s*(?:""\s*[^""\s]|'\s*[^'\s]|[^\s,;}\]""'])",
         global::System.Text.RegularExpressions.RegexOptions.IgnoreCase | global::System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     /// <summary>
@@ -403,6 +405,10 @@ internal static class DiagnosticText
         const global::System.Reflection.BindingFlags Any =
             global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Instance;
         if (type.GetMethod("<Clone>$", Any) is null) return false;
+        // Generated text also prints public fields, which PropRows does not list, so a record with
+        // any is judged by its own text.
+        if (type.GetFields(global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Instance).Length > 0)
+            return false;
         var toString = type.GetMethod(nameof(ToString), global::System.Type.EmptyTypes);
         var printMembers = type.GetMethod("PrintMembers", Any, null, new[] { typeof(global::System.Text.StringBuilder) }, null);
         return toString is not null && printMembers is not null

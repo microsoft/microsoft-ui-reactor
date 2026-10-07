@@ -262,6 +262,8 @@ public class DiagnosticTextTests
     [InlineData("{\"Password\":\"hunter2\"}")]
     [InlineData("{ 'accessToken': 'hunter2' }")]
     [InlineData("{\"Password\":\" hunter2\"}")]
+    [InlineData("{\"Password\":\",hunter2\"}")]
+    [InlineData("{\"Password\":\";hunter2\"}")]
     public void Format_RedactsAStringCarryingALabelledSecret(string text)
     {
         var (shown, redacted) = DiagnosticText.Format("", typeof(string), text);

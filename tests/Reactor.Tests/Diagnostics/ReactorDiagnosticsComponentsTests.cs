@@ -532,6 +532,17 @@ public class ReactorDiagnosticsComponentsTests
         var handWritten = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new HandWrittenRecord("hunter2")) };
         var hwRow = Assert.Single(ComponentHandle.FromNode(handWritten, () => true).Describe().Props);
         Assert.Equal(("Props", "<redacted>", true), (hwRow.Name, hwRow.Value, hwRow.Redacted));
+
+        // Generated text also prints public fields, which are not listed as rows: a record with a
+        // secret field is judged by its text rather than leaking its other members.
+        var withField = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new FieldRecord("visible", "hunter2")) };
+        var fieldRow = Assert.Single(ComponentHandle.FromNode(withField, () => true).Describe().Props);
+        Assert.Equal(("Props", "<redacted>", true), (fieldRow.Name, fieldRow.Value, fieldRow.Redacted));
+    }
+
+    private sealed record FieldRecord(string Value, string Stored)
+    {
+        public string AdminPassword = Stored;
     }
 
     private sealed record HandWrittenRecord(string Value)
