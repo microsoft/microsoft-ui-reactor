@@ -1636,13 +1636,15 @@ internal static class DataGridEditFixtures
                 ? TextOrigin(input)
                 : null;
 
-        // The text renders inside the ScrollContentPresenter of the template's ContentElement.
+        // The text starts at the template's ContentElement (a ScrollViewer) offset by its Padding,
+        // which the template binds to the TextBox's Padding. Probed as a plain Control rather than
+        // via ScrollContentPresenter: nothing else references that type, so under NativeAOT its
+        // projection is trimmed and a type test against it never matches.
         private static global::Windows.Foundation.Point? TextOrigin(TextBox tb)
         {
-            if (FindNamed(tb, "ContentElement") is not ScrollViewer sv) return null;
-            var presenter = FindFirst<ScrollContentPresenter>(sv);
-            if (presenter is null || presenter.ActualHeight <= 0) return null;
-            return presenter.TransformToVisual(null).TransformPoint(new global::Windows.Foundation.Point(0, 0));
+            if (FindNamed(tb, "ContentElement") is not Control content || content.ActualHeight <= 0) return null;
+            return content.TransformToVisual(null).TransformPoint(
+                new global::Windows.Foundation.Point(content.Padding.Left, content.Padding.Top));
         }
 
         private void CheckAligned(string name, global::Windows.Foundation.Point? display, global::Windows.Foundation.Point? editor)
@@ -1672,18 +1674,6 @@ internal static class DataGridEditFixtures
                 var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
                 if (child is Microsoft.UI.Xaml.FrameworkElement fe && fe.Name == name) return fe;
                 if (FindNamed(child, name) is { } found) return found;
-            }
-            return null;
-        }
-
-        private static TElement? FindFirst<TElement>(Microsoft.UI.Xaml.DependencyObject root) where TElement : class
-        {
-            var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
-            for (int i = 0; i < count; i++)
-            {
-                var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
-                if (child is TElement match) return match;
-                if (FindFirst<TElement>(child) is { } found) return found;
             }
             return null;
         }
