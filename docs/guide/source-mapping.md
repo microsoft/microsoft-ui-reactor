@@ -377,8 +377,9 @@ small allocation per *component*, never per leaf, and nothing while the flag is 
 
 `ReactorDiagnostics` (namespace `Microsoft.UI.Reactor.Core.Diagnostics`) lets an
 inspector go from a realized control to the component behind it and make
-development-time edits. It is a provisional surface for devtools. Every member
-must be called on the UI thread. A `ComponentSnapshot` and the property lists are
+development-time edits. It is a provisional surface for devtools. These inspection
+members must be called on the UI thread that owns the element (`GetHosts()` is the
+exception: it is safe from any thread). A `ComponentSnapshot` and the property lists are
 plain text: they hold no reference into the component, so they can be kept or
 sent across a process boundary. The one live object is a resolved reference
 edge's `Target`, the mounted control it points at.

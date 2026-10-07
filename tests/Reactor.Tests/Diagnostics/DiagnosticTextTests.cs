@@ -70,7 +70,7 @@ public class DiagnosticTextTests
         Assert.Equal("List<int> (3 items)", DiagnosticText.Format("", typeof(List<int>), new List<int> { 1, 2, 3 }).Text);
         Assert.Equal("int[] (2 items)", DiagnosticText.Format("", typeof(int[]), new[] { 1, 2 }).Text);
         // HashSet<T> has no non-generic ICollection; its public Count is read instead.
-        Assert.Equal("HashSet<string> (1 items)", DiagnosticText.Format("", typeof(HashSet<string>), new HashSet<string> { "a" }).Text);
+        Assert.Equal("HashSet<string> (1 item)", DiagnosticText.Format("", typeof(HashSet<string>), new HashSet<string> { "a" }).Text);
     }
 
     [Fact]

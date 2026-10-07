@@ -146,7 +146,7 @@ internal static class DiagnosticText
             // A collection expression's runtime type is compiler-generated (<>z__ReadOnlyArray); name the declared one.
             var shownType = value.GetType().Name.StartsWith('<') && declared is not null ? declared : value.GetType();
             var countText = TryCount(value) is int count
-                ? $"{count.ToString(CultureInfo.InvariantCulture)} items"
+                ? $"{count.ToString(CultureInfo.InvariantCulture)} {(count == 1 ? "item" : "items")}"
                 : "count unknown";
             return ($"{FriendlyTypeName(shownType)} ({countText})", false);
         }
