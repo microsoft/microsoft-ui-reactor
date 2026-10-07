@@ -125,7 +125,7 @@ answer *why did this render?*:
 
 | Field | Meaning |
 |---|---|
-| `componentName` | Component CLR type name (`FuncElement` / `MemoElement` for function and memo components) |
+| `componentName` | Component type name — `Counter`, or `ItemList<Int32>` for a generic component (`FuncElement` / `MemoElement` for function and memo components); the same name `RenderError` reports |
 | `componentId` | Process-unique id of the mounted instance; stable across its re-renders |
 | `reason` | `mount`, `state`, `props`, `context`, `parent`, `hotReload` or `forced` |
 | `elapsedMicroseconds` | Time in `Render()` (plus the synchronous effect flush for non-root components) |

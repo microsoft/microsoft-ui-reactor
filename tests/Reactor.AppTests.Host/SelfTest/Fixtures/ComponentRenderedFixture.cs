@@ -761,6 +761,21 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
             Take().Any(e => (string)e.Payload[0]! == nameof(RenderedNullRoot)
                 && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Mount));
 
+        // ── Generic component classes are named like RenderError names them ─
+        var genericHost = H.CreateHost();
+        genericHost.Mount(new RenderedGenericRoot<int>());
+        await Harness.Render();
+        var generic = Take();
+        Console.WriteLine("# generic: " + string.Join(", ", generic.Select(e => (string)e.Payload[0]!)));
+        string expectedRoot = Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(typeof(RenderedGenericRoot<int>));
+        string expectedChild = Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(typeof(RenderedGenericChild<string>));
+        H.Check("ComponentRendered_GenericNames_MatchComponentNames",
+            expectedRoot == "RenderedGenericRoot<Int32>" && expectedChild == "RenderedGenericChild<String>"
+                && generic.Any(e => (string)e.Payload[0]! == expectedRoot)
+                && generic.Any(e => (string)e.Payload[0]! == expectedChild)
+                && !generic.Any(e => ((string)e.Payload[0]!).Contains('`')),
+            string.Join(", ", generic.Select(e => (string)e.Payload[0]!)));
+
         // ── Content changes while the event is off ──────────────────────────
         var root = new RenderedHostControlRoot();
         var offHost = H.CreateHost();
@@ -1195,6 +1210,16 @@ internal sealed class RenderedNullRoot : Component
         UseEffect(() => EffectRan = true);
         return null!;
     }
+}
+
+internal sealed class RenderedGenericRoot<T> : Component
+{
+    public override Element Render() => VStack(TextBlock("generic root"), Component<RenderedGenericChild<string>>());
+}
+
+internal sealed class RenderedGenericChild<T> : Component
+{
+    public override Element Render() => TextBlock("generic child");
 }
 
 internal sealed class RenderedSwapComponentRoot : Component

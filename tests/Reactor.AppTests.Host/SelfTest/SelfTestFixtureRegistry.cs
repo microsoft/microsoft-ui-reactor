@@ -398,6 +398,11 @@ internal static class SelfTestFixtureRegistry
         "ComponentRendered_PropagatedRootFailureReported",
         "ComponentRendered_RootReplacementSurvivesThrowingCleanup",
         "ComponentRendered_HostControlRootSwaps",
+        // RenderError names the component (not ComponentElement`1) on mount/update/root
+        "RenderErrorNames_ComponentTypeOnEveryPath",
+        "RenderErrorNames_ErrorBoundaryCatchIsReported",
+        "RenderErrorNames_RenderErrorHandlerOutcomesReportOnce",
+        "RenderErrorNames_BoundaryRollbackUnmountNamesComponent",
         "FocusTrapContentDialog_ContainmentProbe",
         // Issue #487 — RichTextBlock + inline UI inside ScrollViewer scroll anchor
         "Issue487_ScrollOffsetRestoredAfterRunMutation",
@@ -2456,6 +2461,10 @@ internal static class SelfTestFixtureRegistry
         "ComponentRendered_PropagatedRootFailureReported" => new ComponentRendered_PropagatedRootFailureReported(harness),
         "ComponentRendered_RootReplacementSurvivesThrowingCleanup" => new ComponentRendered_RootReplacementSurvivesThrowingCleanup(harness),
         "ComponentRendered_HostControlRootSwaps" => new ComponentRendered_HostControlRootSwaps(harness),
+        "RenderErrorNames_ComponentTypeOnEveryPath" => new RenderErrorNames_ComponentTypeOnEveryPath(harness),
+        "RenderErrorNames_ErrorBoundaryCatchIsReported" => new RenderErrorNames_ErrorBoundaryCatchIsReported(harness),
+        "RenderErrorNames_RenderErrorHandlerOutcomesReportOnce" => new RenderErrorNames_RenderErrorHandlerOutcomesReportOnce(harness),
+        "RenderErrorNames_BoundaryRollbackUnmountNamesComponent" => new RenderErrorNames_BoundaryRollbackUnmountNamesComponent(harness),
         "FocusTrapContentDialog_ContainmentProbe" => new FocusTrapContentDialog_ContainmentProbe(harness),
         "Issue487_ScrollOffsetRestoredAfterRunMutation" => new Issue487ScrollAnchorFixtures.Issue487_ScrollOffsetRestoredAfterRunMutation(harness),
         "Issue487_RepeatedMutationDoesNotDrift" => new Issue487ScrollAnchorFixtures.Issue487_RepeatedMutationDoesNotDrift(harness),

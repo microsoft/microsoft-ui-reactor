@@ -192,8 +192,13 @@ public sealed partial class Reconciler : IDisposable
                 _errorBoundaryNodes.Remove(wrapper);
                 if (_componentNodes.Remove(wrapper, out var node))
                 {
-                    Diagnostics.ReactorEventSource.Log.ComponentUnmount(
-                        node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
+                    if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                            global::System.Diagnostics.Tracing.EventLevel.Informational,
+                            Diagnostics.ReactorEventSource.Keywords.Lifecycle))
+                    {
+                        Diagnostics.ReactorEventSource.Log.ComponentUnmount(
+                            Diagnostics.ComponentNames.For(node.Component, node.Element));
+                    }
                     if (node.DiagnosticId != 0)
                         Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, wrapper);
                     RunUnmountCleanups(node);
@@ -2204,7 +2209,7 @@ public sealed partial class Reconciler : IDisposable
         if (wrapper is not null)
             Diagnostics.ComponentRenderControls.Registry.Track(id, wrapper, mapControlToId: true);
         Diagnostics.ReactorEventSource.Log.ComponentRendered(
-            node.Component?.GetType().Name ?? element.GetType().Name,
+            Diagnostics.ComponentNames.For(node.Component, element),
             id,
             reason,
             Diagnostics.ComponentRenderTrace.ElapsedMicroseconds(startTimestamp));
@@ -2217,6 +2222,25 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     private static void TrackMountedComponent(ComponentNode node, UIElement wrapper)
         => Diagnostics.ComponentRenderControls.Registry.Track(node.DiagnosticId, wrapper, mapControlToId: true);
+
+    /// <summary>
+    /// <c>ReactorEventSource.RenderError</c> for a component whose Render() threw and was
+    /// replaced by the error fallback. Shared by the mount and update paths so both name
+    /// the component the same way (<see cref="Diagnostics.ComponentNames"/>). Only the
+    /// component name and exception type are written: the sink redacts the message
+    /// (TASK-064), so <paramref name="ex"/>'s virtual <c>Message</c> is never read here —
+    /// an app exception whose <c>Message</c> override throws must not replace the original
+    /// exception on this error path (the ErrorBoundary arms rethrow it unchanged).
+    /// </summary>
+    internal static void EmitRenderError(string componentName, Exception ex)
+    {
+        if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                global::System.Diagnostics.Tracing.EventLevel.Error,
+                Diagnostics.ReactorEventSource.Keywords.Errors))
+        {
+            Diagnostics.ReactorEventSource.Log.RenderError(componentName, ex.GetType().Name, string.Empty);
+        }
+    }
 
     private static void FlushEffectsTraced(RenderContext ctx, string? componentName)
     {
@@ -2472,7 +2496,7 @@ public sealed partial class Reconciler : IDisposable
         long renderStart = 0;
         if (traceRender)
         {
-            componentName = node.Component?.GetType().Name ?? newEl.GetType().Name;
+            componentName = Diagnostics.ComponentNames.For(node.Component, newEl);
             Diagnostics.ReactorEventSource.Log.ComponentRenderStart(
                 componentName, selfTriggered ? "self" : "parent");
             renderStart = global::System.Diagnostics.Stopwatch.GetTimestamp();
@@ -2560,7 +2584,7 @@ public sealed partial class Reconciler : IDisposable
                 _logger?.LogWarning(ex,
                     "Hot reload: hook order/type changed in child component — " +
                     "resetting state and re-rendering: {ComponentName}",
-                    componentName ?? newEl.GetType().Name);
+                    componentName ?? Diagnostics.ComponentNames.For(node.Component, newEl));
                 hotReloadRetried = true;
                 renderCtx.ResetForHotReload();
                 // Time the retry on its own (it reports itself after the loop), starting
@@ -2568,6 +2592,24 @@ public sealed partial class Reconciler : IDisposable
                 if (traceRendered)
                     renderedStart = global::System.Diagnostics.Stopwatch.GetTimestamp();
                 continue;
+            }
+            // Inside an ErrorBoundary the exception propagates to the boundary, which
+            // renders its fallback. Name the failing component here, at the throw site —
+            // the boundary itself cannot know which descendant threw — so a listener sees
+            // the error even though the app recovered. Rethrown unchanged. No OOM/SO carve-out:
+            // the boundary catches every exception, so every one it recovers from is reported.
+            // Outside a boundary, OOM/SO skip the fallback arm below and propagate to the
+            // host, which also recovers — so they are reported here too. An exception the app
+            // declined via RenderError.Propagate() was already reported where it was thrown,
+            // so it passes through unreported (issue #1291).
+            catch (Exception ex) when ((_errorBoundaryDepth > 0 || ex is OutOfMemoryException or StackOverflowException)
+                && !RenderErrorDispatch.IsPropagating(ex))
+            {
+                // The render still happened: report it, as the trailing arm does for the rest.
+                if (traceRendered)
+                    EmitComponentRendered(node, null, newEl, renderedReason!, renderedStart);
+                EmitRenderError(componentName ?? Diagnostics.ComponentNames.For(node.Component, newEl), ex);
+                throw;
             }
             catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
             {
@@ -2578,14 +2620,10 @@ public sealed partial class Reconciler : IDisposable
                     EmitComponentRendered(node, control, newEl, renderedReason!, renderedStart);
                     renderReported = true;
                 }
-                _logger?.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
-                if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                        global::System.Diagnostics.Tracing.EventLevel.Error,
-                        Diagnostics.ReactorEventSource.Keywords.Errors))
-                {
-                    Diagnostics.ReactorEventSource.Log.RenderError(
-                        componentName ?? newEl.GetType().Name, ex.GetType().Name, ex.Message);
-                }
+                var failedName = componentName ?? Diagnostics.ComponentNames.For(node.Component, newEl);
+                _logger?.LogError(ex, "Component Render() threw: {ComponentName}", failedName);
+                // Before the fallback: the app's handler may call Propagate(), which throws.
+                EmitRenderError(failedName, ex);
                 newChildElement = BuildInTreeFallback(ex, inEffects, node.Component?.GetType().Name);
             }
             // Every other exception propagates (to an enclosing ErrorBoundary, or a fatal
@@ -2896,8 +2934,13 @@ public sealed partial class Reconciler : IDisposable
 
         if (_componentNodes.TryGetValue(control, out var node))
         {
-            Diagnostics.ReactorEventSource.Log.ComponentUnmount(
-                node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
+            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                    global::System.Diagnostics.Tracing.EventLevel.Informational,
+                    Diagnostics.ReactorEventSource.Keywords.Lifecycle))
+            {
+                Diagnostics.ReactorEventSource.Log.ComponentUnmount(
+                    Diagnostics.ComponentNames.For(node.Component, node.Element));
+            }
             // The wrapper may be pooled and reused by an unrelated element; drop its id.
             if (node.DiagnosticId != 0)
                 Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, control);
@@ -3312,8 +3355,13 @@ public sealed partial class Reconciler : IDisposable
         // Run cleanup logic (component teardown, etc.)
         if (_componentNodes.TryGetValue(control, out var node))
         {
-            Diagnostics.ReactorEventSource.Log.ComponentUnmount(
-                node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
+            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                    global::System.Diagnostics.Tracing.EventLevel.Informational,
+                    Diagnostics.ReactorEventSource.Keywords.Lifecycle))
+            {
+                Diagnostics.ReactorEventSource.Log.ComponentUnmount(
+                    Diagnostics.ComponentNames.For(node.Component, node.Element));
+            }
             // The wrapper may be pooled and reused by an unrelated element; drop its id.
             if (node.DiagnosticId != 0)
                 Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, control);
