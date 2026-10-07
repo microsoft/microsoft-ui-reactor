@@ -224,6 +224,37 @@ internal static class ComponentInspectionFixtures
                 maxPasses: 16, perPassMs: 10);
             H.Check("RootAnchor_OverlapChildRerendered", H.FindControl<TextBlock>(t => t.Text == "shell-child:d") is not null);
 
+            // The root shows an app-supplied render-error fallback: that is not the root's output,
+            // so neither the container nor the fallback control describes the root.
+            var fail = false;
+            var fbHost = H.CreateHost();
+            fbHost.RenderErrorHandler = _ => TextBlock("root-app-fallback");
+            fbHost.Mount(ctx =>
+            {
+                var (s, _) = ctx.UseState("ok");
+                if (fail) throw new InvalidOperationException("root render failed");
+                return TextBlock($"root-recovered:{s}");
+            });
+            await Harness.Render();
+            var fbTarget = fbHost.ContentTarget;
+            // Render once successfully first, so the fallback replaces an already-described root.
+            H.Check("RootAnchor_RootDescribedBeforeFailure",
+                fbTarget is not null && ReactorDiagnostics.DescribeComponent(fbTarget) is { IsRoot: true });
+            fail = true;
+            fbHost.RequestRender();
+            await Harness.WaitFor(() => H.FindText("root-app-fallback") is not null, maxPasses: 16, perPassMs: 10);
+            var fallback = H.FindText("root-app-fallback");
+            H.Check("RootAnchor_AppFallbackShown", fallback is not null && fbTarget is not null,
+                $"content={fbTarget?.Child?.GetType().Name ?? "null"}");
+            if (fallback is null || fbTarget is null) return;
+            H.Check("RootAnchor_AppFallbackContainerNotDescribed", ReactorDiagnostics.DescribeComponent(fbTarget) is null);
+            H.Check("RootAnchor_AppFallbackControlNotDescribed", ReactorDiagnostics.DescribeComponent(fallback) is null);
+            fail = false;
+            fbHost.RequestRender();
+            await Harness.WaitFor(() => H.FindText("root-recovered:ok") is not null, maxPasses: 16, perPassMs: 10);
+            H.Check("RootAnchor_RecoveredRootDescribed",
+                ReactorDiagnostics.DescribeComponent(fbTarget) is { IsRoot: true, Kind: "function", State: [{ Value: "\"ok\"" }] });
+
             // A host without a ContentTarget installs its root as the window content.
             var window = H.Window;
             var previousContent = window.Content;

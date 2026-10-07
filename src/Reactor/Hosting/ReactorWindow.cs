@@ -258,6 +258,7 @@ public sealed partial class ReactorWindow : IDisposable
     private AspectRatioOverride[] _aspectRatioOverrides = global::System.Array.Empty<AspectRatioOverride>();
     private int _nextAspectRatioOverrideId;
     private UIElement? _backgroundDragRoot;
+    internal UIElement? BackgroundDragRootForTests => _backgroundDragRoot;
     private PointerEventHandler? _backgroundDragHandler;
     private FrameworkElement? _sizeToContentRoot;
     private SizeChangedEventHandler? _sizeToContentSizeChangedHandler;
@@ -500,6 +501,8 @@ public sealed partial class ReactorWindow : IDisposable
         // even if the root tree doesn't carry a BackdropChoice modifier.
         // (spec 036 §3.3)
         _host.BackdropApplier.SetWindowDefault(spec.Backdrop);
+        // Issue #1291 — seed the per-host error handler before the first render.
+        _host.RenderErrorHandler = spec.RenderErrorHandler;
 
         // Subscribe before Activate() so WM_SHOWWINDOW / WM_DPICHANGED routed
         // during the first paint reach our handlers. The monitor is per-window
@@ -2829,7 +2832,15 @@ public sealed partial class ReactorWindow : IDisposable
         // Backdrop, Owner) compare by reference which is the right behavior here.
         var prev = _spec;
         Volatile.Write(ref _spec, next);
-        if (!Equals(prev, next))
+        // Issue #1291 — the error handler is host state, not chrome: apply it on its own
+        // and keep a handler-only change (e.g. a fresh lambda) from re-applying chrome.
+        bool handlerChanged = !Equals(prev.RenderErrorHandler, next.RenderErrorHandler);
+        if (handlerChanged)
+            _host.RenderErrorHandler = next.RenderErrorHandler;
+        bool specChanged = handlerChanged
+            ? !Equals(prev with { RenderErrorHandler = null }, next with { RenderErrorHandler = null })
+            : !Equals(prev, next);
+        if (specChanged)
         {
             ApplyChrome(next, isInitial: false);
             // Re-seed backdrop default in case Update changed it. The next
