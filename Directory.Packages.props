@@ -42,12 +42,19 @@
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.0-rc.1.26425.128" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <!-- Roslyn source generator that emits a static (reflection-free / NativeAOT-safe)
-         YamlStaticContext for the CLI's doc-pipeline YAML DTOs. Analyzer-only
-         (PrivateAssets=all) — never shipped in the `mur` tool output. Version tracks
-         YamlDotNet's major (18.x). -->
+         YamlStaticContext for the doc pipeline's YAML DTOs (tools/Reactor.DocPipeline).
+         Analyzer-only (PrivateAssets=all). Version tracks YamlDotNet's major (18.x). -->
     <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.1.0" />
     <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.14" />
-    <PackageVersion Include="MessagePack" Version="2.5.303" />
+    <PackageVersion Include="MessagePack" Version="2.5.305" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Doc pipeline screenshot capture (tools/Reactor.DocPipeline): the library behind
+         `winapp ui`, used in-process. Its Windows Graphics Capture build needs a Windows 10
+         19041+ TFM. The DI container is how the library hands out IWindowCapture. -->
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation" Version="0.7.1" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>

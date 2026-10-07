@@ -103,7 +103,7 @@ internal sealed class OverlayHostWiring : IDisposable
     /// Swap the content slot to an error panel. Returns true if the wrapper
     /// was active and took the panel, false to let the host fall back.
     /// </summary>
-    public bool TryShowErrorInWrapper(UIElement errorPanel)
+    public bool TryShowErrorInWrapper(UIElement? errorPanel)
     {
         if (_wrapperRoot is null) return false;
         ((ContentControl)_wrapperRoot.Children[0]).Content = errorPanel;

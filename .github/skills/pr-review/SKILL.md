@@ -120,6 +120,7 @@ buckets in this repo:
 | `src/Reactor.Analyzers/`, `src/Reactor.Analyzers.Internal/`, `src/Reactor.Compile.Analyzer/` | api-ergonomics (diagnostic quality), correctness |
 | `src/Reactor.*.Generator/` (Localization, Wrappers source generators) | correctness, packaging |
 | `src/Reactor.Cli/` (`mur`) | api-ergonomics, security, correctness |
+| `tools/Reactor.DocPipeline/` (doc pipeline, screenshot capture) | security, correctness |
 | `src/Reactor.Devtools/`, `src/vscode-reactor/`, `src/vs-reactor/`, `src/Reactor.Interop.WinForms/` | packaging, correctness |
 | `tests/Reactor.Tests/`, `tests/Reactor.SelfTests/`, `tests/Reactor.AppTests*/` | test-coverage |
 | `docs/`, `README.md`, `samples/` | docs-and-samples |
@@ -226,7 +227,7 @@ Coverage block and include its short "what I checked" note in a final
 - **No build/test execution.** Flag staleness (e.g. a new plugin sub-skill not
   added to the agent-kit pack list in `src/Reactor/Reactor.csproj`, or
   `skills/reactor.api.txt` looking out of date) but do not run `mur check`,
-  `dotnet build`, `dotnet test`, or `mur docs compile` yourself — they are slow
+  `dotnet build`, `dotnet test`, or `dotnet run --project tools/Reactor.DocPipeline -- compile` yourself — they are slow
   and the contributor will run them.
 - **Signal-to-noise.** Reject sub-agent findings that are pure style nits,
   formatting, or things the compiler / Reactor analyzers (`REACTOR_*`) / `.editorconfig`

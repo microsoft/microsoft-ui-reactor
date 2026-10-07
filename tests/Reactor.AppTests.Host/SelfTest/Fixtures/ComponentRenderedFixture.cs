@@ -623,6 +623,104 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
     }
 }
 
+/// <summary>
+/// The same contracts when the app supplies the fallback through a
+/// <see cref="RenderErrorHandler"/> (issue #1291): the throwing render is still reported,
+/// and ids follow the fallback the handler installed rather than the built-in panel.
+/// </summary>
+internal class ComponentRendered_AppFallbackFollowsTheHandler(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var events = new List<ReactorEvent>();
+        using var subscription = ReactorTrace.Subscribe(
+            e => { if (e.EventName == nameof(ReactorEventSource.ComponentRendered)) lock (events) events.Add(e); },
+            EventLevel.Verbose,
+            ReactorEventSource.Keywords.RenderDetail);
+
+        if (!ComponentRenderTrace.IsEnabled)
+        {
+            H.Skip("ComponentRendered_AppFallback", "EventSource disabled (NativeAOT)");
+            return;
+        }
+
+        List<ReactorEvent> For(string name)
+        {
+            lock (events) return events.Where(e => (string)e.Payload[0]! == name).ToList();
+        }
+
+        // Ids resolve to the outermost control standing in for the component; an app
+        // fallback is wrapped in an internal guard boundary, so check containment.
+        static bool Contains(UIElement? ancestor, DependencyObject? descendant)
+        {
+            for (var d = descendant; d is not null && ancestor is not null; d = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(d))
+                if (ReferenceEquals(d, ancestor)) return true;
+            return false;
+        }
+
+        Element? Handler(RenderError e) => e.IsHostLevel
+            ? Component<RenderedAppFallback>()
+            : TextBlock("in-tree app fallback");
+
+        // ── Root throws on mount: the handler's component stands in for it ──
+        var host = H.CreateHost();
+        host.RenderErrorHandler = Handler;
+        host.Mount(new RenderedAppThrowingRoot());
+        await Harness.Render();
+        var rootId = For(nameof(RenderedAppThrowingRoot)).Select(e => (long)e.Payload[1]!).FirstOrDefault();
+        var fallbackId = For(nameof(RenderedAppFallback)).Select(e => (long)e.Payload[1]!).FirstOrDefault();
+        var fallbackWrapper = fallbackId != 0 ? ReactorTrace.GetComponentControl(fallbackId) : null;
+        Console.WriteLine($"# app fallback: root={rootId} fallback={fallbackId} wrapper={fallbackWrapper?.GetType().Name ?? "null"}");
+        H.Check("ComponentRendered_AppFallback_Shown", H.FindText("app fallback") is not null);
+        H.Check("ComponentRendered_AppFallback_ThrowingRootReported",
+            rootId != 0 && For(nameof(RenderedAppThrowingRoot)).Any(e => (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Mount));
+        H.Check("ComponentRendered_AppFallback_FallbackComponentMapped",
+            fallbackWrapper is not null && ReactorTrace.TryGetComponentId(fallbackWrapper, out var back) && back == fallbackId);
+        var rootControl = ReactorTrace.GetComponentControl(rootId);
+        H.Check("ComponentRendered_AppFallback_RootIdResolvesToTheFallback",
+            fallbackWrapper is not null && Contains(rootControl, fallbackWrapper));
+
+        // ── Root throws after a healthy render: the old tree is reconciled away ──
+        var flipHost = H.CreateHost();
+        flipHost.RenderErrorHandler = Handler;
+        var flipRoot = new RenderedFlipRoot();
+        flipHost.Mount(flipRoot);
+        await Harness.Render();
+        var leafIds = For(nameof(RenderedFlipLeaf)).Select(e => (long)e.Payload[1]!).Distinct().ToList();
+        var leafId = leafIds.LastOrDefault();
+        H.Check("ComponentRendered_AppFallback_HealthyLeafMapped", leafId != 0 && ReactorTrace.GetComponentControl(leafId) is not null);
+        flipRoot.Explode?.Invoke();
+        await Harness.Render();
+        var flipRootId = For(nameof(RenderedFlipRoot)).Select(e => (long)e.Payload[1]!).LastOrDefault();
+        var flipFallbackId = For(nameof(RenderedAppFallback)).Select(e => (long)e.Payload[1]!).LastOrDefault();
+        H.Check("ComponentRendered_AppFallback_AfterHealthy_OldLeafForgotten", ReactorTrace.GetComponentControl(leafId) is null);
+        H.Check("ComponentRendered_AppFallback_AfterHealthy_RootIdFollowsTheFallback",
+            flipFallbackId != fallbackId && ReactorTrace.GetComponentControl(flipFallbackId) is { } flipWrapper
+            && Contains(ReactorTrace.GetComponentControl(flipRootId), flipWrapper));
+
+        // ── A child throws into the handler's in-tree fallback ─────────────
+        var childHost = H.CreateHost();
+        childHost.RenderErrorHandler = Handler;
+        childHost.Mount(_ => VStack(Component<RenderedThrowOnMountChild>()));
+        await Harness.Render();
+        var childId = For(nameof(RenderedThrowOnMountChild)).Select(e => (long)e.Payload[1]!).LastOrDefault();
+        H.Check("ComponentRendered_AppFallback_InTreeShown", H.FindText("in-tree app fallback") is not null);
+        H.Check("ComponentRendered_AppFallback_InTreeChildReportedAndMapped",
+            childId != 0
+            && Contains(ReactorTrace.GetComponentControl(childId), H.FindText("in-tree app fallback")));
+    }
+}
+
+internal sealed class RenderedAppThrowingRoot : Component
+{
+    public override Element Render() => throw new InvalidOperationException("ComponentRendered selftest: root failure for the app handler");
+}
+
+internal sealed class RenderedAppFallback : Component
+{
+    public override Element Render() => TextBlock("app fallback");
+}
+
 internal sealed class RenderedNullRoot : Component
 {
     public override Element Render() => null!;

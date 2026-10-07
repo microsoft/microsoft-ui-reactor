@@ -2234,11 +2234,14 @@ public sealed class RenderContext
                 {
                     handleRef.Current = Microsoft.UI.Reactor.ReactorApp.OpenWindow(stamped, factory);
                 }
-                catch (Exception ex) when (ex is InvalidOperationException || ex is global::System.Runtime.InteropServices.COMException)
+                catch (Exception ex) when ((ex is InvalidOperationException || ex is global::System.Runtime.InteropServices.COMException)
+                    && !RenderErrorDispatch.IsPropagating(ex))
                 {
                     // No XAML application or UI dispatcher available. Hooks
                     // must not crash the calling render; the live multi-
-                    // window path is exercised in selftest fixtures.
+                    // window path is exercised in selftest fixtures. A render
+                    // error the app asked to propagate (and then declined) is
+                    // not that case: it keeps going out (issue #1291).
                     handleRef.Current = null;
                 }
             }
@@ -2405,7 +2408,18 @@ public sealed class RenderContext
         }
     }
 
-    internal void RunCleanups()
+    internal void RunCleanups() => RunCleanupsCore(onCleanupError: null);
+
+    /// <summary>
+    /// <see cref="RunCleanups()"/>, but every cleanup is isolated: a throwing cleanup is
+    /// reported to <paramref name="onCleanupError"/> and the remaining cleanups still run.
+    /// Used during disposal when a <see cref="RenderErrorHandler"/> is configured (issue #1291).
+    /// A distinct name rather than an overload keeps reflection lookups of
+    /// <c>RunCleanups</c> (test hosts) unambiguous.
+    /// </summary>
+    internal void RunCleanupsIsolated(Action<Exception> onCleanupError) => RunCleanupsCore(onCleanupError);
+
+    private void RunCleanupsCore(Action<Exception>? onCleanupError)
     {
         // Phase 1: Run effect cleanups. Drain BOTH the committed cleanup and any
         // staged-but-not-yet-flushed cleanup: when a render changes an effect's
@@ -2418,10 +2432,20 @@ public sealed class RenderContext
         {
             if (_hooks[i] is EffectHookState hook)
             {
-                hook.PendingCleanup?.Invoke();
+                if (onCleanupError is null)
+                {
+                    hook.PendingCleanup?.Invoke();
+                    hook.PendingCleanup = null;
+                    hook.Cleanup?.Invoke();
+                    hook.Cleanup = null;
+                    continue;
+                }
+                var pending = hook.PendingCleanup;
                 hook.PendingCleanup = null;
-                hook.Cleanup?.Invoke();
+                var committed = hook.Cleanup;
                 hook.Cleanup = null;
+                InvokeIsolated(pending, onCleanupError);
+                InvokeIsolated(committed, onCleanupError);
             }
         }
 
@@ -2432,6 +2456,19 @@ public sealed class RenderContext
             {
                 persisted.SaveToCache();
             }
+        }
+    }
+
+    private static void InvokeIsolated(Action? cleanup, Action<Exception> onError)
+    {
+        if (cleanup is null) return;
+        try
+        {
+            cleanup();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            onError(ex);
         }
     }
 

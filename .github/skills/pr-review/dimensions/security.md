@@ -14,8 +14,12 @@ code-generation paths. There is also a published threat model at
 ## Repo-specific attack surface
 
 - **The CLI (`mur`, `src/Reactor.Cli/`).** Scaffolding, preview, localization,
-  `docs compile`, `pack-local`. It reads project files, writes generated files,
+  `pack-local`. It reads project files, writes generated files,
   and may launch child processes (`dotnet`, build tools).
+- **The doc pipeline (`tools/Reactor.DocPipeline/`).** Contributor tool, not shipped.
+  Launches doc apps (`dotnet run`), talks to their preview host over loopback with a
+  per-launch bearer token, and writes generated pages and screenshots under `docs/guide/`
+  (path containment lives in `DocPaths`).
 - **Hosting & hot reload (`src/Reactor/Hosting/`).** File watchers, dynamic
   reload of user assemblies/code, the render loop.
 - **Source generators (`Reactor.Localization.Generator`, `Reactor.Wrappers.Generator`).**
