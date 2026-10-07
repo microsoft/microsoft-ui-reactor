@@ -343,7 +343,7 @@ internal static class DiagnosticText
         // secret, the same rule Format applies to a value's own text, so its members are not listed
         // one by one. A record's compiler-generated text only lists its members, which are already
         // redacted row by row, so records are not judged by it.
-        if (HasOwnToString(type) && !IsRecord(type)
+        if (HasOwnToString(type) && !HasGeneratedRecordText(type)
             && s_secretMemberInText.IsMatch(OwnText(props, props.ToString)))
             return new[] { ("Props", declared ?? type, (object?)SecretValue.Instance) };
 
@@ -393,13 +393,22 @@ internal static class DiagnosticText
         => type.GetMethod(nameof(ToString), global::System.Type.EmptyTypes) is { } m && m.DeclaringType != typeof(object)
             && m.DeclaringType != typeof(ValueType);
 
-    // Every record class gets a compiler-generated public "<Clone>$" method (and EqualityContract).
+    // A record whose text is entirely compiler-generated: ToString and PrintMembers both carry
+    // [CompilerGenerated], so the text only lists members (redacted row by row). A hand-written
+    // ToString or PrintMembers — or metadata trimmed away — fails this, and the own-text check runs.
     [UnconditionalSuppressMessage("Trimming", "IL2070",
-        Justification = "Diagnostics-only record probe; if trimmed, the record is judged by its own text, which can only redact more.")]
-    private static bool IsRecord(Type type)
-        => type.GetMethod("<Clone>$", global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Instance) is not null
-            || type.GetProperty("EqualityContract",
-                global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Instance) is not null;
+        Justification = "Diagnostics-only probe; if trimmed, the object is judged by its own text, which can only redact more.")]
+    private static bool HasGeneratedRecordText(Type type)
+    {
+        const global::System.Reflection.BindingFlags Any =
+            global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Instance;
+        if (type.GetMethod("<Clone>$", Any) is null) return false;
+        var toString = type.GetMethod(nameof(ToString), global::System.Type.EmptyTypes);
+        var printMembers = type.GetMethod("PrintMembers", Any, null, new[] { typeof(global::System.Text.StringBuilder) }, null);
+        return toString is not null && printMembers is not null
+            && toString.IsDefined(typeof(global::System.Runtime.CompilerServices.CompilerGeneratedAttribute), false)
+            && printMembers.IsDefined(typeof(global::System.Runtime.CompilerServices.CompilerGeneratedAttribute), false);
+    }
 
     // A collection whose ToString() is object's (prints the type name) is summarised by count; a
     // collection that formats itself (e.g. a record implementing IEnumerable) keeps its own text.

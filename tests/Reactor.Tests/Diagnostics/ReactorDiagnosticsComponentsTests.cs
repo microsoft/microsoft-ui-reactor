@@ -527,6 +527,16 @@ public class ReactorDiagnosticsComponentsTests
         var record = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new AdminRecord(2, "hunter2")) };
         var rows = ComponentHandle.FromNode(record, () => true).Describe().Props;
         Assert.Equal(new[] { ("Step", "2", false), ("AdminPassword", "<redacted>", true) }, rows.Select(r => (r.Name, r.Value, r.Redacted)));
+
+        // A record with a hand-written ToString is judged by that text like any other object.
+        var handWritten = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new HandWrittenRecord("hunter2")) };
+        var hwRow = Assert.Single(ComponentHandle.FromNode(handWritten, () => true).Describe().Props);
+        Assert.Equal(("Props", "<redacted>", true), (hwRow.Name, hwRow.Value, hwRow.Redacted));
+    }
+
+    private sealed record HandWrittenRecord(string Value)
+    {
+        public override string ToString() => "ApiKey: " + Value;
     }
 
     private sealed class ApiConfig
