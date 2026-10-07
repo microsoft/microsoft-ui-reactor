@@ -280,6 +280,9 @@ public static class Theme
     /// <see cref="ThemeRef.Resolve(string, bool)"/> call in a <c>Render</c> method.</para>
     /// <para>Callable from any thread; the re-renders are scheduled on each host's UI
     /// thread. Await a host's <c>WaitForIdleAsync()</c> to observe the result.</para>
+    /// <para>On a host's UI thread, a host that has no content yet re-renders inline, and its
+    /// render can throw. Every other host is still notified; then the exception is rethrown
+    /// (an <see cref="System.AggregateException"/> when several hosts threw).</para>
     /// </remarks>
     public static void NotifyResourcesChanged()
     {

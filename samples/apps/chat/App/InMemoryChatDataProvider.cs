@@ -7,7 +7,7 @@ sealed class InMemoryChatDataProvider : IChatDataProvider
 {
     static readonly string[] s_availableModels = ["Sample assistant"];
 
-    readonly object _gate = new();
+    readonly Lock _gate = new();
     readonly Dictionary<string, ChatThread> _threadMap = new();
     readonly Dictionary<string, ChatTimelineState> _timelines = new();
     readonly Dictionary<string, CancellationTokenSource> _responses = new();

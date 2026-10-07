@@ -1281,7 +1281,7 @@ public sealed class RenderContext
             Comparer = comparer;
         }
 
-        public object Gate { get; } = new();
+        public Lock Gate { get; } = new();
         public TSnapshot Snapshot { get; set; }
         public Func<TSnapshot> GetSnapshot { get; set; }
         public IEqualityComparer<TSnapshot> Comparer { get; set; }
@@ -1772,7 +1772,7 @@ public sealed class RenderContext
     /// </summary>
     private sealed class DebounceSlot
     {
-        public readonly object Gate = new();
+        public readonly Lock Gate = new();
         public bool InWindow;
         /// <summary>Absolute time (per the context's <see cref="TimeProvider"/>) at which the
         /// current window expires. Acceptance is decided against this deadline rather than purely on
@@ -2234,11 +2234,14 @@ public sealed class RenderContext
                 {
                     handleRef.Current = Microsoft.UI.Reactor.ReactorApp.OpenWindow(stamped, factory);
                 }
-                catch (Exception ex) when (ex is InvalidOperationException || ex is global::System.Runtime.InteropServices.COMException)
+                catch (Exception ex) when ((ex is InvalidOperationException || ex is global::System.Runtime.InteropServices.COMException)
+                    && !RenderErrorDispatch.IsPropagating(ex))
                 {
                     // No XAML application or UI dispatcher available. Hooks
                     // must not crash the calling render; the live multi-
-                    // window path is exercised in selftest fixtures.
+                    // window path is exercised in selftest fixtures. A render
+                    // error the app asked to propagate (and then declined) is
+                    // not that case: it keeps going out (issue #1291).
                     handleRef.Current = null;
                 }
             }
@@ -2405,7 +2408,18 @@ public sealed class RenderContext
         }
     }
 
-    internal void RunCleanups()
+    internal void RunCleanups() => RunCleanupsCore(onCleanupError: null);
+
+    /// <summary>
+    /// <see cref="RunCleanups()"/>, but every cleanup is isolated: a throwing cleanup is
+    /// reported to <paramref name="onCleanupError"/> and the remaining cleanups still run.
+    /// Used during disposal when a <see cref="RenderErrorHandler"/> is configured (issue #1291).
+    /// A distinct name rather than an overload keeps reflection lookups of
+    /// <c>RunCleanups</c> (test hosts) unambiguous.
+    /// </summary>
+    internal void RunCleanupsIsolated(Action<Exception> onCleanupError) => RunCleanupsCore(onCleanupError);
+
+    private void RunCleanupsCore(Action<Exception>? onCleanupError)
     {
         // Phase 1: Run effect cleanups. Drain BOTH the committed cleanup and any
         // staged-but-not-yet-flushed cleanup: when a render changes an effect's
@@ -2418,10 +2432,20 @@ public sealed class RenderContext
         {
             if (_hooks[i] is EffectHookState hook)
             {
-                hook.PendingCleanup?.Invoke();
+                if (onCleanupError is null)
+                {
+                    hook.PendingCleanup?.Invoke();
+                    hook.PendingCleanup = null;
+                    hook.Cleanup?.Invoke();
+                    hook.Cleanup = null;
+                    continue;
+                }
+                var pending = hook.PendingCleanup;
                 hook.PendingCleanup = null;
-                hook.Cleanup?.Invoke();
+                var committed = hook.Cleanup;
                 hook.Cleanup = null;
+                InvokeIsolated(pending, onCleanupError);
+                InvokeIsolated(committed, onCleanupError);
             }
         }
 
@@ -2432,6 +2456,19 @@ public sealed class RenderContext
             {
                 persisted.SaveToCache();
             }
+        }
+    }
+
+    private static void InvokeIsolated(Action? cleanup, Action<Exception> onError)
+    {
+        if (cleanup is null) return;
+        try
+        {
+            cleanup();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            onError(ex);
         }
     }
 
@@ -2641,7 +2678,7 @@ public sealed class RenderContext
         // Issue #659 (#42): only allocate the lock when threadSafe was requested.
         // The default (false) path never touches Lock, so most state cells now
         // carry no per-hook Lock object.
-        public readonly object? Lock;
+        public readonly Lock? Lock;
         // Issue #659 (#43/#44): the ref-stable setter/updater/dispatch delegate,
         // built once on first render and reused every render thereafter (was a
         // fresh closure per render). Typed as Delegate so one field serves
@@ -2661,7 +2698,7 @@ public sealed class RenderContext
         {
             Value = value;
             ThreadSafe = threadSafe;
-            Lock = threadSafe ? new object() : null;
+            Lock = threadSafe ? new Lock() : null;
         }
     }
 

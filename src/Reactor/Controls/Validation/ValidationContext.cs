@@ -6,7 +6,7 @@ namespace Microsoft.UI.Reactor.Controls.Validation;
 /// </summary>
 public sealed class ValidationContext
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly Dictionary<string, List<ValidationMessage>> _messages = new();
     private readonly Dictionary<string, List<ValidationMessage>> _externalMessages = new();
     // field -> producer -> the exact instances that producer last contributed, so each

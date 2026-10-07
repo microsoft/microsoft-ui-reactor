@@ -33,14 +33,14 @@ namespace Microsoft.UI.Reactor.Hosting.Shell;
 internal sealed class TrayHiddenWindow : IDisposable
 {
     private static TrayHiddenWindow? s_instance;
-    private static readonly object s_singletonLock = new();
+    private static readonly Lock s_singletonLock = new();
 
     private readonly nint _hwnd;
     private readonly DispatcherQueue _dispatcher;
     // Strongly-typed callback collection for the static WndProc to dispatch
     // into. A copy-on-write dictionary keyed by NIN icon id (uID slot).
     private TrayCallbackEntry[] _entries = global::System.Array.Empty<TrayCallbackEntry>();
-    private readonly object _entriesLock = new();
+    private readonly Lock _entriesLock = new();
     private GCHandle _selfHandle;
     private bool _disposed;
     // RegisterWindowMessageW("TaskbarCreated") — Explorer broadcasts this to
@@ -187,20 +187,13 @@ internal sealed class TrayHiddenWindow : IDisposable
         // window was created from the captured dispatcher), but TryEnqueue is
         // a cheap safe no-op when same-thread execution is fine.
         _dispatcher.TryEnqueue(() =>
-        {
-            try
-            {
-                // Routing lives in TrayNotificationRouter so the
-                // notification -> interaction mapping is unit-testable without
-                // an HWND or a dispatcher. See its remarks for why the legacy
-                // mouse messages are deliberately not routed (issue #1180).
-                TrayNotificationRouter.Dispatch(hit, TrayNotificationRouter.Classify(mouseMessage));
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[Reactor] TrayCallback dispatch threw: {ex.Message}");
-            }
-        });
+            // Routing lives in TrayNotificationRouter so the
+            // notification -> interaction mapping is unit-testable without
+            // an HWND or a dispatcher. See its remarks for why the legacy
+            // mouse messages are deliberately not routed (issue #1180).
+            // DispatchGuarded swallows ordinary callback failures but lets a
+            // declined RenderError.Propagate() keep going out (issue #1291).
+            TrayNotificationRouter.DispatchGuarded(hit, TrayNotificationRouter.Classify(mouseMessage)));
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall) })]

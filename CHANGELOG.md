@@ -28,6 +28,16 @@ Conventions for contributors:
 
 ### Added
 
+- **Inspector diagnostics for hosts, roots and component boundaries** (spec 010).
+  `ReactorDiagnostics.GetHosts()` (`Microsoft.UI.Reactor.Core.Diagnostics`) returns
+  a snapshot of every live `ReactorHost` and `ReactorHostControl` — window,
+  host element, root control, root component or render-function name, and
+  `MountSite`, the `ReactorApp.Run` / `OpenWindow` / `Mount` call that mounted the
+  root (recorded by the source-map generator when source mapping is on). While
+  `ReactorSourceMap.Enabled` is true, every component's wrapper is also tagged, so
+  `Reconciler.GetElementTag` finds each component boundary. Provisional API for
+  external inspectors such as `winapp devtools`.
+
 - **`ReactorHostControl` can be declared in XAML.** It gains a public parameterless
   constructor (the XAML compiler rejected the old optional-parameter one with
   `WMC0100`) and a `ComponentType` property, so a hybrid page can write
@@ -84,6 +94,19 @@ Conventions for contributors:
     cleared by `ResetAll()`. This is what `ShowWhen.AfterFirstSubmit` waits for;
     the framework had no notion of a submit before, so that policy could never
     display anything.
+
+- **Apps can replace the built-in render-error fallback (issue #1291).** Outside an
+  `ErrorBoundary`, a render failure showed a fallback with the full exception text
+  (type, message, stack trace), which a shipped app could not hide. A
+  `RenderErrorHandler` now replaces it, set app-wide
+  (`ReactorApp.DefaultRenderErrorHandler`), per window (`WindowSpec.RenderErrorHandler`)
+  or per host (`ReactorHost` / `ReactorHostControl.RenderErrorHandler`). It sees the
+  root render, child renders, the reconcile pass, effects and dispose-time cleanups,
+  through a `RenderError` that carries the exception and its `Source`. Return an element
+  to show it, `null` to keep the built-in fallback, or call `Propagate()` to route the
+  exception to `ReactorApplication.OnUnhandledException`. A handler that throws (or whose
+  fallback throws) fails closed to a neutral message without exception details. With no
+  handler, behavior is unchanged.
 
 - **Framework mechanics are searchable in the ReactorGallery index (spec 064,
   issue #1275).** `find-ui --source reactor` answered "what is control X" but not
@@ -250,6 +273,34 @@ Conventions for contributors:
   `winapp new --template-version`.
 
 ### Fixed
+
+- **DataGrid inline editors no longer shift the cell's text when editing starts**
+  (issue #1340). The built-in TextBox and NumberBox editors used `.Padding(2)` inside
+  WinUI's 32px minimum height, which draws text at the top, so the text moved about 4px
+  up and 5px left as soon as a cell entered edit mode. Text editors now use the cell's
+  horizontal padding and symmetric vertical padding, with `TextControlThemeMinHeight`
+  overridden to 0, so their text lands exactly where the display cell drew it. A custom
+  `col.Editor` keeps any padding, `MinHeight` or `TextControlThemeMinHeight` it sets.
+
+- **A `SwipeControl` side in `SwipeMode.Execute` with more than one item no longer
+  replaces the whole UI with the render-error panel** (issue #1344). WinUI accepts
+  only one item in an Execute-mode `SwipeItems` collection and rejects a second with
+  `E_INVALIDARG`, which escaped the reconciler. Reactor now keeps the first item,
+  ignores the rest, and emits a `SwipeControl.ExecuteItems` diagnostic warning naming
+  the side and how many items were dropped, once each time a side becomes truncated.
+
+- **An `ErrorBoundary` whose child fails part-way through mounting no longer leaves
+  that child's effects running** (issue #1291). A component registers before its
+  effects run, so a child whose second effect threw had already opened whatever its
+  first effect opened (a subscription, a timer), and a control's `.OnMount(...)` had
+  already run. The boundary discarded the half-built subtree without it ever being
+  attached, so nothing could unmount it, and every re-render retried the child and
+  leaked another set. The boundary now rolls the failed child back — the controls
+  that did finish are unmounted (so their interaction states, animations and
+  `.OnUnmount(...)` actions go too), and the components that did not still have their
+  effect cleanups run — both when it first mounts and on each retry. The same applies to the internal boundary
+  around a `RenderErrorHandler` fallback, and when a host replaces or releases its tree
+  for a render-error outcome every cleanup runs even if one of them throws.
 
 - **Dropping an `AutoSuggestBox` right after its text changed can no longer crash
   the app** (PR #1302, supersedes #559). WinUI raises the box's `TextChanged` from

@@ -249,6 +249,21 @@ dotnet_naming_rule.types_pascal.symbols = types
 dotnet_naming_rule.types_pascal.style = pascal_case
 dotnet_naming_rule.types_pascal.severity = suggestion
 
+# ── Locking ──────────────────────────────────────────────────────────────────
+# IDE0330: lock gates use System.Threading.Lock, not `object` (issue #1350).
+# `lock` on a Lock compiles to Lock.EnterScope(), which is cheaper than Monitor.
+# Enforced in the build via EnforceCodeStyleInBuild (Directory.Build.props), so
+# a new `private readonly object _gate = new();` fails the Release build. The
+# rule self-disables where System.Threading.Lock does not exist (netstandard2.0
+# analyzers/generators).
+dotnet_diagnostic.IDE0330.severity = warning
+
+# The VS extension builds net472 locally (no System.Threading.Lock) but net10.0
+# under TF_BUILD, where IDE0330 would fire on gates that must stay `object` for
+# the net472 build.
+[src/vs-reactor/**.cs]
+dotnet_diagnostic.IDE0330.severity = none
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Vendored / generated trees — leave alone
 # ─────────────────────────────────────────────────────────────────────────────

@@ -1510,6 +1510,9 @@ public sealed partial class Reconciler
         Element newRendered;
         Exception? caughtEx = null;
 
+        var record = BeginBoundaryMount();
+        // See MountErrorBoundary: set once the wrapper holds the child or the fallback.
+        bool settled = false;
         _errorBoundaryDepth++;
         try
         {
@@ -1517,19 +1520,30 @@ public sealed partial class Reconciler
             var newControl = Reconcile(node.RenderedElement, newEb.Child, existingChild, requestRerender);
             if (newControl != existingChild)
                 wrapper.Child = newControl;
+            settled = true;
         }
-        catch (Exception ex)
+        // See MountErrorBoundary: a declined RenderError.Propagate() is not caught (issue #1291).
+        catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogWarning(ex, "ErrorBoundary caught render error during update");
             caughtEx = ex;
             if (existingChild is not null)
                 Unmount(existingChild);
+            // What the failed retry mounted but never attached is out of reach of that
+            // Unmount; tear it down too (issue #1291). Without this every failing retry
+            // leaks another set of live subscriptions and native registrations.
+            _boundaryMountJournal = record.OuterJournal;
+            RollBackBoundaryMount(record, existingChild);
             newRendered = newEb.Fallback(ex);
             wrapper.Child = Mount(newRendered, requestRerender);
+            settled = true;
         }
         finally
         {
             _errorBoundaryDepth--;
+            if (!settled && HasBoundaryMountLeftovers(record))
+                RollBackDiscardedBoundaryMount(record, existingChild);
+            EndBoundaryMount(record);
         }
 
         node.ChildElement = newEb.Child;

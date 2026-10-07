@@ -34,7 +34,8 @@ internal record ReactorAppOptions(
     bool FullScreen = false,
     WindowIcon? WindowIcon = null,
     Action<ReactorAppContext>? Startup = null,
-    WindowSpec? InitialWindowSpec = null);
+    WindowSpec? InitialWindowSpec = null,
+    Core.SourceLocation? RootMountSite = null);
 
 public static partial class ReactorApp
 {
@@ -319,6 +320,29 @@ public static partial class ReactorApp
         set => Volatile.Write(ref _appLogger, value);
     }
 
+    private static RenderErrorHandler? _defaultRenderErrorHandler;
+
+    /// <summary>
+    /// App-wide replacement for the built-in render-error fallback, which shows the full
+    /// exception text (type, message, stack trace). <c>null</c> (the default) keeps the
+    /// built-in fallback. (issue #1291)
+    /// </summary>
+    /// <remarks>
+    /// <para>Consulted at error time by every <see cref="Hosting.ReactorHost"/> and
+    /// <see cref="Hosting.ReactorHostControl"/> that has no handler of its own — including
+    /// windows opened after this is set, tray flyouts, and embedded host controls. A host
+    /// overrides it with <see cref="Hosting.ReactorHost.RenderErrorHandler"/>, and a window
+    /// with <see cref="WindowSpec.RenderErrorHandler"/>.</para>
+    /// <para>Covers every place Reactor catches a render-time exception outside an
+    /// <c>ErrorBoundary</c>: the root render, child component renders, the reconcile pass,
+    /// effect flushes, and effect cleanups during dispose. See <see cref="RenderErrorHandler"/>.</para>
+    /// </remarks>
+    public static RenderErrorHandler? DefaultRenderErrorHandler
+    {
+        get => Volatile.Read(ref _defaultRenderErrorHandler);
+        set => Volatile.Write(ref _defaultRenderErrorHandler, value);
+    }
+
     // ── XAML control-assembly registration ─────────────────────────────────
     //
     // The lifted XAML loader resolves `local:` namespaces and Generic.xaml type
@@ -332,7 +356,7 @@ public static partial class ReactorApp
     // CopyOnWrite snapshot semantics so reads from GetXamlType (called on the UI
     // thread, hot path) need no locking.
     private static IXamlMetadataProvider[] _registeredXamlMetadataProviders = [];
-    private static readonly object _registeredXamlMetadataProvidersLock = new();
+    private static readonly Lock _registeredXamlMetadataProvidersLock = new();
 
     /// <summary>
     /// Registers a XAML metadata provider so its types are visible to the WinUI
@@ -439,12 +463,14 @@ public static partial class ReactorApp
             // Spec 010 — source mapping is a devtools-session capability, so it
             // one-way-follows this flag: turning devtools off turns it off too.
             //
-            // It does NOT change how controls are tagged. Reconciler.NeedsTag has no
-            // arm for this flag, deliberately: a stamped element carries its CallSite
-            // in the Extensions bucket, which already satisfies NeedsTag's existing
-            // `Extensions is not null` test. An arm here would only tag UNstamped
-            // elements — which have no location to hand back — while re-introducing
-            // the per-leaf ReactorState allocation PR #468 removed.
+            // It does NOT change how leaf controls are tagged. Reconciler.NeedsTag has no
+            // arm for this flag on ordinary elements, deliberately: a stamped element carries
+            // its CallSite in the Extensions bucket, which already satisfies NeedsTag's
+            // existing `Extensions is not null` test. An arm there would only tag UNstamped
+            // leaves — which have no location to hand back — while re-introducing the
+            // per-leaf ReactorState allocation PR #468 removed. Component boundaries are the
+            // one exception: their Border wrappers are tagged while the flag is on, so an
+            // inspector can find every component (one allocation per component).
             Diagnostics.ReactorSourceMap.Enabled = value;
         }
     }
@@ -495,8 +521,9 @@ public static partial class ReactorApp
         Action<ReactorHost>? configure = null)
         where TRoot : Component, new()
     {
+        var rootMountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         EmitDipBehaviorChangeNoticeOnce(width, height);
-        if (TryRunDevtools(title, width, height, fullScreen, configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot())) return;
+        if (TryRunDevtools(title, width, height, fullScreen, configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot(), rootMountSite: rootMountSite)) return;
 
         StartApplication(() => new ReactorAppOptions(
             RootFactory: () => new TRoot(),
@@ -505,7 +532,8 @@ public static partial class ReactorApp
             WindowWidth: width,
             WindowHeight: height,
             FullScreen: fullScreen,
-            WindowIcon: icon));
+            WindowIcon: icon,
+            RootMountSite: rootMountSite));
     }
 
     /// <summary>
@@ -525,10 +553,11 @@ public static partial class ReactorApp
         Action<ReactorHost>? configure = null)
         where TRoot : Component, new()
     {
+        var rootMountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         ArgumentNullException.ThrowIfNull(spec);
         spec.Validate();
         EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
-        if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot())) return;
+        if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot(), rootMountSite: rootMountSite)) return;
 
         StartApplication(() => new ReactorAppOptions(
             RootFactory: () => new TRoot(),
@@ -537,7 +566,8 @@ public static partial class ReactorApp
             WindowWidth: spec.Width,
             WindowHeight: spec.Height,
             FullScreen: IsFullScreen(spec),
-            InitialWindowSpec: spec));
+            InitialWindowSpec: spec,
+            RootMountSite: rootMountSite));
     }
 
     /// <summary>
@@ -567,8 +597,9 @@ public static partial class ReactorApp
         WindowIcon? icon = null,
         Action<ReactorHost>? configure = null)
     {
+        var rootMountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         EmitDipBehaviorChangeNoticeOnce(width, height);
-        if (TryRunDevtools(title, width, height, fullScreen, configure, rootRenderFunc: rootRender)) return;
+        if (TryRunDevtools(title, width, height, fullScreen, configure, rootRenderFunc: rootRender, rootMountSite: rootMountSite)) return;
 
         StartApplication(() => new ReactorAppOptions(
             RootRenderFunc: rootRender,
@@ -577,7 +608,8 @@ public static partial class ReactorApp
             WindowWidth: width,
             WindowHeight: height,
             FullScreen: fullScreen,
-            WindowIcon: icon));
+            WindowIcon: icon,
+            RootMountSite: rootMountSite));
     }
 
     /// <summary>
@@ -590,11 +622,12 @@ public static partial class ReactorApp
         Func<RenderContext, Element> rootRender,
         Action<ReactorHost>? configure = null)
     {
+        var rootMountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(rootRender);
         spec.Validate();
         EmitDipBehaviorChangeNoticeOnce(spec.Width, spec.Height);
-        if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, rootRenderFunc: rootRender)) return;
+        if (TryRunDevtools(spec.Title, spec.Width, spec.Height, IsFullScreen(spec), configure, rootRenderFunc: rootRender, rootMountSite: rootMountSite)) return;
 
         StartApplication(() => new ReactorAppOptions(
             RootRenderFunc: rootRender,
@@ -603,7 +636,8 @@ public static partial class ReactorApp
             WindowWidth: spec.Width,
             WindowHeight: spec.Height,
             FullScreen: IsFullScreen(spec),
-            InitialWindowSpec: spec));
+            InitialWindowSpec: spec,
+            RootMountSite: rootMountSite));
     }
 
     /// <summary>
@@ -655,6 +689,15 @@ public static partial class ReactorApp
     }
 
     /// <summary>
+    /// Test seam: when set, <see cref="StartApplication"/> hands the options to this callback
+    /// instead of starting WinUI, so a headless test can see what a <c>Run</c> overload would
+    /// pass to <see cref="ReactorApplication"/> (for example the root mount site).
+    /// </summary>
+#pragma warning disable CS0649 // Assigned via InternalsVisibleTo (Reactor.SourceMap.Tests), never inside this assembly.
+    internal static Action<ReactorAppOptions>? StartApplicationForTest;
+#pragma warning restore CS0649
+
+    /// <summary>
     /// Shared startup tail for every <c>Run</c> overload: enter an STA, initialize the
     /// process, publish the options <see cref="ReactorApplication"/> reads on launch, and
     /// hand control to WinUI. Blocks until the app exits.
@@ -665,6 +708,12 @@ public static partial class ReactorApp
     /// </param>
     private static void StartApplication(Func<ReactorAppOptions> options)
     {
+        if (StartApplicationForTest is { } capture)
+        {
+            capture(options());
+            return;
+        }
+
         RunOnSta(() =>
         {
             InitProcess();
@@ -702,10 +751,11 @@ public static partial class ReactorApp
         Func<Component> root,
         Action<ReactorHost>? configure = null)
     {
+        var mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(root);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
-        return OpenAndAnnounce(spec, () => OpenWindowCore(spec, root, renderFunc: null, configure: configure));
+        return OpenAndAnnounce(spec, () => OpenWindowCore(spec, root, renderFunc: null, configure: configure, mountSite: mountSite));
     }
 
     /// <summary>
@@ -719,10 +769,11 @@ public static partial class ReactorApp
         Func<RenderContext, Element> render,
         Action<ReactorHost>? configure = null)
     {
+        var mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(render);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(OpenWindow));
-        return OpenAndAnnounce(spec, () => OpenWindowCore(spec, rootFactory: null, render, configure: configure));
+        return OpenAndAnnounce(spec, () => OpenWindowCore(spec, rootFactory: null, render, configure: configure, mountSite: mountSite));
     }
 
     // Internal overload used by the legacy Run<TRoot>/Run(string, Func) bridges
@@ -733,8 +784,15 @@ public static partial class ReactorApp
         Func<Component>? rootFactory,
         Func<RenderContext, Element>? renderFunc,
         Action<ReactorHost>? configure,
-        bool excludeFromShutdownPolicy = false)
+        bool excludeFromShutdownPolicy = false,
+        Core.SourceLocation? mountSite = null)
     {
+        // The open and its failed-open cleanup are one outermost Reactor frame for render-error
+        // propagation (issue #1291). A synchronous first render can rethrow an error the app
+        // declined via RenderError.Propagate(); the Close/Dispose below must run as nested
+        // frames, not as a new top-level dispatch, or they would clear the "already offered"
+        // mark while that exception is still unwinding.
+        using var propagationScope = RenderErrorDispatch.EnterPropagationScope();
         ReactorWindow window = new ReactorWindow(spec);
         window.ExcludeFromShutdownPolicy = excludeFromShutdownPolicy;
         try
@@ -746,7 +804,7 @@ public static partial class ReactorApp
             // ReactorApp.Windows and therefore to PrepareOpenWindowsForExit.
             configure?.Invoke(window.Host);
             RegisterWindow(window);
-            window.MountAndActivate(rootFactory, renderFunc);
+            window.MountAndActivate(rootFactory, renderFunc, mountSite);
         }
         catch (Exception)
         {
@@ -1180,17 +1238,22 @@ public static partial class ReactorApp
     /// With <c>--vscode</c>, starts the capture server for the VS Code preview panel. Devtools
     /// dispatch requires the build-time <c>Reactor.DevtoolsSupport</c> switch.
     /// </summary>
-    private static bool TryRunDevtools(string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, Func<RenderContext, Element>? rootRenderFunc = null)
+    private static bool TryRunDevtools(string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, Func<RenderContext, Element>? rootRenderFunc = null, Core.SourceLocation? rootMountSite = null)
     {
-        return TryRunDevtoolsCore(Environment.GetCommandLineArgs(), title, width, height, fullScreen, configure, hostRoot, hostRootFactory, rootRenderFunc, exitOnUnavailable: true);
+        return TryRunDevtoolsCore(CommandLineArgsForTest ?? Environment.GetCommandLineArgs(), title, width, height, fullScreen, configure, hostRoot, hostRootFactory, rootRenderFunc, exitOnUnavailable: true, rootMountSite: rootMountSite);
     }
+
+    /// <summary>Test seam: replaces the process command line <c>Run</c> checks for <c>--devtools</c>.</summary>
+#pragma warning disable CS0649 // assigned only by tests through InternalsVisibleTo
+    internal static string[]? CommandLineArgsForTest;
+#pragma warning restore CS0649
 
     internal static bool TryRunDevtoolsForTest(string[] args, string title, double? width, double? height, Action<ReactorHost>? configure = null, Type? hostRoot = null)
     {
         return TryRunDevtoolsCore(args, title, width, height, fullScreen: false, configure, hostRoot, hostRootFactory: null, rootRenderFunc: null, exitOnUnavailable: false);
     }
 
-    private static bool TryRunDevtoolsCore(string[] args, string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, Func<RenderContext, Element>? rootRenderFunc = null, bool exitOnUnavailable = false)
+    private static bool TryRunDevtoolsCore(string[] args, string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, Func<RenderContext, Element>? rootRenderFunc = null, bool exitOnUnavailable = false, Core.SourceLocation? rootMountSite = null)
     {
         var options = DevtoolsCliParser.Parse(args);
 
@@ -1221,7 +1284,10 @@ public static partial class ReactorApp
                 hostRoot,
                 hostRootFactory,
                 rootRenderFunc,
-                configure);
+                configure)
+            {
+                RootMountSite = rootMountSite,
+            };
             return host.TryHandleCommandLine(request);
         }
 
@@ -1378,6 +1444,14 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
     /// Optional callback for unhandled exceptions. If set, called before deciding whether to handle.
     /// Return true to mark the exception as handled; return false (or leave null) to let it crash.
     /// </summary>
+    /// <remarks>
+    /// Also receives render errors an app's <see cref="RenderErrorHandler"/> routes here with
+    /// <see cref="RenderError.Propagate"/>. That call is made by Reactor itself, not by WinUI,
+    /// so it happens even when the app's <c>Application</c> is not a
+    /// <see cref="ReactorApplication"/> (for example a XAML app hosting
+    /// <c>ReactorHostControl</c>). See <see cref="RenderError.Propagate"/> for what happens
+    /// when it returns false.
+    /// </remarks>
     public static Func<Exception, bool>? OnUnhandledException { get; set; }
 
     public ReactorApplication()
@@ -1391,12 +1465,33 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
 
         UnhandledException += (_, e) =>
         {
-            ReactorApp.AppLogger?.LogError(e.Exception, "UnhandledException: {ExceptionType}: {ExceptionMessage}", e.Exception.GetType().Name, e.Exception.Message);
-            if (OnUnhandledException is not null)
-                e.Handled = OnUnhandledException(e.Exception);
+            // A render error the app asked to propagate (RenderError.Propagate) was already
+            // offered to OnUnhandledException, which declined it; don't ask twice.
+            if (RenderErrorDispatch.TryConsumeDeclined(e.Exception))
+                return;
             // Don't set e.Handled = true for unknown exceptions — let the app crash
             // with a useful error rather than silently running in a corrupt state.
+            // Read the callback once: a one-shot callback that unregisters itself before
+            // returning true must still have its decision applied.
+            var callback = OnUnhandledException;
+            bool handled = ReportUnhandled(e.Exception, callback);
+            if (callback is not null)
+                e.Handled = handled;
         };
+    }
+
+    /// <summary>
+    /// The shared unhandled-exception path: logs through <see cref="ReactorApp.AppLogger"/>
+    /// and asks <see cref="OnUnhandledException"/>. Also used for render errors routed here
+    /// by <see cref="RenderError.Propagate"/>, which WinUI would not surface through
+    /// <see cref="Application.UnhandledException"/> on its own.
+    /// </summary>
+    internal static bool ReportUnhandled(Exception ex) => ReportUnhandled(ex, OnUnhandledException);
+
+    private static bool ReportUnhandled(Exception ex, Func<Exception, bool>? callback)
+    {
+        ReactorApp.AppLogger?.LogError(ex, "UnhandledException: {ExceptionType}: {ExceptionMessage}", ex.GetType().Name, ex.Message);
+        return callback is not null && callback(ex);
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
@@ -1460,7 +1555,7 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
 
         try
         {
-            ReactorApp.OpenWindowCore(spec, opts.RootFactory, opts.RootRenderFunc, opts.Configure);
+            ReactorApp.OpenWindowCore(spec, opts.RootFactory, opts.RootRenderFunc, opts.Configure, mountSite: opts.RootMountSite);
         }
         finally
         {

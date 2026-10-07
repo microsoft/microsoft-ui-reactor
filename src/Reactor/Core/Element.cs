@@ -7373,7 +7373,17 @@ public record SwipeItemData(
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("RightItemsMode")]
 public partial record SwipeControlElement(Element Content) : Element
 {
+    /// <summary>
+    /// Items revealed when swiping from the left. When <see cref="LeftItemsMode"/> is
+    /// <see cref="Microsoft.UI.Xaml.Controls.SwipeMode.Execute"/>, WinUI supports only one item:
+    /// Reactor keeps the first and ignores the rest (with a diagnostic warning).
+    /// </summary>
     public SwipeItemData[]? LeftItems { get; init; }
+    /// <summary>
+    /// Items revealed when swiping from the right. When <see cref="RightItemsMode"/> is
+    /// <see cref="Microsoft.UI.Xaml.Controls.SwipeMode.Execute"/>, WinUI supports only one item:
+    /// Reactor keeps the first and ignores the rest (with a diagnostic warning).
+    /// </summary>
     public SwipeItemData[]? RightItems { get; init; }
     public Microsoft.UI.Xaml.Controls.SwipeMode LeftItemsMode { get; init; } = Microsoft.UI.Xaml.Controls.SwipeMode.Reveal;
     public Microsoft.UI.Xaml.Controls.SwipeMode RightItemsMode { get; init; } = Microsoft.UI.Xaml.Controls.SwipeMode.Reveal;
@@ -7382,25 +7392,52 @@ public partial record SwipeControlElement(Element Content) : Element
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<SwipeControlElement, WinUI.SwipeControl> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<SwipeControlElement, WinUI.SwipeControl> d)
         => d.Imperative(
-            mount: static (c, e) => ApplySwipeItems(c, e, force: true),
-            update: static (c, o, n) => ApplySwipeItems(c, n,
-                force: !ReferenceEquals(o.LeftItems, n.LeftItems)
-                    || !ReferenceEquals(o.RightItems, n.RightItems)
-                    || o.LeftItemsMode != n.LeftItemsMode
-                    || o.RightItemsMode != n.RightItemsMode));
+            mount: static (c, e) => ApplySwipeItems(c, null, e),
+            update: static (c, o, n) => ApplySwipeItems(c, o, n));
 
-    private static void ApplySwipeItems(WinUI.SwipeControl control, SwipeControlElement element, bool force)
+    private static void ApplySwipeItems(WinUI.SwipeControl control, SwipeControlElement? old, SwipeControlElement element)
     {
-        if (!force) return;
-        control.LeftItems = CreateSwipeItems(element.LeftItems, element.LeftItemsMode);
-        control.RightItems = CreateSwipeItems(element.RightItems, element.RightItemsMode);
+        if (old is not null
+            && ReferenceEquals(old.LeftItems, element.LeftItems)
+            && ReferenceEquals(old.RightItems, element.RightItems)
+            && old.LeftItemsMode == element.LeftItemsMode
+            && old.RightItemsMode == element.RightItemsMode)
+            return;
+        control.LeftItems = CreateSwipeItems(element.LeftItems, element.LeftItemsMode, nameof(LeftItems),
+            warn: ShouldWarnSwipeItemTruncation(old?.LeftItems?.Length, old?.LeftItemsMode ?? default,
+                element.LeftItems?.Length ?? 0, element.LeftItemsMode));
+        control.RightItems = CreateSwipeItems(element.RightItems, element.RightItemsMode, nameof(RightItems),
+            warn: ShouldWarnSwipeItemTruncation(old?.RightItems?.Length, old?.RightItemsMode ?? default,
+                element.RightItems?.Length ?? 0, element.RightItemsMode));
     }
 
-    private static WinUI.SwipeItems? CreateSwipeItems(SwipeItemData[]? data, WinUI.SwipeMode mode)
+    // WinUI's SwipeItems::Append throws E_INVALIDARG for a second item when Mode == Execute
+    // (issue #1344), which would tear down the whole host via the render-error fallback.
+    internal static int EffectiveSwipeItemCount(int length, WinUI.SwipeMode mode)
+        => mode == WinUI.SwipeMode.Execute ? global::System.Math.Min(length, 1) : length;
+
+    // Warn only on entering the truncated state (oldLength is null on mount), so inline arrays
+    // re-created every render, or edits to the other side, don't repeat the warning.
+    internal static bool ShouldWarnSwipeItemTruncation(int? oldLength, WinUI.SwipeMode oldMode, int newLength, WinUI.SwipeMode newMode)
+    {
+        if (EffectiveSwipeItemCount(newLength, newMode) == newLength) return false;
+        return oldLength is not { } prev || EffectiveSwipeItemCount(prev, oldMode) == prev;
+    }
+
+    private static WinUI.SwipeItems? CreateSwipeItems(SwipeItemData[]? data, WinUI.SwipeMode mode, string side, bool warn)
     {
         if (data is not { Length: > 0 }) return null;
+        int count = EffectiveSwipeItemCount(data.Length, mode);
+        if (warn && count < data.Length && global::Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.IsWarningEnabled)
+        {
+            global::Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.Warning(
+                global::Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Reactor,
+                "SwipeControl.ExecuteItems",
+                $"SwipeControl.{side} has {data.Length} items but SwipeMode.Execute supports only one; " +
+                $"keeping the first item and ignoring {data.Length - count}.");
+        }
         var items = new WinUI.SwipeItems { Mode = mode };
-        foreach (var entry in data) items.Add(CreateSwipeItem(entry));
+        for (int i = 0; i < count; i++) items.Add(CreateSwipeItem(data[i]));
         return items;
     }
 

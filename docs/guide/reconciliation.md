@@ -54,7 +54,10 @@ public UIElement? Reconcile(
     UIElement? existingControl,
     Action requestRerender)
 {
-    // Declared first so it is disposed last: validation changes raised by mount,
+    // A top-level pass is an outermost Reactor frame for render-error propagation
+    // (issue #1291); see EnterFrame. Nested passes and mounts just count.
+    using var entryFrame = EnterFrame();
+    // Declared before the reconcile work so it is disposed after it: validation changes raised by mount,
     // update, or unmount are announced only once the whole pass has finished.
     using var validationScope = Controls.Validation.ValidationRenderScope.BeginReconcile();
     ReferenceDirtySet.BeginCommit();
@@ -385,7 +388,11 @@ element has callbacks (`Element.HasCallbacks`), carries a `Key`, has
 `Extensions`, or uses a reference modifier — the four cases where
 downstream code reads the element back through `GetElementTag`. An
 element with none of those never pays for a `ReactorState` allocation
-or the attached-DP write.
+or the attached-DP write. The one addition is diagnostic: while
+`ReactorSourceMap.Enabled` is on, the `Border` wrapper of every
+`Component`, `Func` and `Memo` boundary is tagged too, so an inspector
+can find each component — one allocation per component, never per leaf
+(see [Source mapping](source-mapping.md)).
 
 This is why `Element.HasCallbacks` is load-bearing in the early-skip
 path of the [child reconciler](#child-reconciler-keyed-vs-positional)

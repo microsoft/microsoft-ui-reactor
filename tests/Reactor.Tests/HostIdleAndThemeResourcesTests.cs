@@ -230,6 +230,60 @@ public sealed partial class HostIdleAndThemeResourcesTests
     }
 
     [Fact]
+    public void NotifyResourcesChanged_AThrowingHostDoesNotStopTheOthers()
+    {
+        var before = new FakeListener();
+        var failing = new ThrowingListener("one");
+        var after = new FakeListener();
+        ThemeResourceListeners.Register(before);
+        ThemeResourceListeners.Register(failing);
+        ThemeResourceListeners.Register(after);
+        try
+        {
+            var ex = Assert.Throws<InvalidOperationException>(Theme.NotifyResourcesChanged);
+
+            Assert.Equal("one", ex.Message);
+            Assert.Equal(1, before.Notified);
+            Assert.Equal(1, after.Notified);
+        }
+        finally
+        {
+            ThemeResourceListeners.Unregister(before);
+            ThemeResourceListeners.Unregister(failing);
+            ThemeResourceListeners.Unregister(after);
+        }
+    }
+
+    [Fact]
+    public void NotifyResourcesChanged_SeveralThrowingHostsAreAggregated()
+    {
+        var a = new ThrowingListener("a");
+        var b = new ThrowingListener("b");
+        var ok = new FakeListener();
+        ThemeResourceListeners.Register(a);
+        ThemeResourceListeners.Register(ok);
+        ThemeResourceListeners.Register(b);
+        try
+        {
+            var ex = Assert.Throws<AggregateException>(Theme.NotifyResourcesChanged);
+
+            Assert.Equal(["a", "b"], ex.InnerExceptions.Select(e => e.Message).ToArray());
+            Assert.Equal(1, ok.Notified);
+        }
+        finally
+        {
+            ThemeResourceListeners.Unregister(a);
+            ThemeResourceListeners.Unregister(ok);
+            ThemeResourceListeners.Unregister(b);
+        }
+    }
+
+    private sealed class ThrowingListener(string message) : IThemeResourceListener
+    {
+        public void OnThemeResourcesChanged() => throw new InvalidOperationException(message);
+    }
+
+    [Fact]
     public void Listeners_DoNotKeepHostsAlive()
     {
         var weak = RegisterUnreferencedListener();

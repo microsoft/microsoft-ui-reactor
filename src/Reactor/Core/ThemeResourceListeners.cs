@@ -18,7 +18,7 @@ internal interface IThemeResourceListener
 /// </summary>
 internal static class ThemeResourceListeners
 {
-    private static readonly object s_gate = new();
+    private static readonly Lock s_gate = new();
     private static List<WeakReference<IThemeResourceListener>>? s_listeners;
 
     internal static void Register(IThemeResourceListener listener)
@@ -41,7 +41,12 @@ internal static class ThemeResourceListeners
         }
     }
 
-    /// <summary>Notifies every live listener. Listeners run outside the lock.</summary>
+    /// <summary>
+    /// Notifies every live listener, outside the lock. A listener can render inline (a host
+    /// with no content renders synchronously on its UI thread), so one that throws must not
+    /// keep the rest from being notified: every listener runs, then the failure is rethrown
+    /// (an <see cref="AggregateException"/> when several failed).
+    /// </summary>
     /// <returns>How many listeners were notified.</returns>
     internal static int NotifyAll()
     {
@@ -51,8 +56,24 @@ internal static class ThemeResourceListeners
             live = SnapshotLiveLocked();
         }
 
+        List<Exception>? errors = null;
         foreach (var listener in live)
-            listener.OnThemeResourcesChanged();
+        {
+            try
+            {
+                listener.OnThemeResourcesChanged();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+            {
+                (errors ??= []).Add(ex);
+            }
+        }
+        if (errors is not null)
+        {
+            if (errors.Count == 1)
+                global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(errors[0]).Throw();
+            throw new AggregateException(errors);
+        }
         return live.Length;
     }
 
