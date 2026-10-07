@@ -791,8 +791,18 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogError(ex, "Render FAILED");
-            // A root effect failure belongs to the root component; a commit-phase one has no
-            // single owning component.
+            // A root effect failure belongs to the root component and is reported like a
+            // child's effect-flush failure (issue #1321) — before the fallback, because the
+            // app's handler may call Propagate(), which throws. A commit-phase failure has no
+            // single owning component and is not a RenderError.
+            if (failurePhase == RenderErrorSource.Effects)
+            {
+                Reconciler.EmitRenderError(
+                    _rootComponent is not null
+                        ? Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_rootComponent, element: null)
+                        : nameof(FuncElement),
+                    ex);
+            }
             ShowErrorFallback(ex, failurePhase,
                 failurePhase == RenderErrorSource.Effects ? _rootComponent?.GetType().Name : null);
         }

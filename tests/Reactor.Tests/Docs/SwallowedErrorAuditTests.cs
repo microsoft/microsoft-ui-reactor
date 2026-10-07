@@ -185,7 +185,7 @@ public sealed class SwallowedErrorAuditTests
     // alone does not enforce that: once the ledger grows past a stale floor,
     // a later shrink back down to it passes silently. Equality makes every
     // change to the total a deliberate, reviewable edit in this file.
-    const int LedgerSiteTotal = 136;
+    const int LedgerSiteTotal = 138;
     const int LedgerSectionFloor = 19;
     const int LedgerRowFloor = 50;
 

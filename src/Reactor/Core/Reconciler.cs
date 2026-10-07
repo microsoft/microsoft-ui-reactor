@@ -192,8 +192,13 @@ public sealed partial class Reconciler : IDisposable
                 _errorBoundaryNodes.Remove(wrapper);
                 if (_componentNodes.Remove(wrapper, out var node))
                 {
-                    Diagnostics.ReactorEventSource.Log.ComponentUnmount(
-                        node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
+                    if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                            global::System.Diagnostics.Tracing.EventLevel.Informational,
+                            Diagnostics.ReactorEventSource.Keywords.Lifecycle))
+                    {
+                        Diagnostics.ReactorEventSource.Log.ComponentUnmount(
+                            Diagnostics.ComponentNames.For(node.Component, node.Element));
+                    }
                     RunUnmountCleanups(node);
                 }
                 if (wrapper is FrameworkElement fe && _onUnmountActions.TryGetValue(fe, out var onUnmount))

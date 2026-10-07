@@ -173,9 +173,109 @@ internal class RenderErrorNames_ComponentTypeOnEveryPath(Harness h) : SelfTestFi
         componentControl.Dispose();
         funcControl.Dispose();
         H.SetContent(null);
+
+        // ── Root effect failures (component and render-function roots) ───
+        // A root's effects are flushed by the host, not inside the root's render catch, so
+        // the host reports them — like a child's effect-flush failure. Mount-only effects,
+        // so each throws exactly once.
+        var effectHost = H.CreateHost();
+        effectHost.Mount(new ThrowingRootEffect());
+        await Harness.Render();
+        var effectRoot = Take();
+        var effectFuncHost = H.CreateHost();
+        effectFuncHost.Mount(ctx =>
+        {
+            ctx.UseEffect(() => throw new RenderErrorProbeException("root func effect"), Array.Empty<object>());
+            return TextBlock("root func effect rendered");
+        });
+        await Harness.Render();
+        var effectRootFunc = Take();
+        Console.WriteLine("# root effect RenderError: " + string.Join(", ", effectRoot)
+            + " | " + string.Join(", ", effectRootFunc));
+        H.Check("RenderErrorNames_RootEffect_NamesTheComponent",
+            effectRoot.Count == 1 && effectRoot[0] == nameof(ThrowingRootEffect));
+        H.Check("RenderErrorNames_RootFuncEffect_Reported",
+            effectRootFunc.Count == 1 && effectRootFunc[0] == nameof(FuncElement));
+
+        var effectControl = new ReactorHostControl();
+        effectControl.Mount(new ThrowingRootEffect());
+        var effectFuncControl = new ReactorHostControl();
+        effectFuncControl.Mount(ctx =>
+        {
+            ctx.UseEffect(() => throw new RenderErrorProbeException("control root func effect"), Array.Empty<object>());
+            return TextBlock("control root func effect rendered");
+        });
+        H.SetContent(new Microsoft.UI.Xaml.Controls.StackPanel
+        {
+            Children = { effectControl, effectFuncControl },
+        });
+        await Harness.Render(200);
+        var effectControls = Take();
+        Console.WriteLine("# host control root effect RenderError: " + string.Join(", ", effectControls));
+        H.Check("RenderErrorNames_HostControl_RootEffect_NamesTheComponent",
+            effectControls.Count(n => n == nameof(ThrowingRootEffect)) == 1);
+        H.Check("RenderErrorNames_HostControl_RootFuncEffect_Reported",
+            effectControls.Count(n => n == nameof(FuncElement)) == 1);
+
+        effectControl.Dispose();
+        effectFuncControl.Dispose();
+        H.SetContent(null);
     }
 
     private const string OomTag = "!oom";
+}
+
+internal sealed class ThrowingRootEffect : Component
+{
+    public override Element Render()
+    {
+        UseEffect(() => throw new RenderErrorProbeException("root effect"), Array.Empty<object>());
+        return TextBlock("root effect rendered");
+    }
+}
+
+/// <summary>
+/// An <c>ErrorBoundary</c> that catches a child's failed first render rolls the child back
+/// (issue #1291), unmounting the half-built component. That <c>ComponentUnmount</c> names the
+/// component exactly as a normal unmount does (<c>Foo&lt;Int32&gt;</c>, not <c>Foo`1</c>).
+/// </summary>
+internal class RenderErrorNames_BoundaryRollbackUnmountNamesComponent(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var unmounts = new List<string>();
+        using var subscription = ReactorTrace.Subscribe(
+            e =>
+            {
+                if (e.EventName == nameof(ReactorEventSource.ComponentUnmount)
+                    && e.Payload[0] is string name && name.StartsWith("RollbackThrower", StringComparison.Ordinal))
+                    lock (unmounts) unmounts.Add(name);
+            },
+            EventLevel.Informational,
+            ReactorEventSource.Keywords.Lifecycle);
+
+        if (!ReactorEventSource.Log.IsEnabled(EventLevel.Informational, ReactorEventSource.Keywords.Lifecycle))
+        {
+            H.Skip("RenderErrorNames_BoundaryRollback", "EventSource disabled (NativeAOT)");
+            return;
+        }
+
+        var host = H.CreateHost();
+        host.Mount(_ => ErrorBoundary(Component<RollbackThrower<int>>(), _ => TextBlock("rollback fallback")));
+        await Harness.Render();
+
+        List<string> seen;
+        lock (unmounts) seen = unmounts.ToList();
+        Console.WriteLine("# rollback ComponentUnmount: " + string.Join(", ", seen));
+        H.Check("RenderErrorNames_BoundaryRollback_FallbackShown", H.FindText("rollback fallback") is not null);
+        H.Check("RenderErrorNames_BoundaryRollback_UnmountNamesGenericComponent",
+            seen.Count == 1 && seen[0] == "RollbackThrower<Int32>");
+    }
+}
+
+internal sealed class RollbackThrower<T> : Component
+{
+    public override Element Render() => throw new RenderErrorProbeException("rollback");
 }
 
 internal sealed class RenderErrorProbeException(string message) : Exception(message);

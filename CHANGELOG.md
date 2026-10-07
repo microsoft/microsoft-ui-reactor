@@ -260,12 +260,15 @@ Conventions for contributors:
   and the other per-component events agree on it. **Listeners now also receive
   errors that were previously silent:** a component (class, function or memo)
   throwing on its first render, a `ReactorHost` / `ReactorHostControl` root
-  component or render function throwing, and any render error an `ErrorBoundary`
+  component or render function throwing (in `Render()` or in its effects), and any
+  render error an `ErrorBoundary`
   catches — reported once, at the throw site, even though the app shows the
   fallback. Same event, same payload; the message stays redacted. Generic
   component names change from ``Foo`1`` to `Foo<Int32>` in every component event.
-  The event is emitted before any `RenderErrorHandler` runs, so it fires whether the
-  handler replaces the fallback or calls `Propagate()` — once per throw either way.
+  For these component failures the event is emitted before any `RenderErrorHandler`
+  runs, so it fires whether the handler replaces the fallback or calls `Propagate()` —
+  once per throw either way. `Reconcile` and `Cleanup` failures are not render errors
+  and are not reported on it.
 
 - **An `ErrorBoundary` whose child fails part-way through mounting no longer leaves
   that child's effects running** (issue #1291). A component registers before its

@@ -103,7 +103,7 @@ row gains a column and the gate rejects it.
 
 | Verdict | Sites | Shipped | Deferred |
 |---|---|---|---|
-| `Keep` | 32 | 32 | 0 |
+| `Keep` | 34 | 34 | 0 |
 | `Narrow` | 38 | 38 | 0 |
 | `Propagate` | 7 | 7 | 0 |
 | `TryFinally` | 7 | 7 | 0 |
@@ -316,12 +316,14 @@ types without making it a narrowing. Same shape as the existing convention at
 | Site(s) | Sites | Verdict | Status | Notes |
 |---|---|---|---|---|
 | Root render catches in `Render` — root component `Render()`, root render function | 2 | `Keep` | shipped | **user-callback isolation** per §6.7.3 — each `try` wraps the app's root render, arbitrary app code. The host shows its error fallback — or, since issue #1291, whatever the app's `RenderErrorHandler` returns — and keeps running; the failure is reported through `ILogger` and, since issue #1321 (PR #1323), the typed `RenderError` event — previously these arms only logged. The catch lets an exception the app declined via `RenderError.Propagate()` pass (`!RenderErrorDispatch.IsPropagating(ex)`, issue #1291). A `HookOrderException` during a hot-reload render is handled by the preceding, narrower clause. Pre-date the ledger; adjudicated when #1321 touched them. |
+| Outer render-loop catch in `Render` ("Render FAILED") — reconcile, content install, root effect flush, post-render callbacks | 1 | `Keep` | shipped | **user-callback isolation** per §6.7.3 — the `try` spans the reconcile pass (child renders and effects), the root's effect flush and app callbacks such as `OnRenderComplete`, all of which run app code. The host shows its fallback (or the app's `RenderErrorHandler` result, issue #1291) and keeps running; an exception the app declined via `RenderError.Propagate()` passes (`!RenderErrorDispatch.IsPropagating(ex)`). When the failing phase is the root's effect flush, the root component owns the failure, so since issue #1321 (PR #1323) it is also reported on the typed `RenderError` event, like a child's effect-flush failure; other phases have no failing component and are not. Pre-dates the ledger; adjudicated when #1321 touched it. |
 
 ### `src/Reactor/Hosting/ReactorHostControl.cs` — render-error reporting (issue #1321)
 
 | Site(s) | Sites | Verdict | Status | Notes |
 |---|---|---|---|---|
 | Root render catches in `Render` — root component `Render()`, root render function | 2 | `Keep` | shipped | **user-callback isolation** per §6.7.3. Same shape and reporting as `ReactorHost.cs` above. |
+| Outer render-loop catch in `Render` ("Render FAILED") | 1 | `Keep` | shipped | **user-callback isolation** per §6.7.3. Same shape and reporting as `ReactorHost.cs` above. |
 
 ### `src/Reactor/Hosting/ReactorWindow.cs` — Phase C.8 (commit `21cd6ef9`) + Phase C.9 narrowing
 
