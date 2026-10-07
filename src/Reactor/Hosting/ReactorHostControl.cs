@@ -749,6 +749,14 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                     TraceRootRendered(hotReloadRender, treeBuildMs);
                 if (_releaseReplacedTreeOnNullRender)
                     ReleaseReplacedTree();
+                // Commit the render like any other: the root's effects still run, and a
+                // failure among them is routed as an effect failure by the outer catch.
+                failurePhase = RenderErrorSource.Effects;
+                if (_rootComponent is not null)
+                    _rootComponent.Context.FlushEffects();
+                else if (_funcContext is not null)
+                    _funcContext.FlushEffects();
+                failurePhase = RenderErrorSource.Reconcile;
                 return;
             }
             TraceRootRendered(hotReloadRender, treeBuildMs);

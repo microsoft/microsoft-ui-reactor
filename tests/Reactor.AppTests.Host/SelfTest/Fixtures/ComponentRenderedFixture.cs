@@ -608,8 +608,11 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
 
         // A root whose Render() returns null still rendered.
         var nullHost = H.CreateHost();
-        nullHost.Mount(new RenderedNullRoot());
+        var nullRoot = new RenderedNullRoot();
+        nullHost.Mount(nullRoot);
         await Harness.Render();
+        // ...and commits like any render: its effects run.
+        H.Check("ComponentRendered_NullRoot_EffectsFlushed", nullRoot.EffectRan);
         H.Check("ComponentRendered_NullRoot_Reported",
             Take().Any(e => (string)e.Payload[0]! == nameof(RenderedNullRoot)
                 && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Mount));
@@ -905,7 +908,13 @@ internal sealed class RenderedCleanupProbeChild : Component
 
 internal sealed class RenderedNullRoot : Component
 {
-    public override Element Render() => null!;
+    public bool EffectRan;
+
+    public override Element Render()
+    {
+        UseEffect(() => EffectRan = true);
+        return null!;
+    }
 }
 
 internal sealed class RenderedSwapComponentRoot : Component
