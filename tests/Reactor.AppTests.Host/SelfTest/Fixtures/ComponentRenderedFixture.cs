@@ -799,7 +799,7 @@ internal class ComponentRendered_RootReplacementSurvivesThrowingCleanup(Harness 
         await Harness.Render();
         Exception? handledEscape = null;
         try { handled.Mount(_ => TextBlock("replacement handled")); }
-        catch (Exception ex) { handledEscape = ex; }
+        catch (InvalidOperationException ex) { handledEscape = ex; }
         await Harness.Render();
         H.Check("ComponentRendered_RetireCleanup_Handled_Reported",
             handledEscape is null && log.Any(e => e.Source == RenderErrorSource.Cleanup),
@@ -823,7 +823,7 @@ internal class ComponentRendered_RootReplacementSurvivesThrowingCleanup(Harness 
             H.Check("ComponentRendered_RetireCleanup_Bare_NewRootShown", H.FindText("replacement bare") is not null);
             Exception? second = null;
             try { bare.Mount(_ => TextBlock("replacement bare 2")); }
-            catch (Exception ex) { second = ex; }
+            catch (InvalidOperationException ex) { second = ex; }
             await Harness.Render();
             H.Check("ComponentRendered_RetireCleanup_Bare_NotRearmed",
                 second is null && H.FindText("replacement bare 2") is not null, second?.Message ?? "");
