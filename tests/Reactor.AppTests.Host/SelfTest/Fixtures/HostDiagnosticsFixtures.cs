@@ -546,15 +546,15 @@ internal static class HostDiagnosticsFixtures
                 var remounted = ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.ReactorWindow, win));
                 H.Check("HostDiagWin_RemountedRoot", remounted?.RootComponentName == ExpectedName<IslandRoot>());
 
-                // A render-function remount on top of a component root: ReactorHost keeps
-                // rendering the component (pre-existing behaviour), so the snapshot must keep
-                // describing the component — its type AND its mount site — not the ignored
-                // render function.
-                win.Mount(static _ => TextBlock("hostdiag-ignored-render"));
+                // A render-function remount on top of a component root replaces it (issue
+                // #1326: the component root is retired, and no longer keeps rendering), so the
+                // snapshot describes the render function — its name AND its mount site.
+                win.Mount(static _ => TextBlock("hostdiag-render-remount")); var renderLine = Line();
                 await win.Host.WaitForIdleAsync();
                 var afterRender = ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.ReactorWindow, win));
-                H.Check("HostDiagWin_IgnoredRenderRemountKeepsComponentRoot",
-                    afterRender?.RootComponentName == ExpectedName<IslandRoot>() && afterRender?.RootRenderFunctionName is null);
+                H.Check("HostDiagWin_RenderRemountReplacesComponentRoot",
+                    afterRender?.RootComponentName is null && afterRender?.RootRenderFunctionName is not null,
+                    $"component={afterRender?.RootComponentName ?? "null"} render={afterRender?.RootRenderFunctionName ?? "null"}");
 
 #if REACTOR_SOURCEMAP
                 H.Check("HostDiagWin_OpenWindowSite",
@@ -565,14 +565,14 @@ internal static class HostDiagnosticsFixtures
                 H.Check("HostDiagWin_RemountSite",
                     remounted?.MountSite?.LineNumber == remountLine,
                     $"site={remounted?.MountSite?.ToShortString() ?? "null"} expected line {remountLine}");
-                H.Check("HostDiagWin_IgnoredRenderRemountKeepsComponentSite",
-                    afterRender?.MountSite?.LineNumber == remountLine,
-                    $"site={afterRender?.MountSite?.ToShortString() ?? "null"} expected line {remountLine}");
+                H.Check("HostDiagWin_RenderRemountReportsItsSite",
+                    afterRender?.MountSite?.LineNumber == renderLine,
+                    $"site={afterRender?.MountSite?.ToShortString() ?? "null"} expected line {renderLine}");
 #else
-                _ = openLine; _ = remountLine;
+                _ = openLine; _ = remountLine; _ = renderLine;
                 H.Skip("HostDiagWin_OpenWindowSite", SkipReason);
                 H.Skip("HostDiagWin_RemountSite", SkipReason);
-                H.Skip("HostDiagWin_IgnoredRenderRemountKeepsComponentSite", SkipReason);
+                H.Skip("HostDiagWin_RenderRemountReportsItsSite", SkipReason);
 #endif
             }
             finally

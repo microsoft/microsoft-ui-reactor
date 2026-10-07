@@ -117,7 +117,7 @@ internal sealed class ComponentControlRegistry<TControl> where TControl : class
 {
     private const int MinPruneThreshold = 256;
 
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly Dictionary<long, WeakReference<TControl>> _byId = new();
     private readonly Func<TControl, long> _readId;
     private readonly Action<TControl, long> _writeId;
