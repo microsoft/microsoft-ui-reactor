@@ -259,6 +259,13 @@ Conventions for contributors:
   overridden to 0, so their text lands exactly where the display cell drew it. A custom
   `col.Editor` keeps any padding, `MinHeight` or `TextControlThemeMinHeight` it sets.
 
+- **A `SwipeControl` side in `SwipeMode.Execute` with more than one item no longer
+  replaces the whole UI with the render-error panel** (issue #1344). WinUI accepts
+  only one item in an Execute-mode `SwipeItems` collection and rejects a second with
+  `E_INVALIDARG`, which escaped the reconciler. Reactor now keeps the first item,
+  ignores the rest, and emits a `SwipeControl.ExecuteItems` diagnostic warning naming
+  the side and how many items were dropped, once each time a side becomes truncated.
+
 - **An `ErrorBoundary` whose child fails part-way through mounting no longer leaves
   that child's effects running** (issue #1291). A component registers before its
   effects run, so a child whose second effect threw had already opened whatever its
