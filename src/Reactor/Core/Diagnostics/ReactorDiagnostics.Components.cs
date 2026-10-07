@@ -338,13 +338,15 @@ internal sealed class ComponentHandle
             var valueType = cell.DiagnosticValueType;
             string text = "";
             bool redacted = false;
-            if (cell.DiagnosticKind is not (HookKind.Effect or HookKind.NavigationLifecycle or HookKind.Unknown))
+            if (cell.DiagnosticKind == HookKind.Context && contexts?.FirstOrDefault(c => c.Index == i) is { } contextRow)
             {
-                // A context hook's secret-ness can come from the context's name.
-                var redactionName = cell.DiagnosticKind == HookKind.Context
-                    ? contexts?.FirstOrDefault(c => c.Index == i)?.Name ?? ""
-                    : "";
-                (text, redacted) = DiagnosticText.Format(redactionName, valueType, cell.DiagnosticValue);
+                // Already formatted for Contexts (with the context's name for redaction): reuse it, so
+                // one snapshot runs app formatting code once and both rows agree.
+                (text, redacted) = (contextRow.Value, contextRow.Redacted);
+            }
+            else if (cell.DiagnosticKind is not (HookKind.Effect or HookKind.NavigationLifecycle or HookKind.Unknown))
+            {
+                (text, redacted) = DiagnosticText.Format("", valueType, cell.DiagnosticValue);
             }
             values[i] = new DiagnosticValue(i, "", HookKindText(cell.DiagnosticKind),
                 valueType is null ? "" : DiagnosticText.FriendlyTypeName(valueType), text,

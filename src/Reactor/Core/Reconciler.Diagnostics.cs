@@ -31,7 +31,7 @@ public sealed partial class Reconciler
     /// The owning host's UI dispatcher, set alongside <see cref="DiagnosticsRootResolver"/>.
     /// The registry is process-wide while hosts can live on different UI threads, so a lookup
     /// skips every reconciler whose dispatcher is not the calling thread's before touching its
-    /// unsynchronized tables or controls. Null (headless) is not filtered.
+    /// unsynchronized tables or controls. A reconciler with no dispatcher recorded is not inspected.
     /// </summary>
     internal Microsoft.UI.Dispatching.DispatcherQueue? DiagnosticsDispatcher { get; set; }
 
@@ -49,7 +49,10 @@ public sealed partial class Reconciler
         DiagnosticsDispatcher ??= Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
     }
 
-    private bool IsOwnedByAnotherThread => DiagnosticsDispatcher is { HasThreadAccess: false };
+    // Inspectable only from the UI thread it has recorded. A reconciler with no dispatcher yet
+    // (constructed, not yet hosted or mounting) is skipped: it has no live element to resolve,
+    // and its first mount may be mutating its tables on another thread.
+    private bool IsInspectableFromThisThread => DiagnosticsDispatcher is { HasThreadAccess: true };
 
     private void RegisterForDiagnostics()
     {
@@ -99,7 +102,7 @@ public sealed partial class Reconciler
     /// </summary>
     internal static bool TryFindComponentNode(UIElement element, out Reconciler owner, out ComponentNode node)
     {
-        foreach (var r in SnapshotLiveReconcilers().Where(static r => !r.IsOwnedByAnotherThread))
+        foreach (var r in SnapshotLiveReconcilers().Where(static r => r.IsInspectableFromThisThread))
         {
             if (r._componentNodes.TryGetValue(element, out var found))
             {
@@ -116,7 +119,7 @@ public sealed partial class Reconciler
     /// <summary>Finds the host root component anchored at <paramref name="element"/>.</summary>
     internal static bool TryFindRootComponent(UIElement element, out RootComponentSource root)
     {
-        foreach (var r in SnapshotLiveReconcilers().Where(static r => !r.IsOwnedByAnotherThread))
+        foreach (var r in SnapshotLiveReconcilers().Where(static r => r.IsInspectableFromThisThread))
         {
             if (r.DiagnosticsRootResolver?.Invoke(element) is { } found)
             {

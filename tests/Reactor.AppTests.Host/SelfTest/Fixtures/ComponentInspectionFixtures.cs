@@ -94,6 +94,14 @@ internal static class ComponentInspectionFixtures
                     var directWrapper = direct.Mount(Component<Counter, CounterProps>(new CounterProps(1, "x")), () => { });
                     H.Check("CompInspect_DirectReconcilerCapturesDispatcher",
                         directWrapper is not null && direct.DiagnosticsDispatcher is { HasThreadAccess: true });
+                    H.Check("CompInspect_DirectReconcilerDescribed",
+                        directWrapper is not null && ReactorDiagnostics.DescribeComponent(directWrapper) is { Name: "Counter" });
+                    // With no dispatcher recorded, a reconciler is never inspected from any thread.
+                    var recorded = direct.DiagnosticsDispatcher;
+                    direct.DiagnosticsDispatcher = null;
+                    H.Check("CompInspect_UncapturedReconcilerNotInspected",
+                        directWrapper is not null && ReactorDiagnostics.DescribeComponent(directWrapper) is null);
+                    direct.DiagnosticsDispatcher = recorded;
                 }
                 var counter = ReactorDiagnostics.DescribeComponent(wrapper);
                 H.Check("CompInspect_ClassDescribed",

@@ -387,6 +387,28 @@ public class ReactorDiagnosticsComponentsTests
         Assert.DoesNotContain("s3cr3t", snapshot.Contexts.Single().Value + snapshot.State.Single().Value);
     }
 
+    private sealed class CountingText
+    {
+        public int Calls;
+        public override string ToString() { Calls++; return "v" + Calls; }
+    }
+
+    [Fact]
+    public void Contexts_AContextValueIsFormattedOnce_AndBothRowsAgree()
+    {
+        var ctx = new Context<CountingText?>(null, "Counting");
+        var value = new CountingText();
+        var r = new Renderer();
+        r.Scope.Push(new Dictionary<ContextBase, object?> { [ctx] = value });
+        r.Begin();
+        r.Context.UseContext(ctx);
+
+        var snapshot = ForContext(r.Context).Describe();
+
+        Assert.Equal(1, value.Calls);
+        Assert.Equal(snapshot.Contexts.Single().Value, snapshot.State.Single().Value);
+    }
+
     private sealed class EqualsThrows
     {
         public override bool Equals(object? obj) => throw new InvalidOperationException("boom");
