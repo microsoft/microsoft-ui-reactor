@@ -383,6 +383,26 @@ public sealed class ReactorHost : IDisposable
             _rootComponent?.GetType().Name ?? nameof(FuncElement),
             hotReloadRender, _reconciler.ForceFullRenderPending, elapsedMilliseconds);
 
+    // Set by RetireRoot while the previous root's content is still shown; cleared once the
+    // replacement renders content, or when it renders nothing and the old tree is released.
+    private bool _releaseReplacedTreeOnNullRender;
+
+    /// <summary>
+    /// A replacement root's render returned null: nothing reconciles the previous root's tree
+    /// away, so release it here (its components unmount and their cleanups run) and show no
+    /// content. A root that merely re-renders to null keeps its content, as before.
+    /// </summary>
+    private void ReleaseReplacedTree()
+    {
+        _releaseReplacedTreeOnNullRender = false;
+        if (_currentTree is not null)
+            _reconciler.Reconcile(_currentTree, null, _currentControl, _rerenderAction ??= () => RequestRender());
+        // Installs "no content" through the same path as a render-error outcome that shows
+        // nothing: clears the content, moves the theme listener and window hooks off it.
+        SetErrorContent(null, null, replacesTree: true);
+        _rootDiagnostics.TrackContent(null);
+    }
+
     /// <summary>
     /// Retires the current root before another is mounted: its effects' cleanups run (as on
     /// Dispose), whichever kind it was, and both root slots are cleared so the render loop
@@ -420,6 +440,9 @@ public sealed class ReactorHost : IDisposable
         _rootRenderFunc = null;
         _funcContext = null;
         _rootDiagnostics.Reset();
+        // The old root's content stays on screen until the replacement renders; if that
+        // render produces nothing, the old tree must still be released (see Render).
+        _releaseReplacedTreeOnNullRender = _currentTree is not null || _currentControl is not null;
         return failure;
     }
 
@@ -742,6 +765,8 @@ public sealed class ReactorHost : IDisposable
                 // content to reconcile. (No root at all is not a render.)
                 if (_rootComponent is not null || _rootRenderFunc is not null)
                     TraceRootRendered(hotReloadRender, treeBuildMs);
+                if (_releaseReplacedTreeOnNullRender)
+                    ReleaseReplacedTree();
                 return;
             }
             TraceRootRendered(hotReloadRender, treeBuildMs);
@@ -837,6 +862,7 @@ public sealed class ReactorHost : IDisposable
 
             _currentControl = newControl;
             _currentTree = newTree;
+            _releaseReplacedTreeOnNullRender = false;
             _rootDiagnostics.TrackContent(newControl);
             OwningWindow?.OnHostContentRendered(newControl);
 
@@ -1213,6 +1239,8 @@ public sealed class ReactorHost : IDisposable
     // built-in panel is a raw control, so the tree is cleared and the next render mounts fresh.
     private void SetErrorContent(UIElement? errorPanel, Element? errorTree, bool replacesTree)
     {
+        // Whatever was shown has been replaced; nothing is left for ReleaseReplacedTree.
+        _releaseReplacedTreeOnNullRender = false;
         if (_overlayWiring is not null && _overlayWiring.TryShowErrorInWrapper(errorPanel))
         {
             // shared overlay wrapper took it

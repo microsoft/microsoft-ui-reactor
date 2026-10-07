@@ -276,7 +276,10 @@ Conventions for contributors:
   and could no longer be reached by `Dispose()`. `ReactorHost.Mount(Func<...>)` also
   clears a previous component root, which the render loop checks first and so kept
   rendering instead of the new function root. Mounting the instance that is already
-  mounted just re-renders it.
+  mounted just re-renders it. A replacement whose first render produces nothing now
+  releases the previous root's content (and its components' effects) instead of leaving
+  it on screen, and a cleanup that throws during the swap is routed like a disposal-time
+  cleanup failure without blocking the new root.
 
 - **An `ErrorBoundary` whose child fails part-way through mounting no longer leaves
   that child's effects running** (issue #1291). A component registers before its

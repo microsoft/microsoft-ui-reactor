@@ -592,6 +592,20 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
         H.Check("ComponentRendered_RootSwap_RetiredInstanceRemountsFresh",
             thirdRoot.CleanedUp && firstRoot.EffectRuns == 2 && !firstRoot.CleanedUp);
 
+        // A replacement root whose first render is null: nothing reconciles the old root's
+        // tree away, so the host releases it (its child's cleanup runs, its content goes).
+        var releaseHost = H.CreateHost();
+        var cleanupProbe = new RenderedCleanupProbeRoot();
+        releaseHost.Mount(cleanupProbe);
+        await Harness.Render();
+        H.Check("ComponentRendered_NullReplacement_OldTreeLiveBefore",
+            H.FindText("cleanup probe child") is not null && RenderedCleanupProbeChild.Cleanups == 0);
+        releaseHost.Mount(new RenderedNullRoot());
+        await Harness.Render();
+        H.Check("ComponentRendered_NullReplacement_OldTreeReleased",
+            H.FindText("cleanup probe child") is null && RenderedCleanupProbeChild.Cleanups == 1,
+            $"cleanups={RenderedCleanupProbeChild.Cleanups}");
+
         // A root whose Render() returns null still rendered.
         var nullHost = H.CreateHost();
         nullHost.Mount(new RenderedNullRoot());
@@ -867,6 +881,26 @@ internal sealed class RenderedAppThrowingRoot : Component
 internal sealed class RenderedAppFallback : Component
 {
     public override Element Render() => TextBlock("app fallback");
+}
+
+internal sealed class RenderedCleanupProbeRoot : Component
+{
+    public override Element Render()
+    {
+        RenderedCleanupProbeChild.Cleanups = 0;
+        return VStack(Component<RenderedCleanupProbeChild>());
+    }
+}
+
+internal sealed class RenderedCleanupProbeChild : Component
+{
+    public static int Cleanups;
+
+    public override Element Render()
+    {
+        UseEffect(() => () => Cleanups++);
+        return TextBlock("cleanup probe child");
+    }
 }
 
 internal sealed class RenderedNullRoot : Component
