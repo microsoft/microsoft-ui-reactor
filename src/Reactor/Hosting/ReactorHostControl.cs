@@ -1239,10 +1239,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                 _deferredRetirements = null;
                 foreach (var (component, funcContext) in deferred)
                 {
-                    RenderErrorDispatch.RunCleanups(component?.Context, cleanupHandler, component?.GetType().Name,
-                        isHostLevel: true, _logger, ref pendingPropagation);
-                    RenderErrorDispatch.RunCleanups(funcContext, cleanupHandler, componentName: null,
-                        isHostLevel: true, _logger, ref pendingPropagation);
+                    // Cleans up and detaches, so a retained old root or setter does not pin
+                    // this disposed host; the first failure escapes once disposal is done.
+                    var failure = RetireContexts(component, funcContext);
+                    pendingPropagation ??= failure;
                 }
             }
             RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
