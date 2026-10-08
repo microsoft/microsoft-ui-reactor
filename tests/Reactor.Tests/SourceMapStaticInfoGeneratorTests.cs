@@ -474,6 +474,55 @@ public sealed class SourceMapStaticInfoGeneratorTests
     }
 
     [Fact]
+    public void Source_FingerprintCoversHookFreeRootMounts()
+    {
+        // A file whose only Reactor call is a root mount building its output with a
+        // constructor: no element factory and no hook, so before root mounts took part it
+        // made no b.Source claim at all, and another assembly's hook-using root at the same
+        // path, line and column lent it its hooks (StaticInfoTests covers the runtime side:
+        // disagreeing claims make the facts unknown).
+        const string hooked = """
+            using Microsoft.UI.Reactor.Core;
+            using Microsoft.UI.Reactor.Hosting;
+
+            namespace Microsoft.UI.Reactor.Hosting
+            {
+                public sealed class ReactorHost
+                {
+                    public void Mount(global::System.Func<RenderContext, Element> root) { }
+                }
+            }
+
+            public static class App
+            {
+                public static void Start(ReactorHost host)
+                    => host.Mount(ctx => { var n = ctx.UseRef(0); return new TextBlockElement("x"); });
+            }
+            """;
+        var hookFree = hooked.Replace("var n = ctx.UseRef(0);", "                     ", StringComparison.Ordinal);
+        Assert.Equal(PositionOf(hooked, "Mount(ctx"), PositionOf(hookFree, "Mount(ctx"));
+
+        static string? FingerprintOf(string code)
+        {
+            var match = Regex.Match(SourceMapTransparentGeneratorTests.Run(code).GeneratedSource,
+                @"b\.Source\(@""User\.cs"", @""(?<fp>[0-9a-f]{16})""\);", RegexOptions.CultureInvariant);
+            return match.Success ? match.Groups["fp"].Value : null;
+        }
+
+        // Positive control: the hook-using root is recorded where the runtime looks it up.
+        var hookedOutput = SourceMapTransparentGeneratorTests.Run(hooked).GeneratedSource;
+        var mount = PositionOf(hooked, "Mount(ctx");
+        Assert.Contains($"b.RenderFunctionHooks(@\"User.cs\", {mount.Line}, {mount.Column}, ", hookedOutput, StringComparison.Ordinal);
+
+        var withHooks = FingerprintOf(hooked);
+        var withoutHooks = FingerprintOf(hookFree);
+        Assert.NotNull(withHooks);
+        Assert.NotNull(withoutHooks); // the hook-free root still claims its file
+        Assert.NotEqual(withHooks, withoutHooks);
+        Assert.DoesNotContain("b.RenderFunctionHooks(", SourceMapTransparentGeneratorTests.Run(hookFree).GeneratedSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Hooks_ConditionalHook_MakesTheFollowingSlotsUnknown()
     {
         const string code = """

@@ -139,9 +139,23 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
             spc.AddSource("ReactorSourceMap.Interceptors.g.cs", Emit(sites!, polyfill, map));
         });
 
+        // Root mount sites: ReactorApp.Run / ReactorApp.OpenWindow / ReactorWindow.Mount /
+        // ReactorHost.Mount / ReactorHostControl.Mount. A root is not an element, so there
+        // is nothing to stamp; the interceptor instead brackets the call with a scope that
+        // the intercepted method claims as its first statement and hands down to the host
+        // it mounts (see ReactorSourceMap.RootMount.cs). A separate pass with a
+        // syntactic NAME pre-filter, so the overwhelming majority of invocations never
+        // reach the semantic model a second time.
+        var rootMountSites = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => IsRootMountCandidate(node),
+                transform: static (ctx, ct) => TryDescribeRootMount(ctx, ct))
+            .Where(static x => x is not null)
+            .Collect();
+
         // Declared names and hook names: a module initializer, separate from the
         // interceptors so a compilation with hooks but no factory calls still gets one.
-        InitializeStaticInfo(context, enabled, pathMap, callSites);
+        // Root mount sites take part in the per-file fingerprints (a hook-free root too).
+        InitializeStaticInfo(context, enabled, pathMap, callSites, rootMountSites);
 
         // Gated on the same opt-in as the interceptors: in a compilation where the
         // generator emits nothing, the attribute is inert by design and a warning about
@@ -156,18 +170,6 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
             }
         });
 
-        // Root mount sites: ReactorApp.Run / ReactorApp.OpenWindow / ReactorWindow.Mount /
-        // ReactorHost.Mount / ReactorHostControl.Mount. A root is not an element, so there
-        // is nothing to stamp; the interceptor instead brackets the call with a scope that
-        // the intercepted method claims as its first statement and hands down to the host
-        // it mounts (see ReactorSourceMap.RootMount.cs). A separate pass with a
-        // syntactic NAME pre-filter, so the overwhelming majority of invocations never
-        // reach the semantic model a second time.
-        var rootMountSites = context.SyntaxProvider.CreateSyntaxProvider(
-                predicate: static (node, _) => IsRootMountCandidate(node),
-                transform: static (ctx, ct) => TryDescribeRootMount(ctx, ct))
-            .Where(static x => x is not null)
-            .Collect();
 
         context.RegisterSourceOutput(rootMountSites.Combine(enabled).Combine(needsPolyfill).Combine(pathMap), static (spc, tuple) =>
         {

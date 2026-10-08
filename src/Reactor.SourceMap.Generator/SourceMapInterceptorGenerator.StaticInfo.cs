@@ -41,7 +41,8 @@ public sealed partial class SourceMapInterceptorGenerator
         IncrementalGeneratorInitializationContext context,
         IncrementalValueProvider<bool> enabled,
         IncrementalValueProvider<ImmutableArray<KeyValuePair<string, string>>> pathMap,
-        IncrementalValueProvider<ImmutableArray<CallSite?>> callSites)
+        IncrementalValueProvider<ImmutableArray<CallSite?>> callSites,
+        IncrementalValueProvider<ImmutableArray<RootMountSite?>> rootMountSites)
     {
         var hasApi = context.CompilationProvider.Select(static (c, _) =>
             c.GetTypeByMetadataName(StaticInfoBuilderMetadataName) is not null);
@@ -73,12 +74,12 @@ public sealed partial class SourceMapInterceptorGenerator
             return (Project: project ?? string.Empty, Solution: solution ?? string.Empty);
         });
 
-        var input = callSites.Combine(hookCalls).Combine(renderOwners).Combine(enabled).Combine(hasApi).Combine(pathMap).Combine(roots);
+        var input = callSites.Combine(hookCalls).Combine(renderOwners).Combine(rootMountSites).Combine(enabled).Combine(hasApi).Combine(pathMap).Combine(roots);
         context.RegisterSourceOutput(input, static (spc, tuple) =>
         {
-            var ((((((sites, hooks), owners), isEnabled), api), map), root) = tuple;
+            var (((((((sites, hooks), owners), mounts), isEnabled), api), map), root) = tuple;
             if (!isEnabled || !api) return;
-            var source = EmitStaticInfo(sites, hooks, owners, map, root.Project, root.Solution);
+            var source = EmitStaticInfo(sites, hooks, owners, mounts, map, root.Project, root.Solution);
             if (source is not null) spc.AddSource("ReactorSourceMap.StaticInfo.g.cs", source);
         });
     }
@@ -469,6 +470,7 @@ public sealed partial class SourceMapInterceptorGenerator
         ImmutableArray<CallSite?> sites,
         ImmutableArray<HookCall?> hooks,
         ImmutableArray<string?> renderOwners,
+        ImmutableArray<RootMountSite?> rootMountSites,
         ImmutableArray<KeyValuePair<string, string>> pathMap,
         string projectDirectory,
         string solutionDirectory)
@@ -507,6 +509,7 @@ public sealed partial class SourceMapInterceptorGenerator
                 $"S{site.Line}:{site.Column}={site.DeclaredName}");
         }
 
+        var functionHookSites = new HashSet<(string Path, int Line, int Column)>();
         foreach (var group in hooks.Where(static h => h is not null).GroupBy(static h => h!.Owner))
         {
             var value = HooksValue(group.OrderBy(static h => h!.SortPath, StringComparer.Ordinal)
@@ -514,10 +517,26 @@ public sealed partial class SourceMapInterceptorGenerator
                 .Select(static h => h!));
             var owner = group.Key;
             if (owner.Kind == HookOwnerKind.Component) componentsWithHooks.Add(owner.Key);
-            else FactsOf(ApplyPathMap(owner.Key, pathMap)).Add($"H{owner.Line}:{owner.Column}={value}");
+            else
+            {
+                var mapped = ApplyPathMap(owner.Key, pathMap);
+                functionHookSites.Add((mapped, owner.Line, owner.Column));
+                FactsOf(mapped).Add($"H{owner.Line}:{owner.Column}={value}");
+            }
             body.AppendLine(owner.Kind == HookOwnerKind.Component
                 ? $"            b.ComponentHooks({Literal(owner.Key)}, {Literal(value)});"
                 : $"            b.RenderFunctionHooks({Literal(ApplyPathMap(owner.Key, pathMap))}, {owner.Line}, {owner.Column}, {Literal(value)});");
+        }
+
+        // A root mount site is where a root render function's hooks are keyed; one with no
+        // hooks (or a component root) records that absence, so a hook-using root another
+        // assembly maps to the same path, line and column cannot lend it its hooks.
+        foreach (var mount in rootMountSites)
+        {
+            if (mount is null) continue;
+            var mapped = ApplyPathMap(mount.FilePath, pathMap);
+            if (functionHookSites.Add((mapped, mount.Line, mount.Column)))
+                FactsOf(mapped).Add($"H{mount.Line}:{mount.Column}=");
         }
 
         foreach (var file in fileFacts.OrderBy(static f => f.Key, StringComparer.Ordinal))

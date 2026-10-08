@@ -315,7 +315,8 @@ public sealed class ReactorStaticInfoBuilder
     /// <summary>
     /// Records the fingerprint of everything the registering assembly knows about one source
     /// file: every call site with its declared name or none, and every render function with
-    /// its hooks or none. When two assemblies stamp the same path with different fingerprints
+    /// its hooks or none (every root mount site included, as a render function may be passed
+    /// there). When two assemblies stamp the same path with different fingerprints
     /// (both mapping their roots to <c>/_/</c>), none of that file's names or render-function
     /// hooks can be attributed, absent ones included, so all are reported as unknown.
     /// </summary>
