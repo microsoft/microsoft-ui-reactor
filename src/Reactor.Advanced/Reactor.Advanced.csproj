@@ -27,8 +27,8 @@
     <Version Condition="'$(Version)' == ''">0.0.0-local</Version>
     <Authors>Microsoft</Authors>
     <Company>Microsoft</Company>
-    <Description>Advanced Reactor components for WinUI 3 — the Win2D canvas, the D3 charting subsystem (Microsoft.UI.Reactor.Charting), the docking / dock-layout subsystem (Microsoft.UI.Reactor.Docking), the CommonMark markdown renderer (Microsoft.UI.Reactor.Markdown), and the data grid (Microsoft.UI.Reactor.Controls DataGrid).</Description>
-    <PackageTags>WinUI;WinUI3;Windows App SDK;WinAppSDK;XAML;Windows;desktop;UI;declarative;Reactor;Win2D;canvas;graphics;charts;docking;dock-layout;markdown;commonmark;datagrid;grid</PackageTags>
+    <Description>Advanced Reactor components for WinUI 3 — the Win2D canvas, the D3 charting subsystem (Microsoft.UI.Reactor.Charting), the docking / dock-layout subsystem (Microsoft.UI.Reactor.Docking), the CommonMark markdown renderer (Microsoft.UI.Reactor.Markdown), the data grid (Microsoft.UI.Reactor.Controls DataGrid), and the experimental WinUI TableView (Microsoft.UI.Reactor.Advanced.Tabular) and Chart (Microsoft.UI.Reactor.Advanced.Charts) controls.</Description>
+    <PackageTags>WinUI;WinUI3;Windows App SDK;WinAppSDK;XAML;Windows;desktop;UI;declarative;Reactor;Win2D;canvas;graphics;charts;docking;dock-layout;markdown;commonmark;datagrid;grid;tableview;table</PackageTags>
     <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
     <PackageIcon>Icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>

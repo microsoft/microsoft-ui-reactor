@@ -42,6 +42,10 @@ public static partial class Factories
             static () => new Win2DAnimatedCanvasHandler());
         ControlRegistry.Register<Win2DVirtualCanvasElement, CanvasVirtualControl>(
             static () => new Win2DVirtualCanvasHandler());
+        ControlRegistry.Register<Tabular.TableViewElement, Microsoft.UI.Xaml.Controls.Tabular.TableView>(
+            static () => new Tabular.TableViewHandler());
+        ControlRegistry.Register<Charts.ChartElement, Microsoft.UI.Xaml.Controls.Charts.Chart>(
+            static () => new Charts.ChartHandler());
     }
 
     // ── Win2D — manual-invalidate canvas (CanvasControl) ─────────────
