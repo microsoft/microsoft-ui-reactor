@@ -443,6 +443,366 @@ public sealed partial class Reconciler : IDisposable
     public int DebugUIElementsModified;
     private int _debugReconcileDepth;
 
+    // ── ReactorDiagnostics.SourceProperty publishing (diagnostics mode only) ─────
+    // Every touch of these is behind ReactorFeatures.DevtoolsSupported && IsEnabled, so
+    // a build without Reactor.DevtoolsSupport trims it and a Release JIT app folds it away.
+
+    /// <summary>The component whose render output is being mounted / reconciled right now.</summary>
+    private string? _diagOwner;
+
+    /// <summary>
+    /// Owner name for the host's root render output (the root component, or
+    /// <c>FuncElement</c> for a root render function). Set by the host for the duration of
+    /// its render pass only, and cleared after it.
+    /// </summary>
+    internal string? DiagnosticRootOwner { get; set; }
+
+    /// <summary>
+    /// Owner for elements realized now: the component being rendered, else the root during
+    /// the host's render pass. Outside it (an ItemsRepeater realizing or reusing a row during
+    /// layout, which also runs <c>Reconcile</c>) the owner is unknown and the field is
+    /// omitted rather than guessed.
+    /// </summary>
+    private string? CurrentDiagnosticOwner => _diagOwner ?? DiagnosticRootOwner;
+
+    private void PublishSource(UIElement control, Element element)
+    {
+        var kind = element;
+        while (kind is ModifiedElement modified) kind = modified.Inner;
+        // A KeyedMemoElement realizes its factory output, which published itself.
+        if (kind is KeyedMemoElement) return;
+        Component? component = kind is ComponentElement && _componentNodes.TryGetValue(control, out var node)
+            ? node.Component
+            : null;
+        var value = Diagnostics.ReactorSourcePublisher.Publish(control, element, CurrentDiagnosticOwner, component);
+        KeepTagIfSourceAmbiguous(control, element, value);
+        MirrorOntoLiveDialog(control, value);
+    }
+
+    /// <summary>
+    /// A ContentDialog element realizes a collapsed placeholder in the tree and shows a separate
+    /// WinUI ContentDialog; the visible dialog carries the placeholder's published value too.
+    /// Only a ContentDialog placeholder has a live dialog, so no element check is needed (a
+    /// keyed-memo root's realized output is described by its value, not by re-running it).
+    /// </summary>
+    private static void MirrorOntoLiveDialog(UIElement control, string value)
+    {
+        if (control is FrameworkElement placeholder
+            && V1Protocol.OverlayLifecycle.PeekLiveContentDialog(placeholder) is { } dialog
+            && !string.Equals(dialog.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) as string, value, StringComparison.Ordinal))
+            dialog.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, value);
+    }
+
+    /// <summary>
+    /// <see cref="SkipsCallSiteOnlyTags"/> mode resolves <c>GetSource</c> from the published
+    /// value. When that value's <c>at=</c> text is shared by different call sites it cannot,
+    /// so such a control is tagged after all — unless it already has an element (a
+    /// decorator's own tag, which must not be replaced).
+    /// </summary>
+    private static void KeepTagIfSourceAmbiguous(UIElement control, Element element, string value)
+    {
+        if (!Diagnostics.ReactorSourcePublisher.SkipsCallSiteOnlyTags
+            || !Diagnostics.ReactorSourcePublisher.IsAmbiguous(value)
+            || control is not FrameworkElement fe)
+            return;
+        if (TryGetReactorState(fe, out var state))
+            state.Element ??= element;
+        else
+            SetElementTag(fe, element);
+    }
+
+    /// <summary>
+    /// Shallow-skip refresh: the element was skipped, so only its call site can have moved.
+    /// The skip happens inside its parent's reconcile, under the same owner as an update.
+    /// </summary>
+    internal void PublishSourceOnSkip(UIElement control, Element newEl) => PublishSource(control, newEl);
+
+    /// <summary>
+    /// ItemsRepeater adoption (<c>TryAdoptRealizedReplacement</c>) moves a fresh component
+    /// subtree into the still-realized wrapper, but not the wrapper's own attached values.
+    /// The replacement wrapper was published when it mounted; carry that value over so the
+    /// live wrapper describes the element it now hosts (its new key, for one).
+    /// </summary>
+    internal static void AdoptPublishedSource(UIElement adopted, UIElement replacement)
+    {
+        if (replacement.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string value)
+            adopted.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, value);
+    }
+
+    /// <summary>The root name of the last <see cref="PublishRootSource"/> (a string; no control is retained).</summary>
+    private string? _publishedRootName;
+
+    /// <summary>Host hook: describes the root content control, naming the host's root component.</summary>
+    internal void PublishRootSource(UIElement? control, Element tree, string rootName, string? rootHooks)
+    {
+        if (control is null) return;
+        RefreshStaleFacts(control);
+        if (_publishedRootName is { } previousRoot && !string.Equals(previousRoot, rootName, StringComparison.Ordinal))
+            RenameRootOwner(control, previousRoot, rootName);
+        _publishedRootName = rootName;
+        // A root wrapped in modifiers (ModifiedElement) is still the kind it wraps.
+        var kind = tree;
+        while (kind is ModifiedElement modified) kind = modified.Inner;
+        Component? component = kind is ComponentElement && _componentNodes.TryGetValue(control, out var node)
+            ? node.Component
+            : null;
+        // The control's current value is the baseline: the update path may have rewritten the
+        // plain value, so the root value is written whenever it differs. No reference to the
+        // root is kept, so a disposed host's previous subtree is not retained.
+        var current = control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) as string;
+        // Keyed-memo roots and forwarding RegisterType roots realize a control that describes
+        // another element (the factory output; the forwarded child): only the host-root fields
+        // are added to its value, never a re-description of the root element.
+        if (kind is KeyedMemoElement || IsForwardingRegisteredRoot(control, kind))
+        {
+            var withRoot = Diagnostics.ReactorSourcePublisher.WithRoot(
+                current, rootName, rootHooks, _hostAddedRootHooks, out var addedHooks);
+            _hostAddedRootHooks = addedHooks ? rootHooks : null;
+            if (withRoot is null) return;
+            if (!string.Equals(withRoot, current, StringComparison.Ordinal))
+                control.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, withRoot);
+            MirrorOntoLiveDialog(control, withRoot);
+            return;
+        }
+        _hostAddedRootHooks = null;
+        var value = Diagnostics.ReactorSourcePublisher.Publish(control, tree, rootName, component, rootName, rootHooks, current);
+        KeepTagIfSourceAmbiguous(control, tree, value);
+        MirrorOntoLiveDialog(control, value);
+    }
+
+    /// <summary>
+    /// The <c>hooks=</c> value <see cref="PublishRootSource"/> added to a keyed-memo root's
+    /// value on its last pass (the realized output had none of its own), so a remounted root
+    /// replaces or removes it instead of keeping the previous root's hooks.
+    /// </summary>
+    private string? _hostAddedRootHooks;
+
+    /// <summary>The <c>ReactorSourceMap.StaticFactsRevision</c> this host's published values reflect.</summary>
+    private int _seenFactsRevision;
+
+    /// <summary>
+    /// Static facts (names, hooks) already published may have gone stale since the last pass: a
+    /// late source-mapped assembly made a file unattributable, or a hot-reload update made them
+    /// all unknown. Controls whose call site, key and kind did not change, and skipped
+    /// subtrees, are not re-published, so the whole tree is walked once per change (rare) and
+    /// the stale fields are dropped.
+    /// </summary>
+    /// <summary>
+    /// Host hook: a root rendered null and kept its content, which nothing else re-publishes,
+    /// so the content's stale static facts are dropped here (see <see cref="RefreshStaleFacts"/>).
+    /// </summary>
+    internal void RefreshRetainedContentFacts(UIElement? control)
+    {
+        if (control is not null) RefreshStaleFacts(control);
+    }
+
+    private void RefreshStaleFacts(UIElement control)
+    {
+        int revision = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.StaticFactsRevision;
+        if (revision == _seenFactsRevision) return;
+        _seenFactsRevision = revision;
+        // Each control's exact call site (its tag where it has one), not the first site recorded
+        // for its at= text: two files can share that text, and only one may have gone stale.
+        WalkPublished(control, stopAtBoundaries: false, static (node, value) =>
+            Diagnostics.ReactorSourcePublisher.WithoutStaleFacts(value,
+                node is UIElement ui ? global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(ui) : null));
+    }
+
+    /// <summary>
+    /// Host hook: the root threw and the app's <c>RenderErrorHandler</c> supplied a fallback
+    /// tree, which now stands in for the root's content. Its controls describe the fallback
+    /// (published as it mounted); the content root additionally gets the host-root fields, so
+    /// an inspector still sees which root failed. Same shape as a keyed-memo root: only
+    /// <c>root=</c> (and the root's <c>hooks=</c>, when the value has none) are added.
+    /// </summary>
+    internal void PublishFallbackRootSource(UIElement? control, string rootName, string? rootHooks)
+    {
+        if (control is null) return;
+        RefreshStaleFacts(control);
+        _publishedRootName = rootName;
+        var current = control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) as string;
+        var withRoot = Diagnostics.ReactorSourcePublisher.WithRoot(
+            current, rootName, rootHooks, _hostAddedRootHooks, out var addedHooks);
+        _hostAddedRootHooks = addedHooks ? rootHooks : null;
+        if (withRoot is null) return;
+        if (!string.Equals(withRoot, current, StringComparison.Ordinal))
+            control.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, withRoot);
+        MirrorOntoLiveDialog(control, withRoot);
+    }
+
+    /// <summary>
+    /// Host hook: the host mounted a different root over content it kept (an in-place update).
+    /// Root-owned controls whose call site, key and kind did not change were not re-published,
+    /// so they still name the previous root. Rewrites <c>owner=</c> on the content's root-owned
+    /// controls: the visual tree plus the Reactor subtrees hung off it outside the visual tree
+    /// (flyout content and pass-through element, popup child, a showing dialog's content,
+    /// cached navigation pages). A component wrapper (<c>mounts=</c>) is renamed if the root
+    /// owns it, but not entered: its subtree is owned by that component. Rare (only on a root
+    /// swap), so a walk.
+    /// </summary>
+    internal void RenameRootOwner(UIElement? root, string previousOwner, string owner)
+        => WalkPublished(root, stopAtBoundaries: true,
+            (_, value) => Diagnostics.ReactorSourcePublisher.WithOwner(value, previousOwner, owner));
+
+    /// <summary>
+    /// Visits every control under <paramref name="root"/> that carries a published value,
+    /// through the visual tree and the Reactor subtrees outside it (see
+    /// <see cref="RenameRootOwner"/>), writing back what <paramref name="rewrite"/> returns
+    /// (<c>null</c> = unchanged). With <paramref name="stopAtBoundaries"/>, component wrappers
+    /// and embedded hosts are not entered (their subtrees have other owners).
+    /// </summary>
+    private void WalkPublished(UIElement? root, bool stopAtBoundaries, Func<DependencyObject, string, string?> rewrite)
+    {
+        if (root is null) return;
+        var seen = new HashSet<DependencyObject>(ReferenceEqualityComparer.Instance);
+        var pending = new Stack<DependencyObject>();
+        void Push(DependencyObject? d)
+        {
+            if (d is not null && seen.Add(d)) pending.Push(d);
+        }
+
+        Push(root);
+        while (pending.Count > 0)
+        {
+            var node = pending.Pop();
+            bool componentWrapper = false;
+            if (node.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string value)
+            {
+                if (rewrite(node, value) is { } rewritten && !string.Equals(rewritten, value, StringComparison.Ordinal))
+                    node.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, rewritten);
+                componentWrapper = Diagnostics.ReactorSourcePublisher.IsComponentWrapper(value);
+            }
+
+            // Overlay edges first: a decorator hangs its flyout on its target's control, which
+            // can be a component wrapper (Flyout(Component<T>(), body)) or an embedded host
+            // whose own content is not this root's, while the flyout body is the decorator
+            // owner's.
+            if (node is FrameworkElement fe)
+            {
+                if (GetFlyoutOnControl(fe) is WinUI.Flyout flyout)
+                {
+                    Push(flyout.Content);
+                    Push(flyout.OverlayInputPassThroughElement);
+                }
+                // .WithContextFlyout / .AttachedFlyout / .ToolTip modifiers hang Reactor content
+                // off the control too, outside every child walk until opened.
+                if (fe.ContextFlyout is WinUI.Flyout contextFlyout) Push(contextFlyout.Content);
+                if (WinPrim.FlyoutBase.GetAttachedFlyout(fe) is WinUI.Flyout attachedFlyout) Push(attachedFlyout.Content);
+                Push(WinUI.ToolTipService.GetToolTip(fe) as UIElement);
+                Push(V1Protocol.OverlayLifecycle.PeekLiveContentDialog(fe));
+            }
+            // A component wrapper's subtree is that component's. An embedded ReactorHostControl
+            // is another host, even when it is this root's own content (XamlHost(() => island)):
+            // its island names its own root. The node itself was renamed above if this root owns it.
+            if (stopAtBoundaries && (componentWrapper || node is global::Microsoft.UI.Reactor.Hosting.ReactorHostControl)) continue;
+
+            if (node is WinPrim.Popup popup) Push(popup.Child);
+            int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);
+            for (int i = 0; i < count; i++)
+                Push(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node, i));
+
+            if (node is not UIElement ui) continue;
+            // Logical children too: content a control template has not realized yet (a closed
+            // flyout's Button content, a collapsed pane slot) is not in the visual tree.
+            ForEachReactorChildControl(ui, child => Push(child));
+            // Inline UI in a RichTextBlock document lives in its blocks, not its visual tree.
+            if (ui is WinUI.RichTextBlock richText)
+                VisitInlineUIChildren(richText, child => Push(child));
+            // A target-wrapping decorator (Flyout(NavigationView(...), ...)) replaces the
+            // target's tag with its own; the control's children are still the target's.
+            if (ui is FrameworkElement tagged && GetElementTag(tagged) is Element taggedElement
+                && global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.UnwrapDecorators(taggedElement) is { } hostElement
+                && _v1Handlers.TryGet(hostElement.GetType(), out var entry) && entry is IV1ChildEnumerator children)
+                children.VisitLiveChildren(ui, child => Push(child));
+            if (ui is WinUI.ItemsControl items)
+            {
+                foreach (var item in items.Items)
+                    Push(item as UIElement);
+            }
+            else if (ui is WinUI.TabView tabs)
+            {
+                foreach (var tab in tabs.TabItems)
+                    Push(tab as UIElement);
+            }
+            else if (ui is WinUI.TreeView tree)
+            {
+                // Node content (legacy TreeViewNodeData.ContentElement) is mounted for every
+                // node, collapsed ones included, and is in no visual or logical child walk.
+                var nodes = new Stack<WinUI.TreeViewNode>(tree.RootNodes);
+                while (nodes.Count > 0)
+                {
+                    var treeNode = nodes.Pop();
+                    Push(treeNode.Content as UIElement);
+                    foreach (var child in treeNode.Children) nodes.Push(child);
+                }
+            }
+            if (_navigationHostNodes.TryGetValue(ui, out var navNode) && navNode.Cache is { } cache)
+            {
+                foreach (var page in cache.SnapshotControls())
+                    Push(page);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A root that dispatched to a per-host <c>RegisterType</c> registration (a V1 handler for
+    /// the same type takes precedence, as in Mount) whose control describes another element.
+    /// </summary>
+    private bool IsForwardingRegisteredRoot(UIElement control, Element kind)
+        => !_v1Handlers.TryGet(kind.GetType(), out _)
+            && _typeRegistry.ContainsKey(kind.GetType())
+            && ForwardsAnotherElement(control, kind);
+
+    /// <summary>
+    /// A per-host <c>RegisterType</c> callback can return the control the reconciler mounted for
+    /// a child element; the published value then describes whatever the JIT tag (and so
+    /// <c>GetSource</c>) describes. <c>TypeRegistration.TagControl</c> keeps the child's tag when
+    /// the child is tagged (a stamped child always is, outside the Native AOT skip, so a value
+    /// with a call site counts) and otherwise tags the control with the registration. Decided
+    /// from the value and the tag, so it holds where no tag exists.
+    /// </summary>
+    private static bool ForwardsAnotherElement(UIElement control, Element element)
+    {
+        if (control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is not string current
+            || !Diagnostics.ReactorSourcePublisher.DescribesAnotherElement(current, element))
+            return false;
+        return Diagnostics.ReactorSourcePublisher.AtKey(current) is not null
+            || (control is FrameworkElement fe && GetElementTag(fe) is { } tag && tag.GetType() != element.GetType());
+    }
+
+    /// <summary>
+    /// Mounts a ContentDialog's body. A dialog opened later (deferred to the placeholder's
+    /// Loaded, or on a state flip handled outside a render) mounts outside any owner scope; the
+    /// placeholder's published <c>owner=</c> is the owner its body was declared under, so it is
+    /// restored for the mount. Nested components still scope their own subtrees.
+    /// </summary>
+    internal UIElement? MountDialogContent(FrameworkElement placeholder, Element content, Action requestRerender)
+    {
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+            && CurrentDiagnosticOwner is null
+            && placeholder.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string published
+            && Diagnostics.ReactorSourcePublisher.Owner(published) is { } owner)
+            return MountUnderOwner(content, requestRerender, owner);
+        return Mount(content, requestRerender);
+    }
+
+    private UIElement? MountUnderOwner(Element element, Action requestRerender, string owner)
+    {
+        var previous = _diagOwner;
+        _diagOwner = owner;
+        try { return Mount(element, requestRerender); }
+        finally { _diagOwner = previous; }
+    }
+
+    private UIElement? ReconcileUnderOwner(
+        Element? oldElement, Element? newElement, UIElement? existing, Action requestRerender, string owner)
+    {
+        var previous = _diagOwner;
+        _diagOwner = owner;
+        try { return Reconcile(oldElement, newElement, existing, requestRerender); }
+        finally { _diagOwner = previous; }
+    }
+
     // Hot reload signal: when set, the next top-level Reconcile() pass bypasses
     // Component memo (props/deps equality) so updated method bodies are picked up
     // even when props are unchanged. Cleared at the start of that pass.
@@ -1000,7 +1360,26 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Predicate companion to <see cref="SetElementTagIfNeeded"/>. Returns
+    /// V1 adapter variant. <paramref name="ownsTeardown"/> says the element's handler does
+    /// teardown the generic unmount walk (<see cref="ForEachReactorChildControl(UIElement, Action{UIElement})"/>)
+    /// does not, such as NavigationView's <c>PaneHeader</c> or NavigationHost's route
+    /// subscription and page cache. Unmount dispatches to that
+    /// handler through the tag, so in <see cref="SkipsCallSiteOnlyTags"/> mode a stamped
+    /// element keeps it, exactly as every stamped element is tagged outside that mode.
+    /// </summary>
+    internal static void SetElementTagIfNeeded(FrameworkElement control, Element element, bool ownsTeardown)
+    {
+        if (ownsTeardown && SkipsCallSiteOnlyTags && element.Extensions is not null
+            && control.GetValue(ReactorAttached.StateProperty) is not ReactorState)
+        {
+            control.SetValue(ReactorAttached.StateProperty, new ReactorState { Element = element });
+            return;
+        }
+        SetElementTagIfNeeded(control, element);
+    }
+
+    /// <summary>
+    /// Predicate companion to <see cref="SetElementTagIfNeeded(FrameworkElement, Element)"/>. Returns
     /// true when downstream code will read the element back through
     /// <see cref="GetElementTag(FrameworkElement)"/> — see the helper's
     /// summary for the three categories.
@@ -1027,7 +1406,7 @@ public sealed partial class Reconciler : IDisposable
     internal static bool NeedsTag(Element element) =>
         element.HasCallbacks
         || element.Key is not null
-        || element.Extensions is not null
+        || (element.Extensions is { } extras && (!SkipsCallSiteOnlyTags || !extras.IsBehaviorallyEmpty))
         || HasReferenceModifiers(element)
         || (IsComponentBoundary(element) && global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
 
@@ -1038,6 +1417,34 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     private static bool IsComponentBoundary(Element element) =>
         element is ComponentElement or FuncElement or MemoElement;
+
+    /// <summary>
+    /// Native AOT in diagnostics mode: an element whose ONLY extra is its call site is not
+    /// tagged. That tag (a <see cref="ReactorState"/> plus its attached DP, ~1.2 KB native
+    /// per control) exists so a managed inspector can read call sites, and no managed agent
+    /// can load into a Native AOT process. The control keeps exactly the state an unstamped
+    /// build gives it (every functional reader already handles that), and
+    /// <c>ReactorSourceMap.GetSource</c> resolves its location from the published
+    /// <see cref="Diagnostics.ReactorDiagnostics.SourceProperty"/> value instead.
+    /// Guarded on the feature switch first, so a build without it folds this to false.
+    /// </summary>
+    internal static bool SkipsCallSiteOnlyTags =>
+        global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+        && Diagnostics.ReactorSourcePublisher.SkipsCallSiteOnlyTags;
+
+    /// <summary>
+    /// Spec 010 shallow-skip refresh when only the call site moved. Refreshes an existing
+    /// back-pointer, and allocates one only when <see cref="NeedsTag"/> says so — which for
+    /// a stamped element is always, except in <see cref="SkipsCallSiteOnlyTags"/> mode
+    /// (there the published value is refreshed instead) — or when the element's handler owns
+    /// teardown that unmount reaches through the tag (the same rule as its mount and update).
+    /// </summary>
+    internal void RefreshCallSiteTagOnSkip(FrameworkElement control, Element newEl)
+        => SetElementTagIfNeeded(control, newEl,
+            SkipsCallSiteOnlyTags
+            && _v1Handlers.TryGet(newEl.GetType(), out var entry)
+            && entry is IV1TeardownOwner owner
+            && owner.OwnsTeardown(control));
 
     /// <summary>
     /// Spec 010 — did the source location change across a shallow skip?
@@ -1181,6 +1588,19 @@ public sealed partial class Reconciler : IDisposable
     {
         if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
             state.Element = null;
+        ClearPublishedSource(fe);
+    }
+
+    /// <summary>
+    /// A control that leaves Reactor's ownership (pool return, recycle, detach) stops
+    /// describing the element it no longer hosts: the published <c>ReactorSource</c> goes with
+    /// the element pointer, so neither an inspector nor <c>GetSource</c>'s published-value
+    /// fallback reports stale attribution. Applies to controls without a ReactorState too.
+    /// </summary>
+    private static void ClearPublishedSource(FrameworkElement fe)
+    {
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
+            fe.ClearValue(Diagnostics.ReactorDiagnostics.SourceProperty);
     }
 
     /// <summary>
@@ -1220,6 +1640,7 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     public static void DetachReactorState(FrameworkElement fe)
     {
+        ClearPublishedSource(fe);
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
             return;
         TeardownReferenceEdges(fe);
@@ -1605,6 +2026,9 @@ public sealed partial class Reconciler : IDisposable
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).
             fe.ClearValue(FrameworkElement.DataContextProperty);
+            // The element pointer is gone; so is what was published about it, even when the
+            // pool then declines the control (pooling disabled, full, or not poolable).
+            ClearPublishedSource(fe);
 
             _pool.Return(fe);
         }
@@ -2657,7 +3081,10 @@ public sealed partial class Reconciler : IDisposable
         // Each component is wrapped in a Border as an identity anchor, so we
         // reconcile the child inside the wrapper, not the wrapper itself.
         var existingChild = (control as Border)?.Child;
-        var newControl = Reconcile(node.RenderedElement, newChildElement, existingChild, componentRerender);
+        var newControl = global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+            ? ReconcileUnderOwner(node.RenderedElement, newChildElement, existingChild, componentRerender,
+                Diagnostics.ReactorSourceFormat.ComponentName(node.Component, newEl))
+            : Reconcile(node.RenderedElement, newChildElement, existingChild, componentRerender);
         if (control is Border border)
         {
             if (newControl != existingChild)
@@ -3576,7 +4003,8 @@ public sealed partial class Reconciler : IDisposable
         // path's refresh.
         if (existingControl is FrameworkElement migratedFe)
             SetElementTagIfNeeded(migratedFe, newEl);
-
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
+            PublishSource(existingControl, newEl);
         Diagnostics.ReactorEventSource.Log.HotReloadStateMigrated(newType.FullName ?? newType.Name);
         return true;
     }

@@ -26,6 +26,18 @@ internal sealed class NavigationCache
 
     public int MaxSize { get; set; }
 
+    /// <summary>Every cached page's mounted control (a snapshot; for diagnostics walks).</summary>
+    internal List<UIElement> SnapshotControls()
+    {
+        lock (_lock)
+        {
+            var controls = new List<UIElement>(_cache.Count);
+            foreach (var page in _cache.Values)
+                if (page.MountedControl is { } control) controls.Add(control);
+            return controls;
+        }
+    }
+
     /// <param name="maxSize">Maximum number of entries before LRU eviction.</param>
     /// <param name="onEvict">Called when an entry is evicted so the reconciler can unmount it.</param>
     public NavigationCache(int maxSize, Action<UIElement>? onEvict = null)

@@ -131,6 +131,53 @@ are only issued while the event is enabled, so subscribe with
 `ReactorTrace.Subscribe(..., EventLevel.Verbose, (EventKeywords)0x4000)` first.
 The payload carries no props, state values, keys or paths.
 
+### Inspector diagnostics on controls
+
+Out-of-process inspectors (WinUI DevTools, VS Live Property Explorer) read the visual tree
+through XamlDiagnostics, which cannot call into managed code. That matters most for Native
+AOT apps, which have no managed agent to load. Reactor therefore publishes what it knows about each control as a string attached
+property, `ReactorDiagnostics.SourceProperty` (`.ReactorSource` in XamlDiagnostics):
+
+```
+v=1|at=Pages/Main.cs:36:13|owner=Counter|element=Button|key=t1|name=incrementButton
+v=1|at=App.cs:46:9|owner=App|element=Component|mounts=Counter|hooks=0:count@36;1:density@37
+```
+
+| Field | Meaning |
+|---|---|
+| `at` | DSL call site `path:line[:column]`, relative to the project directory |
+| `rel` | `root` = `at` is relative to the solution root; `0` = file name only (file outside both) |
+| `owner` | Component whose render produced the control (`FuncElement` / `MemoElement` for function components) |
+| `element` | Element kind: `Button`, `TextBlock`, `Stack`, `Component`, … |
+| `mounts` | On a component's wrapper: the component it hosts |
+| `root` | On a host's root content: the host's root component |
+| `key` | The element's key |
+| `name` | The identifier the element was assigned to (`var title = TextBlock(…)` → `title`) |
+| `hooks` | On `mounts` / `root` controls: `slot:variable@line;…` (`?` once slots are not statically known) |
+
+Values escape `%` as `%25` and `|` as `%7C`. Readers ignore fields they do not know.
+
+**Gating.** Publishing needs both of these:
+
+- the `Reactor.DevtoolsSupport` build switch: on by default in Debug through `$(ReactorDiagnostics)`, and `-p:ReactorDiagnostics=true` for a Release / Native AOT build. An explicit `ReactorDiagnostics` value wins over the default and over a `Reactor.DevtoolsSupport` item the project declares itself;
+- `REACTOR_DIAGNOSTICS=1` in the environment at launch. It also turns source mapping on from startup, so elements built before the first host (a page's field initializers, say) carry their call sites.
+
+Otherwise nothing is written, and a trimmed or AOT build without the switch does not contain the publishing code at all. Like XAML's runtime source info, paths are never absolute developer paths. See the [threat model](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/security/threat-model.md) §7.7.
+
+**Cost.** With the switch on but `REACTOR_DIAGNOSTICS` unset (the Debug default), the cost is a
+cached boolean check per control: mount, re-render, memory and first frame stay within run-to-run
+noise of a build without the feature. With publishing on, every realized control carries one string
+value. Measured on a Native AOT app with 50,000 controls, diagnostics mode costs about 20 B of
+managed memory and 0.7 KB of native memory per control, and about 3 µs per control at mount. Values
+are cached per call site, so controls without a key from the same call site share one string; a
+value that is unique per control (a keyed control) costs about 0.3 KB more. An in-place re-render
+whose call sites and keys did not change writes nothing. Under JIT, where a managed inspector can
+read call sites from the element, each stamped control also keeps its element tag (about 0.2 KB
+managed and 0.8 KB native more); Native AOT skips that tag when the call site is all it would carry,
+because no managed inspector can load, and `ReactorSourceMap.GetSource` reads the published value
+instead. Controls whose handler tears down child slots itself (NavigationView's pane slots, item
+hosts) keep it, because unmount reaches that handler through the tag.
+
 > **NativeAOT:** the .NET NativeAOT toolchain defaults the `EventSourceSupport`
 > feature switch to `false`, which compiles the whole `EventSource` surface out.
 > A NativeAOT-published app therefore emits none of these events — including

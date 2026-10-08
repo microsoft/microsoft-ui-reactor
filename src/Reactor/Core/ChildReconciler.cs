@@ -241,8 +241,13 @@ internal static class ChildReconciler
                         || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
                     && (existingControl ??= children.Get(i)) is FrameworkElement fe)
                 {
-                    if (newEl.HasCallbacks || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                    if (newEl.HasCallbacks)
                         Reconciler.SetElementTag(fe, newEl);
+                    else if (Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        reconciler.RefreshCallSiteTagOnSkip(fe, newEl);
+                    if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+                        && Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        reconciler.PublishSourceOnSkip(fe, newEl);
                     Reconciler.RefreshGestureDragStateOnSkip(fe, oldEl.Modifiers, newEl.Modifiers);
                 }
                 return;
@@ -334,8 +339,13 @@ internal static class ChildReconciler
                     && prefixLen < childCount
                     && (existingControl ??= children.Get(prefixLen)) is FrameworkElement fe)
                 {
-                    if (newEl.HasCallbacks || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                    if (newEl.HasCallbacks)
                         Reconciler.SetElementTag(fe, newEl);
+                    else if (Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        reconciler.RefreshCallSiteTagOnSkip(fe, newEl);
+                    if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+                        && Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        reconciler.PublishSourceOnSkip(fe, newEl);
                     Reconciler.RefreshGestureDragStateOnSkip(fe, oldEl.Modifiers, newEl.Modifiers);
                 }
                 prefixLen++;
@@ -390,8 +400,13 @@ internal static class ChildReconciler
                     && panelIdx < childCount
                     && (existingControl ??= children.Get(panelIdx)) is FrameworkElement fe)
                 {
-                    if (newEl.HasCallbacks || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                    if (newEl.HasCallbacks)
                         Reconciler.SetElementTag(fe, newEl);
+                    else if (Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        reconciler.RefreshCallSiteTagOnSkip(fe, newEl);
+                    if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+                        && Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
+                        reconciler.PublishSourceOnSkip(fe, newEl);
                     Reconciler.RefreshGestureDragStateOnSkip(fe, oldEl.Modifiers, newEl.Modifiers);
                 }
                 suffixLen++;

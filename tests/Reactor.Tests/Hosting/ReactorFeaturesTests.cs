@@ -22,17 +22,13 @@ public class ReactorFeaturesTests
         }
         finally
         {
-            AppContext.SetSwitch(SwitchName, false);
+            AppContext.SetSwitch(SwitchName, TestSetup.ConfiguredDevtoolsSupport);
         }
     }
 
     [Fact]
     public void IsDevtoolsSupported_DefaultsOff()
-    {
-        AppContext.SetSwitch(SwitchName, false);
-
-        Assert.False(ReactorFeatures.IsDevtoolsSupported);
-    }
+        => TestSetup.WithDevtoolsSupportSwitch(false, static () => Assert.False(ReactorFeatures.IsDevtoolsSupported));
 
     [Fact]
     public void DevtoolsCliParser_RecognizesDevtoolsVerbs_WithoutLoadingHandlers()
@@ -74,7 +70,7 @@ public class ReactorFeaturesTests
         finally
         {
             Console.SetError(originalError);
-            AppContext.SetSwitch(SwitchName, false);
+            AppContext.SetSwitch(SwitchName, TestSetup.ConfiguredDevtoolsSupport);
             ReactorApp.ResetDevtoolsEnabledForTests();
         }
     }

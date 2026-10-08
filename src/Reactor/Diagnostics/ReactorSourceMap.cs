@@ -47,7 +47,24 @@ public static partial class ReactorSourceMap
     /// interceptor, where an unhoistable class-init check would show up.</para>
     /// </summary>
     private static int s_enabled =
-        IsEnabledByEnvironment(global::System.Environment.GetEnvironmentVariable("REACTOR_SOURCEMAP")) ? 1 : 0;
+        IsEnabledAtStartup(
+            global::System.Environment.GetEnvironmentVariable("REACTOR_SOURCEMAP"),
+            // Guarded inline so a build without Reactor.DevtoolsSupport folds the read (and
+            // the variable's name) away.
+            global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+                ? global::System.Environment.GetEnvironmentVariable("REACTOR_DIAGNOSTICS")
+                : null) ? 1 : 0;
+
+    /// <summary>
+    /// The startup value of <see cref="Enabled"/>: <c>REACTOR_SOURCEMAP=1</c>, or the
+    /// diagnostics launch opt-in <c>REACTOR_DIAGNOSTICS=1</c> in a build with the
+    /// <c>Reactor.DevtoolsSupport</c> switch (diagnostics mode needs call sites, including on
+    /// elements an app builds before its first host exists, such as a page's field
+    /// initializers).
+    /// </summary>
+    internal static bool IsEnabledAtStartup(string? sourceMapValue, string? diagnosticsValue)
+        => IsEnabledByEnvironment(sourceMapValue)
+            || (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && IsEnabledByEnvironment(diagnosticsValue));
 
     /// <summary>
     /// The <c>REACTOR_SOURCEMAP</c> contract: exactly <c>"1"</c> enables, anything else
@@ -105,11 +122,30 @@ public static partial class ReactorSourceMap
     /// line — so reporting the decorator's line would name the wrong creator, the same
     /// misattribution the generator avoids for pass-through factories. The walk is a
     /// loop so nested decorators resolve to the innermost target.</para>
+    /// <para>Native AOT in diagnostics mode does not tag a control whose element's only extra
+    /// is its call site (no managed inspector can load to read the tag); there the location
+    /// is resolved from the control's published <c>ReactorSource</c> value and is the same
+    /// <see cref="SourceLocation"/> the tag would give.</para>
     /// </summary>
     public static SourceLocation? GetSource(UIElement control)
     {
         var element = Reconciler.GetElementTag(control);
-        return element is null ? null : UnwrapDecorators(element)?.CallSite;
+        if (element is not null)
+        {
+            // Native AOT diagnostics mode: a forwarding RegisterType registration that needs a
+            // tag (a key, an unmount callback) tags the control with itself, because the stamped
+            // child it forwarded to was not tagged; under JIT the child's tag stays and names the
+            // child. The published value still describes the child, so it answers instead.
+            if (Reconciler.SkipsCallSiteOnlyTags
+                && control.GetValue(global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics.SourceProperty) is string published
+                && global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.AtKey(published) is not null
+                && global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.DescribesAnotherElement(published, element))
+                return global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.ResolvePublishedSource(control);
+            return UnwrapDecorators(element)?.CallSite;
+        }
+        return Reconciler.SkipsCallSiteOnlyTags
+            ? global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.ResolvePublishedSource(control)
+            : null;
     }
 
     /// <summary>

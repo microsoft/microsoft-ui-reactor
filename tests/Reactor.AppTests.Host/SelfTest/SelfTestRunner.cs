@@ -578,6 +578,11 @@ internal static class SelfTestRunner
                         // its dispatcher-bound timeout fired) so the watchdog
                         // doesn't blame this fixture for an inter-fixture gap.
                         Volatile.Write(ref _currentFixture, null);
+                        // A hot-reload fixture (HotReloadService.UpdateApplication) makes the
+                        // source map's static names and hooks unknown for the rest of the
+                        // process, as in a real app. Fixtures are independent: each starts
+                        // from the compiled tables.
+                        global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.ResetHotReloadInvalidationForTests();
 
                         // Three outcomes, not two (issue #1061). A fixture that ran to completion
                         // having emitted only H.Skip directives asserted NOTHING, yet it produces

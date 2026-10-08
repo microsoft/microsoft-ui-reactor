@@ -374,12 +374,12 @@ The descriptor adapter refreshes that live tag on both mount and update:
 
 ```csharp
 if (control is FrameworkElement fe)
-    Reconciler.SetElementTagIfNeeded(fe, typedEl);
+    Reconciler.SetElementTagIfNeeded(fe, typedEl, OwnsTeardown(control));
 ```
 
 ```csharp
 if (control is FrameworkElement fe)
-    Reconciler.SetElementTagIfNeeded(fe, typedNew);
+    Reconciler.SetElementTagIfNeeded(fe, typedNew, OwnsTeardown(control));
 ```
 
 Tagging is allocation-gated. `NeedsTag(element)` is true when the

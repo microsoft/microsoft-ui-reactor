@@ -115,7 +115,10 @@ public sealed partial class Reconciler
             if (newEl.HasCallbacks && control is FrameworkElement tagFeSE)
                 SetElementTag(tagFeSE, newEl);
             else if (CallSiteChangedOnSkip(oldEl, newEl) && control is FrameworkElement srcFeSE)
-                SetElementTag(srcFeSE, newEl);   // spec 010 — keep the reported line live
+                RefreshCallSiteTagOnSkip(srcFeSE, newEl);   // spec 010 — keep the reported line live
+            if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+                && CallSiteChangedOnSkip(oldEl, newEl))
+                PublishSourceOnSkip(control, newEl);
             if (newEl.ThemeBindings is not null && control is FrameworkElement thFeSE)
                 ApplyThemeBindings(thFeSE, newEl.ThemeBindings);
             // Re-resolve ThemeRef-based resource overrides on theme change, against the
@@ -177,6 +180,7 @@ public sealed partial class Reconciler
         }
 
         UIElement? result;
+        bool registeredType = false;
         try
         {
         // Publish the effective theme for the subtree now that we're committed to the
@@ -205,6 +209,7 @@ public sealed partial class Reconciler
         else if (_typeRegistry.TryGetValue(newEl.GetType(), out var reg))
         {
             result = reg.Update(oldEl, newEl, control, requestRerender, this);
+            registeredType = true;
         }
         else if (TryResolveFromControlRegistry(newEl.GetType(), out v1Entry))
         {
@@ -246,6 +251,16 @@ public sealed partial class Reconciler
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
         // stale values (same principle as the flex attached-property fix).
         var target = result ?? control;
+        // Re-publish only when the value can change: a replaced control (its mount already
+        // published, but a handler may have swapped it without Mount) or a new call site /
+        // key / kind. An in-place update of an unchanged element keeps its published value.
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+            && (result is not null || Diagnostics.ReactorSourcePublisher.IdentityChanged(oldEl, newEl))
+            // A RegisterType callback that forwards to a child: the control describes the child
+            // (compared with the element whose value it would carry: the new one for a
+            // replacement, the old one for an in-place update).
+            && !(registeredType && ForwardsAnotherElement(target, result is not null ? newEl : oldEl)))
+            PublishSource(target, newEl);
 
         // Record the control for highlight overlay only when the element's own
         // WinUI properties were actually updated (not just children recursed).
@@ -463,6 +478,37 @@ public sealed partial class Reconciler
         {
             if (block is Microsoft.UI.Xaml.Documents.Paragraph para)
                 UnmountInlineUIChildrenInInlines(para.Inlines);
+        }
+    }
+
+    /// <summary>
+    /// Visits the Reactor-managed (Route A) inline UI children of a
+    /// <see cref="WinUI.RichTextBlock"/>: the same set <see cref="UnmountInlineUIChildren"/>
+    /// tears down, which a logical walk must reach before the document is realized.
+    /// </summary>
+    internal static void VisitInlineUIChildren(WinUI.RichTextBlock rtb, Action<UIElement> visit)
+    {
+        foreach (var block in rtb.Blocks)
+        {
+            if (block is Microsoft.UI.Xaml.Documents.Paragraph para)
+                VisitInlineUIChildrenInInlines(para.Inlines, visit);
+        }
+    }
+
+    private static void VisitInlineUIChildrenInInlines(
+        Microsoft.UI.Xaml.Documents.InlineCollection inlines, Action<UIElement> visit)
+    {
+        foreach (var inline in inlines)
+        {
+            switch (inline)
+            {
+                case WinDocs.InlineUIContainer { Child: FrameworkElement childFe } when (bool)childFe.GetValue(s_inlineUIRouteAProperty):
+                    visit(childFe);
+                    break;
+                case WinDocs.Span span:
+                    VisitInlineUIChildrenInInlines(span.Inlines, visit);
+                    break;
+            }
         }
     }
 

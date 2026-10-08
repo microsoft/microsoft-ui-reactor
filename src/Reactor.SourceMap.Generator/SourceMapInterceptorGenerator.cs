@@ -34,7 +34,7 @@ namespace Microsoft.UI.Reactor.SourceMap.Generator;
 /// the namespace. The two must stay welded together.</para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
-public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
+public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerator
 {
     internal const string InterceptorNamespace = "Microsoft.UI.Reactor.Generated";
     private const string FactoriesMetadataName = "Microsoft.UI.Reactor.Factories";
@@ -139,6 +139,24 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             spc.AddSource("ReactorSourceMap.Interceptors.g.cs", Emit(sites!, polyfill, map));
         });
 
+        // Root mount sites: ReactorApp.Run / ReactorApp.OpenWindow / ReactorWindow.Mount /
+        // ReactorHost.Mount / ReactorHostControl.Mount. A root is not an element, so there
+        // is nothing to stamp; the interceptor instead brackets the call with a scope that
+        // the intercepted method claims as its first statement and hands down to the host
+        // it mounts (see ReactorSourceMap.RootMount.cs). A separate pass with a
+        // syntactic NAME pre-filter, so the overwhelming majority of invocations never
+        // reach the semantic model a second time.
+        var rootMountSites = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => IsRootMountCandidate(node),
+                transform: static (ctx, ct) => TryDescribeRootMount(ctx, ct))
+            .Where(static x => x is not null)
+            .Collect();
+
+        // Declared names and hook names: a module initializer, separate from the
+        // interceptors so a compilation with hooks but no factory calls still gets one.
+        // Root mount sites take part in the per-file fingerprints (a hook-free root too).
+        InitializeStaticInfo(context, enabled, pathMap, callSites, rootMountSites);
+
         // Gated on the same opt-in as the interceptors: in a compilation where the
         // generator emits nothing, the attribute is inert by design and a warning about
         // it would be noise.
@@ -152,18 +170,6 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             }
         });
 
-        // Root mount sites: ReactorApp.Run / ReactorApp.OpenWindow / ReactorWindow.Mount /
-        // ReactorHost.Mount / ReactorHostControl.Mount. A root is not an element, so there
-        // is nothing to stamp; the interceptor instead brackets the call with a scope that
-        // the intercepted method claims as its first statement and hands down to the host
-        // it mounts (see ReactorSourceMap.RootMount.cs). A separate pass with a
-        // syntactic NAME pre-filter, so the overwhelming majority of invocations never
-        // reach the semantic model a second time.
-        var rootMountSites = context.SyntaxProvider.CreateSyntaxProvider(
-                predicate: static (node, _) => IsRootMountCandidate(node),
-                transform: static (ctx, ct) => TryDescribeRootMount(ctx, ct))
-            .Where(static x => x is not null)
-            .Collect();
 
         context.RegisterSourceOutput(rootMountSites.Combine(enabled).Combine(needsPolyfill).Combine(pathMap), static (spc, tuple) =>
         {
@@ -481,6 +487,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
             filePath: ResolveMappedPath(lineSpan, invocation.SyntaxTree.FilePath),
             line: lineSpan.StartLinePosition.Line + 1,
             column: CallSiteColumn(invocation, lineSpan, ct),
+            declaredName: DeclaredNameOf(invocation, ctx.SemanticModel, elementSymbol, ct),
             signature: Signature.From(method, elementSymbol, compilation.GetTypeByMetadataName(EmptyElementMetadataName)),
             argumentStamps: DescribeArgumentStamps(ctx, invocation, method, elementSymbol, ct));
     }
@@ -1111,13 +1118,14 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
 
     private sealed class CallSite : IEquatable<CallSite>
     {
-        public CallSite(string attribute, string filePath, int line, int column, Signature signature,
-                        ImmutableArray<ArgumentStamp> argumentStamps)
+        public CallSite(string attribute, string filePath, int line, int column, string? declaredName,
+                        Signature signature, ImmutableArray<ArgumentStamp> argumentStamps)
         {
             Attribute = attribute;
             FilePath = filePath;
             Line = line;
             Column = column;
+            DeclaredName = declaredName;
             Signature = signature;
             ArgumentStamps = argumentStamps;
         }
@@ -1131,6 +1139,9 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
         /// shifts a call sideways still regenerates the stamped literal.
         /// </summary>
         public int Column { get; }
+
+        /// <summary>The identifier the element is assigned to; see <c>DeclaredNameOf</c>.</summary>
+        public string? DeclaredName { get; }
         public Signature Signature { get; }
 
         /// <summary>
@@ -1145,6 +1156,7 @@ public sealed class SourceMapInterceptorGenerator : IIncrementalGenerator
                && FilePath == other.FilePath
                && Line == other.Line
                && Column == other.Column
+               && DeclaredName == other.DeclaredName
                && Signature.Equals(other.Signature)
                && ArgumentStamps.SequenceEqual(other.ArgumentStamps);
 
