@@ -708,8 +708,11 @@ public sealed partial class Reconciler : IDisposable
             // Inline UI in a RichTextBlock document lives in its blocks, not its visual tree.
             if (ui is WinUI.RichTextBlock richText)
                 VisitInlineUIChildren(richText, child => Push(child));
+            // A target-wrapping decorator (Flyout(NavigationView(...), ...)) replaces the
+            // target's tag with its own; the control's children are still the target's.
             if (ui is FrameworkElement tagged && GetElementTag(tagged) is Element taggedElement
-                && _v1Handlers.TryGet(taggedElement.GetType(), out var entry) && entry is IV1ChildEnumerator children)
+                && global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.UnwrapDecorators(taggedElement) is { } hostElement
+                && _v1Handlers.TryGet(hostElement.GetType(), out var entry) && entry is IV1ChildEnumerator children)
                 children.VisitLiveChildren(ui, child => Push(child));
             if (ui is WinUI.ItemsControl items)
             {

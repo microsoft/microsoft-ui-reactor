@@ -509,6 +509,9 @@ internal static class RemountView
         Button("remount-ctx-target").WithContextFlyout(TextBlock("remount-ctx-body")),
         // Inline UI in a never-opened flyout's RichTextBlock lives in its document blocks only.
         Flyout(Button("remount-rflyout-target"), RichTextBlock([Paragraph(InlineUI(TextBlock("remount-inline-ui")))])),
+        // A decorated named-slot host: the flyout's tag replaces the NavigationView's, and the
+        // collapsed NavigationView never applies its template, so its PaneHeader is a slot only.
+        Flyout(NavigationView([]).PaneHeader(TextBlock("remount-navslot-header")).IsVisible(false), TextBlock("remount-navslot-body")),
 #pragma warning disable CS0618 // the legacy node-mode ContentElement path still mounts controls
         // Node content under a collapsed TreeView node is mounted but in no child walk. Kept in a
         // keyed Memo so the root swap retains it (an updated TreeView rebuilds its nodes anyway).
@@ -638,6 +641,8 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
                 "remount-nflyout-inner" => NestedFlyoutInnerSource(),
                 "remount-ctx-body" => H.FindControl<WinUI.Button>(b => b.Content as string == "remount-ctx-target")?.ContextFlyout
                     is WinUI.Flyout { Content: WinUI.TextBlock ctxBody } ? ReactorDiagnostics.GetSource(ctxBody) : null,
+                "remount-navslot-header" => H.FindControl<WinUI.NavigationView>(nv => nv.PaneHeader is WinUI.TextBlock { Text: "remount-navslot-header" })?.PaneHeader
+                    is WinUI.TextBlock paneHeader ? ReactorDiagnostics.GetSource(paneHeader) : null,
                 "remount-tree-content" => H.FindControl<WinUI.TreeView>(_ => true) is { RootNodes.Count: > 0 } tv
                     && tv.RootNodes[0].Children.FirstOrDefault()?.Content is WinUI.TextBlock treeContent
                     ? ReactorDiagnostics.GetSource(treeContent) : null,
@@ -698,6 +703,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.Check("ReactorSource_RootRemount_Host_ContextFlyoutRenamed", await Owned("remount-ctx-body", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_UnopenedInlineUIRenamed", await Owned("remount-inline-ui", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_CollapsedTreeNodeContentRenamed", await Owned("remount-tree-content", nameof(RemountRootB)));
+            H.Check("ReactorSource_RootRemount_Host_DecoratedSlotContentRenamed", await Owned("remount-navslot-header", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             host.Dispose();
             H.SetContent(null);
@@ -762,6 +768,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.Check("ReactorSource_RootRemount_HostControl_ContextFlyoutRenamed", await Owned("remount-ctx-body", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_HostControl_UnopenedInlineUIRenamed", await Owned("remount-inline-ui", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_HostControl_CollapsedTreeNodeContentRenamed", await Owned("remount-tree-content", nameof(RemountRootB)));
+            H.Check("ReactorSource_RootRemount_HostControl_DecoratedSlotContentRenamed", await Owned("remount-navslot-header", nameof(RemountRootB)));
             Console.WriteLine($"# remount (ReactorHostControl): {Source("remount-leaf")} / {Source("remount-nested")}");
             H.Check("ReactorSource_RootRemount_HostControl_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             hostControl.Dispose();
