@@ -1,0 +1,34 @@
+<!-- Copyright (c) Microsoft Corporation. All rights reserved.
+     Licensed under the MIT License. See LICENSE in the project root for license information. -->
+<!-- P1-DESIGN-1 (resolved 2026-05-29): default ControlTemplate for EditableContentPresenter.
+     Both presenters are stacked in a Grid so they occupy the same cell and the visible one
+     (toggled via UpdateVisibility / fade animations) defines the cell's content. PART_*
+     names are template contract — see EditableContentPresenter.cpp OnApplyTemplate. -->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:primitives="using:Microsoft.UI.Xaml.Controls.Primitives">
+
+    <Style TargetType="primitives:EditableContentPresenter">
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="UseSystemFocusVisuals" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="primitives:EditableContentPresenter">
+                    <Grid Background="{TemplateBinding Background}"
+                          Padding="{TemplateBinding Padding}">
+                        <ContentPresenter x:Name="PART_DisplayPresenter"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        <ContentPresenter x:Name="PART_EditPresenter"
+                                          Visibility="Collapsed"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

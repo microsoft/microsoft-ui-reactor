@@ -1,0 +1,64 @@
+﻿<!-- Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT License. See LICENSE in the project root for license information. -->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Sort indicator visuals deliberately reuse the tabular-surface header
+         foreground brush (defined in TabularSurfaces_themeresources.xaml) so the
+         chevron stays in sync with header text/icon color across themes.
+         The badge brushes MUST be defined inside ThemeDictionaries because the
+         keys they alias (TabularSurfaceHeader*Brush) live inside ThemeDictionaries.
+         Root-level StaticResource references cannot resolve into theme-scoped
+         dictionaries at load time, which silently drops the brush keys and causes
+         programmatic SortIndicator instances to fail with E_XAMLPARSEFAILED. -->
+
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Default">
+            <SolidColorBrush x:Key="SortIndicatorBadgeBackgroundBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="SortIndicatorBadgeForegroundBrush" Color="#FF000000" />
+            <!-- Self-contained chevron-foreground brush. Hex values mirror
+                 MUX_TabularSurfaceHeaderForegroundBrush in TabularSurfaces_themeresources.xaml
+                 (TextFillColorSecondary per theme). Owning the brush in this primitive's
+                 own ThemeDictionaries prevents production apps from having to merge
+                 TabularSurfaces_themeresources.xaml or hand-define the brush at the App
+                 root: when the Style Setter below resolves {ThemeResource MUX_SortIndicatorForegroundBrush}
+                 it walks THIS dictionary's theme map and always succeeds. The previous
+                 reference to MUX_TabularSurfaceHeaderForegroundBrush silently resolved to
+                 null in any consumer that didn't also merge the TabularSurfaces theme
+                 dictionary at the app root, which made the chevron render invisibly even
+                 when the visual state was Ascending/Descending. -->
+            <SolidColorBrush x:Key="MUX_SortIndicatorForegroundBrush" Color="#C5FFFFFF" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="SortIndicatorBadgeBackgroundBrush" Color="#FF000000" />
+            <SolidColorBrush x:Key="SortIndicatorBadgeForegroundBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="MUX_SortIndicatorForegroundBrush" Color="#9E000000" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="HighContrast">
+            <!-- §1.13 audit 2026-05-21: replaced hardcoded colors with ThemeResource System*Color tokens -->
+            <SolidColorBrush x:Key="SortIndicatorBadgeBackgroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SortIndicatorBadgeForegroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="MUX_SortIndicatorForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!-- Default visual size for the chevron glyph. Theme-agnostic. -->
+    <x:Double x:Key="SortIndicatorGlyphSize">12</x:Double>
+
+    <!-- Multi-column priority badge tokens (used when Index > 0 && Direction != None).
+         Brushes (above) are aliased to the tabular-surface header tokens by default but exposed as
+         distinct keys so consumers can re-skin the badge through lightweight styling without
+         replacing the entire SortIndicator template. -->
+    <x:Double x:Key="SortIndicatorBadgeFontSize">8</x:Double>
+    <CornerRadius x:Key="SortIndicatorBadgeCornerRadius">3</CornerRadius>
+    <Thickness x:Key="SortIndicatorBadgePadding">2,0,2,0</Thickness>
+    <!-- NOTE: The badge brush keys (SortIndicatorBadge*Brush) are defined in the
+         single ResourceDictionary.ThemeDictionaries block above. A previous
+         "BLOCK-2 fix" pass added a SECOND ThemeDictionaries block here that aliased
+         to TabularSurfaceHeader*Brush via <StaticResource>; that broke compilation
+         (WMC0035 "Duplication assignment to the 'ThemeDictionaries' property") and
+         even when it parsed it produced near-invisible badges in dark theme because
+         the header foreground/background brushes are deliberately low-contrast.
+         Keeping the literal-color theme block above guarantees the priority badge
+         stays high-contrast across themes. -->
+</ResourceDictionary>
