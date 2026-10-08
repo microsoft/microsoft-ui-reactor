@@ -29,19 +29,24 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
     /// <summary>
     /// Whether unmount must reach this handler for teardown the generic unmount walk does not
     /// do: child slots it does not reach (named slots, item hosts, imperative children, or a
-    /// single-content / panel strategy on a control that walk does not know), or, for a
+    /// single-content strategy, or a panel strategy whose collection that walk does not visit), or, for a
     /// hand-written handler, an <c>Unmount</c> body (NavigationHost detaches its route
     /// subscription and clears its page cache there). A descriptor's own <c>OnUnmount</c>
     /// already forces its tag at mount. Only consulted in the Native AOT diagnostics mode that
     /// skips call-site-only tags, where it keeps the tag unmount dispatch goes through.
+    /// <para>The only strategy the walk is proven to cover is a panel strategy whose collection
+    /// is the control's own <see cref="Microsoft.UI.Xaml.Controls.Panel.Children"/>, the
+    /// collection the walk visits. A single-content strategy writes through an opaque setter,
+    /// and this runs before its child is mounted, so it always keeps the tag.</para>
     /// </summary>
     public bool OwnsTeardown(UIElement control)
         => Reconciler.SkipsCallSiteOnlyTags
             && (_handler is not Descriptor.IDescriptorBackedHandler
                 || (_handler.ChildrenForUnmount is { } strategy
                     && strategy is not None<TElement, TControl>
-                    && !(strategy is Panel<TElement, TControl> or SingleContent<TElement, TControl>
-                        && Reconciler.UnmountWalkReachesChildren(control))));
+                    && !(strategy is Panel<TElement, TControl> panel
+                        && control is Microsoft.UI.Xaml.Controls.Panel host and TControl typed
+                        && ReferenceEquals(panel.GetCollection(typed), host.Children))));
 
     /// <summary>
     /// The live children this handler's strategy hosts, the ones its unmount tears down

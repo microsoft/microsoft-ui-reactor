@@ -1366,11 +1366,6 @@ public sealed partial class Reconciler : IDisposable
         SetElementTagIfNeeded(control, element);
     }
 
-    /// <summary>Whether the generic unmount walk reaches this control's Reactor children by itself.</summary>
-    internal static bool UnmountWalkReachesChildren(UIElement control)
-        => control is WinUI.Panel or WinUI.ItemsRepeater or WinUI.Border or WinUI.ScrollViewer
-            or WinUI.UserControl or WinUI.SplitView or WinUI.Viewbox or WinUI.ContentControl;
-
     /// <summary>
     /// Predicate companion to <see cref="SetElementTagIfNeeded(FrameworkElement, Element)"/>. Returns
     /// true when downstream code will read the element back through

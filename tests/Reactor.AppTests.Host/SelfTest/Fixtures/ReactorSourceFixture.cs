@@ -924,6 +924,83 @@ internal class ReactorSource_AotTagSkipKeepsTeardown(Harness h) : SelfTestFixtur
 }
 
 /// <summary>
+/// A descriptor-backed <c>ContentControl</c> whose single-content strategy keeps its child in a
+/// slot the generic unmount walk does not visit (here <c>Tag</c>; <c>Content</c> stays null).
+/// The walk would visit the empty <c>Content</c>, so in the Native AOT skip mode the element
+/// must still keep the tag that routes unmount to the strategy, or the child's effect cleanup
+/// never runs. Both tag modes.
+/// </summary>
+internal class ReactorSource_AotSkipCustomSlotKeepsTeardown(Harness h) : SelfTestFixtureBase(h)
+{
+    internal sealed record AuxSlotElement(Element Child) : Element;
+
+    private sealed class AuxSlotHandler()
+        : Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.DescriptorHandler<AuxSlotElement, WinUI.ContentControl>(Slot)
+    {
+        private static readonly Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<AuxSlotElement, WinUI.ContentControl> Slot =
+            new() { Children = new Microsoft.UI.Reactor.Core.V1Protocol.SingleContent<AuxSlotElement, WinUI.ContentControl>(
+                GetChild: static e => e.Child,
+                SetChild: static (c, ui) => c.Tag = ui)
+            {
+                GetCurrentChild = static c => c.Tag as UIElement,
+            } };
+    }
+
+    private async Task<(int Cleanups, bool Tagged)> RunPath(bool noManagedAgent)
+    {
+        ReactorSourcePublisher.NoManagedAgent = noManagedAgent;
+        TeardownProbe.Cleanups = 0;
+        Action<bool>? setShown = null;
+        var host = H.CreateHost();
+        host.Mount(ctx =>
+        {
+            var (shown, set) = ctx.UseState(true);
+            setShown = set;
+            return shown
+                ? VStack(new AuxSlotElement(Component<TeardownProbe>()) { CallSite = new SourceLocation("AuxSlot.cs", 1, 1) })
+                : VStack(TextBlock("aux-slot-gone"));
+        });
+        await Harness.Render();
+        await Harness.Render();
+        var slot = H.FindControl<WinUI.ContentControl>(c => c.Tag is UIElement);
+        bool tagged = slot is not null && Reconciler.GetElementTag(slot) is not null;
+        setShown!(false);
+        await Harness.Render();
+        await Harness.Render();
+        int cleanups = TeardownProbe.Cleanups;
+        host.Dispose();
+        H.SetContent(null);
+        return (cleanups, tagged);
+    }
+
+    public override async Task RunAsync()
+    {
+        if (!ReactorSourcePublisher.IsSupported)
+        {
+            H.Skip("ReactorSource_AotSkipCustomSlot", "Reactor.DevtoolsSupport is off in this host");
+            return;
+        }
+
+        Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.Register<AuxSlotElement, WinUI.ContentControl>(static () => new AuxSlotHandler());
+        var (enabled, noAgent) = (ReactorSourcePublisher.IsEnabled, ReactorSourcePublisher.NoManagedAgent);
+        try
+        {
+            ReactorSourcePublisher.IsEnabled = true;
+            var tagged = await RunPath(noManagedAgent: false);
+            var skipped = await RunPath(noManagedAgent: true);
+            Console.WriteLine($"# custom slot: tagged {tagged}; skipped {skipped}");
+            H.Check("ReactorSource_AotSkipCustomSlot_ChildCleanedUp", tagged.Cleanups == 1 && skipped.Cleanups == 1);
+            H.Check("ReactorSource_AotSkipCustomSlot_KeepsItsTag", tagged.Tagged && skipped.Tagged);
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = enabled;
+            ReactorSourcePublisher.NoManagedAgent = noAgent;
+        }
+    }
+}
+
+/// <summary>
 /// A ContentDialog element realizes a collapsed placeholder; the dialog the user sees is a
 /// separate WinUI object. An out-of-process inspector sees the dialog, so it carries the
 /// element's published value too: when opened at mount (the reconciler mirrors the value it
