@@ -64,10 +64,20 @@ internal class ReactorSource_StaleFactsDropped(Harness h) : SelfTestFixtureBase(
             var nameBefore = Source("late-title");
             var hooksBefore = MemoWrapperSource();
             Console.WriteLine($"# stale facts, before: {nameBefore} / {hooksBefore}");
-            if (nameBefore?.Contains("|name=lateTitle", StringComparison.Ordinal) != true
-                || hooksBefore?.Contains("|hooks=0:count@", StringComparison.Ordinal) != true)
+            // Only a host without stamped call sites (no source-map build) is unsupported; a
+            // stamped host that lacks either fact is a publication failure, not a skip.
+            if (nameBefore?.Contains("|at=", StringComparison.Ordinal) != true)
             {
-                H.Skip("ReactorSource_StaleFacts", "this host has no source-map static facts");
+                H.Skip("ReactorSource_StaleFacts", "call sites are not stamped in this host");
+                hrHost.Dispose();
+                H.SetContent(null);
+                return;
+            }
+            bool publishedBefore = nameBefore.Contains("|name=lateTitle", StringComparison.Ordinal)
+                && hooksBefore?.Contains("|hooks=0:count@", StringComparison.Ordinal) == true;
+            H.Check("ReactorSource_StaleFacts_PublishedBeforeInvalidation", publishedBefore);
+            if (!publishedBefore)
+            {
                 hrHost.Dispose();
                 H.SetContent(null);
                 return;

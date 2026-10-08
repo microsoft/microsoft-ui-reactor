@@ -1090,6 +1090,100 @@ internal class ReactorSource_ReentrantRootMount(Harness h) : SelfTestFixtureBase
 }
 
 /// <summary>
+/// A ReactorHostControl whose Loaded-time activation fails has no root, yet shows the app's
+/// fallback. A code-only ComponentType names the root it meant; a throwing ComponentFactory
+/// (which wins over ComponentType) leaves the root unattributed. Neither is published as a
+/// render-function root, including when the fallback re-renders from its own state.
+/// </summary>
+internal class ReactorSource_ActivationFailureFallback(Harness h) : SelfTestFixtureBase(h)
+{
+    // Never named in markup, so the host app has no XAML activator for it.
+    internal sealed class CodeOnlyActivationRoot : Component
+    {
+        public override Element Render() => TextBlock("activation-never");
+    }
+
+    internal sealed class ActivationFallback : Component
+    {
+        internal static Action<int>? Set;
+
+        public override Element Render()
+        {
+            var (n, set) = UseState(0);
+            Set = set;
+            return TextBlock($"activation-fallback {n}");
+        }
+    }
+
+    // Every published value from the fallback text up to the host control.
+    private static List<string> ValuesUp(WinUI.TextBlock? text, UIElement host)
+    {
+        var values = new List<string>();
+        for (DependencyObject? d = text; d is not null && !ReferenceEquals(d, host); d = VisualTreeHelper.GetParent(d))
+        {
+            if (ReactorDiagnostics.GetSource(d) is { } v) values.Add(v);
+        }
+        return values;
+    }
+
+    private async Task<(List<string> Shown, List<string> Rerendered)> Run(Func<Microsoft.UI.Reactor.Hosting.ReactorHostControl> create)
+    {
+        var control = create();
+        control.RenderErrorHandler = _ => Component<ActivationFallback>();
+        H.SetContent(new WinUI.Border { Child = control });
+        await Harness.WaitFor(() => H.FindControl<WinUI.TextBlock>(t => t.Text == "activation-fallback 0") is not null,
+            maxPasses: 32, perPassMs: 10);
+        var shown = ValuesUp(H.FindControl<WinUI.TextBlock>(t => t.Text == "activation-fallback 0"), control);
+        ActivationFallback.Set?.Invoke(1);
+        await Harness.WaitFor(() => H.FindControl<WinUI.TextBlock>(t => t.Text == "activation-fallback 1") is not null,
+            maxPasses: 32, perPassMs: 10);
+        var rerendered = ValuesUp(H.FindControl<WinUI.TextBlock>(t => t.Text == "activation-fallback 1"), control);
+        control.Dispose();
+        H.SetContent(null);
+        return (shown, rerendered);
+    }
+
+    public override async Task RunAsync()
+    {
+        if (!ReactorSourcePublisher.IsSupported)
+        {
+            H.Skip("ReactorSource_ActivationFailure", "Reactor.DevtoolsSupport is off in this host");
+            return;
+        }
+
+        var previous = ReactorSourcePublisher.IsEnabled;
+        try
+        {
+            ReactorSourcePublisher.IsEnabled = true;
+
+            static bool Names(List<string> values, string root)
+                => values.Count > 0 && values.Any(v => v.Contains($"|root={root}", StringComparison.Ordinal))
+                    && !values.Any(v => v.Contains("|root=FuncElement", StringComparison.Ordinal));
+            static bool Unattributed(List<string> values)
+                => values.Count > 0 && !values.Any(v => v.Contains("|root=", StringComparison.Ordinal));
+
+            var typed = await Run(() => new Microsoft.UI.Reactor.Hosting.ReactorHostControl { ComponentType = typeof(CodeOnlyActivationRoot) });
+            Console.WriteLine($"# activation, ComponentType: {string.Join(" / ", typed.Shown)} => {string.Join(" / ", typed.Rerendered)}");
+            H.Check("ReactorSource_ActivationFailure_ComponentTypeNamesTheRoot",
+                Names(typed.Shown, nameof(CodeOnlyActivationRoot)) && Names(typed.Rerendered, nameof(CodeOnlyActivationRoot)));
+
+            var factory = await Run(() => new Microsoft.UI.Reactor.Hosting.ReactorHostControl
+            {
+                ComponentType = typeof(CodeOnlyActivationRoot),
+                ComponentFactory = () => throw new InvalidOperationException("ReactorSource selftest: activation boom"),
+            });
+            Console.WriteLine($"# activation, ComponentFactory: {string.Join(" / ", factory.Shown)} => {string.Join(" / ", factory.Rerendered)}");
+            H.Check("ReactorSource_ActivationFailure_ThrowingFactoryUnattributed",
+                Unattributed(factory.Shown) && Unattributed(factory.Rerendered));
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = previous;
+        }
+    }
+}
+
+/// <summary>
 /// A ContentDialog element realizes a collapsed placeholder; the dialog the user sees is a
 /// separate WinUI object. An out-of-process inspector sees the dialog, so it carries the
 /// element's published value too: when opened at mount (the reconciler mirrors the value it

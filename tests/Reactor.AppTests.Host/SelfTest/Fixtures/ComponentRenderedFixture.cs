@@ -1200,6 +1200,41 @@ internal class ComponentRendered_ReentrantMountDefersRetirement(Harness h) : Sel
         H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = control });
         bool controlShown = await Shows("control effect replacement");
         await Harness.WaitFor(() => controlEffectRoot.CleanedUp, maxPasses: 32, perPassMs: 10);
+        // Render() mounts a replacement whose first render is null: the tree the outgoing
+        // pass committed is still released (its child's cleanup runs, its content goes).
+        var nullHost = H.CreateHost();
+        var nullMounter = new RenderedMountsNullReplacementRoot();
+        nullMounter.Replace = () => nullHost.Mount(_ => null!);
+        nullHost.Mount(nullMounter);
+        await Harness.Render();
+        bool released = await Harness.WaitFor(
+            () => RenderedCleanupProbeChild.Cleanups == 1 && H.FindText("cleanup probe child") is null,
+            maxPasses: 32, perPassMs: 10);
+        H.Check("ComponentRendered_ReentrantMount_NullReplacementReleasesOutgoingTree",
+            released, $"cleanups={RenderedCleanupProbeChild.Cleanups}");
+
+        // Same when the outgoing attempt throws after mounting: its error panel goes too.
+        var throwHost = H.CreateHost();
+        var throwMounter = new RenderedMountsNullReplacementRoot { ThrowAfterMount = true };
+        throwMounter.Replace = () => throwHost.Mount(_ => null!);
+        throwHost.Mount(throwMounter);
+        await Harness.Render();
+        bool panelReleased = await Harness.WaitFor(
+            () => H.FindTextContaining("InvalidOperationException") is null, maxPasses: 32, perPassMs: 10);
+        H.Check("ComponentRendered_ReentrantMount_NullReplacementReleasesOutgoingErrorPanel", panelReleased);
+
+        var nullControl = new ReactorHostControl();
+        var controlNullMounter = new RenderedMountsNullReplacementRoot();
+        controlNullMounter.Replace = () => nullControl.Mount(_ => null!);
+        nullControl.Mount(controlNullMounter);
+        H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = nullControl });
+        bool controlReleased = await Harness.WaitFor(
+            () => RenderedCleanupProbeChild.Cleanups == 1 && H.FindText("cleanup probe child") is null,
+            maxPasses: 32, perPassMs: 10);
+        H.Check("ComponentRendered_ReentrantMount_HostControlNullReplacementReleasesOutgoingTree",
+            controlReleased, $"cleanups={RenderedCleanupProbeChild.Cleanups}");
+        nullControl.Dispose();
+
         H.Check("ComponentRendered_ReentrantMount_HostControlEffectCleanupStillRuns",
             controlShown && controlEffectRoot.EffectRuns == 1 && controlEffectRoot.CleanedUp,
             $"shown={controlShown} runs={controlEffectRoot.EffectRuns} cleaned={controlEffectRoot.CleanedUp}");
@@ -1403,6 +1438,23 @@ internal sealed class RenderedNullRoot : Component
     {
         UseEffect(() => EffectRan = true);
         return null!;
+    }
+}
+
+// Mounts its replacement from its first Render(), then still returns (or throws) its own tree.
+internal sealed class RenderedMountsNullReplacementRoot : Component
+{
+    public Action? Replace;
+    public bool ThrowAfterMount;
+
+    public override Element Render()
+    {
+        var replace = Replace;
+        Replace = null;
+        replace?.Invoke();
+        if (ThrowAfterMount) throw new InvalidOperationException("ComponentRendered selftest: outgoing attempt threw after mounting");
+        RenderedCleanupProbeChild.Cleanups = 0;
+        return VStack(Component<RenderedCleanupProbeChild>());
     }
 }
 
