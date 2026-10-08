@@ -4612,10 +4612,12 @@ RenderErrorHandler EffectiveRenderErrorHandler { get; }
 RenderErrorHandler RenderErrorHandler { get; set; }
 RenderStats Stats { get; }
 Type ComponentType { get; set; }
+bool IsIdle { get; }
 object Props { get; set; }
 Dispose() → void
 Mount(Component component) → void
 Mount(Func<RenderContext, Element> renderFunc) → void
+WaitForIdleAsync(int maxYields = 50) → Task
 
 ### class ReactorHostInfo
 FrameworkElement HostElement { get; }
@@ -5848,6 +5850,7 @@ GetHashCode() → int
 ToString() → string
 
 ### static class Theme
+NotifyResourcesChanged() → void
 Ref(string resourceKey) → ThemeRef
 
 ### struct ThemeRef

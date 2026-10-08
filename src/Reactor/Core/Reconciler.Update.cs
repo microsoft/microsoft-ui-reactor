@@ -31,6 +31,9 @@ public sealed partial class Reconciler
     internal UIElement? Update(Element oldEl, Element newEl, UIElement control, Action requestRerender)
     {
         DebugElementsDiffed++;
+        // As received, legacy ModifiedElement layers included: a keyed Memo that remounts during a
+        // resource refresh mounts this, so the layers' modifiers apply as on a first mount.
+        var receivedNewEl = newEl;
         // Unwrap all layers of ModifiedElement, accumulating modifiers.
         // Inner modifiers override outer ones (via Merge: other wins where non-null).
         ElementModifiers? oldModifiers = oldEl.Modifiers;
@@ -235,11 +238,33 @@ public sealed partial class Reconciler
             // the post-dispatch ApplyModifiers below.
             // The one exception is a component inside the subtree that updated its own state:
             // returning null would leave it un-rendered, so the pass walks down to it instead.
+            // A resource-refresh pass (Theme.NotifyResourcesChanged) re-runs the factory and
+            // diffs it against the output realized last time, so theme values inside the
+            // memoized subtree are re-applied, including brushes the factory resolved eagerly.
+            (KeyedMemoElement, KeyedMemoElement memo, _) when _resourceRefreshActive
+                => RefreshKeyedMemo(memo, receivedNewEl, control, requestRerender),
             (KeyedMemoElement, KeyedMemoElement memo, _) when IsOnDirtyAncestorPath(control)
                 => UpdateKeyedMemoTowardDirtyDescendant(memo, control, requestRerender),
             (KeyedMemoElement, KeyedMemoElement, _) => null,
             _ => Mount(newEl, requestRerender),
         };
+        }
+
+        // A dispatch that fully mounted the new element (a keyed Memo remounted during a resource
+        // refresh) already applied its modifiers and lifecycle with mount semantics; diffing them
+        // old->new here would skip unchanged ones on the fresh control and fire OnUpdate.
+        if (result is not null && ReferenceEquals(result, _freshMountFromDispatch))
+        {
+            _freshMountFromDispatch = null;
+            return result;
+        }
+        // A transparent wrapper (an outer keyed Memo) whose nested memo remounted: the control is
+        // fresh, so this wrapper's own modifiers apply with mount semantics (all written, OnMount
+        // runs) rather than as an old->new diff.
+        if (result is not null && ReferenceEquals(result, _freshForWrapperMount))
+        {
+            _freshForWrapperMount = null;
+            oldModifiers = null;
         }
 
         // Apply inline modifiers after update. When old modifiers existed but new
@@ -1175,7 +1200,7 @@ public sealed partial class Reconciler
         if (newChild is not null && oldChild is not null
             && getControl() is UIElement existing && CanUpdate(oldChild, newChild))
         {
-            var replacement = Update(oldChild, newChild, existing, requestRerender);
+            var replacement = UpdateHostedChild(oldChild, newChild, existing, requestRerender);
             if (replacement is not null) setControl(replacement);
         }
         else if (newChild is not null)
@@ -1230,18 +1255,12 @@ public sealed partial class Reconciler
             var oldItemElement = GetElementTag(cc);
             var newItemElement = viewSource.BuildItemView(index);
 
-            if (oldItemElement is not null && cc.Content is UIElement existingCtrl && CanUpdate(oldItemElement, newItemElement))
-            {
-                var replacement = Update(oldItemElement, newItemElement, existingCtrl, requestRerender);
-                if (replacement is not null && !ReferenceEquals(cc.Content, replacement))
-                    cc.Content = replacement;
-            }
-            else
-            {
-                if (cc.Content is UIElement oldCtrl)
-                    Unmount(oldCtrl);
-                cc.Content = Mount(newItemElement, requestRerender);
-            }
+            // ReconcileV1Child updates in place when it can and remounts otherwise, and either way
+            // unmounts a control it replaced (e.g. a same-key Memo whose output changed shape
+            // during a resource refresh), so the old item's effects and refs are cleaned up.
+            var next = ReconcileV1Child(oldItemElement, newItemElement, cc.Content as UIElement, requestRerender);
+            if (!ReferenceEquals(cc.Content, next))
+                cc.Content = next;
             SetElementTag(cc, newItemElement);
 
             // Issue #951 — the container survives re-renders, so its automation
@@ -1467,7 +1486,7 @@ public sealed partial class Reconciler
             && CanUpdate(oldContentEl, newContentEl))
         {
             // Reconcile in place
-            var replacement = Update(oldContentEl, newContentEl, existingCtrl, requestRerender);
+            var replacement = UpdateHostedChild(oldContentEl, newContentEl, existingCtrl, requestRerender);
             if (replacement is not null && !ReferenceEquals(liveNode.Content, replacement))
                 liveNode.Content = replacement;
         }
@@ -1576,6 +1595,71 @@ public sealed partial class Reconciler
         var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
         return inner is EmptyElement ? null : Update(inner, inner, control, requestRerender);
     }
+
+    /// <summary>
+    /// A same-key <c>Memo(key, …)</c> during a resource-refresh pass. Re-runs the factory and
+    /// diffs the output against what was realized last time (recorded at mount and here), not
+    /// against itself: a brush the factory resolved eagerly with <c>ThemeRef.Resolve</c> is
+    /// equal on both sides of a self-diff, and diff-based setters would skip writing it.
+    /// <list type="bullet">
+    /// <item>Output is another memo (nested): self-diff, so the nested memo's own refresh diffs
+    /// against the recorded (innermost) output.</item>
+    /// <item>Output changed shape (root type or key) from the recorded one: remount the memo and
+    /// return the new control; the caller unmounts the old one and swaps it in.</item>
+    /// <item>Nothing recorded (a control that is not a FrameworkElement): self-diff.</item>
+    /// <item>Output is Empty: keep the realized control. Update can't express a removal, and
+    /// a same-key factory is pure by contract, so a resource edit that empties it is out of
+    /// contract.</item>
+    /// </list>
+    /// </summary>
+    private UIElement? RefreshKeyedMemo(KeyedMemoElement memo, Element received, UIElement control, Action requestRerender)
+    {
+        var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
+        if (inner is EmptyElement) return null;
+        if (inner is KeyedMemoElement)
+        {
+            var nested = Update(inner, inner, control, requestRerender);
+            // A nested memo that remounted hands back a fresh control; the enclosing Update must
+            // apply this memo's own modifiers to it with mount semantics.
+            if (nested is not null && !ReferenceEquals(nested, control)) _freshForWrapperMount = nested;
+            return nested;
+        }
+
+        var recorded = control is FrameworkElement fe && TryGetReactorState(fe, out var state)
+            ? state.KeyedMemoOutput
+            : null;
+        UIElement? replacement;
+        if (recorded is null)
+            replacement = Update(inner, inner, control, requestRerender);
+        else if (CanUpdate(recorded, inner))
+            replacement = Update(recorded, inner, control, requestRerender);
+        else
+        {
+            // The output changed shape: mount the memo element as Update received it, legacy
+            // ModifiedElement layers included, so its modifiers and lifecycle apply with mount
+            // semantics and MountKeyedMemo records the output. The caller unmounts the old
+            // control, as for any replacement Update returns.
+            replacement = Mount(received, requestRerender);
+            if (replacement is not null) _freshMountFromDispatch = replacement;
+            return replacement;
+        }
+
+        // A compatible output whose handler still built a fresh control (ValidationVisualizer
+        // always remounts): the enclosing Update applies this memo's wrapper modifiers to it with
+        // mount semantics, as for a nested memo. The caller unmounts the old control.
+        if (replacement is not null && !ReferenceEquals(replacement, control)) _freshForWrapperMount = replacement;
+        if ((replacement ?? control) is FrameworkElement realized)
+            GetOrCreateReactorState(realized).KeyedMemoOutput = inner;
+        return replacement;
+    }
+
+    // Set by a dispatch arm that returned a fully mounted control; consumed by Update right after
+    // the dispatch so its post-dispatch modifier diff is skipped for that control.
+    private UIElement? _freshMountFromDispatch;
+
+    // Set by RefreshKeyedMemo when a nested memo handed back a fresh control; consumed by the
+    // enclosing Update, which then applies its wrapper modifiers with mount semantics.
+    private UIElement? _freshForWrapperMount;
 
     private static string Truncate(string s, int maxLen) =>
         s.Length <= maxLen ? s : s[..maxLen] + "…";

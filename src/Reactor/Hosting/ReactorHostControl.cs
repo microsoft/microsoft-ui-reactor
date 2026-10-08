@@ -41,7 +41,7 @@ namespace Microsoft.UI.Reactor.Hosting;
 ///   - Error boundary with fallback UI
 ///   - Clean lifecycle via Loaded/Unloaded
 /// </summary>
-public sealed partial class ReactorHostControl : ContentControl, IDisposable, Core.Diagnostics.IReactorDiagnosticHost
+public sealed partial class ReactorHostControl : ContentControl, IDisposable, Core.Diagnostics.IReactorDiagnosticHost, IThemeResourceListener
 {
 #pragma warning disable CS0414 // Design constant for render-loop limiting; wiring pending
     private static readonly int MaxRenderIterations = 50;
@@ -243,6 +243,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         Unloaded += OnUnloaded;
 
         Core.Diagnostics.ReactorHostRegistry.Register(this);
+        ThemeResourceListeners.Register(this);
 
         if (component is not null)
             MountRoot(component, mountSite: null);
@@ -271,6 +272,16 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             rootComponent: _rootComponent,
             rootRenderFunction: _rootRenderFunc,
             mountSite: _mountSite.Value);
+    }
+
+    // Theme.NotifyResourcesChanged: a resource-refresh pass — past memoization AND past
+    // every structural skip, so every theme-resolved value is resolved again.
+    // RequestResourceRefresh and RequestRender are thread-safe.
+    void IThemeResourceListener.OnThemeResourcesChanged()
+    {
+        if (_disposed) return;
+        _reconciler.RequestResourceRefresh();
+        RequestRender();
     }
 
     private bool AnyOverlayFlagOn => ReactorFeatureFlags.HighlightReconcileChanges;
@@ -520,6 +531,34 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     }
 
     /// <summary>
+    /// True when the render loop has no pending or in-flight render and no
+    /// re-render queued for the next tick — same contract as
+    /// <see cref="ReactorHost.IsIdle"/>. Safe to read from any thread. A disposed
+    /// control reports idle: it will never render again.
+    /// </summary>
+    public bool IsIdle =>
+        _disposed ||
+        (Volatile.Read(ref _renderPending) == 0 &&
+         !_isRendering &&
+         !_needsRerender);
+
+    /// <summary>
+    /// Completes once the render loop is idle (see <see cref="IsIdle"/>) — after a
+    /// <c>setState</c>, a <see cref="Mount(Component)"/>, or any other change that
+    /// schedules a render, await this before reading the realized tree back. Yields to
+    /// the dispatcher at Low priority so Normal-priority renders and Low-priority
+    /// re-renders all complete first; gives up after <paramref name="maxYields"/>
+    /// yields, or immediately if the dispatcher is shutting down. Same contract as
+    /// <see cref="ReactorHost.WaitForIdleAsync"/>; callable from any thread.
+    /// </summary>
+    public Task WaitForIdleAsync(int maxYields = 50)
+        => RenderLoopIdle.WaitAsync(
+            () => IsIdle,
+            _dispatcherQueue.TryEnqueue,
+            maxYields,
+            () => $"renderPending={_renderPending} isRendering={_isRendering} needsRerender={_needsRerender}");
+
+    /// <summary>
     /// Hot Reload state migration entry point (spec 049 §6). Mirror of
     /// <c>ReactorHost.MigrateHotReloadState</c> for the in-XAML host control.
     /// Runs once at the start of a hot-reload render pass, before any component
@@ -609,6 +648,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         try
         {
             Element? newTree = null;
+
+            // Before the root render, so a resource notification that lands while the tree is
+            // being built stays pending for the render it queues instead of being taken by this
+            // pass, whose render may already have read the old resources.
+            _reconciler.BeginRootPass();
 
             _phaseSw.Restart();
 
@@ -851,6 +895,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         }
         finally
         {
+            _reconciler.EndRootPass();
             _isRendering = false;
         }
     }
@@ -973,6 +1018,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         if (_disposed) return;
         _disposed = true;
 
+        ThemeResourceListeners.Unregister(this);
         Core.Diagnostics.ReactorHostRegistry.Unregister(this);
 
         Loaded -= OnLoaded;

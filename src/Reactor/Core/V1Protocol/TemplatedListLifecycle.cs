@@ -364,7 +364,7 @@ internal static class TemplatedListLifecycle
             var newItemElement = n.BuildItemView(i);
             if (fv.Items[i] is UIElement existingCtrl && reconciler.CanUpdate(oldItemElement, newItemElement))
             {
-                var replacement = reconciler.Update(oldItemElement, newItemElement, existingCtrl, requestRerender);
+                var replacement = reconciler.UpdateHostedChild(oldItemElement, newItemElement, existingCtrl, requestRerender);
                 if (replacement is not null && replacement != existingCtrl)
                     fv.Items[i] = replacement;
             }

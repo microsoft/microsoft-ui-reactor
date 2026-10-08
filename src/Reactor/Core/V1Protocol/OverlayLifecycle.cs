@@ -95,7 +95,7 @@ internal static class OverlayLifecycle
         // the dialog (focus, scroll, caret) survives the owner's re-renders.
         if (dialog.Content is UIElement existing && reconciler.CanUpdate(o.Content, n.Content))
         {
-            var replacement = reconciler.Update(o.Content, n.Content, existing, requestRerender);
+            var replacement = reconciler.UpdateHostedChild(o.Content, n.Content, existing, requestRerender);
             if (replacement is not null && !ReferenceEquals(dialog.Content, replacement))
                 dialog.Content = replacement;
         }
@@ -320,7 +320,7 @@ internal static class OverlayLifecycle
             {
                 if (flyout.Content is UIElement existingContent && reconciler.CanUpdate(o.FlyoutContent, n.FlyoutContent))
                 {
-                    var contentRepl = reconciler.Update(o.FlyoutContent, n.FlyoutContent, existingContent, requestRerender);
+                    var contentRepl = reconciler.UpdateHostedChild(o.FlyoutContent, n.FlyoutContent, existingContent, requestRerender);
                     if (contentRepl is not null) flyout.Content = contentRepl;
                 }
                 else
@@ -553,7 +553,7 @@ internal static class OverlayLifecycle
 
         if (popup.Child is UIElement existing && reconciler.CanUpdate(o.Child, n.Child))
         {
-            var replacement = reconciler.Update(o.Child, n.Child, existing, requestRerender);
+            var replacement = reconciler.UpdateHostedChild(o.Child, n.Child, existing, requestRerender);
             if (replacement is not null && !ReferenceEquals(popup.Child, replacement))
                 popup.Child = replacement;
         }

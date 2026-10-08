@@ -119,7 +119,7 @@ public sealed partial class Reconciler
             // factory output) when it changes, so the mounted inner is never re-derived from
             // the old factory. Any modifiers on the wrapper itself are applied by the
             // post-dispatch ApplyModifiers below, exactly like any other element.
-            KeyedMemoElement km => Mount(WithWrapperKey(km.Factory() ?? EmptyElement.Instance, km.Key), requestRerender),
+            KeyedMemoElement km => MountKeyedMemo(km, requestRerender),
             // EmptyElement is a no-op sentinel — callers (Reconcile, panel
             // children loops, ChildReconciler) already filter it before
             // reaching Mount, but MountContext.MountChild does not, so a V1
@@ -276,6 +276,17 @@ public sealed partial class Reconciler
         wrapperKey is null || inner is EmptyElement || inner.Key == wrapperKey
             ? inner
             : inner with { Key = wrapperKey };
+
+    private UIElement? MountKeyedMemo(KeyedMemoElement km, Action requestRerender)
+    {
+        var inner = WithWrapperKey(km.Factory() ?? EmptyElement.Instance, km.Key);
+        var control = Mount(inner, requestRerender);
+        // Nested memos share the realized control; only the innermost layer (the one whose
+        // output is not another memo) records, so an outer layer never overwrites it.
+        if (inner is not KeyedMemoElement && control is FrameworkElement fe)
+            GetOrCreateReactorState(fe).KeyedMemoOutput = inner;
+        return control;
+    }
 
     /// <summary>
     /// Final dispatch arm: the four resolution arms in <see cref="Mount"/>

@@ -890,6 +890,9 @@ internal static class SelfTestFixtureRegistry
         "Hosting_XamlInteropRegister",
         "Hosting_HostControlReparentSurvives",
         "Hosting_PreviewCaptureServerEndpoints",
+        "Hosting_HostControlWaitForIdle",
+        "Hosting_NotifyResourcesChangedRefreshesThemeRefOverrides",
+        "Hosting_NotifyResourcesChangedRefreshesMemoizedThemeModifiers",
         // Navigation coverage — advanced handle ops, serialization, deep links, transitions
         "NavCov_HandleAdvancedOps",
         "NavCov_HandlePopTo",
@@ -2942,6 +2945,9 @@ internal static class SelfTestFixtureRegistry
         "Hosting_XamlInteropRegister" => new HostingCoverageFixtures.XamlInteropRegister(harness),
         "Hosting_HostControlReparentSurvives" => new HostingCoverageFixtures.HostControlReparentSurvives(harness),
         "Hosting_PreviewCaptureServerEndpoints" => new HostingCoverageFixtures.PreviewCaptureServerEndpoints(harness),
+        "Hosting_HostControlWaitForIdle" => new HostIdleAndThemeResourceFixtures.HostControlWaitForIdle(harness),
+        "Hosting_NotifyResourcesChangedRefreshesThemeRefOverrides" => new HostIdleAndThemeResourceFixtures.NotifyResourcesChangedRefreshesThemeRefOverrides(harness),
+        "Hosting_NotifyResourcesChangedRefreshesMemoizedThemeModifiers" => new HostIdleAndThemeResourceFixtures.NotifyResourcesChangedRefreshesMemoizedThemeModifiers(harness),
         // Navigation coverage
         "NavCov_HandleAdvancedOps" => new NavigationCoverageFixtures.NavHandleAdvancedOps(harness),
         "NavCov_HandlePopTo" => new NavigationCoverageFixtures.NavHandlePopTo(harness),

@@ -15,7 +15,7 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// Manages the render loop: when state changes, re-renders the component
 /// and reconciles the virtual tree against the real WinUI control tree.
 /// </summary>
-public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnosticHost
+public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnosticHost, IThemeResourceListener
 {
 #pragma warning disable CS0414 // Design constant for render-loop limiting; wiring pending
     private static readonly int MaxRenderIterations = 50;
@@ -289,6 +289,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         _window.Closed += _closedHandler;
 
         Core.Diagnostics.ReactorHostRegistry.Register(this);
+        ThemeResourceListeners.Register(this);
     }
 
     void Core.Diagnostics.IReactorDiagnosticHost.TagComponentBoundaries()
@@ -317,6 +318,16 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             rootComponent: _rootComponent,
             rootRenderFunction: _rootRenderFunc,
             mountSite: _mountSite.Value);
+    }
+
+    // Theme.NotifyResourcesChanged: a resource-refresh pass — past memoization AND past
+    // every structural skip, so every theme-resolved value is resolved again.
+    // RequestResourceRefresh and RequestRender are thread-safe.
+    void IThemeResourceListener.OnThemeResourcesChanged()
+    {
+        if (_disposed) return;
+        _reconciler.RequestResourceRefresh();
+        RequestRender();
     }
 
     /// <summary>Ensure the overlay wrapper exists whenever any dev overlay flag is on.</summary>
@@ -627,6 +638,11 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         {
             Element? newTree = null;
 
+            // Before the root render, so a resource notification that lands while the tree is
+            // being built stays pending for the render it queues instead of being taken by this
+            // pass, whose render may already have read the old resources.
+            _reconciler.BeginRootPass();
+
             _phaseSw.Restart();
 
             // Propagate accessibility state to D3Charts thread-statics so all
@@ -905,6 +921,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         }
         finally
         {
+            _reconciler.EndRootPass();
             _isRendering = false;
             ReactorApp.ActiveHostInternal = prevActiveHost;
         }
@@ -1011,60 +1028,18 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     /// Used by test harnesses to replace blind Task.Delay waits.
     /// </summary>
     public Task WaitForIdleAsync(int maxYields = 50)
-    {
-        if (_disposed) return Task.CompletedTask;
-        if (_renderPending == 0 && !_isRendering && !_needsRerender)
-            return Task.CompletedTask;
-
-        // RunContinuationsAsynchronously: TrySetResult is called from a
-        // dispatcher callback, and without this flag any await continuation
-        // would run inline on the dispatcher at Low priority — re-entering
-        // UI logic inside the yield loop and partially defeating its purpose.
-        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        int yields = 0;
-        void CheckIdle()
-        {
-            if (_disposed)
-            {
-                tcs.TrySetResult();
-                return;
-            }
-            if (_renderPending == 0 && !_isRendering && !_needsRerender)
-            {
-                tcs.TrySetResult();
-                return;
-            }
-            if (++yields > maxYields)
-            {
-                // Returning early here is the classic flake source: callers
-                // (e.g. selftest Harness.Render) move on against a half-settled
-                // tree. Log so the next flake is greppable instead of silent.
-                Debug.WriteLine(
-                    $"[Reactor.WaitForIdle] yield cap hit ({maxYields}); " +
-                    $"renderPending={_renderPending} isRendering={_isRendering} needsRerender={_needsRerender}");
-                tcs.TrySetResult();
-                return;
-            }
-            if (!_dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, CheckIdle))
-            {
-                // Queue refused enqueue (shutdown). Complete rather than
-                // hang the caller forever.
-                tcs.TrySetResult();
-            }
-        }
-        if (!_dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, CheckIdle))
-        {
-            // Same fallback for the initial enqueue.
-            tcs.TrySetResult();
-        }
-        return tcs.Task;
-    }
+        => RenderLoopIdle.WaitAsync(
+            () => IsIdle,
+            _dispatcherQueue.TryEnqueue,
+            maxYields,
+            () => $"renderPending={_renderPending} isRendering={_isRendering} needsRerender={_needsRerender}");
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
 
+        ThemeResourceListeners.Unregister(this);
         Core.Diagnostics.ReactorHostRegistry.Unregister(this);
 
         _window.Closed -= _closedHandler;

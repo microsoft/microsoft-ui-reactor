@@ -233,16 +233,23 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                 var newItems = ih.GetItems(element);
                 var collection = ih.GetCollection(control);
                 if (collection.Count > 0) collection.Clear();
+                var entries = new int[newItems.Count];
                 for (int i = 0; i < newItems.Count; i++)
                 {
+                    entries[i] = -1;
                     var item = newItems[i];
                     if (item is Element childEl)
                     {
                         var mounted = ctx.MountChild(childEl);
-                        if (mounted is not null) collection.Add(mounted);
+                        if (mounted is not null) { collection.Add(mounted); entries[i] = collection.Count - 1; }
                     }
-                    else collection.Add(item);
+                    else
+                    {
+                        collection.Add(item);
+                        entries[i] = collection.Count - 1;
+                    }
                 }
+                ih.RememberEntries(control, entries);
                 return;
             }
         }
@@ -369,7 +376,11 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                 var oldItems = ih.GetItems(oldEl);
                 var newItems = ih.GetItems(newEl);
                 var equals = ih.ItemEquals ?? object.Equals;
-                if (ReferenceEquals(oldItems, newItems)) return;
+                if (ReferenceEquals(oldItems, newItems))
+                {
+                    ih.RefreshKeptItems(reconciler, control, oldItems, newItems, requestRerender);
+                    return;
+                }
                 if (oldItems.Count == newItems.Count)
                 {
                     bool same = true;
@@ -377,7 +388,11 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                     {
                         if (!equals(oldItems[i], newItems[i])) { same = false; break; }
                     }
-                    if (same) return;
+                    if (same)
+                    {
+                        ih.RefreshKeptItems(reconciler, control, oldItems, newItems, requestRerender);
+                        return;
+                    }
                 }
                 // Structural change — rebuild. Element items are unmounted via
                 // the existing UnmountChild path (ReconcileV1Child(old, null, ...))
@@ -390,16 +405,23 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                         reconciler.ReconcileV1Child(oldChild, null, null, requestRerender);
                 }
                 if (collection.Count > 0) collection.Clear();
+                var entries = new int[newItems.Count];
                 for (int i = 0; i < newItems.Count; i++)
                 {
+                    entries[i] = -1;
                     var item = newItems[i];
                     if (item is Element childEl)
                     {
                         var mounted = ctx.MountChild(childEl);
-                        if (mounted is not null) collection.Add(mounted);
+                        if (mounted is not null) { collection.Add(mounted); entries[i] = collection.Count - 1; }
                     }
-                    else collection.Add(item);
+                    else
+                    {
+                        collection.Add(item);
+                        entries[i] = collection.Count - 1;
+                    }
                 }
+                ih.RememberEntries(control, entries);
                 return;
             }
         }
