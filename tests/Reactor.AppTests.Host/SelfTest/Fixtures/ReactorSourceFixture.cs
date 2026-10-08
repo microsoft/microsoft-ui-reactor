@@ -1001,6 +1001,95 @@ internal class ReactorSource_AotSkipCustomSlotKeepsTeardown(Harness h) : SelfTes
 }
 
 /// <summary>
+/// A root whose child mounts the root's replacement during the first pass: that pass still
+/// renders (and publishes) the outgoing root, so the root value and the owner it records name it.
+/// The replacement's first pass then renames the retained, skipped descendants it shares
+/// with the outgoing tree. Both hosts.
+/// </summary>
+internal class ReactorSource_ReentrantRootMount(Harness h) : SelfTestFixtureBase(h)
+{
+    // One call site for both roots, so the leaf reconciles by a shallow skip.
+    internal static Element SharedLeaf() => TextBlock("reentrant-shared");
+
+    internal sealed class OutgoingRoot : Component
+    {
+        internal static Action? MountReplacement;
+
+        // The replacement is mounted by a child, during reconciliation: after the pass has
+        // already published the shared leaf as the outgoing root's.
+        public override Element Render() => VStack(SharedLeaf(), Component<MountingChild>());
+    }
+
+    internal sealed class MountingChild : Component
+    {
+        public override Element Render()
+        {
+            var mount = OutgoingRoot.MountReplacement;
+            OutgoingRoot.MountReplacement = null;
+            mount?.Invoke();
+            return TextBlock("reentrant-outgoing");
+        }
+    }
+
+    internal sealed class ReplacementRoot : Component
+    {
+        public override Element Render() => VStack(SharedLeaf(), TextBlock("reentrant-replacement"));
+    }
+
+    private void Check(string name)
+    {
+        var shared = H.FindControl<WinUI.TextBlock>(t => t.Text == "reentrant-shared");
+        var sharedValue = shared is null ? null : ReactorDiagnostics.GetSource(shared);
+        var rootValue = shared is null || VisualTreeHelper.GetParent(shared) is not { } parent ? null : ReactorDiagnostics.GetSource(parent);
+        Console.WriteLine($"# {name}: shared {sharedValue}; root {rootValue}");
+        H.Check(name,
+            sharedValue?.Contains("|owner=ReplacementRoot|", StringComparison.Ordinal) == true
+            && rootValue?.Contains("|root=ReplacementRoot", StringComparison.Ordinal) == true);
+    }
+
+    public override async Task RunAsync()
+    {
+        if (!ReactorSourcePublisher.IsSupported)
+        {
+            H.Skip("ReactorSource_ReentrantRootMount", "Reactor.DevtoolsSupport is off in this host");
+            return;
+        }
+
+        var previous = ReactorSourcePublisher.IsEnabled;
+        try
+        {
+            ReactorSourcePublisher.IsEnabled = true;
+
+            var host = H.CreateHost();
+            OutgoingRoot.MountReplacement = () => host.Mount(new ReplacementRoot());
+            host.Mount(new OutgoingRoot());
+            await Harness.WaitFor(() => H.FindControl<WinUI.TextBlock>(t => t.Text == "reentrant-replacement") is not null,
+                maxPasses: 32, perPassMs: 10);
+            await Harness.Render();
+            Check("ReactorSource_ReentrantRootMount_Host_RenamesRetainedDescendants");
+            host.Dispose();
+            H.SetContent(null);
+
+            var control = new Microsoft.UI.Reactor.Hosting.ReactorHostControl();
+            OutgoingRoot.MountReplacement = () => control.Mount(new ReplacementRoot());
+            control.Mount(new OutgoingRoot());
+            H.SetContent(new WinUI.Border { Child = control });
+            // A standalone ReactorHostControl is not ReactorApp.ActiveHost: poll its loop.
+            await Harness.WaitFor(() => H.FindControl<WinUI.TextBlock>(t => t.Text == "reentrant-replacement") is not null,
+                maxPasses: 32, perPassMs: 10);
+            await Harness.Render();
+            Check("ReactorSource_ReentrantRootMount_HostControl_RenamesRetainedDescendants");
+            control.Dispose();
+            H.SetContent(null);
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = previous;
+        }
+    }
+}
+
+/// <summary>
 /// A ContentDialog element realizes a collapsed placeholder; the dialog the user sees is a
 /// separate WinUI object. An out-of-process inspector sees the dialog, so it carries the
 /// element's published value too: when opened at mount (the reconciler mirrors the value it

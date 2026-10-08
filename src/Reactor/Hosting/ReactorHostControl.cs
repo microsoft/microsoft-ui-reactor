@@ -66,6 +66,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     // Render() can Mount() a replacement, and the attempt in progress is still the old root's.
     private Microsoft.UI.Reactor.Core.Diagnostics.RootRenderDiagnostics? _renderingRootDiagnostics;
     private Component? _renderingRoot;
+    // The root mount site as of the same snapshot: a root render function's hooks resolve
+    // through it, and a reentrant Mount() replaces the live one mid-pass.
+    private SourceLocation? _renderingMountSite;
     private Func<RenderContext, Element>? _rootRenderFunc;
     private RenderContext? _funcContext;
 
@@ -294,17 +297,25 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     /// the function was passed to: exactly the recorded root mount site.
     /// </summary>
     private string? DiagnosticRootHooks()
-        => _rootComponent is not null
-            ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetComponentHooks(_rootComponent.GetType())
-            : _mountSite.Value is { } rootSite
+        => DiagnosticRoot is { } root
+            ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetComponentHooks(root.GetType())
+            : DiagnosticMountSite is { } rootSite
                 ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetRenderFunctionHooks(rootSite)
                 : null;
 
     /// <summary>Owner / root= name of this host's root component for ReactorDiagnostics.SourceProperty.</summary>
     private string DiagnosticRootName()
-        => _rootComponent is not null
-            ? Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourceFormat.ComponentName(_rootComponent.GetType())
+        => DiagnosticRoot is { } root
+            ? Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourceFormat.ComponentName(root.GetType())
             : nameof(FuncElement);
+
+    // During a render pass, the root that pass renders (snapshotted before app code runs,
+    // which can Mount() a replacement); otherwise the live root.
+    private Component? DiagnosticRoot
+        => _renderingRootDiagnostics is not null ? _renderingRoot : _rootComponent;
+
+    private SourceLocation? DiagnosticMountSite
+        => _renderingRootDiagnostics is not null ? _renderingMountSite : _mountSite.Value;
 
     /// <summary>
     /// The root's Render() threw: report the render (as a throwing child component's is)
@@ -696,6 +707,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             {
                 _renderingRoot = null;
                 _renderingRootDiagnostics = null;
+                _renderingMountSite = null;
                 // Reset the gate so future setState calls can enqueue — also when a render
                 // error the app chose to propagate (RenderError.Propagate) escapes Render().
                 Interlocked.Exchange(ref _renderPending, 0);
@@ -821,6 +833,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             // clears the snapshot when the pass ends).
             _renderingRoot = _rootComponent;
             _renderingRootDiagnostics = _rootDiagnostics;
+            _renderingMountSite = _mountSite.Value;
 
             Element? newTree = null;
 
