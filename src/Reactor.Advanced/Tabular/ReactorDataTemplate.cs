@@ -29,6 +29,7 @@ internal sealed class ReactorDataTemplate
     private readonly ConditionalWeakTable<ContentControl, Slot> _slots = new();
     private Func<object?, Element?> _render;
     private object _renderIdentity;
+    private bool _detached;
 
     internal ReactorDataTemplate(
         Reconciler reconciler,
@@ -58,9 +59,14 @@ internal sealed class ReactorDataTemplate
             Render(shell, slot, shell.DataContext);
     }
 
-    /// <summary>Unmounts every realized subtree so descendant effect cleanups run.</summary>
+    /// <summary>
+    /// Unmounts every realized subtree so descendant effect cleanups run, and stops reacting
+    /// to the shells: the native control can release (and re-context) them after the table
+    /// is gone, and nothing may re-enter the reconciler on its behalf from then on.
+    /// </summary>
     internal void UnmountAll()
     {
+        _detached = true;
         foreach (var (shell, slot) in _slots)
         {
             if (slot.Control is not null)
@@ -94,6 +100,7 @@ internal sealed class ReactorDataTemplate
 
     private void Render(ContentControl shell, Slot slot, object? item)
     {
+        if (_detached) return;
         var next = _render(item);
         var control = _reconciler.Reconcile(slot.Element, next, slot.Control, _requestRerender);
         slot.Element = next;
