@@ -40,6 +40,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
 
     private Element? _currentTree;
     private UIElement? _currentControl;
+    // The root that produced _currentControl (diagnostics); see RenderedRoot.
+    private RenderedRoot _renderedRoot;
     private int _renderPending;    // 0 or 1 — Interlocked for thread-safe access
     private volatile bool _isRendering;     // only touched on UI thread
     private volatile bool _needsRerender;   // only touched on UI thread
@@ -182,6 +184,56 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     internal UIElement? CurrentControl => _currentControl;
 
     /// <summary>
+    /// <see cref="Reconciler.DiagnosticsRootResolver"/> for this host. The root anchor is
+    /// the rendered root control, or — while this host's content is the one installed there —
+    /// the element it installed it into (the <see cref="ContentTarget"/> border or the window
+    /// content) and the dev-overlay wrapper it puts around the root while an overlay is on.
+    /// Several hosts can share one container over time (a replaced, undisposed host keeps
+    /// its stale reference to it), so the container only counts for the host whose content
+    /// is actually in it — or, while it is empty (an <c>Empty()</c> root), for the host that
+    /// last rendered into it.
+    /// </summary>
+    private RootComponentSource? ResolveDiagnosticsRoot(UIElement element)
+    {
+        if (_disposed) return null;
+        // Null when the root rendered Empty(); see the ownership rule below.
+        var control = _currentControl;
+
+        // Resolve against where the displayed root was published, not the requested ContentTarget:
+        // retargeting takes effect only when the next render writes the new container, and until
+        // then the previous one is still the root's anchor. A claimed Border is that destination;
+        // with no claim the root went to the window content (a window write releases any claim).
+        var published = _claimedContentTarget as WinUI.Border;
+        if (published is not null && !OwnsContentTarget(published)) published = null; // taken over by another host
+        UIElement? container = published
+            ?? (_claimedContentTarget is null && !_windowClosed ? _window.Content as UIElement : null);
+        UIElement? installed = published is not null ? published.Child : container;
+        var wrapper = _overlayWiring?.WrapperRoot;
+        // Content identity proves ownership when there is content. An empty container proves
+        // nothing (any empty-root host sharing it would match), so then it must be the container
+        // this host published into.
+        bool ours = installed is not null
+            ? ReferenceEquals(installed, control) || (wrapper is not null && ReferenceEquals(installed, wrapper))
+            : control is null && published is not null;
+
+        bool isAnchor = (control is not null && ReferenceEquals(element, control))
+            || (ours && (ReferenceEquals(element, container) || ReferenceEquals(element, installed)));
+        if (!isAnchor) return null;
+
+        // The root that produced the displayed control, not the requested one: after Mount and
+        // before its queued render, the old control still shows the previous root.
+        var rendered = _renderedRoot;
+        if (rendered.IsEmpty) return null;
+        return new RootComponentSource(
+            rendered.Component,
+            rendered.FuncContext,
+            rendered.RenderFunc,
+            control,
+            _currentTree,
+            () => !_disposed && _renderedRoot.SameRootAs(rendered));
+    }
+
+    /// <summary>
     /// Optional: when set, Reactor renders into this Border instead of Window.Content.
     /// Useful for embedding Reactor content in a pre-existing layout (e.g., a test harness
     /// with a persistent TitleBar).
@@ -220,10 +272,12 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         // Microsoft.Extensions.Logging call paths.
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
+        _reconciler.DiagnosticsRootResolver = ResolveDiagnosticsRoot;
         _reconciler.RenderErrorHandlerProvider = () => EffectiveRenderErrorHandler;
         _window = window;
         _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        _reconciler.OwningDispatcher = _dispatcherQueue;
         // Off-thread rerenders marshal via ReactorApp.UIDispatcher (captured
         // in OnLaunched). For embedded ReactorHostControl scenarios where
         // there's no Reactor.Run, fall back to seeding UIDispatcher with this
@@ -299,6 +353,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         else
             _dispatcherQueue.TryEnqueue(() => { if (!_disposed) _reconciler.TagComponentBoundaries(); });
     }
+
+    Reconciler? Core.Diagnostics.IReactorDiagnosticHost.DiagnosticReconciler => _disposed ? null : _reconciler;
 
     Core.Diagnostics.ReactorHostInfo? Core.Diagnostics.IReactorDiagnosticHost.CaptureDiagnosticInfo()
     {
@@ -427,6 +483,45 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
         RequestRender();
     }
+
+    // Diagnostics ownership of a shared ContentTarget: the host that last rendered into it
+    // (wrote its content, or published an Empty() root while targeting it) — so ownership and
+    // the published rendered root always change together. Only consulted when the container is
+    // empty, where content identity cannot say whose it is. Not written on an ordinary
+    // re-render that changes nothing. The owner is held weakly and released on Dispose, so the
+    // table never keeps a host (or its window and reconciler) alive.
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, WeakReference<ReactorHost>> s_contentTargetOwner = new();
+
+    private void ClaimContentTarget()
+    {
+        if (ContentTarget is not { } target) return;
+        // Retargeted: drop the claim on the previous container so it cannot resolve to a root
+        // this host has since rendered elsewhere.
+        if (_claimedContentTarget is { } previous && !ReferenceEquals(previous, target) && OwnsContentTarget(previous))
+            s_contentTargetOwner.Remove(previous);
+        s_contentTargetOwner.AddOrUpdate(target, new WeakReference<ReactorHost>(this));
+        _claimedContentTarget = target;
+    }
+
+    // The container this host last claimed (not necessarily the current ContentTarget).
+    private UIElement? _claimedContentTarget;
+
+    private void ReleaseContentTarget()
+    {
+        if (_claimedContentTarget is { } target && OwnsContentTarget(target))
+            s_contentTargetOwner.Remove(target);
+        _claimedContentTarget = null;
+    }
+
+    private bool OwnsContentTarget(UIElement target)
+        => ReferenceEquals(_claimedContentTarget, target)
+            && s_contentTargetOwner.TryGetValue(target, out var owner)
+            && owner.TryGetTarget(out var host) && ReferenceEquals(host, this);
+
+    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host): whether any live host owns
+    // the container in the diagnostics ownership table.
+    internal static bool HasContentTargetOwnerForTest(UIElement target)
+        => s_contentTargetOwner.TryGetValue(target, out var owner) && owner.TryGetTarget(out _);
 
     /// <summary>
     /// Thread-safe: can be called from any thread. Coalesces multiple calls into
@@ -755,9 +850,15 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
                 if (anyOverlayOn)
                     contentToSet = _overlayWiring!.SetContentViaWrapper(newControl);
                 if (ContentTarget is not null)
+                {
                     ContentTarget.Child = contentToSet;
+                    ClaimContentTarget();
+                }
                 else
+                {
                     _window.Content = contentToSet;
+                    ReleaseContentTarget();
+                }
                 AttachThemeListener(newControl);
             }
             else if (anyOverlayOn && _overlayWiring!.WrapperRoot is null)
@@ -771,9 +872,15 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
                     _window.Content = null;
                 var wrapper = _overlayWiring.SetContentViaWrapper(newControl);
                 if (ContentTarget is not null)
+                {
                     ContentTarget.Child = wrapper;
+                    ClaimContentTarget();
+                }
                 else
+                {
                     _window.Content = wrapper;
+                    ReleaseContentTarget();
+                }
                 Debug.WriteLine($"[Reactor.Overlay] wrapper installed mid-session; content={newControl?.GetType().Name ?? "null"}");
             }
             else if (!anyOverlayOn && _overlayWiring?.WrapperRoot is not null)
@@ -785,15 +892,26 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
                 // window.
                 _overlayWiring.DetachContent();
                 if (ContentTarget is not null)
+                {
                     ContentTarget.Child = newControl;
+                    ClaimContentTarget();
+                }
                 else
+                {
                     _window.Content = newControl;
+                    ReleaseContentTarget();
+                }
                 _overlayWiring.Dispose();
                 _overlayWiring = null;
             }
 
             _currentControl = newControl;
             _currentTree = newTree;
+            _renderedRoot = new RenderedRoot(_rootComponent, _funcContext, _rootRenderFunc);
+            // An Empty() render may write nothing (the container was already empty), yet the
+            // container now shows this root: claim it alongside the published root.
+            if (newControl is null && ContentTarget is { } emptyTarget && !OwnsContentTarget(emptyTarget))
+                ClaimContentTarget();
             OwningWindow?.OnHostContentRendered(newControl);
 
             // Spec 033 §6 — apply (or clear) the SystemBackdrop modifier carried on
@@ -1123,6 +1241,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         _funcContext = null;
         _currentTree = null;
         _currentControl = null;
+        _renderedRoot = default;
+        ReleaseContentTarget();
 
         try { _overlayWiring?.Dispose(); } catch { /* best effort */ }
         _overlayWiring = null;
@@ -1180,13 +1300,17 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         else if (ContentTarget is not null)
         {
             ContentTarget.Child = errorPanel;
+            ClaimContentTarget();
         }
         else
         {
             _window.Content = errorPanel;
+            ReleaseContentTarget();
         }
         _currentControl = errorPanel;
         _currentTree = errorTree;
+        // A fallback is shown, not the root's output, so no root is described from it.
+        _renderedRoot = default;
         // When the handler's outcome replaced (and released) the tree, the theme listener
         // moves to the new content like any content swap, or is detached when there is none,
         // so it neither pins the released root nor misses a ThemeRef-bound app fallback. The

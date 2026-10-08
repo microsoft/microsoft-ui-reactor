@@ -28,6 +28,25 @@ Conventions for contributors:
 
 ### Added
 
+- **Component inspection for devtools: `ReactorDiagnostics.DescribeComponent`,
+  `TrySetState`, `Rerender`, `GetAppliedProperties`, `GetReferenceEdges`.** An
+  inspector can go from a realized control to the component behind it: its name,
+  kind, props, hooks and consumed contexts as a text `ComponentSnapshot`; set a
+  `UseState` / `UseReducer` / `UsePersisted` value from text (parsed to the hook's
+  type, refused with a reason otherwise) and re-render it; list the WinUI
+  properties a control's modifiers set (including the caption-derived default
+  `AutomationProperties.Name`); and list the references it declares, including
+  pending ones whose target has not mounted. Component snapshots and property
+  lists are text — no live component, element or hook object — with secrets
+  redacted; a resolved reference edge carries its mounted target control. Reads
+  are on demand and UI-thread-affine. The render path gains only reference
+  stores: per component, `UseContext` records the context it read and
+  reference-list wiring keeps the authored list; per host render, the host
+  records which root produced the displayed control (and, when it renders into its
+  `ContentTarget`, that it owns it). With source mapping on, an open
+  `ContentDialog` is tagged with its element so its chrome resolves to the
+  `ContentDialog(...)` call site (spec 010, spec 057 §3.1).
+
 - **Inspector diagnostics for hosts, roots and component boundaries** (spec 010).
   `ReactorDiagnostics.GetHosts()` (`Microsoft.UI.Reactor.Core.Diagnostics`) returns
   a snapshot of every live `ReactorHost` and `ReactorHostControl` — window,

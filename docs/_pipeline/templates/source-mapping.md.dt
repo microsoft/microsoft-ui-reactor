@@ -313,6 +313,71 @@ small allocation per *component*, never per leaf, and nothing while the flag is 
   `[ReactorSourceTransparent]`, which is what `Pending(fallback, child)` does;
   `intl.RichMessage` cannot, because it is an instance method.
 
+## Inspecting components
+
+`ReactorDiagnostics` (namespace `Microsoft.UI.Reactor.Core.Diagnostics`) lets an
+inspector go from a realized control to the component behind it and make
+development-time edits. It is a provisional surface for devtools. These inspection
+members must be called on the UI thread that owns the element (`GetHosts()` is the
+exception: it is safe from any thread). A `ComponentSnapshot` and the property lists are
+plain text: they hold no reference into the component, so they can be kept or
+sent across a process boundary. The one live object is a resolved reference
+edge's `Target`, the mounted control it points at.
+
+```csharp snippet="diagnostics/inspect-component"
+```
+
+Values are formatted for display: strings are quoted, collections are summarised
+as `List<T> (n items)` from the count they advertise (a lazy sequence is never
+enumerated and shows `(count unknown)`), long values are cut at 200 characters,
+and secrets — a `SecureString`; a type, collection element type or member name
+ending in `Password`, `Secret`, `Credential`, `Token`, `ApiKey`, `PrivateKey` or
+`ConnectionString`; an object whose own text, or a string, names such a member
+with a value (`AccessToken=…`, a record with a `Password` property) — are
+reported as
+`<redacted>` and are never editable; nor is a value written that would read back
+redacted.
+`TrySetState` accepts numbers, single characters, `true`/`false`, enum member
+names (a `[Flags]` combination only of declared bits), dates, time spans, GUIDs,
+plain text and their nullables (`null` clears a
+string or nullable); it refuses any other type with a reason rather than guessing.
+Hook names are not recorded, so `State` rows have an empty `Name` and are
+identified by call-order index and kind. Props are read by reflection: under
+NativeAOT or trimming a props type's members can be trimmed away, and `Props` then
+holds a single `<Type> (members unavailable)` row instead.
+
+Component lookup does not depend on source mapping. When a root renders a component
+directly (`Render() => Component<Shell>()`), its rendered control is also `Shell`'s
+wrapper; that element describes `Shell`, and the root is reached through its
+`ContentTarget`, its `ReactorHostControl` or the dev-overlay wrapper instead. A host
+that installs straight into `Window.Content` has no such anchor, so in that shape its
+root is not reachable. `GetAppliedProperties` reads
+the element back-pointer, so it needs the control to be tagged — turn source
+mapping on for full coverage. It covers common modifiers only; a property set by
+the control's own element record (`TextBlock("hi")` → `Text`) is not listed. The
+one exception is the `AutomationProperties.Name` Reactor derives from a captioned
+control (`Button("Save")`) when you set none: it is reported as
+`"DefaultAutomationName"` while the live name still equals it.
+
+An open `ContentDialog` is hosted in its own popup, out of reach of an ancestor
+walk from the dialog's buttons, so with source mapping on the realized dialog is
+tagged with its `ContentDialog(...)` element too: `ReactorSourceMap.GetSource(dialog)`
+names the call site. That tag is for attribution only — the element's modifiers
+apply to the collapsed placeholder — so `GetAppliedProperties` and
+`GetReferenceEdges` report nothing for the dialog itself, and the tag is cleared
+when the dialog closes.
+
+A re-render diffs element against element, not against the live control, so it
+does not undo a property you edited directly on the control unless the element's
+value for that property changed.
+
+`ReactorDiagnostics.GetReferenceEdges(control)` lists the references a control
+declares (`.LabeledBy(ref)`, `.XYFocusRight(ref)`, `.DescribedBy(...)`, a
+descriptor's `.Reference(...)`, …): the property, the AutomationId or expected
+target type you passed, and whether it has resolved. A pending edge is the case
+WinUI cannot show you: until the target mounts, the property itself
+(`XYFocusRight`, `AutomationProperties.LabeledBy`) reads null.
+
 ## Tips
 
 **For now, lean on the component name.** Wrap chunks of UI in

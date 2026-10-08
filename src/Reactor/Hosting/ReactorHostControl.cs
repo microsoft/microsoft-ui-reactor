@@ -66,6 +66,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
     private Element? _currentTree;
     private UIElement? _currentControl;
+    // The root that produced _currentControl (diagnostics); see RenderedRoot.
+    private RenderedRoot _renderedRoot;
     private int _renderPending;      // 0 or 1 — Interlocked for thread-safe access
     private volatile bool _isRendering;       // only touched on UI thread
     private volatile bool _needsRerender;     // only touched on UI thread
@@ -222,8 +224,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         // already-constructed controls.
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
+        _reconciler.DiagnosticsRootResolver = ResolveDiagnosticsRoot;
         _reconciler.RenderErrorHandlerProvider = () => EffectiveRenderErrorHandler;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        _reconciler.OwningDispatcher = _dispatcherQueue;
         // A standalone ReactorHostControl has no ReactorApp bootstrap, so nothing else
         // sets ReactorApp.UIDispatcher. Cross-thread setState — including the re-render
         // that UseValidationContext schedules when a background async validator raises
@@ -256,6 +260,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         else
             _dispatcherQueue.TryEnqueue(() => { if (!_disposed) _reconciler.TagComponentBoundaries(); });
     }
+
+    Reconciler? Core.Diagnostics.IReactorDiagnosticHost.DiagnosticReconciler => _disposed ? null : _reconciler;
 
     Core.Diagnostics.ReactorHostInfo? Core.Diagnostics.IReactorDiagnosticHost.CaptureDiagnosticInfo()
     {
@@ -743,6 +749,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
             _currentControl = newControl;
             _currentTree = newTree;
+            _renderedRoot = new RenderedRoot(_rootComponent, _funcContext, _rootRenderFunc);
 
             // Spec 033 §6 — Backdrop modifier on the root tree is a no-op for
             // ReactorHostControl, which doesn't own its hosting Window. We
@@ -950,6 +957,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         }
         _currentControl = errorPanel;
         _currentTree = errorTree;
+        // A fallback is shown, not the root's output, so no root is described from it.
+        _renderedRoot = default;
         // See ReactorHost.SetErrorContent: when the handler's outcome replaced the tree, the
         // theme listener follows the new content, or is detached when there is none.
         if (replacesTree)
@@ -1005,6 +1014,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         _funcContext = null;
         _currentTree = null;
         _currentControl = null;
+        _renderedRoot = default;
         try { _overlayWiring?.Dispose(); } catch { /* best effort */ }
         _overlayWiring = null;
 

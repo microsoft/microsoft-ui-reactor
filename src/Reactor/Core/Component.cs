@@ -327,6 +327,12 @@ public abstract class Component
 internal interface IPropsReceiver
 {
     void SetProps(object props);
+
+    /// <summary>Boxed current props, for diagnostics (no reflection).</summary>
+    object? PropsBoxed { get; }
+
+    /// <summary>The declared props type (<c>TProps</c>), for diagnostics.</summary>
+    Type PropsType { get; }
 }
 
 /// <summary>
@@ -349,6 +355,10 @@ public abstract class Component<TProps> : Component, IPropsReceiver, IPropsCompa
     public TProps Props { get; internal set; } = default!;
 
     void IPropsReceiver.SetProps(object props) => Props = (TProps)props;
+
+    object? IPropsReceiver.PropsBoxed => Props;
+
+    Type IPropsReceiver.PropsType => typeof(TProps);
 
     bool IPropsComparable.CompareProps(object? oldProps, object? newProps)
         => ShouldUpdate((TProps?)oldProps, (TProps?)newProps);

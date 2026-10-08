@@ -35,6 +35,8 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
 
         public void TagComponentBoundaries() => TagRefreshes++;
 
+        public Reconciler? DiagnosticReconciler => null;
+
         public ReactorHostInfo? CaptureDiagnosticInfo() => Disposed
             ? null
             : ReactorHostInfo.ForRoot(
