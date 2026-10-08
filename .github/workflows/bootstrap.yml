@@ -282,7 +282,7 @@ jobs:
               # not-yet-published public preview while a release-prep PR is in
               # flight, so opt into the local package version explicitly here
               . ../tools/WindowsAppRuntimeId.ps1
-              $sdk = Get-PinnedWindowsAppSdkVersion -PropsPath ../Directory.Build.props
+              $sdk = Get-PinnedWindowsAppSdkVersion -PropsPath (Join-Path $env:GITHUB_WORKSPACE 'Directory.Build.props')
               $prereleaseSdk = $sdk -and $sdk.Contains('-')
 
               dotnet new reactor -n TestApp --reactor-version 0.0.0-local
