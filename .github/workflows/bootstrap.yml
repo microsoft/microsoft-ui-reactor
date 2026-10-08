@@ -281,18 +281,24 @@ jobs:
               # mur pack-local. The template's normal default may point at a
               # not-yet-published public preview while a release-prep PR is in
               # flight, so opt into the local package version explicitly here
+              . ../tools/WindowsAppRuntimeId.ps1
+              $sdk = Get-PinnedWindowsAppSdkVersion -PropsPath ../Directory.Build.props
+              $prereleaseSdk = $sdk -and $sdk.Contains('-')
+
               dotnet new reactor -n TestApp --reactor-version 0.0.0-local
-              if ($LASTEXITCODE -ne 0) { throw "dotnet new reactor exited $LASTEXITCODE" }
-              if (-not (Test-Path 'TestApp/TestApp.csproj')) { throw "TestApp/TestApp.csproj not produced" }
+              $newExit = $LASTEXITCODE
+              if (-not (Test-Path 'TestApp/TestApp.csproj')) { throw "TestApp/TestApp.csproj not produced (dotnet new exited $newExit)" }
+              # Under a prerelease pin the template's own post-creation restore is expected
+              # to fail (see below), which makes `dotnet new` exit non-zero; the explicit
+              # restore after pinning is the real check.
+              if ($newExit -ne 0 -and -not $prereleaseSdk) { throw "dotnet new reactor exited $newExit" }
 
               # The template floats Microsoft.WindowsAppSDK at Version="*", which never
               # resolves a prerelease. When the repo is pinned to a prerelease SDK channel
               # (e.g. 2.5.4-experimental), the local Reactor package requires that runtime
               # and the float resolves the latest stable instead (NU1107). Pin the scaffold
               # to the repo's version, as a consumer of this Reactor build must.
-              . ../tools/WindowsAppRuntimeId.ps1
-              $sdk = Get-PinnedWindowsAppSdkVersion -PropsPath ../Directory.Build.props
-              if ($sdk -and $sdk.Contains('-')) {
+              if ($prereleaseSdk) {
                   $csproj = 'TestApp/TestApp.csproj'
                   $text = Get-Content $csproj -Raw
                   $pinned = $text -replace '(<PackageReference\s+Include="Microsoft\.WindowsAppSDK"\s+Version=")[^"]*(")', "`${1}$sdk`${2}"

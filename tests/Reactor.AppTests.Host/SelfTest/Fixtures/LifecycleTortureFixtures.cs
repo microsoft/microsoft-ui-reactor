@@ -69,10 +69,11 @@ internal sealed class LT_OnMountUnmountBalanced(Harness h) : SelfTestFixtureBase
         // passes and the Check below reports the real number.
         await Harness.WaitFor(() => mounts == 30 && unmounts == 30);
 
-        H.Check("LT_Mounts_Exactly_30", mounts == 30);
-        H.Check("LT_Unmounts_Exactly_30", unmounts == 30);
-        H.Check("LT_OnMount_Received_Control", gotControl == mounts);
-        H.Check("LT_NoLeak_MountsEqualUnmounts", mounts == unmounts);
+        var counts = $"mounts={mounts} unmounts={unmounts} gotControl={gotControl}";
+        H.Check("LT_Mounts_Exactly_30", mounts == 30, counts);
+        H.Check("LT_Unmounts_Exactly_30", unmounts == 30, counts);
+        H.Check("LT_OnMount_Received_Control", gotControl == mounts, counts);
+        H.Check("LT_NoLeak_MountsEqualUnmounts", mounts == unmounts, counts);
     }
 }
 
