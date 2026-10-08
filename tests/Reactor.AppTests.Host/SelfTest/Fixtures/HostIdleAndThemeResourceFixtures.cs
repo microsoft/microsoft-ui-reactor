@@ -1,4 +1,5 @@
 using Microsoft.UI;
+using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
@@ -169,6 +170,8 @@ internal static class HostIdleAndThemeResourceFixtures
             int shapeItemCleanedUp = 0;
             int templatedItemCleanedUp = 0;
             int popupContentCleanedUp = 0;
+            int visualizerContentMounts = 0;
+            int visualizerContentCleanups = 0;
             int wrapperMounts = 0;
             int nestedInnerMounts = 0;
             int nestedOuterMounts = 0;
@@ -260,6 +263,18 @@ internal static class HostIdleAndThemeResourceFixtures
                                     return TextBlock("PopupBefore");
                                 })
                                 : TextBlock("PopupAfter"))),
+                        // A popup child whose update always hands back a fresh control: each outgoing
+                        // subtree must be unmounted, so exactly one copy of its content stays live.
+                        Popup(ValidationVisualizerDsl.ValidationVisualizer(VisualizerStyle.Inline,
+                            RenderEachTime(fctx =>
+                            {
+                                fctx.UseEffect(() =>
+                                {
+                                    visualizerContentMounts++;
+                                    return () => visualizerContentCleanups++;
+                                });
+                                return TextBlock("VisualizerProbe");
+                            }))),
                         // A templated-list item that changes shape with the resource: the replaced
                         // item must be unmounted.
                         ListView(templatedItems, static s => s, (_, _) => Memo("templatedShape",
@@ -313,6 +328,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_NestedWrapperRerenderAloneMountedOnce", nestedInnerMounts == 1 && nestedOuterMounts == 1,
                     $"inner={nestedInnerMounts} outer={nestedOuterMounts}");
                 H.Check("ThemeMemo_PopupContentRerenderAloneKept", popupContentCleanedUp == 0);
+                H.Check("ThemeMemo_VisualizerRerenderOneLiveCopy", visualizerContentMounts >= 2 && visualizerContentMounts - visualizerContentCleanups == 1,
+                    $"mounts={visualizerContentMounts} cleanups={visualizerContentCleanups}");
                 H.Check("ThemeMemo_TreeContentRerenderAloneUnchanged", ToggleTree(target) is { } toggleBefore
                     && toggleBefore.RootNodes[0].Content is UIElement && toggleBefore.RootNodes[1].Content is null,
                     $"first={ToggleTree(target)?.RootNodes[0].Content?.GetType().Name ?? "null"} second={ToggleTree(target)?.RootNodes[1].Content?.GetType().Name ?? "null"}");
@@ -343,6 +360,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_NestedWrapperRemountRunsOnMount", nestedInnerMounts == 2 && nestedOuterMounts == 2,
                     $"inner={nestedInnerMounts} outer={nestedOuterMounts}");
                 H.Check("ThemeMemo_PopupContentReplacedAndUnmounted", popupContentCleanedUp == 1, $"cleanups={popupContentCleanedUp}");
+                H.Check("ThemeMemo_VisualizerNotifiedOneLiveCopy", visualizerContentMounts >= 3 && visualizerContentMounts - visualizerContentCleanups == 1,
+                    $"mounts={visualizerContentMounts} cleanups={visualizerContentCleanups}");
                 H.Check("ThemeMemo_TreeContentVisibleToEmpty", ToggleTree(target)?.RootNodes[0].Content is null,
                     $"content={ToggleTree(target)?.RootNodes[0].Content?.GetType().Name ?? "null"}");
                 H.Check("ThemeMemo_TreeContentEmptyToVisible", ToggleTree(target)?.RootNodes[1].Content is UIElement,

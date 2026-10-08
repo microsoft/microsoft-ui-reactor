@@ -1197,7 +1197,7 @@ public sealed partial class Reconciler
         if (newChild is not null && oldChild is not null
             && getControl() is UIElement existing && CanUpdate(oldChild, newChild))
         {
-            var replacement = Update(oldChild, newChild, existing, requestRerender);
+            var replacement = UpdateHostedChild(oldChild, newChild, existing, requestRerender);
             if (replacement is not null) setControl(replacement);
         }
         else if (newChild is not null)
@@ -1483,7 +1483,7 @@ public sealed partial class Reconciler
             && CanUpdate(oldContentEl, newContentEl))
         {
             // Reconcile in place
-            var replacement = Update(oldContentEl, newContentEl, existingCtrl, requestRerender);
+            var replacement = UpdateHostedChild(oldContentEl, newContentEl, existingCtrl, requestRerender);
             if (replacement is not null && !ReferenceEquals(liveNode.Content, replacement))
                 liveNode.Content = replacement;
         }

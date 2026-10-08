@@ -2778,6 +2778,21 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
+    /// <see cref="Update"/> for a hosted child slot (dialog/popup/flyout/tooltip content, tree and
+    /// list item containers) whose owner swaps a replacement in. When the update hands back a
+    /// different control, the old one is unmounted here (unless the update already did) so its
+    /// effects, refs and unmount callbacks don't outlive it. Returns the replacement, or null
+    /// when the existing control was kept: a drop-in for <see cref="Update"/> at those sites.
+    /// </summary>
+    internal UIElement? UpdateHostedChild(Element oldEl, Element newEl, UIElement existing, Action requestRerender)
+    {
+        var replacement = UpdateSlotChild(oldEl, newEl, existing, requestRerender, out var unmountedByUpdate);
+        if (replacement is null || IsSameControl(replacement, existing)) return null;
+        if (!unmountedByUpdate) Unmount(existing);
+        return replacement;
+    }
+
+    /// <summary>
     /// <see cref="UpdateChild"/> for a caller that unmounts a replaced control: reports whether
     /// the update already unmounted it (e.g. a same-key Memo remounting its output during a
     /// resource refresh), so the caller doesn't unmount it twice.
@@ -4877,7 +4892,7 @@ public sealed partial class Reconciler : IDisposable
             var existingTip = WinUI.ToolTipService.GetToolTip(fe) as UIElement;
             if (oldTipEl is not null && existingTip is not null && CanUpdate(oldTipEl, m.RichToolTip))
             {
-                var replacement = Update(oldTipEl, m.RichToolTip, existingTip, requestRerender);
+                var replacement = UpdateHostedChild(oldTipEl, m.RichToolTip, existingTip, requestRerender);
                 if (replacement is not null)
                     WinUI.ToolTipService.SetToolTip(fe, replacement);
             }
@@ -6261,7 +6276,7 @@ public sealed partial class Reconciler : IDisposable
             var oldContent = oldEl is ContentFlyoutElement oldCf ? oldCf.Content : null;
             if (oldContent is not null && flyout.Content is UIElement existingContent && CanUpdate(oldContent, newCf.Content))
             {
-                var replacement = Update(oldContent, newCf.Content, existingContent, requestRerender);
+                var replacement = UpdateHostedChild(oldContent, newCf.Content, existingContent, requestRerender);
                 if (replacement is not null && !ReferenceEquals(flyout.Content, replacement))
                     flyout.Content = replacement;
             }
@@ -6288,7 +6303,7 @@ public sealed partial class Reconciler : IDisposable
         {
             if (CanUpdate(oldEl, newEl))
             {
-                var replacement = Update(oldEl, newEl, existingCtrl, requestRerender);
+                var replacement = UpdateHostedChild(oldEl, newEl, existingCtrl, requestRerender);
                 if (replacement is not null && !ReferenceEquals(plainFlyout.Content, replacement))
                     plainFlyout.Content = replacement;
             }

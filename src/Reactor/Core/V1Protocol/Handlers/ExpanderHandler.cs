@@ -73,7 +73,7 @@ internal sealed class ExpanderHandler : IDecoratorElementHandler<ExpanderElement
         // Reconcile content child
         if (exp.Content is UIElement existingContent && reconciler.CanUpdate(oldEl.Content, newEl.Content))
         {
-            var replacement = reconciler.UpdateChild(oldEl.Content, newEl.Content, existingContent, requestRerender);
+            var replacement = reconciler.UpdateHostedChild(oldEl.Content, newEl.Content, existingContent, requestRerender);
             if (replacement is not null && !ReferenceEquals(exp.Content, replacement))
                 exp.Content = replacement;
         }
