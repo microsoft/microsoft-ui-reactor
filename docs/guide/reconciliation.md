@@ -162,7 +162,7 @@ reads these.
 > collection". If you call `Reconcile` from a custom container and
 > ignore the return value, the parent keeps pointing at a control that's
 > about to be unmounted. The framework's own
-> [`ChildReconciler`](#child-reconciler) handles this; custom callers
+> [`ChildReconciler`](#child-reconciler-keyed-vs-positional) handles this; custom callers
 > need to mirror it.
 
 ## Mount — building a control tree

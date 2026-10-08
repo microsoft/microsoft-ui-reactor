@@ -30,7 +30,7 @@ a debugger when an existing one mis-updates.
 # The Control Reconciler Protocol
 
 This page documents the data path between
-[`Reconciler.Reconcile`](reconciliation.md#reconcile--the-entry-point)
+[`Reconciler.Reconcile`](reconciliation.md#reconcile-the-entry-point)
 and the WinUI control it edits. The audience is anyone extending
 Reactor with a new native control, or anyone debugging why an
 existing element does not update the way it should. The companion
@@ -108,7 +108,7 @@ pool. If you stash per-control state in a field on the handler
 instance, it survives pool rent — and that is almost certainly a bug.
 Per-control state lives on the **control**, either as an attached
 state DP or as the typed event payload box
-([`Reconciler.GetOrCreateControlEventPayload`](#echo-suppression-and-write-suppressed)),
+([`Reconciler.GetOrCreateControlEventPayload`](#echo-suppression-and-writesuppressed)),
 both of which the pool reset contract clears. The handler instance is
 a stateless interpreter.
 <!-- /ai:caveat -->
@@ -225,7 +225,7 @@ return, so the handler body itself never has to walk children.
 The strategy switch is the engine's seam between the handler protocol
 and the rest of the reconciler — `SingleContent` and `NamedSlots`
 route through
-[`Reconciler.ReconcileV1Child`](reconciliation.md#child-reconciler),
+[`Reconciler.ReconcileV1Child`](reconciliation.md#child-reconciler-keyed-vs-positional),
 which is the same diff path the rest of Reactor uses; `Panel`
 walks the new and old child lists in lockstep and preserves descendant
 component state across reorderings that do not change identity;
@@ -400,7 +400,7 @@ on every Mount; precedence is documented in
 `ControlRegistry.Register<TElement, TControl>(Func<IElementHandler<TElement,TControl>>)`
 is the surface custom-control authors target. The recommended shape
 is the *factory holder* described in
-[Extending Reactor — Step 6](extending-reactor-controls.md#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it):
+[Extending Reactor — Step 6](extending-reactor-controls.md#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it):
 a `static class` whose static constructor calls
 `ControlRegistry.Register` with a `static () => new MyHandler()`
 lambda, paired with an `Of(...)` factory that is the sole

@@ -652,7 +652,7 @@ Rules for good keys:
 - **Keys must be unique** within their sibling list. Duplicates cause
   undefined reconciliation behavior.
 - **Keys should be strings.** `WithKey(string)` is the base modifier. For
-  types that implement [`IReactorKeyed`](#ireactorkeyed--identity-on-the-data)
+  types that implement [`IReactorKeyed`](#ireactorkeyed-identity-on-the-data)
   there is also `WithKey<TKey>(TKey item)`, which reads `item.Key` for you.
 
 ## Grouping

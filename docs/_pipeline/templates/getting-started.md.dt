@@ -141,7 +141,7 @@ package identity, which needs **Developer Mode**. If you have the
 `winapp run counter.cs` does the same.
 
 `Microsoft.UI.Reactor` brings the Windows App SDK in transitively, exactly as in
-the [minimal `.csproj`](index.md#minimal-setup). The rest of the header:
+the [minimal `.csproj`](index.md#minimal-project-setup). The rest of the header:
 
 | Directive | Why it is required |
 |---|---|
