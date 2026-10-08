@@ -40,7 +40,7 @@
   <text class="sub" x="180" y="121" text-anchor="middle">class MyView : Component { … }</text>
 
   <rect class="box" x="370" y="80" width="320" height="56" rx="6"/>
-  <text class="label" x="530" y="103" text-anchor="middle">Component.GetType().Name</text>
+  <text class="label" x="530" y="103" text-anchor="middle">ComponentNames.For(component)</text>
   <text class="sub" x="530" y="121" text-anchor="middle">"MyView"</text>
 
   <rect class="box" x="740" y="80" width="340" height="56" rx="6"/>

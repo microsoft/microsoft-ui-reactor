@@ -642,6 +642,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
         // Which phase the outer catch attributes a failure to (issue #1291).
         var failurePhase = RenderErrorSource.Reconcile;
+        // The root whose effects are being flushed, captured before app code runs: an effect
+        // can Mount() a replacement root and then throw, and the failure is the original's.
+        Component? effectsRoot = null;
         try
         {
             Element? newTree = null;
@@ -653,25 +656,30 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
             _phaseSw.Restart();
 
-            if (_rootComponent is not null)
+            // Captured before app code runs: the root's Render() can Mount() a replacement
+            // root and then throw, and the failure belongs to the component that threw.
+            if (_rootComponent is { } renderingRoot)
             {
-                _rootComponent.Context.BeginRender(_requestRenderAction ??= RequestRender);
+                renderingRoot.Context.BeginRender(_requestRenderAction ??= RequestRender);
                 try
                 {
                     using (ValidationRenderScope.Begin(null))
                     {
-                        newTree = ValidationRenderScope.ApplyProvide(_rootComponent.Render());
+                        newTree = ValidationRenderScope.ApplyProvide(renderingRoot.Render());
                     }
                 }
                 catch (HookOrderException ex) when (hotReloadRender)
                 {
-                    RecoverFromHookOrder(ex, _rootComponent.Context, "component");
+                    RecoverFromHookOrder(ex, renderingRoot.Context, "component");
                     return;
                 }
                 catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
                 {
                     _logger?.LogError(ex, "Component Render() threw");
-                    ShowErrorFallback(ex, RenderErrorSource.RootRender, _rootComponent.GetType().Name);
+                    // Before the fallback: the app's handler may call Propagate(), which throws.
+                    Reconciler.EmitRenderError(
+                        Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(renderingRoot, element: null), ex);
+                    ShowErrorFallback(ex, RenderErrorSource.RootRender, renderingRoot.GetType().Name);
                     return;
                 }
             }
@@ -693,6 +701,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                 catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
                 {
                     _logger?.LogError(ex, "Function component threw");
+                    // Before the fallback: the app's handler may call Propagate(), which throws.
+                    Reconciler.EmitRenderError(nameof(FuncElement), ex);
                     ShowErrorFallback(ex, RenderErrorSource.RootRender);
                     return;
                 }
@@ -800,8 +810,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             _phaseSw.Restart();
 
             failurePhase = RenderErrorSource.Effects;
-            if (_rootComponent is not null)
-                _rootComponent.Context.FlushEffects();
+            effectsRoot = _rootComponent;
+            if (effectsRoot is not null)
+                effectsRoot.Context.FlushEffects();
             else if (_funcContext is not null)
                 _funcContext.FlushEffects();
             failurePhase = RenderErrorSource.Reconcile;
@@ -867,10 +878,20 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
         {
             _logger?.LogError(ex, "Render FAILED");
-            // A root effect failure belongs to the root component; a commit-phase one has no
-            // single owning component.
+            // A root effect failure belongs to the root component and is reported like a
+            // child's effect-flush failure (issue #1321) — before the fallback, because the
+            // app's handler may call Propagate(), which throws. A commit-phase failure has no
+            // single owning component and is not a RenderError.
+            if (failurePhase == RenderErrorSource.Effects)
+            {
+                Reconciler.EmitRenderError(
+                    effectsRoot is not null
+                        ? Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(effectsRoot, element: null)
+                        : nameof(FuncElement),
+                    ex);
+            }
             ShowErrorFallback(ex, failurePhase,
-                failurePhase == RenderErrorSource.Effects ? _rootComponent?.GetType().Name : null);
+                failurePhase == RenderErrorSource.Effects ? effectsRoot?.GetType().Name : null);
         }
         finally
         {

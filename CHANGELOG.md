@@ -274,6 +274,25 @@ Conventions for contributors:
 
 ### Fixed
 
+- **`RenderError` names the component that threw, and now reports every render
+  error** (issue #1321, spec 044 §6.2.1). For class components the event reported
+  the element record (``ComponentElement`1`` / `ComponentElement`) instead of the
+  component unless the `Render` keyword was also on, so an Errors-only listener
+  such as `winapp devtools logs` could not tell which component failed. It now
+  reports the component's type name (`Counter`; a generic one as `Foo<Int32>`),
+  and the other per-component events agree on it. **Listeners now also receive
+  errors that were previously silent:** a component (class, function or memo)
+  throwing on its first render, a `ReactorHost` / `ReactorHostControl` root
+  component or render function throwing (in `Render()` or in its effects), and any
+  render error an `ErrorBoundary`
+  catches — reported once, at the throw site, even though the app shows the
+  fallback. Same event, same payload; the message stays redacted. Generic
+  component names change from ``Foo`1`` to `Foo<Int32>` in every component event.
+  For these component failures the event is emitted before any `RenderErrorHandler`
+  runs, so it fires whether the handler replaces the fallback or calls `Propagate()` —
+  once per throw either way. `Reconcile` and `Cleanup` failures are not render errors
+  and are not reported on it.
+
 - **DataGrid inline editors no longer shift the cell's text when editing starts**
   (issue #1340). The built-in TextBox and NumberBox editors used `.Padding(2)` inside
   WinUI's 32px minimum height, which draws text at the top, so the text moved about 4px
