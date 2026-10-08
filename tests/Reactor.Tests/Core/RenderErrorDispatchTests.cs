@@ -240,6 +240,33 @@ public class RenderErrorDispatchTests
                 new InvalidOperationException("cleanup"), "Probe", isHostLevel: true, logger: null)));
     }
 
+    [Fact]
+    public void ReportCleanupFailures_Reports_Every_Collected_Failure_As_Cleanup()
+    {
+        var a = new InvalidOperationException("a");
+        var b = new InvalidOperationException("b");
+        var seen = new List<RenderError>();
+
+        var pending = RenderErrorDispatch.ReportCleanupFailures(
+            new[] { a, b }, () => e => { seen.Add(e); return null; }, isHostLevel: false, logger: null);
+
+        Assert.Null(pending);
+        Assert.Equal(new[] { a, b }, seen.Select(e => e.Exception));
+        Assert.All(seen, e => Assert.Equal(RenderErrorSource.Cleanup, e.Source));
+    }
+
+    [Fact]
+    public void ReportCleanupFailures_Without_A_Handler_Returns_The_First_Failure()
+    {
+        var a = new InvalidOperationException("a");
+
+        var pending = RenderErrorDispatch.ReportCleanupFailures(
+            new[] { a, new InvalidOperationException("b") }, () => null, isHostLevel: false, logger: null);
+
+        Assert.NotNull(pending);
+        Assert.Same(a, pending!.SourceException);
+    }
+
     private static RenderContext ContextWithCleanups(params Action[] cleanups)
     {
         var ctx = new RenderContext();
@@ -264,6 +291,60 @@ public class RenderErrorDispatchTests
 
         Assert.Equal("first", ex.Message);
         Assert.False(secondRan);
+    }
+
+    [Fact]
+    public void RunCleanups_Drain_Without_A_Handler_Runs_Every_Cleanup_And_Keeps_The_First()
+    {
+        bool secondRan = false;
+        var ctx = ContextWithCleanups(
+            () => throw new InvalidOperationException("first"),
+            () => secondRan = true,
+            () => throw new InvalidOperationException("third"));
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pending = null;
+
+        RenderErrorDispatch.RunCleanups(ctx, () => null, "Probe", isHostLevel: true, logger: null, ref pending, drain: true);
+
+        Assert.True(secondRan);
+        Assert.Equal("first", pending?.SourceException.Message);
+    }
+
+    [Fact]
+    public void ReportReleasedTreeCleanupFailures_Without_A_Handler_Logs_Instead_Of_Rethrowing()
+    {
+        var failures = new List<Exception> { new InvalidOperationException("released") };
+
+        Assert.Null(RenderErrorDispatch.ReportReleasedTreeCleanupFailures(failures, () => null, logger: null));
+    }
+
+    [Fact]
+    public void ReportReleasedTreeCleanupFailures_Resolves_The_Handler_Per_Failure()
+    {
+        // The first report clears the handler; the second failure then has none and is
+        // logged, not returned for rethrow over the replacement's error.
+        RenderErrorHandler? current = null;
+        var reported = new List<string>();
+        current = e => { reported.Add(e.Exception.Message); current = null; return null; };
+        var failures = new List<Exception> { new InvalidOperationException("a"), new InvalidOperationException("b") };
+
+        var propagation = RenderErrorDispatch.ReportReleasedTreeCleanupFailures(failures, () => current, logger: null);
+
+        Assert.Null(propagation);
+        Assert.Equal(new[] { "a" }, reported);
+    }
+
+    [Fact]
+    public void ReportReleasedTreeCleanupFailures_With_A_Handler_Reports_Each_As_Cleanup()
+    {
+        var reported = new List<RenderError>();
+        RenderErrorHandler handler = e => { reported.Add(e); return null; };
+        var failures = new List<Exception> { new InvalidOperationException("a"), new InvalidOperationException("b") };
+
+        var propagation = RenderErrorDispatch.ReportReleasedTreeCleanupFailures(failures, () => handler, logger: null);
+
+        Assert.Null(propagation);
+        Assert.Equal(new[] { "a", "b" }, reported.Select(e => e.Exception.Message));
+        Assert.All(reported, e => Assert.Equal(RenderErrorSource.Cleanup, e.Source));
     }
 
     [Fact]

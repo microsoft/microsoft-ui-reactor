@@ -4637,7 +4637,9 @@ GetSource(UIElement control) → SourceLocation?
 new()
 
 ### static class ReactorTrace
+GetComponentControl(long componentId) → UIElement
 Subscribe(Action<ReactorEvent> onEvent, EventLevel level = EventLevel.Verbose, EventKeywords keywords = EventKeywords.All) → IDisposable
+TryGetComponentId(UIElement control, ref long componentId) → bool
 
 ### class ReactorTrayIcon
 TrayIconSpec Spec { get; }
@@ -5348,10 +5350,11 @@ GetHashCode() → int
 ToString() → string
 
 ### struct SourceLocation
-new(string FilePath, int LineNumber)
+new(string FilePath, int LineNumber, int ColumnNumber)
+int ColumnNumber { get; init; }
 int LineNumber { get; init; }
 string FilePath { get; init; }
-Deconstruct(ref string FilePath, ref int LineNumber) → void
+Deconstruct(ref string FilePath, ref int LineNumber, ref int ColumnNumber) → void
 Equals(SourceLocation other) → bool
 Equals(object obj) → bool
 GetHashCode() → int

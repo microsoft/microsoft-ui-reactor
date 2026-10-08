@@ -6,7 +6,7 @@ an ETW event, a `--preview` overlay highlight, a thrown exception —
 back to the C# source that produced it. Two granularities ship today:
 *component* attribution, where every render emits an ETW event carrying
 the component's type name, and *per-element* attribution, where each DSL
-call site carries the file and line that produced it. This page covers
+call site carries the file, line and column that produced it. This page covers
 both.
 
 > **Status.** Per-element source tagging ships as `Element.CallSite` plus
@@ -53,6 +53,7 @@ public static class Keywords
     public const EventKeywords Theme = (EventKeywords)0x800;        // theme apply, bindings
     public const EventKeywords Shell = (EventKeywords)0x1000;       // JumpList/Tray/ThumbnailToolbar
     public const EventKeywords HotReload = (EventKeywords)0x2000;   // spec 049 — state migration across edits
+    public const EventKeywords RenderDetail = (EventKeywords)0x4000; // per-component ComponentRendered (reason + instance id) for inspectors
 }
 ```
 
@@ -69,18 +70,19 @@ arguments in C# form (`ItemList<Int32>`, not ``ItemList`1``); function and memo
 components, which have no type of their own, report `FuncElement` and
 `MemoElement`.
 
-![Source attribution: component-name attribution flows the component's type name, formatted by ComponentNames (generic components in C# form), into ETW, while per-element attribution stamps each DSL call site with file and line via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource.](images/source-mapping/attribution.svg)
+![Source attribution: component-name attribution flows the component's type name, formatted by ComponentNames (generic components in C# form), into ETW, while per-element attribution stamps each DSL call site with file, line and column via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource.](images/source-mapping/attribution.svg)
 
 ## Reconcile-pass attribution
 
 | Signal | Granularity | Where it surfaces |
 |---|---|---|
 | `ComponentRenderStart` / `Stop` | Component CLR type name | ETW `Render` keyword |
+| `ComponentRendered` | Component type name + instance id + render reason | ETW `RenderDetail` keyword (Verbose); id resolves to a control via `ReactorTrace.GetComponentControl` |
 | `ReconcileStart` / `Stop` | Root element type + diff counters | ETW `Reconcile` keyword |
 | `EffectsFlushStart` / `Stop` | Component CLR type name | ETW `Render` keyword |
 | `StateChange` | Hook kind + value type | ETW `State` keyword |
 | `RenderError` | Component name + exception type only (message redacted); emitted when a component's `Render()` or effect flush throws — on mount, update and at the host root — including errors an `ErrorBoundary` catches (named at the throw site, once) | ETW `Errors` keyword |
-| Per-element file:line | Element call site | `Element.CallSite` / `ReactorSourceMap.GetSource` (when source mapping is enabled at build time) |
+| Per-element file:line:column | Element call site | `Element.CallSite` / `ReactorSourceMap.GetSource` (when source mapping is enabled at build time) |
 
 The reconcile pass also emits a counter summary on stop:
 
@@ -147,8 +149,8 @@ and is added to your compilation only when `ReactorSourceMap` is true.
 is loaded into every build: this generator inspects every invocation in your
 project, so a Release build should not load it at all.) For each DSL factory
 call site in *your* project it
-emits an interceptor that calls the real factory and stamps the file and
-line onto the returned element. No factory signature changes and no call
+emits an interceptor that calls the real factory and stamps the file,
+line and column onto the returned element. No factory signature changes and no call
 site is edited, which is what lets it cover the `params Element?[]
 children` family (`VStack`, `HStack`, `Grid`, …) that `[CallerFilePath]`
 structurally cannot reach.
@@ -201,6 +203,12 @@ string label = src is null
 already stores -> `Element.CallSite`. It returns `null` when the control
 was not produced by Reactor, when the assembly was built without source
 mapping, or when nothing stamped that element.
+
+`SourceLocation.ColumnNumber` is the 1-based column of the factory's name
+(the `B` of `Button` in `Row(Button("a"), Button("b"))`), which is what tells
+several calls on one line apart; `0` means the provider did not record one.
+`ToString()` keeps the `file:line` shape,
+so read the column from the property.
 
 ### Helper methods and `[ReactorSourceTransparent]`
 
@@ -335,7 +343,8 @@ keeps a window alive; it costs one small allocation per host and nothing per ren
 **Root mount sites.** A root is not an element, so it has no `CallSite`. When
 source mapping is on, the generator also intercepts `ReactorApp.Run`,
 `ReactorApp.OpenWindow`, `ReactorWindow.Mount`, `ReactorHost.Mount` and
-`ReactorHostControl.Mount` and records the line that called them. Each of those
+`ReactorHostControl.Mount` and records the line and column that called them (the
+column of the method name, as for element call sites). Each of those
 methods claims its own line first thing and hands it to the host it mounts, which
 reports it as `ReactorHostInfo.MountSite`. Anything else that mounts while that
 call is running — a host created in a `configure` callback, a window the framework

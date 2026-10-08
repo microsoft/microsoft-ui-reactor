@@ -28,6 +28,23 @@ Conventions for contributors:
 
 ### Added
 
+- **Inspector diagnostics: call-site column and a per-component render event**
+  (issue #1326, spec 010 §1.1):
+  - `SourceLocation.ColumnNumber` (1-based, `0` = unknown), a third positional
+    member: `new SourceLocation(path, line)` now needs a column. The source-map generator
+    stamps the column of the invoked method's name, so several calls on one line
+    resolve to distinct positions. `ToString()` stays `file:line`.
+  - `ComponentRendered` on the `Microsoft-UI-Reactor` provider (EventId 40,
+    Verbose, keywords `Render | RenderDetail`; `RenderDetail` = `0x4000` is new):
+    one event per component render, including mount, the host root and a render
+    that threw. The payload carries the component name, a stable `componentId`,
+    the `reason` (`mount` / `state` / `props` / `context` / `parent` /
+    `hotReload` / `forced`) and the elapsed time.
+  - `ReactorTrace.GetComponentControl(long)` and
+    `ReactorTrace.TryGetComponentId(UIElement, out long)` map a `componentId` to
+    the component's on-screen control and back, so an inspector can flash what
+    re-rendered.
+
 - **Inspector diagnostics for hosts, roots and component boundaries** (spec 010).
   `ReactorDiagnostics.GetHosts()` (`Microsoft.UI.Reactor.Core.Diagnostics`) returns
   a snapshot of every live `ReactorHost` and `ReactorHostControl` — window,
@@ -261,6 +278,18 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Replacing a host's root no longer leaves the old root running** (issue #1326).
+  `ReactorHost.Mount(...)` and `ReactorHostControl.Mount(...)` now retire the
+  outgoing root before installing the new one: its effect cleanups run, and a
+  component root's hook state is reset, so mounting that instance again later starts
+  fresh. Before, the outgoing root's `UseEffect` subscriptions and timers stayed live
+  and could no longer be reached by `Dispose()`. `ReactorHost.Mount(Func<...>)` also
+  clears a previous component root, which the render loop checks first and so kept
+  rendering instead of the new function root. Mounting the instance that is already
+  mounted just re-renders it. A replacement whose first render produces nothing now
+  releases the previous root's content (and its components' effects) instead of leaving
+  it on screen, and a cleanup that throws during the swap is routed like a disposal-time
+  cleanup failure without blocking the new root.
 - **`RenderError` names the component that threw, and now reports every render
   error** (issue #1321, spec 044 §6.2.1). For class components the event reported
   the element record (``ComponentElement`1`` / `ComponentElement`) instead of the

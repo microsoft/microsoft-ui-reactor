@@ -199,6 +199,8 @@ public sealed partial class Reconciler : IDisposable
                         Diagnostics.ReactorEventSource.Log.ComponentUnmount(
                             Diagnostics.ComponentNames.For(node.Component, node.Element));
                     }
+                    if (node.DiagnosticId != 0)
+                        Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, wrapper);
                     RunUnmountCleanups(node);
                 }
                 if (wrapper is FrameworkElement fe && _onUnmountActions.TryGetValue(fe, out var onUnmount))
@@ -446,6 +448,13 @@ public sealed partial class Reconciler : IDisposable
     // even when props are unchanged. Cleared at the start of that pass.
     internal volatile bool ForceFullRenderPending;
     private bool _forceFullRenderActive;
+
+    // Diagnostics only: the next top-level pass is the retry a host schedules after a
+    // hot-reload hook-order recovery. That retry runs outside a hot-reload pass, so
+    // without this ComponentRendered would attribute its renders to their ordinary
+    // reasons, not "hotReload". Consumed by that pass; never changes render behaviour.
+    internal volatile bool HotReloadRetryPending;
+    private bool _hotReloadRetryActive;
 
     // True for the duration of a hot-reload force pass. Read by ChildReconciler's
     // positional fast path: while a force pass is active, untouched wrapper cells
@@ -843,6 +852,17 @@ public sealed partial class Reconciler : IDisposable
         /// pool, so no renter inherits them.
         /// </summary>
         public HashSet<string>? ManagedResourceKeys;
+
+        /// <summary>
+        /// <c>componentId</c> (<c>ReactorEventSource.ComponentRendered</c>) of the component
+        /// whose wrapper this control is; 0 when none. Backs
+        /// <c>ReactorTrace.TryGetComponentId</c>. Stored here rather than in a
+        /// <c>ConditionalWeakTable</c> for the same duplicate-RCW reason as
+        /// <see cref="EchoSuppressCount"/>: an inspector that reaches the control through
+        /// the visual tree may hold a different managed wrapper than the reconciler did.
+        /// Cleared when the component unmounts, before the wrapper can be pooled.
+        /// </summary>
+        public long ComponentDiagnosticId;
     }
 
     internal static class ReactorAttached
@@ -1203,6 +1223,10 @@ public sealed partial class Reconciler : IDisposable
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
             return;
         TeardownReferenceEdges(fe);
+        // A detached component wrapper must stop answering for its ComponentRendered id
+        // (both directions), like the unmount path does before pooling.
+        if (state.ComponentDiagnosticId != 0)
+            Diagnostics.ComponentRenderControls.Registry.Forget(state.ComponentDiagnosticId, fe);
         state.Element = null;
         state.Modifiers?.ClearCurrentHandlers();
         state.Modifiers = null;
@@ -2069,6 +2093,8 @@ public sealed partial class Reconciler : IDisposable
             // every component re-runs Render() even when props/deps are unchanged.
             _forceFullRenderActive = ForceFullRenderPending;
             ForceFullRenderPending = false;
+            _hotReloadRetryActive = HotReloadRetryPending;
+            HotReloadRetryPending = false;
 
             // Build the dirty-ancestor path. For every component node
             // whose SelfTriggered is true, walk up the realized visual
@@ -2114,6 +2140,7 @@ public sealed partial class Reconciler : IDisposable
             if (--_debugReconcileDepth == 0)
             {
                 _forceFullRenderActive = false;
+                _hotReloadRetryActive = false;
                 _dirtyAncestorPath?.Clear();
                 _dirtyPathChildren?.Clear();
             }
@@ -2166,6 +2193,43 @@ public sealed partial class Reconciler : IDisposable
     // non-zero value between passes means a nested Reconcile incremented
     // without a matching decrement, which silently suppresses all later spans.
     internal int ReconcileTraceDepthForTests => _reconcileTraceDepth;
+
+    /// <summary>
+    /// Emits <c>ReactorEventSource.ComponentRendered</c> for a component node and keeps
+    /// the id → wrapper registry current. Only called when the event is enabled. A null
+    /// <paramref name="wrapper"/> reports the render without touching the registry
+    /// (a render that threw into an <c>ErrorBoundary</c>, whose wrapper is discarded or
+    /// replaced by the boundary's fallback).
+    /// </summary>
+    private static void EmitComponentRendered(
+        ComponentNode node, UIElement? wrapper, Element element, string reason, long startTimestamp)
+    {
+        long id = node.DiagnosticId;
+        if (id == 0) node.DiagnosticId = id = Diagnostics.ComponentRenderTrace.NextId();
+        // Rechecks the live gate: the decision to trace was made before Render() ran, and a
+        // listener can dispose itself from an earlier event's callback (for instance a
+        // hot-reload hook-order retry's aborted attempt). Nothing is mapped while it is off.
+        if (wrapper is not null && Diagnostics.ComponentRenderTrace.IsEnabled)
+            Diagnostics.ComponentRenderControls.Registry.Track(id, wrapper, mapControlToId: true);
+        Diagnostics.ReactorEventSource.Log.ComponentRendered(
+            Diagnostics.ComponentNames.For(node.Component, element),
+            id,
+            reason,
+            Diagnostics.ComponentRenderTrace.ElapsedMicroseconds(startTimestamp));
+    }
+
+    /// <summary>
+    /// Maps a freshly mounted component's id to its wrapper (event enabled only). If an
+    /// enclosing ErrorBoundary later discards the subtree, its rollback (unmount of completed
+    /// subtrees, or the boundary mount journal) forgets the mapping again. Rechecks the live
+    /// gate: a listener can be disabled from the event's own callback, after the mount
+    /// decided to trace, and nothing is mapped while it is off.
+    /// </summary>
+    private static void TrackMountedComponent(ComponentNode node, UIElement wrapper)
+    {
+        if (Diagnostics.ComponentRenderTrace.IsEnabled)
+            Diagnostics.ComponentRenderControls.Registry.Track(node.DiagnosticId, wrapper, mapControlToId: true);
+    }
 
     /// <summary>
     /// <c>ReactorEventSource.RenderError</c> for a component whose Render() threw and was
@@ -2291,6 +2355,17 @@ public sealed partial class Reconciler : IDisposable
         // inside ReconcileImperative; overwrite defensively regardless.
         _componentNodes.Remove(replacement);
         _componentNodes[realized] = freshNode;
+        // Registry bookkeeping: while ComponentRendered is enabled the id moves onto the
+        // realized wrapper. If the listener was disabled (possibly by the fresh mount's own
+        // event callback), drop the mapping the mount gave the soon-discarded replacement
+        // wrapper; the next traced render of this node re-tracks its id onto `realized`.
+        if (freshNode.DiagnosticId != 0)
+        {
+            if (Diagnostics.ComponentRenderTrace.IsEnabled)
+                Diagnostics.ComponentRenderControls.Registry.Track(freshNode.DiagnosticId, realized, mapControlToId: true);
+            else
+                Diagnostics.ComponentRenderControls.Registry.Forget(freshNode.DiagnosticId, replacement);
+        }
 
         // Move the fresh visual subtree into the parented wrapper. Assigning
         // Border.Child detaches it from `replacementWrapper` first (and detaches the
@@ -2317,6 +2392,14 @@ public sealed partial class Reconciler : IDisposable
         // ── Memo check: skip render if props/context unchanged and not self-triggered ──
         bool selfTriggered = node.SelfTriggered;
         node.SelfTriggered = false;
+
+        // ComponentRendered bookkeeping: what forced or let this render through. Plain
+        // locals holding interned constants, so they cost nothing when tracing is off.
+        bool forcedRender = _forceFullRenderActive;
+        string? memoReason = null;
+        // Set when the reason classification below already read the event's gate, so
+        // the render path reuses it instead of checking a second time.
+        bool? traceEnabled = null;
 
         // Hot reload forces every component to re-run Render(); the new method
         // body lives only on the type, not in props/deps, so the memo gate
@@ -2348,6 +2431,16 @@ public sealed partial class Reconciler : IDisposable
 
                 bool contextChanged = HasConsumedContextChanged(node);
                 skipRender = !propsChanged && !contextChanged;
+                // Props components: a props change wins, else it was the context.
+                // Propless components (ShouldUpdate() true or a context change): the
+                // context wins, else nothing could skip it.
+                memoReason = node.Component is IPropsReceiver
+                    ? propsChanged
+                        ? Diagnostics.ComponentRenderTrace.Reasons.Props
+                        : Diagnostics.ComponentRenderTrace.Reasons.Context
+                    : contextChanged
+                        ? Diagnostics.ComponentRenderTrace.Reasons.Context
+                        : Diagnostics.ComponentRenderTrace.Reasons.Parent;
             }
             else if (node.Context is not null && newEl is MemoElement newMemo)
             {
@@ -2359,6 +2452,17 @@ public sealed partial class Reconciler : IDisposable
                     : oldDeps is null || newDeps is null || !DepsEqual(oldDeps, newDeps);
                 bool contextChanged = HasConsumedContextChanged(node);
                 skipRender = !depsChanged && !contextChanged;
+                memoReason = depsChanged
+                    ? Diagnostics.ComponentRenderTrace.Reasons.Props
+                    : Diagnostics.ComponentRenderTrace.Reasons.Context;
+            }
+            else if (newEl is FuncElement
+                && (traceEnabled = Diagnostics.ComponentRenderTrace.IsEnabled).Value
+                && HasConsumedContextChanged(node))
+            {
+                // No gate can skip a function component, so this only refines the
+                // ComponentRendered reason (and is only computed while it is traced).
+                memoReason = Diagnostics.ComponentRenderTrace.Reasons.Context;
             }
 
             if (skipRender)
@@ -2405,6 +2509,15 @@ public sealed partial class Reconciler : IDisposable
                 componentName, selfTriggered ? "self" : "parent");
             renderStart = global::System.Diagnostics.Stopwatch.GetTimestamp();
         }
+        bool traceRendered = traceEnabled ?? Diagnostics.ComponentRenderTrace.IsEnabled;
+        long renderedStart = traceRendered ? global::System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+        // The reason is fixed for this render (its inputs do not change below); computed
+        // only while traced. renderReported: the fallback catch already emitted.
+        string? renderedReason = traceRendered
+            ? Diagnostics.ComponentRenderTrace.ClassifyUpdate(
+                forcedRender, HotReloadService.WithinUpdatePass || _hotReloadRetryActive, selfTriggered, memoReason)
+            : null;
+        bool renderReported = false;
 
         Element newChildElement;
         // The RenderContext backing whichever branch we render (component or
@@ -2472,12 +2585,20 @@ public sealed partial class Reconciler : IDisposable
                 && renderCtx is not null
                 && HotReloadService.WithinUpdatePass)
             {
+                // The aborted attempt still ran Render(); report it before logging, so a
+                // slow logger is not charged to it.
+                if (traceRendered)
+                    EmitComponentRendered(node, null, newEl, Diagnostics.ComponentRenderTrace.Reasons.HotReload, renderedStart);
                 _logger?.LogWarning(ex,
                     "Hot reload: hook order/type changed in child component — " +
                     "resetting state and re-rendering: {ComponentName}",
                     componentName ?? Diagnostics.ComponentNames.For(node.Component, newEl));
                 hotReloadRetried = true;
                 renderCtx.ResetForHotReload();
+                // Time the retry on its own (it reports itself after the loop), starting
+                // after the reset ran the effect cleanups.
+                if (traceRendered)
+                    renderedStart = global::System.Diagnostics.Stopwatch.GetTimestamp();
                 continue;
             }
             // Inside an ErrorBoundary the exception propagates to the boundary, which
@@ -2492,16 +2613,33 @@ public sealed partial class Reconciler : IDisposable
             catch (Exception ex) when ((_errorBoundaryDepth > 0 || ex is OutOfMemoryException or StackOverflowException)
                 && !RenderErrorDispatch.IsPropagating(ex))
             {
+                // The render still happened: report it, as the trailing arm does for the rest.
+                if (traceRendered)
+                    EmitComponentRendered(node, null, newEl, renderedReason!, renderedStart);
                 EmitRenderError(componentName ?? Diagnostics.ComponentNames.For(node.Component, newEl), ex);
                 throw;
             }
             catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
             {
+                // Report before building the fallback: its time is not this render's, and
+                // a fallback that throws must not swallow the event.
+                if (traceRendered)
+                {
+                    EmitComponentRendered(node, control, newEl, renderedReason!, renderedStart);
+                    renderReported = true;
+                }
                 var failedName = componentName ?? Diagnostics.ComponentNames.For(node.Component, newEl);
                 _logger?.LogError(ex, "Component Render() threw: {ComponentName}", failedName);
                 // Before the fallback: the app's handler may call Propagate(), which throws.
                 EmitRenderError(failedName, ex);
                 newChildElement = BuildInTreeFallback(ex, inEffects, node.Component?.GetType().Name);
+            }
+            // Every other exception propagates (to an enclosing ErrorBoundary, or a fatal
+            // one to the host); the render still happened, so report it and rethrow.
+            catch (Exception) when (traceRendered)
+            {
+                EmitComponentRendered(node, null, newEl, renderedReason!, renderedStart);
+                throw;
             }
             break;
         }
@@ -2512,6 +2650,8 @@ public sealed partial class Reconciler : IDisposable
                 * 1_000_000.0 / global::System.Diagnostics.Stopwatch.Frequency);
             Diagnostics.ReactorEventSource.Log.ComponentRenderStop(componentName!, renderElapsedUs);
         }
+        if (traceRendered && !renderReported)
+            EmitComponentRendered(node, control, newEl, renderedReason!, renderedStart);
 
         // Dereference the Border wrapper to get the actual child control.
         // Each component is wrapped in a Border as an identity anchor, so we
@@ -2809,6 +2949,9 @@ public sealed partial class Reconciler : IDisposable
                 Diagnostics.ReactorEventSource.Log.ComponentUnmount(
                     Diagnostics.ComponentNames.For(node.Component, node.Element));
             }
+            // The wrapper may be pooled and reused by an unrelated element; drop its id.
+            if (node.DiagnosticId != 0)
+                Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, control);
             RunUnmountCleanups(node);
             _componentNodes.Remove(control);
         }
@@ -3227,6 +3370,9 @@ public sealed partial class Reconciler : IDisposable
                 Diagnostics.ReactorEventSource.Log.ComponentUnmount(
                     Diagnostics.ComponentNames.For(node.Component, node.Element));
             }
+            // The wrapper may be pooled and reused by an unrelated element; drop its id.
+            if (node.DiagnosticId != 0)
+                Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, control);
             RunUnmountCleanups(node);
             _componentNodes.Remove(control);
         }
@@ -6362,6 +6508,11 @@ public sealed partial class Reconciler : IDisposable
         /// Accessed from background threads (UseState callbacks) — use volatile field.</summary>
         private volatile bool _selfTriggered;
         public bool SelfTriggered { get => _selfTriggered; set => _selfTriggered = value; }
+        /// <summary>
+        /// <c>componentId</c> of this node in <c>ReactorEventSource.ComponentRendered</c>;
+        /// 0 until the node first renders while that event is enabled.
+        /// </summary>
+        public long DiagnosticId { get; set; }
     }
 
     /// <summary>
@@ -6556,6 +6707,21 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    /// <summary>
+    /// Drops the <c>ComponentRendered</c> id mapping of every component this reconciler
+    /// tracks, for teardown paths that discard the tree without unmounting it
+    /// (<see cref="Dispose"/>, a host replacing its content with the error panel).
+    /// Cheap when tracing was never on: no id was ever issued, so nothing is touched.
+    /// </summary>
+    internal void ForgetComponentDiagnostics()
+    {
+        foreach (var (control, node) in _componentNodes)
+        {
+            if (node.DiagnosticId != 0)
+                Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, control);
+        }
+    }
+
     public void Dispose()
     {
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation;
@@ -6576,6 +6742,8 @@ public sealed partial class Reconciler : IDisposable
         // Issue #1291: with a RenderErrorHandler configured, every effect cleanup runs and
         // each failure is reported (Source = Cleanup). With no handler the first throwing
         // cleanup escapes as before.
+        // The tree is dropped without unmounting it; its ComponentRendered ids must stop resolving.
+        ForgetComponentDiagnostics();
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
         // Resolved per failure (a cleanup may change the handler), not once per batch.
         Func<RenderErrorHandler?> cleanupHandler = ResolveRenderErrorHandler;

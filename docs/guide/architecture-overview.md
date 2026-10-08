@@ -305,6 +305,8 @@ public UIElement? Reconcile(
         // every component re-runs Render() even when props/deps are unchanged.
         _forceFullRenderActive = ForceFullRenderPending;
         ForceFullRenderPending = false;
+        _hotReloadRetryActive = HotReloadRetryPending;
+        HotReloadRetryPending = false;
 
         // Build the dirty-ancestor path. For every component node
         // whose SelfTriggered is true, walk up the realized visual
