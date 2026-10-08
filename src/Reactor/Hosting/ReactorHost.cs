@@ -620,6 +620,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         // would never be scheduled again.
         if (ReferenceEquals(component, _rootComponent))
         {
+            // Still an explicit mount: the diagnostics site follows the latest call.
+            _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
             RequestRender();
             return;
         }
