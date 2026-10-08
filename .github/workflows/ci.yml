@@ -759,7 +759,7 @@ jobs:
 
       # Run the published exe directly (not via `dotnet test`) so we exercise
       # the NativeAOT binary. SelfTestRunner.DefaultAotSkipPatterns gates the
-      # known-failing fixtures (17 entries: PropertyGrid auto-discovery, three
+      # known-failing fixtures (18 entries: PropertyGrid auto-discovery, three
       # Devtools fixtures — `fire`'s handler lookup, `state`'s hook read, and
       # DependencyProperty discovery for `properties`/`setProperty` — Issue142-style
       # XAML metadata, hot-reload state migration, and the UseObservableTree
@@ -1035,10 +1035,14 @@ jobs:
       # scan alone would make the gate depend on MSBuild's output text, which is not a contract.
       # NU1900 ("Error occurred while getting package vulnerability data") is exempted rather than
       # NoWarn'd, because NoWarn would replace each project's own list instead of adding to it.
+      # CS8305 is exempted for the same reason Directory.Build.props demotes it: while the repo is on
+      # the Windows App SDK -experimental channel, the XAML compiler's generated XamlTypeInfo.g.cs
+      # references the SDK's [Experimental] metadata providers. A command-line WarningsNotAsErrors
+      # is a global property and replaces the props-file value, so it must be repeated here.
       - name: Build doc apps with consumer analyzers
         shell: pwsh
         run: |
-          $log = dotnet build docs/_pipeline/apps/DocApps.proj -c Debug -p:Platform=x64 --no-restore -v:minimal -nologo -p:TreatWarningsAsErrors=true -p:WarningsNotAsErrors=NU1900 2>&1
+          $log = dotnet build docs/_pipeline/apps/DocApps.proj -c Debug -p:Platform=x64 --no-restore -v:minimal -nologo -p:TreatWarningsAsErrors=true "-p:WarningsNotAsErrors=NU1900%3BCS8305" 2>&1
           $log | ForEach-Object { $_.ToString() }
           $exit = $LASTEXITCODE
 

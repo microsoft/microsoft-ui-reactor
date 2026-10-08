@@ -67,10 +67,14 @@ internal static class PanelDescriptorMigrationFixtures
 
             await Harness.Render();
 
-            int? Hash(string key) =>
+            // The Border wrapper itself, compared by reference. Holding it in `before` keeps it
+            // alive, so CsWinRT keeps returning that same wrapper for the native Border; an
+            // identity hash of a wrapper changes whenever a GC collects and re-projects it,
+            // with no change to the native tree (seen under NativeAOT).
+            WinXC.Border? Hash(string key) =>
                 H.FindControl<WinXC.TextBlock>(t =>
                     Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == $"pdm_st_{key}") is { Parent: WinXC.Border br }
-                    ? global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(br)
+                    ? br
                     : null;
 
             var keys = new[] { "a", "b", "c", "d" };
@@ -88,7 +92,7 @@ internal static class PanelDescriptorMigrationFixtures
             // dispatcher-drain drift slip through before identity stabilized; a
             // genuine identity break never satisfies the predicate and fails.
             H.Check("PDM_Stack_Swap_AllSurvivorsKeepIdentity",
-                await Harness.WaitFor(() => keys.All(k => before[k] == Hash(k))));
+                await Harness.WaitFor(() => keys.All(k => ReferenceEquals(before[k], Hash(k)))));
         }
     }
 
@@ -290,10 +294,14 @@ internal static class PanelDescriptorMigrationFixtures
 
             await Harness.Render();
 
-            int? Hash(string key) =>
+            // The Border wrapper itself, compared by reference. Holding it in `before` keeps it
+            // alive, so CsWinRT keeps returning that same wrapper for the native Border; an
+            // identity hash of a wrapper changes whenever a GC collects and re-projects it,
+            // with no change to the native tree (seen under NativeAOT).
+            WinXC.Border? Hash(string key) =>
                 H.FindControl<WinXC.TextBlock>(t =>
                     Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == $"pdm_wg_{key}") is { Parent: WinXC.Border br }
-                    ? global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(br)
+                    ? br
                     : null;
 
             var keys = new[] { "a", "b", "c", "d", "e" };
@@ -308,7 +316,7 @@ internal static class PanelDescriptorMigrationFixtures
             // survivor is back with its original Border instance. A genuine
             // identity break never satisfies the predicate and still fails.
             H.Check("PDM_WrapGrid_Reverse_AllSurvivorsKeepIdentity",
-                await Harness.WaitFor(() => keys.All(k => before[k] == Hash(k))));
+                await Harness.WaitFor(() => keys.All(k => ReferenceEquals(before[k], Hash(k)))));
         }
     }
 

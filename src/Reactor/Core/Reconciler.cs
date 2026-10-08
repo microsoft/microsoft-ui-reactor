@@ -36,10 +36,9 @@ public sealed partial class Reconciler : IDisposable
     // look up per-instance navigation state; teardown stays here (Dispose loop +
     // CleanupNavigationHostNode).
     internal readonly Dictionary<UIElement, NavigationHostNode> _navigationHostNodes = new();
-    // Per-control unmount actions (.OnUnmount). Captured at ApplyModifiers from the
-    // authoritative modifier set (same source .OnMount reads), so it doesn't depend
-    // on the tagged element's identity at teardown. Invoked + removed on unmount.
-    private readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, Action<FrameworkElement>> _onUnmountActions = new();
+    // Per-control unmount actions (.OnUnmount) live on the native element's ReactorState
+    // (ReactorState.OnUnmountAction), captured at ApplyModifiers from the authoritative
+    // modifier set and taken on unmount. See TakeOnUnmountAction.
     // Internal so V1-owned lifecycle classes (e.g. LazyStackLifecycle) can rent
     // pooled controls and pass the pool into element factories.
     internal readonly ElementPool _pool = new();
@@ -201,9 +200,8 @@ public sealed partial class Reconciler : IDisposable
                     }
                     RunUnmountCleanups(node);
                 }
-                if (wrapper is FrameworkElement fe && _onUnmountActions.TryGetValue(fe, out var onUnmount))
+                if (wrapper is FrameworkElement fe && TakeOnUnmountAction(fe) is { } onUnmount)
                 {
-                    _onUnmountActions.Remove(fe);
                     RunUnmountAction(onUnmount, fe);
                 }
                 if (_navigationHostNodes.ContainsKey(wrapper))
@@ -843,6 +841,17 @@ public sealed partial class Reconciler : IDisposable
         /// pool, so no renter inherits them.
         /// </summary>
         public HashSet<string>? ManagedResourceKeys;
+
+        /// <summary>
+        /// The control's <c>.OnUnmount</c> action, captured at ApplyModifiers and taken
+        /// (cleared) at unmount. Stored here rather than in a <c>ConditionalWeakTable</c>
+        /// keyed by <see cref="FrameworkElement"/> for the same reason as
+        /// <see cref="EchoSuppressCount"/>: nothing keeps a plain control's managed wrapper
+        /// alive, and once it is collected the unmount walk sees a fresh wrapper over the
+        /// same native object, so a wrapper-keyed entry is silently missed and the callback
+        /// never fires.
+        /// </summary>
+        public Action<FrameworkElement>? OnUnmountAction;
     }
 
     internal static class ReactorAttached
@@ -862,6 +871,18 @@ public sealed partial class Reconciler : IDisposable
         state = new ReactorState();
         fe.SetValue(ReactorAttached.StateProperty, state);
         return state;
+    }
+
+    /// <summary>
+    /// Removes and returns the control's pending <c>.OnUnmount</c> action, so it runs at most
+    /// once per mount (see <see cref="ReactorState.OnUnmountAction"/>).
+    /// </summary>
+    private static Action<FrameworkElement>? TakeOnUnmountAction(FrameworkElement fe)
+    {
+        if (!TryGetReactorState(fe, out var state) || state.OnUnmountAction is not { } action)
+            return null;
+        state.OnUnmountAction = null;
+        return action;
     }
 
     /// <summary>
@@ -2786,9 +2807,8 @@ public sealed partial class Reconciler : IDisposable
         WithdrawAttachedValidation(control);
 
         // OnUnmountAction (.OnUnmount) — imperative teardown half of .OnMount.
-        if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
+        if (control is FrameworkElement umFe && TakeOnUnmountAction(umFe) is { } onUnmount)
         {
-            _onUnmountActions.Remove(umFe);
             RunUnmountAction(onUnmount, umFe);
         }
 
@@ -3204,9 +3224,8 @@ public sealed partial class Reconciler : IDisposable
         WithdrawAttachedValidation(control);
 
         // OnUnmountAction (.OnUnmount) — imperative teardown half of .OnMount.
-        if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
+        if (control is FrameworkElement umFe && TakeOnUnmountAction(umFe) is { } onUnmount)
         {
-            _onUnmountActions.Remove(umFe);
             RunUnmountAction(onUnmount, umFe);
         }
 
@@ -5057,16 +5076,18 @@ public sealed partial class Reconciler : IDisposable
 
         // OnUnmountAction — captured here (authoritative modifier set) so it fires
         // reliably at teardown regardless of the tagged element's identity. Keep the
-        // latest action across re-renders; clear unconditionally when absent so a
-        // pooled control reused for a no-OnUnmount element can't fire a stale action
-        // (pool reuse remounts with oldM == null, so this can't be gated on oldM).
+        // latest action across re-renders; clear it when absent so a pooled control
+        // reused for a no-OnUnmount element can't fire a stale action (pool reuse
+        // remounts with oldM == null). The clear is skipped on an update whose previous
+        // modifiers had no action, which is the only state in which none can be stored.
         if (m.OnUnmountAction is not null)
         {
-            _onUnmountActions.AddOrUpdate(fe, m.OnUnmountAction);
+            GetOrCreateReactorState(fe).OnUnmountAction = m.OnUnmountAction;
             _boundaryMountJournal?.Add(fe);
         }
-        else
-            _onUnmountActions.Remove(fe);
+        else if ((oldM is null || oldM.OnUnmountAction is not null)
+            && TryGetReactorState(fe, out var unmountState))
+            unmountState.OnUnmountAction = null;
 
         // Element ref — populate on mount/update so imperative APIs (FocusManager.Focus)
         // can target the mounted control. Writing on every update is cheap (single field

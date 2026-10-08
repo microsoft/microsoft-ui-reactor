@@ -18,7 +18,7 @@
 
 // Controlled-prop note: factories keep plain (value, setter) call sites; direct element-record reads use Optional<T> (.Value / .GetValueOrDefault).
 #:package Microsoft.UI.Reactor@0.0.0-local
-#:package Microsoft.WindowsAppSDK@2.2.0
+#:package Microsoft.WindowsAppSDK@2.5.4-experimental
 #:property OutputType=WinExe
 #:property TargetFramework=net10.0-windows10.0.22621.0
 #:property UseWinUI=true

@@ -422,6 +422,17 @@ internal static class SelfTestFixtureRegistry
         "Win2D_AnimatedCanvas_InitialPausedResumes",
         "Win2D_Canvas_SameRedrawKeyNoExtraDraws",
         "Win2D_AnimatedCanvas_SharedDeviceResourceDraws",
+        // Reactor.Advanced TableView / Chart (Windows App SDK experimental controls).
+        "TableView_MountsRowsAndColumns",
+        "TableView_UpdatesColumnsInPlace",
+        "TableView_ControlledSelection",
+        "TableView_FilterGroupAndEmpty",
+        "TableView_ImmutableSnapshotsDiffInPlace",
+        "TableView_TextColumnEditViaAutomation",
+        "TableView_UnmountTearsDownCells",
+        "Chart_MountsSeriesAndAxes",
+        "Chart_UpdatesInPlace",
+        "Chart_AxisSharingAndTypeChange",
         // PR #324 review fixes — heterogeneous rows, RefreshRealizedItems
         // sync, and ItemsRepeater unmount cleanup.
         "EFR_Factory_ReplacementOnRootTypeChange_DropsOldControlTracking",
@@ -866,6 +877,7 @@ internal static class SelfTestFixtureRegistry
         "CoreCov2_XamlHostMount",
         // Mount/unmount/lifecycle torture tests (real WinUI controls)
         "LT_OnMountUnmountBalanced",
+        "LT_OnUnmountSurvivesWrapperCollection",
         "LT_EffectCleanupBalanced",
         "LT_NavSwapNoLeak",
         "CoreCov2_ComponentTypedProps",
@@ -2296,6 +2308,17 @@ internal static class SelfTestFixtureRegistry
         "Win2D_Canvas_SameRedrawKeyNoExtraDraws" => new Win2DCanvasFixtures.CanvasSameRedrawKeyNoExtraDraws(harness),
         "Win2D_AnimatedCanvas_SharedDeviceResourceDraws" => new Win2DCanvasFixtures.AnimatedCanvasSharedDeviceResourceDraws(harness),
 
+        "TableView_MountsRowsAndColumns" => new TableViewFixtures.MountsRowsAndColumns(harness),
+        "TableView_UpdatesColumnsInPlace" => new TableViewFixtures.UpdatesColumnsInPlace(harness),
+        "TableView_ControlledSelection" => new TableViewFixtures.ControlledSelection(harness),
+        "TableView_FilterGroupAndEmpty" => new TableViewFixtures.FilterGroupAndEmpty(harness),
+        "TableView_ImmutableSnapshotsDiffInPlace" => new TableViewFixtures.ImmutableSnapshotsDiffInPlace(harness),
+        "TableView_TextColumnEditViaAutomation" => new TableViewFixtures.TextColumnEditViaAutomation(harness),
+        "TableView_UnmountTearsDownCells" => new TableViewFixtures.UnmountTearsDownCells(harness),
+        "Chart_MountsSeriesAndAxes" => new ChartFixtures.MountsSeriesAndAxes(harness),
+        "Chart_UpdatesInPlace" => new ChartFixtures.UpdatesInPlace(harness),
+        "Chart_AxisSharingAndTypeChange" => new ChartFixtures.AxisSharingAndTypeChange(harness),
+
         "MdHtml_HtmlGeneration" => new MarkdownHtmlFixtures.HtmlGeneration(harness),
         "MdHtml_HtmlInWebView2" => new MarkdownHtmlFixtures.HtmlInWebView2(harness),
         "ListView_TypedRendering" => new CollectionFixtures.ListViewTyped(harness),
@@ -2918,6 +2941,7 @@ internal static class SelfTestFixtureRegistry
         "CoreCov2_ParallaxViewMount" => new CoreCoverageFixtures2.ParallaxViewMount(harness),
         "CoreCov2_XamlHostMount" => new CoreCoverageFixtures2.XamlHostMount(harness),
         "LT_OnMountUnmountBalanced" => new LT_OnMountUnmountBalanced(harness),
+        "LT_OnUnmountSurvivesWrapperCollection" => new LT_OnUnmountSurvivesWrapperCollection(harness),
         "LT_EffectCleanupBalanced" => new LT_EffectCleanupBalanced(harness),
         "LT_NavSwapNoLeak" => new LT_NavSwapNoLeak(harness),
         "CoreCov2_ComponentTypedProps" => new CoreCoverageFixtures2.ComponentTypedProps(harness),

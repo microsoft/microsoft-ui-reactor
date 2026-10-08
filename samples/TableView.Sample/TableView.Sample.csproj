@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <!-- TableView ships only on the Windows App SDK -experimental channel and is
+         [Experimental]; acknowledging that is the point of this sample. -->
+    <NoWarn>$(NoWarn);CS8305</NoWarn>
+    <!-- The experimental Tabular/Charts controls load their theme resources through
+         ms-appx:///, which an unpackaged app only resolves when the controls' .pri files
+         are merged into its own resources.pri — i.e. when it is self-contained. -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
+    <ProjectReference Include="..\..\src\Reactor.Advanced\Reactor.Advanced.csproj" />
+  </ItemGroup>
+
+</Project>
