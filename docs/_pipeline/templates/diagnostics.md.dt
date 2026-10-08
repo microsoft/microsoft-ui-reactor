@@ -139,8 +139,9 @@ changes).
 `parent` means the parent re-rendered and nothing could skip this component (a
 function component, or a propless `Component` whose `ShouldUpdate()` is true). A
 function component whose consumed context changed reports `context` instead.
-`hotReload` covers every render of a hot-reload pass, whatever else changed,
-including the retry after a hook-order change.
+`hotReload` covers every re-render of a hot-reload pass, whatever else changed,
+including the retry after a hook-order change. A component first created during
+the pass reports `mount`.
 
 In process, `ReactorTrace.GetComponentControl(componentId)` resolves an id to the
 control whose bounds are that component's, and `ReactorTrace.TryGetComponentId(control, out id)` goes the other way. Ids

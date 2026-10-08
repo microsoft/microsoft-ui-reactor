@@ -42,8 +42,9 @@ internal static class ComponentRenderTrace
         public const string Parent = "parent";
 
         /// <summary>
-        /// Rendered during a hot-reload pass (forced or not, whatever else changed), or by
-        /// the retry a host schedules after a hot-reload hook-order recovery.
+        /// Re-rendered during a hot-reload pass (forced or not, whatever else changed), or by
+        /// the retry a host schedules after a hot-reload hook-order recovery. A component
+        /// first created during the pass is a new instance and reports <see cref="Mount"/>.
         /// </summary>
         public const string HotReload = "hotReload";
 
