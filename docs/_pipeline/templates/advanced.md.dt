@@ -515,7 +515,7 @@ static void FocusPassword() => _passwordField?.Focus(FocusState.Programmatic);
 The reconciler may unmount, swap, or pool the underlying control
 between renders. The static field outlives every one of those events
 and ends up pointing at a detached or recycled instance. Use
-[`UseElementRef<T>`](#imperative-refs--useelementref) — the ref's
+[`UseElementRef<T>`](#imperative-refs-useelementref) — the ref's
 `.Current` is null when the control isn't attached and is repopulated
 when it remounts.
 
