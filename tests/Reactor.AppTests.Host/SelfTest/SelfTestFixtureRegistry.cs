@@ -877,6 +877,7 @@ internal static class SelfTestFixtureRegistry
         "CoreCov2_XamlHostMount",
         // Mount/unmount/lifecycle torture tests (real WinUI controls)
         "LT_OnMountUnmountBalanced",
+        "LT_OnUnmountSurvivesWrapperCollection",
         "LT_EffectCleanupBalanced",
         "LT_NavSwapNoLeak",
         "CoreCov2_ComponentTypedProps",
@@ -2940,6 +2941,7 @@ internal static class SelfTestFixtureRegistry
         "CoreCov2_ParallaxViewMount" => new CoreCoverageFixtures2.ParallaxViewMount(harness),
         "CoreCov2_XamlHostMount" => new CoreCoverageFixtures2.XamlHostMount(harness),
         "LT_OnMountUnmountBalanced" => new LT_OnMountUnmountBalanced(harness),
+        "LT_OnUnmountSurvivesWrapperCollection" => new LT_OnUnmountSurvivesWrapperCollection(harness),
         "LT_EffectCleanupBalanced" => new LT_EffectCleanupBalanced(harness),
         "LT_NavSwapNoLeak" => new LT_NavSwapNoLeak(harness),
         "CoreCov2_ComponentTypedProps" => new CoreCoverageFixtures2.ComponentTypedProps(harness),

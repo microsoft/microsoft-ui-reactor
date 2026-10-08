@@ -1299,7 +1299,7 @@ public abstract record Element
             // new one — otherwise the shallow-skip path strands a stale ElementRef.
             && ReferenceEquals(a.Ref, b.Ref)
             // Imperative teardown slot (.OnUnmount). ApplyModifiers re-registers the
-            // latest OnUnmountAction (Reconciler._onUnmountActions) on every non-skip
+            // latest OnUnmountAction (ReactorState.OnUnmountAction) on every non-skip
             // Update, and that captured delegate is what fires at unmount — so a
             // changed teardown closure must decline the skip or the stale (first-render)
             // action is stranded and runs in place of the current one. Unlike

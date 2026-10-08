@@ -77,6 +77,62 @@ internal sealed class LT_OnMountUnmountBalanced(Harness h) : SelfTestFixtureBase
     }
 }
 
+/// <summary>
+/// .OnUnmount still fires when the controls' managed wrappers were collected between mount
+/// and unmount. Nothing keeps a plain TextBlock's RCW alive, so after a GC the unmount walk
+/// sees a fresh wrapper over the same native control; per-element state keyed by wrapper
+/// identity silently misses it. This is the deterministic form of the intermittent CI
+/// failure of <see cref="LT_OnMountUnmountBalanced"/> (exactly the last batch's unmounts
+/// missing).
+/// </summary>
+internal sealed class LT_OnUnmountSurvivesWrapperCollection(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        int mounts = 0, unmounts = 0;
+        Action<bool>? setShown = null;
+
+        var host = H.CreateHost();
+        host.Mount(ctx =>
+        {
+            var (shown, set) = ctx.UseState(false);
+            setShown = set;
+            var children = new List<Element>();
+            if (shown)
+            {
+                for (int i = 0; i < 10; i++)
+                    children.Add(TextBlock($"gc{i}").WithKey($"gc{i}")
+                        .OnMount(_ => mounts++)
+                        .OnUnmount(_ => unmounts++));
+            }
+            else
+            {
+                children.Add(TextBlock("gc-empty").WithKey("gc-empty"));
+            }
+            return VStack(children.ToArray());
+        });
+
+        await Harness.Render();
+        setShown!(true);
+        await Harness.WaitFor(() => H.FindText("gc9") is not null);
+
+        // Drop every managed wrapper this test could still hold, then collect them.
+        for (int i = 0; i < 3; i++)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
+
+        setShown!(false);
+        await Harness.WaitFor(() => H.FindText("gc0") is null);
+        await Harness.WaitFor(() => unmounts == 10);
+
+        var counts = $"mounts={mounts} unmounts={unmounts}";
+        H.Check("LT_GcWrapper_Mounted", mounts == 10, counts);
+        H.Check("LT_GcWrapper_UnmountsFireAfterCollection", unmounts == 10, counts);
+    }
+}
+
 /// <summary>Component UseEffect setup/cleanup pairs stay balanced as a child
 /// component is mounted and unmounted 40 times.</summary>
 internal sealed class LT_EffectCleanupBalanced(Harness h) : SelfTestFixtureBase(h)
