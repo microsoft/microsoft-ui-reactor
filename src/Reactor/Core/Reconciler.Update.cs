@@ -1235,18 +1235,12 @@ public sealed partial class Reconciler
             var oldItemElement = GetElementTag(cc);
             var newItemElement = viewSource.BuildItemView(index);
 
-            if (oldItemElement is not null && cc.Content is UIElement existingCtrl && CanUpdate(oldItemElement, newItemElement))
-            {
-                var replacement = Update(oldItemElement, newItemElement, existingCtrl, requestRerender);
-                if (replacement is not null && !ReferenceEquals(cc.Content, replacement))
-                    cc.Content = replacement;
-            }
-            else
-            {
-                if (cc.Content is UIElement oldCtrl)
-                    Unmount(oldCtrl);
-                cc.Content = Mount(newItemElement, requestRerender);
-            }
+            // ReconcileV1Child updates in place when it can and remounts otherwise, and either way
+            // unmounts a control it replaced (e.g. a same-key Memo whose output changed shape
+            // during a resource refresh), so the old item's effects and refs are cleaned up.
+            var next = ReconcileV1Child(oldItemElement, newItemElement, cc.Content as UIElement, requestRerender);
+            if (!ReferenceEquals(cc.Content, next))
+                cc.Content = next;
             SetElementTag(cc, newItemElement);
 
             // Issue #951 — the container survives re-renders, so its automation

@@ -168,6 +168,7 @@ internal static class HostIdleAndThemeResourceFixtures
             var target = new Border();
             H.SetContent(target);
             bool shapeItemCleanedUp = false;
+            bool templatedItemCleanedUp = false;
             try
             {
                 // Disposed at the end of this block, before finally restores the active host.
@@ -189,6 +190,7 @@ internal static class HostIdleAndThemeResourceFixtures
                     var lvItems = ctx.UseMemo<Element[]>(
                         () => [TextBlock("LvItemProbe").Foreground(Theme.Ref(AppKey)), TextBlock("LvSecond")]);
                     var lazyItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["lazy"]);
+                    var templatedItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["templated"]);
                     var treeNodes = ctx.UseMemo<TreeViewNodeData[]>(
                         () => [new TreeViewNodeData("TreeRoot", [new TreeViewNodeData("TreeChild")])]);
                     var gvItems = ctx.UseMemo<Element[]>(
@@ -224,6 +226,16 @@ internal static class HostIdleAndThemeResourceFixtures
                         ListView(lvItems),
                         GridView(gvItems),
                         TreeView(treeNodes),
+                        // A templated-list item that changes shape with the resource: the replaced
+                        // item must be unmounted.
+                        ListView(templatedItems, static s => s, (_, _) => Memo("templatedShape",
+                            () => ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red
+                                ? RenderEachTime(fctx =>
+                                {
+                                    fctx.UseEffect(() => () => templatedItemCleanedUp = true);
+                                    return TextBlock("TemplatedBefore");
+                                })
+                                : TextBlock("TemplatedAfter"))),
                         LazyVStack(lazyItems, static s => s,
                             static (_, _) => TextBlock("LazyProbe").Foreground(Theme.Ref(AppKey))),
                         Memo("outer", () => Memo("inner",
@@ -235,7 +247,7 @@ internal static class HostIdleAndThemeResourceFixtures
                 // List containers realize during layout; wait for them before editing the resource.
                 bool listsRealized = await Harness.WaitFor(
                     () => ProbeColor(target, "LvItemProbe") == Colors.Red && ProbeColor(target, "GvItemProbe") == Colors.Red
-                          && ProbeColor(target, "LazyProbe") == Colors.Red,
+                          && ProbeColor(target, "LazyProbe") == Colors.Red && FindText(target, "TemplatedBefore") is not null,
                     maxPasses: 20, perPassMs: 20);
                 H.Check("ThemeMemo_ListsInitialRed", listsRealized,
                     $"lv={ProbeColor(target, "LvItemProbe")} gv={ProbeColor(target, "GvItemProbe")}");
@@ -254,12 +266,14 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_LazyRowRerenderAloneIsStale", ProbeColor(target, "LazyProbe") == Colors.Red, $"color={ProbeColor(target, "LazyProbe")}");
                 // A user expansion, which rebuilding the TreeView's nodes would reset.
                 var treeView = FindDescendant<TreeView>(target);
-                var rootNode = treeView?.RootNodes.Count > 0 ? treeView.RootNodes[0] : null;
+                var rootNode = treeView is not null && treeView.RootNodes.Count > 0 ? treeView.RootNodes[0] : null;
                 if (rootNode is not null) rootNode.IsExpanded = true;
                 // A user selection, which an ItemsSource swap would clear.
                 var listView = FindDescendant<ListView>(target);
                 if (listView is not null) listView.SelectedIndex = 1;
                 H.Check("ThemeMemo_ShapeRerenderAloneIsStale", FindText(target, "ShapeProbeBefore") is not null);
+                H.Check("ThemeMemo_TemplatedItemRerenderAloneKeepsIt", !templatedItemCleanedUp && FindText(target, "TemplatedBefore") is not null,
+                    $"cleanedUp={templatedItemCleanedUp} before={FindText(target, "TemplatedBefore") is not null}");
                 H.Check("ThemeMemo_ShapeItemRerenderAloneKeepsIt", !shapeItemCleanedUp && !HasComboText(target, "ShapeItemAfter"));
                 H.Check("ThemeMemo_GapItemRerenderAloneIsStale", ListItemColor(target, "GapItemProbe") == Colors.Red, $"color={ListItemColor(target, "GapItemProbe")}");
                 H.Check("ThemeMemo_NestedMemoRerenderAloneIsStale", ProbeColor(target, "NestedMemoProbe") == Colors.Red, $"color={ProbeColor(target, "NestedMemoProbe")}");
@@ -273,9 +287,12 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_ListViewItemNotifiedIsBlue", ProbeColor(target, "LvItemProbe") == Colors.Blue, $"color={ProbeColor(target, "LvItemProbe")}");
                 H.Check("ThemeMemo_GridViewItemNotifiedIsBlue", ProbeColor(target, "GvItemProbe") == Colors.Blue, $"color={ProbeColor(target, "GvItemProbe")}");
                 H.Check("ThemeMemo_LazyRowNotifiedMidScrollIsBlue", ProbeColor(target, "LazyProbe") == Colors.Blue, $"color={ProbeColor(target, "LazyProbe")}");
-                H.Check("ThemeMemo_TreeViewNodesKept", rootNode is not null && treeView!.RootNodes.Count == 1
+                H.Check("ThemeMemo_TreeViewNodesKept", rootNode is not null && treeView is not null && treeView.RootNodes.Count == 1
                     && ReferenceEquals(treeView.RootNodes[0], rootNode) && rootNode.IsExpanded,
                     $"root={rootNode is not null} same={(treeView is not null && treeView.RootNodes.Count > 0 && ReferenceEquals(treeView.RootNodes[0], rootNode))} expanded={rootNode?.IsExpanded}");
+                bool templatedAfterShown = await Harness.WaitFor(() => FindText(target, "TemplatedAfter") is not null, maxPasses: 20, perPassMs: 20);
+                H.Check("ThemeMemo_TemplatedItemReplacedAndUnmounted", templatedItemCleanedUp && templatedAfterShown,
+                    $"cleanedUp={templatedItemCleanedUp} after={FindText(target, "TemplatedAfter") is not null}");
                 H.Check("ThemeMemo_ListViewSelectionKept", listView?.SelectedIndex == 1, $"selected={listView?.SelectedIndex}");
                 H.Check("ThemeMemo_ShapeChangeRemounts", FindText(target, "ShapeProbeAfter") is not null && FindText(target, "ShapeProbeBefore") is null);
                 H.Check("ThemeMemo_ShapeItemReplacedAndUnmounted", shapeItemCleanedUp && HasComboText(target, "ShapeItemAfter"),
