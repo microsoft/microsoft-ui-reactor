@@ -451,7 +451,7 @@ function Stage-RustRuntime {
         #    the shared windows-reactor-setup cache (e.g. local experimentation) fall back to
         #    the highest *version* — never the largest file, which is arbitrary and could stage
         #    a mismatched runtime and reintroduce 0xC0000135. Else download the pinned version.
-        $pkg = 'Microsoft.WindowsAppSDK.Runtime'; $ver = '2.2.0'
+        $pkg = 'Microsoft.WindowsAppSDK.Runtime'; $ver = '2.5.4-experimental'
         $nupkg = $null
         $pinned = Join-Path $cache "$pkg.$ver.nupkg"
         if (Test-Path $pinned) {
