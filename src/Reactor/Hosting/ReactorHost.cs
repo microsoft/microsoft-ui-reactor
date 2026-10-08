@@ -969,6 +969,11 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
                     TraceRootRendered(hotReloadRender, treeBuildMs);
                 if (_releaseReplacedTreeOnNullRender)
                     ReleaseReplacedTree();
+                // Content the root kept is not re-published: drop static facts that went
+                // stale (hot reload, a late conflicting registration) as a publishing pass would.
+                if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+                    && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
+                    _reconciler.RefreshRetainedContentFacts(_currentControl);
                 // Commit the render like any other: the root's effects still run, and a
                 // failure among them is routed as an effect failure by the outer catch.
                 failurePhase = RenderErrorSource.Effects;

@@ -587,6 +587,15 @@ public sealed partial class Reconciler : IDisposable
     /// subtrees, are not re-published, so the whole tree is walked once per change (rare) and
     /// the stale fields are dropped.
     /// </summary>
+    /// <summary>
+    /// Host hook: a root rendered null and kept its content, which nothing else re-publishes,
+    /// so the content's stale static facts are dropped here (see <see cref="RefreshStaleFacts"/>).
+    /// </summary>
+    internal void RefreshRetainedContentFacts(UIElement? control)
+    {
+        if (control is not null) RefreshStaleFacts(control);
+    }
+
     private void RefreshStaleFacts(UIElement control)
     {
         int revision = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.StaticFactsRevision;
