@@ -65,7 +65,10 @@ public readonly record struct ThemeRef(string ResourceKey)
 
     private static bool TryGetCurrentResolution((string Key, string Theme) cacheKey, int generation, out Brush? brush)
     {
-        if (s_resolutionCache.TryGetValue(cacheKey, out var entry) && entry.Generation == generation)
+        // Also re-check the live generation: an invalidation that has incremented it but not yet
+        // cleared the dictionary must not serve the entry it is about to drop.
+        if (s_resolutionCache.TryGetValue(cacheKey, out var entry) && entry.Generation == generation
+            && Volatile.Read(ref s_resolutionGeneration) == generation)
         {
             brush = entry.Brush;
             return true;
@@ -91,6 +94,10 @@ public readonly record struct ThemeRef(string ResourceKey)
     /// <summary>Test seam: whether a lookup would be served from the cache.</summary>
     internal static bool IsResolutionCachedForTest(string resourceKey, string themeName)
         => TryGetCurrentResolution((resourceKey, themeName), ResolutionGenerationForTest, out _);
+
+    /// <summary>Test seam: whether a lookup that captured <paramref name="capturedGeneration"/> would be served.</summary>
+    internal static bool IsResolutionCachedForTest(string resourceKey, string themeName, int capturedGeneration)
+        => TryGetCurrentResolution((resourceKey, themeName), capturedGeneration, out _);
 
     private static Brush? ResolveForTheme(string resourceKey, string themeName)
     {

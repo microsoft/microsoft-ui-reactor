@@ -513,14 +513,14 @@ public sealed partial class Reconciler : IDisposable
     {
         if (!_resourceRefreshActive || list.ItemsPanelRoot is not { } panel) return;
         // Snapshot: reconciling may mount controls, and Children can't change mid-enumeration.
-        var realized = new List<UIElement>(panel.Children.Count);
-        foreach (var child in panel.Children) realized.Add(child);
-        foreach (var child in realized)
+        var realized = panel.Children
+            .OfType<WinUI.Primitives.SelectorItem>()
+            .Select(static container => (Container: container, Shell: container.ContentTemplateRoot as WinUI.ContentControl))
+            .Where(static c => c.Shell?.Content is UIElement)
+            .ToList();
+        foreach (var (container, cc) in realized)
         {
-            if (child is not WinUI.Primitives.SelectorItem container
-                || container.ContentTemplateRoot is not WinUI.ContentControl cc
-                || cc.Content is not UIElement existing)
-                continue;
+            var existing = (UIElement)cc!.Content;
             int i = list.IndexFromContainer(container);
             if (i < 0 || i >= items.Length) continue;
             var next = ReconcileV1Child(items[i], items[i], existing, requestRerender);

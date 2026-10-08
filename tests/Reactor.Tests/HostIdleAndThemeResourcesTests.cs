@@ -183,6 +183,19 @@ public sealed partial class HostIdleAndThemeResourcesTests
     }
 
     [Fact]
+    public void LookupThatRacesAnInvalidation_IsNotServed()
+    {
+        // A lookup captured the generation, then an invalidation incremented it before clearing:
+        // the entry stamped with the captured generation is still present but must not be served.
+        int captured = ThemeRef.ResolutionGenerationForTest;
+        Theme.NotifyResourcesChanged();
+        ThemeRef.SeedResolutionCacheForTest("RacingBrush", "Light", captured);
+
+        Assert.False(ThemeRef.IsResolutionCachedForTest("RacingBrush", "Light", captured));
+        ThemeRef.InvalidateResolutionCache();
+    }
+
+    [Fact]
     public void ResolutionPublishedAfterAnInvalidation_IsNotServed()
     {
         // A resolve that read the dictionaries before the invalidation and publishes after it.

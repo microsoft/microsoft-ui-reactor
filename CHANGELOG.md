@@ -57,8 +57,8 @@ Conventions for contributors:
 
 - **`Theme.NotifyResourcesChanged()`** for runtime resource edits (a brand dictionary
   swap, a replaced brush in an app-level dictionary, an inspector's live
-  resource edit). Reactor caches each resolved `(key, theme)` brush and only cleared
-  that cache on a theme or palette change, so such an edit was invisible to `ThemeRef`
+  resource edit). Reactor caches each resolved `(key, theme)` brush, and until now cleared
+  that cache only on a theme or palette change, so such an edit was invisible to `ThemeRef`
   modifiers, overrides and `ThemeRef.Resolve`. The call clears the cache and re-renders
   every live host past memoization and the skip of unchanged elements. Callable from
   any thread (issue #1327).

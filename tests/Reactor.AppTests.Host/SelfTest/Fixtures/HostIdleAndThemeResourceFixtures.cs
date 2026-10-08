@@ -189,6 +189,8 @@ internal static class HostIdleAndThemeResourceFixtures
                     var lvItems = ctx.UseMemo<Element[]>(
                         () => [TextBlock("LvItemProbe").Foreground(Theme.Ref(AppKey)), TextBlock("LvSecond")]);
                     var lazyItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["lazy"]);
+                    var treeNodes = ctx.UseMemo<TreeViewNodeData[]>(
+                        () => [new TreeViewNodeData("TreeRoot", [new TreeViewNodeData("TreeChild")])]);
                     var gvItems = ctx.UseMemo<Element[]>(
                         () => [TextBlock("GvItemProbe").Foreground(Theme.Ref(AppKey))]);
                     var gapItems = ctx.UseMemo<Element[]>(
@@ -221,6 +223,7 @@ internal static class HostIdleAndThemeResourceFixtures
                         ComboBox(gapItems, default, null),
                         ListView(lvItems),
                         GridView(gvItems),
+                        TreeView(treeNodes),
                         LazyVStack(lazyItems, static s => s,
                             static (_, _) => TextBlock("LazyProbe").Foreground(Theme.Ref(AppKey))),
                         Memo("outer", () => Memo("inner",
@@ -249,6 +252,10 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_ListViewItemRerenderAloneIsStale", ProbeColor(target, "LvItemProbe") == Colors.Red, $"color={ProbeColor(target, "LvItemProbe")}");
                 H.Check("ThemeMemo_GridViewItemRerenderAloneIsStale", ProbeColor(target, "GvItemProbe") == Colors.Red, $"color={ProbeColor(target, "GvItemProbe")}");
                 H.Check("ThemeMemo_LazyRowRerenderAloneIsStale", ProbeColor(target, "LazyProbe") == Colors.Red, $"color={ProbeColor(target, "LazyProbe")}");
+                // A user expansion, which rebuilding the TreeView's nodes would reset.
+                var treeView = FindDescendant<TreeView>(target);
+                var rootNode = treeView?.RootNodes.Count > 0 ? treeView.RootNodes[0] : null;
+                if (rootNode is not null) rootNode.IsExpanded = true;
                 // A user selection, which an ItemsSource swap would clear.
                 var listView = FindDescendant<ListView>(target);
                 if (listView is not null) listView.SelectedIndex = 1;
@@ -266,6 +273,9 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_ListViewItemNotifiedIsBlue", ProbeColor(target, "LvItemProbe") == Colors.Blue, $"color={ProbeColor(target, "LvItemProbe")}");
                 H.Check("ThemeMemo_GridViewItemNotifiedIsBlue", ProbeColor(target, "GvItemProbe") == Colors.Blue, $"color={ProbeColor(target, "GvItemProbe")}");
                 H.Check("ThemeMemo_LazyRowNotifiedMidScrollIsBlue", ProbeColor(target, "LazyProbe") == Colors.Blue, $"color={ProbeColor(target, "LazyProbe")}");
+                H.Check("ThemeMemo_TreeViewNodesKept", rootNode is not null && treeView!.RootNodes.Count == 1
+                    && ReferenceEquals(treeView.RootNodes[0], rootNode) && rootNode.IsExpanded,
+                    $"root={rootNode is not null} same={(treeView is not null && treeView.RootNodes.Count > 0 && ReferenceEquals(treeView.RootNodes[0], rootNode))} expanded={rootNode?.IsExpanded}");
                 H.Check("ThemeMemo_ListViewSelectionKept", listView?.SelectedIndex == 1, $"selected={listView?.SelectedIndex}");
                 H.Check("ThemeMemo_ShapeChangeRemounts", FindText(target, "ShapeProbeAfter") is not null && FindText(target, "ShapeProbeBefore") is null);
                 H.Check("ThemeMemo_ShapeItemReplacedAndUnmounted", shapeItemCleanedUp && HasComboText(target, "ShapeItemAfter"),

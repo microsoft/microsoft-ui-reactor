@@ -393,10 +393,21 @@ public sealed record TreeChildren<TElement, TControl>(
 {
     void IItemsBinderStrategy.Bind(FrameworkElement control, Element? oldElement, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
     {
-        _ = oldElement; // positional rebuild reads only the new tree
         var tree = (TControl)control;
         var nodes = GetNodes((TElement)element);
         bool hasContentElements = HasAnyContentElement(nodes);
+
+        // A resource-refresh pass (Theme.NotifyResourcesChanged) updates every element, even an
+        // unchanged TreeView that is otherwise skipped. Its node list is then the same instance:
+        // refresh mounted node content in place rather than rebuilding, which would reset
+        // expansion, selection and descendant state.
+        if (!isMount && reconciler.ResourceRefreshActive
+            && oldElement is TElement oldTyped && ReferenceEquals(GetNodes(oldTyped), nodes))
+        {
+            if (hasContentElements)
+                RefreshTreeContent(tree.RootNodes, nodes, reconciler, requestRerender);
+            return;
+        }
 
         if (isMount)
         {
@@ -453,6 +464,26 @@ public sealed record TreeChildren<TElement, TControl>(
         return node;
     }
 #pragma warning restore CS0618
+
+    private static void RefreshTreeContent(
+        IList<WinUI.TreeViewNode> treeNodes, IReadOnlyList<TreeViewNodeData> data,
+        Reconciler reconciler, Action requestRerender)
+    {
+        for (int i = 0; i < treeNodes.Count && i < data.Count; i++)
+        {
+            var node = treeNodes[i];
+            var d = data[i];
+#pragma warning disable CS0618
+            if (d.ContentElement is { } content && node.Content is UIElement existing)
+            {
+                var next = reconciler.ReconcileV1Child(content, content, existing, requestRerender);
+                if (next is not null && !ReferenceEquals(next, existing)) node.Content = next;
+            }
+#pragma warning restore CS0618
+            if (d.Children is not null)
+                RefreshTreeContent(node.Children, d.Children, reconciler, requestRerender);
+        }
+    }
 
     private static void UnmountTreeContent(IList<WinUI.TreeViewNode> nodes, Reconciler reconciler)
     {
