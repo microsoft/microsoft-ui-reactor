@@ -440,6 +440,7 @@ own dictionary merged into `Application.Current.Resources` (the app
 dictionary itself is `XamlControlsResources` and rejects direct entries):
 
 ```csharp
+const string AppKey = "SelfTestBrandBrush"; // the key the UI reads with Theme.Ref(AppKey)
 var resources = new ResourceDictionary { [AppKey] = new SolidColorBrush(Colors.Red) };
 Application.Current.Resources.MergedDictionaries.Add(resources);
 ```

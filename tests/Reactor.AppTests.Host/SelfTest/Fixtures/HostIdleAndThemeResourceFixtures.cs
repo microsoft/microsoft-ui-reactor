@@ -153,11 +153,12 @@ internal static class HostIdleAndThemeResourceFixtures
     /// </summary>
     internal class NotifyResourcesChangedRefreshesMemoizedThemeModifiers(Harness h) : SelfTestFixtureBase(h)
     {
-        private const string AppKey = "ReactorSelfTestNotifyResourcesMemoBrush";
+        private const string AppKey = "SelfTestBrandBrush";
 
         public override async Task RunAsync()
         {
             // <snippet:runtime-resource-dictionary>
+            const string AppKey = "SelfTestBrandBrush"; // the key the UI reads with Theme.Ref(AppKey)
             var resources = new ResourceDictionary { [AppKey] = new SolidColorBrush(Colors.Red) };
             Application.Current.Resources.MergedDictionaries.Add(resources);
             // </snippet:runtime-resource-dictionary>
