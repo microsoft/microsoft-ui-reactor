@@ -63,6 +63,22 @@ public class ReactorDiagnosticsDefaultAutomationNameTests
     }
 
     [Fact]
+    public void DefaultAutomationName_UpdatePathRecognisesItsOwnTruncatedDefault()
+    {
+        var longCaption = new string('x', 140);
+        var truncated = Reconciler.DefaultAutomationNameFromCaption(longCaption);
+
+        // Reactor wrote the truncated form at mount; a caption change must still replace it.
+        Assert.True(Reconciler.MayReplaceDefaultAutomationName(truncated, longCaption));
+        Assert.True(Reconciler.MayReplaceDefaultAutomationName("Save", "Save"));
+        Assert.True(Reconciler.MayReplaceDefaultAutomationName("", "Save"));
+        Assert.True(Reconciler.MayReplaceDefaultAutomationName(null, null));
+        // Anything else is the author's.
+        Assert.False(Reconciler.MayReplaceDefaultAutomationName("Save draft", "Save"));
+        Assert.False(Reconciler.MayReplaceDefaultAutomationName("Save", null));
+    }
+
+    [Fact]
     public void DefaultAutomationName_UncaptionedOrBlankCaption_NotReported()
     {
         Assert.Null(AppliedModifierMap.DescribeDefaultAutomationName(VStack(), liveName: "anything"));

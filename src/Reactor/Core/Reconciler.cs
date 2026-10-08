@@ -3605,11 +3605,22 @@ public sealed partial class Reconciler : IDisposable
         if (fe is null) return;
         if (DefaultAutomationNameFromCaption(newCaption) is not { } trimmed) return;
         var current = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(fe);
-        bool authorOverride =
-            !string.IsNullOrEmpty(current) &&
-            (oldCaption is null || !string.Equals(current, oldCaption, StringComparison.Ordinal));
-        if (authorOverride) return;
+        if (!MayReplaceDefaultAutomationName(current, oldCaption)) return;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, trimmed);
+    }
+
+    /// <summary>
+    /// True when the live name is Reactor's own default for <paramref name="oldCaption"/> (or
+    /// empty), so a caption change may replace it. The default for a long caption is its
+    /// truncated form (<see cref="DefaultAutomationNameFromCaption"/>), so both the full and the
+    /// truncated caption count as Reactor's; any other value is the author's and is kept.
+    /// </summary>
+    internal static bool MayReplaceDefaultAutomationName(string? current, string? oldCaption)
+    {
+        if (string.IsNullOrEmpty(current)) return true;
+        if (oldCaption is null) return false;
+        return string.Equals(current, oldCaption, StringComparison.Ordinal)
+            || string.Equals(current, DefaultAutomationNameFromCaption(oldCaption), StringComparison.Ordinal);
     }
 
     internal static string? ExtractElementCaption(Element? element) => element switch
