@@ -172,6 +172,7 @@ internal static class HostIdleAndThemeResourceFixtures
             int popupContentCleanedUp = 0;
             int visualizerContentMounts = 0;
             int visualizerContentCleanups = 0;
+            int visualizerWrapperMounts = 0;
             int wrapperMounts = 0;
             int nestedInnerMounts = 0;
             int nestedOuterMounts = 0;
@@ -275,6 +276,12 @@ internal static class HostIdleAndThemeResourceFixtures
                                 });
                                 return TextBlock("VisualizerProbe");
                             }))),
+                        // A same-shape memo output whose handler still builds a fresh control: the memo's
+                        // wrapper modifiers and OnMount must apply to it with mount semantics.
+                        Memo("visualizerWrapper", () => ValidationVisualizerDsl.ValidationVisualizer(VisualizerStyle.Inline,
+                                TextBlock("VisualizerWrapProbe")))
+                            .Margin(9)
+                            .OnMount(_ => visualizerWrapperMounts++),
                         // A templated-list item that changes shape with the resource: the replaced
                         // item must be unmounted.
                         ListView(templatedItems, static s => s, (_, _) => Memo("templatedShape",
@@ -328,6 +335,7 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_NestedWrapperRerenderAloneMountedOnce", nestedInnerMounts == 1 && nestedOuterMounts == 1,
                     $"inner={nestedInnerMounts} outer={nestedOuterMounts}");
                 H.Check("ThemeMemo_PopupContentRerenderAloneKept", popupContentCleanedUp == 0);
+                H.Check("ThemeMemo_VisualizerWrapperRerenderAloneMountedOnce", visualizerWrapperMounts == 1, $"mounts={visualizerWrapperMounts}");
                 H.Check("ThemeMemo_VisualizerRerenderOneLiveCopy", visualizerContentMounts >= 2 && visualizerContentMounts - visualizerContentCleanups == 1,
                     $"mounts={visualizerContentMounts} cleanups={visualizerContentCleanups}");
                 H.Check("ThemeMemo_TreeContentRerenderAloneUnchanged", ToggleTree(target) is { } toggleBefore
@@ -360,6 +368,9 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_NestedWrapperRemountRunsOnMount", nestedInnerMounts == 2 && nestedOuterMounts == 2,
                     $"inner={nestedInnerMounts} outer={nestedOuterMounts}");
                 H.Check("ThemeMemo_PopupContentReplacedAndUnmounted", popupContentCleanedUp == 1, $"cleanups={popupContentCleanedUp}");
+                H.Check("ThemeMemo_VisualizerWrapperRemountRunsOnMount", visualizerWrapperMounts == 2, $"mounts={visualizerWrapperMounts}");
+                var visualizerWrapMargin = AncestorMargin(FindText(target, "VisualizerWrapProbe"), new Thickness(9));
+                H.Check("ThemeMemo_VisualizerWrapperRemountKeepsModifiers", visualizerWrapMargin, $"found={FindText(target, "VisualizerWrapProbe") is not null}");
                 H.Check("ThemeMemo_VisualizerNotifiedOneLiveCopy", visualizerContentMounts >= 3 && visualizerContentMounts - visualizerContentCleanups == 1,
                     $"mounts={visualizerContentMounts} cleanups={visualizerContentCleanups}");
                 H.Check("ThemeMemo_TreeContentVisibleToEmpty", ToggleTree(target)?.RootNodes[0].Content is null,
@@ -485,6 +496,16 @@ internal static class HostIdleAndThemeResourceFixtures
                 if (FindText(VisualTreeHelper.GetChild(root, i), text) is { } found) return found;
             }
             return null;
+        }
+
+        // Whether an element within a few levels above `fe` carries `margin`.
+        private static bool AncestorMargin(FrameworkElement? fe, Thickness margin)
+        {
+            for (int i = 0; fe is not null && i < 4; i++, fe = VisualTreeHelper.GetParent(fe) as FrameworkElement)
+            {
+                if (fe.Margin == margin) return true;
+            }
+            return false;
         }
     }
 }

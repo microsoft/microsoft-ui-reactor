@@ -1647,6 +1647,10 @@ public sealed partial class Reconciler
             return replacement;
         }
 
+        // A compatible output whose handler still built a fresh control (ValidationVisualizer
+        // always remounts): the enclosing Update applies this memo's wrapper modifiers to it with
+        // mount semantics, as for a nested memo. The caller unmounts the old control.
+        if (replacement is not null && !ReferenceEquals(replacement, control)) _freshForWrapperMount = replacement;
         if ((replacement ?? control) is FrameworkElement realized)
             GetOrCreateReactorState(realized).KeyedMemoOutput = inner;
         return replacement;
