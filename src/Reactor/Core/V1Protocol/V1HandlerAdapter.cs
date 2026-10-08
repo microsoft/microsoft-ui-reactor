@@ -50,7 +50,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
 
     /// <summary>
     /// The live children this handler's strategy hosts, the ones its unmount tears down
-    /// (single content, named slots, item-host items). For diagnostics walks that must reach
+    /// (single content, named slots, panel children, item-host items). For diagnostics walks that must reach
     /// Reactor content a control template has not realized yet.
     /// </summary>
     public void VisitLiveChildren(UIElement control, Action<UIElement> visit)
@@ -68,6 +68,15 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
                         visit(slotChild);
                 }
                 return;
+            case Panel<TElement, TControl> panel:
+            {
+                // The collection can belong to an inner panel the host's template has not
+                // attached yet, outside the visual and logical walks.
+                var panelChildren = panel.GetCollection(typed);
+                for (int i = 0; i < panelChildren.Count; i++)
+                    visit(panelChildren[i]);
+                return;
+            }
             case ItemsHost<TElement, TControl> host:
                 var collection = host.GetCollection(typed);
                 for (int i = 0; i < collection.Count; i++)

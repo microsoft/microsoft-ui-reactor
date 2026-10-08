@@ -1191,6 +1191,88 @@ internal class ReactorSource_ActivationFailureFallback(Harness h) : SelfTestFixt
 }
 
 /// <summary>
+/// A custom host whose panel strategy mounts into an inner panel its template has not
+/// attached (here: never attached), so its children are in no visual or logical walk. A root
+/// swap over the kept content must still rename them, through the strategy's collection.
+/// </summary>
+internal partial class ReactorSource_DetachedPanelChildrenRenamed(Harness h) : SelfTestFixtureBase(h)
+{
+    internal sealed partial class DetachedPanelHost : WinUI.Control
+    {
+        public WinUI.StackPanel Inner { get; } = new();
+    }
+
+    internal sealed record DetachedPanelHostElement(Element[] Items) : Element;
+
+    private sealed class DetachedPanelHostHandler()
+        : Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.DescriptorHandler<DetachedPanelHostElement, DetachedPanelHost>(HostDescriptor)
+    {
+        private static readonly Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<DetachedPanelHostElement, DetachedPanelHost> HostDescriptor = new()
+        {
+            Children = new Microsoft.UI.Reactor.Core.V1Protocol.Panel<DetachedPanelHostElement, DetachedPanelHost>(
+                GetChildren: static e => e.Items,
+                GetCollection: static c => c.Inner.Children),
+        };
+    }
+
+    // Shared by both roots, so the host element is equal across the swap and is skipped.
+    private static readonly Element[] Items = [TextBlock("detached-panel-child")];
+
+    internal static Element Body() => VStack(
+        new DetachedPanelHostElement(Items) { CallSite = new SourceLocation("DetachedPanel.cs", 1, 1) });
+
+    internal sealed class RootA : Component
+    {
+        public override Element Render() => Body();
+    }
+
+    internal sealed class RootB : Component
+    {
+        public override Element Render() => Body();
+    }
+
+    private string? ChildSource()
+        => H.FindControl<DetachedPanelHost>(_ => true)?.Inner.Children.FirstOrDefault() is WinUI.TextBlock child
+            ? ReactorDiagnostics.GetSource(child)
+            : null;
+
+    public override async Task RunAsync()
+    {
+        if (!ReactorSourcePublisher.IsSupported)
+        {
+            H.Skip("ReactorSource_DetachedPanel", "Reactor.DevtoolsSupport is off in this host");
+            return;
+        }
+
+        Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.Register<DetachedPanelHostElement, DetachedPanelHost>(
+            static () => new DetachedPanelHostHandler());
+        var previous = ReactorSourcePublisher.IsEnabled;
+        try
+        {
+            ReactorSourcePublisher.IsEnabled = true;
+            var host = H.CreateHost();
+            host.Mount(new RootA());
+            await Harness.Render();
+            var before = ChildSource();
+            host.Mount(new RootB());
+            await Harness.Render();
+            await Harness.Render();
+            var after = ChildSource();
+            Console.WriteLine($"# detached panel child: {before} -> {after}");
+            H.Check("ReactorSource_DetachedPanel_ChildRenamed",
+                before?.Contains($"|owner={nameof(RootA)}|", StringComparison.Ordinal) == true
+                && after?.Contains($"|owner={nameof(RootB)}|", StringComparison.Ordinal) == true);
+            host.Dispose();
+            H.SetContent(null);
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = previous;
+        }
+    }
+}
+
+/// <summary>
 /// A ContentDialog element realizes a collapsed placeholder; the dialog the user sees is a
 /// separate WinUI object. An out-of-process inspector sees the dialog, so it carries the
 /// element's published value too: when opened at mount (the reconciler mirrors the value it
