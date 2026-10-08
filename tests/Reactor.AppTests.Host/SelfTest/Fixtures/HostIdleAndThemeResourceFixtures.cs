@@ -226,6 +226,8 @@ internal static class HostIdleAndThemeResourceFixtures
                         ListView(lvItems),
                         GridView(gvItems),
                         TreeView(treeNodes),
+                        // Not memoized: the DSL builds fresh but equivalent node arrays every render.
+                        TreeView(new TreeViewNodeData("FreshRoot", [new TreeViewNodeData("FreshChild")])),
                         // A templated-list item that changes shape with the resource: the replaced
                         // item must be unmounted.
                         ListView(templatedItems, static s => s, (_, _) => Memo("templatedShape",
@@ -265,9 +267,12 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_GridViewItemRerenderAloneIsStale", ProbeColor(target, "GvItemProbe") == Colors.Red, $"color={ProbeColor(target, "GvItemProbe")}");
                 H.Check("ThemeMemo_LazyRowRerenderAloneIsStale", ProbeColor(target, "LazyProbe") == Colors.Red, $"color={ProbeColor(target, "LazyProbe")}");
                 // A user expansion, which rebuilding the TreeView's nodes would reset.
-                var treeView = FindDescendant<TreeView>(target);
-                var rootNode = treeView is not null && treeView.RootNodes.Count > 0 ? treeView.RootNodes[0] : null;
+                var treeView = FindTreeView(target, "TreeRoot");
+                var rootNode = treeView?.RootNodes[0];
                 if (rootNode is not null) rootNode.IsExpanded = true;
+                var freshTreeView = FindTreeView(target, "FreshRoot");
+                var freshRoot = freshTreeView?.RootNodes[0];
+                if (freshRoot is not null) freshRoot.IsExpanded = true;
                 // A user selection, which an ItemsSource swap would clear.
                 var listView = FindDescendant<ListView>(target);
                 if (listView is not null) listView.SelectedIndex = 1;
@@ -287,9 +292,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_ListViewItemNotifiedIsBlue", ProbeColor(target, "LvItemProbe") == Colors.Blue, $"color={ProbeColor(target, "LvItemProbe")}");
                 H.Check("ThemeMemo_GridViewItemNotifiedIsBlue", ProbeColor(target, "GvItemProbe") == Colors.Blue, $"color={ProbeColor(target, "GvItemProbe")}");
                 H.Check("ThemeMemo_LazyRowNotifiedMidScrollIsBlue", ProbeColor(target, "LazyProbe") == Colors.Blue, $"color={ProbeColor(target, "LazyProbe")}");
-                H.Check("ThemeMemo_TreeViewNodesKept", rootNode is not null && treeView is not null && treeView.RootNodes.Count == 1
-                    && ReferenceEquals(treeView.RootNodes[0], rootNode) && rootNode.IsExpanded,
-                    $"root={rootNode is not null} same={(treeView is not null && treeView.RootNodes.Count > 0 && ReferenceEquals(treeView.RootNodes[0], rootNode))} expanded={rootNode?.IsExpanded}");
+                H.Check("ThemeMemo_TreeViewNodesKept", NodeKept(treeView, rootNode), DescribeNode(treeView, rootNode));
+                H.Check("ThemeMemo_FreshTreeViewNodesKept", NodeKept(freshTreeView, freshRoot), DescribeNode(freshTreeView, freshRoot));
                 bool templatedAfterShown = await Harness.WaitFor(() => FindText(target, "TemplatedAfter") is not null, maxPasses: 20, perPassMs: 20);
                 H.Check("ThemeMemo_TemplatedItemReplacedAndUnmounted", templatedItemCleanedUp && templatedAfterShown,
                     $"cleanedUp={templatedItemCleanedUp} after={FindText(target, "TemplatedAfter") is not null}");
@@ -339,6 +343,28 @@ internal static class HostIdleAndThemeResourceFixtures
             }
             return null;
         }
+
+        // The TreeView whose first root node shows text, found by walking every TreeView.
+        private static TreeView? FindTreeView(DependencyObject root, string rootText)
+        {
+            if (root is TreeView tv && tv.RootNodes.Count > 0
+                && tv.RootNodes[0].Content is TreeViewNodeData { Content: var text } && text == rootText)
+                return tv;
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                if (FindTreeView(VisualTreeHelper.GetChild(root, i), rootText) is { } found) return found;
+            }
+            return null;
+        }
+
+        // The same node instance is still the tree's root and still expanded: not rebuilt.
+        private static bool NodeKept(TreeView? tree, TreeViewNode? node)
+            => tree is { RootNodes.Count: 1 } && node is not null
+               && ReferenceEquals(tree.RootNodes[0], node) && node.IsExpanded;
+
+        private static string DescribeNode(TreeView? tree, TreeViewNode? node)
+            => $"tree={tree is not null} node={node is not null} same={tree is { RootNodes.Count: > 0 } && ReferenceEquals(tree.RootNodes[0], node)} expanded={node?.IsExpanded}";
 
         private static bool HasComboText(Border target, string text)
             => FindComboBoxes(target).SelectMany(cb => cb.Items.OfType<TextBlock>()).Any(t => t.Text == text);

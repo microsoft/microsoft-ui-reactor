@@ -398,14 +398,15 @@ public sealed record TreeChildren<TElement, TControl>(
         bool hasContentElements = HasAnyContentElement(nodes);
 
         // A resource-refresh pass (Theme.NotifyResourcesChanged) updates every element, even an
-        // unchanged TreeView that is otherwise skipped. Its node list is then the same instance:
-        // refresh mounted node content in place rather than rebuilding, which would reset
-        // expansion, selection and descendant state.
+        // unchanged TreeView that is otherwise skipped. When the node tree has the same shape
+        // (the same array, or a fresh but equivalent one from the DSL), refresh mounted node
+        // content in place rather than rebuilding, which would reset expansion, selection and
+        // descendant state.
         if (!isMount && reconciler.ResourceRefreshActive
-            && oldElement is TElement oldTyped && ReferenceEquals(GetNodes(oldTyped), nodes))
+            && oldElement is TElement oldTyped && GetNodes(oldTyped) is var oldNodes && SameShape(oldNodes, nodes))
         {
             if (hasContentElements)
-                RefreshTreeContent(tree.RootNodes, nodes, reconciler, requestRerender);
+                RefreshTreeContent(tree.RootNodes, oldNodes, nodes, reconciler, requestRerender);
             return;
         }
 
@@ -465,23 +466,45 @@ public sealed record TreeChildren<TElement, TControl>(
     }
 #pragma warning restore CS0618
 
-    private static void RefreshTreeContent(
-        IList<WinUI.TreeViewNode> treeNodes, IReadOnlyList<TreeViewNodeData> data,
-        Reconciler reconciler, Action requestRerender)
+    // Same node structure: equal text, expansion and children, and content elements in the same
+    // places. Arrays are compared by shape, not reference, because the DSL builds fresh ones.
+    private static bool SameShape(IReadOnlyList<TreeViewNodeData> a, IReadOnlyList<TreeViewNodeData> b)
     {
-        for (int i = 0; i < treeNodes.Count && i < data.Count; i++)
+        if (ReferenceEquals(a, b)) return true;
+        if (a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+        {
+            var x = a[i];
+            var y = b[i];
+#pragma warning disable CS0618
+            if (x.Content != y.Content || x.IsExpanded != y.IsExpanded
+                || (x.ContentElement is null) != (y.ContentElement is null)
+                || (x.Children is null) != (y.Children is null))
+                return false;
+#pragma warning restore CS0618
+            if (x.Children is not null && !SameShape(x.Children, y.Children!)) return false;
+        }
+        return true;
+    }
+
+    private static void RefreshTreeContent(
+        IList<WinUI.TreeViewNode> treeNodes, IReadOnlyList<TreeViewNodeData> oldData,
+        IReadOnlyList<TreeViewNodeData> newData, Reconciler reconciler, Action requestRerender)
+    {
+        for (int i = 0; i < treeNodes.Count && i < newData.Count; i++)
         {
             var node = treeNodes[i];
-            var d = data[i];
+            var o = oldData[i];
+            var d = newData[i];
 #pragma warning disable CS0618
             if (d.ContentElement is { } content && node.Content is UIElement existing)
             {
-                var next = reconciler.ReconcileV1Child(content, content, existing, requestRerender);
+                var next = reconciler.ReconcileV1Child(o.ContentElement, content, existing, requestRerender);
                 if (next is not null && !ReferenceEquals(next, existing)) node.Content = next;
             }
 #pragma warning restore CS0618
-            if (d.Children is not null)
-                RefreshTreeContent(node.Children, d.Children, reconciler, requestRerender);
+            if (d.Children is not null && o.Children is not null)
+                RefreshTreeContent(node.Children, o.Children, d.Children, reconciler, requestRerender);
         }
     }
 
