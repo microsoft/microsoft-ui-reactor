@@ -299,6 +299,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             _renderingRoot is null ? nameof(FuncElement) : Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_renderingRoot, element: null),
             hotReloadRender, _reconciler.ForceFullRenderPending, elapsedMilliseconds);
 
+    // True when a re-entrant Mount replaced the root this pass is rendering (RetireRoot
+    // swaps the diagnostics instance the pass snapshotted).
+    private bool RootReplacedDuringPass
+        => _renderingRootDiagnostics is { } rendering && !ReferenceEquals(rendering, _rootDiagnostics);
+
     // Set by RetireRoot while the previous root's content is still shown; cleared once the
     // replacement renders content, or when it renders nothing and the old tree is released.
     private bool _releaseReplacedTreeOnNullRender;
@@ -969,7 +974,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
             _currentControl = newControl;
             _currentTree = newTree;
-            _releaseReplacedTreeOnNullRender = false;
+            // A root replaced during this pass (it called Mount) still committed its own tree;
+            // that tree is the replacement's to release if its first render produces nothing.
+            _releaseReplacedTreeOnNullRender = RootReplacedDuringPass;
             _rootDiagnostics.TrackContent(newControl);
 
             // Spec 033 §6 — Backdrop modifier on the root tree is a no-op for
@@ -1180,8 +1187,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
     private void SetErrorContent(UIElement? errorPanel, Element? errorTree, bool replacesTree)
     {
-        // Whatever was shown has been replaced; nothing is left for ReleaseReplacedTree.
-        _releaseReplacedTreeOnNullRender = false;
+        // Whatever was shown has been replaced; nothing is left for ReleaseReplacedTree,
+        // unless this is the outgoing attempt of a root replaced during this pass: the
+        // content it leaves behind is the replacement's to release.
+        _releaseReplacedTreeOnNullRender = RootReplacedDuringPass && (errorPanel is not null || errorTree is not null);
         if (_overlayWiring is not null && _overlayWiring.TryShowErrorInWrapper(errorPanel))
         {
             // shared overlay wrapper took it
