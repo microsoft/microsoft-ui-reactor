@@ -96,10 +96,10 @@ internal static class ComponentInspectionFixtures
                         directWrapper is not null && ReactorDiagnostics.DescribeComponent(directWrapper) is null);
                 }
                 // A hosted reconciler with no dispatcher recorded is never inspected from any thread.
-                var recorded = host.Reconciler.DiagnosticsDispatcher;
-                host.Reconciler.DiagnosticsDispatcher = null;
+                var recorded = host.Reconciler.OwningDispatcher;
+                host.Reconciler.OwningDispatcher = null;
                 H.Check("CompInspect_UncapturedReconcilerNotInspected", ReactorDiagnostics.DescribeComponent(wrapper) is null);
-                host.Reconciler.DiagnosticsDispatcher = recorded;
+                host.Reconciler.OwningDispatcher = recorded;
                 var counter = ReactorDiagnostics.DescribeComponent(wrapper);
                 H.Check("CompInspect_ClassDescribed",
                     counter is { Name: "Counter", Kind: "class", IsRoot: false });
@@ -125,6 +125,24 @@ internal static class ComponentInspectionFixtures
                 H.Check("CompInspect_SetStateRerendered", H.FindControl<TextBlock>(t => t.Text == "inspect-count:5") is not null);
                 H.Check("CompInspect_SetStateRefusesBadText",
                     !ReactorDiagnostics.TrySetState(wrapper, 0, "five", out var badError) && badError == "'five' is not a valid int");
+
+                // The rerender a write triggers runs on the host's own UI thread, not on the
+                // process-wide ReactorApp.UIDispatcher (another window's, for hosts on a second UI
+                // thread). Point the process-wide one at a shut-down foreign queue: a rerender
+                // marshalled there would be dropped and the text would never update.
+                var foreignUi = Microsoft.UI.Dispatching.DispatcherQueueController.CreateOnDedicatedThread();
+                await foreignUi.ShutdownQueueAsync();
+                var processWide = ReactorApp.UIDispatcher;
+                try
+                {
+                    ReactorApp.UIDispatcher = foreignUi.DispatcherQueue;
+                    H.Check("CompInspect_SetStateWithForeignProcessDispatcher", ReactorDiagnostics.TrySetState(wrapper, 0, "6", out _));
+                }
+                finally { ReactorApp.UIDispatcher = processWide; }
+                await Harness.WaitFor(() => H.FindControl<TextBlock>(t => t.Text == "inspect-count:6") is not null, maxPasses: 16, perPassMs: 10);
+                H.Check("CompInspect_RerenderUsesTheOwningDispatcher", H.FindControl<TextBlock>(t => t.Text == "inspect-count:6") is not null);
+                ReactorDiagnostics.TrySetState(wrapper, 0, "5", out _);
+                await Harness.WaitFor(() => H.FindControl<TextBlock>(t => t.Text == "inspect-count:5") is not null, maxPasses: 16, perPassMs: 10);
 
                 // ── Memo component ──
                 var memoWrapper = VisualTreeHelper.GetParent(memoLeaf) as UIElement;
@@ -230,16 +248,16 @@ internal static class ComponentInspectionFixtures
 
             // A reconciler owned by another UI thread is never read: with this host's dispatcher
             // swapped for a dedicated thread's, its root no longer resolves from here.
-            var ownDispatcher = host.Reconciler.DiagnosticsDispatcher;
+            var ownDispatcher = host.Reconciler.OwningDispatcher;
             var foreignThread = Microsoft.UI.Dispatching.DispatcherQueueController.CreateOnDedicatedThread();
             try
             {
-                host.Reconciler.DiagnosticsDispatcher = foreignThread.DispatcherQueue;
+                host.Reconciler.OwningDispatcher = foreignThread.DispatcherQueue;
                 H.Check("RootAnchor_ForeignThreadReconcilerSkipped", ReactorDiagnostics.DescribeComponent(target) is null);
             }
             finally
             {
-                host.Reconciler.DiagnosticsDispatcher = ownDispatcher;
+                host.Reconciler.OwningDispatcher = ownDispatcher;
                 await foreignThread.ShutdownQueueAsync();
             }
             H.Check("RootAnchor_OwnThreadReconcilerRead", IsRoot(ReactorDiagnostics.DescribeComponent(target)));
@@ -412,6 +430,24 @@ internal static class ComponentInspectionFixtures
                     maxPasses: 16, perPassMs: 10);
                 H.Check("RootAnchor_WindowContent",
                     window.Content is UIElement windowContent && IsRoot(ReactorDiagnostics.DescribeComponent(windowContent)));
+                // With an overlay on, the window content is the overlay wrapper, which anchors the root
+                // only through the published destination. Requesting a ContentTarget does not move the
+                // root until the next render publishes there, so the wrapper stays its anchor meanwhile.
+                var overlayWas = ReactorFeatureFlags.HighlightReconcileChanges;
+                try
+                {
+                    ReactorFeatureFlags.HighlightReconcileChanges = true;
+                    bare.RequestRender();
+                    await Harness.WaitFor(() => window.Content is UIElement c && !ReferenceEquals(c, bare.CurrentControl),
+                        maxPasses: 16, perPassMs: 10);
+                    var shownWrapper = window.Content as UIElement;
+                    H.Check("RootAnchor_WindowOverlayWrapperInstalled",
+                        shownWrapper is not null && !ReferenceEquals(shownWrapper, bare.CurrentControl));
+                    bare.ContentTarget = new Border();
+                    H.Check("RootAnchor_WindowContentAnchorsUntilRetargetRenders",
+                        shownWrapper is not null && IsRoot(ReactorDiagnostics.DescribeComponent(shownWrapper)));
+                }
+                finally { ReactorFeatureFlags.HighlightReconcileChanges = overlayWas; }
             }
             finally
             {

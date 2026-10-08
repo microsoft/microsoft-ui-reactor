@@ -206,7 +206,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         var published = _claimedContentTarget as WinUI.Border;
         if (published is not null && !OwnsContentTarget(published)) published = null; // taken over by another host
         UIElement? container = published
-            ?? (ContentTarget is null && _claimedContentTarget is null && !_windowClosed ? _window.Content as UIElement : null);
+            ?? (_claimedContentTarget is null && !_windowClosed ? _window.Content as UIElement : null);
         UIElement? installed = published is not null ? published.Child : container;
         var wrapper = _overlayWiring?.WrapperRoot;
         // Content identity proves ownership when there is content. An empty container proves
@@ -277,7 +277,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         _window = window;
         _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-        _reconciler.DiagnosticsDispatcher = _dispatcherQueue;
+        _reconciler.OwningDispatcher = _dispatcherQueue;
         // Off-thread rerenders marshal via ReactorApp.UIDispatcher (captured
         // in OnLaunched). For embedded ReactorHostControl scenarios where
         // there's no Reactor.Run, fall back to seeding UIDispatcher with this

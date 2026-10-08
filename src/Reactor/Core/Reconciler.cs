@@ -2511,7 +2511,7 @@ public sealed partial class Reconciler : IDisposable
     /// before invoking the parent requestRerender, so the memo check is bypassed.
     /// Captures the node directly to avoid accessing _componentNodes from background threads.
     /// </summary>
-    private static Action CreateComponentRerender(ComponentNode node, Action requestRerender)
+    private Action CreateComponentRerender(ComponentNode node, Action requestRerender)
     {
         return () =>
         {
@@ -2527,11 +2527,13 @@ public sealed partial class Reconciler : IDisposable
             // SECURITY (TASK-063): if invoked off the UI thread (e.g.,
             // setState(threadSafe:true) firing from a worker, or a worker
             // that owns its own DispatcherQueue), marshal onto the UI
-            // dispatcher captured at host bring-up so we don't race the
-            // reconciler and ElementPool from a background thread.
-            // A non-null GetForCurrentThread() doesn't imply UI affinity —
-            // the only authoritative check is HasThreadAccess on the UI DQ.
-            var uiDq = Microsoft.UI.Reactor.ReactorApp.UIDispatcher;
+            // dispatcher so we don't race the reconciler and ElementPool from
+            // a background thread. That is this reconciler's owning thread
+            // (its host's), not the process-wide one: hosts on a second UI
+            // thread must render on theirs. A non-null GetForCurrentThread()
+            // doesn't imply UI affinity — the only authoritative check is
+            // HasThreadAccess on the UI DQ.
+            var uiDq = OwningDispatcher ?? Microsoft.UI.Reactor.ReactorApp.UIDispatcher;
             bool onUiThread = false;
             if (uiDq is not null)
             {

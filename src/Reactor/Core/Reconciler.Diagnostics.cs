@@ -26,13 +26,15 @@ public sealed partial class Reconciler
 
     /// <summary>
     /// The owning host's UI dispatcher, set alongside <see cref="DiagnosticsRootResolver"/>.
-    /// Hosts can live on different UI threads, so a lookup skips every reconciler whose
-    /// dispatcher is not the calling thread's before touching its unsynchronized tables or
-    /// controls. A reconciler with no dispatcher recorded is not inspected.
+    /// Component rerenders marshal onto it (hosts can live on different UI threads, so the
+    /// process-wide <c>ReactorApp.UIDispatcher</c> may be another window's), and diagnostics
+    /// lookups skip every reconciler whose dispatcher is not the calling thread's before
+    /// touching its unsynchronized tables or controls. A reconciler with no dispatcher recorded
+    /// is not inspected, and its rerenders fall back to <c>ReactorApp.UIDispatcher</c>.
     /// </summary>
-    internal Microsoft.UI.Dispatching.DispatcherQueue? DiagnosticsDispatcher { get; set; }
+    internal Microsoft.UI.Dispatching.DispatcherQueue? OwningDispatcher { get; set; }
 
-    private bool IsInspectableFromThisThread => DiagnosticsDispatcher is { HasThreadAccess: true };
+    private bool IsInspectableFromThisThread => OwningDispatcher is { HasThreadAccess: true };
 
     /// <summary>The reconcilers of live hosts that the calling thread may inspect.</summary>
     private static IEnumerable<Reconciler> InspectableReconcilers()
