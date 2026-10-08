@@ -1584,8 +1584,8 @@ public sealed partial class Reconciler
     /// <list type="bullet">
     /// <item>Output is another memo (nested): self-diff, so the nested memo's own refresh diffs
     /// against the recorded (innermost) output.</item>
-    /// <item>Output changed shape (root type or key) from the recorded one: remount it; the
-    /// caller swaps the replacement in and unmounts the old control.</item>
+    /// <item>Output changed shape (root type or key) from the recorded one: remount it and
+    /// unmount the old control here; the caller swaps the replacement in.</item>
     /// <item>Nothing recorded (a control that is not a FrameworkElement): self-diff.</item>
     /// <item>Output is Empty: keep the realized control. Update can't express a removal, and
     /// a same-key factory is pure by contract, so a resource edit that empties it is out of
@@ -1607,7 +1607,14 @@ public sealed partial class Reconciler
         else if (CanUpdate(recorded, inner))
             replacement = Update(recorded, inner, control, requestRerender);
         else
+        {
+            // The output changed shape: mount the new one and unmount the old here, so every
+            // caller is covered, including the hosted slots (dialogs, popups, flyouts, tree and
+            // list containers) that swap a replacement in without unmounting. Callers that do
+            // unmount a replacement track this one (UpdateSlotChild) and skip a second unmount.
             replacement = Mount(inner, requestRerender);
+            if (replacement is not null) Unmount(control);
+        }
 
         if ((replacement ?? control) is FrameworkElement realized)
             GetOrCreateReactorState(realized).KeyedMemoOutput = inner;

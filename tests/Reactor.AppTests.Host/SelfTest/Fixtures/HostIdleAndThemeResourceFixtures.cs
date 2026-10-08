@@ -167,8 +167,9 @@ internal static class HostIdleAndThemeResourceFixtures
             var previousActiveHost = ReactorApp.ActiveHostInternal;
             var target = new Border();
             H.SetContent(target);
-            bool shapeItemCleanedUp = false;
-            bool templatedItemCleanedUp = false;
+            int shapeItemCleanedUp = 0;
+            int templatedItemCleanedUp = 0;
+            int popupContentCleanedUp = 0;
             try
             {
                 // Disposed at the end of this block, before finally restores the active host.
@@ -204,7 +205,7 @@ internal static class HostIdleAndThemeResourceFixtures
                             Memo("shapeItem", () => ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red
                                 ? RenderEachTime(fctx =>
                                 {
-                                    fctx.UseEffect(() => () => shapeItemCleanedUp = true);
+                                    fctx.UseEffect(() => () => shapeItemCleanedUp++);
                                     return TextBlock("ShapeItemBefore");
                                 })
                                 : TextBlock("ShapeItemAfter")),
@@ -228,13 +229,25 @@ internal static class HostIdleAndThemeResourceFixtures
                         TreeView(treeNodes),
                         // Not memoized: the DSL builds fresh but equivalent node arrays every render.
                         TreeView(new TreeViewNodeData("FreshRoot", [new TreeViewNodeData("FreshChild")])),
+                        // Node content that switches to and from Empty with the resource.
+                        ContentTogglingTree(),
+                        // A hosted slot that swaps an update's replacement in without unmounting the
+                        // old control: the refresh must unmount it itself.
+                        Popup(Memo("popupShape",
+                            () => ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red
+                                ? RenderEachTime(fctx =>
+                                {
+                                    fctx.UseEffect(() => () => popupContentCleanedUp++);
+                                    return TextBlock("PopupBefore");
+                                })
+                                : TextBlock("PopupAfter"))),
                         // A templated-list item that changes shape with the resource: the replaced
                         // item must be unmounted.
                         ListView(templatedItems, static s => s, (_, _) => Memo("templatedShape",
                             () => ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red
                                 ? RenderEachTime(fctx =>
                                 {
-                                    fctx.UseEffect(() => () => templatedItemCleanedUp = true);
+                                    fctx.UseEffect(() => () => templatedItemCleanedUp++);
                                     return TextBlock("TemplatedBefore");
                                 })
                                 : TextBlock("TemplatedAfter"))),
@@ -277,9 +290,13 @@ internal static class HostIdleAndThemeResourceFixtures
                 var listView = FindDescendant<ListView>(target);
                 if (listView is not null) listView.SelectedIndex = 1;
                 H.Check("ThemeMemo_ShapeRerenderAloneIsStale", FindText(target, "ShapeProbeBefore") is not null);
-                H.Check("ThemeMemo_TemplatedItemRerenderAloneKeepsIt", !templatedItemCleanedUp && FindText(target, "TemplatedBefore") is not null,
+                H.Check("ThemeMemo_PopupContentRerenderAloneKept", popupContentCleanedUp == 0);
+                H.Check("ThemeMemo_TreeContentRerenderAloneUnchanged", ToggleTree(target) is { } toggleBefore
+                    && toggleBefore.RootNodes[0].Content is UIElement && toggleBefore.RootNodes[1].Content is null,
+                    $"first={ToggleTree(target)?.RootNodes[0].Content?.GetType().Name ?? "null"} second={ToggleTree(target)?.RootNodes[1].Content?.GetType().Name ?? "null"}");
+                H.Check("ThemeMemo_TemplatedItemRerenderAloneKeepsIt", templatedItemCleanedUp == 0 && FindText(target, "TemplatedBefore") is not null,
                     $"cleanedUp={templatedItemCleanedUp} before={FindText(target, "TemplatedBefore") is not null}");
-                H.Check("ThemeMemo_ShapeItemRerenderAloneKeepsIt", !shapeItemCleanedUp && !HasComboText(target, "ShapeItemAfter"));
+                H.Check("ThemeMemo_ShapeItemRerenderAloneKeepsIt", shapeItemCleanedUp == 0 && !HasComboText(target, "ShapeItemAfter"));
                 H.Check("ThemeMemo_GapItemRerenderAloneIsStale", ListItemColor(target, "GapItemProbe") == Colors.Red, $"color={ListItemColor(target, "GapItemProbe")}");
                 H.Check("ThemeMemo_NestedMemoRerenderAloneIsStale", ProbeColor(target, "NestedMemoProbe") == Colors.Red, $"color={ProbeColor(target, "NestedMemoProbe")}");
                 H.Check("ThemeMemo_ResolvedMemoRerenderAloneIsStale", ProbeColor(target, "ResolvedMemoProbe") == Colors.Red, $"color={ProbeColor(target, "ResolvedMemoProbe")}");
@@ -293,13 +310,18 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_GridViewItemNotifiedIsBlue", ProbeColor(target, "GvItemProbe") == Colors.Blue, $"color={ProbeColor(target, "GvItemProbe")}");
                 H.Check("ThemeMemo_LazyRowNotifiedMidScrollIsBlue", ProbeColor(target, "LazyProbe") == Colors.Blue, $"color={ProbeColor(target, "LazyProbe")}");
                 H.Check("ThemeMemo_TreeViewNodesKept", NodeKept(treeView, rootNode), DescribeNode(treeView, rootNode));
+                H.Check("ThemeMemo_PopupContentReplacedAndUnmounted", popupContentCleanedUp == 1, $"cleanups={popupContentCleanedUp}");
+                H.Check("ThemeMemo_TreeContentVisibleToEmpty", ToggleTree(target)?.RootNodes[0].Content is null,
+                    $"content={ToggleTree(target)?.RootNodes[0].Content?.GetType().Name ?? "null"}");
+                H.Check("ThemeMemo_TreeContentEmptyToVisible", ToggleTree(target)?.RootNodes[1].Content is UIElement,
+                    $"content={ToggleTree(target)?.RootNodes[1].Content?.GetType().Name ?? "null"}");
                 H.Check("ThemeMemo_FreshTreeViewNodesKept", NodeKept(freshTreeView, freshRoot), DescribeNode(freshTreeView, freshRoot));
                 bool templatedAfterShown = await Harness.WaitFor(() => FindText(target, "TemplatedAfter") is not null, maxPasses: 20, perPassMs: 20);
-                H.Check("ThemeMemo_TemplatedItemReplacedAndUnmounted", templatedItemCleanedUp && templatedAfterShown,
+                H.Check("ThemeMemo_TemplatedItemReplacedAndUnmounted", templatedItemCleanedUp == 1 && templatedAfterShown,
                     $"cleanedUp={templatedItemCleanedUp} after={FindText(target, "TemplatedAfter") is not null}");
                 H.Check("ThemeMemo_ListViewSelectionKept", listView?.SelectedIndex == 1, $"selected={listView?.SelectedIndex}");
                 H.Check("ThemeMemo_ShapeChangeRemounts", FindText(target, "ShapeProbeAfter") is not null && FindText(target, "ShapeProbeBefore") is null);
-                H.Check("ThemeMemo_ShapeItemReplacedAndUnmounted", shapeItemCleanedUp && HasComboText(target, "ShapeItemAfter"),
+                H.Check("ThemeMemo_ShapeItemReplacedAndUnmounted", shapeItemCleanedUp == 1 && HasComboText(target, "ShapeItemAfter"),
                     $"cleanedUp={shapeItemCleanedUp} after={HasComboText(target, "ShapeItemAfter")}");
                 H.Check("ThemeMemo_GapItemNotifiedIsBlue", ListItemColor(target, "GapItemProbe") == Colors.Blue, $"color={ListItemColor(target, "GapItemProbe")}");
                 H.Check("ThemeMemo_NestedMemoNotifiedIsBlue", ProbeColor(target, "NestedMemoProbe") == Colors.Blue, $"color={ProbeColor(target, "NestedMemoProbe")}");
@@ -340,6 +362,29 @@ internal static class HostIdleAndThemeResourceFixtures
             for (int i = 0; i < count; i++)
             {
                 if (FindDescendant<T>(VisualTreeHelper.GetChild(root, i)) is { } found) return found;
+            }
+            return null;
+        }
+
+        // Legacy ContentElement nodes (deprecated, still supported): the first node has content
+        // while the resource is red and is Empty after; the second the other way round.
+#pragma warning disable CS0618
+        private static Element ContentTogglingTree()
+        {
+            bool red = ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red;
+            return TreeView(
+                new TreeViewNodeData("ToggleA") { ContentElement = red ? TextBlock("ToggleAContent") : Empty() },
+                new TreeViewNodeData("ToggleB") { ContentElement = red ? Empty() : TextBlock("ToggleBContent") });
+        }
+#pragma warning restore CS0618
+
+        private static TreeView? ToggleTree(DependencyObject root)
+        {
+            if (root is TreeView { RootNodes.Count: 2 } tv) return tv;
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                if (ToggleTree(VisualTreeHelper.GetChild(root, i)) is { } found) return found;
             }
             return null;
         }

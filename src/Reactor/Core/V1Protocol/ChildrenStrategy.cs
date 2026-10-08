@@ -497,10 +497,13 @@ public sealed record TreeChildren<TElement, TControl>(
             var o = oldData[i];
             var d = newData[i];
 #pragma warning disable CS0618
-            if (d.ContentElement is { } content && node.Content is UIElement existing)
+            if (d.ContentElement is { } content)
             {
+                // Either side may be Empty, which mounts nothing: reconcile against whatever is
+                // there (possibly nothing) and take the result even when it is null.
+                var existing = node.Content as UIElement;
                 var next = reconciler.ReconcileV1Child(o.ContentElement, content, existing, requestRerender);
-                if (next is not null && !ReferenceEquals(next, existing)) node.Content = next;
+                if (!ReferenceEquals(existing, next)) node.Content = next;
             }
 #pragma warning restore CS0618
             if (d.Children is not null && o.Children is not null)

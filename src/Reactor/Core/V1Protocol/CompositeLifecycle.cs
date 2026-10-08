@@ -323,12 +323,12 @@ internal static class CompositeLifecycle
         var outgoingContent = existingContent;
         if (reconciler.CanUpdate(oldFf.Content, newFf.Content))
         {
-            var replacement = reconciler.Update(oldFf.Content, newFf.Content, existingContent, requestRerender);
+            var replacement = reconciler.UpdateChildTracked(oldFf.Content, newFf.Content, existingContent, requestRerender, out var unmountedByUpdate);
             if (replacement is not null)
             {
                 // WinUI indexer assignment doesn't fully disconnect the old element's
                 // parent state — use RemoveAt+Insert (see ChildCollection.Replace).
-                reconciler.UnmountChild(existingContent);
+                if (!unmountedByUpdate) reconciler.UnmountChild(existingContent);
                 panel.Children.RemoveAt(1);
                 panel.Children.Insert(1, replacement);
                 existingContent = replacement;

@@ -2778,6 +2778,15 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
+    /// <see cref="UpdateChild"/> for a caller that unmounts a replaced control: reports whether
+    /// the update already unmounted it (e.g. a same-key Memo remounting its output during a
+    /// resource refresh), so the caller doesn't unmount it twice.
+    /// </summary>
+    internal UIElement? UpdateChildTracked(Element oldEl, Element newEl, UIElement control, Action requestRerender,
+        out bool unmountedByUpdate)
+        => UpdateSlotChild(oldEl, newEl, control, requestRerender, out unmountedByUpdate);
+
+    /// <summary>
     /// Unmounts a child control. Public so registered type handlers can unmount children.
     /// </summary>
     public void UnmountChild(UIElement control)
