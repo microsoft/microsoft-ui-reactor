@@ -407,6 +407,10 @@ internal static class HostDiagnosticsFixtures
                 H.Check("HostDiagRace_NoTornSites", bad == 0, $"torn={bad} of {reads}");
                 H.Check("HostDiagRace_HostAndSiteAlwaysPresent", missing == 0, $"missing host or site in {missing} of {reads}");
                 H.Check("HostDiagRace_FinalSite", InfoFor(host)?.MountSite == a);
+                // Mounting the active instance again keeps the root, but the site follows the call.
+                host.Mount(root, b);
+                H.Check("HostDiagRace_SameInstanceRemountUpdatesSite", InfoFor(host)?.MountSite == b,
+                    $"site={InfoFor(host)?.MountSite?.ToShortString() ?? "null"}");
             }
             finally
             {
@@ -463,9 +467,16 @@ internal static class HostDiagnosticsFixtures
                 H.Check("HostDiagIsland_MountSite",
                     info.MountSite?.LineNumber == mountLine,
                     $"site={info.MountSite?.ToShortString() ?? "null"} expected line {mountLine}");
+                // Mounting the active instance again keeps the root, but the site follows the call.
+                island.Mount(root); var againLine = Line();
+                var againSite = InfoFor(island)?.MountSite;
+                H.Check("HostDiagIsland_SameInstanceRemountUpdatesSite",
+                    againSite?.LineNumber == againLine && againLine != mountLine,
+                    $"site={againSite?.ToShortString() ?? "null"} expected line {againLine}");
 #else
                 _ = mountLine;
                 H.Skip("HostDiagIsland_MountSite", SkipReason);
+                H.Skip("HostDiagIsland_SameInstanceRemountUpdatesSite", SkipReason);
 #endif
 
                 var factoryInfo = InfoFor(factoryIsland);
