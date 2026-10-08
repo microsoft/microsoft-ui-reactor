@@ -728,6 +728,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     private void Render()
     {
         _isRendering = true;
+        // This pass is the hook-order retry if the previous one scheduled it; the marker is
+        // dropped when the pass ends even if it never reconciled (a null or failed root).
+        bool hotReloadRetryPass = _reconciler.HotReloadRetryPending;
         // Atomic capture-and-clear gives us at-most-once recovery per
         // UpdateApplication call:
         //
@@ -781,9 +784,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                 mode);
             ctx.ResetForHotReload();
             // The retry runs outside a hot-reload pass; keep ComponentRendered attributing
-            // the root's retry to hot reload. This host's hot-reload passes are not forced,
-            // so its children keep their own reasons (as they do in the pass itself).
+            // it to hot reload: the root here, and its children via the reconciler.
             _rootDiagnostics.MarkHotReloadRetry();
+            _reconciler.HotReloadRetryPending = true;
             RequestRender();
         }
 
@@ -1091,6 +1094,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         finally
         {
             _isRendering = false;
+            if (hotReloadRetryPass) _reconciler.HotReloadRetryPending = false;
         }
     }
 

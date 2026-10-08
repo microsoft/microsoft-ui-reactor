@@ -756,6 +756,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     private void Render()
     {
         _isRendering = true;
+        // This pass is the hook-order retry if the previous one scheduled it; the marker is
+        // dropped when the pass ends even if it never reconciled (a null or failed root).
+        bool hotReloadRetryPass = _reconciler.HotReloadRetryPending;
         // Atomic capture-and-clear gives us at-most-once recovery per
         // UpdateApplication call — see the matching block in
         // ReactorHostControl.Render() for the full rationale.
@@ -802,10 +805,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
                 mode);
             ctx.ResetForHotReload();
             // The retry runs outside a hot-reload pass; keep ComponentRendered attributing
-            // it to hot reload: the root here, and (since this host's hot-reload pass is a
-            // forced one whose force flag is still pending) its children via the reconciler.
+            // it to hot reload: the root here, and its children via the reconciler.
             _rootDiagnostics.MarkHotReloadRetry();
-            _reconciler.ForceFullRenderIsHotReloadRetry = true;
+            _reconciler.HotReloadRetryPending = true;
             RequestRender();
         }
 
@@ -1154,6 +1156,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         finally
         {
             _isRendering = false;
+            if (hotReloadRetryPass) _reconciler.HotReloadRetryPending = false;
             ReactorApp.ActiveHostInternal = prevActiveHost;
         }
     }

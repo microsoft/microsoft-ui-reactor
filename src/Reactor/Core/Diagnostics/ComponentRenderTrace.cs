@@ -41,7 +41,10 @@ internal static class ComponentRenderTrace
         /// </summary>
         public const string Parent = "parent";
 
-        /// <summary>A hot-reload pass forced every component to re-render.</summary>
+        /// <summary>
+        /// Rendered during a hot-reload pass (forced or not, whatever else changed), or by
+        /// the retry a host schedules after a hot-reload hook-order recovery.
+        /// </summary>
         public const string HotReload = "hotReload";
 
         /// <summary>A full re-render was forced outside hot reload (e.g. the reset-all-state escape hatch).</summary>
@@ -81,8 +84,10 @@ internal static class ComponentRenderTrace
     /// <param name="memoReason">What the memo gate found when it let the render through, or null when there is no gate.</param>
     internal static string ClassifyUpdate(bool forced, bool hotReloadPass, bool selfTriggered, string? memoReason)
     {
-        if (forced) return hotReloadPass ? Reasons.HotReload : Reasons.Forced;
-        if (selfTriggered) return hotReloadPass ? Reasons.HotReload : Reasons.State;
+        // Every render of a hot-reload pass is hot reload, whether or not the host forced it.
+        if (hotReloadPass) return Reasons.HotReload;
+        if (forced) return Reasons.Forced;
+        if (selfTriggered) return Reasons.State;
         return memoReason ?? Reasons.Parent;
     }
 
