@@ -834,6 +834,46 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
         selfMountControl.Dispose();
         Take();
 
+        // ── A deferred retirement's cleanup mounts yet another root ─────────────
+        // The pass that runs the deferred cleanup renders the root that cleanup mounted, and
+        // reports it as itself (its own name, reason mount), not as the root it replaced.
+        void CheckCleanupMount(string check, List<ReactorEvent> evs)
+        {
+            Console.WriteLine($"# {check}: " + string.Join(", ", evs.Select(e => $"{e.Payload[0]}#{e.Payload[1]}:{e.Payload[2]}")));
+            var final = evs.Where(e => (string)e.Payload[0]! == nameof(RenderedHostControlRoot)).ToList();
+            H.Check(check,
+                final.Count >= 1 && (string)final[0].Payload[2]! == ComponentRenderTrace.Reasons.Mount
+                    && !evs.Any(e => (string)e.Payload[0]! == nameof(RenderedSwapComponentRoot)));
+        }
+
+        Take();
+        var cleanupMountHost = H.CreateHost();
+        var cleanupMounter = new RenderedCleanupMountsRoot();
+        cleanupMounter.Replace = () => cleanupMountHost.Mount(new RenderedSwapComponentRoot());
+        cleanupMounter.OnCleanup = () => cleanupMountHost.Mount(new RenderedHostControlRoot());
+        cleanupMountHost.Mount(cleanupMounter);
+        await Harness.WaitFor(() => H.FindText("host control root 0") is not null, maxPasses: 32, perPassMs: 10);
+        await Harness.Render();
+        CheckCleanupMount("ComponentRendered_DeferredCleanupMount_ReportsTheMountedRoot", Take());
+
+        var cleanupMountControl = new ReactorHostControl();
+        var controlCleanupMounter = new RenderedCleanupMountsRoot();
+        controlCleanupMounter.Replace = () => cleanupMountControl.Mount(new RenderedSwapComponentRoot());
+        controlCleanupMounter.OnCleanup = () => cleanupMountControl.Mount(new RenderedHostControlRoot());
+        cleanupMountControl.Mount(controlCleanupMounter);
+        H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = cleanupMountControl });
+        var cleanupControlEvents = new List<ReactorEvent>();
+        await Harness.WaitFor(() =>
+        {
+            cleanupControlEvents.AddRange(Take());
+            return cleanupControlEvents.Any(e => (string)e.Payload[0]! == nameof(RenderedHostControlRoot));
+        }, maxPasses: 32, perPassMs: 10);
+        await Harness.WaitFor(() => false, maxPasses: 3, perPassMs: 10);
+        cleanupControlEvents.AddRange(Take());
+        CheckCleanupMount("ComponentRendered_HostControlDeferredCleanupMount_ReportsTheMountedRoot", cleanupControlEvents);
+        cleanupMountControl.Dispose();
+        Take();
+
         // ── Generic component classes are named like RenderError names them ─
         var genericHost = H.CreateHost();
         genericHost.Mount(new RenderedGenericRoot<int>());
@@ -1363,6 +1403,31 @@ internal sealed class RenderedNullRoot : Component
     {
         UseEffect(() => EffectRan = true);
         return null!;
+    }
+}
+
+// Its effect mounts a replacement (so its retirement is deferred), and its cleanup, which
+// runs during that deferred retirement, mounts another root.
+internal sealed class RenderedCleanupMountsRoot : Component
+{
+    public Action? Replace;
+    public Action? OnCleanup;
+
+    public override Element Render()
+    {
+        UseEffect(() =>
+        {
+            var replace = Replace;
+            Replace = null;
+            replace?.Invoke();
+            return () =>
+            {
+                var onCleanup = OnCleanup;
+                OnCleanup = null;
+                onCleanup?.Invoke();
+            };
+        }, Array.Empty<object>());
+        return TextBlock("cleanup mounts root");
     }
 }
 

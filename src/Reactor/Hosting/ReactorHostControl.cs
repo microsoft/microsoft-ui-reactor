@@ -384,7 +384,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         _deferredRetirements = null;
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? first = null;
         foreach (var (component, funcContext) in deferred)
-            first ??= RetireContexts(component, funcContext);
+        {
+            // Every queued root is retired; only the first failure is kept.
+            var failure = RetireContexts(component, funcContext);
+            first ??= failure;
+        }
         first?.Throw();
     }
 
@@ -663,8 +667,6 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         {
             try
             {
-                _renderingRoot = _rootComponent;
-                _renderingRootDiagnostics = _rootDiagnostics;
                 Render();
             }
             finally
@@ -791,6 +793,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                 RetireDeferredRoots();
                 failurePhase = RenderErrorSource.Reconcile;
             }
+            // Snapshot the root this pass renders, after deferred retirement (whose cleanups
+            // may Mount) and before any of its code runs (which may Mount again; RenderLoop
+            // clears the snapshot when the pass ends).
+            _renderingRoot = _rootComponent;
+            _renderingRootDiagnostics = _rootDiagnostics;
 
             Element? newTree = null;
 
