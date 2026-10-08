@@ -285,6 +285,22 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw "dotnet new reactor exited $LASTEXITCODE" }
               if (-not (Test-Path 'TestApp/TestApp.csproj')) { throw "TestApp/TestApp.csproj not produced" }
 
+              # The template floats Microsoft.WindowsAppSDK at Version="*", which never
+              # resolves a prerelease. When the repo is pinned to a prerelease SDK channel
+              # (e.g. 2.5.4-experimental), the local Reactor package requires that runtime
+              # and the float resolves the latest stable instead (NU1107). Pin the scaffold
+              # to the repo's version, as a consumer of this Reactor build must.
+              . ../tools/WindowsAppRuntimeId.ps1
+              $sdk = Get-PinnedWindowsAppSdkVersion -PropsPath ../Directory.Build.props
+              if ($sdk -and $sdk.Contains('-')) {
+                  $csproj = 'TestApp/TestApp.csproj'
+                  $text = Get-Content $csproj -Raw
+                  $pinned = $text -replace '(<PackageReference\s+Include="Microsoft\.WindowsAppSDK"\s+Version=")[^"]*(")', "`${1}$sdk`${2}"
+                  if ($pinned -eq $text) { throw "Could not pin Microsoft.WindowsAppSDK to $sdk in $csproj" }
+                  Set-Content -Path $csproj -Value $pinned -NoNewline
+                  Write-Host "Pinned the scaffold's Microsoft.WindowsAppSDK to the repo's prerelease $sdk."
+              }
+
               dotnet restore TestApp/TestApp.csproj --nologo -v:m
               if ($LASTEXITCODE -ne 0) { throw "dotnet restore for TestApp exited $LASTEXITCODE" }
           } finally {

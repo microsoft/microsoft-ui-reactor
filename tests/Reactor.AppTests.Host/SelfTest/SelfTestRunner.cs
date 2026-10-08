@@ -204,6 +204,14 @@ internal static class SelfTestRunner
     // debugging workflow.
     private static readonly string[] DefaultAotSkipPatterns =
     {
+        // -- The TableView edit fixture drives the edit through the platform's cell
+        // automation peer, reached via FrameworkElementAutomationPeer.CreatePeerForElement
+        // on a TableViewRow. In-process under NativeAOT that call returns null (measured on
+        // WinUI 2.3.10-experimental), so the fixture cannot reach the peer at all. The
+        // product path it covers — TextColumn's converter turning a committed edit into the
+        // onEdit callback — is not reflection-based; every other TableView fixture,
+        // including the immutable-snapshot one, runs under AOT. --
+        "TableView_TextColumnEditViaAutomation",
         // -- UseObservableTree subscribes to nested INotifyPropertyChanged by
         // walking the model graph with Type.GetProperties (see
         // ObservableTreeTracker.CreateInpcCandidateProperties). The fixture's

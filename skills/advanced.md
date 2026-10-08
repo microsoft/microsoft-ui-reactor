@@ -103,7 +103,7 @@ Chart(
 
 | Rule | Why |
 |---|---|
-| Pass immutable snapshots (arrays/lists of records) and replace them to change rows; add `.KeyRows<T>(...)` for stable identity. | The handler diffs each snapshot into a collection it owns — the table never resets, so selection, scroll and edits survive. A user-owned `INotifyCollectionChanged` collection is bound as-is instead. |
+| Pass immutable snapshots (arrays/lists of records) and replace them to change rows; add `.KeyRows<T>(...)` for stable identity. | The handler diffs each snapshot into a collection it owns — the table never resets, so selection, scroll and edits survive. A user-owned `INotifyCollectionChanged` collection is bound as-is instead (under NativeAOT it must be a named `partial` type for CsWinRT to project it). |
 | Prefer `TextColumn<T>(header, read, onEdit)`; edits arrive as a callback, nothing is written into the row. | It is the native text column (accessible TextBlock cell, TextBox editor, UIA value pattern) fed by a pathless binding + C# converter — no reflection, NativeAOT-safe. |
 | `BoundColumn(header, path)` is the classic `{Binding}` for mutable INPC models; under NativeAOT mark row types `[WinRT.GeneratedBindableCustomProperty]` (partial), and opt into editing with `.ReadOnly(false)`. | The path resolves by name through `ICustomPropertyProvider`; the control defaults to read-only. |
 | Columns reconcile by position; same column type ⇒ updated in place (width/sort state survive). | Inserting/removing/retyping a column rebuilds the native column list. |

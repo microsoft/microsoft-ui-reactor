@@ -28,7 +28,8 @@ public sealed record TableViewElement : Element
     /// a collection it owns (see <see cref="RowKey"/>), so only the rows that changed are
     /// touched and selection, scroll position and the active edit survive. A user-owned
     /// <see cref="global::System.Collections.Specialized.INotifyCollectionChanged"/>
-    /// collection is bound directly instead.
+    /// collection is bound directly instead; under NativeAOT it must be a named
+    /// <c>partial</c> collection type, or CsWinRT cannot project it.
     /// </summary>
     public IEnumerable? ItemsSource { get; init; }
 

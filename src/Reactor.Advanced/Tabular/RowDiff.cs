@@ -4,6 +4,15 @@ using System.Collections.ObjectModel;
 namespace Microsoft.UI.Reactor.Advanced.Tabular;
 
 /// <summary>
+/// The collection a <see cref="TableViewHandler"/> binds for a row snapshot. A named
+/// <c>partial</c> type, so the CsWinRT AOT generator emits its WinRT collection interfaces
+/// (<c>IBindableVector</c>, <c>INotifyCollectionChanged</c>): an anonymous
+/// <c>ObservableCollection&lt;object?&gt;</c> assigned to an <c>object</c>-typed property is
+/// rejected under NativeAOT ("items must implement a supported collection interface").
+/// </summary>
+internal sealed partial class TableRows : ObservableCollection<object?>;
+
+/// <summary>
 /// Applies an immutable row snapshot to the collection a <see cref="TableViewHandler"/> binds,
 /// as the smallest run of collection edits, so the native table re-realizes only the rows that
 /// changed and keeps its selection, scroll position and active edit.

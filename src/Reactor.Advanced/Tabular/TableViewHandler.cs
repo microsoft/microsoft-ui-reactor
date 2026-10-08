@@ -242,7 +242,7 @@ public sealed partial class TableViewHandler : IElementHandler<TableViewElement,
         }
         else
         {
-            state.Rows ??= new ObservableCollection<object?>();
+            state.Rows ??= new TableRows();
             if (!ReferenceEquals(state.RowsSnapshot, el.ItemsSource) || !ReferenceEquals(state.RowsKey, el.RowKey))
             {
                 RowDiff.Apply(state.Rows, el.ItemsSource, el.RowKey);
@@ -316,7 +316,7 @@ public sealed partial class TableViewHandler : IElementHandler<TableViewElement,
         public Func<object, object?>? AppliedGroupBy;
         public object? AppliedItemsSource;
         public bool ItemsSourceApplied;
-        public ObservableCollection<object?>? Rows;
+        public TableRows? Rows;
         public object? RowsSnapshot;
         public Func<object, object?>? RowsKey;
         // The row being edited and its column, between BeginningEdit and the commit.

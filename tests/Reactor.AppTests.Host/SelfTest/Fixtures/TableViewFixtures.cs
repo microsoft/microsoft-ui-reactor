@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using Microsoft.UI.Reactor.Advanced.Tabular;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
@@ -51,7 +50,9 @@ internal static partial class TableViewFixtures
 
             H.Check("TableView_Mount_TemplateCellsRealized",
                 await Harness.WaitFor(() => H.FindText("score:42") is not null && H.FindText("score:99") is not null,
-                    maxPasses: 40, perPassMs: 25));
+                    maxPasses: 40, perPassMs: 25),
+                // A mount failure renders an error panel instead of the table; carry its text.
+                string.Join(" | ", H.FindAllControls<TextBlock>(_ => true).Select(t => t.Text).Take(3)));
             H.Check("TableView_Mount_TextColumnBindingRealized",
                 await Harness.WaitFor(() => H.FindText("Alice") is not null, maxPasses: 20, perPassMs: 25));
 
@@ -169,7 +170,7 @@ internal static partial class TableViewFixtures
     {
         public override async Task RunAsync()
         {
-            var rows = new ObservableCollection<Row>(Rows());
+            var rows = Rows();
             var host = H.CreateHost();
             host.Mount(ctx =>
             {
@@ -225,7 +226,7 @@ internal static partial class TableViewFixtures
                         [.. rows.Select(c => c.Id == 2 ? c with { Name = "Grace H." } : c), new(4, "Barbara", 4)])),
                     Button("Drop first", () => setRows(rows[1..])),
                     TableView(rows,
-                            TextColumn<Contact>("Name", c => c.Name.StartsWith("mvu:") ? c.Name : $"mvu:{c.Name}",
+                            TextColumn<Contact>("Name", c => $"mvu:{c.Name}",
                                 (c, name) => setRows([.. rows.Select(r => r.Id == c.Id ? r with { Name = name } : r)])),
                             TextColumn<Contact>("Score", c => c.Score.ToString()).SortBy<Contact>((a, b) => a.Score.CompareTo(b.Score)))
                         .KeyRows<Contact>(c => c.Id)
@@ -242,21 +243,6 @@ internal static partial class TableViewFixtures
                 && table.Columns[0] is TableViewTextColumn { IsReadOnly: false }
                 && table.Columns[1] is TableViewTextColumn { IsReadOnly: true });
 
-            // Drive a real edit through the native cell peer's UIA SetValue — BeginEdit, type into
-            // the column's TextBox editor, CommitEdit — the path assistive technology uses. The
-            // committed text must reach the onEdit callback, which produces the next snapshot.
-            var alanCell = H.FindText("mvu:Alan")!;
-            var cellHost = (FrameworkElement)Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(alanCell);
-            DependencyObject? walk = cellHost;
-            while (walk is not null and not TableViewRow) walk = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(walk);
-            var peer = new TableViewCellAutomationPeer(cellHost, (TableViewRow)walk!, table.Columns[0], 0);
-            H.Check("TableView_Immutable_CellPeerReadsText", peer.Value == "mvu:Alan" && !peer.IsReadOnly,
-                $"value={peer.Value} readOnly={peer.IsReadOnly}");
-            peer.SetValue("Alan T.");
-            H.Check("TableView_Immutable_EditCommitsThroughCallback",
-                await Harness.WaitFor(() => H.FindText("mvu:Alan T.") is not null && H.FindText("mvu:Alan") is null,
-                    maxPasses: 40, perPassMs: 25));
-            H.Check("TableView_Immutable_EditKeepsBoundCollection", ReferenceEquals(table.ItemsSource, boundSource));
             table.Select(0);
             await Harness.Render();
 
@@ -273,7 +259,7 @@ internal static partial class TableViewFixtures
 
             H.ClickButton("Drop first");
             H.Check("TableView_Immutable_RemovedRowGone",
-                await Harness.WaitFor(() => H.FindText("mvu:Ada") is null && H.FindText("mvu:Alan T.") is not null,
+                await Harness.WaitFor(() => H.FindText("mvu:Ada") is null && H.FindText("mvu:Alan") is not null,
                     maxPasses: 40, perPassMs: 25));
 
             host.Mount(_ => TextBlock("TableView unmounted"));
@@ -281,6 +267,60 @@ internal static partial class TableViewFixtures
         }
     }
 
+    /// <summary>
+    /// A committed edit of a <see cref="TableTextColumn"/> reaches its onEdit callback, driven
+    /// through the platform's own cell automation peer (UIA SetValue: BeginEdit, type into the
+    /// column's TextBox editor, CommitEdit) — the path assistive technology uses.
+    /// </summary>
+    internal class TextColumnEditViaAutomation(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            Contact[] initial = [new(1, "Ada", 3), new(2, "Alan", 2)];
+            var edits = new List<string>();
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (rows, setRows) = ctx.UseState(initial);
+                return TableView(rows,
+                        TextColumn<Contact>("Name", c => c.Name, (c, name) =>
+                        {
+                            edits.Add(name);
+                            setRows([.. rows.Select(r => r.Id == c.Id ? r with { Name = name } : r)]);
+                        }))
+                    .KeyRows<Contact>(c => c.Id)
+                    .Width(400).Height(200);
+            });
+
+            await Harness.WaitFor(() => H.FindText("Alan") is not null, maxPasses: 40, perPassMs: 25);
+            var table = FindTable(H)!;
+            var boundSource = table.ItemsSource;
+
+            // Ask the platform for the row's automation peer and take its cell child — the
+            // same walk a screen reader performs.
+            DependencyObject? rowElement = H.FindText("Alan");
+            while (rowElement is not null and not TableViewRow) rowElement = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(rowElement);
+            var rowPeer = rowElement is null
+                ? null
+                : Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement((TableViewRow)rowElement);
+            var peer = rowPeer?.GetChildren()?.OfType<TableViewCellAutomationPeer>().FirstOrDefault();
+            H.Check("TableView_EditViaUia_CellPeerReadsText", peer is { Value: "Alan", IsReadOnly: false },
+                $"rowPeer={rowPeer?.GetType().Name ?? "null"} peer={peer?.GetType().Name ?? "null"} value={peer?.Value} readOnly={peer?.IsReadOnly}");
+            if (peer is null) return;
+
+            peer.SetValue("Alan T.");
+            H.Check("TableView_EditViaUia_CommitReachesCallback",
+                await Harness.WaitFor(() => H.FindText("Alan T.") is not null && H.FindText("Alan") is null,
+                    maxPasses: 40, perPassMs: 25),
+                $"edits=[{string.Join(",", edits)}]");
+            H.Check("TableView_EditViaUia_CallbackCalledOnce", edits.Count == 1 && edits[0] == "Alan T.",
+                $"edits=[{string.Join(",", edits)}]");
+            H.Check("TableView_EditViaUia_BoundCollectionStable", ReferenceEquals(table.ItemsSource, boundSource));
+
+            host.Mount(_ => TextBlock("TableView unmounted"));
+            await Harness.Render();
+        }
+    }
     internal class UnmountTearsDownCells(Harness h) : SelfTestFixtureBase(h)
     {
         private static int s_mounted;
