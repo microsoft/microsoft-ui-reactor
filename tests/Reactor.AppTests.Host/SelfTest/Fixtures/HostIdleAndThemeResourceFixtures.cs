@@ -173,6 +173,8 @@ internal static class HostIdleAndThemeResourceFixtures
             int visualizerContentMounts = 0;
             int visualizerContentCleanups = 0;
             int visualizerWrapperMounts = 0;
+            int commandHostChildCleanups = 0;
+            int commandHostChildUnmounts = 0;
             int wrapperMounts = 0;
             int nestedInnerMounts = 0;
             int nestedOuterMounts = 0;
@@ -282,6 +284,23 @@ internal static class HostIdleAndThemeResourceFixtures
                                 TextBlock("VisualizerWrapProbe")))
                             .Margin(9)
                             .OnMount(_ => visualizerWrapperMounts++),
+                        // A CommandHost child that changes shape: the host unmounts the replaced child,
+                        // exactly once.
+                        CommandHost([], Memo("commandHostShape",
+                            () => ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red
+                                ? RenderEachTime(fctx =>
+                                {
+                                    fctx.UseEffect(() => () => commandHostChildCleanups++);
+                                    return TextBlock("CommandHostBefore").OnUnmount(_ => commandHostChildUnmounts++);
+                                })
+                                : TextBlock("CommandHostAfter"))),
+                        // A legacy ModifiedElement around a memo that changes shape: its modifiers must
+                        // reach the remounted control.
+                        new ModifiedElement(Memo("legacyWrap",
+                                () => ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red
+                                    ? TextBlock("LegacyWrapBefore")
+                                    : Border(TextBlock("LegacyWrapAfter"))),
+                            new ElementModifiers { Margin = new Thickness(11) }),
                         // A templated-list item that changes shape with the resource: the replaced
                         // item must be unmounted.
                         ListView(templatedItems, static s => s, (_, _) => Memo("templatedShape",
@@ -335,6 +354,9 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_NestedWrapperRerenderAloneMountedOnce", nestedInnerMounts == 1 && nestedOuterMounts == 1,
                     $"inner={nestedInnerMounts} outer={nestedOuterMounts}");
                 H.Check("ThemeMemo_PopupContentRerenderAloneKept", popupContentCleanedUp == 0);
+                H.Check("ThemeMemo_CommandHostChildRerenderAloneKept", commandHostChildCleanups == 0 && FindText(target, "CommandHostBefore") is not null,
+                    $"cleanups={commandHostChildCleanups}");
+                H.Check("ThemeMemo_LegacyWrapperRerenderAloneKept", (FindText(target, "LegacyWrapBefore")?.Margin ?? default) == new Thickness(11));
                 H.Check("ThemeMemo_VisualizerWrapperRerenderAloneMountedOnce", visualizerWrapperMounts == 1, $"mounts={visualizerWrapperMounts}");
                 H.Check("ThemeMemo_VisualizerRerenderOneLiveCopy", visualizerContentMounts >= 2 && visualizerContentMounts - visualizerContentCleanups == 1,
                     $"mounts={visualizerContentMounts} cleanups={visualizerContentCleanups}");
@@ -371,6 +393,11 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_VisualizerWrapperRemountRunsOnMount", visualizerWrapperMounts == 2, $"mounts={visualizerWrapperMounts}");
                 var visualizerWrapMargin = AncestorMargin(FindText(target, "VisualizerWrapProbe"), new Thickness(9));
                 H.Check("ThemeMemo_VisualizerWrapperRemountKeepsModifiers", visualizerWrapMargin, $"found={FindText(target, "VisualizerWrapProbe") is not null}");
+                H.Check("ThemeMemo_CommandHostChildReplacedAndUnmountedOnce", commandHostChildCleanups == 1 && commandHostChildUnmounts == 1 && FindText(target, "CommandHostAfter") is not null,
+                    $"cleanups={commandHostChildCleanups} unmounts={commandHostChildUnmounts} after={FindText(target, "CommandHostAfter") is not null}");
+                var legacyBorder = FindText(target, "LegacyWrapAfter")?.Parent as Border;
+                H.Check("ThemeMemo_LegacyWrapperRemountKeepsModifiers", legacyBorder?.Margin == new Thickness(11),
+                    $"margin={legacyBorder?.Margin.ToString() ?? "(not found)"}");
                 H.Check("ThemeMemo_VisualizerNotifiedOneLiveCopy", visualizerContentMounts >= 3 && visualizerContentMounts - visualizerContentCleanups == 1,
                     $"mounts={visualizerContentMounts} cleanups={visualizerContentCleanups}");
                 H.Check("ThemeMemo_TreeContentVisibleToEmpty", ToggleTree(target)?.RootNodes[0].Content is null,

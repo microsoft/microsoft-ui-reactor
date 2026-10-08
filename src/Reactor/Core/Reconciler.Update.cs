@@ -31,6 +31,9 @@ public sealed partial class Reconciler
     internal UIElement? Update(Element oldEl, Element newEl, UIElement control, Action requestRerender)
     {
         DebugElementsDiffed++;
+        // As received, legacy ModifiedElement layers included: a keyed Memo that remounts during a
+        // resource refresh mounts this, so the layers' modifiers apply as on a first mount.
+        var receivedNewEl = newEl;
         // Unwrap all layers of ModifiedElement, accumulating modifiers.
         // Inner modifiers override outer ones (via Merge: other wins where non-null).
         ElementModifiers? oldModifiers = oldEl.Modifiers;
@@ -239,7 +242,7 @@ public sealed partial class Reconciler
             // diffs it against the output realized last time, so theme values inside the
             // memoized subtree are re-applied, including brushes the factory resolved eagerly.
             (KeyedMemoElement, KeyedMemoElement memo, _) when _resourceRefreshActive
-                => RefreshKeyedMemo(memo, control, requestRerender),
+                => RefreshKeyedMemo(memo, receivedNewEl, control, requestRerender),
             (KeyedMemoElement, KeyedMemoElement memo, _) when IsOnDirtyAncestorPath(control)
                 => UpdateKeyedMemoTowardDirtyDescendant(memo, control, requestRerender),
             (KeyedMemoElement, KeyedMemoElement, _) => null,
@@ -1601,15 +1604,15 @@ public sealed partial class Reconciler
     /// <list type="bullet">
     /// <item>Output is another memo (nested): self-diff, so the nested memo's own refresh diffs
     /// against the recorded (innermost) output.</item>
-    /// <item>Output changed shape (root type or key) from the recorded one: remount it and
-    /// unmount the old control here; the caller swaps the replacement in.</item>
+    /// <item>Output changed shape (root type or key) from the recorded one: remount the memo and
+    /// return the new control; the caller unmounts the old one and swaps it in.</item>
     /// <item>Nothing recorded (a control that is not a FrameworkElement): self-diff.</item>
     /// <item>Output is Empty: keep the realized control. Update can't express a removal, and
     /// a same-key factory is pure by contract, so a resource edit that empties it is out of
     /// contract.</item>
     /// </list>
     /// </summary>
-    private UIElement? RefreshKeyedMemo(KeyedMemoElement memo, UIElement control, Action requestRerender)
+    private UIElement? RefreshKeyedMemo(KeyedMemoElement memo, Element received, UIElement control, Action requestRerender)
     {
         var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
         if (inner is EmptyElement) return null;
@@ -1632,18 +1635,12 @@ public sealed partial class Reconciler
             replacement = Update(recorded, inner, control, requestRerender);
         else
         {
-            // The output changed shape: mount the whole memo element (so its own modifiers and
-            // lifecycle apply with mount semantics, and MountKeyedMemo records the output) and
-            // unmount the old control here, so every caller is covered, including the hosted
-            // slots (dialogs, popups, flyouts, tree and list containers) that swap a replacement
-            // in without unmounting. Callers that do unmount a replacement track this one
-            // (UpdateSlotChild) and skip a second unmount.
-            replacement = Mount(memo, requestRerender);
-            if (replacement is not null)
-            {
-                Unmount(control);
-                _freshMountFromDispatch = replacement;
-            }
+            // The output changed shape: mount the memo element as Update received it, legacy
+            // ModifiedElement layers included, so its modifiers and lifecycle apply with mount
+            // semantics and MountKeyedMemo records the output. The caller unmounts the old
+            // control, as for any replacement Update returns.
+            replacement = Mount(received, requestRerender);
+            if (replacement is not null) _freshMountFromDispatch = replacement;
             return replacement;
         }
 

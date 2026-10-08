@@ -27,10 +27,10 @@ internal static class CompositeLifecycle
         // Update child element
         if (host.Children.Count > 0 && host.Children[0] is UIElement existingChild)
         {
-            var replacement = reconciler.UpdateChild(o.Child, n.Child, existingChild, requestRerender);
+            var replacement = reconciler.UpdateChildTracked(o.Child, n.Child, existingChild, requestRerender, out var unmountedByUpdate);
             if (replacement is not null)
             {
-                reconciler.UnmountChild(existingChild);
+                if (!unmountedByUpdate) reconciler.UnmountChild(existingChild);
                 // Explicit RemoveAt+Insert instead of indexer assignment — WinUI's
                 // Children[i] = x can leave the old element's internal parent state
                 // attached, causing a COMException when it is later reused from the
