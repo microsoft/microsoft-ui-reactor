@@ -796,6 +796,27 @@ internal class ComponentRendered_RootMappingFollowsHostChanges(Harness h) : Self
             Take().Any(e => (string)e.Payload[0]! == nameof(RenderedNullRoot)
                 && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Mount));
 
+        // A null-returning class root whose effect throws: the failure is named after it
+        // (not FuncElement), on both hosts.
+        var nullEffectLog = new List<RenderError>();
+        var nullEffectHost = H.CreateHost();
+        nullEffectHost.RenderErrorHandler = e => { nullEffectLog.Add(e); return null; };
+        nullEffectHost.Mount(new RenderedNullRootThrowingEffect());
+        await Harness.Render();
+        H.Check("ComponentRendered_NullRootEffectFailure_NamedAfterTheRoot",
+            nullEffectLog.Any(e => e.Source == RenderErrorSource.Effects && e.ComponentName == nameof(RenderedNullRootThrowingEffect)),
+            string.Join(",", nullEffectLog.Select(e => $"{e.Source}:{e.ComponentName ?? "null"}")));
+
+        var nullEffectControlLog = new List<RenderError>();
+        var nullEffectControl = new ReactorHostControl { RenderErrorHandler = e => { nullEffectControlLog.Add(e); return null; } };
+        nullEffectControl.Mount(new RenderedNullRootThrowingEffect());
+        H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = nullEffectControl });
+        bool nullEffectControlReported = await Harness.WaitFor(() => nullEffectControlLog.Count > 0, maxPasses: 32, perPassMs: 10);
+        H.Check("ComponentRendered_HostControlNullRootEffectFailure_NamedAfterTheRoot",
+            nullEffectControlReported && nullEffectControlLog.Any(e => e.Source == RenderErrorSource.Effects && e.ComponentName == nameof(RenderedNullRootThrowingEffect)),
+            string.Join(",", nullEffectControlLog.Select(e => $"{e.Source}:{e.ComponentName ?? "null"}")));
+        nullEffectControl.Dispose();
+
         // ── A root that mounts its replacement from its own Render() ───────────
         // The attempt in progress is still the outgoing root's (its name and id); the
         // replacement's first render is its own mount, under a new id.
@@ -1427,6 +1448,15 @@ internal sealed class RenderedCleanupProbeChild : Component
     {
         UseEffect(() => () => Cleanups++);
         return TextBlock("cleanup probe child");
+    }
+}
+
+internal sealed class RenderedNullRootThrowingEffect : Component
+{
+    public override Element Render()
+    {
+        UseEffect(() => throw new InvalidOperationException("ComponentRendered selftest: null root effect failure"), Array.Empty<object>());
+        return null!;
     }
 }
 
