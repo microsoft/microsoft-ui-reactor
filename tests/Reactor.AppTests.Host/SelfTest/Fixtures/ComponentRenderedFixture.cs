@@ -1237,6 +1237,36 @@ internal class ComponentRendered_ReentrantMountDefersRetirement(Harness h) : Sel
         H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = control });
         bool controlShown = await Shows("control effect replacement");
         await Harness.WaitFor(() => controlEffectRoot.CleanedUp, maxPasses: 32, perPassMs: 10);
+        // A direct swap (not during a pass) whose outgoing cleanup mounts another root: the
+        // cleanup's mount is the later one, so its root is the one left mounted.
+        var directHost = H.CreateHost();
+        var directOutgoing = new RenderedCleanupMountsRoot();
+        directOutgoing.OnCleanup = () => directHost.Mount(new RenderedHostControlRoot());
+        directHost.Mount(directOutgoing);
+        await Harness.Render();
+        var directSwapIn = new RenderedSwapComponentRoot();
+        directHost.Mount(directSwapIn);
+        await Harness.Render();
+        bool directCleanupRootShown = await Shows("host control root 0");
+        H.Check("ComponentRendered_DirectSwap_CleanupMountedRootWins",
+            directCleanupRootShown && directSwapIn.EffectRuns == 0 && H.FindText("swap component root") is null,
+            $"shown={directCleanupRootShown} swapInRuns={directSwapIn.EffectRuns}");
+
+        var directControl = new ReactorHostControl();
+        var controlDirectOutgoing = new RenderedCleanupMountsRoot();
+        controlDirectOutgoing.OnCleanup = () => directControl.Mount(new RenderedHostControlRoot());
+        directControl.Mount(controlDirectOutgoing);
+        H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = directControl });
+        await Shows("cleanup mounts root");
+        var controlSwapIn = new RenderedSwapComponentRoot();
+        directControl.Mount(controlSwapIn);
+        bool controlCleanupRootShown = await Shows("host control root 0");
+        await Harness.WaitFor(() => false, maxPasses: 3, perPassMs: 10);
+        H.Check("ComponentRendered_HostControlDirectSwap_CleanupMountedRootWins",
+            controlCleanupRootShown && controlSwapIn.EffectRuns == 0 && H.FindText("swap component root") is null,
+            $"shown={controlCleanupRootShown} swapInRuns={controlSwapIn.EffectRuns}");
+        directControl.Dispose();
+
         // Render() mounts a replacement whose first render is null: the tree the outgoing
         // pass committed is still released (its child's cleanup runs, its content goes).
         var nullHost = H.CreateHost();

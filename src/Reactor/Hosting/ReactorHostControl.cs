@@ -495,20 +495,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     /// </summary>
     private global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? RetireRoot()
     {
-        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? failure = null;
-        if (_isRendering)
-        {
-            // Re-entrant: app code in this pass (the root's Render() or an effect) called
-            // Mount. That code is still running against the outgoing contexts, so retiring
-            // them now would let later hooks repopulate them and an effect's returned cleanup
-            // land after the hook list was dropped. Retire them once the pass has exited.
-            if (_rootComponent is not null || _funcContext is not null)
-                (_deferredRetirements ??= new()).Add((_rootComponent, _funcContext));
-        }
-        else
-        {
-            failure = RetireContexts(_rootComponent, _funcContext);
-        }
+        var outgoingComponent = _rootComponent;
+        var outgoingFuncContext = _funcContext;
+        // The slots are cleared before any outgoing cleanup runs: a cleanup can call Mount,
+        // and the root it mounts must not be retired or overwritten by this call's caller
+        // (see _mountGeneration).
         _rootComponent = null;
         _rootRenderFunc = null;
         _funcContext = null;
@@ -519,8 +510,24 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         // The old root's content stays on screen until the replacement renders; if that
         // render produces nothing, the old tree must still be released (see Render).
         _releaseReplacedTreeOnNullRender = _currentTree is not null || _currentControl is not null;
-        return failure;
+        if (outgoingComponent is null && outgoingFuncContext is null)
+            return null;
+        if (_isRendering)
+        {
+            // Re-entrant: app code in this pass (the root's Render() or an effect) called
+            // Mount. That code is still running against the outgoing contexts, so retiring
+            // them now would let later hooks repopulate them and an effect's returned cleanup
+            // land after the hook list was dropped. Retire them once the pass has exited.
+            (_deferredRetirements ??= new()).Add((outgoingComponent, outgoingFuncContext));
+            return null;
+        }
+        return RetireContexts(outgoingComponent, outgoingFuncContext);
     }
+
+    // Bumped by every Mount. A mount whose retirement ran a cleanup that mounted another
+    // root sees it changed and leaves that newer root in place (as a cleanup-mounted root
+    // also wins when the retirement is deferred to the next pass).
+    private int _mountGeneration;
 
     /// <summary>
     /// Mount a Component instance directly. Starts the render loop immediately.
@@ -534,10 +541,15 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     public void Mount(Func<RenderContext, Element> renderFunc)
     {
         _activationError = null;
+        var mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
+        int generation = ++_mountGeneration;
         var retireFailure = RetireRoot();
-        _rootRenderFunc = renderFunc;
-        _funcContext = new RenderContext();
-        _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(Diagnostics.ReactorSourceMap.TakeRootMountSite());
+        if (generation == _mountGeneration)
+        {
+            _rootRenderFunc = renderFunc;
+            _funcContext = new RenderContext();
+            _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
+        }
         RequestRender();
         retireFailure?.Throw();
     }
@@ -545,6 +557,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     private void MountRoot(Component component, SourceLocation? mountSite)
     {
         _activationError = null;
+        int generation = ++_mountGeneration;
         // Re-mounting the active instance keeps it (and its effects) alive: retiring it
         // would run its cleanups and then reuse the same context, whose unchanged effects
         // would never be scheduled again.
@@ -556,8 +569,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             return;
         }
         var retireFailure = RetireRoot();
-        _rootComponent = component;
-        _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
+        if (generation == _mountGeneration)
+        {
+            _rootComponent = component;
+            _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
+        }
         RequestRender();
         retireFailure?.Throw();
     }
