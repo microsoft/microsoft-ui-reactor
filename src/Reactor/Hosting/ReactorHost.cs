@@ -32,7 +32,13 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
 
     private Component? _rootComponent;
     // The root's ReactorEventSource.ComponentRendered bookkeeping (id, first render).
-    private readonly Microsoft.UI.Reactor.Core.Diagnostics.RootRenderDiagnostics _rootDiagnostics = new();
+    // Replaced (not reset) when the root is retired, so a render already in progress keeps
+    // reporting as the root it started with (see _renderingRootDiagnostics).
+    private Microsoft.UI.Reactor.Core.Diagnostics.RootRenderDiagnostics _rootDiagnostics = new();
+    // The root and its diagnostics as of the current Render()'s start: app code in the root's
+    // Render() can Mount() a replacement, and the attempt in progress is still the old root's.
+    private Microsoft.UI.Reactor.Core.Diagnostics.RootRenderDiagnostics? _renderingRootDiagnostics;
+    private Component? _renderingRoot;
     private Func<RenderContext, Element>? _rootRenderFunc;
     private RenderContext? _funcContext;
 
@@ -436,8 +442,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
 
     /// <summary>ComponentRendered for the root; must run before Reconcile consumes ForceFullRenderPending.</summary>
     private void TraceRootRendered(bool hotReloadRender, double elapsedMilliseconds)
-        => _rootDiagnostics.TraceRendered(
-            _rootComponent is null ? nameof(FuncElement) : Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_rootComponent, element: null),
+        => (_renderingRootDiagnostics ?? _rootDiagnostics).TraceRendered(
+            _renderingRoot is null ? nameof(FuncElement) : Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_renderingRoot, element: null),
             hotReloadRender, _reconciler.ForceFullRenderPending, elapsedMilliseconds);
 
     // Set by RetireRoot while the previous root's content is still shown; cleared once the
@@ -478,18 +484,15 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         }
     }
 
+    // Roots replaced re-entrantly during a render pass, retired by the next pass (or Dispose).
+    private List<(Component? Component, RenderContext? FuncContext)>? _deferredRetirements;
+
     /// <summary>
-    /// Retires the current root before another is mounted: its effects' cleanups run (as on
-    /// Dispose), whichever kind it was, and both root slots are cleared so the render loop
-    /// (which checks the component root first) only sees the new one.
-    ///
-    /// <para>Cleanup failures are routed like disposal's (issue #1291): with a
-    /// <c>RenderErrorHandler</c> each is reported; with none, the first escapes. Every
-    /// cleanup runs either way. Either way retirement completes first (a failed cleanup is not left
-    /// armed, and the hook state and root slots are cleared), and the failure to rethrow
-    /// is returned so the caller can install the new root before throwing it.</para>
+    /// Runs a retired root's cleanups (draining all of them; failures routed like disposal's)
+    /// and detaches its contexts from this host. Returns the failure to rethrow, if any.
     /// </summary>
-    private global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? RetireRoot()
+    private global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? RetireContexts(
+        Component? component, RenderContext? funcContext)
     {
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? failure = null;
         Func<RenderErrorHandler?> cleanupHandler = () => EffectiveRenderErrorHandler;
@@ -497,9 +500,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         {
             using (RenderErrorDispatch.EnterPropagationScope())
             {
-                RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
+                RenderErrorDispatch.RunCleanups(component?.Context, cleanupHandler, component?.GetType().Name,
                     isHostLevel: true, _logger, ref failure, drain: true);
-                RenderErrorDispatch.RunCleanups(_funcContext, cleanupHandler, componentName: null,
+                RenderErrorDispatch.RunCleanups(funcContext, cleanupHandler, componentName: null,
                     isHostLevel: true, _logger, ref failure, drain: true);
             }
         }
@@ -512,12 +515,68 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         // may mount it again later, which must then be a fresh mount. Both contexts also
         // let go of this host, so a retained instance or hook setter neither pins it nor
         // requests renders of the replacement root.
-        _rootComponent?.Context.DetachFromHost();
-        _funcContext?.DetachFromHost();
+        component?.Context.DetachFromHost();
+        funcContext?.DetachFromHost();
+        return failure;
+    }
+
+    /// <summary>
+    /// Retires the roots a previous pass replaced re-entrantly. Runs at the start of the next
+    /// pass, inside its error handling: with no <c>RenderErrorHandler</c> a cleanup failure
+    /// surfaces as that pass's render error (as <c>ReleaseReplacedTree</c>'s does).
+    /// </summary>
+    private void RetireDeferredRoots()
+    {
+        if (_deferredRetirements is not { } deferred) return;
+        _deferredRetirements = null;
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? first = null;
+        foreach (var (component, funcContext) in deferred)
+        {
+            // Every queued root is retired; only the first failure is kept.
+            var failure = RetireContexts(component, funcContext);
+            first ??= failure;
+        }
+        first?.Throw();
+    }
+
+    /// <summary>
+    /// Retires the current root before another is mounted: its effects' cleanups run (as on
+    /// Dispose), whichever kind it was, and both root slots are cleared so the render loop
+    /// (which checks the component root first) only sees the new one.
+    ///
+    /// <para>Cleanup failures are routed like disposal's (issue #1291): with a
+    /// <c>RenderErrorHandler</c> each is reported; with none, the first escapes. Every
+    /// cleanup runs either way. Either way retirement completes first (a failed cleanup is not left
+    /// armed, and the hook state and root slots are cleared), and the failure to rethrow
+    /// is returned so the caller can install the new root before throwing it.</para>
+    ///
+    /// <para>Called re-entrantly from the pass that is rendering the root (its Render() or
+    /// an effect mounted the replacement), the cleanups and detach are deferred to the next
+    /// pass: see <see cref="RetireDeferredRoots"/>.</para>
+    /// </summary>
+    private global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? RetireRoot()
+    {
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? failure = null;
+        if (_isRendering)
+        {
+            // Re-entrant: app code in this pass (the root's Render() or an effect) called
+            // Mount. That code is still running against the outgoing contexts, so retiring
+            // them now would let later hooks repopulate them and an effect's returned cleanup
+            // land after the hook list was dropped. Retire them once the pass has exited.
+            if (_rootComponent is not null || _funcContext is not null)
+                (_deferredRetirements ??= new()).Add((_rootComponent, _funcContext));
+        }
+        else
+        {
+            failure = RetireContexts(_rootComponent, _funcContext);
+        }
         _rootComponent = null;
         _rootRenderFunc = null;
         _funcContext = null;
-        _rootDiagnostics.Reset();
+        // A fresh instance rather than Reset(): a render of the old root may still be in
+        // progress (it called Mount), and it reports as the old root.
+        _rootDiagnostics.Forget();
+        _rootDiagnostics = new();
         // The old root's content stays on screen until the replacement renders; if that
         // render produces nothing, the old tree must still be released (see Render).
         _releaseReplacedTreeOnNullRender = _currentTree is not null || _currentControl is not null;
@@ -655,6 +714,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             }
             finally
             {
+                _renderingRoot = null;
+                _renderingRootDiagnostics = null;
                 // Reset the gate so future setState calls can enqueue — also when a render
                 // error the app chose to propagate (RenderError.Propagate) escapes Render().
                 Interlocked.Exchange(ref _renderPending, 0);
@@ -768,6 +829,18 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         Component? effectsRoot = null;
         try
         {
+            if (_deferredRetirements is not null)
+            {
+                failurePhase = RenderErrorSource.Cleanup;
+                RetireDeferredRoots();
+                failurePhase = RenderErrorSource.Reconcile;
+            }
+            // Snapshot the root this pass renders, after deferred retirement (whose cleanups
+            // may Mount) and before any of its code runs (which may Mount again; RenderLoop
+            // clears the snapshot when the pass ends).
+            _renderingRoot = _rootComponent;
+            _renderingRootDiagnostics = _rootDiagnostics;
+
             Element? newTree = null;
 
             _phaseSw.Restart();
@@ -1289,6 +1362,18 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         Func<RenderErrorHandler?> cleanupHandler = () => EffectiveRenderErrorHandler;
         using (RenderErrorDispatch.EnterPropagationScope())
         {
+            // Roots replaced re-entrantly by a pass that never got a successor.
+            if (_deferredRetirements is { } deferred)
+            {
+                _deferredRetirements = null;
+                foreach (var (component, funcContext) in deferred)
+                {
+                    RenderErrorDispatch.RunCleanups(component?.Context, cleanupHandler, component?.GetType().Name,
+                        isHostLevel: true, _logger, ref pendingPropagation);
+                    RenderErrorDispatch.RunCleanups(funcContext, cleanupHandler, componentName: null,
+                        isHostLevel: true, _logger, ref pendingPropagation);
+                }
+            }
             RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
                 isHostLevel: true, _logger, ref pendingPropagation);
             RenderErrorDispatch.RunCleanups(_funcContext, cleanupHandler, componentName: null,

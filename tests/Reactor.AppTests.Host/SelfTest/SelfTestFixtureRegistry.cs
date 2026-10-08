@@ -412,6 +412,8 @@ internal static class SelfTestFixtureRegistry
         "ComponentRendered_PropagatedRootFailureReported",
         "ComponentRendered_RootReplacementSurvivesThrowingCleanup",
         "ComponentRendered_HostControlRootSwaps",
+        "ComponentRendered_ListenerDisposedInCallback",
+        "ComponentRendered_ReentrantMountDefersRetirement",
         // RenderError names the component (not ComponentElement`1) on mount/update/root
         "RenderErrorNames_ComponentTypeOnEveryPath",
         "RenderErrorNames_ErrorBoundaryCatchIsReported",
@@ -2488,6 +2490,8 @@ internal static class SelfTestFixtureRegistry
         "ComponentRendered_PropagatedRootFailureReported" => new ComponentRendered_PropagatedRootFailureReported(harness),
         "ComponentRendered_RootReplacementSurvivesThrowingCleanup" => new ComponentRendered_RootReplacementSurvivesThrowingCleanup(harness),
         "ComponentRendered_HostControlRootSwaps" => new ComponentRendered_HostControlRootSwaps(harness),
+        "ComponentRendered_ListenerDisposedInCallback" => new ComponentRendered_ListenerDisposedInCallback(harness),
+        "ComponentRendered_ReentrantMountDefersRetirement" => new ComponentRendered_ReentrantMountDefersRetirement(harness),
         "RenderErrorNames_ComponentTypeOnEveryPath" => new RenderErrorNames_ComponentTypeOnEveryPath(harness),
         "RenderErrorNames_ErrorBoundaryCatchIsReported" => new RenderErrorNames_ErrorBoundaryCatchIsReported(harness),
         "RenderErrorNames_RenderErrorHandlerOutcomesReportOnce" => new RenderErrorNames_RenderErrorHandlerOutcomesReportOnce(harness),

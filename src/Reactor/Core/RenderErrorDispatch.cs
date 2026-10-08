@@ -371,24 +371,47 @@ internal static class RenderErrorDispatch
 
     /// <summary>
     /// Routes cleanup failures of a swapped-out root's tree that was released while the
-    /// host showed a render-error outcome for its replacement. Each is reported to the
-    /// handler as <see cref="RenderErrorSource.Cleanup"/>, as <see cref="ReportCleanupFailures"/>
-    /// does. With no handler they are logged rather than rethrown: the replacement's render
-    /// error is already on screen, and a rethrow here would replace it (or escape the
-    /// render loop). Returns the propagation to rethrow, if any.
+    /// host showed a render-error outcome for its replacement. The handler is resolved per
+    /// failure (one that clears itself affects the later ones), and each failure with a
+    /// handler is reported as <see cref="RenderErrorSource.Cleanup"/>. A failure with no
+    /// handler at that moment is logged rather than rethrown: the replacement's render error
+    /// is already on screen, and a rethrow here would replace it (or escape the render loop).
+    /// Returns the first propagation to rethrow, if any.
     /// </summary>
     internal static ExceptionDispatchInfo? ReportReleasedTreeCleanupFailures(
         IReadOnlyList<Exception> failures, Func<RenderErrorHandler?> resolveHandler, ILogger? logger)
     {
         if (failures.Count == 0) return null;
-        if (resolveHandler() is null)
+        ExceptionDispatchInfo? first = null;
+        using (EnterPropagationScope())
         {
             foreach (var ex in failures)
-                logger?.LogError(ex, "A cleanup threw while releasing the replaced root's tree; the remaining cleanups still ran");
-            return null;
+            {
+                ExceptionDispatchInfo? propagation;
+                if (IsPropagating(ex))
+                {
+                    propagation = ContinuePropagation(ex);
+                }
+                else if (resolveHandler() is { } handler)
+                {
+                    try
+                    {
+                        propagation = ReportCleanup(handler, ex, componentName: null, isHostLevel: false, logger);
+                    }
+                    catch (Exception nested) when (IsPropagating(nested))
+                    {
+                        propagation = ContinuePropagation(nested);
+                    }
+                }
+                else
+                {
+                    logger?.LogError(ex, "A cleanup threw while releasing the replaced root's tree; the remaining cleanups still ran");
+                    continue;
+                }
+                first ??= propagation;
+            }
         }
-        using (EnterPropagationScope())
-            return ReportCleanupFailures(failures, resolveHandler, isHostLevel: false, logger);
+        return first;
     }
 
     /// <summary>

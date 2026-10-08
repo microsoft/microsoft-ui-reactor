@@ -299,6 +299,15 @@ internal sealed class RootRenderDiagnostics
         _hotReloadRetry = false;
     }
 
+    /// <summary>
+    /// Drops the root's id → control mapping when the root is retired. The id itself is kept,
+    /// so a render of the retired root still in progress reports under it.
+    /// </summary>
+    public void Forget()
+    {
+        if (_id != 0) ComponentRenderControls.Registry.Forget(_id, null);
+    }
+
     /// <summary>Marks the next root render as a hot-reload hook-order retry (reported as <c>hotReload</c>).</summary>
     public void MarkHotReloadRetry() => _hotReloadRetry = true;
 

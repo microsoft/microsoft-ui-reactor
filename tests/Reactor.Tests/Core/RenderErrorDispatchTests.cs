@@ -318,6 +318,22 @@ public class RenderErrorDispatchTests
     }
 
     [Fact]
+    public void ReportReleasedTreeCleanupFailures_Resolves_The_Handler_Per_Failure()
+    {
+        // The first report clears the handler; the second failure then has none and is
+        // logged, not returned for rethrow over the replacement's error.
+        RenderErrorHandler? current = null;
+        var reported = new List<string>();
+        current = e => { reported.Add(e.Exception.Message); current = null; return null; };
+        var failures = new List<Exception> { new InvalidOperationException("a"), new InvalidOperationException("b") };
+
+        var propagation = RenderErrorDispatch.ReportReleasedTreeCleanupFailures(failures, () => current, logger: null);
+
+        Assert.Null(propagation);
+        Assert.Equal(new[] { "a" }, reported);
+    }
+
+    [Fact]
     public void ReportReleasedTreeCleanupFailures_With_A_Handler_Reports_Each_As_Cleanup()
     {
         var reported = new List<RenderError>();

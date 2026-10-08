@@ -2618,7 +2618,10 @@ public sealed partial class Reconciler : IDisposable
     {
         long id = node.DiagnosticId;
         if (id == 0) node.DiagnosticId = id = Diagnostics.ComponentRenderTrace.NextId();
-        if (wrapper is not null)
+        // Rechecks the live gate: the decision to trace was made before Render() ran, and a
+        // listener can dispose itself from an earlier event's callback (for instance a
+        // hot-reload hook-order retry's aborted attempt). Nothing is mapped while it is off.
+        if (wrapper is not null && Diagnostics.ComponentRenderTrace.IsEnabled)
             Diagnostics.ComponentRenderControls.Registry.Track(id, wrapper, mapControlToId: true);
         Diagnostics.ReactorEventSource.Log.ComponentRendered(
             Diagnostics.ComponentNames.For(node.Component, element),
@@ -2630,10 +2633,15 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// Maps a freshly mounted component's id to its wrapper (event enabled only). If an
     /// enclosing ErrorBoundary later discards the subtree, its rollback (unmount of completed
-    /// subtrees, or the boundary mount journal) forgets the mapping again.
+    /// subtrees, or the boundary mount journal) forgets the mapping again. Rechecks the live
+    /// gate: a listener can be disabled from the event's own callback, after the mount
+    /// decided to trace, and nothing is mapped while it is off.
     /// </summary>
     private static void TrackMountedComponent(ComponentNode node, UIElement wrapper)
-        => Diagnostics.ComponentRenderControls.Registry.Track(node.DiagnosticId, wrapper, mapControlToId: true);
+    {
+        if (Diagnostics.ComponentRenderTrace.IsEnabled)
+            Diagnostics.ComponentRenderControls.Registry.Track(node.DiagnosticId, wrapper, mapControlToId: true);
+    }
 
     /// <summary>
     /// <c>ReactorEventSource.RenderError</c> for a component whose Render() threw and was
