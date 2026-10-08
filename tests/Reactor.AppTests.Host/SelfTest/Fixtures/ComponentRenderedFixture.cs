@@ -484,6 +484,22 @@ internal class ComponentRendered_RootHookOrderRetryIsHotReload(Harness h) : Self
                 && childEvents.All(e => (string)e.Payload[2]! == ComponentRenderTrace.Reasons.HotReload)
                 && childEvents.Select(e => (long)e.Payload[1]!).Distinct().Count() == 1);
 
+            // A hot-reload pass that is not forced (ReactorHostControl's kind): a child reached
+            // from its parent with changed props is still reported as hot reload.
+            var hrReconciler = new Reconciler();
+            Element HrTree(int n) => VStack(Component<RenderedPropsChild, int>(n));
+            var hrBefore = HrTree(0);
+            var hrControl = hrReconciler.Mount(hrBefore, static () => { })!;
+            Take();
+            using (HotReloadService.BeginUpdatePass())
+                hrReconciler.Reconcile(hrBefore, HrTree(1), hrControl, static () => { });
+            var hrEvents = Take().Where(e => (string)e.Payload[0]! == nameof(RenderedPropsChild)).ToList();
+            Console.WriteLine("# unforced hot-reload pass: " + string.Join(", ",
+                hrEvents.Select(e => $"{e.Payload[0]}#{e.Payload[1]}:{e.Payload[2]}")));
+            H.Check("ComponentRendered_UnforcedHotReloadPass_ChildIsHotReload",
+                hrEvents.Count == 1 && (string)hrEvents[0].Payload[2]! == ComponentRenderTrace.Reasons.HotReload);
+            hrReconciler.Dispose();
+
             // A listener that disposes itself on the child's aborted attempt: the retry, in
             // the same component span, must not map the child's wrapper afterwards.
             subscription.Dispose();   // idempotent; the using disposes again harmlessly

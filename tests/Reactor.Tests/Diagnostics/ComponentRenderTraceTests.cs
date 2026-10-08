@@ -12,13 +12,16 @@ namespace Microsoft.UI.Reactor.Tests.Diagnostics;
 public sealed class ComponentRenderTraceTests
 {
     [Theory]
-    // forced wins over everything, split by whether a hot-reload pass is open
+    // a hot-reload pass wins over everything, forced or not
     [InlineData(true, true, true, R.Props, R.HotReload)]
+    [InlineData(false, true, true, null, R.HotReload)]
+    [InlineData(false, true, false, R.Props, R.HotReload)]
+    [InlineData(false, true, false, null, R.HotReload)]
+    // then a forced pass
     [InlineData(true, false, false, null, R.Forced)]
     [InlineData(true, false, true, R.Context, R.Forced)]
     // a subtree re-render request
     [InlineData(false, false, true, R.Props, R.State)]
-    [InlineData(false, true, true, null, R.HotReload)]
     // reached from the parent: whatever the memo gate found, else "parent"
     [InlineData(false, false, false, R.Props, R.Props)]
     [InlineData(false, false, false, R.Context, R.Context)]
