@@ -247,6 +247,15 @@ public sealed partial class Reconciler
         };
         }
 
+        // A dispatch that fully mounted the new element (a keyed Memo remounted during a resource
+        // refresh) already applied its modifiers and lifecycle with mount semantics; diffing them
+        // old->new here would skip unchanged ones on the fresh control and fire OnUpdate.
+        if (result is not null && ReferenceEquals(result, _freshMountFromDispatch))
+        {
+            _freshMountFromDispatch = null;
+            return result;
+        }
+
         // Apply inline modifiers after update. When old modifiers existed but new
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
         // stale values (same principle as the flex attached-property fix).
@@ -1608,18 +1617,29 @@ public sealed partial class Reconciler
             replacement = Update(recorded, inner, control, requestRerender);
         else
         {
-            // The output changed shape: mount the new one and unmount the old here, so every
-            // caller is covered, including the hosted slots (dialogs, popups, flyouts, tree and
-            // list containers) that swap a replacement in without unmounting. Callers that do
-            // unmount a replacement track this one (UpdateSlotChild) and skip a second unmount.
-            replacement = Mount(inner, requestRerender);
-            if (replacement is not null) Unmount(control);
+            // The output changed shape: mount the whole memo element (so its own modifiers and
+            // lifecycle apply with mount semantics, and MountKeyedMemo records the output) and
+            // unmount the old control here, so every caller is covered, including the hosted
+            // slots (dialogs, popups, flyouts, tree and list containers) that swap a replacement
+            // in without unmounting. Callers that do unmount a replacement track this one
+            // (UpdateSlotChild) and skip a second unmount.
+            replacement = Mount(memo, requestRerender);
+            if (replacement is not null)
+            {
+                Unmount(control);
+                _freshMountFromDispatch = replacement;
+            }
+            return replacement;
         }
 
         if ((replacement ?? control) is FrameworkElement realized)
             GetOrCreateReactorState(realized).KeyedMemoOutput = inner;
         return replacement;
     }
+
+    // Set by a dispatch arm that returned a fully mounted control; consumed by Update right after
+    // the dispatch so its post-dispatch modifier diff is skipped for that control.
+    private UIElement? _freshMountFromDispatch;
 
     private static string Truncate(string s, int maxLen) =>
         s.Length <= maxLen ? s : s[..maxLen] + "…";

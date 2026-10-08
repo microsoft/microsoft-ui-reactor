@@ -153,8 +153,6 @@ internal static class HostIdleAndThemeResourceFixtures
     /// </summary>
     internal class NotifyResourcesChangedRefreshesMemoizedThemeModifiers(Harness h) : SelfTestFixtureBase(h)
     {
-        private const string AppKey = "SelfTestBrandBrush";
-
         public override async Task RunAsync()
         {
             // <snippet:runtime-resource-dictionary>
@@ -171,6 +169,7 @@ internal static class HostIdleAndThemeResourceFixtures
             int shapeItemCleanedUp = 0;
             int templatedItemCleanedUp = 0;
             int popupContentCleanedUp = 0;
+            int wrapperMounts = 0;
             try
             {
                 // Disposed at the end of this block, before finally restores the active host.
@@ -231,7 +230,14 @@ internal static class HostIdleAndThemeResourceFixtures
                         // Not memoized: the DSL builds fresh but equivalent node arrays every render.
                         TreeView(new TreeViewNodeData("FreshRoot", [new TreeViewNodeData("FreshChild")])),
                         // Node content that switches to and from Empty with the resource.
-                        ContentTogglingTree(),
+                        ContentTogglingTree(AppKey),
+                        // Wrapper modifiers on a memo whose output changes shape: the remounted control
+                        // must get them with mount semantics.
+                        Memo("wrapperShape", () => ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red
+                                ? TextBlock("WrapperBefore")
+                                : Border(TextBlock("WrapperAfter")))
+                            .Margin(7)
+                            .OnMount(_ => wrapperMounts++),
                         // A hosted slot that swaps an update's replacement in without unmounting the
                         // old control: the refresh must unmount it itself.
                         Popup(Memo("popupShape",
@@ -291,6 +297,7 @@ internal static class HostIdleAndThemeResourceFixtures
                 var listView = FindDescendant<ListView>(target);
                 if (listView is not null) listView.SelectedIndex = 1;
                 H.Check("ThemeMemo_ShapeRerenderAloneIsStale", FindText(target, "ShapeProbeBefore") is not null);
+                H.Check("ThemeMemo_WrapperRerenderAloneMountedOnce", wrapperMounts == 1, $"mounts={wrapperMounts}");
                 H.Check("ThemeMemo_PopupContentRerenderAloneKept", popupContentCleanedUp == 0);
                 H.Check("ThemeMemo_TreeContentRerenderAloneUnchanged", ToggleTree(target) is { } toggleBefore
                     && toggleBefore.RootNodes[0].Content is UIElement && toggleBefore.RootNodes[1].Content is null,
@@ -311,6 +318,10 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_GridViewItemNotifiedIsBlue", ProbeColor(target, "GvItemProbe") == Colors.Blue, $"color={ProbeColor(target, "GvItemProbe")}");
                 H.Check("ThemeMemo_LazyRowNotifiedMidScrollIsBlue", ProbeColor(target, "LazyProbe") == Colors.Blue, $"color={ProbeColor(target, "LazyProbe")}");
                 H.Check("ThemeMemo_TreeViewNodesKept", NodeKept(treeView, rootNode), DescribeNode(treeView, rootNode));
+                var wrapperBorder = FindText(target, "WrapperAfter")?.Parent as Border;
+                H.Check("ThemeMemo_WrapperRemountKeepsModifiers", wrapperBorder?.Margin == new Thickness(7),
+                    $"margin={wrapperBorder?.Margin.ToString() ?? "(not found)"}");
+                H.Check("ThemeMemo_WrapperRemountRunsOnMount", wrapperMounts == 2, $"mounts={wrapperMounts}");
                 H.Check("ThemeMemo_PopupContentReplacedAndUnmounted", popupContentCleanedUp == 1, $"cleanups={popupContentCleanedUp}");
                 H.Check("ThemeMemo_TreeContentVisibleToEmpty", ToggleTree(target)?.RootNodes[0].Content is null,
                     $"content={ToggleTree(target)?.RootNodes[0].Content?.GetType().Name ?? "null"}");
@@ -370,9 +381,9 @@ internal static class HostIdleAndThemeResourceFixtures
         // Legacy ContentElement nodes (deprecated, still supported): the first node has content
         // while the resource is red and is Empty after; the second the other way round.
 #pragma warning disable CS0618
-        private static Element ContentTogglingTree()
+        private static Element ContentTogglingTree(string resourceKey)
         {
-            bool red = ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red;
+            bool red = ThemeRef.Resolve(resourceKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red;
             return TreeView(
                 new TreeViewNodeData("ToggleA") { ContentElement = red ? TextBlock("ToggleAContent") : Empty() },
                 new TreeViewNodeData("ToggleB") { ContentElement = red ? Empty() : TextBlock("ToggleBContent") });
