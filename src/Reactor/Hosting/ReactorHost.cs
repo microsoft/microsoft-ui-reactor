@@ -442,6 +442,28 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         => _renderingRootDiagnostics is not null ? _renderingMountSite : _mountSite.Value;
 
     /// <summary>
+    /// A null render keeps the root's content, which no publishing pass then re-describes.
+    /// Describe it again as one would, so static facts that went stale since (a hot-reload
+    /// update, a late conflicting registration) are dropped: the content's own names and hooks,
+    /// and the hooks the host added for the root from its mount site.
+    /// </summary>
+    private void RepublishRetainedRoot()
+    {
+        if (_currentTree is null)
+        {
+            // The built-in error panel (or nothing): no root element to describe.
+            _reconciler.RefreshRetainedContentFacts(_currentControl);
+            return;
+        }
+        if (RenderErrorDispatch.IsAppFallback(_currentTree))
+        {
+            _reconciler.PublishFallbackRootSource(_currentControl, DiagnosticRootName(), DiagnosticRootHooks());
+            return;
+        }
+        _reconciler.PublishRootSource(_currentControl, _currentTree, DiagnosticRootName(), DiagnosticRootHooks());
+    }
+
+    /// <summary>
     /// The root's Render() threw: report the render (as a throwing child component's is)
     /// and map its id to the error panel that now stands in for the root's content.
     /// </summary>
@@ -971,11 +993,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
                     TraceRootRendered(hotReloadRender, treeBuildMs);
                 if (_releaseReplacedTreeOnNullRender)
                     ReleaseReplacedTree();
-                // Content the root kept is not re-published: drop static facts that went
-                // stale (hot reload, a late conflicting registration) as a publishing pass would.
                 if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
                     && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
-                    _reconciler.RefreshRetainedContentFacts(_currentControl);
+                    RepublishRetainedRoot();
                 // Commit the render like any other: the root's effects still run, and a
                 // failure among them is routed as an effect failure by the outer catch.
                 failurePhase = RenderErrorSource.Effects;
