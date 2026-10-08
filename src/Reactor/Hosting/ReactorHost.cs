@@ -421,7 +421,10 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     private void TraceRootRendered(bool hotReloadRender, double elapsedMilliseconds)
         => (_renderingRootDiagnostics ?? _rootDiagnostics).TraceRendered(
             _renderingRoot is null ? nameof(FuncElement) : Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_renderingRoot, element: null),
-            hotReloadRender, _reconciler.ForceFullRenderPending, elapsedMilliseconds);
+            hotReloadRender, _reconciler.ForceFullRenderPending, Math.Max(0, elapsedMilliseconds - _rootRenderOffsetMs));
+
+    // _phaseSw reading at which the root's Render() started this pass; see Render.
+    private double _rootRenderOffsetMs;
 
     // Set by RetireRoot while the previous root's content is still shown; cleared once the
     // replacement renders content, or when it renders nothing and the old tree is released.
@@ -838,6 +841,10 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             // so it can't bind to an Action method group — cache the wrapper once
             // instead of allocating `() => RequestRender()` every render.
             Action rerender = _rerenderAction ??= () => RequestRender();
+
+            // ComponentRendered times the root's Render() alone; _phaseSw (the PERF "tree"
+            // phase) also covers the charting-state push above.
+            _rootRenderOffsetMs = _phaseSw.Elapsed.TotalMilliseconds;
 
             // Captured before app code runs: the root's Render() can Mount() a replacement
             // root and then throw, and the failure belongs to the component that threw.
