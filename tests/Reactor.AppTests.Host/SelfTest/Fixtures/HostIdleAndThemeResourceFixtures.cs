@@ -170,6 +170,8 @@ internal static class HostIdleAndThemeResourceFixtures
             int templatedItemCleanedUp = 0;
             int popupContentCleanedUp = 0;
             int wrapperMounts = 0;
+            int nestedInnerMounts = 0;
+            int nestedOuterMounts = 0;
             try
             {
                 // Disposed at the end of this block, before finally restores the active host.
@@ -238,6 +240,16 @@ internal static class HostIdleAndThemeResourceFixtures
                                 : Border(TextBlock("WrapperAfter")))
                             .Margin(7)
                             .OnMount(_ => wrapperMounts++),
+                        // The same through a nested chain: both wrappers' modifiers apply to the fresh
+                        // control with mount semantics.
+                        Memo("nestedWrapOuter", () => Memo("nestedWrapInner",
+                                () => ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red
+                                    ? TextBlock("NestedWrapBefore")
+                                    : Border(TextBlock("NestedWrapAfter")))
+                                .Opacity(0.5)
+                                .OnMount(_ => nestedInnerMounts++))
+                            .Margin(5)
+                            .OnMount(_ => nestedOuterMounts++),
                         // A hosted slot that swaps an update's replacement in without unmounting the
                         // old control: the refresh must unmount it itself.
                         Popup(Memo("popupShape",
@@ -298,6 +310,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 if (listView is not null) listView.SelectedIndex = 1;
                 H.Check("ThemeMemo_ShapeRerenderAloneIsStale", FindText(target, "ShapeProbeBefore") is not null);
                 H.Check("ThemeMemo_WrapperRerenderAloneMountedOnce", wrapperMounts == 1, $"mounts={wrapperMounts}");
+                H.Check("ThemeMemo_NestedWrapperRerenderAloneMountedOnce", nestedInnerMounts == 1 && nestedOuterMounts == 1,
+                    $"inner={nestedInnerMounts} outer={nestedOuterMounts}");
                 H.Check("ThemeMemo_PopupContentRerenderAloneKept", popupContentCleanedUp == 0);
                 H.Check("ThemeMemo_TreeContentRerenderAloneUnchanged", ToggleTree(target) is { } toggleBefore
                     && toggleBefore.RootNodes[0].Content is UIElement && toggleBefore.RootNodes[1].Content is null,
@@ -322,6 +336,12 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_WrapperRemountKeepsModifiers", wrapperBorder?.Margin == new Thickness(7),
                     $"margin={wrapperBorder?.Margin.ToString() ?? "(not found)"}");
                 H.Check("ThemeMemo_WrapperRemountRunsOnMount", wrapperMounts == 2, $"mounts={wrapperMounts}");
+                var nestedBorder = FindText(target, "NestedWrapAfter")?.Parent as Border;
+                H.Check("ThemeMemo_NestedWrapperRemountKeepsModifiers",
+                    nestedBorder is not null && nestedBorder.Margin == new Thickness(5) && Math.Abs(nestedBorder.Opacity - 0.5) < 0.001,
+                    $"margin={nestedBorder?.Margin.ToString() ?? "(not found)"} opacity={nestedBorder?.Opacity}");
+                H.Check("ThemeMemo_NestedWrapperRemountRunsOnMount", nestedInnerMounts == 2 && nestedOuterMounts == 2,
+                    $"inner={nestedInnerMounts} outer={nestedOuterMounts}");
                 H.Check("ThemeMemo_PopupContentReplacedAndUnmounted", popupContentCleanedUp == 1, $"cleanups={popupContentCleanedUp}");
                 H.Check("ThemeMemo_TreeContentVisibleToEmpty", ToggleTree(target)?.RootNodes[0].Content is null,
                     $"content={ToggleTree(target)?.RootNodes[0].Content?.GetType().Name ?? "null"}");

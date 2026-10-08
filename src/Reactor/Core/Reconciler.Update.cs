@@ -255,6 +255,14 @@ public sealed partial class Reconciler
             _freshMountFromDispatch = null;
             return result;
         }
+        // A transparent wrapper (an outer keyed Memo) whose nested memo remounted: the control is
+        // fresh, so this wrapper's own modifiers apply with mount semantics (all written, OnMount
+        // runs) rather than as an old->new diff.
+        if (result is not null && ReferenceEquals(result, _freshForWrapperMount))
+        {
+            _freshForWrapperMount = null;
+            oldModifiers = null;
+        }
 
         // Apply inline modifiers after update. When old modifiers existed but new
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
@@ -1605,7 +1613,14 @@ public sealed partial class Reconciler
     {
         var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
         if (inner is EmptyElement) return null;
-        if (inner is KeyedMemoElement) return Update(inner, inner, control, requestRerender);
+        if (inner is KeyedMemoElement)
+        {
+            var nested = Update(inner, inner, control, requestRerender);
+            // A nested memo that remounted hands back a fresh control; the enclosing Update must
+            // apply this memo's own modifiers to it with mount semantics.
+            if (nested is not null && !ReferenceEquals(nested, control)) _freshForWrapperMount = nested;
+            return nested;
+        }
 
         var recorded = control is FrameworkElement fe && TryGetReactorState(fe, out var state)
             ? state.KeyedMemoOutput
@@ -1640,6 +1655,10 @@ public sealed partial class Reconciler
     // Set by a dispatch arm that returned a fully mounted control; consumed by Update right after
     // the dispatch so its post-dispatch modifier diff is skipped for that control.
     private UIElement? _freshMountFromDispatch;
+
+    // Set by RefreshKeyedMemo when a nested memo handed back a fresh control; consumed by the
+    // enclosing Update, which then applies its wrapper modifiers with mount semantics.
+    private UIElement? _freshForWrapperMount;
 
     private static string Truncate(string s, int maxLen) =>
         s.Length <= maxLen ? s : s[..maxLen] + "…";
