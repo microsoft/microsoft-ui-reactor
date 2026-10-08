@@ -542,7 +542,7 @@ public class ReactorDiagnosticsComponentsTests
 
     private sealed record FieldRecord(string Value, string Stored)
     {
-        public string AdminPassword = Stored;
+        public readonly string AdminPassword = Stored;
     }
 
     private sealed record HandWrittenRecord(string Value)
