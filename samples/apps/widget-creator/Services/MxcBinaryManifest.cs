@@ -25,12 +25,12 @@ public static class MxcBinaryManifest
         {
             ["win-arm64"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["winhttp-proxy-shim.exe"] = "aca7cd110b09a1045c53a5c9bd73089f63e6c66f0b3d2627a5bdfb55bb524fdc",
-                ["wxc-exec.exe"] = "e430d0e4f44f616e91db684f8d825a6dc93e06a1262b8d00bcaac7522a317aab",
-                ["wxc-host-prep.exe"] = "3ef702332286a39153fc259310b5021e3de3c191751d7522684f6475f73af5ef",
-                ["wxc-test-proxy.exe"] = "1d1a5821a65c9b4aceb2f1788ca54b08d06b92b784daa1926ab978f4a49f1f00",
-                ["wxc-windows-sandbox-daemon.exe"] = "fc8079bddf5db77ee4ecea91d7f22a543fbec3618945a7ab97269dcfef3f66b1",
-                ["wxc-windows-sandbox-guest.exe"] = "69c972ce4a65d337f15d828e40b92fcb2f89665d32f2cb598606b45c76adfde3",
+                ["winhttp-proxy-shim.exe"] = "f1fdf37c66af032f4472f5de24fae766544d2fac19da75e45cecb38c5437caa8",
+                ["wxc-exec.exe"] = "d12957f434871af4cee0fbccfe12a91a615d3e91d8b81c7713f4141eb1f466df",
+                ["wxc-host-prep.exe"] = "ec91ae4a8d8b537b11c8401f3c1efd7ffc0fb4fba26d0f822f5138aa6cb08aee",
+                ["wxc-test-proxy.exe"] = "553fbc073ff820b674a87e0a348ddb8814031144812e5df2bc87e4ce7ba34ffa",
+                ["wxc-windows-sandbox-daemon.exe"] = "68054c012e8fcea6f8b82336edad58f96debb4d02b6f0a145befd9d7eaf301c1",
+                ["wxc-windows-sandbox-guest.exe"] = "985b88a7871653518f6db0103abf491c2e510be2405bf6a3dff8e64dece7f6f2",
             },
             ["win-x64"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {

@@ -1,0 +1,158 @@
+<Project>
+
+  <!--
+    Resilient, internal/external-aware Copilot CLI acquisition for
+    GitHub.Copilot.SDK consumers (widget-creator, demo-script-tool, Reactor.Cli).
+
+    THE PROBLEM
+    The SDK's GitHub.Copilot.SDK.targets fetch the native `copilot.exe` at build
+    time with an unauthenticated MSBuild <DownloadFile> hardcoded to
+    registry.npmjs.org, then <Error> if it can't. That download:
+      * HARD-FAILS the build (MSB3923) on any offline / proxied / TLS-intercepted
+        network, and
+      * cannot use an authenticated Azure Artifacts npm feed (DownloadFile has no
+        credential support; Azure Artifacts npm feeds have no anonymous read).
+    See upstream github/copilot-sdk#921. The CLI is only a RUNTIME artifact — it is
+    not needed to compile — yet its download breaks `dotnet build` / `dotnet run`.
+
+    The SDK resolves the CLI at run time from COPILOT_CLI_PATH or the build-bundled
+    binary only (it does NOT download at run time), so we cannot simply skip: we
+    want to still bundle the pinned CLI whenever we can.
+
+    THE FIX (this file)
+    Take over acquisition ourselves whenever the SDK is referenced and neither the
+    developer nor CI has already pinned/skipped it, and turn OFF the SDK's own
+    hard-failing download. We decide this at EVALUATION time (this file is imported
+    from Directory.Build.targets AFTER the SDK's package targets, so the value we
+    evaluate for CopilotSkipCliDownload is the one the SDK targets' Conditions see —
+    a value set inside a BeforeTargets hook would be too late). We then obtain the
+    binary best-effort, in preference order, and place it in the output exactly like
+    the SDK would:
+
+      (1) A binary cached by a previous build              -> reuse it.
+      (2) COPILOT_CLI_PATH -> a local copilot(.exe)        -> bundle that.
+      (3) Public registry (external/OSS) -> <DownloadFile>  (auth-less, fast).
+      (4) `npm pack` honoring the ambient .npmrc            -> the supported path for
+          an AUTHENTICATED internal Azure Artifacts npm feed (internal dev/CI); also
+          a proxy-friendly fallback when (3) is blocked.
+      (5) Nothing worked -> warn and build WITHOUT a bundled CLI. The build still
+          succeeds; the app resolves the CLI at run time via COPILOT_CLI_PATH.
+
+    INTERNAL vs EXTERNAL
+      * External / OSS: the committed nuget.config + .npmrc stay on nuget.org /
+        registry.npmjs.org. (3) downloads the CLI directly. Nothing to configure.
+      * Internal: the build environment points npm at the internal Azure Artifacts
+        feed via an authenticated .npmrc (CI writes one; see build/pipelines). (4)
+        `npm pack` then resolves the CLI through that feed. Set CopilotNpmRegistryUrl
+        to force a specific registry; otherwise the ambient .npmrc registry is used.
+
+    Only active when GitHub.Copilot.SDK is referenced ($(CopilotCliVersion) is set by
+    its props). Inert when CopilotSkipCliDownload=true (CI default, see
+    Directory.Build.props) or the developer pinned CopilotCliBinaryPath.
+  -->
+
+  <PropertyGroup Condition="'$(CopilotCliVersion)' != '' and '$(_CopilotPlatform)' != '' and '$(CopilotSkipCliDownload)' != 'true' and '$(CopilotCliBinaryPath)' == ''">
+    <!-- We manage acquisition: disable the SDK's own download/copy/register targets
+         (they gate off CopilotSkipCliDownload) and bundle the CLI ourselves. -->
+    <_ReactorCopilotManage>true</_ReactorCopilotManage>
+    <CopilotSkipCliDownload>true</CopilotSkipCliDownload>
+
+    <_ReactorCopilotCacheDir>$(IntermediateOutputPath)copilot-cli\$(CopilotCliVersion)\$(_CopilotPlatform)</_ReactorCopilotCacheDir>
+    <_ReactorCopilotCacheBin>$(_ReactorCopilotCacheDir)\$(_CopilotBinary)</_ReactorCopilotCacheBin>
+    <_ReactorCopilotRegistry>$([System.String]::Copy('$(CopilotNpmRegistryUrl)').TrimEnd('/'))</_ReactorCopilotRegistry>
+    <_ReactorCopilotRegistry Condition="'$(_ReactorCopilotRegistry)' == ''">https://registry.npmjs.org</_ReactorCopilotRegistry>
+    <_ReactorCopilotRegistryIsPublic>false</_ReactorCopilotRegistryIsPublic>
+    <_ReactorCopilotRegistryIsPublic Condition="'$(_ReactorCopilotRegistry)' == 'https://registry.npmjs.org'">true</_ReactorCopilotRegistryIsPublic>
+  </PropertyGroup>
+
+  <!-- Obtain the CLI into the SDK's cache path, best-effort. Everything is
+       ContinueOnError so a restricted network / missing npm can't break the build. -->
+  <Target Name="_ReactorAcquireCopilotCli"
+          Condition="'$(_ReactorCopilotManage)' == 'true' and '$(TargetFramework)' != ''"
+          BeforeTargets="BeforeBuild">
+
+    <PropertyGroup>
+      <_ReactorCopilotTgzUrl>$(_ReactorCopilotRegistry)/@github/copilot-$(_CopilotPlatform)/-/copilot-$(_CopilotPlatform)-$(CopilotCliVersion).tgz</_ReactorCopilotTgzUrl>
+      <_ReactorCopilotArchive>$(_ReactorCopilotCacheDir)\copilot.tgz</_ReactorCopilotArchive>
+      <_ReactorCopilotNpmTgz>$(_ReactorCopilotCacheDir)\github-copilot-$(_CopilotPlatform)-$(CopilotCliVersion).tgz</_ReactorCopilotNpmTgz>
+      <_ReactorCopilotNpmRegistryArg Condition="'$(_ReactorCopilotRegistryIsPublic)' != 'true'"> --registry $(_ReactorCopilotRegistry)</_ReactorCopilotNpmRegistryArg>
+      <_ReactorCopilotTar Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(SystemRoot)\System32\tar.exe</_ReactorCopilotTar>
+      <_ReactorCopilotTar Condition="'$(_ReactorCopilotTar)' == ''">tar</_ReactorCopilotTar>
+    </PropertyGroup>
+
+    <MakeDir Condition="!Exists('$(_ReactorCopilotCacheBin)')" Directories="$(_ReactorCopilotCacheDir)" />
+
+    <!-- (2) Developer-provided local CLI. -->
+    <Copy Condition="!Exists('$(_ReactorCopilotCacheBin)') and '$(COPILOT_CLI_PATH)' != '' and Exists('$(COPILOT_CLI_PATH)')"
+          SourceFiles="$(COPILOT_CLI_PATH)"
+          DestinationFiles="$(_ReactorCopilotCacheBin)"
+          SkipUnchangedFiles="true"
+          ContinueOnError="true" />
+
+    <!-- (3) Public registry: direct, auth-less download. -->
+    <DownloadFile Condition="!Exists('$(_ReactorCopilotCacheBin)') and '$(_ReactorCopilotRegistryIsPublic)' == 'true'"
+                  SourceUrl="$(_ReactorCopilotTgzUrl)"
+                  DestinationFolder="$(_ReactorCopilotCacheDir)"
+                  DestinationFileName="copilot.tgz"
+                  ContinueOnError="true" />
+    <Exec Condition="!Exists('$(_ReactorCopilotCacheBin)') and Exists('$(_ReactorCopilotArchive)')"
+          Command="&quot;$(_ReactorCopilotTar)&quot; -xzf &quot;$(_ReactorCopilotArchive)&quot; --strip-components=1 -C &quot;$(_ReactorCopilotCacheDir)&quot;"
+          ContinueOnError="true" />
+
+    <!-- (4) Authenticated internal feed (or proxy fallback): `npm pack` honors the
+         ambient .npmrc credentials that DownloadFile cannot use. -->
+    <Exec Condition="!Exists('$(_ReactorCopilotCacheBin)')"
+          Command="npm pack @github/copilot-$(_CopilotPlatform)@$(CopilotCliVersion)$(_ReactorCopilotNpmRegistryArg) --pack-destination &quot;$(_ReactorCopilotCacheDir)&quot;"
+          ContinueOnError="true" />
+    <Exec Condition="!Exists('$(_ReactorCopilotCacheBin)') and Exists('$(_ReactorCopilotNpmTgz)')"
+          Command="&quot;$(_ReactorCopilotTar)&quot; -xzf &quot;$(_ReactorCopilotNpmTgz)&quot; --strip-components=1 -C &quot;$(_ReactorCopilotCacheDir)&quot;"
+          ContinueOnError="true" />
+
+    <!-- (5) Give up gracefully. -->
+    <Warning Condition="!Exists('$(_ReactorCopilotCacheBin)')"
+             Code="REACTORCLI001"
+             Text="Copilot CLI $(CopilotCliVersion) could not be acquired (offline, restricted network, or no authenticated npm feed). Building '$(MSBuildProjectName)' without a bundled CLI. Set the COPILOT_CLI_PATH environment variable to a local Copilot CLI binary to enable generation at run time; internal builds should point npm at the internal Azure Artifacts feed (see build/pipelines)." />
+  </Target>
+
+  <!-- Register the bundled CLI as content so it flows to this project's output and
+       any referencing project. Mirrors the SDK's _RegisterCopilotCliForCopy but is a
+       no-op (no <Error>) when acquisition produced no binary. -->
+  <Target Name="_ReactorRegisterCopilotCli"
+          Condition="'$(_ReactorCopilotManage)' == 'true' and '$(TargetFramework)' != ''"
+          DependsOnTargets="_ReactorAcquireCopilotCli"
+          BeforeTargets="GetCopyToOutputDirectoryItems">
+    <PropertyGroup>
+      <_ReactorCopilotRuntimeNode>$(_ReactorCopilotCacheDir)\prebuilds\$(_CopilotPlatform)\runtime.node</_ReactorCopilotRuntimeNode>
+    </PropertyGroup>
+    <ItemGroup Condition="Exists('$(_ReactorCopilotCacheBin)')">
+      <ContentWithTargetPath Include="$(_ReactorCopilotCacheBin)"
+                             TargetPath="runtimes\$(_CopilotRid)\native\$(_CopilotBinary)"
+                             CopyToOutputDirectory="PreserveNewest" />
+      <ContentWithTargetPath Include="$(_ReactorCopilotRuntimeNode)"
+                             TargetPath="runtimes\$(_CopilotRid)\native\$(_CopilotRuntimeLib)"
+                             CopyToOutputDirectory="PreserveNewest"
+                             Condition="Exists('$(_ReactorCopilotRuntimeNode)')" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Copy the bundled CLI into this project's output runtimes folder. Mirrors the
+       SDK's _CopyCopilotCliToOutput; guarded on Exists so it is a no-op when absent. -->
+  <Target Name="_ReactorCopyCopilotCliToOutput"
+          Condition="'$(_ReactorCopilotManage)' == 'true' and '$(TargetFramework)' != '' and Exists('$(_ReactorCopilotCacheBin)')"
+          DependsOnTargets="_ReactorAcquireCopilotCli"
+          AfterTargets="Build">
+    <PropertyGroup>
+      <_ReactorCopilotOutDir>$(OutDir)runtimes\$(_CopilotRid)\native</_ReactorCopilotOutDir>
+      <_ReactorCopilotRuntimeNode>$(_ReactorCopilotCacheDir)\prebuilds\$(_CopilotPlatform)\runtime.node</_ReactorCopilotRuntimeNode>
+    </PropertyGroup>
+    <MakeDir Directories="$(_ReactorCopilotOutDir)" />
+    <Copy SourceFiles="$(_ReactorCopilotCacheBin)"
+          DestinationFiles="$(_ReactorCopilotOutDir)\$(_CopilotBinary)"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(_ReactorCopilotRuntimeNode)"
+          DestinationFiles="$(_ReactorCopilotOutDir)\$(_CopilotRuntimeLib)"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(_ReactorCopilotRuntimeNode)')" />
+  </Target>
+
+</Project>

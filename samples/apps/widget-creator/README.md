@@ -106,6 +106,28 @@ dotnet run --project samples/apps/widget-creator/widget-creator.csproj -p:Platfo
    `Directory.Build.props`, because a widget that pins a different version fails
    its build in `Microsoft.WindowsAppSDK.ComponentReference.targets`.
 
+### The Copilot CLI at build time (internal vs external)
+
+The `GitHub.Copilot.SDK` bundles a native `copilot.exe` that it downloads at
+**build** time from an npm registry. The repo makes this resilient for everyone
+(`build/Reactor.CopilotCli.targets`), so `dotnet build` / `dotnet run` never
+hard-fails on a restricted network:
+
+- **External / OSS** — the committed `nuget.config` + `.npmrc` stay on public
+  `nuget.org` / `registry.npmjs.org`; the CLI downloads directly. Nothing to set up.
+- **Internal (Microsoft)** — point npm at the internal Azure Artifacts feed
+  (`https://pkgs.dev.azure.com/github-private/microsoft/_packaging/microsoft-ui-reactor/npm/registry/`)
+  via an authenticated `.npmrc` (CI does this automatically; locally use
+  `az artifacts` or the feed's *Connect to feed* → npm instructions). The build then
+  acquires the CLI through that feed with `npm pack`, since Azure Artifacts feeds
+  require auth that the SDK's raw download can't provide.
+- **Offline / no feed** — the build still succeeds *without* a bundled CLI (a
+  `REACTORCLI001` warning is emitted). To run generation you then need a Copilot
+  CLI binary available at run time: set `COPILOT_CLI_PATH` to a local `copilot.exe`
+  (or install the standalone Copilot CLI in its default per-user location). Note
+  `gh auth` only supplies Copilot credentials — it is not itself a runnable
+  `copilot.exe`.
+
 Type a prompt, click **Generate & Run**. The generated source streams into the
 right panel; the build + `wxc-exec` log streams below it. The widget window opens
 sandboxed — close it to finish the run. If it crashes instead, the creator keeps
