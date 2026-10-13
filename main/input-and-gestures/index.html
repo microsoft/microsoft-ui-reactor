@@ -4681,7 +4681,7 @@ If a parent needs to see the press before children consume it, drop
 down to <code>.Set(c =&gt; c.AddHandler(PointerPressedEvent, handler,
 handledEventsToo: true))</code> — there is no handled-too overload on the
 <code>.On*</code> modifiers themselves. The
-<a href="#ai:caveat">caveat above</a> goes into the routing detail.</p>
+<a href="#the-move-on-confirmation-pattern">caveat above</a> goes into the routing detail.</p>
 <h3 id="using-onkeydown-for-accelerator-chords">Using <code>.OnKeyDown</code> for accelerator chords<a class="headerlink" href="#using-onkeydown-for-accelerator-chords" title="Permanent link">&para;</a></h3>
 <p><code>.OnKeyDown</code> fires per element on focus — a <code>Ctrl+S</code> handler attached
 to a <code>TextBox</code> only fires while that field has focus. For app-wide

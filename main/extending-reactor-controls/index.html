@@ -3595,7 +3595,7 @@ with the global <a href="../control-reconciler-protocol/#registration"><code>Con
 the same lifecycle, the same diff-and-write efficiency, the same pool
 reuse, and the same echo-safe two-way binding as <code>Button</code>,
 <a href="../forms/"><code>TextBox</code></a>, and <code>TabView</code>. The factory holder pattern is
-<a href="#step-3--wrap-the-constructor-in-a-factory-holder">trim-clean by construction</a>:
+<a href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">trim-clean by construction</a>:
 if the app never calls the factory, the handler and the underlying
 WinUI control type are unreachable and NativeAOT publishing drops both.
 This page is the cookbook for that flow. By the end you will have
@@ -3662,7 +3662,7 @@ similar family.</p>
 <code>static</code> keyword on the lambda in Step 3 is mandatory, and the
 holder's class-init being the registration trigger is what makes the
 control trim-clean under NativeAOT publishing (see
-<a href="#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6 — Wrap the constructor in a factory holder, then use it</a>).
+<a href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6 — Wrap the constructor in a factory holder, then use it</a>).
 If no component ever calls <code>StarMeter.Of(...)</code>, the holder is
 unreachable; the trimmer follows that unreachability through the
 cctor to the handler class and the WinUI control type, and removes
@@ -3715,7 +3715,7 @@ custom controls are well-served by the default sealed-record shape.</p>
 <code>new StarMeterElement(...)</code> from outside the assembly that owns the
 element, leaving <code>StarMeter.Of(...)</code> (Step 6) as the sole external
 construction path. That is the <em>construction discipline</em> spec 048 §6
-requires for the <a href="#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it">factory-holder trim story</a>
+requires for the <a href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">factory-holder trim story</a>
 to hold — if external callers could bypass <code>Of</code>, the holder's class-
 init would not be guaranteed to run and the global registration could
 be missing when the element reached the reconciler. Init properties
@@ -3773,7 +3773,7 @@ at the field. The
 shape; keeping the demo focused, the cookbook below omits it.</p>
 <h2 id="step-2-choose-a-shape-descriptor-vs-hand-coded">Step 2 — Choose a shape (descriptor vs hand-coded)<a class="headerlink" href="#step-2-choose-a-shape-descriptor-vs-hand-coded" title="Permanent link">&para;</a></h2>
 <p>Reactor's handler protocol has two surfaces — declarative
-(<a href="../control-reconciler-protocol/#descriptors--declarative-handlers"><code>ControlDescriptor</code></a>)
+(<a href="../control-reconciler-protocol/#descriptors-declarative-handlers"><code>ControlDescriptor</code></a>)
 and imperative
 (<a href="../control-reconciler-protocol/#the-handler-contract"><code>IElementHandler</code></a>) — that
 land on the same dispatch table. New controls should default to a
@@ -3859,7 +3859,7 @@ the bar for "complicated enough to write by hand."</p>
 <a id="__codelineno-1-45" name="__codelineno-1-45" href="#__codelineno-1-45"></a><span class="p">}</span>
 </code></pre></div>
 <p>Each fluent builder call adds one
-<a href="../control-reconciler-protocol/#propentry-shapes--the-prop-binding-vocabulary"><code>PropEntry</code></a>
+<a href="../control-reconciler-protocol/#propentry-shapes-the-prop-binding-vocabulary"><code>PropEntry</code></a>
 to the descriptor. The interpreter iterates them in declaration order
 during Mount and Update. The descriptor above uses three of the
 common shapes:</p>
@@ -4441,7 +4441,7 @@ opt-ins.</p>
 exposes <code>(Color, IsOn) → Background</code> is one entry, not two — the
 <code>get</code> returns a tuple and the <code>set</code> reads both fields. The diff fires
 exactly when either input changes. This is how the LED indicator in
-<a href="../control-reconciler-protocol/#descriptors--declarative-handlers">the Control Reconciler Protocol reference</a>
+<a href="../control-reconciler-protocol/#descriptors-declarative-handlers">the Control Reconciler Protocol reference</a>
 collapses two element fields into one WinUI write.</p>
 <p><strong>Layer in a Reactor-friendly default for an awkward control.</strong> Many
 WinUI controls require an initial property write to "behave"
@@ -4503,7 +4503,7 @@ reset contract clears both on <code>ReturnControl</code>; descriptor-level state
 survives pool rent and corrupts the next mount.</p>
 <p><strong>Passing a non-<code>static</code> lambda to <code>ControlRegistry.Register</code>.</strong> The
 <code>static</code> keyword on the factory lambda is mandatory (see
-<a href="#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6</a>).
+<a href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6</a>).
 Writing
 <code>ControlRegistry.Register&lt;MyElement, MyControl&gt;(() =&gt; new MyHandler())</code>
 without the <code>static</code> modifier compiles, but allocates a closure object

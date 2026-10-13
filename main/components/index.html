@@ -4001,7 +4001,7 @@ stable; it's catastrophic when items reorder, because the second-position
 state cell now belongs to a different item. Apply
 <code>.WithKey(item.Id)</code> (or any stable key) on every child of a <code>ForEach</code> /
 collection render so the reconciler matches by <strong>identity</strong> instead. The
-<a href="../reconciliation/#child-reconciler--keyed-vs-positional">Reconciliation</a>
+<a href="../reconciliation/#child-reconciler-keyed-vs-positional">Reconciliation</a>
 chapter walks the four-phase keyed algorithm in full. The classic failure
 mode: a todo list where deleting item 2 makes item 3's checkbox state
 appear on item 2 — because positionally, slot 2 is still occupied, and the
