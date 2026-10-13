@@ -3470,7 +3470,7 @@ an ETW event, a <code>--preview</code> overlay highlight, a thrown exception —
 back to the C# source that produced it. Two granularities ship today:
 <em>component</em> attribution, where every render emits an ETW event carrying
 the component's type name, and <em>per-element</em> attribution, where each DSL
-call site carries the file and line that produced it. This page covers
+call site carries the file, line and column that produced it. This page covers
 both.</p>
 <blockquote>
 <p><strong>Status.</strong> Per-element source tagging ships as <code>Element.CallSite</code> plus
@@ -3514,7 +3514,8 @@ consumers can subscribe to just the render channel:</p>
 <a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">Theme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x800</span><span class="p">;</span><span class="w">        </span><span class="c1">// theme apply, bindings</span>
 <a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">Shell</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x1000</span><span class="p">;</span><span class="w">       </span><span class="c1">// JumpList/Tray/ThumbnailToolbar</span>
 <a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">HotReload</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x2000</span><span class="p">;</span><span class="w">   </span><span class="c1">// spec 049 — state migration across edits</span>
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="p">}</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">RenderDetail</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x4000</span><span class="p">;</span><span class="w"> </span><span class="c1">// per-component ComponentRendered (reason + instance id) for inspectors</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="p">}</span>
 </code></pre></div>
 <p><code>ComponentRenderStart</code> / <code>ComponentRenderStop</code> fire with the component's
 type name — <code>Counter</code> for a <code>Counter : Component&lt;CounterProps&gt;</code>, whichever
@@ -3528,7 +3529,7 @@ on every tick". <code>RenderError</code>, <code>EffectsFlushStart</code> / <code
 arguments in C# form (<code>ItemList&lt;Int32&gt;</code>, not <code>ItemList`1</code>); function and memo
 components, which have no type of their own, report <code>FuncElement</code> and
 <code>MemoElement</code>.</p>
-<p><img alt="Source attribution: component-name attribution flows the component's type name, formatted by ComponentNames (generic components in C# form), into ETW, while per-element attribution stamps each DSL call site with file and line via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource." src="../images/source-mapping/attribution.svg" /></p>
+<p><img alt="Source attribution: component-name attribution flows the component's type name, formatted by ComponentNames (generic components in C# form), into ETW, while per-element attribution stamps each DSL call site with file, line and column via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource." src="../images/source-mapping/attribution.svg" /></p>
 <h2 id="reconcile-pass-attribution">Reconcile-pass attribution<a class="headerlink" href="#reconcile-pass-attribution" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -3543,6 +3544,11 @@ components, which have no type of their own, report <code>FuncElement</code> and
 <td><code>ComponentRenderStart</code> / <code>Stop</code></td>
 <td>Component CLR type name</td>
 <td>ETW <code>Render</code> keyword</td>
+</tr>
+<tr>
+<td><code>ComponentRendered</code></td>
+<td>Component type name + instance id + render reason</td>
+<td>ETW <code>RenderDetail</code> keyword (Verbose); id resolves to a control via <code>ReactorTrace.GetComponentControl</code></td>
 </tr>
 <tr>
 <td><code>ReconcileStart</code> / <code>Stop</code></td>
@@ -3565,7 +3571,7 @@ components, which have no type of their own, report <code>FuncElement</code> and
 <td>ETW <code>Errors</code> keyword</td>
 </tr>
 <tr>
-<td>Per-element file:line</td>
+<td>Per-element file:line:column</td>
 <td>Element call site</td>
 <td><code>Element.CallSite</code> / <code>ReactorSourceMap.GetSource</code> (when source mapping is enabled at build time)</td>
 </tr>
@@ -3626,8 +3632,8 @@ and is added to your compilation only when <code>ReactorSourceMap</code> is true
 is loaded into every build: this generator inspects every invocation in your
 project, so a Release build should not load it at all.) For each DSL factory
 call site in <em>your</em> project it
-emits an interceptor that calls the real factory and stamps the file and
-line onto the returned element. No factory signature changes and no call
+emits an interceptor that calls the real factory and stamps the file,
+line and column onto the returned element. No factory signature changes and no call
 site is edited, which is what lets it cover the <code>params Element?[]
 children</code> family (<code>VStack</code>, <code>HStack</code>, <code>Grid</code>, …) that <code>[CallerFilePath]</code>
 structurally cannot reach.</p>
@@ -3688,6 +3694,11 @@ so this is the cheaper of the two.</p>
 already stores -&gt; <code>Element.CallSite</code>. It returns <code>null</code> when the control
 was not produced by Reactor, when the assembly was built without source
 mapping, or when nothing stamped that element.</p>
+<p><code>SourceLocation.ColumnNumber</code> is the 1-based column of the factory's name
+(the <code>B</code> of <code>Button</code> in <code>Row(Button("a"), Button("b"))</code>), which is what tells
+several calls on one line apart; <code>0</code> means the provider did not record one.
+<code>ToString()</code> keeps the <code>file:line</code> shape,
+so read the column from the property.</p>
 <h3 id="helper-methods-and-reactorsourcetransparent">Helper methods and <code>[ReactorSourceTransparent]</code><a class="headerlink" href="#helper-methods-and-reactorsourcetransparent" title="Permanent link">&para;</a></h3>
 <p>By default a helper is attributed to <em>itself</em>. In</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">static</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">MyHeader</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;header&quot;</span><span class="p">);</span>
@@ -3822,7 +3833,8 @@ keeps a window alive; it costs one small allocation per host and nothing per ren
 <p><strong>Root mount sites.</strong> A root is not an element, so it has no <code>CallSite</code>. When
 source mapping is on, the generator also intercepts <code>ReactorApp.Run</code>,
 <code>ReactorApp.OpenWindow</code>, <code>ReactorWindow.Mount</code>, <code>ReactorHost.Mount</code> and
-<code>ReactorHostControl.Mount</code> and records the line that called them. Each of those
+<code>ReactorHostControl.Mount</code> and records the line and column that called them (the
+column of the method name, as for element call sites). Each of those
 methods claims its own line first thing and hands it to the host it mounts, which
 reports it as <code>ReactorHostInfo.MountSite</code>. Anything else that mounts while that
 call is running — a host created in a <code>configure</code> callback, a window the framework

@@ -2454,6 +2454,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What&#39;s instrumented">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#component-render-notifications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Component render notifications
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3443,6 +3460,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What&#39;s instrumented">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#component-render-notifications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Component render notifications
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3735,8 +3769,9 @@ forward to a sink under your own ACL.</p>
 <h2 id="whats-instrumented">What's instrumented<a class="headerlink" href="#whats-instrumented" title="Permanent link">&para;</a></h2>
 <p>The provider's events split across a small set of keywords; spec 044
 adds six subsystem keywords on top of the seven the perf-instrumentation
-page documents, and spec 049 added a seventh (<code>HotReload</code>). Pick the
-bits that match what you're triaging:</p>
+page documents, spec 049 added a seventh (<code>HotReload</code>), and <code>RenderDetail</code>
+carries the per-component render notification. Pick the bits that match what
+you're triaging:</p>
 <table>
 <thead>
 <tr>
@@ -3786,6 +3821,11 @@ bits that match what you're triaging:</p>
 <td><code>0x2000</code></td>
 <td>Hook-state migration across edits (spec 049)</td>
 </tr>
+<tr>
+<td><code>RenderDetail</code></td>
+<td><code>0x4000</code></td>
+<td><code>ComponentRendered</code> — one Verbose event per component render, with the reason</td>
+</tr>
 </tbody>
 </table>
 <p>Combine bits with bitwise-or. The most common capture-everything-
@@ -3793,7 +3833,8 @@ unsurprising mask is <code>0x1FA0</code> (<code>Errors | Hosting | Persistence |
 Navigation | Intl | Theme</code>) — drops the verbose <code>State</code> and
 <code>EventDispatch</code> keywords that produce per-state-write spam. Add
 <code>0x2000</code> when you are debugging why hot reload reset a component's
-state.</p>
+state, and <code>0x4000</code> (at level <code>5</code>, Verbose) when you want one
+<code>ComponentRendered</code> event per component render.</p>
 <p><code>Warning</code> carries a framework-authored diagnostic for a recoverable
 misconfiguration the framework chose to continue past — an unresolved
 <code>.ApplyStyle()</code> key, a backdrop that could not materialize. Its payload is
@@ -3822,6 +3863,57 @@ three strings:</p>
 </table>
 <p>The message is composed by the framework from developer-authored
 identifiers, never from user data (spec 044 §6.2.1).</p>
+<h3 id="component-render-notifications">Component render notifications<a class="headerlink" href="#component-render-notifications" title="Permanent link">&para;</a></h3>
+<p><code>ComponentRendered</code> (EventId 40, <code>Verbose</code>, keywords <code>Render | RenderDetail</code>)
+fires once each time a component's <code>Render()</code> runs — on mount, on update, and
+for a host's root component, including a <code>Render()</code> that threw (whether the
+framework's error fallback or an <code>ErrorBoundary</code> caught it) — and never for a
+component the memo gate skipped.
+It is what an inspector needs to flash the regions that just re-rendered, or to
+answer <em>why did this render?</em>:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>componentName</code></td>
+<td>Component type name — <code>Counter</code>, or <code>ItemList&lt;Int32&gt;</code> for a generic component (<code>FuncElement</code> / <code>MemoElement</code> for function and memo components); the same name <code>RenderError</code> reports</td>
+</tr>
+<tr>
+<td><code>componentId</code></td>
+<td>Process-unique id of the mounted instance; stable across its re-renders</td>
+</tr>
+<tr>
+<td><code>reason</code></td>
+<td><code>mount</code>, <code>state</code>, <code>props</code>, <code>context</code>, <code>parent</code>, <code>hotReload</code> or <code>forced</code></td>
+</tr>
+<tr>
+<td><code>elapsedMicroseconds</code></td>
+<td>Time in <code>Render()</code> (plus the synchronous effect flush for non-root components)</td>
+</tr>
+</tbody>
+</table>
+<p><code>state</code> means an update was requested from inside the component's subtree —
+its own hook, or a descendant's: Reactor re-renders every component on the path
+from the root to the one whose state changed, so ancestors report <code>state</code> too.
+A host's root component reports <code>state</code> for every non-forced re-render, including
+the ones the host requests itself (theme, high-contrast or animation-setting
+changes).
+<code>parent</code> means the parent re-rendered and nothing could skip this component (a
+function component, or a propless <code>Component</code> whose <code>ShouldUpdate()</code> is true). A
+function component whose consumed context changed reports <code>context</code> instead.
+<code>hotReload</code> covers every re-render of a hot-reload pass, whatever else changed,
+including the retry after a hook-order change. A component first created during
+the pass reports <code>mount</code>.</p>
+<p>In process, <code>ReactorTrace.GetComponentControl(componentId)</code> resolves an id to the
+control whose bounds are that component's, and <code>ReactorTrace.TryGetComponentId(control, out id)</code> goes the other way. Ids
+are only issued while the event is enabled, so subscribe with
+<code>ReactorTrace.Subscribe(..., EventLevel.Verbose, (EventKeywords)0x4000)</code> first.
+The payload carries no props, state values, keys or paths.</p>
 <blockquote>
 <p><strong>NativeAOT:</strong> the .NET NativeAOT toolchain defaults the <code>EventSourceSupport</code>
 feature switch to <code>false</code>, which compiles the whole <code>EventSource</code> surface out.

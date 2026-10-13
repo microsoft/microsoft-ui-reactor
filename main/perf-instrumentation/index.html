@@ -3631,9 +3631,10 @@ power-of-two flags on <code>EventKeywords</code>, so a consumer can request
 <a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">Theme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x800</span><span class="p">;</span><span class="w">        </span><span class="c1">// theme apply, bindings</span>
 <a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">Shell</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x1000</span><span class="p">;</span><span class="w">       </span><span class="c1">// JumpList/Tray/ThumbnailToolbar</span>
 <a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">HotReload</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x2000</span><span class="p">;</span><span class="w">   </span><span class="c1">// spec 049 — state migration across edits</span>
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="p">}</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">RenderDetail</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x4000</span><span class="p">;</span><span class="w"> </span><span class="c1">// per-component ComponentRendered (reason + instance id) for inspectors</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="p">}</span>
 </code></pre></div>
-<p>Fourteen keywords carve the event surface so a consumer can pay for
+<p>Fifteen keywords carve the event surface so a consumer can pay for
 exactly the events it wants. The original seven cover the render loop:
 <code>Reconcile</code> (0x1) covers the reconciler pass
 boundaries and the child-list diff; <code>Render</code> (0x2) covers per-component
@@ -3648,7 +3649,12 @@ subsystems outside that loop — <code>Hosting</code> (0x80, window / HWND / DPI
 backdrop), <code>Persistence</code> (0x100), <code>Navigation</code> (0x200), <code>Intl</code> (0x400,
 missing keys and format fallback), <code>Theme</code> (0x800), <code>Shell</code> (0x1000,
 JumpList / tray / thumbnail toolbar) — plus <code>HotReload</code> (0x2000) from
-spec 049 for state migration across edits.
+spec 049 for state migration across edits, and <code>RenderDetail</code> (0x4000),
+which carries only the Verbose <code>ComponentRendered</code> event (one per component
+render, with the reason it rendered) so an inspector can take it without
+switching on the <code>Render</code> timing spans. <code>ComponentRendered</code> is also tagged
+<code>Render</code>, so a <code>Render</code> capture at <code>Verbose</code> sees it and one at
+<code>Informational</code> does not.
 Adding a new event in any of those
 categories is a matter of picking the right keyword and the right
 event id; consumers already subscribed to the keyword pick the new

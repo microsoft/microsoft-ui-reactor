@@ -3486,7 +3486,7 @@ feels slow" is the only signal you have. A profile trace is the next
 step up: it costs more to set up but gives you elapsed microseconds
 per span and a complete hierarchy you can sort.</p>
 <h2 id="the-provider-and-its-keywords">The provider and its keywords<a class="headerlink" href="#the-provider-and-its-keywords" title="Permanent link">&para;</a></h2>
-<p>The Reactor provider's events split across seven keywords. A consumer
+<p>The Reactor provider's events split across fifteen keywords. A consumer
 masks in only the ones it wants, so a "just reconcile" trace doesn't
 pay for state writes, MCP traffic, or trampoline dispatches:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">Keywords</span>
@@ -3508,17 +3508,21 @@ pay for state writes, MCP traffic, or trampoline dispatches:</p>
 <a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">Theme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x800</span><span class="p">;</span><span class="w">        </span><span class="c1">// theme apply, bindings</span>
 <a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">Shell</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x1000</span><span class="p">;</span><span class="w">       </span><span class="c1">// JumpList/Tray/ThumbnailToolbar</span>
 <a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">HotReload</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x2000</span><span class="p">;</span><span class="w">   </span><span class="c1">// spec 049 — state migration across edits</span>
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="p">}</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">RenderDetail</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x4000</span><span class="p">;</span><span class="w"> </span><span class="c1">// per-component ComponentRendered (reason + instance id) for inspectors</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="p">}</span>
 </code></pre></div>
-<p><code>Reconcile</code> covers reconcile-pass boundaries and the child-list diff,
-<code>Render</code> covers per-component render timing and the effect-flush
-boundary, <code>State</code> covers <code>UseState</code> writes, <code>Mcp</code> covers
-<a href="../dev-tooling/">devtools</a> tool dispatch, <code>Lifecycle</code> covers mount and
-unmount, <code>Errors</code> is severity-Error events, and <code>EventDispatch</code> covers
-the trampoline that fans WinUI routed events out to your Reactor
-callbacks. The values are power-of-two flags on <code>EventKeywords</code>, so
-<code>Reconcile | Render</code> is <code>0x3</code> and <code>Reconcile | Render | EventDispatch</code>
-is <code>0x43</code>.</p>
+<p>The seven that cover the render loop: <code>Reconcile</code> covers reconcile-pass
+boundaries and the child-list diff, <code>Render</code> covers per-component render
+timing and the effect-flush boundary, <code>State</code> covers <code>UseState</code> writes,
+<code>Mcp</code> covers <a href="../dev-tooling/">devtools</a> tool dispatch, <code>Lifecycle</code> covers
+mount and unmount, <code>Errors</code> is severity-Error events, and <code>EventDispatch</code>
+covers the trampoline that fans WinUI routed events out to your Reactor
+callbacks. The rest (<code>Hosting</code> through <code>HotReload</code>, and <code>RenderDetail</code> for
+the per-component <code>ComponentRendered</code> notification) are covered in
+<a href="../perf-instrumentation/">Perf instrumentation</a> and
+<a href="../diagnostics/">Diagnostics</a>. The values are power-of-two flags on
+<code>EventKeywords</code>, so <code>Reconcile | Render</code> is <code>0x3</code> and
+<code>Reconcile | Render | EventDispatch</code> is <code>0x43</code>.</p>
 <p><img alt="Top-down profile flow — from running app through dotnet-trace or PerfView into a Reactor span hierarchy" src="../images/performance/top-down-flow.svg" /></p>
 <h2 id="taking-a-reactor-only-trace">Taking a Reactor-only trace<a class="headerlink" href="#taking-a-reactor-only-trace" title="Permanent link">&para;</a></h2>
 <p>For a Reactor-only workflow on any OS, <code>dotnet-trace</code> is the right
