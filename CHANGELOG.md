@@ -313,6 +313,12 @@ Conventions for contributors:
   releases the previous root's content (and its components' effects) instead of leaving
   it on screen, and a cleanup that throws during the swap is routed like a disposal-time
   cleanup failure without blocking the new root.
+- **`ReactorWindow`, the tray host and Devtools embedding no longer throw
+  `EntryPointNotFoundException` in x86 processes** (#1365). They imported
+  `GetWindowLongPtrW` / `SetWindowLongPtrW` directly, which 32-bit `user32.dll`
+  does not export. A shared `NativeWindowLong` helper now dispatches to
+  `GetWindowLongW` / `SetWindowLongW` when `IntPtr.Size == 4`; x64 and ARM64
+  behaviour is unchanged.
 - **`RenderError` names the component that threw, and now reports every render
   error** (issue #1321, spec 044 §6.2.1). For class components the event reported
   the element record (``ComponentElement`1`` / `ComponentElement`) instead of the
