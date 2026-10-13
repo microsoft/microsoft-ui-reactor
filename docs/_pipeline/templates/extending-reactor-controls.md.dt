@@ -22,7 +22,7 @@ with the global [`ControlRegistry`](control-reconciler-protocol.md#registration)
 the same lifecycle, the same diff-and-write efficiency, the same pool
 reuse, and the same echo-safe two-way binding as `Button`,
 [`TextBox`](forms.md), and `TabView`. The factory holder pattern is
-[trim-clean by construction](#step-3--wrap-the-constructor-in-a-factory-holder):
+[trim-clean by construction](#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it):
 if the app never calls the factory, the handler and the underlying
 WinUI control type are unreachable and NativeAOT publishing drops both.
 This page is the cookbook for that flow. By the end you will have
@@ -71,7 +71,7 @@ similar family.
 `static` keyword on the lambda in Step 3 is mandatory, and the
 holder's class-init being the registration trigger is what makes the
 control trim-clean under NativeAOT publishing (see
-[Step 6 — Wrap the constructor in a factory holder, then use it](#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it)).
+[Step 6 — Wrap the constructor in a factory holder, then use it](#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it)).
 If no component ever calls `StarMeter.Of(...)`, the holder is
 unreachable; the trimmer follows that unreachability through the
 cctor to the handler class and the WinUI control type, and removes
@@ -103,7 +103,7 @@ The primary constructor is `internal` on purpose: it closes off
 `new StarMeterElement(...)` from outside the assembly that owns the
 element, leaving `StarMeter.Of(...)` (Step 6) as the sole external
 construction path. That is the *construction discipline* spec 048 §6
-requires for the [factory-holder trim story](#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it)
+requires for the [factory-holder trim story](#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it)
 to hold — if external callers could bypass `Of`, the holder's class-
 init would not be guaranteed to run and the global registration could
 be missing when the element reached the reconciler. Init properties
@@ -137,7 +137,7 @@ shape; keeping the demo focused, the cookbook below omits it.
 ## Step 2 — Choose a shape (descriptor vs hand-coded)
 
 Reactor's handler protocol has two surfaces — declarative
-([`ControlDescriptor`](control-reconciler-protocol.md#descriptors--declarative-handlers))
+([`ControlDescriptor`](control-reconciler-protocol.md#descriptors-declarative-handlers))
 and imperative
 ([`IElementHandler`](control-reconciler-protocol.md#the-handler-contract)) — that
 land on the same dispatch table. New controls should default to a
@@ -164,7 +164,7 @@ the bar for "complicated enough to write by hand."
 ```
 
 Each fluent builder call adds one
-[`PropEntry`](control-reconciler-protocol.md#propentry-shapes--the-prop-binding-vocabulary)
+[`PropEntry`](control-reconciler-protocol.md#propentry-shapes-the-prop-binding-vocabulary)
 to the descriptor. The interpreter iterates them in declaration order
 during Mount and Update. The descriptor above uses three of the
 common shapes:
@@ -593,7 +593,7 @@ opt-ins.
 exposes `(Color, IsOn) → Background` is one entry, not two — the
 `get` returns a tuple and the `set` reads both fields. The diff fires
 exactly when either input changes. This is how the LED indicator in
-[the Control Reconciler Protocol reference](control-reconciler-protocol.md#descriptors--declarative-handlers)
+[the Control Reconciler Protocol reference](control-reconciler-protocol.md#descriptors-declarative-handlers)
 collapses two element fields into one WinUI write.
 
 **Layer in a Reactor-friendly default for an awkward control.** Many
@@ -664,7 +664,7 @@ survives pool rent and corrupts the next mount.
 
 **Passing a non-`static` lambda to `ControlRegistry.Register`.** The
 `static` keyword on the factory lambda is mandatory (see
-[Step 6](#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it)).
+[Step 6](#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it)).
 Writing
 `ControlRegistry.Register<MyElement, MyControl>(() => new MyHandler())`
 without the `static` modifier compiles, but allocates a closure object

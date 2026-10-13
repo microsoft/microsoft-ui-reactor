@@ -47,21 +47,46 @@ public sealed class RootMountInterceptionTests : IDisposable
         public override Element Render() => TextBlock("probe");
     }
 
-    private void AssertSingleSiteAt(int expectedLine)
+    /// <summary>
+    /// Asserts one scope was opened at <paramref name="expectedLine"/>, at the column of
+    /// <paramref name="methodName"/> followed by <c>(</c> on that line. The column oracle
+    /// is this file's own text (there is no <c>[CallerColumnNumber]</c>).
+    /// </summary>
+    private void AssertSingleSiteAt(int expectedLine, string methodName)
     {
         var site = Assert.Single(_entered);
         Assert.Equal(expectedLine, site.LineNumber);
         Assert.EndsWith("RootMountInterceptionTests.cs", site.FilePath, StringComparison.Ordinal);
         Assert.Equal(0, ReactorSourceMap.OpenRootMountScopeCountForTest);
+
+        var text = SourceLine(expectedLine);
+        int index = text.IndexOf(methodName + "(", StringComparison.Ordinal);
+        Assert.True(index >= 0, $"'{methodName}(' not found on line {expectedLine}: {text}");
+        Assert.Equal(index + 1, site.ColumnNumber);
+    }
+
+    private static string SourceLine(int lineNumber)
+    {
+        string relative = global::System.IO.Path.Join("tests", "Reactor.SourceMap.Tests", "RootMountInterceptionTests.cs");
+        var dir = new global::System.IO.DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = global::System.IO.Path.Join(dir.FullName, relative);
+            if (global::System.IO.File.Exists(candidate))
+                return global::System.IO.File.ReadAllLines(candidate)[lineNumber - 1];
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("could not locate RootMountInterceptionTests.cs above " + AppContext.BaseDirectory);
     }
 
     /// <summary>
     /// The intercepted method claimed its OWN scope as its first statement — before the
     /// argument check that makes it throw — so no later mount could have taken it.
     /// </summary>
-    private void AssertClaimedByTheEntryPoint(int expectedLine)
+    private void AssertClaimedByTheEntryPoint(int expectedLine, string methodName)
     {
-        AssertSingleSiteAt(expectedLine);
+        AssertSingleSiteAt(expectedLine, methodName);
         Assert.Equal(_entered, _claimed);
     }
 
@@ -70,7 +95,7 @@ public sealed class RootMountInterceptionTests : IDisposable
     {
         Assert.Throws<ArgumentNullException>(() => ReactorApp.OpenWindow(new WindowSpec(), (Func<Component>)null!)); int expected = Line();
 
-        AssertClaimedByTheEntryPoint(expected);
+        AssertClaimedByTheEntryPoint(expected, "OpenWindow");
     }
 
     [Fact]
@@ -78,7 +103,7 @@ public sealed class RootMountInterceptionTests : IDisposable
     {
         Assert.Throws<ArgumentNullException>(() => ReactorApp.OpenWindow(new WindowSpec(), (Func<RenderContext, Element>)null!)); int expected = Line();
 
-        AssertClaimedByTheEntryPoint(expected);
+        AssertClaimedByTheEntryPoint(expected, "OpenWindow");
     }
 
     [Fact]
@@ -86,7 +111,7 @@ public sealed class RootMountInterceptionTests : IDisposable
     {
         Assert.Throws<ArgumentNullException>(() => ReactorApp.Run<Probe>((WindowSpec)null!)); int expected = Line();
 
-        AssertClaimedByTheEntryPoint(expected);
+        AssertClaimedByTheEntryPoint(expected, "Run<Probe>");
     }
 
     [Fact]
@@ -94,7 +119,7 @@ public sealed class RootMountInterceptionTests : IDisposable
     {
         Assert.Throws<ArgumentNullException>(() => ReactorApp.Run((WindowSpec)null!, _ => TextBlock("x"))); int expected = Line();
 
-        AssertClaimedByTheEntryPoint(expected);
+        AssertClaimedByTheEntryPoint(expected, "Run");
     }
 
     [Fact]
@@ -104,7 +129,7 @@ public sealed class RootMountInterceptionTests : IDisposable
 
         Assert.Throws<NullReferenceException>(() => host.Mount(_ => TextBlock("x"))); int expected = Line();
 
-        AssertSingleSiteAt(expected);
+        AssertSingleSiteAt(expected, "Mount");
     }
 
     [Fact]
@@ -114,7 +139,7 @@ public sealed class RootMountInterceptionTests : IDisposable
 
         Assert.Throws<NullReferenceException>(() => control.Mount(new Probe())); int expected = Line();
 
-        AssertSingleSiteAt(expected);
+        AssertSingleSiteAt(expected, "Mount");
     }
 
     [Fact]
@@ -124,7 +149,7 @@ public sealed class RootMountInterceptionTests : IDisposable
 
         Assert.Throws<NullReferenceException>(() => control.Mount(_ => TextBlock("x"))); int expected = Line();
 
-        AssertSingleSiteAt(expected);
+        AssertSingleSiteAt(expected, "Mount");
     }
 
     [Fact]
@@ -134,7 +159,7 @@ public sealed class RootMountInterceptionTests : IDisposable
 
         Assert.Throws<NullReferenceException>(() => window.Mount(new Probe())); int expected = Line();
 
-        AssertSingleSiteAt(expected);
+        AssertSingleSiteAt(expected, "Mount");
     }
 
     /// <summary>
@@ -178,7 +203,10 @@ public sealed class RootMountInterceptionTests : IDisposable
         Assert.NotNull(generated);
 
         var text = File.ReadAllText(generated!);
-        Assert.Contains($"RootMountInterceptionTests.cs\", {expected})", text, StringComparison.Ordinal);
+        var source = SourceLine(expected);
+        int column = source.IndexOf("Mount(", StringComparison.Ordinal) + 1;
+        Assert.True(column > 0, source);
+        Assert.Contains($"RootMountInterceptionTests.cs\", {expected}, {column})", text, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -209,7 +237,7 @@ public sealed class RootMountInterceptionTests : IDisposable
 
         Assert.Throws<ArgumentNullException>(() => ReactorApp.OpenWindow(new WindowSpec(), (Func<Component>)null!)); int expected = Line();
 
-        AssertClaimedByTheEntryPoint(expected);
+        AssertClaimedByTheEntryPoint(expected, "OpenWindow");
     }
 
     /// <summary>

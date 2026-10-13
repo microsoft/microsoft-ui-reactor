@@ -308,6 +308,8 @@ public UIElement? Reconcile(
         _resourceRefreshArmed = false;
         _forceFullRenderActive = ForceFullRenderPending || _resourceRefreshActive;
         ForceFullRenderPending = false;
+        _hotReloadRetryActive = HotReloadRetryPending;
+        HotReloadRetryPending = false;
 
         // Build the dirty-ancestor path. For every component node
         // whose SelfTriggered is true, walk up the realized visual
