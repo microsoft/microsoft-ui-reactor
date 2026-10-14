@@ -30,19 +30,22 @@ internal class ReactorSource_NullRenderDropsLateConflictRootHooks(Harness h) : S
 {
     private static WinUI.TextBlock? Find(Harness h, string text) => h.FindControl<WinUI.TextBlock>(t => t.Text == text);
 
-    // Returns false when this host does not stamp call sites (nothing to test).
-    private async Task<bool> RunPath(string name, string text, Func<Action<bool>?> setShown, Func<Task> mount, Func<Task> render, Action dispose)
+    // Only called in a host that stamps call sites (see RunAsync), so a missing at= or hooks=
+    // is a publication failure.
+    private async Task RunPath(string name, string text, Func<Action<bool>?> setShown, Func<Task> mount, Func<Task> render, Action dispose)
     {
         await mount();
         var root = Find(H, text);
         var before = root is null ? null : ReactorDiagnostics.GetSource(root);
         Console.WriteLine($"# {name}, before: {before}");
-        if (before?.Contains("|at=", StringComparison.Ordinal) != true)
+        bool published = before?.Contains("|at=", StringComparison.Ordinal) == true
+            && before.Contains("|root=FuncElement|hooks=0:shown@", StringComparison.Ordinal);
+        H.Check($"{name}_RootHooksPublished", published);
+        if (!published)
         {
             dispose();
-            return false;
+            return;
         }
-        H.Check($"{name}_RootHooksPublished", before.Contains("|root=FuncElement|hooks=0:shown@", StringComparison.Ordinal));
         var siteFile = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(root!)?.FilePath;
         if (siteFile is not null)
             Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.RegisterStaticInfo(
@@ -56,7 +59,6 @@ internal class ReactorSource_NullRenderDropsLateConflictRootHooks(Harness h) : S
             && after.Contains("|root=FuncElement", StringComparison.Ordinal)
             && !after.Contains("|hooks=", StringComparison.Ordinal));
         dispose();
-        return true;
     }
 
     public override async Task RunAsync()
@@ -67,13 +69,20 @@ internal class ReactorSource_NullRenderDropsLateConflictRootHooks(Harness h) : S
             return;
         }
 
-        var previous = ReactorSourcePublisher.IsEnabled;
+        var (previous, mapped) = (ReactorSourcePublisher.IsEnabled, Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
         try
         {
             ReactorSourcePublisher.IsEnabled = true;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
+            // Decided independently of the published values under test.
+            if (TextBlock("late-null-stamp-probe").CallSite is null)
+            {
+                H.Skip("ReactorSource_NullRenderLateConflict", "call sites are not stamped in this host");
+                return;
+            }
 
             ReactorHost? host = null;
-            bool stamped = await RunPath("ReactorSource_NullRenderLateConflict_Host", "late-null-root-host",
+            await RunPath("ReactorSource_NullRenderLateConflict_Host", "late-null-root-host",
                 () => LateNullRootHostMount.SetShown,
                 mount: async () =>
                 {
@@ -83,11 +92,6 @@ internal class ReactorSource_NullRenderDropsLateConflictRootHooks(Harness h) : S
                 },
                 render: async () => { await Harness.Render(); await Harness.Render(); },
                 dispose: () => { host?.Dispose(); H.SetContent(null); });
-            if (!stamped)
-            {
-                H.Skip("ReactorSource_NullRenderLateConflict", "call sites are not stamped in this host");
-                return;
-            }
 
             ReactorHostControl? control = null;
             await RunPath("ReactorSource_NullRenderLateConflict_HostControl", "late-null-root-control",
@@ -113,6 +117,7 @@ internal class ReactorSource_NullRenderDropsLateConflictRootHooks(Harness h) : S
         finally
         {
             ReactorSourcePublisher.IsEnabled = previous;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = mapped;
         }
     }
 }

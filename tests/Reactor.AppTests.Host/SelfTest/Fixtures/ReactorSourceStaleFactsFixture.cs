@@ -52,10 +52,17 @@ internal class ReactorSource_StaleFactsDropped(Harness h) : SelfTestFixtureBase(
             return;
         }
 
-        var previous = ReactorSourcePublisher.IsEnabled;
+        var (previous, mapped) = (ReactorSourcePublisher.IsEnabled, Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
         try
         {
             ReactorSourcePublisher.IsEnabled = true;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
+            // Decided independently of the published values under test.
+            if (TextBlock("stale-facts-stamp-probe").CallSite is null)
+            {
+                H.Skip("ReactorSource_StaleFacts", "call sites are not stamped in this host");
+                return;
+            }
 
             // ── Hot reload: every name and hook list becomes unknown. ──
             var hrHost = H.CreateHost();
@@ -64,16 +71,9 @@ internal class ReactorSource_StaleFactsDropped(Harness h) : SelfTestFixtureBase(
             var nameBefore = Source("late-title");
             var hooksBefore = MemoWrapperSource();
             Console.WriteLine($"# stale facts, before: {nameBefore} / {hooksBefore}");
-            // Only a host without stamped call sites (no source-map build) is unsupported; a
-            // stamped host that lacks either fact is a publication failure, not a skip.
-            if (nameBefore?.Contains("|at=", StringComparison.Ordinal) != true)
-            {
-                H.Skip("ReactorSource_StaleFacts", "call sites are not stamped in this host");
-                hrHost.Dispose();
-                H.SetContent(null);
-                return;
-            }
-            bool publishedBefore = nameBefore.Contains("|name=lateTitle", StringComparison.Ordinal)
+            // This host stamps call sites (checked above), so a missing fact is a failure.
+            bool publishedBefore = nameBefore?.Contains("|at=", StringComparison.Ordinal) == true
+                && nameBefore.Contains("|name=lateTitle", StringComparison.Ordinal)
                 && hooksBefore?.Contains("|hooks=0:count@", StringComparison.Ordinal) == true;
             H.Check("ReactorSource_StaleFacts_PublishedBeforeInvalidation", publishedBefore);
             if (!publishedBefore)
@@ -160,6 +160,7 @@ internal class ReactorSource_StaleFactsDropped(Harness h) : SelfTestFixtureBase(
         finally
         {
             ReactorSourcePublisher.IsEnabled = previous;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = mapped;
         }
     }
 }

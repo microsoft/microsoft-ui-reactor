@@ -35,18 +35,21 @@ internal class ReactorSource_NullRenderDropsStaleFacts(Harness h) : SelfTestFixt
     private string? Title()
         => H.FindControl<WinUI.TextBlock>(t => t.Text == "null-render-title") is { } tb ? ReactorDiagnostics.GetSource(tb) : null;
 
-    // Returns false when this host does not stamp call sites (nothing to test).
-    private async Task<bool> RunPath(string name, Func<Task> mount, Func<Task> render, Action dispose)
+    // Only called in a host that stamps call sites (see RunAsync), so a missing at= or name=
+    // is a publication failure.
+    private async Task RunPath(string name, Func<Task> mount, Func<Task> render, Action dispose)
     {
         await mount();
         var before = Title();
         Console.WriteLine($"# {name}, before: {before}");
-        if (before?.Contains("|at=", StringComparison.Ordinal) != true)
+        bool published = before?.Contains("|at=", StringComparison.Ordinal) == true
+            && before.Contains("|name=nullTitle", StringComparison.Ordinal);
+        H.Check($"{name}_NamePublished", published);
+        if (!published)
         {
             dispose();
-            return false;
+            return;
         }
-        H.Check($"{name}_NamePublished", before.Contains("|name=nullTitle", StringComparison.Ordinal));
         try
         {
             Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.InvalidateStaticFactsForHotReload();
@@ -62,7 +65,6 @@ internal class ReactorSource_NullRenderDropsStaleFacts(Harness h) : SelfTestFixt
             Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.ResetHotReloadInvalidationForTests();
             dispose();
         }
-        return true;
     }
 
     public override async Task RunAsync()
@@ -73,13 +75,20 @@ internal class ReactorSource_NullRenderDropsStaleFacts(Harness h) : SelfTestFixt
             return;
         }
 
-        var previous = ReactorSourcePublisher.IsEnabled;
+        var (previous, mapped) = (ReactorSourcePublisher.IsEnabled, Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
         try
         {
             ReactorSourcePublisher.IsEnabled = true;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
+            // Decided independently of the published values under test.
+            if (TextBlock("null-render-stamp-probe").CallSite is null)
+            {
+                H.Skip("ReactorSource_NullRenderDropsStaleFacts", "call sites are not stamped in this host");
+                return;
+            }
 
             Microsoft.UI.Reactor.Hosting.ReactorHost? host = null;
-            bool stamped = await RunPath("ReactorSource_NullRender_Host",
+            await RunPath("ReactorSource_NullRender_Host",
                 mount: async () =>
                 {
                     host = H.CreateHost();
@@ -88,11 +97,6 @@ internal class ReactorSource_NullRenderDropsStaleFacts(Harness h) : SelfTestFixt
                 },
                 render: async () => { await Harness.Render(); await Harness.Render(); },
                 dispose: () => { host?.Dispose(); H.SetContent(null); });
-            if (!stamped)
-            {
-                H.Skip("ReactorSource_NullRenderDropsStaleFacts", "call sites are not stamped in this host");
-                return;
-            }
 
             Microsoft.UI.Reactor.Hosting.ReactorHostControl? control = null;
             await RunPath("ReactorSource_NullRender_HostControl",
@@ -115,6 +119,7 @@ internal class ReactorSource_NullRenderDropsStaleFacts(Harness h) : SelfTestFixt
         finally
         {
             ReactorSourcePublisher.IsEnabled = previous;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = mapped;
         }
     }
 }
