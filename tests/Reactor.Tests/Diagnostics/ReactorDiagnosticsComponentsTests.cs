@@ -545,6 +545,33 @@ public class ReactorDiagnosticsComponentsTests
         public readonly string AdminPassword = Stored;
     }
 
+    [Fact]
+    public void Props_ADerivedRecordOverAHandWrittenBase_IsJudgedByItsText_ADerivedGeneratedOneListsMembers()
+    {
+        var overHandWritten = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new DerivedOverHandWritten("hunter2", 1)) };
+        var row = Assert.Single(ComponentHandle.FromNode(overHandWritten, () => true).Describe().Props);
+        Assert.Equal(("Props", "<redacted>", true), (row.Name, row.Value, row.Redacted));
+
+        var overGenerated = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new DerivedOverGenerated("a", 2)) };
+        var rows = ComponentHandle.FromNode(overGenerated, () => true).Describe().Props;
+        Assert.Equal(new[] { "Extra", "Name" }, rows.Select(r => r.Name).OrderBy(n => n, StringComparer.Ordinal));
+    }
+
+    private record HandWrittenBase(string Value)
+    {
+        protected virtual bool PrintMembers(global::System.Text.StringBuilder builder)
+        {
+            builder.Append("Password = ").Append(Value);
+            return true;
+        }
+    }
+
+    private sealed record DerivedOverHandWritten(string Value, int Extra) : HandWrittenBase(Value);
+
+    private record GeneratedBase(string Name);
+
+    private sealed record DerivedOverGenerated(string Name, int Extra) : GeneratedBase(Name);
+
     private sealed record HandWrittenRecord(string Value)
     {
         public override string ToString() => "ApiKey: " + Value;

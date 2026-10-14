@@ -1180,8 +1180,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             _currentTree = newTree;
             _renderedRoot = passRoot;
             // An Empty() render may write nothing (the container was already empty), yet the
-            // container now shows this root: claim it alongside the published root.
-            if (newControl is null && ContentTarget is { } emptyTarget && !OwnsContentTarget(emptyTarget))
+            // container now shows this root: claim it alongside the published root. Only an empty
+            // container: an occupied one still shows another host's content, which keeps it.
+            if (newControl is null && ContentTarget is { Child: null } emptyTarget && !OwnsContentTarget(emptyTarget))
                 ClaimContentTarget();
             // A root replaced during this pass (it called Mount) still committed its own tree;
             // that tree is the replacement's to release if its first render produces nothing.

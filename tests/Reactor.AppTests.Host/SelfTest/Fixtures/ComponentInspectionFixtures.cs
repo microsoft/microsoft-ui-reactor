@@ -423,6 +423,25 @@ internal static class ComponentInspectionFixtures
                 H.Check("RootAnchor_SharedEmptyContainerOwnedByLatestMount",
                     ReactorDiagnostics.DescribeComponent(emptyTarget) is { IsRoot: true, State: [{ Value: "\"second-empty\"" }] });
 
+                // An Empty() render into a container another host still fills writes nothing, so it
+                // takes no ownership: the occupied container keeps resolving to the host shown in it.
+                var occupied = new Border();
+                using (var filler = new ReactorHost(H.Window) { ContentTarget = occupied })
+                using (var emptyLate = new ReactorHost(H.Window) { ContentTarget = occupied })
+                {
+                    filler.Mount(new RootCounter());
+                    await Harness.Render();
+                    H.Check("RootAnchor_OccupiedContainerResolvesFiller", IsRoot(ReactorDiagnostics.DescribeComponent(occupied)));
+                    emptyLate.Mount(ctx =>
+                    {
+                        var (s, _) = ctx.UseState("late-empty");
+                        return Empty();
+                    });
+                    await Harness.Render();
+                    H.Check("RootAnchor_EmptyRenderDoesNotClaimOccupiedContainer",
+                        occupied.Child is not null && IsRoot(ReactorDiagnostics.DescribeComponent(occupied)));
+                }
+
                 // Overlay teardown writes the (empty) raw content back and reclaims the container,
                 // even though another host claimed it while the wrapper was installed.
                 var overlayBefore = ReactorFeatureFlags.HighlightReconcileChanges;

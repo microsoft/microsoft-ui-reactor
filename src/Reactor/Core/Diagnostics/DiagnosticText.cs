@@ -400,6 +400,8 @@ internal static class DiagnosticText
     // ToString or PrintMembers — or metadata trimmed away — fails this, and the own-text check runs.
     [UnconditionalSuppressMessage("Trimming", "IL2070",
         Justification = "Diagnostics-only probe; if trimmed, the object is judged by its own text, which can only redact more.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075",
+        Justification = "Diagnostics-only walk of the record base chain; trimmed metadata fails the probe, which can only redact more.")]
     private static bool HasGeneratedRecordText(Type type)
     {
         const global::System.Reflection.BindingFlags Any =
@@ -410,10 +412,22 @@ internal static class DiagnosticText
         if (type.GetFields(global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Instance).Length > 0)
             return false;
         var toString = type.GetMethod(nameof(ToString), global::System.Type.EmptyTypes);
-        var printMembers = type.GetMethod("PrintMembers", Any, null, new[] { typeof(global::System.Text.StringBuilder) }, null);
-        return toString is not null && printMembers is not null
-            && toString.IsDefined(typeof(global::System.Runtime.CompilerServices.CompilerGeneratedAttribute), false)
-            && printMembers.IsDefined(typeof(global::System.Runtime.CompilerServices.CompilerGeneratedAttribute), false);
+        if (toString is null || !toString.IsDefined(typeof(global::System.Runtime.CompilerServices.CompilerGeneratedAttribute), false))
+            return false;
+        // A derived record's generated PrintMembers calls base.PrintMembers, so every record in the
+        // chain must print through a generated PrintMembers declared on its own type; a hand-written
+        // one anywhere up the chain can print a secret under another member's name.
+        for (var t = type; t is not null && t != typeof(object); t = t.BaseType)
+        {
+            var printMembers = t.GetMethod("PrintMembers", Any | global::System.Reflection.BindingFlags.DeclaredOnly,
+                null, new[] { typeof(global::System.Text.StringBuilder) }, null);
+            if (printMembers is null
+                || !printMembers.IsDefined(typeof(global::System.Runtime.CompilerServices.CompilerGeneratedAttribute), false))
+                return false;
+            if (t.BaseType is { } baseType && baseType.GetMethod("<Clone>$", Any) is null)
+                break; // reached the root record (its base is a non-record class)
+        }
+        return true;
     }
 
     // A collection whose ToString() is object's (prints the type name) is summarised by count; a
