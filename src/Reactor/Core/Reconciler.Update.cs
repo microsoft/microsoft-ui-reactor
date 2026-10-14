@@ -1602,8 +1602,9 @@ public sealed partial class Reconciler
     /// against itself: a brush the factory resolved eagerly with <c>ThemeRef.Resolve</c> is
     /// equal on both sides of a self-diff, and diff-based setters would skip writing it.
     /// <list type="bullet">
-    /// <item>Output is another memo (nested): self-diff, so the nested memo's own refresh diffs
-    /// against the recorded (innermost) output.</item>
+    /// <item>Output is another memo (nested, possibly inside legacy <see cref="ModifiedElement"/>
+    /// layers): self-diff, so the nested memo's own refresh diffs against the recorded (innermost)
+    /// output.</item>
     /// <item>Output changed shape (root type or key) from the recorded one: remount the memo and
     /// return the new control; the caller unmounts the old one and swaps it in.</item>
     /// <item>Nothing recorded (a control that is not a FrameworkElement): self-diff.</item>
@@ -1616,7 +1617,7 @@ public sealed partial class Reconciler
     {
         var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
         if (inner is EmptyElement) return null;
-        if (inner is KeyedMemoElement)
+        if (IsNestedKeyedMemo(inner))
         {
             var nested = Update(inner, inner, control, requestRerender);
             // A nested memo that remounted hands back a fresh control; the enclosing Update must

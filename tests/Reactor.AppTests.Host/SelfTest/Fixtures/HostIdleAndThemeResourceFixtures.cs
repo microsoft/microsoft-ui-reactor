@@ -175,6 +175,8 @@ internal static class HostIdleAndThemeResourceFixtures
             int visualizerWrapperMounts = 0;
             int commandHostChildCleanups = 0;
             int commandHostChildUnmounts = 0;
+            int legacyNestedMounts = 0;
+            int legacyNestedCleanups = 0;
             int wrapperMounts = 0;
             int nestedInnerMounts = 0;
             int nestedOuterMounts = 0;
@@ -301,6 +303,20 @@ internal static class HostIdleAndThemeResourceFixtures
                                     ? TextBlock("LegacyWrapBefore")
                                     : Border(TextBlock("LegacyWrapAfter"))),
                             new ElementModifiers { Margin = new Thickness(11) }),
+                        // A memo whose output is a legacy ModifiedElement around a nested memo: the layers
+                        // share one control, so the inner memo's recorded output must survive and a
+                        // same-shape refresh must keep its subtree (and state) instead of remounting it.
+                        Memo("legacyNestedOuter", () => new ModifiedElement(
+                            Memo("legacyNestedInner", () => RenderEachTime(fctx =>
+                            {
+                                fctx.UseEffect(() =>
+                                {
+                                    legacyNestedMounts++;
+                                    return () => legacyNestedCleanups++;
+                                });
+                                return TextBlock("LegacyNestedProbe").Foreground(Theme.Ref(AppKey));
+                            })),
+                            new ElementModifiers { Margin = new Thickness(13) })),
                         // A templated-list item that changes shape with the resource: the replaced
                         // item must be unmounted.
                         ListView(templatedItems, static s => s, (_, _) => Memo("templatedShape",
@@ -354,6 +370,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_NestedWrapperRerenderAloneMountedOnce", nestedInnerMounts == 1 && nestedOuterMounts == 1,
                     $"inner={nestedInnerMounts} outer={nestedOuterMounts}");
                 H.Check("ThemeMemo_PopupContentRerenderAloneKept", popupContentCleanedUp == 0);
+                H.Check("ThemeMemo_LegacyNestedRerenderAloneIsStale", ProbeColor(target, "LegacyNestedProbe") == Colors.Red,
+                    $"color={ProbeColor(target, "LegacyNestedProbe")}");
                 H.Check("ThemeMemo_CommandHostChildRerenderAloneKept", commandHostChildCleanups == 0 && FindText(target, "CommandHostBefore") is not null,
                     $"cleanups={commandHostChildCleanups}");
                 H.Check("ThemeMemo_LegacyWrapperRerenderAloneKept", (FindText(target, "LegacyWrapBefore")?.Margin ?? default) == new Thickness(11));
@@ -398,6 +416,11 @@ internal static class HostIdleAndThemeResourceFixtures
                 var legacyBorder = FindText(target, "LegacyWrapAfter")?.Parent as Border;
                 H.Check("ThemeMemo_LegacyWrapperRemountKeepsModifiers", legacyBorder?.Margin == new Thickness(11),
                     $"margin={legacyBorder?.Margin.ToString() ?? "(not found)"}");
+                H.Check("ThemeMemo_LegacyNestedNotifiedIsBlue", ProbeColor(target, "LegacyNestedProbe") == Colors.Blue,
+                    $"color={ProbeColor(target, "LegacyNestedProbe")}");
+                H.Check("ThemeMemo_LegacyNestedKeptNotRemounted", legacyNestedMounts == 1 && legacyNestedCleanups == 0,
+                    $"mounts={legacyNestedMounts} cleanups={legacyNestedCleanups}");
+                H.Check("ThemeMemo_LegacyNestedKeepsModifiers", AncestorMargin(FindText(target, "LegacyNestedProbe"), new Thickness(13)));
                 H.Check("ThemeMemo_VisualizerNotifiedOneLiveCopy", visualizerContentMounts >= 3 && visualizerContentMounts - visualizerContentCleanups == 1,
                     $"mounts={visualizerContentMounts} cleanups={visualizerContentCleanups}");
                 H.Check("ThemeMemo_TreeContentVisibleToEmpty", ToggleTree(target)?.RootNodes[0].Content is null,

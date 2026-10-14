@@ -283,9 +283,20 @@ public sealed partial class Reconciler
         var control = Mount(inner, requestRerender);
         // Nested memos share the realized control; only the innermost layer (the one whose
         // output is not another memo) records, so an outer layer never overwrites it.
-        if (inner is not KeyedMemoElement && control is FrameworkElement fe)
+        if (!IsNestedKeyedMemo(inner) && control is FrameworkElement fe)
             GetOrCreateReactorState(fe).KeyedMemoOutput = inner;
         return control;
+    }
+
+    /// <summary>
+    /// Whether a keyed memo's output is itself a keyed memo, seen through any legacy
+    /// <see cref="ModifiedElement"/> layers: such an output shares the realized control, so the
+    /// innermost memo owns <c>KeyedMemoOutput</c>.
+    /// </summary>
+    private static bool IsNestedKeyedMemo(Element output)
+    {
+        while (output is ModifiedElement mod) output = mod.Inner;
+        return output is KeyedMemoElement;
     }
 
     /// <summary>
