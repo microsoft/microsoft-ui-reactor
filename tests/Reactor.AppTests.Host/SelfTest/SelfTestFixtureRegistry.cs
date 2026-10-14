@@ -905,6 +905,7 @@ internal static class SelfTestFixtureRegistry
         "Hosting_HostControlWaitForIdle",
         "Hosting_NotifyResourcesChangedRefreshesThemeRefOverrides",
         "Hosting_NotifyResourcesChangedRefreshesMemoizedThemeModifiers",
+        "Hosting_NotifyDuringRenderPassSchedulesRender",
         // Navigation coverage — advanced handle ops, serialization, deep links, transitions
         "NavCov_HandleAdvancedOps",
         "NavCov_HandlePopTo",
@@ -2972,6 +2973,7 @@ internal static class SelfTestFixtureRegistry
         "Hosting_HostControlWaitForIdle" => new HostIdleAndThemeResourceFixtures.HostControlWaitForIdle(harness),
         "Hosting_NotifyResourcesChangedRefreshesThemeRefOverrides" => new HostIdleAndThemeResourceFixtures.NotifyResourcesChangedRefreshesThemeRefOverrides(harness),
         "Hosting_NotifyResourcesChangedRefreshesMemoizedThemeModifiers" => new HostIdleAndThemeResourceFixtures.NotifyResourcesChangedRefreshesMemoizedThemeModifiers(harness),
+        "Hosting_NotifyDuringRenderPassSchedulesRender" => new HostIdleAndThemeResourceFixtures.NotifyDuringRenderPassSchedulesRender(harness),
         // Navigation coverage
         "NavCov_HandleAdvancedOps" => new NavigationCoverageFixtures.NavHandleAdvancedOps(harness),
         "NavCov_HandlePopTo" => new NavigationCoverageFixtures.NavHandlePopTo(harness),

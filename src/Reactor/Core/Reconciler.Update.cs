@@ -294,8 +294,11 @@ public sealed partial class Reconciler
         // A layer that shares its inner element's control (a keyed memo, a flyout wrapping its target)
         // refreshed in place: the inner diff may have rewritten a property this layer also sets, and
         // this layer's value wins (it applies after the inner one's at mount).
+        // Legacy ModifiedElement layers were stripped from newEl above; their modifiers sit on the
+        // same control as the inner element's properties, so they replay too.
         if (_resourceRefreshActive
-            && newEl is KeyedMemoElement or FlyoutElement or MenuFlyoutElement or CommandBarFlyoutElement
+            && (newEl is KeyedMemoElement or FlyoutElement or MenuFlyoutElement or CommandBarFlyoutElement
+                || receivedNewEl is ModifiedElement)
             && (result is null || ReferenceEquals(result, control))
             && modifiers is { } wrapperMods && target is FrameworkElement wrapperFe)
             ReassertWrapperValues(wrapperFe, wrapperMods, requestRerender);

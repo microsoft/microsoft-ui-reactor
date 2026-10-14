@@ -635,11 +635,15 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         retireFailure?.Throw();
     }
 
+    // Test seam: runs right after RequestRender reads _isRendering, so a selftest can finish the
+    // in-flight render pass inside that window. Null outside the test.
+    internal static Action<ReactorHost>? RequestRenderAfterRenderingCheckForTest { get; set; }
+
     /// <summary>
     /// Thread-safe: can be called from any thread. Coalesces multiple calls into
     /// a single render. At most one RenderLoop is ever pending on the dispatcher.
     ///
-    /// During render: setState calls set _needsRerender (no enqueue).
+    /// Every call sets _needsRerender first. During render that is all it does (no enqueue).
     /// Between renders: first setState CAS-flips _renderPending 0→1 and enqueues.
     /// _renderPending stays 1 throughout the render, blocking duplicate enqueues.
     ///
@@ -670,19 +674,19 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         if (captured is not null)
             _pendingAmbientAnimation = captured;
 
-        // During render: just flag — the render loop will re-enqueue after Render().
-        if (_isRendering)
-        {
-            _needsRerender = true;
-            return;
-        }
+        // Flag re-render before the _isRendering / CAS checks, as ReactorHostControl does: a caller
+        // off the UI thread (Theme.NotifyResourcesChanged) can read _isRendering == true and lose the
+        // race with the end of that render pass, which has already checked _needsRerender. Writing
+        // the flag first means the pass either sees it or this call finds the gate open and enqueues.
+        _needsRerender = true;
+        bool rendering = _isRendering;
+        RequestRenderAfterRenderingCheckForTest?.Invoke(this);
+
+        // During render: the flag is sufficient — RenderLoop re-checks after Render().
+        if (rendering) return;
 
         // Between renders: CAS 0→1 gates a single TryEnqueue.
-        if (Interlocked.CompareExchange(ref _renderPending, 1, 0) != 0)
-        {
-            _needsRerender = true;
-            return;
-        }
+        if (Interlocked.CompareExchange(ref _renderPending, 1, 0) != 0) return;
 
         // First render synchronous-on-UI-thread: the very first render
         // fires from Mount() inside OnLaunched, which is already on the

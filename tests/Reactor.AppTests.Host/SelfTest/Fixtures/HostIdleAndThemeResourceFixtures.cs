@@ -149,6 +149,81 @@ internal static class HostIdleAndThemeResourceFixtures
     }
 
     /// <summary>
+    /// A notification from another thread that finds the window host mid-render must not be lost
+    /// when that render pass finishes between RequestRender's read of _isRendering and its flag
+    /// write. The test hook runs in exactly that window and lets the pass (and its RenderLoop
+    /// tail) complete before RequestRender continues; the refresh must still render.
+    /// </summary>
+    internal class NotifyDuringRenderPassSchedulesRender(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var previousActiveHost = ReactorApp.ActiveHostInternal;
+            var target = new Border();
+            H.SetContent(target);
+            var dispatcher = global::Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            int renders = 0;
+            bool holdNextRender = false;
+            bool hookRanMidRender = false;
+            using var renderStarted = new SemaphoreSlim(0);
+            using var checkedRendering = new SemaphoreSlim(0);
+            using var passFinished = new SemaphoreSlim(0);
+            try
+            {
+                using var host = new ReactorHost(H.Window) { ContentTarget = target };
+                using var isolation = OnlyTheseHostsListen(host);
+                Action<int>? setTick = null;
+                host.Mount(ctx =>
+                {
+                    var (tick, set) = ctx.UseState(0);
+                    setTick = set;
+                    renders++;
+                    if (holdNextRender)
+                    {
+                        holdNextRender = false;
+                        renderStarted.Release();
+                        // Hold this pass until the other thread has read _isRendering.
+                        hookRanMidRender = checkedRendering.Wait(TimeSpan.FromSeconds(5));
+                    }
+                    return TextBlock($"race:{tick}");
+                });
+                await host.WaitForIdleAsync();
+
+                ReactorHost.RequestRenderAfterRenderingCheckForTest = caller =>
+                {
+                    if (!ReferenceEquals(caller, host) || dispatcher.HasThreadAccess) return;
+                    checkedRendering.Release();
+                    // Queued behind the rest of the in-flight pass; lets it finish first.
+                    dispatcher.TryEnqueue(global::Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => passFinished.Release());
+                    passFinished.Wait(TimeSpan.FromSeconds(5));
+                };
+
+                holdNextRender = true;
+                setTick!(1);
+                var notify = Task.Run(async () =>
+                {
+                    if (await renderStarted.WaitAsync(TimeSpan.FromSeconds(5)))
+                        Theme.NotifyResourcesChanged();
+                });
+                await host.WaitForIdleAsync();
+                await notify;
+                ReactorHost.RequestRenderAfterRenderingCheckForTest = null;
+                await host.WaitForIdleAsync();
+
+                H.Check("RenderRace_HookRanMidRender", hookRanMidRender);
+                // Mount, the tick render, and the refresh the notification asked for.
+                H.Check("RenderRace_NotifyDuringPassStillRenders", renders == 3 && host.IsIdle,
+                    $"renders={renders} idle={host.IsIdle}");
+            }
+            finally
+            {
+                ReactorHost.RequestRenderAfterRenderingCheckForTest = null;
+                ReactorApp.ActiveHostInternal = previousActiveHost;
+                H.SetContent(null);
+            }
+        }
+    }
+    /// <summary>
     /// The window <see cref="ReactorHost"/> path, a reference-equal (UseMemo'd) subtree, an
     /// ordinary <c>.Foreground(Theme.Ref(...))</c> modifier and a background-thread call.
     /// A memoized subtree is skipped wholesale by a plain re-render — and by a hot-reload
@@ -421,6 +496,10 @@ internal static class HostIdleAndThemeResourceFixtures
                         TextBlock("LabelW").AutomationId("SelfTestLabelW"),
                         Memo("labeledPrecedence", () => TextBlock("LabeledProbe").LabeledBy(ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red ? "SelfTestLabelA" : "SelfTestLabelB"))
                             .LabeledBy("SelfTestLabelW"),
+                        // A memo returning a legacy wrapper over a property-sized TextBlock: the wrapper wins.
+                        Memo("legacyFont", () => new ModifiedElement(
+                            new TextBlockElement("LegacyFontProbe") { FontSize = ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red ? 12 : 14 },
+                            new ElementModifiers { FontSize = 30 })),
                         Memo("dragPrecedence", () => TextBlock("DragProbe").IsDragRegion(!(ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red)))
                             .IsDragRegion(false),
                         // A wrapper labelled through an ElementRef beats an output's string LabeledBy.
@@ -501,6 +580,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 int tipMountsBeforeNotify = tipContentMounts;
                 H.Check("ThemeMemo_FlyoutPrecedenceRerenderAloneKeepsWrapper", FindText(target, "FlyPrecedenceProbe")?.FontSize == 30,
                     $"size={FindText(target, "FlyPrecedenceProbe")?.FontSize}");
+                H.Check("ThemeMemo_LegacyFontRerenderAloneKeepsWrapper", FindText(target, "LegacyFontProbe")?.FontSize == 30,
+                    $"size={FindText(target, "LegacyFontProbe")?.FontSize}");
                 H.Check("ThemeMemo_DragRegionRerenderAloneKeepsWrapper", DragRegionOf(target, "DragProbe") == false,
                     $"drag={DragRegionOf(target, "DragProbe")}");
                 H.Check("ThemeMemo_PlacementRerenderAloneKeepsWrapper", PlacementOf(target, "PlacementProbe") == global::Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Right,
@@ -580,6 +661,8 @@ internal static class HostIdleAndThemeResourceFixtures
                     $"color={FlipViewItemColor(target, "FlipProbe")}");
                 H.Check("ThemeMemo_FlyoutPrecedenceRefreshKeepsWrapper", FindText(target, "FlyPrecedenceProbe")?.FontSize == 30,
                     $"size={FindText(target, "FlyPrecedenceProbe")?.FontSize}");
+                H.Check("ThemeMemo_LegacyFontRefreshKeepsWrapper", FindText(target, "LegacyFontProbe")?.FontSize == 30,
+                    $"size={FindText(target, "LegacyFontProbe")?.FontSize}");
                 H.Check("ThemeMemo_DragRegionRefreshKeepsWrapper", DragRegionOf(target, "DragProbe") == false,
                     $"drag={DragRegionOf(target, "DragProbe")}");
                 H.Check("ThemeMemo_RefLabelRefreshKeepsWrapper", LabelTextOf(target, "RefLabeledProbe") == "LabelR",
