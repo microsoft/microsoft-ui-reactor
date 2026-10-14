@@ -6443,11 +6443,11 @@ public sealed partial class Reconciler : IDisposable
                 fe.Resources[key] = resolved;
                 managed.Add(key);
             }
-            else if (managed.Remove(key))
+            else if (!newOverrides.Literals.ContainsKey(key) && managed.Remove(key))
             {
                 // The source resource went away (e.g. a dictionary removed before
                 // Theme.NotifyResourcesChanged): drop the brush this override wrote earlier
-                // instead of leaving it stale.
+                // instead of leaving it stale. A literal for the same key, written above, stays.
                 fe.Resources.Remove(key);
             }
         }

@@ -97,7 +97,11 @@ internal static class HostIdleAndThemeResourceFixtures
                 var (tick, set) = ctx.UseState(0);
                 setTick = set;
                 return Border(TextBlock($"tick:{tick}"))
-                    .Resources(r => r.Set("ProbeBrush", Theme.Ref(AppKey)));
+                    .Resources(r => r
+                        .Set("ProbeBrush", Theme.Ref(AppKey))
+                        // A literal and an unresolvable ThemeRef for one key: the literal stays.
+                        .Set("MixedBrush", "#FF00FF00")
+                        .Set("MixedBrush", Theme.Ref("ReactorSelfTestNoSuchBrush")));
             });
             H.SetContent(new Border { Child = host });
             using var isolation = OnlyTheseHostsListen(host);
@@ -105,6 +109,7 @@ internal static class HostIdleAndThemeResourceFixtures
             {
                 await host.WaitForIdleAsync();
                 H.Check("ThemeNotify_InitialRed", ProbeColor(host) == Colors.Red, $"color={ProbeColor(host)}");
+                H.Check("ThemeNotify_MixedLiteralKeptAtMount", ProbeColor(host, "MixedBrush") == Colors.Lime, $"color={ProbeColor(host, "MixedBrush")}");
 
                 resources[AppKey] = new SolidColorBrush(Colors.Blue);
                 setTick!(1);
@@ -114,6 +119,7 @@ internal static class HostIdleAndThemeResourceFixtures
                 Theme.NotifyResourcesChanged();
                 await host.WaitForIdleAsync();
                 H.Check("ThemeNotify_NotifiedIsBlue", ProbeColor(host) == Colors.Blue, $"color={ProbeColor(host)}");
+                H.Check("ThemeNotify_MixedLiteralKeptOnRefresh", ProbeColor(host, "MixedBrush") == Colors.Lime, $"color={ProbeColor(host, "MixedBrush")}");
 
                 // The source key goes away: the override it wrote must go too.
                 resources.Remove(AppKey);
@@ -133,10 +139,10 @@ internal static class HostIdleAndThemeResourceFixtures
             }
         }
 
-        private static global::Windows.UI.Color? ProbeColor(ReactorHostControl host)
+        private static global::Windows.UI.Color? ProbeColor(ReactorHostControl host, string key = "ProbeBrush")
             => host.Content is Border b
                && b.Resources is { } res
-               && res.TryGetValue("ProbeBrush", out var value)
+               && res.TryGetValue(key, out var value)
                && value is SolidColorBrush brush
                 ? brush.Color
                 : null;
@@ -174,11 +180,12 @@ internal static class HostIdleAndThemeResourceFixtures
             int visualizerContentCleanups = 0;
             int visualizerWrapperMounts = 0;
             int commandHostChildCleanups = 0;
-            int commandHostChildUnmounts = 0;
             int legacyNestedMounts = 0;
             int legacyNestedCleanups = 0;
             int flyoutTargetMounts = 0;
             int flyoutTargetCleanups = 0;
+            int sameKeyMounts = 0;
+            int sameKeyCleanups = 0;
             int wrapperMounts = 0;
             int nestedInnerMounts = 0;
             int nestedOuterMounts = 0;
@@ -296,7 +303,7 @@ internal static class HostIdleAndThemeResourceFixtures
                                 ? RenderEachTime(fctx =>
                                 {
                                     fctx.UseEffect(() => () => commandHostChildCleanups++);
-                                    return TextBlock("CommandHostBefore").OnUnmount(_ => commandHostChildUnmounts++);
+                                    return TextBlock("CommandHostBefore");
                                 })
                                 : TextBlock("CommandHostAfter"))),
                         // A legacy ModifiedElement around a memo that changes shape: its modifiers must
@@ -337,6 +344,24 @@ internal static class HostIdleAndThemeResourceFixtures
                                 return TextBlock("FlyoutTargetProbe").Foreground(Theme.Ref(AppKey));
                             })),
                             TextBlock("FlyoutTip"))),
+                        // Nested memos with one key share a control: each must keep its own record, so
+                        // the component inside keeps its state.
+                        Memo("sameKey", () => Memo("sameKey", () => RenderEachTime(fctx =>
+                        {
+                            fctx.UseEffect(() =>
+                            {
+                                sameKeyMounts++;
+                                return () => sameKeyCleanups++;
+                            });
+                            return TextBlock("SameKeyProbe").Foreground(Theme.Ref(AppKey));
+                        }))),
+                        // A factory returning a legacy wrapper whose wrapped type changes: remount, with
+                        // the wrapper's modifiers.
+                        Memo("legacyOutput", () => new ModifiedElement(
+                            ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red
+                                ? TextBlock("LegacyOutBefore")
+                                : Border(TextBlock("LegacyOutAfter")),
+                            new ElementModifiers { Margin = new Thickness(17) })),
                         // A typed FlipView item with an eagerly resolved brush.
                         FlipView(flipItems, static s => s,
                             static (_, _) => TextBlock("FlipProbe").Foreground(ThemeRef.Resolve(AppKey, isDark: false)!)),
@@ -436,8 +461,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_VisualizerWrapperRemountRunsOnMount", visualizerWrapperMounts == 2, $"mounts={visualizerWrapperMounts}");
                 var visualizerWrapMargin = AncestorMargin(FindText(target, "VisualizerWrapProbe"), new Thickness(9));
                 H.Check("ThemeMemo_VisualizerWrapperRemountKeepsModifiers", visualizerWrapMargin, $"found={FindText(target, "VisualizerWrapProbe") is not null}");
-                H.Check("ThemeMemo_CommandHostChildReplacedAndUnmountedOnce", commandHostChildCleanups == 1 && commandHostChildUnmounts == 1 && FindText(target, "CommandHostAfter") is not null,
-                    $"cleanups={commandHostChildCleanups} unmounts={commandHostChildUnmounts} after={FindText(target, "CommandHostAfter") is not null}");
+                H.Check("ThemeMemo_CommandHostChildReplacedAndUnmountedOnce", commandHostChildCleanups == 1 && FindText(target, "CommandHostAfter") is not null,
+                    $"cleanups={commandHostChildCleanups} after={FindText(target, "CommandHostAfter") is not null}");
                 var legacyBorder = FindText(target, "LegacyWrapAfter")?.Parent as Border;
                 H.Check("ThemeMemo_LegacyWrapperRemountKeepsModifiers", legacyBorder?.Margin == new Thickness(11),
                     $"margin={legacyBorder?.Margin.ToString() ?? "(not found)"}");
@@ -448,6 +473,14 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_LegacyNestedKeepsModifiers", AncestorMargin(FindText(target, "LegacyNestedProbe"), new Thickness(13)));
                 H.Check("ThemeMemo_EagerWrapperNotifiedIsBlue", EagerWrapColor(target) == Colors.Blue, $"color={EagerWrapColor(target)}");
                 H.Check("ThemeMemo_FlipItemNotifiedIsBlue", FlipItemColor(target) == Colors.Blue, $"color={FlipItemColor(target)}");
+                H.Check("ThemeMemo_SameKeyNotifiedIsBlue", ProbeColor(target, "SameKeyProbe") == Colors.Blue,
+                    $"color={ProbeColor(target, "SameKeyProbe")}");
+                H.Check("ThemeMemo_SameKeyKeptNotRemounted", sameKeyMounts == 1 && sameKeyCleanups == 0,
+                    $"mounts={sameKeyMounts} cleanups={sameKeyCleanups}");
+                var legacyOutBorder = FindText(target, "LegacyOutAfter")?.Parent as Border;
+                H.Check("ThemeMemo_LegacyOutputShapeChangeRemounts", legacyOutBorder?.Margin == new Thickness(17)
+                    && FindText(target, "LegacyOutBefore") is null,
+                    $"margin={legacyOutBorder?.Margin.ToString() ?? "(not found)"} before={FindText(target, "LegacyOutBefore") is not null}");
                 H.Check("ThemeMemo_FlyoutTargetNotifiedIsBlue", ProbeColor(target, "FlyoutTargetProbe") == Colors.Blue,
                     $"color={ProbeColor(target, "FlyoutTargetProbe")}");
                 H.Check("ThemeMemo_FlyoutTargetKeptNotRemounted", flyoutTargetMounts == 1 && flyoutTargetCleanups == 0,

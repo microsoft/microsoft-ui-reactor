@@ -1606,8 +1606,9 @@ public sealed partial class Reconciler
     /// inside legacy <see cref="ModifiedElement"/> layers, or as a flyout's target) is diffed
     /// against its recorded element too: the wrapper's modifiers are diffed old to new, and the
     /// nested memo's own refresh diffs against its own recorded output.</item>
-    /// <item>Output changed shape (root type or key) from the recorded one: remount the memo and
+    /// <item>Output changed shape (root type or key, also inside legacy wrappers) from the recorded one: remount the memo and
     /// return the new control; the caller unmounts the old one and swaps it in.</item>
+    /// <item>Nested memos with an equal key on one control are told apart by mount order.</item>
     /// <item>Nothing recorded (a control that is not a FrameworkElement): self-diff.</item>
     /// <item>Output is Empty: keep the realized control. Update can't express a removal, and
     /// a same-key factory is pure by contract, so a resource edit that empties it is out of
@@ -1619,35 +1620,82 @@ public sealed partial class Reconciler
         var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
         if (inner is EmptyElement) return null;
 
-        var recorded = control is FrameworkElement fe && TryGetReactorState(fe, out var state)
-            ? GetKeyedMemoOutput(state, memo.MemoKey)
-            : null;
-        UIElement? replacement;
-        if (recorded is null)
-            replacement = Update(inner, inner, control, requestRerender);
-        else if (CanUpdate(recorded, inner))
-            replacement = Update(recorded, inner, control, requestRerender);
-        else
+        // Same-key layers sharing this control are recorded innermost first and refreshed
+        // outermost first, so the enclosing same-key refreshes on this control say which entry
+        // is this layer's.
+        var state = control is FrameworkElement fe && TryGetReactorState(fe, out var s) ? s : null;
+        int nth = -1;
+        Element? recorded = null;
+        if (state is not null)
+        {
+            int enclosing = 0;
+            if (_memoRefreshFrames is { } open)
+            {
+                foreach (var (key, layerControl) in open)
+                {
+                    if (ReferenceEquals(layerControl, control) && key.Equals(memo.MemoKey)) enclosing++;
+                }
+            }
+            nth = CountKeyedMemoOutputs(state, memo.MemoKey) - 1 - enclosing;
+            if (nth >= 0) recorded = GetKeyedMemoOutput(state, memo.MemoKey, nth);
+        }
+
+        if (recorded is not null && !CanUpdateThroughWrappers(recorded, inner))
         {
             // The output changed shape: mount the memo element as Update received it, legacy
             // ModifiedElement layers included, so its modifiers and lifecycle apply with mount
             // semantics and MountKeyedMemo records the output. The caller unmounts the old
             // control, as for any replacement Update returns.
-            replacement = Mount(received, requestRerender);
-            if (replacement is not null) _freshMountFromDispatch = replacement;
-            return replacement;
+            var remounted = Mount(received, requestRerender);
+            if (remounted is not null) _freshMountFromDispatch = remounted;
+            return remounted;
+        }
+
+        var frames = _memoRefreshFrames ??= new();
+        frames.Add((memo.MemoKey, control));
+        UIElement? replacement;
+        try
+        {
+            replacement = Update(recorded ?? inner, inner, control, requestRerender);
+        }
+        finally
+        {
+            frames.RemoveAt(frames.Count - 1);
         }
 
         // A compatible output that still came back as a fresh control (a nested memo that
         // remounted, or a handler that always remounts, such as ValidationVisualizer): the
         // enclosing Update applies this memo's wrapper modifiers to it with mount semantics. The
         // caller unmounts the old control.
-        if (replacement is not null && !ReferenceEquals(replacement, control)) _freshForWrapperMount = replacement;
+        bool kept = replacement is null || ReferenceEquals(replacement, control);
+        if (!kept) _freshForWrapperMount = replacement;
         if ((replacement ?? control) is FrameworkElement realized)
-            SetKeyedMemoOutput(GetOrCreateReactorState(realized), memo.MemoKey, inner);
+        {
+            // Kept: overwrite this layer's entry. Fresh: the layers inside it recorded on the new
+            // control as they mounted, so this one goes on top.
+            var realizedState = GetOrCreateReactorState(realized);
+            SetKeyedMemoOutput(realizedState, memo.MemoKey,
+                kept && nth >= 0 ? nth : CountKeyedMemoOutputs(realizedState, memo.MemoKey), inner);
+        }
         return replacement;
     }
 
+    // The keyed memo layers whose refresh is in progress, with the control each was refreshing.
+    private List<(object Key, UIElement Control)>? _memoRefreshFrames;
+
+    // CanUpdate, also through legacy ModifiedElement layers on both sides, which Update unwraps
+    // before dispatching to the inner elements' handlers.
+    private bool CanUpdateThroughWrappers(Element oldEl, Element newEl)
+    {
+        if (!CanUpdate(oldEl, newEl)) return false;
+        while (oldEl is ModifiedElement oldMod && newEl is ModifiedElement newMod)
+        {
+            oldEl = oldMod.Inner;
+            newEl = newMod.Inner;
+            if (!CanUpdate(oldEl, newEl)) return false;
+        }
+        return true;
+    }
     // Set by a dispatch arm that returned a fully mounted control; consumed by Update right after
     // the dispatch so its post-dispatch modifier diff is skipped for that control.
     private UIElement? _freshMountFromDispatch;
