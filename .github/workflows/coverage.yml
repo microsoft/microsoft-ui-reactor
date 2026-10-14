@@ -185,7 +185,7 @@ jobs:
             -WorkDir "$env:GITHUB_WORKSPACE/coverage-out/${{ matrix.lane }}"
 
       - name: Upload ${{ matrix.lane }} report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-part-${{ matrix.lane }}
           path: coverage-out/${{ matrix.lane }}/
@@ -305,7 +305,7 @@ jobs:
 
       - name: Upload coverage reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-reports-${{ needs.target.outputs.head_sha }}
           path: coverage-out/reports/**
@@ -322,7 +322,7 @@ jobs:
       # against) with a longer retention so it survives between main pushes.
       - name: Upload coverage data (PR)
         if: ${{ always() && needs.target.outputs.is_baseline != 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-data
           path: coverage-out/coverage.json
@@ -331,7 +331,7 @@ jobs:
 
       - name: Upload coverage baseline (main)
         if: ${{ needs.target.outputs.is_baseline == 'true' && steps.ensure.outputs.data_ok == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-baseline
           path: coverage-out/coverage.json
