@@ -1691,7 +1691,8 @@ public sealed partial class Reconciler
 
     /// <summary>
     /// Writes a wrapper's plain property values (layout, visual, typography, enabled state, string
-    /// tooltip, automation and accessibility values, focus and access-key settings) to <paramref name="fe"/>
+    /// tooltip, automation and accessibility values, focus, access-key and drag-region settings, and
+    /// reference targets) to <paramref name="fe"/>
     /// again, through <see cref="ApplyModifiers(FrameworkElement, ElementModifiers?, ElementModifiers, Action)"/>
     /// with only those values unset on the old side. Every other field is identical on both
     /// sides, so ApplyModifiers leaves it alone (no lifecycle callback, handler or ref change);
@@ -1721,6 +1722,7 @@ public sealed partial class Reconciler
             TabIndex = null,
             AccessKey = null,
             XYFocusKeyboardNavigation = null,
+            IsDragRegion = null,
             // Scalar accessibility values, including the LabeledBy automation id; the LabeledByRef
             // and DescribedBy references stay equal.
             Accessibility = current.Accessibility is { } a11y
@@ -1742,6 +1744,25 @@ public sealed partial class Reconciler
                 : null,
         };
         ApplyModifiers(fe, unset, current, requestRerender);
+
+        // Reference-backed values (a LabeledBy ElementRef, XY-focus targets) are wired once per
+        // ref and skip an unchanged one, so write this wrapper's current targets again, keeping
+        // their subscriptions. A string LabeledBy the output parked for Loaded must not land later.
+        ReapplyWrapperReference(fe, ReferenceSlots.ModifierRef_LabeledBy, m.Accessibility?.LabeledByRef);
+        ReapplyWrapperReference(fe, ReferenceSlots.ModifierRef_XYFocusUp, m.XYFocusUpRef);
+        ReapplyWrapperReference(fe, ReferenceSlots.ModifierRef_XYFocusDown, m.XYFocusDownRef);
+        ReapplyWrapperReference(fe, ReferenceSlots.ModifierRef_XYFocusLeft, m.XYFocusLeftRef);
+        ReapplyWrapperReference(fe, ReferenceSlots.ModifierRef_XYFocusRight, m.XYFocusRightRef);
+        if (m.Accessibility?.LabeledByRef is not null && TryGetReactorState(fe, out var labelState))
+            labelState.PendingLabeledBy = null;
+    }
+
+    private static void ReapplyWrapperReference(FrameworkElement fe, int slot, Microsoft.UI.Reactor.Input.ElementRef? cell)
+    {
+        if (cell is not null && TryGetReactorState(fe, out var state)
+            && state.ReferenceEdges?.Edges.TryGetValue(slot, out var edge) == true
+            && ReferenceEquals(edge.Cell, cell))
+            edge.Apply?.Invoke(fe, cell.Current);
     }
     // The keyed memo layers whose refresh is in progress, with the control each was refreshing.
     private List<(object Key, UIElement Control)>? _memoRefreshFrames;

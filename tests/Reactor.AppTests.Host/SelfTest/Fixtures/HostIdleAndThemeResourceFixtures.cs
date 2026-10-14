@@ -190,6 +190,7 @@ internal static class HostIdleAndThemeResourceFixtures
             int precedenceMounts = 0;
             int tipContentMounts = 0;
             int tipContentCleanups = 0;
+            var labelRef = new global::Microsoft.UI.Reactor.Input.ElementRef();
             var fixedBrush = new SolidColorBrush(Colors.Orange);
             int wrapperMounts = 0;
             int nestedInnerMounts = 0;
@@ -420,6 +421,12 @@ internal static class HostIdleAndThemeResourceFixtures
                         TextBlock("LabelW").AutomationId("SelfTestLabelW"),
                         Memo("labeledPrecedence", () => TextBlock("LabeledProbe").LabeledBy(ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red ? "SelfTestLabelA" : "SelfTestLabelB"))
                             .LabeledBy("SelfTestLabelW"),
+                        Memo("dragPrecedence", () => TextBlock("DragProbe").IsDragRegion(!(ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red)))
+                            .IsDragRegion(false),
+                        // A wrapper labelled through an ElementRef beats an output's string LabeledBy.
+                        TextBlock("LabelR").Ref(labelRef),
+                        Memo("refLabeled", () => TextBlock("RefLabeledProbe").LabeledBy(ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red ? "SelfTestLabelA" : "SelfTestLabelB"))
+                            .LabeledBy(labelRef),
                         // A kept ListView item whose automation name changes in place: the container forwards it.
                         ListView(lvNameItems),
                         // A FlipView whose first item mounts nothing.
@@ -494,6 +501,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 int tipMountsBeforeNotify = tipContentMounts;
                 H.Check("ThemeMemo_FlyoutPrecedenceRerenderAloneKeepsWrapper", FindText(target, "FlyPrecedenceProbe")?.FontSize == 30,
                     $"size={FindText(target, "FlyPrecedenceProbe")?.FontSize}");
+                H.Check("ThemeMemo_DragRegionRerenderAloneKeepsWrapper", DragRegionOf(target, "DragProbe") == false,
+                    $"drag={DragRegionOf(target, "DragProbe")}");
                 H.Check("ThemeMemo_PlacementRerenderAloneKeepsWrapper", PlacementOf(target, "PlacementProbe") == global::Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Right,
                     $"placement={PlacementOf(target, "PlacementProbe")}");
                 H.Check("ThemeMemo_LabeledByRerenderAloneKeepsWrapper", LabelTextOf(target, "LabeledProbe") == "LabelW",
@@ -571,6 +580,10 @@ internal static class HostIdleAndThemeResourceFixtures
                     $"color={FlipViewItemColor(target, "FlipProbe")}");
                 H.Check("ThemeMemo_FlyoutPrecedenceRefreshKeepsWrapper", FindText(target, "FlyPrecedenceProbe")?.FontSize == 30,
                     $"size={FindText(target, "FlyPrecedenceProbe")?.FontSize}");
+                H.Check("ThemeMemo_DragRegionRefreshKeepsWrapper", DragRegionOf(target, "DragProbe") == false,
+                    $"drag={DragRegionOf(target, "DragProbe")}");
+                H.Check("ThemeMemo_RefLabelRefreshKeepsWrapper", LabelTextOf(target, "RefLabeledProbe") == "LabelR",
+                    $"label={LabelTextOf(target, "RefLabeledProbe")}");
                 H.Check("ThemeMemo_PlacementRefreshKeepsWrapper", PlacementOf(target, "PlacementProbe") == global::Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Right,
                     $"placement={PlacementOf(target, "PlacementProbe")}");
                 H.Check("ThemeMemo_LabeledByRefreshKeepsWrapper", LabelTextOf(target, "LabeledProbe") == "LabelW",
@@ -747,6 +760,9 @@ internal static class HostIdleAndThemeResourceFixtures
 
         private static global::Microsoft.UI.Xaml.Controls.Primitives.PlacementMode? PlacementOf(Border target, string text)
             => FindText(target, text) is { } tb ? global::Microsoft.UI.Xaml.Controls.ToolTipService.GetPlacement(tb) : null;
+
+        private static bool? DragRegionOf(Border target, string text)
+            => FindText(target, text) is { } tb ? global::Microsoft.UI.Xaml.Controls.TitleBar.GetIsDragRegion(tb) : null;
 
         private static string? LabelTextOf(Border target, string text)
             => FindText(target, text) is { } tb
