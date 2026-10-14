@@ -25,11 +25,11 @@ internal static class EmbedNative
     [DllImport("user32.dll", SetLastError = true)]
     public static extern nint GetParent(nint hWnd);
 
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
-    public static extern nint SetWindowLongPtr(nint hWnd, int nIndex, nint dwNewLong);
+    public static nint SetWindowLongPtr(nint hWnd, int nIndex, nint dwNewLong)
+        => NativeWindowLong.SetWindowLongPtr(hWnd, nIndex, dwNewLong);
 
-    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
-    public static extern nint GetWindowLongPtr(nint hWnd, int nIndex);
+    public static nint GetWindowLongPtr(nint hWnd, int nIndex)
+        => NativeWindowLong.GetWindowLongPtr(hWnd, nIndex);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

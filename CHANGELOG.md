@@ -47,6 +47,23 @@ Conventions for contributors:
   `ContentDialog` is tagged with its element so its chrome resolves to the
   `ContentDialog(...)` call site (spec 010, spec 057 §3.1).
 
+- **Inspector diagnostics: call-site column and a per-component render event**
+  (issue #1326, spec 010 §1.1):
+  - `SourceLocation.ColumnNumber` (1-based, `0` = unknown), a third positional
+    member: `new SourceLocation(path, line)` now needs a column. The source-map generator
+    stamps the column of the invoked method's name, so several calls on one line
+    resolve to distinct positions. `ToString()` stays `file:line`.
+  - `ComponentRendered` on the `Microsoft-UI-Reactor` provider (EventId 40,
+    Verbose, keywords `Render | RenderDetail`; `RenderDetail` = `0x4000` is new):
+    one event per component render, including mount, the host root and a render
+    that threw. The payload carries the component name, a stable `componentId`,
+    the `reason` (`mount` / `state` / `props` / `context` / `parent` /
+    `hotReload` / `forced`) and the elapsed time.
+  - `ReactorTrace.GetComponentControl(long)` and
+    `ReactorTrace.TryGetComponentId(UIElement, out long)` map a `componentId` to
+    the component's on-screen control and back, so an inspector can flash what
+    re-rendered.
+
 - **Inspector diagnostics for hosts, roots and component boundaries** (spec 010).
   `ReactorDiagnostics.GetHosts()` (`Microsoft.UI.Reactor.Core.Diagnostics`) returns
   a snapshot of every live `ReactorHost` and `ReactorHostControl` — window,
@@ -279,6 +296,43 @@ Conventions for contributors:
   `winapp new --template-version`.
 
 ### Fixed
+
+- **Replacing a host's root no longer leaves the old root running** (issue #1326).
+  `ReactorHost.Mount(...)` and `ReactorHostControl.Mount(...)` now retire the
+  outgoing root before installing the new one: its effect cleanups run, and a
+  component root's hook state is reset, so mounting that instance again later starts
+  fresh. Before, the outgoing root's `UseEffect` subscriptions and timers stayed live
+  and could no longer be reached by `Dispose()`. `ReactorHost.Mount(Func<...>)` also
+  clears a previous component root, which the render loop checks first and so kept
+  rendering instead of the new function root. Mounting the instance that is already
+  mounted just re-renders it. A replacement whose first render produces nothing now
+  releases the previous root's content (and its components' effects) instead of leaving
+  it on screen, and a cleanup that throws during the swap is routed like a disposal-time
+  cleanup failure without blocking the new root.
+- **`ReactorWindow`, the tray host and Devtools embedding no longer throw
+  `EntryPointNotFoundException` in x86 processes** (#1365). They imported
+  `GetWindowLongPtrW` / `SetWindowLongPtrW` directly, which 32-bit `user32.dll`
+  does not export. A shared `NativeWindowLong` helper now dispatches to
+  `GetWindowLongW` / `SetWindowLongW` when `IntPtr.Size == 4`; x64 and ARM64
+  behaviour is unchanged.
+- **`RenderError` names the component that threw, and now reports every render
+  error** (issue #1321, spec 044 §6.2.1). For class components the event reported
+  the element record (``ComponentElement`1`` / `ComponentElement`) instead of the
+  component unless the `Render` keyword was also on, so an Errors-only listener
+  such as `winapp devtools logs` could not tell which component failed. It now
+  reports the component's type name (`Counter`; a generic one as `Foo<Int32>`),
+  and the other per-component events agree on it. **Listeners now also receive
+  errors that were previously silent:** a component (class, function or memo)
+  throwing on its first render, a `ReactorHost` / `ReactorHostControl` root
+  component or render function throwing (in `Render()` or in its effects), and any
+  render error an `ErrorBoundary`
+  catches — reported once, at the throw site, even though the app shows the
+  fallback. Same event, same payload; the message stays redacted. Generic
+  component names change from ``Foo`1`` to `Foo<Int32>` in every component event.
+  For these component failures the event is emitted before any `RenderErrorHandler`
+  runs, so it fires whether the handler replaces the fallback or calls `Propagate()` —
+  once per throw either way. `Reconcile` and `Cleanup` failures are not render errors
+  and are not reported on it.
 
 - **DataGrid inline editors no longer shift the cell's text when editing starts**
   (issue #1340). The built-in TextBox and NumberBox editors used `.Padding(2)` inside

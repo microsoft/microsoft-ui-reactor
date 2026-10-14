@@ -203,6 +203,30 @@ internal static class ComponentInspectionFixtures
         }
     }
 
+    private sealed class SwitchedIn : Microsoft.UI.Reactor.Core.Component
+    {
+        public override Element Render()
+        {
+            var (s, _) = UseState("in");
+            _ = s;
+            return TextBlock("switched-in");
+        }
+    }
+
+    // Mounts a replacement from inside its own first Render().
+    private sealed class SwitchingRoot : Microsoft.UI.Reactor.Core.Component
+    {
+        public ReactorHost? Host;
+        public override Element Render()
+        {
+            var (s, _) = UseState("out");
+            _ = s;
+            Host?.Mount(new SwitchedIn());
+            Host = null;
+            return TextBlock("switching-out");
+        }
+    }
+
     private sealed class ShellChild : Microsoft.UI.Reactor.Core.Component
     {
         public override Element Render()
@@ -283,10 +307,10 @@ internal static class ComponentInspectionFixtures
             // A root that renders a component directly: its rendered control is the child's
             // wrapper, which describes the child; the ContentTarget still reaches the root.
             host.Mount(new ShellRoot());
-            // Mount swaps the requested root at once but renders later; until then the
-            // displayed control still belongs to — and is described as — the previous root.
-            H.Check("RootAnchor_RemountGapDescribesDisplayedRoot",
-                ReactorDiagnostics.DescribeComponent(target) is { IsRoot: true, Name: "RootCounter", State: [{ Value: "7" }] });
+            // Mount retires the previous root at once (its cleanups run, its hooks are dropped)
+            // but renders the new one later. In that gap the old control is still on screen,
+            // yet neither the retired root nor the not-yet-rendered one is described.
+            H.Check("RootAnchor_RemountGapDescribesNoRetiredRoot", ReactorDiagnostics.DescribeComponent(target) is null);
             await Harness.WaitFor(() => H.FindControl<TextBlock>(t => t.Text == "shell-child:c") is not null,
                 maxPasses: 16, perPassMs: 10);
             var overlap = host.CurrentControl;
@@ -299,6 +323,16 @@ internal static class ComponentInspectionFixtures
             await Harness.WaitFor(() => H.FindControl<TextBlock>(t => t.Text == "shell-child:d") is not null,
                 maxPasses: 16, perPassMs: 10);
             H.Check("RootAnchor_OverlapChildRerendered", H.FindControl<TextBlock>(t => t.Text == "shell-child:d") is not null);
+
+            // A root that calls Mount from its own Render(): that pass still commits the old root's
+            // tree, and its retirement is deferred to the next pass, after which only the
+            // replacement is described.
+            var switcher = new SwitchingRoot { Host = host };
+            host.Mount(switcher);
+            await Harness.WaitFor(() => H.FindControl<TextBlock>(t => t.Text == "switched-in") is not null, maxPasses: 16, perPassMs: 10);
+            H.Check("RootAnchor_MidPassMountRendersReplacement", H.FindControl<TextBlock>(t => t.Text == "switched-in") is not null);
+            H.Check("RootAnchor_MidPassMountDescribesOnlyTheReplacement",
+                ReactorDiagnostics.DescribeComponent(target) is { IsRoot: true, Name: "SwitchedIn" });
 
             // The root shows an app-supplied render-error fallback: that is not the root's output,
             // so neither the container nor the fallback control describes the root.
@@ -481,10 +515,10 @@ internal static class ComponentInspectionFixtures
                 H.Check("RootAnchor_HostControlStillDescribedAfterSwap", ReactorDiagnostics.DescribeComponent(hostControl) is { IsRoot: true });
                 hostControl.Content = rendered;
 
-                // Remount gap: the displayed (function) root is still what is described.
+                // Remount gap: Mount retired the displayed (function) root, so nothing is described
+                // until the new root renders.
                 hostControl.Mount(new RootCounter());
-                H.Check("RootAnchor_HostControlRemountGap",
-                    ReactorDiagnostics.DescribeComponent(hostControl) is { IsRoot: true, Kind: "function", State: [{ Value: "\"hc\"" }] });
+                H.Check("RootAnchor_HostControlRemountGap", ReactorDiagnostics.DescribeComponent(hostControl) is null);
                 await Harness.WaitFor(() => ReactorDiagnostics.DescribeComponent(hostControl) is { Name: "RootCounter" },
                     maxPasses: 16, perPassMs: 10);
                 H.Check("RootAnchor_HostControlRemounted",

@@ -66,7 +66,7 @@ public class DecoratorTargetDriftTests
             // Build an instance with a stamped target, then ask the resolver for it.
             // Using the resolver itself (rather than a copied list) means this fails
             // when DecoratorTarget stops handling a type, which is the actual risk.
-            var target = new TextBlockElement("t") with { CallSite = new SourceLocation("F.cs", 7) };
+            var target = new TextBlockElement("t") with { CallSite = new SourceLocation("F.cs", 7, 0) };
             Element? instance = TryConstruct(t, target);
             if (instance is null) continue;
 
@@ -116,8 +116,8 @@ public class DecoratorTargetDriftTests
         ControlRegistry.RegisterDecorator<ExternalTargetDecoratorElement>(
             static () => new ExternalTargetDecoratorHandler());
 
-        var target = new TextBlockElement("target") with { CallSite = new SourceLocation("Target.cs", 7) };
-        var decorator = new ExternalTargetDecoratorElement(target) with { CallSite = new SourceLocation("Decorator.cs", 11) };
+        var target = new TextBlockElement("target") with { CallSite = new SourceLocation("Target.cs", 7, 0) };
+        var decorator = new ExternalTargetDecoratorElement(target) with { CallSite = new SourceLocation("Decorator.cs", 11, 0) };
 
         Assert.Same(target, ReactorSourceMap.DecoratorTarget(decorator));
         var afterFirstLookup = ExternalTargetDecoratorHandler.CreatedCount;
@@ -164,8 +164,8 @@ public class DecoratorTargetDriftTests
         ControlRegistry.RegisterDecoratorForDerivedTypes<BaseDerivedDecoratorElement>(
             static () => new BaseDerivedDecoratorHandler());
 
-        var target = new TextBlockElement("target") with { CallSite = new SourceLocation("Target.cs", 21) };
-        var decorator = new DerivedDecoratorElement(target) with { CallSite = new SourceLocation("Decorator.cs", 22) };
+        var target = new TextBlockElement("target") with { CallSite = new SourceLocation("Target.cs", 21, 0) };
+        var decorator = new DerivedDecoratorElement(target) with { CallSite = new SourceLocation("Decorator.cs", 22, 0) };
 
         Assert.Same(target, ReactorSourceMap.DecoratorTarget(decorator));
     }
@@ -298,7 +298,7 @@ public class DecoratorTargetDriftTests
     {
         // The built-in fallback must keep working, so the change above cannot pass by
         // having disabled unwrapping altogether.
-        var target = new TextBlockElement("t") with { CallSite = new SourceLocation("Target.cs", 41) };
+        var target = new TextBlockElement("t") with { CallSite = new SourceLocation("Target.cs", 41, 0) };
         var flyout = new FlyoutElement(target, new TextBlockElement("c"));
 
         Assert.Same(target, ReactorSourceMap.DecoratorTarget(flyout));

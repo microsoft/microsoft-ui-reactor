@@ -341,11 +341,11 @@ internal sealed class TrayHiddenWindow : IDisposable
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern unsafe nint GetModuleHandleW(char* lpModuleName);
 
-    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
-    private static extern nint GetWindowLongPtrW(nint hWnd, int nIndex);
+    private static nint GetWindowLongPtrW(nint hWnd, int nIndex)
+        => NativeWindowLong.GetWindowLongPtr(hWnd, nIndex);
 
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
-    private static extern nint SetWindowLongPtrW(nint hWnd, int nIndex, nint dwNewLong);
+    private static nint SetWindowLongPtrW(nint hWnd, int nIndex, nint dwNewLong)
+        => NativeWindowLong.SetWindowLongPtr(hWnd, nIndex, dwNewLong);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint RegisterWindowMessageW([MarshalAs(UnmanagedType.LPWStr)] string lpString);

@@ -14,7 +14,7 @@ namespace Microsoft.UI.Reactor.Tests.Diagnostics;
 [Collection("SourceMapGlobals")]
 public class ContentDialogDiagnosticsTagTests
 {
-    private static readonly SourceLocation Site = new(@"C:\app\Dialogs.cs", 12);
+    private static readonly SourceLocation Site = new(@"C:\app\Dialogs.cs", 12, 0);
 
 
     [Fact]

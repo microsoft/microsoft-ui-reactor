@@ -60,14 +60,18 @@ public static partial class ReactorSourceMap
     /// <summary>
     /// Infrastructure for generated source-map interceptors; not intended to be
     /// called directly. Opens a root mount scope for the call written at
-    /// <paramref name="filePath"/>:<paramref name="lineNumber"/>, and returns a token
-    /// for <see cref="ExitRootMountSite"/>. The scope opens regardless of
-    /// <see cref="Enabled"/>; whether the site is kept is decided when the host mounts.
+    /// <paramref name="filePath"/>:<paramref name="lineNumber"/>:<paramref name="columnNumber"/>,
+    /// and returns a token for <see cref="ExitRootMountSite"/>. The scope opens regardless
+    /// of <see cref="Enabled"/>; whether the site is kept is decided when the host mounts.
     /// </summary>
+    /// <param name="filePath">Mapped source path of the call.</param>
+    /// <param name="lineNumber">1-based line (follows the argument list's open paren).</param>
+    /// <param name="columnNumber">1-based column of the method name, or 0 when unknown;
+    /// becomes <see cref="SourceLocation.ColumnNumber"/>.</param>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public static object? EnterRootMountSite(string filePath, int lineNumber)
+    public static object? EnterRootMountSite(string filePath, int lineNumber, int columnNumber)
     {
-        var site = new SourceLocation(filePath, lineNumber);
+        var site = new SourceLocation(filePath, lineNumber, columnNumber);
         var frame = new RootMountFrame(site, t_rootMountTop);
         t_rootMountTop = frame;
         RootMountSiteEnteredForTest?.Invoke(site);

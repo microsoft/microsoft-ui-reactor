@@ -277,8 +277,48 @@ jobs:
       - name: Restore
         run: dotnet restore tests/Reactor.PackagedTests/Reactor.PackagedTests.csproj -p:Platform=x64
 
+      # A host that fail-fasts (e.g. STATUS_STOWED_EXCEPTION 0xC000027B, issue #1345) leaves only
+      # a truncated TAP stream, and a native-origin exception has no managed frames to print.
+      # The originating native stack lives only in a dump, so have WER write one for the host
+      # (scoped to its exe name). The dump never leaves the runner: process memory published
+      # as an artifact can carry whatever the process held, so the analysis step below reads
+      # it in place and prints only the debugger's text report. Because nothing is published,
+      # this can be a full dump, which keeps the stowed-exception records cdb walks.
+      - name: Enable crash dumps for the packaged host
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'packaged-host-dumps'
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\Reactor.PackagedTests.Host.exe'
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpFolder -PropertyType ExpandString -Value $dir -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 2 -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 2 -Force | Out-Null
+
       - name: Test
         run: dotnet test tests/Reactor.PackagedTests/Reactor.PackagedTests.csproj --no-restore -p:Platform=x64
+
+      # Diagnostic only: it cannot change the job's result, and a missing debugger or a symbol
+      # server outage just leaves a warning. `!analyze -v` follows a stowed exception
+      # (0xC000027B) to the stack that originated the error.
+      - name: Analyze packaged host crash dumps
+        if: failure()
+        continue-on-error: true
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          $dumps = @(Get-ChildItem (Join-Path $env:RUNNER_TEMP 'packaged-host-dumps') -Filter *.dmp -ErrorAction SilentlyContinue)
+          if ($dumps.Count -eq 0) { Write-Host 'The packaged host wrote no crash dump.'; exit 0 }
+          $cdb = @("${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64\cdb.exe",
+                   "$env:ProgramFiles\Windows Kits\10\Debuggers\x64\cdb.exe") |
+            Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $cdb) { Write-Host '::warning::cdb.exe is not installed on this runner; the crash dump was not analyzed.'; exit 0 }
+          $env:_NT_SYMBOL_PATH = "srv*$(Join-Path $env:RUNNER_TEMP 'symbols')*https://msdl.microsoft.com/download/symbols"
+          foreach ($d in $dumps) {
+            Write-Host "::group::cdb analysis of $($d.Name)"
+            & $cdb -z $d.FullName -c '!analyze -v; .ecxr; kn 64; q' 2>&1 | Write-Host
+            Write-Host '::endgroup::'
+          }
 
       # ClassCleanup removes the registration, but a hard failure (or a killed job) can
       # leave it behind, and a stale registration owning the execution alias would make the

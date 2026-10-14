@@ -337,7 +337,7 @@ mounting, updating, and unmounting as the tree changes.
 > state cell now belongs to a different item. Apply
 > `.WithKey(item.Id)` (or any stable key) on every child of a `ForEach` /
 > collection render so the reconciler matches by **identity** instead. The
-> [Reconciliation](reconciliation.md#child-reconciler--keyed-vs-positional)
+> [Reconciliation](reconciliation.md#child-reconciler-keyed-vs-positional)
 > chapter walks the four-phase keyed algorithm in full. The classic failure
 > mode: a todo list where deleting item 2 makes item 3's checkbox state
 > appear on item 2 — because positionally, slot 2 is still occupied, and the
