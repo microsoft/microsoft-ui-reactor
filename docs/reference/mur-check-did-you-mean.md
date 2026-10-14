@@ -168,7 +168,7 @@ Each rule is a small file under `src/Reactor.Cli/Check/Rules/`, registered into 
 
 Each rule passes a six-bar **Validation Gate** before merge (frequency, cross-agent reproducibility, positive fixtures, negative counter-examples, independent reviewer signoff, kill-switch). The gate exists because a bad rule is worse than no rule — it contaminates every downstream agent session. Class-B (vocabulary-translation) rules waive bar #1 (frequency) — their justification is the documented prior-framework citation rather than a corpus cluster. The audit at `docs/specs/tasks/038-tuning-reports/2026-05-11-cross-agent-audit.md` is where bar #2 (cross-agent) gets formally cleared per cluster.
 
-**Six rules shipped to date** (four Class-A induced + two Class-B vocabulary):
+**Seven rules shipped to date** (four Class-A induced + two Class-B vocabulary + one analyzer mirror):
 
 | Rule | Class | Code(s) | Receiver | What it suggests | Cross-agent events |
 |---|---|---|---|---|---|
@@ -178,6 +178,7 @@ Each rule passes a six-bar **Validation Gate** before merge (frequency, cross-ag
 | `GridSizePxRenameRule` | A | CS0117 | `GridSize` | `GridSize.Px(...)` for `Pixel`/`Pixels`/`Fixed` legacy names | 9 |
 | `TextBlockStyleHintRule` | A | CS1061 / CS0117 | `TextBlockElement` | fluent text helpers (`.FontSize`, `.SemiBold`, …); Reactor has no `Style` member | 5 across both `.Style(...)` and `with { Style = ... }` shapes |
 | `ThemeRawResourceKeyRule` | A | CS0117 | `Theme` | real `Theme.*` aliases (`Theme.LayerFill`, `Theme.Accent`, …) for WinUI `<X>FillColor<Y>` ThemeResource key names | run5 opus-4.7 only; bar #2 partial |
+| `ColorStringLiteralRule` | analyzer mirror | `REACTOR_DYM_006` | `BrushHelper` / `ResourceBuilder` / `ElementExtensions` | the hex for an unparseable constant color string (`"orange"` → `"#FFA500"`, `"#888"` → `"#888888"`), or `new FontFamily("…")` under a `*FontFamily` resource key. **First rule anchored on an analyzer ID**: the mistake compiles, so there is no CS code to hang it on (issue #1375) | n/a — mirrors the in-build analyzer |
 
 ### Suggest-gate carve-out for Tier-3 rules
 

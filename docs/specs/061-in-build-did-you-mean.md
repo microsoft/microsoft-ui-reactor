@@ -5,8 +5,9 @@
 **Implemented (in part) — 2026-07-07.** Phase 1 (`REACTOR_DYM_001`) and Phase 2 (`REACTOR_DYM_002`)
 have shipped, along with the first fuzzy analyzer (`REACTOR_DYM_003`, the CS0103
 mistyped-factory-name case) and the argument-shape analyzers (`REACTOR_DYM_004`, CS7036 missing
-argument; `REACTOR_DYM_005`, the CS1503 string-for-Element case — see §7.2); the remaining fuzzy
-member-resolution phases and the shared match-engine extraction remain design-only. This spec
+argument; `REACTOR_DYM_005`, the CS1503 string-for-Element case — see §7.2), and the first did-you-mean
+that rides **no** compiler error (`REACTOR_DYM_006`, unparseable color-string literals — see §7.3); the
+remaining fuzzy member-resolution phases and the shared match-engine extraction remain design-only. This spec
 is the design of record for bringing Reactor's "did you mean" suggestions — today reachable only
 through the `mur check` CLI — into a plain `dotnet build` and the IDE, for consumers of the
 `Microsoft.UI.Reactor` NuGet package.
@@ -321,14 +322,66 @@ produces uncompilable code is worse than none, so neither ships one.
 and the IDE. Tunable via `.editorconfig`. The shared gating lives in one `ArgumentShapeGate` helper so the
 two analyzers can't drift.
 
+### §7.3 `REACTOR_DYM_006` — unparseable color-string literal (shipped)
+
+Issue #1375. Every Reactor API that takes a color *string* goes through `BrushHelper.ParseColor`, which
+knows eight names (`red`, `green`, `blue`, `white`, `black`, `gray`/`grey`, `lightgray`/`lightgrey`,
+`transparent`) plus `#RRGGBB` / `#AARRGGBB`. Anything else silently becomes a **gray** brush. So
+`.Background("orange")`, `.Foreground("#888")`, and — once `ResourceBuilder.Set(string, FontFamily)` exists
+(PR #1370) — `.Resources(r => r.Set("ContentControlThemeFontFamily", "Consolas"))` all compile and render
+wrong. `ColorStringLiteralAnalyzer` + `ColorStringLiteralCodeFix` catch the constant cases.
+
+**The first DYM that rides no compiler error.** DYM_001–005 always co-occur with a CS error, which is what
+made Warning safe under `TreatWarningsAsErrors`. This one fires on code that compiles. It is still a
+**Warning**: the result is always a wrong brush, never a style preference (the same reasoning as
+`REACTOR_MOD_003`). In-repo hits were fixed in the PR that introduced it rather than suppressed.
+
+- **Targets (symbol identity, resolved once per compilation).** `BrushHelper.Parse(string)`,
+  `ResourceBuilder.Set(string key, string color)`, and the `string color` overloads of `Background` /
+  `Foreground` / `BorderBrush` / `WithBorder` on `ElementExtensions` (generic and RichText). A look-alike API
+  in another namespace never matches. `D3Charts.Brush(string)` is out of scope: it parses with `D3Color`.
+- **Values.** Only compile-time constants: literals, `const`s, constant concatenation, and each constant
+  branch of a `?:` / `??` / switch expression. A wholly-constant expression is checked as its single value,
+  so a dead branch is never reported. Runtime strings are out of reach; a runtime throw was considered and
+  left as a separate decision (it would change behaviour for apps relying on the fallback).
+- **Grammar parity.** The analyzer can't reference `src/Reactor`, so `ColorStringClassifier` carries a
+  netstandard2.0 copy of the grammar, including its quirks (`TrimStart('#')` accepts `##FF0000`;
+  `NumberStyles.HexNumber` tolerates whitespace inside a byte pair). `BrushHelper` exposes an internal
+  `TryParseColor` (no behaviour change) so `ColorStringParityTests` can compare exactly — a plain
+  "result is gray" oracle can't tell an unparseable string from a legitimate `"gray"`.
+- **Did-you-mean, in priority order.** (1) a `ResourceBuilder.Set` key ending in `FontFamily` suggests
+  `new FontFamily("…")`, but **only when** `Set(string, FontFamily)` is present in the compilation; without it
+  the message says the overload only stores color brushes and no fix is offered. (2) `#RGB` / `#ARGB`
+  shorthand → expanded `#RRGGBB` / `#AARRGGBB`. (3) six or eight hex digits without `#` → add it. (4) other
+  `#…` → "must be `#RRGGBB` or `#AARRGGBB`". (5) a standard CSS / WinUI named color (139 entries, including
+  the `grey` spellings) → its exact hex, cross-checked against `System.Drawing.KnownColor`. (6) anything else
+  → the supported list, hex, or a `Theme` token.
+- **Fix.** Cases 1–3 and 5 carry the replacement in the property bag. Literal fixes rewrite the string
+  literal (including one inside a `?:` branch); the FontFamily fix wraps the whole argument (a literal or a
+  `const` reference) in a `Simplifier`-annotated `new FontFamily(...)`.
+
+**`mur check` mirror.** `ColorStringLiteralRule` is the first Tier-3 rule anchored on an **analyzer** ID
+rather than a CS code — there is no compiler diagnostic to augment. `mur check` wraps `dotnet build`, which
+runs the analyzer bundle, so `REACTOR_DYM_006` appears in the parsed output and the rule adds the same
+rewrite as a `→ try:` suffix. It stays silent when the argument's unparseable branches disagree on a
+rewrite, or when there is none. There is deliberately no Tier-1 `HintFor` entry, which would mask the
+suggestion. `ColorStringParityTests` locks the two classifier copies together, and
+`DidYouMeanAnalyzerParityTests` feeds real analyzer diagnostics to the rule and asserts it suggests the same
+rewrite as the code fix.
+
+**Overlap with `REACTOR_THEME_001`.** THEME_001 already flags every string literal passed to `.Background` /
+`.Foreground` / `.WithBorder` as "use a Theme token". That is a style nudge (and is downgraded to
+`suggestion` across `samples/`). DYM_006 is the correctness subset: the literal doesn't just ignore the
+theme, it renders gray. Both can fire on one literal.
+
 ## §8 Risks and guardrails
 
 | Risk | Guardrail |
 |---|---|
 | False positives under cascading / partial-edit errors | Bail when the receiver type is unresolved or an error type; only fire when the invocation didn't bind; gate to Reactor symbols; (fuzzy phases) require high similarity thresholds. |
 | IDE typing latency | Use the provided `context.SemanticModel` (never `Compilation.GetSemanticModel`, RS1030); narrow syntax-node actions; cheap symbol pre-checks before any fuzzy match. |
-| Divergence between analyzer and `mur check` | Phase 2: local maps locked to the CLI Tier-3 rules by a cross-check parity test (`DidYouMeanAnalyzerParityTests`). Argument-shape phase (§7.2): the same test asserts `REACTOR_DYM_004`/`_005` and the CLI `SymbolSuggester` both fire on the representative CS7036 / CS1503 shapes. Fuzzy phases: one shared match library + shared fixtures (§7 item 5). |
-| Noise (a second diagnostic atop the CS error) | Concise message; `REACTOR_DYM_*` only ever accompanies a genuine compile error; consumers can tune severity via `.editorconfig`. |
+| Divergence between analyzer and `mur check` | Phase 2: local maps locked to the CLI Tier-3 rules by a cross-check parity test (`DidYouMeanAnalyzerParityTests`). Argument-shape phase (§7.2): the same test asserts `REACTOR_DYM_004`/`_005` and the CLI `SymbolSuggester` both fire on the representative CS7036 / CS1503 shapes. `REACTOR_DYM_006` (§7.3): `ColorStringParityTests` locks `BrushHelper.TryParseColor` and both classifier copies together, and the rule is driven by real analyzer output. Fuzzy phases: one shared match library + shared fixtures (§7 item 5). |
+| Noise (a second diagnostic atop the CS error) | Concise message; `REACTOR_DYM_001`–`_005` only ever accompany a genuine compile error; consumers can tune severity via `.editorconfig`. `REACTOR_DYM_006` is the exception (§7.3) and fires only on a value that provably renders gray. |
 
 ## §9 Relationship to `mur check`
 

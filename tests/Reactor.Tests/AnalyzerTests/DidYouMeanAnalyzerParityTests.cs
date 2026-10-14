@@ -10,6 +10,7 @@ using Microsoft.UI.Reactor.Cli.Check;
 using Microsoft.UI.Reactor.Cli.Check.Rules;
 using Microsoft.UI.Reactor.Cli.Check.Suggesters;
 using Microsoft.UI.Reactor.Tests.CheckCommandTests;
+using Microsoft.UI.Reactor.Tests.CheckCommandTests.Rules;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
@@ -166,5 +167,32 @@ namespace App { using static Microsoft.UI.Reactor.Factories; static class C { st
 
         var ctx = new SuggesterContext(comp, diag, pick, receiver, FactoryIndex.Build(comp));
         return new SymbolSuggester().Suggest(ctx);
+    }
+
+    // ── REACTOR_DYM_006 (ColorStringLiteralAnalyzer) <-> ColorStringLiteralRule ──
+    //
+    // The analyzer's code-fix replacement and the rule's `→ try:` text must name the same rewrite.
+    // Driven end-to-end: the real analyzer reports, its diagnostic is fed to the rule.
+
+    [Theory]
+    [InlineData(@"TextBlock(""hi"").Foreground(""#888"")", false)]
+    [InlineData(@"TextBlock(""hi"").Background(""ff00ff"")", false)]
+    [InlineData(@"BrushHelper.Parse(""orange"")", false)]
+    [InlineData(@"new ResourceBuilder().Set(""ButtonBackground"", ""Wheat"")", false)]
+    [InlineData(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", ""Consolas"")", true)]
+    public void Color_string_analyzer_replacement_matches_cli_rule(string expression, bool fontFamilyOverload)
+    {
+        var (diagnostics, c) = ColorStringLiteralRuleTests.AnalyzeRaw(expression, fontFamilyOverload);
+        var d = Assert.Single(diagnostics);
+        var replacement = d.Properties[ColorStringLiteralAnalyzer.ReplacementProperty];
+        Assert.False(string.IsNullOrEmpty(replacement));
+        var expected = d.Properties[ColorStringLiteralAnalyzer.IssueProperty] == "FontFamilyKey"
+            ? $"new FontFamily(\"{replacement}\")"
+            : $"\"{replacement}\"";
+
+        var s = ColorStringLiteralRuleTests.RunRule(ColorStringLiteralRuleTests.ToCheckDiag(d), c);
+        Assert.NotNull(s);
+        Assert.Equal("ColorStringLiteralRule", s!.SuggesterName);
+        Assert.Equal(expected, s.Text);
     }
 }

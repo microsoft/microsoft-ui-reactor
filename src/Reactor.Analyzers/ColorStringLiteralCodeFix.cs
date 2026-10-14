@@ -1,0 +1,92 @@
+using System.Collections.Immutable;
+using System.Composition;
+using System.Threading.Tasks;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CodeActions;
+using Microsoft.CodeAnalysis.CodeFixes;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Simplification;
+
+namespace Microsoft.UI.Reactor.Analyzers;
+
+/// <summary>
+/// Code fix for <see cref="ColorStringLiteralAnalyzer"/> (REACTOR_DYM_006). Rewrites a string literal
+/// to the suggested color (<c>"#888"</c> → <c>"#888888"</c>, <c>"FF0000"</c> → <c>"#FF0000"</c>,
+/// <c>"orange"</c> → <c>"#FFA500"</c>), or — for a font name stored under a <c>*FontFamily</c>
+/// resource key — rewrites the argument to <c>new FontFamily("…")</c> so it binds to the
+/// <c>ResourceBuilder.Set(string, FontFamily)</c> overload. The replacement travels in the
+/// diagnostic's property bag; no fix is offered when the analyzer attached none. The literal fixes
+/// need a plain string literal (a flagged <c>const</c> reference is fixed at its declaration instead).
+/// </summary>
+[ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(ColorStringLiteralCodeFix))]
+[Shared]
+public sealed class ColorStringLiteralCodeFix : CodeFixProvider
+{
+    private const string LiteralEquivalenceKey = "Reactor_ColorStringLiteral";
+    private const string FontFamilyEquivalenceKey = "Reactor_ColorStringFontFamily";
+
+    public override ImmutableArray<string> FixableDiagnosticIds =>
+        ImmutableArray.Create(ColorStringLiteralAnalyzer.DiagnosticId);
+
+    public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
+
+    public override async Task RegisterCodeFixesAsync(CodeFixContext context)
+    {
+        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
+        if (root is null) return;
+
+        foreach (var diagnostic in context.Diagnostics)
+        {
+            if (!diagnostic.Properties.TryGetValue(ColorStringLiteralAnalyzer.ReplacementProperty, out var replacement)
+                || replacement is null
+                || !diagnostic.Properties.TryGetValue(ColorStringLiteralAnalyzer.IssueProperty, out var issue))
+                continue;
+
+            var node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
+            if (node is ArgumentSyntax argument)
+                node = argument.Expression;
+            if (node is not ExpressionSyntax expression)
+                continue;
+
+            if (issue == nameof(ColorStringIssue.FontFamilyKey))
+            {
+                // Only when the flagged value *is* the argument — inside a ?: branch the other branch
+                // would still be a string, and the expression would no longer type-check. A const
+                // reference is fine to wrap as-is.
+                if (expression.Parent is not ArgumentSyntax)
+                    continue;
+
+                var creation = SyntaxFactory.ObjectCreationExpression(
+                        SyntaxFactory.ParseTypeName("global::" + ColorStringLiteralAnalyzer.FontFamilyMetadataName)
+                            .WithAdditionalAnnotations(Simplifier.Annotation))
+                    .WithArgumentList(SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(expression.WithoutTrivia()))))
+                    .WithTriviaFrom(expression);
+
+                context.RegisterCodeFix(
+                    CodeAction.Create(
+                        $"Use new FontFamily(\"{replacement}\")",
+                        _ => Task.FromResult(context.Document.WithSyntaxRoot(root.ReplaceNode(expression, creation))),
+                        equivalenceKey: FontFamilyEquivalenceKey),
+                    diagnostic);
+                continue;
+            }
+
+            if (expression is not LiteralExpressionSyntax literal || !literal.IsKind(SyntaxKind.StringLiteralExpression))
+                continue;
+
+            var newLiteral = SyntaxFactory.LiteralExpression(
+                    SyntaxKind.StringLiteralExpression,
+                    SyntaxFactory.Literal(replacement!))
+                .WithTriviaFrom(literal);
+
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    $"Change to \"{replacement}\"",
+                    _ => Task.FromResult(context.Document.WithSyntaxRoot(root.ReplaceNode(literal, newLiteral))),
+                    equivalenceKey: LiteralEquivalenceKey),
+                diagnostic);
+        }
+    }
+}

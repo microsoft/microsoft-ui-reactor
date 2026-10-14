@@ -43,7 +43,12 @@ public sealed class ResourceBuilder
     private readonly Dictionary<string, object> _literals = new();
     private readonly Dictionary<string, ThemeRef> _themeRefs = new();
 
-    /// <summary>Sets a color resource override from a hex string or named color.</summary>
+    /// <summary>
+    /// Sets a color resource override from a hex string (#RRGGBB / #AARRGGBB) or named color
+    /// (see <see cref="BrushHelper.Parse"/>). Anything else — including a font name under a
+    /// <c>*FontFamily</c> key — silently stores a gray brush; the REACTOR_DYM_006 analyzer
+    /// flags constant values that do.
+    /// </summary>
     public ResourceBuilder Set(string key, string color)
     {
         _literals[key] = BrushHelper.Parse(color);

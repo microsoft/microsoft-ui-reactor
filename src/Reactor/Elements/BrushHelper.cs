@@ -26,7 +26,8 @@ public static class BrushHelper
     /// caller. Supports named colors (red, green, blue, white, black, gray, lightgray,
     /// transparent) and hex codes (#RRGGBB or #AARRGGBB). The parsed color is cached,
     /// but a new brush instance is returned on every call, so callers may safely mutate
-    /// it and a brush is never shared between controls.
+    /// it and a brush is never shared between controls. Any other string silently
+    /// yields a gray brush; the REACTOR_DYM_006 analyzer flags constant strings that do.
     /// </summary>
     public static SolidColorBrush Parse(string color) => new(ParseColor(color));
 
@@ -36,21 +37,46 @@ public static class BrushHelper
     /// </summary>
     internal static global::Windows.UI.Color ParseColor(string color) =>
         _colorCache.GetOrAdd(color, static c =>
-            c.ToLowerInvariant() switch
-            {
-                "red" => global::Windows.UI.Color.FromArgb(255, 255, 0, 0),
-                "green" => global::Windows.UI.Color.FromArgb(255, 0, 128, 0),
-                "blue" => global::Windows.UI.Color.FromArgb(255, 0, 0, 255),
-                "white" => global::Windows.UI.Color.FromArgb(255, 255, 255, 255),
-                "black" => global::Windows.UI.Color.FromArgb(255, 0, 0, 0),
-                "gray" or "grey" => global::Windows.UI.Color.FromArgb(255, 128, 128, 128),
-                "lightgray" or "lightgrey" => global::Windows.UI.Color.FromArgb(255, 211, 211, 211),
-                "transparent" => global::Windows.UI.Color.FromArgb(0, 0, 0, 0),
-                _ when c.StartsWith('#') => ParseHex(c),
-                _ => global::Windows.UI.Color.FromArgb(255, 128, 128, 128),
-            });
+            TryParseColor(c, out var parsed) ? parsed : FallbackGray);
 
-    internal static global::Windows.UI.Color ParseHex(string hex)
+    /// <summary>
+    /// The color every unrecognized string silently falls back to.
+    /// </summary>
+    internal static readonly global::Windows.UI.Color FallbackGray = global::Windows.UI.Color.FromArgb(255, 128, 128, 128);
+
+    /// <summary>
+    /// Parses a color string without the gray fallback, so callers can tell a genuine
+    /// <c>"gray"</c> from an unrecognized string. Uncached.
+    /// </summary>
+    /// <remarks>
+    /// The REACTOR_DYM_006 analyzer (<c>ColorStringClassifier</c> in Reactor.Analyzers) and
+    /// the <c>mur check</c> <c>ColorStringLiteralRule</c> carry byte-for-byte copies of this
+    /// grammar; <c>ColorStringParityTests</c> locks all three together.
+    /// </remarks>
+    internal static bool TryParseColor(string color, out global::Windows.UI.Color parsed)
+    {
+        switch (color.ToLowerInvariant())
+        {
+            case "red": parsed = global::Windows.UI.Color.FromArgb(255, 255, 0, 0); return true;
+            case "green": parsed = global::Windows.UI.Color.FromArgb(255, 0, 128, 0); return true;
+            case "blue": parsed = global::Windows.UI.Color.FromArgb(255, 0, 0, 255); return true;
+            case "white": parsed = global::Windows.UI.Color.FromArgb(255, 255, 255, 255); return true;
+            case "black": parsed = global::Windows.UI.Color.FromArgb(255, 0, 0, 0); return true;
+            case "gray" or "grey": parsed = global::Windows.UI.Color.FromArgb(255, 128, 128, 128); return true;
+            case "lightgray" or "lightgrey": parsed = global::Windows.UI.Color.FromArgb(255, 211, 211, 211); return true;
+            case "transparent": parsed = global::Windows.UI.Color.FromArgb(0, 0, 0, 0); return true;
+        }
+        if (color.StartsWith('#'))
+            return TryParseHex(color, out parsed);
+        parsed = FallbackGray;
+        return false;
+    }
+
+    internal static global::Windows.UI.Color ParseHex(string hex) =>
+        // Fallback to gray for malformed hex, consistent with named color fallback
+        TryParseHex(hex, out var parsed) ? parsed : FallbackGray;
+
+    private static bool TryParseHex(string hex, out global::Windows.UI.Color parsed)
     {
         hex = hex.TrimStart('#');
         if (hex.Length == 6
@@ -58,7 +84,8 @@ public static class BrushHelper
             && byte.TryParse(hex[2..4], global::System.Globalization.NumberStyles.HexNumber, null, out var g6)
             && byte.TryParse(hex[4..6], global::System.Globalization.NumberStyles.HexNumber, null, out var b6))
         {
-            return global::Windows.UI.Color.FromArgb(255, r6, g6, b6);
+            parsed = global::Windows.UI.Color.FromArgb(255, r6, g6, b6);
+            return true;
         }
         if (hex.Length == 8
             && byte.TryParse(hex[0..2], global::System.Globalization.NumberStyles.HexNumber, null, out var a8)
@@ -66,9 +93,10 @@ public static class BrushHelper
             && byte.TryParse(hex[4..6], global::System.Globalization.NumberStyles.HexNumber, null, out var g8)
             && byte.TryParse(hex[6..8], global::System.Globalization.NumberStyles.HexNumber, null, out var b8))
         {
-            return global::Windows.UI.Color.FromArgb(a8, r8, g8, b8);
+            parsed = global::Windows.UI.Color.FromArgb(a8, r8, g8, b8);
+            return true;
         }
-        // Fallback to gray for malformed hex, consistent with named color fallback
-        return global::Windows.UI.Color.FromArgb(255, 128, 128, 128);
+        parsed = FallbackGray;
+        return false;
     }
 }
