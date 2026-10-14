@@ -194,12 +194,18 @@ internal static class TemplatedListLifecycle
 
         // FlipView doesn't support ContainerContentChanging (not a ListViewBase).
         // Pre-mount all items — FlipView typically has few items so this is fine.
+        var mounted = new List<Element>(el.ItemCount);
         for (int i = 0; i < el.ItemCount; i++)
         {
             var itemElement = el.BuildItemView(i);
             var ctrl = reconciler.Mount(itemElement, requestRerender);
-            if (ctrl is not null) flipView.Items.Add(ctrl);
+            if (ctrl is not null)
+            {
+                flipView.Items.Add(ctrl);
+                mounted.Add(itemElement);
+            }
         }
+        Reconciler.GetOrCreateReactorState(flipView).MountedItemElements = mounted;
 
         flipView.SelectionChanged += (s, _) =>
         {
@@ -352,16 +358,24 @@ internal static class TemplatedListLifecycle
 
     internal static UIElement? UpdateFlipView(Reconciler reconciler, TemplatedListElementBase o, TemplatedListElementBase n, WinUI.FlipView fv, Action requestRerender)
     {
-        // FlipView items are pre-mounted directly (no ContainerContentChanging).
-        // Build old element array from o, then reconcile like regular items.
+        // FlipView items are pre-mounted directly (no ContainerContentChanging). Diff each item
+        // against the element it mounted or was last updated to; rebuilding it from o would
+        // re-resolve an eagerly read theme brush to its current value, so a resource refresh
+        // would see no change. Fall back to rebuilding when the record doesn't line up.
         int oldCount = o.ItemCount;
         int newCount = n.ItemCount;
         int shared = Math.Min(oldCount, newCount);
+        var fvState = Reconciler.GetOrCreateReactorState(fv);
+        var mounted = fvState.MountedItemElements is { } recorded && recorded.Count == oldCount && fv.Items.Count == oldCount
+            ? recorded
+            : null;
+        var nextMounted = new List<Element>(newCount);
 
         for (int i = 0; i < shared; i++)
         {
-            var oldItemElement = o.BuildItemView(i);
+            var oldItemElement = mounted?[i] ?? o.BuildItemView(i);
             var newItemElement = n.BuildItemView(i);
+            nextMounted.Add(newItemElement);
             if (fv.Items[i] is UIElement existingCtrl && reconciler.CanUpdate(oldItemElement, newItemElement))
             {
                 var replacement = reconciler.UpdateHostedChild(oldItemElement, newItemElement, existingCtrl, requestRerender);
@@ -385,9 +399,15 @@ internal static class TemplatedListLifecycle
         // Add new
         for (int i = shared; i < newCount; i++)
         {
-            var ctrl = reconciler.Mount(n.BuildItemView(i), requestRerender);
-            if (ctrl is not null) fv.Items.Add(ctrl);
+            var itemElement = n.BuildItemView(i);
+            var ctrl = reconciler.Mount(itemElement, requestRerender);
+            if (ctrl is not null)
+            {
+                fv.Items.Add(ctrl);
+                nextMounted.Add(itemElement);
+            }
         }
+        fvState.MountedItemElements = nextMounted;
 
         // Issue #495 — drift-guarded, suppressed write. Previously
         // unconditional, which would write -1 when n.GetSelectedIndex() == -1

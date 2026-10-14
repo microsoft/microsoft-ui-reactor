@@ -177,6 +177,8 @@ internal static class HostIdleAndThemeResourceFixtures
             int commandHostChildUnmounts = 0;
             int legacyNestedMounts = 0;
             int legacyNestedCleanups = 0;
+            int flyoutTargetMounts = 0;
+            int flyoutTargetCleanups = 0;
             int wrapperMounts = 0;
             int nestedInnerMounts = 0;
             int nestedOuterMounts = 0;
@@ -202,6 +204,7 @@ internal static class HostIdleAndThemeResourceFixtures
                         () => [TextBlock("LvItemProbe").Foreground(Theme.Ref(AppKey)), TextBlock("LvSecond")]);
                     var lazyItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["lazy"]);
                     var templatedItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["templated"]);
+                    var flipItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["flip"]);
                     var treeNodes = ctx.UseMemo<TreeViewNodeData[]>(
                         () => [new TreeViewNodeData("TreeRoot", [new TreeViewNodeData("TreeChild")])]);
                     var gvItems = ctx.UseMemo<Element[]>(
@@ -317,6 +320,26 @@ internal static class HostIdleAndThemeResourceFixtures
                                 return TextBlock("LegacyNestedProbe").Foreground(Theme.Ref(AppKey));
                             })),
                             new ElementModifiers { Margin = new Thickness(13) })),
+                        // A nested memo whose wrapper carries an eagerly resolved brush: the outer layer
+                        // must diff it against the mounted wrapper, not against itself.
+                        Memo("eagerOuter", () => Memo("eagerInner", () => Border(TextBlock("EagerWrapProbe")))
+                            .Background(ThemeRef.Resolve(AppKey, isDark: false)!)),
+                        // A memo under a flyout's target shares the control with the outer memo: its
+                        // component must keep its state through the refresh.
+                        Memo("flyoutOuter", () => Flyout(
+                            Memo("flyoutInner", () => RenderEachTime(fctx =>
+                            {
+                                fctx.UseEffect(() =>
+                                {
+                                    flyoutTargetMounts++;
+                                    return () => flyoutTargetCleanups++;
+                                });
+                                return TextBlock("FlyoutTargetProbe").Foreground(Theme.Ref(AppKey));
+                            })),
+                            TextBlock("FlyoutTip"))),
+                        // A typed FlipView item with an eagerly resolved brush.
+                        FlipView(flipItems, static s => s,
+                            static (_, _) => TextBlock("FlipProbe").Foreground(ThemeRef.Resolve(AppKey, isDark: false)!)),
                         // A templated-list item that changes shape with the resource: the replaced
                         // item must be unmounted.
                         ListView(templatedItems, static s => s, (_, _) => Memo("templatedShape",
@@ -370,6 +393,8 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_NestedWrapperRerenderAloneMountedOnce", nestedInnerMounts == 1 && nestedOuterMounts == 1,
                     $"inner={nestedInnerMounts} outer={nestedOuterMounts}");
                 H.Check("ThemeMemo_PopupContentRerenderAloneKept", popupContentCleanedUp == 0);
+                H.Check("ThemeMemo_EagerWrapperRerenderAloneIsStale", EagerWrapColor(target) == Colors.Red, $"color={EagerWrapColor(target)}");
+                H.Check("ThemeMemo_FlipItemRerenderAloneIsStale", FlipItemColor(target) == Colors.Red, $"color={FlipItemColor(target)}");
                 H.Check("ThemeMemo_LegacyNestedRerenderAloneIsStale", ProbeColor(target, "LegacyNestedProbe") == Colors.Red,
                     $"color={ProbeColor(target, "LegacyNestedProbe")}");
                 H.Check("ThemeMemo_CommandHostChildRerenderAloneKept", commandHostChildCleanups == 0 && FindText(target, "CommandHostBefore") is not null,
@@ -421,6 +446,12 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_LegacyNestedKeptNotRemounted", legacyNestedMounts == 1 && legacyNestedCleanups == 0,
                     $"mounts={legacyNestedMounts} cleanups={legacyNestedCleanups}");
                 H.Check("ThemeMemo_LegacyNestedKeepsModifiers", AncestorMargin(FindText(target, "LegacyNestedProbe"), new Thickness(13)));
+                H.Check("ThemeMemo_EagerWrapperNotifiedIsBlue", EagerWrapColor(target) == Colors.Blue, $"color={EagerWrapColor(target)}");
+                H.Check("ThemeMemo_FlipItemNotifiedIsBlue", FlipItemColor(target) == Colors.Blue, $"color={FlipItemColor(target)}");
+                H.Check("ThemeMemo_FlyoutTargetNotifiedIsBlue", ProbeColor(target, "FlyoutTargetProbe") == Colors.Blue,
+                    $"color={ProbeColor(target, "FlyoutTargetProbe")}");
+                H.Check("ThemeMemo_FlyoutTargetKeptNotRemounted", flyoutTargetMounts == 1 && flyoutTargetCleanups == 0,
+                    $"mounts={flyoutTargetMounts} cleanups={flyoutTargetCleanups}");
                 H.Check("ThemeMemo_VisualizerNotifiedOneLiveCopy", visualizerContentMounts >= 3 && visualizerContentMounts - visualizerContentCleanups == 1,
                     $"mounts={visualizerContentMounts} cleanups={visualizerContentCleanups}");
                 H.Check("ThemeMemo_TreeContentVisibleToEmpty", ToggleTree(target)?.RootNodes[0].Content is null,
@@ -547,6 +578,13 @@ internal static class HostIdleAndThemeResourceFixtures
             }
             return null;
         }
+
+        private static global::Windows.UI.Color? EagerWrapColor(Border target)
+            => (FindText(target, "EagerWrapProbe")?.Parent as Border)?.Background is SolidColorBrush b ? b.Color : null;
+
+        private static global::Windows.UI.Color? FlipItemColor(Border target)
+            => FindDescendant<FlipView>(target) is { } fv && fv.Items.Count > 0
+               && fv.Items[0] is TextBlock { Foreground: SolidColorBrush b } ? b.Color : null;
 
         // Whether an element within a few levels above `fe` carries `margin`.
         private static bool AncestorMargin(FrameworkElement? fe, Thickness margin)

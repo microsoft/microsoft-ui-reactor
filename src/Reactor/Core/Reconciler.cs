@@ -929,14 +929,29 @@ public sealed partial class Reconciler : IDisposable
         public HashSet<string>? ManagedResourceKeys;
 
         /// <summary>
-        /// The factory output last realized on this control by a directly reconciled
-        /// <see cref="KeyedMemoElement"/>, so a resource-refresh pass can diff a fresh output
-        /// against what is mounted (<c>RefreshKeyedMemo</c>). Stored here, not in a table keyed
-        /// by the managed wrapper, for the same reason as <see cref="ManagedResourceKeys"/>.
-        /// Cleared on pool return; it is only read for a keyed memo's control, and guarded by
-        /// <c>CanUpdate</c>.
+        /// The factory output each <see cref="KeyedMemoElement"/> layer realized on this control
+        /// last, keyed by its <see cref="KeyedMemoElement.MemoKey"/>, so a resource-refresh pass
+        /// can diff a fresh output against what is mounted (<c>RefreshKeyedMemo</c>). Nested memos,
+        /// including ones separated by a transparent decorator such as a flyout's target, share
+        /// one control, so each layer keeps its own entry: the first inline, any others in
+        /// <see cref="MoreKeyedMemoOutputs"/>. Stored here, not in a table keyed by the managed
+        /// wrapper, for the same reason as <see cref="ManagedResourceKeys"/>. Cleared on pool
+        /// return; read only for a keyed memo's control, and guarded by <c>CanUpdate</c>.
         /// </summary>
+        public object? KeyedMemoKey;
+
+        /// <summary>The output recorded for <see cref="KeyedMemoKey"/>.</summary>
         public Element? KeyedMemoOutput;
+
+        /// <summary>Outputs of further memo layers sharing this control.</summary>
+        public List<KeyValuePair<object, Element>>? MoreKeyedMemoOutputs;
+
+        /// <summary>
+        /// For a templated <c>FlipView</c>: the element each item mounted or was last updated to,
+        /// so an update diffs against what is realized rather than a view rebuilt from the old
+        /// element (a rebuild re-resolves eagerly read theme brushes to their current values).
+        /// </summary>
+        public List<Element>? MountedItemElements;
 
         /// <summary>
         /// For an <c>ItemsHost</c> control: the collection entry each logical item realized
@@ -1328,7 +1343,10 @@ public sealed partial class Reconciler : IDisposable
         state.PendingLabeledBy = null;
         // Both can root an element graph (a keyed memo's realized output holds its
         // callbacks and setters); a detached, app-held control must not keep it alive.
+        state.KeyedMemoKey = null;
         state.KeyedMemoOutput = null;
+        state.MoreKeyedMemoOutputs = null;
+        state.MountedItemElements = null;
         state.ItemsHostEntries = null;
         // Issue #1262 — a retired control must not keep a ValidationContext (or a
         // pending async rule) alive through a binding the normal FormField /
@@ -1697,7 +1715,10 @@ public sealed partial class Reconciler : IDisposable
                 rs.EchoSuppressScopeDepth = 0;
                 rs.PendingEchoMatch = null;
                 rs.PendingLabeledBy = null;
+                rs.KeyedMemoKey = null;
                 rs.KeyedMemoOutput = null;
+                rs.MoreKeyedMemoOutputs = null;
+                rs.MountedItemElements = null;
                 rs.ItemsHostEntries = null;
                 rs.Element = null;
             }

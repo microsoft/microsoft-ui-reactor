@@ -1602,9 +1602,10 @@ public sealed partial class Reconciler
     /// against itself: a brush the factory resolved eagerly with <c>ThemeRef.Resolve</c> is
     /// equal on both sides of a self-diff, and diff-based setters would skip writing it.
     /// <list type="bullet">
-    /// <item>Output is another memo (nested, possibly inside legacy <see cref="ModifiedElement"/>
-    /// layers): self-diff, so the nested memo's own refresh diffs against the recorded (innermost)
-    /// output.</item>
+    /// <item>Each memo layer on a control records its own output, so a nested memo (directly,
+    /// inside legacy <see cref="ModifiedElement"/> layers, or as a flyout's target) is diffed
+    /// against its recorded element too: the wrapper's modifiers are diffed old to new, and the
+    /// nested memo's own refresh diffs against its own recorded output.</item>
     /// <item>Output changed shape (root type or key) from the recorded one: remount the memo and
     /// return the new control; the caller unmounts the old one and swaps it in.</item>
     /// <item>Nothing recorded (a control that is not a FrameworkElement): self-diff.</item>
@@ -1617,17 +1618,9 @@ public sealed partial class Reconciler
     {
         var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
         if (inner is EmptyElement) return null;
-        if (IsNestedKeyedMemo(inner))
-        {
-            var nested = Update(inner, inner, control, requestRerender);
-            // A nested memo that remounted hands back a fresh control; the enclosing Update must
-            // apply this memo's own modifiers to it with mount semantics.
-            if (nested is not null && !ReferenceEquals(nested, control)) _freshForWrapperMount = nested;
-            return nested;
-        }
 
         var recorded = control is FrameworkElement fe && TryGetReactorState(fe, out var state)
-            ? state.KeyedMemoOutput
+            ? GetKeyedMemoOutput(state, memo.MemoKey)
             : null;
         UIElement? replacement;
         if (recorded is null)
@@ -1645,12 +1638,13 @@ public sealed partial class Reconciler
             return replacement;
         }
 
-        // A compatible output whose handler still built a fresh control (ValidationVisualizer
-        // always remounts): the enclosing Update applies this memo's wrapper modifiers to it with
-        // mount semantics, as for a nested memo. The caller unmounts the old control.
+        // A compatible output that still came back as a fresh control (a nested memo that
+        // remounted, or a handler that always remounts, such as ValidationVisualizer): the
+        // enclosing Update applies this memo's wrapper modifiers to it with mount semantics. The
+        // caller unmounts the old control.
         if (replacement is not null && !ReferenceEquals(replacement, control)) _freshForWrapperMount = replacement;
         if ((replacement ?? control) is FrameworkElement realized)
-            GetOrCreateReactorState(realized).KeyedMemoOutput = inner;
+            SetKeyedMemoOutput(GetOrCreateReactorState(realized), memo.MemoKey, inner);
         return replacement;
     }
 

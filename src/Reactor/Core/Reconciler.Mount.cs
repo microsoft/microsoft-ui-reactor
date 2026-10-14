@@ -281,22 +281,48 @@ public sealed partial class Reconciler
     {
         var inner = WithWrapperKey(km.Factory() ?? EmptyElement.Instance, km.Key);
         var control = Mount(inner, requestRerender);
-        // Nested memos share the realized control; only the innermost layer (the one whose
-        // output is not another memo) records, so an outer layer never overwrites it.
-        if (!IsNestedKeyedMemo(inner) && control is FrameworkElement fe)
-            GetOrCreateReactorState(fe).KeyedMemoOutput = inner;
+        // Nested memos share the realized control, so each layer records under its own key.
+        if (control is FrameworkElement fe)
+            SetKeyedMemoOutput(GetOrCreateReactorState(fe), km.MemoKey, inner);
         return control;
     }
 
     /// <summary>
-    /// Whether a keyed memo's output is itself a keyed memo, seen through any legacy
-    /// <see cref="ModifiedElement"/> layers: such an output shares the realized control, so the
-    /// innermost memo owns <c>KeyedMemoOutput</c>.
+    /// The output the keyed memo layer <paramref name="memoKey"/> last realized on a control, or
+    /// null when none was recorded. Two nested layers with an equal key on one control share an
+    /// entry (the outer one wins), so the inner one remounts on a refresh instead of diffing.
     /// </summary>
-    private static bool IsNestedKeyedMemo(Element output)
+    internal static Element? GetKeyedMemoOutput(ReactorState state, object memoKey)
     {
-        while (output is ModifiedElement mod) output = mod.Inner;
-        return output is KeyedMemoElement;
+        if (state.KeyedMemoKey is { } first && first.Equals(memoKey)) return state.KeyedMemoOutput;
+        if (state.MoreKeyedMemoOutputs is { } more)
+        {
+            foreach (var entry in more)
+            {
+                if (entry.Key.Equals(memoKey)) return entry.Value;
+            }
+        }
+        return null;
+    }
+
+    internal static void SetKeyedMemoOutput(ReactorState state, object memoKey, Element output)
+    {
+        if (state.KeyedMemoKey is null || state.KeyedMemoKey.Equals(memoKey))
+        {
+            state.KeyedMemoKey = memoKey;
+            state.KeyedMemoOutput = output;
+            return;
+        }
+        var more = state.MoreKeyedMemoOutputs ??= new();
+        for (int i = 0; i < more.Count; i++)
+        {
+            if (more[i].Key.Equals(memoKey))
+            {
+                more[i] = new(memoKey, output);
+                return;
+            }
+        }
+        more.Add(new(memoKey, output));
     }
 
     /// <summary>
