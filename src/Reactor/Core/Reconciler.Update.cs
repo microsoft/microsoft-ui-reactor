@@ -267,6 +267,12 @@ public sealed partial class Reconciler
         // above, and is dropped when the pass ends.
         if (result is not null && !ReferenceEquals(result, control) && ReferenceEquals(result, _freshForWrapperMount))
             oldModifiers = null;
+        // A flyout that wraps its target hands the target's control up as its own; when the target
+        // was replaced (its type changed), that control is new to the flyout too, so the flyout's
+        // modifiers apply with mount semantics. The flyout updaters never remount the flyout itself.
+        else if (result is not null && !ReferenceEquals(result, control)
+            && newEl is FlyoutElement or MenuFlyoutElement or CommandBarFlyoutElement)
+            oldModifiers = null;
 
         // Apply inline modifiers after update. When old modifiers existed but new
         // modifiers are null, pass an empty instance so ApplyModifiers can clear

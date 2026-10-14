@@ -266,6 +266,7 @@ internal static class HostIdleAndThemeResourceFixtures
             int tipContentMounts = 0;
             int tipContentCleanups = 0;
             var labelRef = new global::Microsoft.UI.Reactor.Input.ElementRef();
+            int flyoutTargetShapeMounts = 0;
             var fixedBrush = new SolidColorBrush(Colors.Orange);
             int wrapperMounts = 0;
             int nestedInnerMounts = 0;
@@ -500,6 +501,13 @@ internal static class HostIdleAndThemeResourceFixtures
                         Memo("legacyFont", () => new ModifiedElement(
                             new TextBlockElement("LegacyFontProbe") { FontSize = ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red ? 12 : 14 },
                             new ElementModifiers { FontSize = 30 })),
+                        // A memo whose output is a flyout with its own modifiers and a target that changes
+                        // type: the flyout's modifiers and OnMount reach the new target.
+                        Memo("flyoutTargetShape", () => Flyout(
+                                ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red ? TextBlock("FtsBefore") : Border(TextBlock("FtsAfter")),
+                                TextBlock("FtsTip"))
+                            .Margin(23)
+                            .OnMount(_ => flyoutTargetShapeMounts++)),
                         Memo("dragPrecedence", () => TextBlock("DragProbe").IsDragRegion(!(ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red)))
                             .IsDragRegion(false),
                         // A wrapper labelled through an ElementRef beats an output's string LabeledBy.
@@ -582,6 +590,7 @@ internal static class HostIdleAndThemeResourceFixtures
                     $"size={FindText(target, "FlyPrecedenceProbe")?.FontSize}");
                 H.Check("ThemeMemo_LegacyFontRerenderAloneKeepsWrapper", FindText(target, "LegacyFontProbe")?.FontSize == 30,
                     $"size={FindText(target, "LegacyFontProbe")?.FontSize}");
+                H.Check("ThemeMemo_FlyoutOutputRerenderAloneMountedOnce", flyoutTargetShapeMounts == 1, $"mounts={flyoutTargetShapeMounts}");
                 H.Check("ThemeMemo_DragRegionRerenderAloneKeepsWrapper", DragRegionOf(target, "DragProbe") == false,
                     $"drag={DragRegionOf(target, "DragProbe")}");
                 H.Check("ThemeMemo_PlacementRerenderAloneKeepsWrapper", PlacementOf(target, "PlacementProbe") == global::Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Right,
@@ -663,6 +672,10 @@ internal static class HostIdleAndThemeResourceFixtures
                     $"size={FindText(target, "FlyPrecedenceProbe")?.FontSize}");
                 H.Check("ThemeMemo_LegacyFontRefreshKeepsWrapper", FindText(target, "LegacyFontProbe")?.FontSize == 30,
                     $"size={FindText(target, "LegacyFontProbe")?.FontSize}");
+                var ftsBorder = FindText(target, "FtsAfter")?.Parent as Border;
+                H.Check("ThemeMemo_FlyoutOutputTargetReplacedKeepsFlyoutModifiers", ftsBorder?.Margin == new Thickness(23)
+                    && flyoutTargetShapeMounts == 2 && FindText(target, "FtsBefore") is null,
+                    $"margin={ftsBorder?.Margin.ToString() ?? "(not found)"} mounts={flyoutTargetShapeMounts}");
                 H.Check("ThemeMemo_DragRegionRefreshKeepsWrapper", DragRegionOf(target, "DragProbe") == false,
                     $"drag={DragRegionOf(target, "DragProbe")}");
                 H.Check("ThemeMemo_RefLabelRefreshKeepsWrapper", LabelTextOf(target, "RefLabeledProbe") == "LabelR",
