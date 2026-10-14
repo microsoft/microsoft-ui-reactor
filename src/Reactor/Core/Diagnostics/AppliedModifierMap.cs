@@ -210,7 +210,8 @@ internal static class AppliedModifierMap
     /// <para>Reported only while <paramref name="liveName"/> still equals the default: the
     /// apply path yields to any existing name, so a different live value means the app (a
     /// <c>.Set(...)</c> setter or code-behind) wrote it. A value the app set to exactly the
-    /// caption is indistinguishable from the default and is reported as the default.</para>
+    /// derived default (the caption as Reactor shortens it, not necessarily the full caption) is
+    /// indistinguishable from it and is reported as the default.</para>
     /// </summary>
     internal static AppliedModifier? DescribeDefaultAutomationName(Element source, string? liveName)
     {

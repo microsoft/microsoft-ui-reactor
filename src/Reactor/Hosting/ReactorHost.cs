@@ -698,6 +698,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     private void ClaimContentTarget()
     {
         if (ContentTarget is not { } target) return;
+        // Already the owner: nothing to update (keeps repeat renders allocation-free).
+        if (ReferenceEquals(_claimedContentTarget, target) && OwnsContentTarget(target)) return;
         // Retargeted: drop the claim on the previous container so it cannot resolve to a root
         // this host has since rendered elsewhere.
         if (_claimedContentTarget is { } previous && !ReferenceEquals(previous, target) && OwnsContentTarget(previous))

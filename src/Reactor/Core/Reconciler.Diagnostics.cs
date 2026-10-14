@@ -123,6 +123,9 @@ internal readonly struct RenderedRoot
     internal Delegate? RenderFunc { get; }
     internal bool IsEmpty => Component is null && FuncContext is null;
 
+    // Identity of the root, not its render delegate: every Mount allocates a new Component or
+    // FuncContext and nothing swaps a root's delegate in place, so the context identifies a function
+    // root on its own (and lets retirement match it without the delegate).
     internal bool SameRootAs(in RenderedRoot other)
         => ReferenceEquals(Component, other.Component) && ReferenceEquals(FuncContext, other.FuncContext);
 }
