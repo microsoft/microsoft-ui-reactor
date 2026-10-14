@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text.Json;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
@@ -178,19 +179,22 @@ public sealed class PriPackagingTests : IDisposable
     }
 
     /// <summary>
-    /// WindowsAppSDK#6394 — the package's targets must put the CONSUMING app's own `.pri`
-    /// (and the `.xbf` sidecars) into its publish output.
+    /// WindowsAppSDK#6394 — the CONSUMING app's own <c>.pri</c> must reach its publish output.
     ///
-    /// <para>The Windows App SDK generates the app's resource index into the build output but
-    /// never copies it to publish for an unpackaged app, and the published app then dies at
-    /// startup with <c>0xC000027B</c> inside native XAML. Reactor ships
-    /// <c>_ReactorCopyWinUIResourcesToPublish</c> to close that gap for every consumer; this
-    /// test is what keeps it working, since nothing else fails if the target stops running —
-    /// the build stays green and only the published app breaks.</para>
+    /// <para>An unpackaged app builds a <c>.pri</c> that embeds its compiled XAML and, when
+    /// self-contained, WinUI's own <c>generic.xbf</c> / <c>themeresources.xbf</c>. Build tools
+    /// before <c>Microsoft.Windows.SDK.BuildTools.MSIX</c> 1.7.260930100 never copy it to
+    /// publish, and the published self-contained app dies at startup with <c>0xC000027B</c>.
+    /// The Windows App SDK still resolves an older version on its own, so Reactor's package
+    /// declares the fixed one as a dependency floor. Nothing else fails if that floor is lost —
+    /// the build stays green and only the published app breaks — so this test is what keeps it.</para>
     ///
-    /// <para>The opt-out property doubles as the control: it must reproduce the missing file.
-    /// Without that half, a publish that happened to include the <c>.pri</c> for some unrelated
-    /// reason would let this pass while the target did nothing.</para>
+    /// <para>The control pins the same consumer back to the version the Windows App SDK resolves
+    /// alone (suppressing the <c>NU1605</c> downgrade warning that a direct reference below a
+    /// dependency's minimum raises), so the build-tools version is the only variable between the
+    /// two publishes. It must reproduce the missing file. Without that half, a publish that
+    /// produced the <c>.pri</c> for an unrelated reason would let this pass while the floor did
+    /// nothing.</para>
     ///
     /// <para>The two publishes deliberately run from SEPARATE project directories. Publishing the
     /// same project twice with a different global property forces a full re-evaluation that reuses
@@ -200,66 +204,73 @@ public sealed class PriPackagingTests : IDisposable
     /// aware. One publish per directory stays clear of both.</para>
     /// </summary>
     [Fact]
-    public void ConsumerPublishIncludesTheAppPriAndXbfSidecars()
+    public void ConsumerPublishIncludesTheAppPri()
     {
         // Short directory names on purpose: these paths feed the XAML compiler, which fails
         // around MAX_PATH, and the fixture's package folder already consumes most of the budget.
-        var onDir = Path.Join(_tempRoot, "on");
-        var offDir = Path.Join(_tempRoot, "off");
-        Directory.CreateDirectory(onDir);
-        Directory.CreateDirectory(offDir);
+        var floorDir = Path.Join(_tempRoot, "on");
+        var downgradedDir = Path.Join(_tempRoot, "off");
+        Directory.CreateDirectory(floorDir);
+        Directory.CreateDirectory(downgradedDir);
 
-        foreach (var dir in new[] { onDir, offDir })
+        // Core package only. The publish path is the one that runs the XAML compiler against
+        // the full reference closure, and dragging in Advanced (Win2D) and Devtools adds
+        // references without adding coverage — the floor under test is in the core package.
+        WriteConsumerProject(floorDir, coreOnly: true);
+        WriteConsumerProject(downgradedDir, coreOnly: true, buildToolsMsixVersion: BuildToolsMsixWithoutPublishFix);
+        foreach (var dir in new[] { floorDir, downgradedDir })
         {
-            // Core package only. The publish path is the one that runs the XAML compiler against
-            // the full reference closure, and dragging in Advanced (Win2D) and Devtools adds
-            // references without adding coverage — the target under test is in the core package.
-            WriteConsumerProject(dir, coreOnly: true);
             WriteConsumerProgram(dir);
-            WriteConsumerXaml(dir);
             CreateNuGetConfig(dir);
         }
 
-        var publishDir = Path.Join(onDir, "pub");
+        var publishDir = Path.Join(floorDir, "pub");
         RunHelpers.RunDotnet(
             $"publish -c Release -a {_fixture.RunArchitecture} -o \"{publishDir}\"",
-            onDir,
+            floorDir,
             _fixture.CommandEnvironment,
             timeoutMs: 600_000);
 
         Assert.True(
             File.Exists(Path.Join(publishDir, "Consumer.pri")),
             "The app's own .pri is missing from the publish output, so the published app would " +
-            "start with an empty resource dictionary and crash in native XAML (WindowsAppSDK#6394). " +
-            "Reactor's _ReactorCopyWinUIResourcesToPublish target is supposed to copy it.");
+            "crash in native XAML at startup (WindowsAppSDK#6394). Reactor's dependency on " +
+            $"{BuildToolsMsixId} is supposed to bring the fix; the consumer resolved " +
+            $"{ResolvedBuildToolsMsix(floorDir)}.");
 
-        // The CONSUMER's own compiled XAML, not Reactor's. ReactorApplication.xbf would be a
-        // vacuous check here: the package delivers it through a <None CopyToPublishDirectory>
-        // item, so it lands in publish whether or not this target's $(OutputPath)**\*.xbf glob
-        // runs. Only an .xbf the consumer compiles itself exercises that glob.
-        Assert.True(
-            File.Exists(Path.Join(publishDir, "Themes", "ConsumerStyles.xbf")),
-            "The consumer's own compiled XAML (Themes/ConsumerStyles.xbf) is missing from the " +
-            "publish output, and its relative folder must be preserved for ms-appx:/// to resolve it.");
-
-        // Control: with the target disabled both files must disappear again. If they do not,
-        // something else is supplying them and the assertions above prove nothing about the target.
-        var optOutDir = Path.Join(offDir, "pub");
+        var downgradedPublishDir = Path.Join(downgradedDir, "pub");
         RunHelpers.RunDotnet(
-            $"publish -c Release -a {_fixture.RunArchitecture} -o \"{optOutDir}\" -p:ReactorCopyWinUIResourcesToPublish=false",
-            offDir,
+            $"publish -c Release -a {_fixture.RunArchitecture} -o \"{downgradedPublishDir}\"",
+            downgradedDir,
             _fixture.CommandEnvironment,
             timeoutMs: 600_000);
 
         Assert.False(
-            File.Exists(Path.Join(optOutDir, "Themes", "ConsumerStyles.xbf")),
-            "Opting out of _ReactorCopyWinUIResourcesToPublish still produced the consumer's own " +
-            ".xbf, so the passing assertion above does not attribute the copy to Reactor's target.");
+            File.Exists(Path.Join(downgradedPublishDir, "Consumer.pri")),
+            $"Pinned back to {BuildToolsMsixId} {BuildToolsMsixWithoutPublishFix} (resolved " +
+            $"{ResolvedBuildToolsMsix(downgradedDir)}), the publish still produced the app .pri, so " +
+            "the passing assertion above does not attribute it to Reactor's dependency floor.");
+    }
 
-        Assert.False(
-            File.Exists(Path.Join(optOutDir, "Consumer.pri")),
-            "Opting out of _ReactorCopyWinUIResourcesToPublish still produced the app .pri, so the " +
-            "passing assertion above does not actually attribute the copy to Reactor's target.");
+    private const string BuildToolsMsixId = "Microsoft.Windows.SDK.BuildTools.MSIX";
+
+    // What Microsoft.WindowsAppSDK.Base still resolves on its own, and the last version
+    // without the WindowsAppSDK#6394 publish fix.
+    private const string BuildToolsMsixWithoutPublishFix = "1.7.251221100";
+
+    private static string ResolvedBuildToolsMsix(string appDir)
+    {
+        var assetsPath = Path.Join(appDir, "obj", "project.assets.json");
+        if (!File.Exists(assetsPath))
+        {
+            return "nothing (no project.assets.json)";
+        }
+
+        using var assets = JsonDocument.Parse(File.ReadAllText(assetsPath));
+        return assets.RootElement.GetProperty("libraries").EnumerateObject()
+            .Select(library => library.Name)
+            .FirstOrDefault(name => name.StartsWith(BuildToolsMsixId + "/", StringComparison.OrdinalIgnoreCase))
+            ?? $"no {BuildToolsMsixId} at all";
     }
 
     private string[] ReadPackageEntries(string packageId)
@@ -277,18 +288,19 @@ public sealed class PriPackagingTests : IDisposable
     /// were empty — including the Devtools one with the longest, build-breaking file name —
     /// untested. <paramref name="coreOnly"/> trims that down for the publish test, which does not
     /// need them and is sensitive to how many references the XAML compiler has to resolve.
+    /// <paramref name="buildToolsMsixVersion"/> pins the build tools below Reactor's floor for
+    /// the publish test's control.
     ///
-    /// <para><c>WindowsAppSDKSelfContained=true</c> is deliberate, not incidental. It is the
-    /// deployment in which a missing app <c>.pri</c> actually breaks a published app: a
-    /// self-contained app resolves WinUI through its own <c>.pri</c>, whereas a
-    /// framework-dependent one — the default since Reactor's Windows App Runtime dependency was
-    /// restored — loads WinUI from the installed runtime and runs without it. Measured: with the
-    /// copy target disabled, the framework-dependent publish runs with theme resources resolving
-    /// and the self-contained one crashes with <c>0xC000027B</c>. Do not "simplify" this to the
-    /// framework-dependent default; the publish test would still pass, but it would stop testing
-    /// the case the target exists for.</para>
+    /// <para><c>WindowsAppSDKSelfContained=true</c> is deliberate, not incidental, for two
+    /// reasons. It is the deployment in which a missing app <c>.pri</c> crashes the published app
+    /// (<c>0xC000027B</c>), because the <c>.pri</c> also carries WinUI's own XAML; a
+    /// framework-dependent app loads that from the installed runtime and loses only its own XAML.
+    /// And it is what makes the Windows App SDK dump its framework PRIs at all, which is the
+    /// positive control in <see cref="ConsumerBuildRunsNoMakepriDumpForReactorPackages"/>:
+    /// measured, a framework-dependent consumer dumps none, so that control would have nothing to
+    /// match. Do not "simplify" this to the framework-dependent default.</para>
     /// </summary>
-    private void WriteConsumerProject(string appDir, bool coreOnly = false)
+    private void WriteConsumerProject(string appDir, bool coreOnly = false, string? buildToolsMsixVersion = null)
     {
         var extraPackages = coreOnly
             ? string.Empty
@@ -296,6 +308,21 @@ public sealed class PriPackagingTests : IDisposable
 
                     <PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="{_fixture.PackageVersion}" />
                     <PackageReference Include="Microsoft.UI.Reactor.Devtools" Version="{_fixture.PackageVersion}" />
+              """;
+
+        // A direct reference below a dependency's minimum is an NU1605 downgrade, which fails the
+        // restore by default; the control wants exactly that downgrade.
+        var buildToolsPin = buildToolsMsixVersion is null
+            ? string.Empty
+            : $"""
+
+                    <PackageReference Include="{BuildToolsMsixId}" Version="{buildToolsMsixVersion}" />
+              """;
+        var noWarn = buildToolsMsixVersion is null
+            ? string.Empty
+            : """
+
+                    <NoWarn>$(NoWarn);NU1605</NoWarn>
               """;
 
         var csproj = $"""
@@ -308,10 +335,10 @@ public sealed class PriPackagingTests : IDisposable
                 <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
                 <Platform>{_fixture.RunArchitecture}</Platform>
                 <Platforms>{_fixture.RunArchitecture}</Platforms>
-                <RuntimeIdentifier>win-{_fixture.RunArchitecture}</RuntimeIdentifier>
+                <RuntimeIdentifier>win-{_fixture.RunArchitecture}</RuntimeIdentifier>{noWarn}
               </PropertyGroup>
               <ItemGroup>
-                <PackageReference Include="Microsoft.UI.Reactor" Version="{_fixture.PackageVersion}" />{extraPackages}
+                <PackageReference Include="Microsoft.UI.Reactor" Version="{_fixture.PackageVersion}" />{extraPackages}{buildToolsPin}
               </ItemGroup>
             </Project>
             """;
@@ -322,34 +349,13 @@ public sealed class PriPackagingTests : IDisposable
     private static void WriteConsumerProgram(string appDir)
     {
         // OutputType=Exe is what makes the Windows App SDK compute input PRIs at all
-        // (ShouldComputeInputPris), so the app must be an executable. It is never run here —
-        // this test is about the build, and CreateTemplateTests already covers running.
+        // (ShouldComputeInputPris), so the app must be an executable. It is never run here:
+        // these tests assert on the build and publish layout.
         File.WriteAllText(Path.Join(appDir, "Program.cs"), """
             using static Microsoft.UI.Reactor.Factories;
 
             System.Console.WriteLine(TextBlock("hello") is not null);
 
-            """);
-    }
-
-    /// <summary>
-    /// A consumer-owned XAML file, so the publish test can assert on an <c>.xbf</c> that the
-    /// consumer compiles rather than one the package already delivers by another route.
-    /// A keyless <c>ResourceDictionary</c> is the smallest thing the XAML compiler will emit an
-    /// <c>.xbf</c> for; it lives in a subfolder so the copy's <c>RecursiveDir</c> handling is
-    /// covered too.
-    /// </summary>
-    private static void WriteConsumerXaml(string appDir)
-    {
-        var themes = Path.Join(appDir, "Themes");
-        Directory.CreateDirectory(themes);
-
-        File.WriteAllText(Path.Join(themes, "ConsumerStyles.xaml"), """
-            <ResourceDictionary
-                xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-                <x:Double x:Key="ConsumerProbeValue">42</x:Double>
-            </ResourceDictionary>
             """);
     }
 

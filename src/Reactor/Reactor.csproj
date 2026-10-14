@@ -123,6 +123,25 @@
     <PackageReference Include="MessageFormat" />
   </ItemGroup>
 
+  <!--
+    WindowsAppSDK#6394: an unpackaged app's own .pri and compiled .xbf are built but never
+    copied to the publish output, so a self-contained publish crashes at startup with
+    0xC000027B and a framework-dependent one cannot load its own XAML. The fix shipped in
+    Microsoft.Windows.SDK.BuildTools.MSIX 1.7.260930100, but apps get that package only
+    transitively, through Microsoft.WindowsAppSDK.Base, and every Base release to date still
+    resolves 1.7.251221100. Referencing it here turns the fix into a dependency floor every
+    Reactor consumer inherits (NuGet picks the highest minimum).
+
+    Default PrivateAssets on purpose: the package's targets reach consumers through its
+    buildTransitive folder, and only the version is being raised. Delete this reference (and
+    its PackageVersion) once the Microsoft.WindowsAppSDK version this repo pins resolves
+    1.7.260930100 or later by itself. PriPackagingTests.ConsumerPublishIncludesTheAppPri is what
+    proves the floor reaches consumers.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.MSIX" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Reactor.Localization.Generator\Reactor.Localization.Generator.csproj"
                       OutputItemType="Analyzer"

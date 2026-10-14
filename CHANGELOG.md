@@ -647,26 +647,24 @@ Conventions for contributors:
   `Cancel()` cleanup (PR #1124), that the source had been pooled and reset, was wrong: that crash
   was this same fault.
 
-- **Reactor packages no longer ship a `.pri`, so consuming apps build at path depths where
-  they previously failed (issue #1271).** The index sat beside the assembly in `lib/`, where
-  `ResolveAssemblyReference` treats it as a reference-related file and the Windows App SDK
-  expands it with `makepri.exe Dump` into `$(IntermediateOutputPath)` — a path that breaks
-  past `MAX_PATH` and fails the build with `PRI175` / `PRI222` / `APPX0002`. Nothing is lost:
-  the `.Advanced` and `.Devtools` indexes were empty and the core one only embedded a second
-  copy of `ReactorApplication.xbf`, which still ships loose. `.pri` *generation* is unchanged,
-  so `ProjectReference` consumers are unaffected. The core package now also exposes one
-  `lib/` folder instead of two for the same target framework.
+- **Reactor packages no longer ship a `.pri` (issue #1271).** The index sat beside the
+  assembly in `lib/`, where `ResolveAssemblyReference` treats it as a reference-related file,
+  so every consumer build expanded it with `makepri.exe Dump` into `$(IntermediateOutputPath)`
+  — and on build tools before 1.7.260930100 that path broke past `MAX_PATH` with `PRI175` /
+  `PRI222` / `APPX0002`. Nothing is lost: the `.Advanced` and `.Devtools` indexes were empty
+  and the core one only embedded a second copy of `ReactorApplication.xbf`, which still ships
+  loose. `.pri` *generation* is unchanged, so `ProjectReference` consumers are unaffected. The
+  core package now also exposes one `lib/` folder instead of two for the same target framework.
 
-- **Published self-contained apps no longer start with an empty resource dictionary
-  ([WindowsAppSDK#6394](https://github.com/microsoft/WindowsAppSDK/issues/6394)).** The
-  Windows App SDK leaves an unpackaged app's own `.pri` and `.xbf` out of the publish
-  output. A self-contained app (`WindowsAppSDKSelfContained=true`) resolves WinUI through
-  that `.pri`, so it resolved no theme resources and died at startup with `0xC000027B`
-  inside native XAML. Reactor's targets now copy them, for AOT and non-AOT publishes alike
-  — opt out with `<ReactorCopyWinUIResourcesToPublish>false</ReactorCopyWinUIResourcesToPublish>`.
-  Framework-dependent apps, the default since the Windows App Runtime dependency was
-  restored, load WinUI from the installed runtime and were not affected. Replaces the
-  per-project `_CopyWinUIResourcesForAot` snippet (removed from 11 projects).
+- **Published apps now include their own `.pri`
+  ([WindowsAppSDK#6394](https://github.com/microsoft/WindowsAppSDK/issues/6394)).**
+  `Microsoft.Windows.SDK.BuildTools.MSIX` before 1.7.260930100 leaves an unpackaged app's
+  `.pri` out of its publish output: self-contained apps (AOT or not) crashed at startup with
+  `0xC000027B`, and framework-dependent apps could not load their own XAML. Every Windows App
+  SDK release still resolves an older version, so `Microsoft.UI.Reactor` now depends on
+  1.7.260930100 directly, which also fixes the `MAX_PATH` failure above for the SDK's own
+  `.pri` files. Replaces the per-project `_CopyWinUIResourcesForAot` snippet (removed from 11
+  projects).
 
 ### Security
 

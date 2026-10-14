@@ -180,37 +180,31 @@ shipping `Reactor.pri` from a `sidecar/` folder with a plain
 `<None CopyToOutputDirectory="PreserveNewest">` item still produces a
 `makepri.exe Dump -IndexFile …\sidecar\Reactor.pri` invocation. It has to be absent.
 
-**The upstream long-path fix does not retire this.** The `MAX_PATH` defect itself is
-[microsoft/WindowsAppSDK#6795](https://github.com/microsoft/WindowsAppSDK/issues/6795)
-(`WinAppSdkExpandPriContent` passes a non-extended-length path to `makepri.exe`), still
-open. A fix exists and was verified by A/B in `Microsoft.Windows.SDK.BuildTools.MSIX`
-**1.7.260925103** — but that is a private drop, not a feed package: checked against
-nuget.org on 2026-09-25 it returns 404, while 1.7.251221100 and 1.7.260903100 return 200
-and a nonsense version returns 404 (i.e. the probe can tell absent from broken).
+**The upstream long-path fix, and why this section outlives it.** The `MAX_PATH` defect
+itself is [microsoft/WindowsAppSDK#6795](https://github.com/microsoft/WindowsAppSDK/issues/6795)
+(`WinAppSdkExpandPriContent` passed a non-extended-length path to `makepri.exe`), fixed in
+`Microsoft.Windows.SDK.BuildTools.MSIX` **1.7.260930100** (closed 2026-10-01). The fix is a
+`\\?\` prefix in the task rather than a shorter path — the dumps still land in
+`$(IntermediateOutputPath)` — so it also covers the expansion path a Reactor app takes.
+Measured at matched depths, varying only the build-tools version:
 
-**No published version fixes it.** The newest published build tools, 1.7.260903100, were
-A/B'd at a failing depth and still fail — 6 `PRI` and 4 `APPX` errors — which matches the
-structure: that version's `MrtCore.PriExpansion.targets` still passes a bare
-`IntermediateDirectory="$(IntermediateOutputPath)"`, and its task assembly contains no
-`\\?\` handling at all.
+| consumer | 1.7.251221100 | 1.7.260930100 |
+|---|---|---|
+| pre-fix packages (ship `.pri`), framework-dependent | `PRI175` on `Microsoft.UI.Reactor.Devtools.pri.xml` | builds |
+| this layout (no `.pri`), self-contained | `PRI175` on the SDK's own `Microsoft.WindowsAppRuntime.pri.xml` | builds |
 
-Consumers also do not choose this package directly. Build tools reach an app only through
-`Microsoft.WindowsAppSDK.Base`, the sole package in the graph that references them — and
-**no Base pins even the newest published build tools**, let alone the fixed private drop.
-Verified at nuspec level across stable *and* prerelease: 2.0.4 (the newest stable, pulled
-by Windows App SDK 2.5.1) and 2.0.5-experimental2 (the newest of any kind) both pin
-`1.7.251221100`; 2.0.250911001-experimental pins an older `1.7.20250829.1` still. Note the
-version strings: a plain `2.0.5` does not exist, only `2.0.5-experimental2`, so a probe for
-the former 404s without that meaning there is no newer Base. So the version is transitive: an app cannot opt into a fixed build-tools
-release by upgrading Windows App SDK, and pinning the newest published one would not help
-either.
+Build tools reach an app only through `Microsoft.WindowsAppSDK.Base`, and every Base release
+to date — 2.0.4 stable and 2.0.5-experimental2 alike — pins `1.7.251221100`. So
+`Microsoft.UI.Reactor` declares its own dependency on 1.7.260930100 (it also fixes
+WindowsAppSDK#6394; see [AOT support](../aot-support.md#publish-time-resources)), and every
+consumer resolves the fixed version. The second row is why that matters even with no `.pri`
+in `lib/`: in a self-contained app the Windows App SDK's own indexes hit the same limit.
 
-That last point is why this section outlives the upstream fix. Even once 1.7.260925103 (or
-its successor) ships and flows, the `.pri` removal keeps the trigger away from every
-consumer still resolving an older build-tools version — which, being transitive, is not
-something they control. And the layout is right on its own terms regardless: the
-`.Advanced` and `.Devtools` indexes are **entirely empty**, and shipping them costs every
-consumer six wasted `makepri.exe Dump` invocations per build.
+The `.pri` removal stands on its own terms. The `.Advanced` and `.Devtools` indexes are
+**entirely empty** and the core one duplicates a file that ships loose, yet each cost every
+consumer a `makepri.exe Dump` per build — six per build with all three referenced, through
+both the reference and the payload path. And an app that pins build tools below Reactor's
+floor would hit the original failure again.
 
 Each of the three csproj files therefore narrows the allow-list that decides what may sit
 in the build-output folder:

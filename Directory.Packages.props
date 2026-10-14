@@ -28,6 +28,10 @@
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
     <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="$(WindowsAppSDKWinUIVersion)" />
     <PackageVersion Include="Microsoft.WindowsAppSDK.Runtime" Version="$(WindowsAppSDKVersion)" />
+    <!-- A floor Microsoft.UI.Reactor ships to its consumers, above the version the Windows
+         App SDK packages resolve on their own. Why, and when to delete it: the
+         PackageReference in src/Reactor/Reactor.csproj. -->
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.MSIX" Version="1.7.260930100" />
     <PackageVersion Include="Microsoft.Graphics.Win2D" Version="$(Win2DVersion)" />
   </ItemGroup>
 
