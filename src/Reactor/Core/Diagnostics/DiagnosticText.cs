@@ -145,14 +145,7 @@ internal static class DiagnosticText
             return (Redacted, true);
 
         if (value is not null && IsListLike(value))
-        {
-            // A collection expression's runtime type is compiler-generated (<>z__ReadOnlyArray); name the declared one.
-            var shownType = value.GetType().Name.StartsWith('<') && declared is not null ? declared : value.GetType();
-            var countText = TryCount(value) is int count
-                ? $"{count.ToString(CultureInfo.InvariantCulture)} {(count == 1 ? "item" : "items")}"
-                : "count unknown";
-            return ($"{FriendlyTypeName(shownType)} ({countText})", false);
-        }
+            return (CollectionSummary(value, declared), false);
 
         if (value is string s)
         {
@@ -173,6 +166,11 @@ internal static class DiagnosticText
     {
         if (IsSecretName(name) && value is not null and not Delegate)
             return (Redacted, true);
+
+        // A collection (DescribedByRefs, …) is summarised by count, never by its own ToString(),
+        // which can enumerate it on the UI thread.
+        if (value is not null && IsListLike(value))
+            return (CollectionSummary(value, null), false);
 
         string text;
         switch (value)
@@ -436,6 +434,17 @@ internal static class DiagnosticText
     // Any non-string sequence is a collection: its own ToString() is never called, because a
     // custom one can enumerate it (lazy, side-effecting or infinite).
     private static bool IsListLike(object value) => value is IEnumerable and not string;
+
+    /// <summary>"<c>List&lt;T&gt; (n items)</c>": the type and advertised count, never the items.</summary>
+    private static string CollectionSummary(object value, Type? declared)
+    {
+        // A collection expression's runtime type is compiler-generated (<>z__ReadOnlyArray); name the declared one.
+        var shownType = value.GetType().Name.StartsWith('<') && declared is not null ? declared : value.GetType();
+        var countText = TryCount(value) is int count
+            ? $"{count.ToString(CultureInfo.InvariantCulture)} {(count == 1 ? "item" : "items")}"
+            : "count unknown";
+        return $"{FriendlyTypeName(shownType)} ({countText})";
+    }
 
     /// <summary>
     /// The item count a collection advertises, without enumerating it: a lazy sequence can be

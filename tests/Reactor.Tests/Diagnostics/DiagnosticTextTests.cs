@@ -304,6 +304,28 @@ public class DiagnosticTextTests
 
     // ── Parsing ─────────────────────────────────────────────────────
 
+    private sealed class SelfFormattingRefs : IReadOnlyList<global::Microsoft.UI.Reactor.Input.ElementRef>
+    {
+        public bool Touched;
+        public int Count => 2;
+        public global::Microsoft.UI.Reactor.Input.ElementRef this[int index] { get { Touched = true; throw new InvalidOperationException(); } }
+        public IEnumerator<global::Microsoft.UI.Reactor.Input.ElementRef> GetEnumerator() { Touched = true; throw new InvalidOperationException(); }
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        public override string ToString() { Touched = true; return "ApiKey: hunter2"; }
+    }
+
+    [Fact]
+    public void FormatPlain_SummarisesCollectionsByCount_WithoutCallingTheirToStringOrEnumerator()
+    {
+        var refs = new SelfFormattingRefs();
+        Assert.Equal(("SelfFormattingRefs (2 items)", false), DiagnosticText.FormatPlain("DescribedByRefs", refs));
+        Assert.False(refs.Touched);
+        var array = new[] { new global::Microsoft.UI.Reactor.Input.ElementRef() };
+        Assert.Equal(" (1 item)", DiagnosticText.FormatPlain("FlowsToRefs", array).Text[^9..]);
+    }
+
+    // ── Parsing ─────────────────────────────────────────────────────
+
     public static IEnumerable<object?[]> Parsed() =>
     [
         ["42", typeof(int), 42],
