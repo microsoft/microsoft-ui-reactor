@@ -412,6 +412,14 @@ internal static class HostIdleAndThemeResourceFixtures
                                     ? global::Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Content
                                     : global::Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Control))
                             .AccessibilityHidden(),
+                        // The wrapper's tooltip placement and LabeledBy beat the output's too.
+                        Memo("placementPrecedence", () => TextBlock("PlacementProbe").ToolTip("inner", ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red ? global::Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Top : global::Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Bottom))
+                            .ToolTip("wrapper", global::Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Right),
+                        TextBlock("LabelA").AutomationId("SelfTestLabelA"),
+                        TextBlock("LabelB").AutomationId("SelfTestLabelB"),
+                        TextBlock("LabelW").AutomationId("SelfTestLabelW"),
+                        Memo("labeledPrecedence", () => TextBlock("LabeledProbe").LabeledBy(ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red ? "SelfTestLabelA" : "SelfTestLabelB"))
+                            .LabeledBy("SelfTestLabelW"),
                         // A kept ListView item whose automation name changes in place: the container forwards it.
                         ListView(lvNameItems),
                         // A FlipView whose first item mounts nothing.
@@ -486,6 +494,10 @@ internal static class HostIdleAndThemeResourceFixtures
                 int tipMountsBeforeNotify = tipContentMounts;
                 H.Check("ThemeMemo_FlyoutPrecedenceRerenderAloneKeepsWrapper", FindText(target, "FlyPrecedenceProbe")?.FontSize == 30,
                     $"size={FindText(target, "FlyPrecedenceProbe")?.FontSize}");
+                H.Check("ThemeMemo_PlacementRerenderAloneKeepsWrapper", PlacementOf(target, "PlacementProbe") == global::Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Right,
+                    $"placement={PlacementOf(target, "PlacementProbe")}");
+                H.Check("ThemeMemo_LabeledByRerenderAloneKeepsWrapper", LabelTextOf(target, "LabeledProbe") == "LabelW",
+                    $"label={LabelTextOf(target, "LabeledProbe")}");
                 H.Check("ThemeMemo_HelpPrecedenceRerenderAloneKeepsWrapper", HelpTextOf(target, "HelpPrecedenceProbe") == "wrapper-help",
                     $"help={HelpTextOf(target, "HelpPrecedenceProbe")}");
                 H.Check("ThemeMemo_HiddenRerenderAloneStaysHidden", ViewOf(target, "HiddenPrecedenceProbe") == global::Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw,
@@ -559,6 +571,10 @@ internal static class HostIdleAndThemeResourceFixtures
                     $"color={FlipViewItemColor(target, "FlipProbe")}");
                 H.Check("ThemeMemo_FlyoutPrecedenceRefreshKeepsWrapper", FindText(target, "FlyPrecedenceProbe")?.FontSize == 30,
                     $"size={FindText(target, "FlyPrecedenceProbe")?.FontSize}");
+                H.Check("ThemeMemo_PlacementRefreshKeepsWrapper", PlacementOf(target, "PlacementProbe") == global::Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Right,
+                    $"placement={PlacementOf(target, "PlacementProbe")}");
+                H.Check("ThemeMemo_LabeledByRefreshKeepsWrapper", LabelTextOf(target, "LabeledProbe") == "LabelW",
+                    $"label={LabelTextOf(target, "LabeledProbe")}");
                 H.Check("ThemeMemo_HelpPrecedenceRefreshKeepsWrapper", HelpTextOf(target, "HelpPrecedenceProbe") == "wrapper-help",
                     $"help={HelpTextOf(target, "HelpPrecedenceProbe")}");
                 H.Check("ThemeMemo_HiddenRefreshStaysHidden", ViewOf(target, "HiddenPrecedenceProbe") == global::Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw,
@@ -728,6 +744,13 @@ internal static class HostIdleAndThemeResourceFixtures
             }
             return null;
         }
+
+        private static global::Microsoft.UI.Xaml.Controls.Primitives.PlacementMode? PlacementOf(Border target, string text)
+            => FindText(target, text) is { } tb ? global::Microsoft.UI.Xaml.Controls.ToolTipService.GetPlacement(tb) : null;
+
+        private static string? LabelTextOf(Border target, string text)
+            => FindText(target, text) is { } tb
+               && global::Microsoft.UI.Xaml.Automation.AutomationProperties.GetLabeledBy(tb) is TextBlock label ? label.Text : null;
 
         private static string? HelpTextOf(Border target, string text)
             => FindText(target, text) is { } tb ? global::Microsoft.UI.Xaml.Automation.AutomationProperties.GetHelpText(tb) : null;

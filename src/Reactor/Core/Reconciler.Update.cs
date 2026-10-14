@@ -1707,6 +1707,7 @@ public sealed partial class Reconciler
             Visual = null,
             // A string tooltip is a plain value; next to a rich one it would replace it.
             ToolTip = m.RichToolTip is null ? null : current.ToolTip,
+            ToolTipPlacement = null,
             IsEnabled = null,
             AutomationName = null,
             AutomationId = null,
@@ -1720,7 +1721,8 @@ public sealed partial class Reconciler
             TabIndex = null,
             AccessKey = null,
             XYFocusKeyboardNavigation = null,
-            // Scalar accessibility values; the LabeledBy / DescribedBy references stay equal.
+            // Scalar accessibility values, including the LabeledBy automation id; the LabeledByRef
+            // and DescribedBy references stay equal.
             Accessibility = current.Accessibility is { } a11y
                 ? a11y with
                 {
@@ -1735,6 +1737,7 @@ public sealed partial class Reconciler
                     Level = null,
                     ItemStatus = null,
                     TabFocusNavigation = null,
+                    LabeledBy = null,
                 }
                 : null,
         };
