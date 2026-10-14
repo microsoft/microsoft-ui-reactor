@@ -263,6 +263,29 @@ jobs:
           Write-Host "All $($checked.Count) packed assemblies are AnyCPU:"
           $checked | ForEach-Object { Write-Host "  $_" }
 
+      # One lib/ folder per package, with ReactorApplication.xbf beside Reactor.dll. A file packed
+      # to a literal lib\$(TargetFramework)\ path lands in a second folder (…22621.0 vs NuGet's
+      # …22621). Checked here because only a pack of an already-built tree, like this one, shows it.
+      - name: Check package lib/ layout
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $packages = @(Get-ChildItem artifacts/nupkg -Filter *.nupkg -File)
+          if ($packages.Count -eq 0) { throw 'No .nupkg under artifacts/nupkg.' }
+          $problems = [System.Collections.Generic.List[string]]::new()
+          foreach ($nupkg in $packages) {
+            $zip = [System.IO.Compression.ZipFile]::OpenRead($nupkg.FullName)
+            try { $entries = @($zip.Entries | ForEach-Object FullName) } finally { $zip.Dispose() }
+            $libs = @($entries | Where-Object { $_ -like 'lib/*/*' } | ForEach-Object { $_.Split('/')[1] } | Sort-Object -Unique)
+            if ($libs.Count -ne 1) {
+              $problems.Add("$($nupkg.Name) has $($libs.Count) lib/ folders: $($libs -join ', ')")
+            } elseif ($entries -contains "lib/$($libs[0])/Reactor.dll" -and $entries -notcontains "lib/$($libs[0])/Reactor/Hosting/ReactorApplication.xbf") {
+              $problems.Add("$($nupkg.Name) has no lib/$($libs[0])/Reactor/Hosting/ReactorApplication.xbf beside Reactor.dll")
+            }
+          }
+          if ($problems.Count -gt 0) { throw "Package layout problems:`n$($problems -join "`n")" }
+          Write-Host "One lib/ folder in each of $($packages.Count) packages."
+
       - name: Build VSIX
         shell: pwsh
         run: |

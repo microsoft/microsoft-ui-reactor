@@ -95,7 +95,7 @@ Devtools are a two-layer opt-in so release and NativeAOT binaries stay trimmed b
 
 ## Publish output
 
-Publishing an unpackaged app needs no extra setup. `Microsoft.UI.Reactor` depends on `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.260930100, which copies the app's `.pri` into the publish output ([WindowsAppSDK#6394](https://github.com/microsoft/WindowsAppSDK/issues/6394)); older versions leave it out, and the published app then crashes at startup or cannot load its own XAML. If you added the `_CopyWinUIResourcesForAot` target that earlier versions of this page recommended, you can delete it.
+Publishing an unpackaged app needs no extra setup. `Microsoft.UI.Reactor` versions after 0.1.0-preview.16 depend on `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.260930100, which copies the app's `.pri` into the publish output ([WindowsAppSDK#6394](https://github.com/microsoft/WindowsAppSDK/issues/6394)); older versions leave it out, and the published app then crashes at startup or cannot load its own XAML. On 0.1.0-preview.16 or earlier, add `<PackageReference Include="Microsoft.Windows.SDK.BuildTools.MSIX" Version="1.7.260930100" />` to your app, and remove it when you upgrade Reactor. If you added the `_CopyWinUIResourcesForAot` target that earlier versions of this page recommended, you can delete it.
 
 ## Debugging an AOT selftest hang
 

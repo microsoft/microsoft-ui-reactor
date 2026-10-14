@@ -19,13 +19,6 @@ public sealed class PriPackagingTests : IDisposable
     // What Microsoft.WindowsAppSDK.Base resolves on its own; it predates the fixes.
     private const string BuildToolsMsixWithoutFixes = "1.7.251221100";
 
-    private static readonly string[] PackageIds =
-    [
-        "Microsoft.UI.Reactor",
-        "Microsoft.UI.Reactor.Advanced",
-        "Microsoft.UI.Reactor.Devtools",
-    ];
-
     private readonly LocalPackageFeedFixture _fixture;
     private readonly string _tempRoot = Path.Join(Path.GetTempPath(), $"rpri-{Guid.NewGuid():N}");
 
@@ -47,27 +40,6 @@ public sealed class PriPackagingTests : IDisposable
 
         Assert.Contains(entries, e => e.EndsWith("Reactor/Hosting/ReactorApplication.xbf", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(entries, e => e.EndsWith("Reactor/Hosting/ReactorApplication.xaml", StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <summary>
-    /// Packing a file to a literal <c>lib\$(TargetFramework)\</c> path adds a second
-    /// <c>lib/</c> folder for the same framework: NuGet names the build-output folder
-    /// <c>net10.0-windows10.0.22621</c>, while <c>$(TargetFramework)</c> ends in <c>.0</c>.
-    /// </summary>
-    [Fact]
-    public void PackagesExposeExactlyOneLibFolder()
-    {
-        foreach (var packageId in PackageIds)
-        {
-            var libFolders = ReadPackageEntries(packageId)
-                .Where(e => e.StartsWith("lib/", StringComparison.OrdinalIgnoreCase))
-                .Select(e => e.Split('/')[1])
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            // Exactly one, so a package with no lib/ folder fails too.
-            Assert.True(libFolders.Length == 1, $"{packageId} has {libFolders.Length} lib/ folder(s): {string.Join(", ", libFolders)}.");
-        }
     }
 
     /// <summary>

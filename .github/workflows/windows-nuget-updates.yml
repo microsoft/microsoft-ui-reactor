@@ -78,7 +78,9 @@ env:
   # Package ids to hold back (exact, case-insensitive; comma separated). Seeded
   # with MessagePack because its 3.x major was intentionally declined in #580 —
   # remove it here to let this workflow propose that major again.
-  IGNORE_PACKAGES: 'MessagePack'
+  # Microsoft.Windows.SDK.BuildTools.MSIX is a floor Microsoft.UI.Reactor ships to
+  # its consumers; it moves by hand with the Windows App SDK (src/Reactor/Reactor.csproj).
+  IGNORE_PACKAGES: 'MessagePack,Microsoft.Windows.SDK.BuildTools.MSIX'
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
