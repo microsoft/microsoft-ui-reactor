@@ -126,7 +126,10 @@ including the retry after a hook-order change. A component first created during
 the pass reports `mount`.
 
 In process, `ReactorTrace.GetComponentControl(componentId)` resolves an id to the
-control whose bounds are that component's, and `ReactorTrace.TryGetComponentId(control, out id)` goes the other way. Ids
+control whose bounds are that component's, and `ReactorTrace.TryGetComponentId(control, out id)` goes the other way,
+except for a host's root: its id resolves to the root content, but that control
+is often also a child component's wrapper, so the reverse lookup returns the
+child's id (or nothing), never the root's. Ids
 are only issued while the event is enabled, so subscribe with
 `ReactorTrace.Subscribe(..., EventLevel.Verbose, (EventKeywords)0x4000)` first.
 The payload carries no props, state values, keys or paths.
