@@ -25,7 +25,14 @@ public sealed class ReactorDiagnosticsTargetsTests : IDisposable
 
     public void Dispose()
     {
-        try { global::System.IO.Directory.Delete(_dir, recursive: true); } catch (global::System.IO.IOException) { }
+        try
+        {
+            global::System.IO.Directory.Delete(_dir, recursive: true);
+        }
+        catch (global::System.IO.IOException)
+        {
+            // Best-effort temp cleanup: a file still held by the build must not fail the test.
+        }
     }
 
     private static string TargetsPath()

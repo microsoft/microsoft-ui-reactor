@@ -231,7 +231,7 @@ public sealed class RootMountInterceptionTests : IDisposable
         var dir = new global::System.IO.DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            var candidate = global::System.IO.Path.Combine(dir.FullName, "tests", "Reactor.SourceMap.Tests", "RootMountInterceptionTests.cs");
+            var candidate = global::System.IO.Path.Join(dir.FullName, "tests", "Reactor.SourceMap.Tests", "RootMountInterceptionTests.cs");
             if (global::System.IO.File.Exists(candidate))
             {
                 var lines = global::System.IO.File.ReadAllLines(candidate);

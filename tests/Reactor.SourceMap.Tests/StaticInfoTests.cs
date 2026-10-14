@@ -24,7 +24,7 @@ public sealed class StaticInfoTests : IDisposable
         var dir = new global::System.IO.DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            var candidate = global::System.IO.Path.Combine(dir.FullName, "tests", "Reactor.SourceMap.Tests", "StaticInfoTests.cs");
+            var candidate = global::System.IO.Path.Join(dir.FullName, "tests", "Reactor.SourceMap.Tests", "StaticInfoTests.cs");
             if (global::System.IO.File.Exists(candidate))
             {
                 var lines = global::System.IO.File.ReadAllLines(candidate);

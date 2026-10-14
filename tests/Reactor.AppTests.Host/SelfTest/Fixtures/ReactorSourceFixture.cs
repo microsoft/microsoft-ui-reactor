@@ -1271,6 +1271,77 @@ internal partial class ReactorSource_DetachedPanelChildrenRenamed(Harness h) : S
 }
 
 /// <summary>
+/// A stamped decorator over an UNSTAMPED target realizes the target's control, which has no
+/// call site of its own: the published value carries no <c>at=</c>, as GetSource reports none,
+/// rather than the decorator's location. On mount, and on an update that turns a stamped
+/// target into an unstamped one.
+/// </summary>
+internal class ReactorSource_DecoratorUnstampedTarget(Harness h) : SelfTestFixtureBase(h)
+{
+    private WinUI.TextBlock? Text(string text) => H.FindControl<WinUI.TextBlock>(t => t.Text == text);
+
+    public override async Task RunAsync()
+    {
+        if (!ReactorSourcePublisher.IsSupported)
+        {
+            H.Skip("ReactorSource_DecoratorUnstampedTarget", "Reactor.DevtoolsSupport is off in this host");
+            return;
+        }
+
+        var previous = ReactorSourcePublisher.IsEnabled;
+        try
+        {
+            ReactorSourcePublisher.IsEnabled = true;
+            Action<bool>? setStamped = null;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (stamped, set) = ctx.UseState(true);
+                setStamped = set;
+                return VStack(
+                    Flyout(new TextBlockElement("decorated-unstamped"), TextBlock("decorated-unstamped-body")),
+                    Flyout(stamped ? TextBlock("decorated-toggle") : new TextBlockElement("decorated-toggle"), TextBlock("decorated-toggle-body")));
+            });
+            await Harness.Render();
+
+            var mounted = Text("decorated-unstamped");
+            var mountedValue = mounted is null ? null : ReactorDiagnostics.GetSource(mounted);
+            var toggle = Text("decorated-toggle");
+            var stampedValue = toggle is null ? null : ReactorDiagnostics.GetSource(toggle);
+            Console.WriteLine($"# decorated, unstamped target: {mountedValue}; stamped target: {stampedValue}");
+            if (stampedValue?.Contains("|at=", StringComparison.Ordinal) != true)
+            {
+                H.Skip("ReactorSource_DecoratorUnstampedTarget", "call sites are not stamped in this host");
+                host.Dispose();
+                H.SetContent(null);
+                return;
+            }
+            H.Check("ReactorSource_DecoratorUnstampedTarget_MountHasNoLocation",
+                mountedValue is not null && !mountedValue.Contains("|at=", StringComparison.Ordinal)
+                && mountedValue.Contains("|element=TextBlock", StringComparison.Ordinal)
+                && Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(mounted!) is null);
+
+            setStamped!(false);
+            await Harness.Render();
+            await Harness.Render();
+            var updated = Text("decorated-toggle");
+            var updatedValue = updated is null ? null : ReactorDiagnostics.GetSource(updated);
+            Console.WriteLine($"# decorated, target unstamped by an update: {updatedValue}");
+            H.Check("ReactorSource_DecoratorUnstampedTarget_UpdateDropsLocation",
+                updatedValue is not null && !updatedValue.Contains("|at=", StringComparison.Ordinal)
+                && Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(updated!) is null);
+
+            host.Dispose();
+            H.SetContent(null);
+        }
+        finally
+        {
+            ReactorSourcePublisher.IsEnabled = previous;
+        }
+    }
+}
+
+/// <summary>
 /// A ContentDialog element realizes a collapsed placeholder; the dialog the user sees is a
 /// separate WinUI object. An out-of-process inspector sees the dialog, so it carries the
 /// element's published value too: when opened at mount (the reconciler mirrors the value it

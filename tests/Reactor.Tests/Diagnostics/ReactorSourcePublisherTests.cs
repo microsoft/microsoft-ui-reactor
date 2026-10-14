@@ -75,6 +75,26 @@ public sealed class ReactorSourcePublisherTests
     }
 
     [Fact]
+    public void Decorator_DescribesOnlyItsTargetsCallSite()
+    {
+        // A stamped Flyout over an UNSTAMPED target: the realized control is the target's,
+        // and GetSource reports no location for it, so neither may the published value.
+        var unstamped = Flyout(new TextBlockElement("target"), TextBlock("body")) with { CallSite = SiteA };
+        var value = ReactorSourcePublisher.Format(unstamped, "Owner");
+        Assert.DoesNotContain("|at=", value, StringComparison.Ordinal);
+        Assert.Contains("|element=TextBlock", value, StringComparison.Ordinal);
+
+        // Positive control: a stamped target is described at its own site, not the decorator's.
+        var stamped = Flyout(new TextBlockElement("target") { CallSite = SiteB }, TextBlock("body")) with { CallSite = SiteA };
+        var stampedValue = ReactorSourcePublisher.Format(stamped, "Owner");
+        Assert.Contains("|at=App.cs:11:5|", stampedValue, StringComparison.Ordinal);
+
+        // Moving only the decorator does not change what is published for its target.
+        Assert.False(ReactorSourcePublisher.IdentityChanged(unstamped, unstamped with { CallSite = SiteB }));
+        Assert.True(ReactorSourcePublisher.IdentityChanged(unstamped, stamped));
+    }
+
+    [Fact]
     public void ModifiedElement_ComparesTheInnerElement()
     {
         var modifiers = new ElementModifiers();

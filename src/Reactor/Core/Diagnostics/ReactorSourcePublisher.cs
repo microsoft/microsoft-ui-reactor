@@ -140,8 +140,10 @@ internal static class ReactorSourcePublisher
     private static void Describe(Element element, out SourceLocation? site, out object? key, out Element effective)
     {
         while (element is ModifiedElement modified) element = modified.Inner;
-        effective = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.UnwrapDecorators(element) ?? element;
-        site = effective.CallSite ?? element.CallSite;
+        var unwrapped = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.UnwrapDecorators(element);
+        effective = unwrapped ?? element;
+        // Exactly what GetSource reports: the target's call site, never the decorator's.
+        site = unwrapped?.CallSite;
         key = effective.Key ?? element.Key;
     }
 
@@ -308,9 +310,13 @@ internal static class ReactorSourcePublisher
     {
         while (element is ModifiedElement modified) element = modified.Inner;
 
-        // A target-wrapping decorator realizes its target's control; describe that.
-        var effective = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.UnwrapDecorators(element) ?? element;
-        var site = effective.CallSite ?? element.CallSite;
+        // A target-wrapping decorator realizes its target's control; describe that. The call
+        // site is the target's only (none when the target is unstamped, or the decorator chain
+        // is cyclic), as ReactorSourceMap.GetSource reports: the decorator's own call site is
+        // not where the realized control was created.
+        var unwrapped = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.UnwrapDecorators(element);
+        var effective = unwrapped ?? element;
+        var site = unwrapped?.CallSite;
 
         string? mounts = null;
         string? hooks = null;

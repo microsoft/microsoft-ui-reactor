@@ -402,9 +402,8 @@ public sealed partial class SourceMapInterceptorGenerator
         }
 
         int total = 0;
-        foreach (var reference in method.DeclaringSyntaxReferences)
+        foreach (var declaration in method.DeclaringSyntaxReferences.Select(reference => reference.GetSyntax(ct)))
         {
-            var declaration = reference.GetSyntax(ct);
             if (declaration is BaseMethodDeclarationSyntax { Body: null, ExpressionBody: null }) return -1;
             var model = compilation.GetSemanticModel(declaration.SyntaxTree);
             foreach (var call in declaration.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(static c => IsHookCandidate(c)))
