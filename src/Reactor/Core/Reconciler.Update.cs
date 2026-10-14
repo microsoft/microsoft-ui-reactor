@@ -488,11 +488,8 @@ public sealed partial class Reconciler
     /// </summary>
     internal static void VisitInlineUIChildren(WinUI.RichTextBlock rtb, Action<UIElement> visit)
     {
-        foreach (var block in rtb.Blocks)
-        {
-            if (block is Microsoft.UI.Xaml.Documents.Paragraph para)
-                VisitInlineUIChildrenInInlines(para.Inlines, visit);
-        }
+        foreach (var para in global::System.Linq.Enumerable.OfType<Microsoft.UI.Xaml.Documents.Paragraph>(rtb.Blocks))
+            VisitInlineUIChildrenInInlines(para.Inlines, visit);
     }
 
     private static void VisitInlineUIChildrenInInlines(

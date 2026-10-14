@@ -250,12 +250,10 @@ internal static class ReactorSourcePublisher
     internal static string? WithoutStaleFacts(string value, SourceLocation? exactSite = null)
     {
         bool hotReloaded = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.StaticFactsInvalidatedByHotReload;
-        if (!hotReloaded)
-        {
-            if ((exactSite ?? ResolvePublishedValue(value)) is not { } site
-                || global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.IsFileAttributable(site.FilePath))
-                return null;
-        }
+        if (!hotReloaded
+            && ((exactSite ?? ResolvePublishedValue(value)) is not { } site
+                || global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.IsFileAttributable(site.FilePath)))
+            return null;
         var mounts = Field(value, "mounts");
         bool dropHooks = hotReloaded || mounts is "FuncElement" or "MemoElement";
         var fields = new List<string>(value.Split('|'));

@@ -177,14 +177,11 @@ public static partial class ReactorSourceMap
     private static string? LongestPrefix(List<string> directories, string path)
     {
         string? best = null;
-        foreach (var directory in directories)
+        foreach (var directory in global::System.Linq.Enumerable.Where(directories,
+            d => path.Length > d.Length && path.StartsWith(d, StringComparison.OrdinalIgnoreCase)))
         {
-            if (path.Length > directory.Length
-                && path.StartsWith(directory, StringComparison.OrdinalIgnoreCase)
-                && (best is null || directory.Length > best.Length))
-            {
+            if (best is null || directory.Length > best.Length)
                 best = directory;
-            }
         }
         return best;
     }

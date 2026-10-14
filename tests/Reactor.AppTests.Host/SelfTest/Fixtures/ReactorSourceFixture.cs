@@ -454,8 +454,6 @@ internal class ReactorSource_LayoutRealizedRowsHaveNoOwner(Harness h) : SelfTest
 /// </summary>
 internal class ReactorSource_KeyedMemoRootNamed(Harness h) : SelfTestFixtureBase(h)
 {
-    private static int s_factoryRuns;
-
     public override async Task RunAsync()
     {
         if (!ReactorSourcePublisher.IsSupported)
@@ -468,21 +466,21 @@ internal class ReactorSource_KeyedMemoRootNamed(Harness h) : SelfTestFixtureBase
         try
         {
             ReactorSourcePublisher.IsEnabled = true;
-            s_factoryRuns = 0;
+            int factoryRuns = 0;
             var host = H.CreateHost();
             host.Mount(_ => Memo(1, () =>
             {
-                s_factoryRuns++;
+                factoryRuns++;
                 return TextBlock("memo-root");
             }));
             await Harness.Render();
 
             var value = ReactorDiagnostics.GetSource(H.FindControl<WinUI.TextBlock>(t => t.Text == "memo-root")!);
-            Console.WriteLine($"# memo root: {value} (factory runs: {s_factoryRuns})");
+            Console.WriteLine($"# memo root: {value} (factory runs: {factoryRuns})");
             H.Check("ReactorSource_KeyedMemoRoot_Named",
                 value?.Contains("|root=FuncElement", StringComparison.Ordinal) == true
                 && value.Contains("|element=TextBlock", StringComparison.Ordinal));
-            H.Check("ReactorSource_KeyedMemoRoot_FactoryRanOnce", s_factoryRuns == 1);
+            H.Check("ReactorSource_KeyedMemoRoot_FactoryRanOnce", factoryRuns == 1);
             host.Dispose();
             H.SetContent(null);
         }

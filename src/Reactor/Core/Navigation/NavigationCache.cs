@@ -32,8 +32,8 @@ internal sealed class NavigationCache
         lock (_lock)
         {
             var controls = new List<UIElement>(_cache.Count);
-            foreach (var page in _cache.Values)
-                if (page.MountedControl is { } control) controls.Add(control);
+            foreach (var page in global::System.Linq.Enumerable.Where(_cache.Values, static p => p.MountedControl is not null))
+                controls.Add(page.MountedControl!);
             return controls;
         }
     }
