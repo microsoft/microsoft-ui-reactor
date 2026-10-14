@@ -103,9 +103,11 @@ internal readonly record struct RootComponentSource(
     Func<bool> IsAlive);
 
 /// <summary>
-/// The root that produced a host's current control, published by the host in the same step
-/// that publishes the control. <c>Mount</c> swaps the requested root before the queued render
-/// replaces the control, so diagnostics resolve against this rather than the requested root.
+/// The root that produced a host's current control, snapshotted when its render pass starts and
+/// published with the control that pass commits. <c>Mount</c> swaps the requested root before
+/// the queued render replaces the control (and a root can Mount from its own Render()), so
+/// diagnostics resolve against this rather than the requested root. Cleared when that root is
+/// retired, so a retired root is never described or written.
 /// </summary>
 internal readonly struct RenderedRoot
 {

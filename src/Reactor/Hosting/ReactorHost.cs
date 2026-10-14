@@ -228,8 +228,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             || (ours && (ReferenceEquals(element, container) || ReferenceEquals(element, installed)));
         if (!isAnchor) return null;
 
-        // The root that produced the displayed control, not the requested one: after Mount and
-        // before its queued render, the old control still shows the previous root.
+        // The root that produced the displayed control, never the requested one: Mount swaps the
+        // requested root before its queued render. Empty once that root is retired (RetireRoot),
+        // so a control still on screen from a retired root describes nothing.
         var rendered = _renderedRoot;
         if (rendered.IsEmpty) return null;
         return new RootComponentSource(
