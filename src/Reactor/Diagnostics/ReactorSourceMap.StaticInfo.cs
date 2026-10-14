@@ -175,16 +175,10 @@ public static partial class ReactorSourceMap
     }
 
     private static string? LongestPrefix(List<string> directories, string path)
-    {
-        string? best = null;
-        foreach (var directory in global::System.Linq.Enumerable.Where(directories,
-            d => path.Length > d.Length && path.StartsWith(d, StringComparison.OrdinalIgnoreCase)))
-        {
-            if (best is null || directory.Length > best.Length)
-                best = directory;
-        }
-        return best;
-    }
+        => global::System.Linq.Enumerable.MaxBy(
+            global::System.Linq.Enumerable.Where(directories,
+                d => path.Length > d.Length && path.StartsWith(d, StringComparison.OrdinalIgnoreCase)),
+            static d => d.Length);
 
     /// <summary>
     /// A drive-rooted, UNC or <c>/</c>-rooted path. A deterministic-build path

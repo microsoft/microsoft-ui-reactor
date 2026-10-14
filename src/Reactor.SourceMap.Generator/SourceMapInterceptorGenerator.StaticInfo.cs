@@ -364,19 +364,14 @@ public sealed partial class SourceMapInterceptorGenerator
     }
 
     private static string? FirstNamed(ParenthesizedVariableDesignationSyntax designation)
-    {
-        foreach (var variable in designation.Variables)
-        {
-            var name = variable switch
+        => designation.Variables
+            .Select(static variable => variable switch
             {
                 SingleVariableDesignationSyntax single => Named(single.Identifier),
                 ParenthesizedVariableDesignationSyntax nested => FirstNamed(nested),
                 _ => null,
-            };
-            if (name is not null) return name;
-        }
-        return null;
-    }
+            })
+            .FirstOrDefault(static name => name is not null);
 
     /// <summary>
     /// How many <c>RenderContext</c> slots a hook call takes: 1 for <see cref="SingleSlotHooks"/>
@@ -412,9 +407,8 @@ public sealed partial class SourceMapInterceptorGenerator
             var declaration = reference.GetSyntax(ct);
             if (declaration is BaseMethodDeclarationSyntax { Body: null, ExpressionBody: null }) return -1;
             var model = compilation.GetSemanticModel(declaration.SyntaxTree);
-            foreach (var call in declaration.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            foreach (var call in declaration.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(static c => IsHookCandidate(c)))
             {
-                if (!IsHookCandidate(call)) continue;
                 // Calls inside a nested lambda / local function run later, not in render order.
                 if (call.Ancestors().TakeWhile(a => a != declaration)
                         .Any(static a => a is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax))
@@ -502,10 +496,9 @@ public sealed partial class SourceMapInterceptorGenerator
             if (!fileFacts.TryGetValue(mappedPath, out var list)) fileFacts[mappedPath] = list = new List<string>();
             return list;
         }
-        foreach (var site in sites)
+        foreach (var site in sites.Where(static s => s is not null))
         {
-            if (site is null) continue;
-            FactsOf(ApplyPathMap(site.FilePath, pathMap)).Add(
+            FactsOf(ApplyPathMap(site!.FilePath, pathMap)).Add(
                 $"S{site.Line}:{site.Column}={site.DeclaredName}");
         }
 
@@ -531,10 +524,9 @@ public sealed partial class SourceMapInterceptorGenerator
         // A root mount site is where a root render function's hooks are keyed; one with no
         // hooks (or a component root) records that absence, so a hook-using root another
         // assembly maps to the same path, line and column cannot lend it its hooks.
-        foreach (var mount in rootMountSites)
+        foreach (var mount in rootMountSites.Where(static m => m is not null))
         {
-            if (mount is null) continue;
-            var mapped = ApplyPathMap(mount.FilePath, pathMap);
+            var mapped = ApplyPathMap(mount!.FilePath, pathMap);
             if (functionHookSites.Add((mapped, mount.Line, mount.Column)))
                 FactsOf(mapped).Add($"H{mount.Line}:{mount.Column}=");
         }
