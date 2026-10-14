@@ -43,7 +43,8 @@ Conventions for contributors:
   - `ReactorTrace.GetComponentControl(long)` and
     `ReactorTrace.TryGetComponentId(UIElement, out long)` map a `componentId` to
     the component's on-screen control and back, so an inspector can flash what
-    re-rendered.
+    re-rendered. A host root's id only maps forward, to the root content: that
+    control is often also a child component's wrapper, whose id it reports.
 
 - **Inspector diagnostics for hosts, roots and component boundaries** (spec 010).
   `ReactorDiagnostics.GetHosts()` (`Microsoft.UI.Reactor.Core.Diagnostics`) returns
