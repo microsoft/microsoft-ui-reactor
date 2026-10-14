@@ -947,11 +947,11 @@ public sealed partial class Reconciler : IDisposable
         public List<KeyValuePair<object, Element>>? MoreKeyedMemoOutputs;
 
         /// <summary>
-        /// For a templated <c>FlipView</c>: the element each item mounted or was last updated to,
+        /// For a templated <c>FlipView</c>: per logical item, the element it mounted or was last updated to and whether it realized a control,
         /// so an update diffs against what is realized rather than a view rebuilt from the old
         /// element (a rebuild re-resolves eagerly read theme brushes to their current values).
         /// </summary>
-        public List<Element>? MountedItemElements;
+        public List<(Element Element, bool HasControl)>? MountedItemElements;
 
         /// <summary>
         /// For an <c>ItemsHost</c> control: the collection entry each logical item realized
@@ -1291,6 +1291,26 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
+    /// Drops the resource-refresh snapshots on a control (each keyed memo layer's recorded output,
+    /// a FlipView's mounted items, an ItemsHost's entry map). They hold element graphs and describe
+    /// one mount, so a control leaving the tree, to the pool or for good, must not keep them.
+    /// </summary>
+    internal static void ClearRefreshSnapshots(FrameworkElement fe)
+    {
+        if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+            ClearRefreshSnapshots(state);
+    }
+
+    internal static void ClearRefreshSnapshots(ReactorState state)
+    {
+        state.KeyedMemoKey = null;
+        state.KeyedMemoOutput = null;
+        state.MoreKeyedMemoOutputs = null;
+        state.MountedItemElements = null;
+        state.ItemsHostEntries = null;
+    }
+
+    /// <summary>
     /// Clears the Current* user-handler delegates from the per-element
     /// ModifierEventHandlerState while leaving the trampoline subscription on the
     /// underlying control. Call from <see cref="ElementPool.CleanElement"/>
@@ -1341,13 +1361,9 @@ public sealed partial class Reconciler : IDisposable
         state.EchoSuppressScopeDepth = 0;
         state.PendingEchoMatch = null;
         state.PendingLabeledBy = null;
-        // Both can root an element graph (a keyed memo's realized output holds its
-        // callbacks and setters); a detached, app-held control must not keep it alive.
-        state.KeyedMemoKey = null;
-        state.KeyedMemoOutput = null;
-        state.MoreKeyedMemoOutputs = null;
-        state.MountedItemElements = null;
-        state.ItemsHostEntries = null;
+        // The refresh snapshots can root an element graph (a keyed memo's realized output holds
+        // its callbacks and setters); a detached, app-held control must not keep it alive.
+        ClearRefreshSnapshots(state);
         // Issue #1262 — a retired control must not keep a ValidationContext (or a
         // pending async rule) alive through a binding the normal FormField /
         // ValidationRule unmount path never got to clear. Neutralize before dropping
@@ -1715,11 +1731,7 @@ public sealed partial class Reconciler : IDisposable
                 rs.EchoSuppressScopeDepth = 0;
                 rs.PendingEchoMatch = null;
                 rs.PendingLabeledBy = null;
-                rs.KeyedMemoKey = null;
-                rs.KeyedMemoOutput = null;
-                rs.MoreKeyedMemoOutputs = null;
-                rs.MountedItemElements = null;
-                rs.ItemsHostEntries = null;
+                ClearRefreshSnapshots(rs);
                 rs.Element = null;
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).
@@ -2263,6 +2275,8 @@ public sealed partial class Reconciler : IDisposable
             {
                 _forceFullRenderActive = false;
                 _resourceRefreshActive = false;
+                _freshForWrapperMount = null;
+                _freshMountFromDispatch = null;
                 _hotReloadRetryActive = false;
                 _dirtyAncestorPath?.Clear();
                 _dirtyPathChildren?.Clear();

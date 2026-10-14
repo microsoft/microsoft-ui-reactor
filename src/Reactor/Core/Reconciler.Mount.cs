@@ -299,12 +299,7 @@ public sealed partial class Reconciler
     {
         int count = state.KeyedMemoKey is { } first && first.Equals(memoKey) ? 1 : 0;
         if (state.MoreKeyedMemoOutputs is { } more)
-        {
-            foreach (var entry in more)
-            {
-                if (entry.Key.Equals(memoKey)) count++;
-            }
-        }
+            count += more.Count(entry => entry.Key.Equals(memoKey));
         return count;
     }
 
@@ -318,9 +313,8 @@ public sealed partial class Reconciler
         }
         if (state.MoreKeyedMemoOutputs is { } more)
         {
-            foreach (var entry in more)
+            foreach (var entry in more.Where(entry => entry.Key.Equals(memoKey)))
             {
-                if (!entry.Key.Equals(memoKey)) continue;
                 if (nth == 0) return entry.Value;
                 nth--;
             }

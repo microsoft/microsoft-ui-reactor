@@ -186,6 +186,9 @@ internal static class HostIdleAndThemeResourceFixtures
             int flyoutTargetCleanups = 0;
             int sameKeyMounts = 0;
             int sameKeyCleanups = 0;
+            int flyoutShapeMounts = 0;
+            int precedenceMounts = 0;
+            var fixedBrush = new SolidColorBrush(Colors.Orange);
             int wrapperMounts = 0;
             int nestedInnerMounts = 0;
             int nestedOuterMounts = 0;
@@ -212,6 +215,7 @@ internal static class HostIdleAndThemeResourceFixtures
                     var lazyItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["lazy"]);
                     var templatedItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["templated"]);
                     var flipItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["flip"]);
+                    var flipGapItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["gap", "shown"]);
                     var treeNodes = ctx.UseMemo<TreeViewNodeData[]>(
                         () => [new TreeViewNodeData("TreeRoot", [new TreeViewNodeData("TreeChild")])]);
                     var gvItems = ctx.UseMemo<Element[]>(
@@ -362,6 +366,22 @@ internal static class HostIdleAndThemeResourceFixtures
                                 ? TextBlock("LegacyOutBefore")
                                 : Border(TextBlock("LegacyOutAfter")),
                             new ElementModifiers { Margin = new Thickness(17) })),
+                        // A shape-changing memo as a flyout's target: the flyout's own modifiers and
+                        // OnMount must reach the remounted control.
+                        Flyout(Memo("flyoutShape", () => ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red
+                                    ? TextBlock("FlyShapeBefore")
+                                    : Border(TextBlock("FlyShapeAfter"))),
+                                TextBlock("FlyShapeTip"))
+                            .Margin(19)
+                            .OnMount(_ => flyoutShapeMounts++),
+                        // A wrapper's own value beats its output's after an in-place refresh, as at mount.
+                        Memo("precedence", () => Border(TextBlock("PrecedenceProbe")).Background(ThemeRef.Resolve(AppKey, isDark: false)!))
+                            .Background(fixedBrush)
+                            .OnMount(_ => precedenceMounts++),
+                        // A FlipView whose first item mounts nothing.
+                        FlipView(flipGapItems, static s => s, static (s, _) => s == "gap"
+                            ? Empty()
+                            : TextBlock("FlipGapProbe").Foreground(ThemeRef.Resolve(AppKey, isDark: false)!)),
                         // A typed FlipView item with an eagerly resolved brush.
                         FlipView(flipItems, static s => s,
                             static (_, _) => TextBlock("FlipProbe").Foreground(ThemeRef.Resolve(AppKey, isDark: false)!)),
@@ -419,6 +439,10 @@ internal static class HostIdleAndThemeResourceFixtures
                     $"inner={nestedInnerMounts} outer={nestedOuterMounts}");
                 H.Check("ThemeMemo_PopupContentRerenderAloneKept", popupContentCleanedUp == 0);
                 H.Check("ThemeMemo_EagerWrapperRerenderAloneIsStale", EagerWrapColor(target) == Colors.Red, $"color={EagerWrapColor(target)}");
+                H.Check("ThemeMemo_FlyoutShapeRerenderAloneMountedOnce", flyoutShapeMounts == 1, $"mounts={flyoutShapeMounts}");
+                H.Check("ThemeMemo_PrecedenceRerenderAloneKeepsWrapper", PrecedenceColor(target) == Colors.Orange, $"color={PrecedenceColor(target)}");
+                H.Check("ThemeMemo_FlipGapRerenderAloneIsStale", FlipViewItemColor(target, "FlipGapProbe") == Colors.Red,
+                    $"color={FlipViewItemColor(target, "FlipGapProbe")}");
                 H.Check("ThemeMemo_FlipItemRerenderAloneIsStale", FlipItemColor(target) == Colors.Red, $"color={FlipItemColor(target)}");
                 H.Check("ThemeMemo_LegacyNestedRerenderAloneIsStale", ProbeColor(target, "LegacyNestedProbe") == Colors.Red,
                     $"color={ProbeColor(target, "LegacyNestedProbe")}");
@@ -472,6 +496,13 @@ internal static class HostIdleAndThemeResourceFixtures
                     $"mounts={legacyNestedMounts} cleanups={legacyNestedCleanups}");
                 H.Check("ThemeMemo_LegacyNestedKeepsModifiers", AncestorMargin(FindText(target, "LegacyNestedProbe"), new Thickness(13)));
                 H.Check("ThemeMemo_EagerWrapperNotifiedIsBlue", EagerWrapColor(target) == Colors.Blue, $"color={EagerWrapColor(target)}");
+                var flyShapeBorder = FindText(target, "FlyShapeAfter")?.Parent as Border;
+                H.Check("ThemeMemo_FlyoutTargetRemountKeepsFlyoutModifiers", flyShapeBorder?.Margin == new Thickness(19) && flyoutShapeMounts == 2,
+                    $"margin={flyShapeBorder?.Margin.ToString() ?? "(not found)"} mounts={flyoutShapeMounts}");
+                H.Check("ThemeMemo_PrecedenceRefreshKeepsWrapper", PrecedenceColor(target) == Colors.Orange && precedenceMounts == 1,
+                    $"color={PrecedenceColor(target)} mounts={precedenceMounts}");
+                H.Check("ThemeMemo_FlipGapNotifiedIsBlue", FlipViewItemColor(target, "FlipGapProbe") == Colors.Blue,
+                    $"color={FlipViewItemColor(target, "FlipGapProbe")}");
                 H.Check("ThemeMemo_FlipItemNotifiedIsBlue", FlipItemColor(target) == Colors.Blue, $"color={FlipItemColor(target)}");
                 H.Check("ThemeMemo_SameKeyNotifiedIsBlue", ProbeColor(target, "SameKeyProbe") == Colors.Blue,
                     $"color={ProbeColor(target, "SameKeyProbe")}");
@@ -512,6 +543,21 @@ internal static class HostIdleAndThemeResourceFixtures
                 // </snippet:runtime-resource-edit>
                 await host.WaitForIdleAsync();
                 H.Check("ThemeMemo_SecondEditIsGreen", ProbeColor(target) == Colors.Green, $"color={ProbeColor(target)}");
+
+                // Every pool return cleans the control: a renter must not inherit the previous
+                // mount's refresh snapshots (each memo layer's output, a FlipView's items).
+                var pooledProbe = new TextBlock();
+                var pooledState = Reconciler.GetOrCreateReactorState(pooledProbe);
+                Reconciler.SetKeyedMemoOutput(pooledState, "pooled", 0, TextBlock("a"));
+                Reconciler.SetKeyedMemoOutput(pooledState, "pooledOuter", 0, TextBlock("b"));
+                pooledState.MountedItemElements = [(TextBlock("c"), true)];
+                bool seeded = Reconciler.CountKeyedMemoOutputs(pooledState, "pooledOuter") == 1;
+                ElementPool.CleanElement(pooledProbe);
+                H.Check("ThemeMemo_PoolCleanDropsSnapshots", seeded
+                    && Reconciler.CountKeyedMemoOutputs(pooledState, "pooled") == 0
+                    && Reconciler.CountKeyedMemoOutputs(pooledState, "pooledOuter") == 0
+                    && pooledState.MountedItemElements is null,
+                    $"seeded={seeded} pooled={Reconciler.CountKeyedMemoOutputs(pooledState, "pooled")} items={pooledState.MountedItemElements?.Count}");
             }
             finally
             {
@@ -608,6 +654,27 @@ internal static class HostIdleAndThemeResourceFixtures
             for (int i = 0; i < count; i++)
             {
                 if (FindText(VisualTreeHelper.GetChild(root, i), text) is { } found) return found;
+            }
+            return null;
+        }
+
+        private static global::Windows.UI.Color? PrecedenceColor(Border target)
+            => (FindText(target, "PrecedenceProbe")?.Parent as Border)?.Background is SolidColorBrush b ? b.Color : null;
+
+        // The item TextBlock with this text, in any FlipView under target.
+        private static global::Windows.UI.Color? FlipViewItemColor(DependencyObject root, string text)
+        {
+            if (root is FlipView fv)
+            {
+                foreach (var item in fv.Items)
+                {
+                    if (item is TextBlock { Foreground: SolidColorBrush b } tb && tb.Text == text) return b.Color;
+                }
+            }
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                if (FlipViewItemColor(VisualTreeHelper.GetChild(root, i), text) is { } found) return found;
             }
             return null;
         }

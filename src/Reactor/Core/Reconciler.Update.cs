@@ -256,16 +256,17 @@ public sealed partial class Reconciler
         if (result is not null && ReferenceEquals(result, _freshMountFromDispatch))
         {
             _freshMountFromDispatch = null;
+            // Layers that hand this control up as their own (an outer memo, a flyout whose target
+            // this is) are fresh to it too.
+            _freshForWrapperMount = result;
             return result;
         }
-        // A transparent wrapper (an outer keyed Memo) whose nested memo remounted: the control is
-        // fresh, so this wrapper's own modifiers apply with mount semantics (all written, OnMount
-        // runs) rather than as an old->new diff.
-        if (result is not null && ReferenceEquals(result, _freshForWrapperMount))
-        {
-            _freshForWrapperMount = null;
+        // A transparent layer (an outer keyed Memo, a decorator whose target it is) whose inner
+        // control is fresh: this layer's own modifiers apply with mount semantics (all written,
+        // OnMount runs) rather than as an old->new diff. The marker stays set for the layers
+        // above, and is dropped when the pass ends.
+        if (result is not null && !ReferenceEquals(result, control) && ReferenceEquals(result, _freshForWrapperMount))
             oldModifiers = null;
-        }
 
         // Apply inline modifiers after update. When old modifiers existed but new
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
@@ -290,6 +291,16 @@ public sealed partial class Reconciler
 
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender);
+        // A keyed memo refreshed in place: its output's diff may have rewritten a property this
+        // wrapper also sets, and the wrapper's value wins (it applies after the output's at mount).
+        // Write the wrapper's layout and visual values again; nothing else is re-run.
+        if (_resourceRefreshActive && newEl is KeyedMemoElement && (result is null || ReferenceEquals(result, control))
+            && modifiers is { } wrapperMods && (wrapperMods.Layout is not null || wrapperMods.Visual is not null)
+            && target is FrameworkElement wrapperFe)
+        {
+            var values = wrapperMods with { OnUpdateAction = null };
+            ApplyModifiers(wrapperFe, values with { Layout = null, Visual = null }, values, requestRerender);
+        }
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
         // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is
@@ -1700,8 +1711,9 @@ public sealed partial class Reconciler
     // the dispatch so its post-dispatch modifier diff is skipped for that control.
     private UIElement? _freshMountFromDispatch;
 
-    // Set by RefreshKeyedMemo when a nested memo handed back a fresh control; consumed by the
-    // enclosing Update, which then applies its wrapper modifiers with mount semantics.
+    // A fresh control a resource refresh handed up through transparent layers (a remounted memo,
+    // or a kept memo whose output came back fresh); each enclosing Update that returns it applies
+    // its own modifiers with mount semantics. Cleared when the top-level pass ends.
     private UIElement? _freshForWrapperMount;
 
     private static string Truncate(string s, int maxLen) =>
