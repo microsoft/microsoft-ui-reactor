@@ -539,10 +539,10 @@ public sealed partial class Reconciler : IDisposable
             if (i < 0 || i >= items.Length) continue;
             var next = ReconcileV1Child(items[i], items[i], existing, requestRerender);
             if (next is not null && !ReferenceEquals(next, existing))
-            {
                 cc.Content = next;
-                PropagateItemAutomationName(container, next);
-            }
+            // The item's own automation name can change in place too (a keyed memo whose output
+            // reads a resource), so forward it after every reconcile, as RefreshRealizedContainers does.
+            PropagateItemAutomationName(container, cc.Content as UIElement);
         }
     }
 
@@ -3052,6 +3052,9 @@ public sealed partial class Reconciler : IDisposable
     private void UnmountRecursive(UIElement control)
     {
         NoteUnmountDuringSlotUpdate(control);
+        // Before any early exit: an unmounted control an app still holds must not keep the
+        // refresh snapshots' element graphs alive.
+        if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);
 
         // Capture connected animation snapshot while element is still in the visual tree
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
@@ -3483,6 +3486,9 @@ public sealed partial class Reconciler : IDisposable
     private void UnmountAndCollect(UIElement control, List<FrameworkElement> toPool)
     {
         NoteUnmountDuringSlotUpdate(control);
+        // Before any early exit: an unmounted control an app still holds must not keep the
+        // refresh snapshots' element graphs alive.
+        if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);
 
         // Capture connected animation snapshot while element is still in the visual tree
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl

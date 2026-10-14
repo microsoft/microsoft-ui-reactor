@@ -291,9 +291,12 @@ public sealed partial class Reconciler
 
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender);
-        // A keyed memo refreshed in place: its output's diff may have rewritten a property this
-        // wrapper also sets, and the wrapper's value wins (it applies after the output's at mount).
-        if (_resourceRefreshActive && newEl is KeyedMemoElement && (result is null || ReferenceEquals(result, control))
+        // A layer that shares its inner element's control (a keyed memo, a flyout wrapping its target)
+        // refreshed in place: the inner diff may have rewritten a property this layer also sets, and
+        // this layer's value wins (it applies after the inner one's at mount).
+        if (_resourceRefreshActive
+            && newEl is KeyedMemoElement or FlyoutElement or MenuFlyoutElement or CommandBarFlyoutElement
+            && (result is null || ReferenceEquals(result, control))
             && modifiers is { } wrapperMods && target is FrameworkElement wrapperFe)
             ReassertWrapperValues(wrapperFe, wrapperMods, requestRerender);
         if (target is FrameworkElement dragFe)
@@ -1688,7 +1691,7 @@ public sealed partial class Reconciler
 
     /// <summary>
     /// Writes a wrapper's plain property values (layout, visual, typography, enabled state, string
-    /// tooltip, automation name and id, focus and access-key settings) to <paramref name="fe"/>
+    /// tooltip, automation and accessibility values, focus and access-key settings) to <paramref name="fe"/>
     /// again, through <see cref="ApplyModifiers(FrameworkElement, ElementModifiers?, ElementModifiers, Action)"/>
     /// with only those values unset on the old side. Every other field is identical on both
     /// sides, so ApplyModifiers leaves it alone (no lifecycle callback, handler or ref change);
@@ -1717,6 +1720,23 @@ public sealed partial class Reconciler
             TabIndex = null,
             AccessKey = null,
             XYFocusKeyboardNavigation = null,
+            // Scalar accessibility values; the LabeledBy / DescribedBy references stay equal.
+            Accessibility = current.Accessibility is { } a11y
+                ? a11y with
+                {
+                    HelpText = null,
+                    FullDescription = null,
+                    LandmarkType = null,
+                    AccessibilityView = null,
+                    IsRequiredForForm = null,
+                    LiveSetting = null,
+                    PositionInSet = null,
+                    SizeOfSet = null,
+                    Level = null,
+                    ItemStatus = null,
+                    TabFocusNavigation = null,
+                }
+                : null,
         };
         ApplyModifiers(fe, unset, current, requestRerender);
     }

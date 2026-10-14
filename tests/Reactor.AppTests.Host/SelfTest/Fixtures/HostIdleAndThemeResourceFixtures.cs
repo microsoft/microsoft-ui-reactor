@@ -218,6 +218,8 @@ internal static class HostIdleAndThemeResourceFixtures
                     var templatedItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["templated"]);
                     var flipItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["flip"]);
                     var flipGapItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["gap", "shown"]);
+                    var lvNameItems = ctx.UseMemo<Element[]>(() => [Memo("lvName", () => TextBlock("LvNameProbe")
+                        .AutomationName(ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red ? "name-red" : "name-blue"))]);
                     var treeNodes = ctx.UseMemo<TreeViewNodeData[]>(
                         () => [new TreeViewNodeData("TreeRoot", [new TreeViewNodeData("TreeChild")])]);
                     var gvItems = ctx.UseMemo<Element[]>(
@@ -398,6 +400,20 @@ internal static class HostIdleAndThemeResourceFixtures
                                     });
                                     return TextBlock("TipContent");
                                 }))),
+                        // A flyout wrapping a memo target: the flyout's value beats the target's.
+                        Flyout(Memo("flyoutPrecedence", () => TextBlock("FlyPrecedenceProbe").FontSize(ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red ? 12 : 14)),
+                                TextBlock("FlyPrecedenceTip"))
+                            .FontSize(30),
+                        // Accessibility values on the wrapper beat the output's too.
+                        Memo("helpPrecedence", () => TextBlock("HelpPrecedenceProbe").HelpText(ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red ? "inner-red" : "inner-blue"))
+                            .HelpText("wrapper-help"),
+                        Memo("hiddenPrecedence", () => TextBlock("HiddenPrecedenceProbe")
+                                .AccessibilityView(ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red
+                                    ? global::Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Content
+                                    : global::Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Control))
+                            .AccessibilityHidden(),
+                        // A kept ListView item whose automation name changes in place: the container forwards it.
+                        ListView(lvNameItems),
                         // A FlipView whose first item mounts nothing.
                         FlipView(flipGapItems, static s => s, static (s, _) => s == "gap"
                             ? Empty()
@@ -468,6 +484,18 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_FontPrecedenceRerenderAloneKeepsWrapper", FindText(target, "FontPrecedenceProbe")?.FontSize == 30,
                     $"size={FindText(target, "FontPrecedenceProbe")?.FontSize}");
                 int tipMountsBeforeNotify = tipContentMounts;
+                H.Check("ThemeMemo_FlyoutPrecedenceRerenderAloneKeepsWrapper", FindText(target, "FlyPrecedenceProbe")?.FontSize == 30,
+                    $"size={FindText(target, "FlyPrecedenceProbe")?.FontSize}");
+                H.Check("ThemeMemo_HelpPrecedenceRerenderAloneKeepsWrapper", HelpTextOf(target, "HelpPrecedenceProbe") == "wrapper-help",
+                    $"help={HelpTextOf(target, "HelpPrecedenceProbe")}");
+                H.Check("ThemeMemo_HiddenRerenderAloneStaysHidden", ViewOf(target, "HiddenPrecedenceProbe") == global::Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw,
+                    $"view={ViewOf(target, "HiddenPrecedenceProbe")}");
+                bool lvNameRealized = await Harness.WaitFor(() => ContainerName(target, "LvNameProbe") == "name-red", maxPasses: 20, perPassMs: 20);
+                H.Check("ThemeMemo_ContainerNameInitial", lvNameRealized, $"name={ContainerName(target, "LvNameProbe")}");
+                // The shape memo's outgoing control, held after the refresh replaces it.
+                var replacedShape = FindText(target, "ShapeProbeBefore");
+                int replacedSnapshotsBefore = replacedShape is not null && Reconciler.TryGetReactorState(replacedShape, out var rsBefore)
+                    ? Reconciler.CountKeyedMemoOutputs(rsBefore, "shape") : -1;
                 H.Check("ThemeMemo_LegacyNestedRerenderAloneIsStale", ProbeColor(target, "LegacyNestedProbe") == Colors.Red,
                     $"color={ProbeColor(target, "LegacyNestedProbe")}");
                 H.Check("ThemeMemo_CommandHostChildRerenderAloneKept", commandHostChildCleanups == 0 && FindText(target, "CommandHostBefore") is not null,
@@ -529,6 +557,19 @@ internal static class HostIdleAndThemeResourceFixtures
                     $"color={FlipViewItemColor(target, "FlipGapProbe")}");
                 H.Check("ThemeMemo_FlipItemNotifiedIsBlue", FlipViewItemColor(target, "FlipProbe") == Colors.Blue,
                     $"color={FlipViewItemColor(target, "FlipProbe")}");
+                H.Check("ThemeMemo_FlyoutPrecedenceRefreshKeepsWrapper", FindText(target, "FlyPrecedenceProbe")?.FontSize == 30,
+                    $"size={FindText(target, "FlyPrecedenceProbe")?.FontSize}");
+                H.Check("ThemeMemo_HelpPrecedenceRefreshKeepsWrapper", HelpTextOf(target, "HelpPrecedenceProbe") == "wrapper-help",
+                    $"help={HelpTextOf(target, "HelpPrecedenceProbe")}");
+                H.Check("ThemeMemo_HiddenRefreshStaysHidden", ViewOf(target, "HiddenPrecedenceProbe") == global::Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw,
+                    $"view={ViewOf(target, "HiddenPrecedenceProbe")}");
+                H.Check("ThemeMemo_ContainerNameForwardedOnRefresh", ContainerName(target, "LvNameProbe") == "name-blue",
+                    $"name={ContainerName(target, "LvNameProbe")}");
+                int replacedSnapshotsAfter = replacedShape is not null && Reconciler.TryGetReactorState(replacedShape, out var rsAfter)
+                    ? Reconciler.CountKeyedMemoOutputs(rsAfter, "shape") : -1;
+                H.Check("ThemeMemo_UnmountedControlDropsSnapshots", replacedSnapshotsBefore == 1 && replacedSnapshotsAfter == 0
+                    && FindText(target, "ShapeProbeBefore") is null,
+                    $"before={replacedSnapshotsBefore} after={replacedSnapshotsAfter}");
                 H.Check("ThemeMemo_FontPrecedenceRefreshKeepsWrapper", FindText(target, "FontPrecedenceProbe")?.FontSize == 30,
                     $"size={FindText(target, "FontPrecedenceProbe")?.FontSize}");
                 H.Check("ThemeMemo_TooltipReconciledOncePerRefresh", tipContentMounts - tipMountsBeforeNotify == 1
@@ -684,6 +725,23 @@ internal static class HostIdleAndThemeResourceFixtures
             for (int i = 0; i < count; i++)
             {
                 if (FindText(VisualTreeHelper.GetChild(root, i), text) is { } found) return found;
+            }
+            return null;
+        }
+
+        private static string? HelpTextOf(Border target, string text)
+            => FindText(target, text) is { } tb ? global::Microsoft.UI.Xaml.Automation.AutomationProperties.GetHelpText(tb) : null;
+
+        private static global::Microsoft.UI.Xaml.Automation.Peers.AccessibilityView? ViewOf(Border target, string text)
+            => FindText(target, text) is { } tb ? global::Microsoft.UI.Xaml.Automation.AutomationProperties.GetAccessibilityView(tb) : null;
+
+        // The automation name on the list container that holds the TextBlock with this text.
+        private static string? ContainerName(Border target, string text)
+        {
+            for (DependencyObject? node = FindText(target, text); node is not null; node = VisualTreeHelper.GetParent(node))
+            {
+                if (node is global::Microsoft.UI.Xaml.Controls.Primitives.SelectorItem item)
+                    return global::Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(item);
             }
             return null;
         }
