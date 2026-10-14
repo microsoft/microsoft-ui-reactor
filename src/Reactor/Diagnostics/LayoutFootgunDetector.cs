@@ -67,7 +67,7 @@ internal static class LayoutFootgunDetector
 #pragma warning restore CS0649
 
     private static readonly HashSet<string> s_warned = new(StringComparer.Ordinal);
-    private static readonly object s_gate = new();
+    private static readonly Lock s_gate = new();
 
     /// <summary>
     /// Inspects a freshly mounted element for the Grid-<c>Auto</c>-track stack footgun and emits a

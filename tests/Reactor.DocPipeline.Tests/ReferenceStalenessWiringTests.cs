@@ -5,7 +5,7 @@ namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 
 /// <summary>
 /// Issue #1068, wiring tier: the selection rule and the staleness warning as
-/// <c>mur docs compile</c> actually uses them, rather than as helpers called
+/// <c>compile</c> actually uses them, rather than as helpers called
 /// directly.
 /// </summary>
 /// <remarks>

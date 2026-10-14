@@ -8,8 +8,9 @@ namespace Microsoft.UI.Reactor.Docking.Native;
 //  The DockHostNativeComponent stashes its live DockHostModel instance here
 //  on every render so external callers (tests, devtools, future apps) can
 //  grab the same model the component is reading/writing. Pattern mirrors
-//  DockChordBridge — same lifetime invariants, same ConditionalWeakTable
-//  for GC hygiene.
+//  DockChordBridge — keyed by the host (DockHostIdentity), so any
+//  DockManager instance the host rendered resolves to the model, and
+//  cleared on unmount.
 //
 //  Apps inside the host subtree should resolve the model via the
 //  DockContexts.Host context (§2.17) instead — that path doesn't require
@@ -18,19 +19,18 @@ namespace Microsoft.UI.Reactor.Docking.Native;
 
 internal static class DockHostModelBridge
 {
-    private static readonly ConditionalWeakTable<DockManager, DockHostModel> _table = new();
+    private static readonly ConditionalWeakTable<object, DockHostModel> _table = new();
 
-    public static void Set(DockManager element, DockHostModel model)
-    {
-        _table.Remove(element);
-        _table.Add(element, model);
-    }
+    public static void Set(DockManager element, DockHostModel model) =>
+        _table.AddOrUpdate(DockHostIdentity.KeyFor(element), model);
 
     public static DockHostModel? Get(DockManager? element)
     {
         if (element is null) return null;
-        return _table.TryGetValue(element, out var m) ? m : null;
+        return _table.TryGetValue(DockHostIdentity.KeyFor(element), out var m) ? m : null;
     }
 
-    public static void Clear(DockManager element) => _table.Remove(element);
+    public static void Clear(DockManager element) => _table.Remove(DockHostIdentity.KeyFor(element));
+
+    public static void Clear(DockHostIdentity host) => _table.Remove(host);
 }

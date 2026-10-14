@@ -49,6 +49,13 @@ public sealed record DockSplit(
 /// empty) or <see cref="DockGroupRole.ToolWindowStrip"/> for an edge
 /// strip of tool windows.
 /// </para>
+///
+/// <para>
+/// <see cref="CompactTabs"/> asks for dense tool-pane tabs; a group whose
+/// panes are all <see cref="ToolWindow"/>s gets them by default. Each tab is
+/// sized to its title instead of stretched to an equal share of the strip,
+/// and unselected tabs keep showing their titles.
+/// </para>
 /// </remarks>
 public sealed record DockTabGroup(
     IReadOnlyList<DockableContent> Documents,

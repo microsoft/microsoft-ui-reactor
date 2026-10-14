@@ -143,12 +143,12 @@ public sealed partial class ReactorWindow : IDisposable
     private TaskbarOverlay? _taskbarOverlay;
     private TaskbarItem? _taskbarItem;
     private Hosting.Shell.ThumbnailToolbarState? _thumbnailToolbar;
-    private readonly object _shellLock = new();
+    private readonly Lock _shellLock = new();
     // Owned windows (this window's children). Copy-on-write so the cascade
     // path can iterate without holding a lock during user-supplied close
     // handlers / guards.
     private ReactorWindow[] _ownedWindows = global::System.Array.Empty<ReactorWindow>();
-    private readonly object _ownedLock = new();
+    private readonly Lock _ownedLock = new();
     private WindowSpec _spec;
     private uint _dpi = 96;
     private DipPositionSnapshot _position = new(0, 0);
@@ -202,6 +202,27 @@ public sealed partial class ReactorWindow : IDisposable
     // the write was skipped). The mounted TitleBar control is sized to *this*,
     // not to the declaration, so the two halves never disagree.
     private WindowTitleBarHeight? _effectiveTitleBarHeight;
+
+    // Issue #1297 — declarative caption theme (AppWindow.TitleBar.PreferredTheme).
+    // Same precedence as the height: the spec value wins, a mounted TitleBar(...)
+    // element supplies the fallback. _appliedTitleBarTheme records what Reactor
+    // last declared so removing the declaration restores _titleBarThemeBaseline —
+    // the value the caption had just before Reactor's first write, so one an app
+    // set imperatively (a `configure:` callback included) comes back rather than
+    // the platform default. A value the app sets without ever declaring one is
+    // never touched.
+    private WindowTitleBarTheme? _specTitleBarTheme;
+    // One entry per mounted TitleBar that declares a theme, in declaration order; the
+    // most recent live one supplies the element fallback. Per-control, so unmounting
+    // one declaring bar hands the caption to another that still declares, instead of
+    // dropping every element declaration.
+    private readonly List<(WeakReference<FrameworkElement> Control, WindowTitleBarTheme Theme)> _titleBarThemeDeclarations = new();
+    private WindowTitleBarTheme? _appliedTitleBarTheme;
+    // False until MountAndActivate: the ctor's ApplyChrome runs before the app's
+    // `configure:` callback, and writing (or capturing the baseline) then would let
+    // that callback silently overwrite a declared theme and be lost on withdrawal.
+    private bool _titleBarThemeReady;
+    private TitleBarTheme _titleBarThemeBaseline;
     private WeakReference<FrameworkElement>? _titleBarControl;
 
     /// <summary>
@@ -233,10 +254,11 @@ public sealed partial class ReactorWindow : IDisposable
     private bool _titleBarControlExplicitHeight;
     private bool _titleBarControlHeightOwned;
     private RECT _lastSizingRect;
-    private readonly object _aspectRatioOverrideLock = new();
+    private readonly Lock _aspectRatioOverrideLock = new();
     private AspectRatioOverride[] _aspectRatioOverrides = global::System.Array.Empty<AspectRatioOverride>();
     private int _nextAspectRatioOverrideId;
     private UIElement? _backgroundDragRoot;
+    internal UIElement? BackgroundDragRootForTests => _backgroundDragRoot;
     private PointerEventHandler? _backgroundDragHandler;
     private FrameworkElement? _sizeToContentRoot;
     private SizeChangedEventHandler? _sizeToContentSizeChangedHandler;
@@ -479,6 +501,8 @@ public sealed partial class ReactorWindow : IDisposable
         // even if the root tree doesn't carry a BackdropChoice modifier.
         // (spec 036 §3.3)
         _host.BackdropApplier.SetWindowDefault(spec.Backdrop);
+        // Issue #1291 — seed the per-host error handler before the first render.
+        _host.RenderErrorHandler = spec.RenderErrorHandler;
 
         // Subscribe before Activate() so WM_SHOWWINDOW / WM_DPICHANGED routed
         // during the first paint reach our handlers. The monitor is per-window
@@ -586,16 +610,24 @@ public sealed partial class ReactorWindow : IDisposable
     /// Mount the supplied root and (optionally) activate the window. Pass
     /// exactly one of <paramref name="rootFactory"/> / <paramref name="renderFunc"/>.
     /// </summary>
-    internal void MountAndActivate(Func<Component>? rootFactory, Func<RenderContext, Element>? renderFunc)
+    internal void MountAndActivate(
+        Func<Component>? rootFactory,
+        Func<RenderContext, Element>? renderFunc,
+        Core.SourceLocation? mountSite = null)
     {
         if ((rootFactory is null) == (renderFunc is null))
             throw new ArgumentException(
                 "Exactly one of rootFactory / renderFunc must be supplied.", nameof(rootFactory));
 
+        // The configure: callback has run by now, so the caption holds whatever the
+        // app set there; take ownership of a declared spec theme on top of it.
+        _titleBarThemeReady = true;
+        ApplyTitleBarTheme();
+
         if (rootFactory is not null)
-            _host.Mount(rootFactory());
+            _host.Mount(rootFactory(), mountSite);
         else
-            _host.Mount(renderFunc!);
+            _host.Mount(renderFunc!, mountSite);
 
         if (_spec.ActivateOnOpen && !_disposed && (_spec.Embed is null || _spec.Embed.InitialVisibility))
             _window.Activate();
@@ -682,6 +714,12 @@ public sealed partial class ReactorWindow : IDisposable
             // ERROR_INVALID_STATE on a non-extended window.
             _specTitleBarHeight = spec.TitleBarHeight;
             ApplyTitleBarHeight(warnWhenNotExtended: spec.TitleBarHeight is not null);
+
+            // Issue #1297 — unlike the height, PreferredTheme is legal on a
+            // non-extended window (it themes the system title bar too), so it is
+            // not gated on the content-extension flip above.
+            _specTitleBarTheme = spec.TitleBarTheme;
+            ApplyTitleBarTheme();
         }
 
         // Sizing — DIP -> physical at the current per-window DPI. (spec 036 §5.1)
@@ -1273,11 +1311,11 @@ public sealed partial class ReactorWindow : IDisposable
     {
         // GWLP_HWNDPARENT — the owner-window slot. Distinct from the
         // GWLP_PARENT used by child controls (which we never want for top-
-        // level windows). 64-bit Reactor builds always use SetWindowLongPtrW.
+        // level windows).
         private const int GWLP_HWNDPARENT = -8;
 
-        [global::System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
-        private static extern nint SetWindowLongPtr(nint hWnd, int nIndex, nint dwNewLong);
+        private static nint SetWindowLongPtr(nint hWnd, int nIndex, nint dwNewLong)
+            => NativeWindowLong.SetWindowLongPtr(hWnd, nIndex, dwNewLong);
 
         public static void SetOwner(nint child, nint owner)
         {
@@ -1956,6 +1994,7 @@ public sealed partial class ReactorWindow : IDisposable
             if (_titleBarIconControls.Count > 0)
             {
                 DropHeightContributionIfWrittenBy(unmounting);
+                DropThemeDeclaration(unmounting);
                 return;
             }
         }
@@ -1966,7 +2005,131 @@ public sealed partial class ReactorWindow : IDisposable
         _titleBarControlHeightOwned = false;
         _elementTitleBarHeight = null;
         ApplyTitleBarHeight(warnWhenNotExtended: false);
+        _titleBarThemeDeclarations.Clear();
+        ApplyTitleBarTheme();
     }
+
+    /// <summary>
+    /// Withdraws the caption-theme declaration of a title bar that unmounts while other
+    /// title bars remain; the most recent remaining declaration, if any, takes over.
+    /// (issue #1297)
+    /// </summary>
+    private void DropThemeDeclaration(Microsoft.UI.Xaml.Controls.TitleBar? unmounting)
+    {
+        if (unmounting is null) return;
+        var index = IndexOfThemeDeclaration(unmounting);
+        if (index < 0) return;
+
+        _titleBarThemeDeclarations.RemoveAt(index);
+        ApplyTitleBarTheme();
+    }
+
+    private int IndexOfThemeDeclaration(FrameworkElement control)
+    {
+        for (var i = 0; i < _titleBarThemeDeclarations.Count; i++)
+        {
+            if (_titleBarThemeDeclarations[i].Control.TryGetTarget(out var existing)
+                && ReferenceEquals(existing, control))
+                return i;
+        }
+        return -1;
+    }
+
+    /// <summary>The most recent declaration from a title bar that is still alive.</summary>
+    private WindowTitleBarTheme? CurrentElementTitleBarTheme()
+    {
+        for (var i = _titleBarThemeDeclarations.Count - 1; i >= 0; i--)
+        {
+            if (_titleBarThemeDeclarations[i].Control.TryGetTarget(out _))
+                return _titleBarThemeDeclarations[i].Theme;
+            _titleBarThemeDeclarations.RemoveAt(i);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Records the caption theme declared by a mounted <c>TitleBar(...)</c> element and
+    /// applies it, unless <see cref="WindowSpec.TitleBarTheme"/> overrides it. Called from
+    /// the element's mount/update path on every render, so it no-ops when nothing
+    /// changed. A bar that changes its declaration becomes the most recent one; a bar
+    /// that declares nothing withdraws only its own. (issue #1297)
+    /// </summary>
+    internal void SetElementTitleBarTheme(WindowTitleBarTheme? theme, FrameworkElement control)
+    {
+        var index = IndexOfThemeDeclaration(control);
+        if (index >= 0 && _titleBarThemeDeclarations[index].Theme == theme) return;
+        if (index < 0 && theme is null) return;
+
+        if (index >= 0)
+            _titleBarThemeDeclarations.RemoveAt(index);
+        if (theme is { } declared)
+            _titleBarThemeDeclarations.Add((new WeakReference<FrameworkElement>(control), declared));
+        ApplyTitleBarTheme();
+    }
+
+    /// <summary>
+    /// Writes the resolved caption theme onto <c>AppWindow.TitleBar.PreferredTheme</c>.
+    /// (issue #1297)
+    /// <para>
+    /// Resolution mirrors the caption height: an explicit
+    /// <see cref="WindowSpec.TitleBarTheme"/> wins, otherwise the mounted
+    /// <c>TitleBar(...)</c> element's declaration applies. With neither declared
+    /// Reactor writes nothing — an app that sets <c>PreferredTheme</c> imperatively
+    /// keeps ownership — except to return a value Reactor applied to the one the
+    /// caption had before Reactor first wrote it.
+    /// </para>
+    /// </summary>
+    private void ApplyTitleBarTheme()
+    {
+        if (_disposed || !_titleBarThemeReady) return;
+
+        var resolved = _specTitleBarTheme ?? CurrentElementTitleBarTheme();
+
+        try
+        {
+            var titleBar = _appWindow.TitleBar;
+            // Taking ownership: remember what was there, so withdrawing the
+            // declaration hands back the app's (or the platform's) value.
+            var baseline = _appliedTitleBarTheme is null ? titleBar.PreferredTheme : _titleBarThemeBaseline;
+            if (!TryResolveCaptionTheme(Volatile.Read(ref _spec), resolved, _appliedTitleBarTheme, baseline, out var target))
+                return;
+            _titleBarThemeBaseline = baseline;
+            if (titleBar.PreferredTheme != target)
+                titleBar.PreferredTheme = target;
+            _appliedTitleBarTheme = resolved;
+        }
+        catch (COMException ex)
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TitleBarTheme.set", ex);
+        }
+    }
+
+    /// <summary>
+    /// Decides the value Reactor writes to the caption theme, if any; the only source of
+    /// that write. It never writes on a Child-embedded window, whose chrome belongs to the
+    /// host, and never when nothing is declared and nothing Reactor applied needs
+    /// withdrawing — so an app's imperative value is left alone. A withdrawn declaration
+    /// resolves to <paramref name="baseline"/>. (issue #1297)
+    /// </summary>
+    internal static bool TryResolveCaptionTheme(
+        WindowSpec spec,
+        WindowTitleBarTheme? resolved,
+        WindowTitleBarTheme? applied,
+        TitleBarTheme baseline,
+        out TitleBarTheme target)
+    {
+        target = resolved is { } declared ? ToNativeTitleBarTheme(declared) : baseline;
+        return IsTopLevelChromeAllowed(spec) && (resolved is not null || applied is not null);
+    }
+
+    internal static TitleBarTheme ToNativeTitleBarTheme(WindowTitleBarTheme theme) => theme switch
+    {
+        WindowTitleBarTheme.Legacy => TitleBarTheme.Legacy,
+        WindowTitleBarTheme.UseDefaultAppMode => TitleBarTheme.UseDefaultAppMode,
+        WindowTitleBarTheme.Light => TitleBarTheme.Light,
+        WindowTitleBarTheme.Dark => TitleBarTheme.Dark,
+        _ => throw new ArgumentOutOfRangeException(nameof(theme), theme, null),
+    };
 
     /// <summary>
     /// Withdraws the caption-height contribution when the bar that supplied it is the one
@@ -2273,7 +2436,7 @@ public sealed partial class ReactorWindow : IDisposable
         public Func<bool> CanClose { get; }
         public ClosingGuard(Func<bool> fn) { CanClose = fn; }
     }
-    private readonly object _closingGuardsLock = new();
+    private readonly Lock _closingGuardsLock = new();
     private readonly List<ClosingGuard> _closingGuards = new();
 
     /// <summary>
@@ -2672,7 +2835,15 @@ public sealed partial class ReactorWindow : IDisposable
         // Backdrop, Owner) compare by reference which is the right behavior here.
         var prev = _spec;
         Volatile.Write(ref _spec, next);
-        if (!Equals(prev, next))
+        // Issue #1291 — the error handler is host state, not chrome: apply it on its own
+        // and keep a handler-only change (e.g. a fresh lambda) from re-applying chrome.
+        bool handlerChanged = !Equals(prev.RenderErrorHandler, next.RenderErrorHandler);
+        if (handlerChanged)
+            _host.RenderErrorHandler = next.RenderErrorHandler;
+        bool specChanged = handlerChanged
+            ? !Equals(prev with { RenderErrorHandler = null }, next with { RenderErrorHandler = null })
+            : !Equals(prev, next);
+        if (specChanged)
         {
             ApplyChrome(next, isInitial: false);
             // Re-seed backdrop default in case Update changed it. The next
@@ -3102,11 +3273,11 @@ public sealed partial class ReactorWindow : IDisposable
         public const uint SWP_FRAMECHANGED = 0x0020;
         public static readonly nint DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4;
 
-        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
-        public static extern nint GetWindowLongPtr(nint hWnd, int nIndex);
+        public static nint GetWindowLongPtr(nint hWnd, int nIndex)
+            => NativeWindowLong.GetWindowLongPtr(hWnd, nIndex);
 
-        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
-        public static extern nint SetWindowLongPtr(nint hWnd, int nIndex, nint dwNewLong);
+        public static nint SetWindowLongPtr(nint hWnd, int nIndex, nint dwNewLong)
+            => NativeWindowLong.SetWindowLongPtr(hWnd, nIndex, dwNewLong);
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -3186,11 +3357,11 @@ public sealed partial class ReactorWindow : IDisposable
         public const uint SWP_NOACTIVATE = 0x0010;
         public const uint SWP_FRAMECHANGED = 0x0020;
 
-        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
-        public static extern nint GetWindowLongPtr(nint hWnd, int nIndex);
+        public static nint GetWindowLongPtr(nint hWnd, int nIndex)
+            => NativeWindowLong.GetWindowLongPtr(hWnd, nIndex);
 
-        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
-        public static extern nint SetWindowLongPtr(nint hWnd, int nIndex, nint dwNewLong);
+        public static nint SetWindowLongPtr(nint hWnd, int nIndex, nint dwNewLong)
+            => NativeWindowLong.SetWindowLongPtr(hWnd, nIndex, dwNewLong);
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -3265,20 +3436,22 @@ public sealed partial class ReactorWindow : IDisposable
     [UIThreadOnly]
     public void Mount(Component root)
     {
+        var mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Mount));
         if (_disposed) throw new ObjectDisposedException(nameof(ReactorWindow));
         ArgumentNullException.ThrowIfNull(root);
-        _host.Mount(root);
+        _host.Mount(root, mountSite);
     }
 
     /// <summary>Mount a new render-function root. UI-thread only.</summary>
     [UIThreadOnly]
     public void Mount(Func<RenderContext, Element> render)
     {
+        var mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Mount));
         if (_disposed) throw new ObjectDisposedException(nameof(ReactorWindow));
         ArgumentNullException.ThrowIfNull(render);
-        _host.Mount(render);
+        _host.Mount(render, mountSite);
     }
 
     // ── teardown ──────────────────────────────────────────────────────
@@ -3307,6 +3480,7 @@ public sealed partial class ReactorWindow : IDisposable
         // keeps a reference to a closed ReactorWindow would otherwise keep every TitleBar
         // wrapper and its applied-icon record alive with it.
         _titleBarIconControls.Clear();
+        _titleBarThemeDeclarations.Clear();
 
         _embedWatchdog?.Stop();
         DetachBackgroundDragRoot();

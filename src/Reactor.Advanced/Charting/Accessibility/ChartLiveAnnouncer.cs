@@ -10,7 +10,7 @@ namespace Microsoft.UI.Reactor.Charting.Accessibility;
 internal sealed class ChartLiveAnnouncer
 {
     private readonly Stopwatch _lastAnnounceTimer = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private string? _pendingMessage;
     private ChartAnnouncePriority _pendingPriority;
     private bool _animationInFlight;

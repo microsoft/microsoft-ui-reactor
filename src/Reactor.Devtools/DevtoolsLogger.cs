@@ -30,7 +30,7 @@ internal sealed class DevtoolsLogger : IDisposable
     private const long MaxBytesPerFile = 10L * 1024 * 1024;
     private const int MaxRotations = 5;
 
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly string _path;
     private readonly DevtoolsLogLevel _level;
     private StreamWriter? _writer;

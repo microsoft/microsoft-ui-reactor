@@ -22,7 +22,7 @@ internal sealed class NavigationCache
 {
     private readonly Dictionary<object, CachedPage> _cache = new();
     private readonly Action<UIElement>? _onEvict;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     public int MaxSize { get; set; }
 

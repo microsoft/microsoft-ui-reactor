@@ -30,6 +30,28 @@ public enum WindowTitleBarHeight
 }
 
 /// <summary>
+/// Theme of the window's system caption (the minimize / maximize / close buttons).
+/// Mirrors <c>Microsoft.UI.Windowing.TitleBarTheme</c>. (issue #1297)
+/// </summary>
+/// <remarks>
+/// WinUI does not carry an element's <c>RequestedTheme</c> through to the caption,
+/// so an app that themes its content opposite to the system declares the caption
+/// theme too — see <see cref="WindowSpec.TitleBarTheme"/> and
+/// <c>TitleBarElement.PreferredTheme</c>.
+/// </remarks>
+public enum WindowTitleBarTheme
+{
+    /// <summary>Legacy caption theming.</summary>
+    Legacy,
+    /// <summary>Follows the app's default mode (the system light / dark setting).</summary>
+    UseDefaultAppMode,
+    /// <summary>Light caption buttons.</summary>
+    Light,
+    /// <summary>Dark caption buttons.</summary>
+    Dark,
+}
+
+/// <summary>
 /// Immutable (init-only) declarative description of a top-level Reactor window. Hand to
 /// <see cref="ReactorApp.OpenWindow(WindowSpec, Func{Component}, Action{Microsoft.UI.Reactor.Hosting.ReactorHost})"/>
 /// to open a window; hand to <see cref="ReactorWindow.Update"/> to diff
@@ -190,8 +212,32 @@ public sealed record WindowSpec
     /// </remarks>
     public WindowTitleBarHeight? TitleBarHeight { get; init; }
 
+    /// <summary>
+    /// Theme of the system caption buttons (<c>AppWindow.TitleBar.PreferredTheme</c>).
+    /// <c>null</c> (the default) leaves the platform default alone; a mounted
+    /// <c>TitleBar(...)</c> element's <c>PreferredTheme</c> then applies instead,
+    /// if it declares one. (issue #1297)
+    /// </summary>
+    /// <remarks>
+    /// WinUI does not derive the caption theme from the content's
+    /// <c>RequestedTheme</c>; an app that themes its content opposite to the
+    /// system sets this to match. Removing a declaration restores the value the
+    /// caption had before Reactor first applied one; a value set imperatively and
+    /// never declared is left alone.
+    /// </remarks>
+    public WindowTitleBarTheme? TitleBarTheme { get; init; }
+
     /// <summary>Optional declarative backdrop. Seeds the per-host modifier.</summary>
     public BackdropChoice? Backdrop { get; init; }
+
+    /// <summary>
+    /// Optional replacement for the built-in render-error fallback in this window. Applied
+    /// to the window's <see cref="Hosting.ReactorHost.RenderErrorHandler"/> before the first
+    /// render (and again by <see cref="ReactorWindow.Update"/>). <c>null</c> (the default)
+    /// falls through to <see cref="ReactorApp.DefaultRenderErrorHandler"/>. See
+    /// <see cref="RenderErrorHandler"/>. (issue #1291)
+    /// </summary>
+    public RenderErrorHandler? RenderErrorHandler { get; init; }
 
     /// <summary>
     /// Optional window icon — the Win32 <c>HICON</c> Windows shows in the window's

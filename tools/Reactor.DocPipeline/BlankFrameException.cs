@@ -8,7 +8,7 @@ namespace Microsoft.UI.Reactor.Cli.Docs;
 /// <remarks>
 /// <para>
 /// This is the shape a doc-app capture takes when the window never painted:
-/// no interactive desktop, the capture server polled before first paint, or a
+/// no interactive desktop, a capture taken before first paint, or a
 /// component switch that failed silently. The frame is a solid-white surface,
 /// which survives content cropping (there is nothing to crop <em>to</em>),
 /// picks up the border and drop shadow like any other screenshot, and encodes

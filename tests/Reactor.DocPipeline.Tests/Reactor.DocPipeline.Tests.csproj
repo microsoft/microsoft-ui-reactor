@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Doc-pipeline compiler tests for spec 041. TFM matches Reactor.Cli
+    Doc-pipeline compiler tests for spec 041. TFM matches tools/Reactor.DocPipeline
     (net10.0-windows10.0.22621.0) so the test project can reference the
     compiler's internal types directly.
   -->
@@ -22,12 +22,12 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <!-- DocsDeployWiringTests parses .github/workflows/docs.yml structurally.
          Referenced explicitly rather than leaned on transitively through
-         Reactor.Cli, so dropping it there cannot silently break this suite. -->
+         the pipeline project, so dropping it there cannot silently break this suite. -->
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Reactor.Cli\Reactor.Cli.csproj" />
+    <ProjectReference Include="..\..\tools\Reactor.DocPipeline\Reactor.DocPipeline.csproj" />
   </ItemGroup>
 
   <ItemGroup>

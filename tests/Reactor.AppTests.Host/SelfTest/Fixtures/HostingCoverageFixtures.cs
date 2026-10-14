@@ -168,6 +168,77 @@ internal static class HostingCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  3a. ReactorHostControl — ComponentType declared in compiled XAML
+    //      XamlDeclaredHostPanel.xaml names the component in markup, so this host
+    //      app's generated XamlTypeInfo has its activator; Application.Current
+    //      (ReactorApplication) chains to that provider.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class HostControlXamlComponentType(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var panel = new XamlDeclaredHostPanel();
+            var hostControl = panel.HostControl;
+            H.Check("HostCtrlXamlType_ParsedFromMarkup",
+                hostControl.ComponentType == typeof(XamlDeclaredHostComponent));
+
+            H.SetContent(panel);
+            await Harness.Render(200);
+
+            H.Check("HostCtrlXamlType_NoError",
+                FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("Render error:") == true) is null);
+            var text = FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("XamlDeclared:") == true);
+            H.Check("HostCtrlXamlType_MountedWithMarkupProps", text?.Text == "XamlDeclared:from-markup:0");
+
+            var btn = FindInContainer<Button>(hostControl, b => b.Content is string s && s == "XamlDeclaredInc");
+            if (btn is not null)
+            {
+                var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(btn);
+                ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
+                    peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+            }
+            H.Check("HostCtrlXamlType_Updated", await Harness.WaitFor(
+                () => FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("XamlDeclared:") == true)
+                          ?.Text == "XamlDeclared:from-markup:1",
+                maxPasses: 16, perPassMs: 10));
+
+            hostControl.Dispose();
+            H.SetContent(null);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  3b. ReactorHostControl — ComponentType assigned from code (Loaded path)
+    //      The host app never names PropsComponent in markup, so there is no XAML
+    //      activator. The failure must be shown in the host, not thrown out of
+    //      Loaded (which fail-fasts the process — 0xc000027b under Native AOT).
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class HostControlCodeOnlyComponentType(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var hostControl = new ReactorHostControl { ComponentType = typeof(PropsComponent) };
+
+            var container = new Border { Child = hostControl };
+            H.SetContent(container);
+            await Harness.Render(200);
+
+            var header = FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("Render error:") == true);
+            H.Check("HostCtrlCodeOnlyType_ErrorShown", header is not null);
+            H.Check("HostCtrlCodeOnlyType_ErrorNamesFix",
+                header?.Text?.Contains("no XAML activation info", StringComparison.Ordinal) == true
+                && header.Text.Contains("ComponentFactory", StringComparison.Ordinal));
+            H.Check("HostCtrlCodeOnlyType_NothingMounted",
+                FindInContainer<TextBlock>(hostControl, tb => tb.Text?.StartsWith("WithProps:") == true) is null);
+
+            hostControl.Dispose();
+            H.SetContent(null);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  4. ReactorHostControl — Reconciler access + OnRenderComplete callback
     //     Targets: Reconciler property, OnRenderComplete
     // ════════════════════════════════════════════════════════════════════════

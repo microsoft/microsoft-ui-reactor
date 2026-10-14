@@ -1201,8 +1201,10 @@ public static partial class Factories
     /// <para>Outside a virtualized factory the wrapper is transparent but <em>keyed</em>: a re-render
     /// with the same key is a no-op (the factory is not re-invoked and the inner subtree is not
     /// diffed), while a changed key replaces the inner (unmount + fresh mount of the new factory
-    /// output). The cross-recycle cache only applies on the virtualized-list path. It is always safe
-    /// to use anywhere an element is expected.</para>
+    /// output). The exception is a component inside the subtree that updates its own state: the
+    /// factory then runs again so the reconciler can walk down to that component. The
+    /// cross-recycle cache only applies on the virtualized-list path. It is always safe to use
+    /// anywhere an element is expected.</para>
     /// </summary>
     /// <typeparam name="TKey">
     /// Key type. Boxed to <see cref="object"/> and compared with <see cref="object.Equals(object)"/> /

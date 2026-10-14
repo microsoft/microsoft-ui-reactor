@@ -233,6 +233,10 @@ public sealed class ElementPool : IDisposable
         // the comment block in Reconciler.cs above ModifierEventHandlerState.
         Reconciler.ClearCurrentEventHandlers(fe);
         fe.Tag = null;
+        // Resources keys the previous renter's .Resources(...) overrides wrote. Mount applies
+        // overrides only for an element that declares some, so without this a renter that
+        // declares none would inherit them. Keys set outside Reactor are left alone.
+        Reconciler.RemoveManagedResourceKeys(fe);
         // Reset via ClearValue, not by assigning the DP default: a local value outranks
         // every Style setter, so writing e.g. HorizontalAlignment.Stretch would hand the
         // next renter a control that can never show its default style's alignment

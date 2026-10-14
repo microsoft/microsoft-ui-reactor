@@ -33,7 +33,7 @@ internal static class DockFloatingPaneRouter
     // from the UI thread but TryAppendUnderCursor is called from
     // tab-drag-completed which is also UI thread; the lock guards
     // against future scenarios where a teardown races a hit-test.
-    private static readonly object _gate = new();
+    private static readonly Lock _gate = new();
     private static readonly Dictionary<ReactorWindow, Action<DockableContent>> _appenders = new();
 
     /// <summary>

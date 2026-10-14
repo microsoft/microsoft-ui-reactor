@@ -9,7 +9,7 @@ namespace Microsoft.UI.Reactor;
 /// </summary>
 public static class ReactorDisplay
 {
-    private static readonly object s_lock = new();
+    private static readonly Lock s_lock = new();
     private static readonly List<DisplayMonitorRegistration> s_registrations = new();
     private static WindowMessageMonitor? s_hostMonitor;
     private static IReadOnlyList<DisplayInfo> s_displays = SnapshotDisplays();

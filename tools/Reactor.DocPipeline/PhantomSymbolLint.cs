@@ -96,7 +96,7 @@ internal static class PhantomSymbolLint
     /// was waiting on. Leaving it at Warning meant a newly introduced
     /// <!-- phantom:skip "Text" --> <!-- phantom:skip "UseTheme" -->
     /// <c>Text("...")</c> or <c>UseTheme()</c> still passed
-    /// <c>mur docs compile</c>, which is the exact regression the rule exists
+    /// <c>compile</c>, which is the exact regression the rule exists
     /// to stop. The <c>src/**</c> XML-doc backlog is gated separately by the
     /// ceiling-budget test, so raising this does not fail on the known
     /// historical occurrences.

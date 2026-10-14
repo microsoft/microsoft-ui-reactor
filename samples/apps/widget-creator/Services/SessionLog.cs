@@ -12,7 +12,7 @@ namespace WidgetCreator.Services;
 /// </summary>
 public static class SessionLog
 {
-    static readonly object _gate = new();
+    static readonly Lock _gate = new();
     static string? _path;
 
     public static string Path => _path ?? "(session log not initialised)";

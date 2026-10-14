@@ -328,9 +328,11 @@ class ConfigurableComponent(string title) : Component
 
 The factory function runs on the UI thread after the XAML Island is ready.
 Return any `UIElement` — typically a `ReactorHostControl` wrapping your
-component. Note that `ComponentType` lives on `XamlIslandControl`, not on
-`ReactorHostControl`: inside a factory you set `ComponentFactory` for a
-parameterless component, or call `Mount(component)` when it takes arguments.
+component. Don't set `ReactorHostControl.ComponentType` here: that property is
+for declaring a host in WinUI XAML markup and creates the root through the XAML
+compiler's generated type information, which a type assigned only from code
+doesn't have. Inside a factory, set `ComponentFactory` for a parameterless
+component, or call `Mount(component)` when it takes arguments.
 
 ## Patterns
 

@@ -74,10 +74,11 @@ public static class Keywords
     public const EventKeywords Theme = (EventKeywords)0x800;        // theme apply, bindings
     public const EventKeywords Shell = (EventKeywords)0x1000;       // JumpList/Tray/ThumbnailToolbar
     public const EventKeywords HotReload = (EventKeywords)0x2000;   // spec 049 — state migration across edits
+    public const EventKeywords RenderDetail = (EventKeywords)0x4000; // per-component ComponentRendered (reason + instance id) for inspectors
 }
 ```
 
-Fourteen keywords carve the event surface so a consumer can pay for
+Fifteen keywords carve the event surface so a consumer can pay for
 exactly the events it wants. The original seven cover the render loop:
 `Reconcile` (0x1) covers the reconciler pass
 boundaries and the child-list diff; `Render` (0x2) covers per-component
@@ -92,7 +93,12 @@ subsystems outside that loop — `Hosting` (0x80, window / HWND / DPI /
 backdrop), `Persistence` (0x100), `Navigation` (0x200), `Intl` (0x400,
 missing keys and format fallback), `Theme` (0x800), `Shell` (0x1000,
 JumpList / tray / thumbnail toolbar) — plus `HotReload` (0x2000) from
-spec 049 for state migration across edits.
+spec 049 for state migration across edits, and `RenderDetail` (0x4000),
+which carries only the Verbose `ComponentRendered` event (one per component
+render, with the reason it rendered) so an inspector can take it without
+switching on the `Render` timing spans. `ComponentRendered` is also tagged
+`Render`, so a `Render` capture at `Verbose` sees it and one at
+`Informational` does not.
 Adding a new event in any of those
 categories is a matter of picking the right keyword and the right
 event id; consumers already subscribed to the keyword pick the new

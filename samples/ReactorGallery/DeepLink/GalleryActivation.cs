@@ -36,7 +36,7 @@ public static class GalleryActivation
     static readonly TimeSpan RedirectTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>Guards <see cref="_initialRoute"/> and <see cref="_pendingRoute"/>.</summary>
-    static readonly object Gate = new();
+    static readonly Lock Gate = new();
 
     static GalleryRoute? _initialRoute;
     static GalleryRoute? _pendingRoute;

@@ -2182,6 +2182,16 @@ public static partial class ElementExtensions
     public static TitleBarElement Tall(this TitleBarElement el, bool tall = true) =>
         el with { HeightOption = tall ? WindowTitleBarHeight.Tall : WindowTitleBarHeight.Standard };
 
+    /// <summary>
+    /// Sets the theme of the hosting window's system caption buttons
+    /// (<c>AppWindow.TitleBar.PreferredTheme</c>). WinUI does not derive it from the
+    /// content's <c>RequestedTheme</c>, so match it here when the app themes its
+    /// content opposite to the system. <see cref="WindowSpec.TitleBarTheme"/>, when
+    /// set, wins over this. (issue #1297)
+    /// </summary>
+    public static TitleBarElement PreferredTheme(this TitleBarElement el, WindowTitleBarTheme theme) =>
+        el with { PreferredTheme = theme };
+
     // ── ExpanderElement sugar ───────────────────────────────────────
 
     public static ExpanderElement Direction(this ExpanderElement el, ExpandDirection dir) =>

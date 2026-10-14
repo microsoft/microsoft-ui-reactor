@@ -127,7 +127,7 @@ paths don't collide:
 public sealed class PendingScope
 {
     private readonly Dictionary<object, bool> _loadingByToken = new(capacity: 4);
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     /// <summary>Fires when a resource joins, leaves, or changes its loading state.</summary>
     public event Action? Changed;
@@ -182,7 +182,7 @@ public sealed class QueryCache : IDisposable
 
     private readonly ConcurrentDictionary<string, Slot> _slots = new();
     private Timer? _evictionTimer;
-    private readonly object _timerLock = new();
+    private readonly Lock _timerLock = new();
     private int _disposed;
 
     /// <summary>Fires when an entry is added, replaced, invalidated, or evicted.</summary>
@@ -334,7 +334,7 @@ UseEffect(() => Fetch(url, options), url, options);  // options is new every ren
 public sealed class PendingScope
 {
     private readonly Dictionary<object, bool> _loadingByToken = new(capacity: 4);
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     /// <summary>Fires when a resource joins, leaves, or changes its loading state.</summary>
     public event Action? Changed;

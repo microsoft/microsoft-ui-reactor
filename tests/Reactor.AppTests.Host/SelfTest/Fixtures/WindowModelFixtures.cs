@@ -859,8 +859,14 @@ internal static partial class WindowModelFixtures
         public const long WS_EX_NOACTIVATE = 0x08000000;
         public const long WS_EX_TRANSPARENT = 0x00000020;
 
+        public static nint GetWindowLongPtr(nint hWnd, int nIndex)
+            => IntPtr.Size == 8 ? GetWindowLongPtr64(hWnd, nIndex) : GetWindowLong32(hWnd, nIndex);
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
+        private static extern int GetWindowLong32(nint hWnd, int nIndex);
+
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
-        public static extern nint GetWindowLongPtr(nint hWnd, int nIndex);
+        private static extern nint GetWindowLongPtr64(nint hWnd, int nIndex);
 
         public static long ExStyle(nint hwnd) => (long)GetWindowLongPtr(hwnd, GWL_EXSTYLE);
         public static bool HasFlag(nint hwnd, long flag) => (ExStyle(hwnd) & flag) != 0;

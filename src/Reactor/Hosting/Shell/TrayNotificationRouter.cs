@@ -76,4 +76,25 @@ internal static class TrayNotificationRouter
                 break;
         }
     }
+
+    /// <summary>
+    /// <see cref="Dispatch"/> as the tray's dispatcher callback runs it: an outermost
+    /// Reactor frame for render-error propagation, where an ordinary callback failure is
+    /// logged and swallowed so one bad handler cannot take the tray down. A render error
+    /// the app already declined via <c>RenderError.Propagate()</c> — from a flyout's
+    /// synchronous first render or a disposing flyout host — is not swallowed: it keeps
+    /// going out, as from any other Reactor frame (issue #1291).
+    /// </summary>
+    internal static void DispatchGuarded(TrayCallbackEntry entry, TrayCallbackKind kind)
+    {
+        using var propagationScope = Core.RenderErrorDispatch.EnterPropagationScope();
+        try
+        {
+            Dispatch(entry, kind);
+        }
+        catch (Exception ex) when (!Core.RenderErrorDispatch.IsPropagating(ex))
+        {
+            global::System.Diagnostics.Debug.WriteLine($"[Reactor] TrayCallback dispatch threw: {ex.Message}");
+        }
+    }
 }

@@ -830,6 +830,7 @@ TitleBarElement.Icon(string imageUri) → TitleBarElement
 TitleBarElement.NoIcon() → TitleBarElement
 TitleBarElement.PaneToggleButtonVisible(bool visible) → TitleBarElement
 TitleBarElement.PaneToggleRequested(Action handler) → TitleBarElement
+TitleBarElement.PreferredTheme(WindowTitleBarTheme theme) → TitleBarElement
 TitleBarElement.RightHeader(Element rightHeader) → TitleBarElement
 TitleBarElement.Set(Action<TitleBar> configure) → TitleBarElement
 TitleBarElement.Subtitle(string subtitle) → TitleBarElement
@@ -1011,8 +1012,10 @@ AnimationKind { None, Default, Spring, EaseIn, EaseOut, EaseInOut }
 BackdropKind { None, Mica, MicaAlt, DesktopAcrylic, AcrylicThin, Transparent }
 ColorScheme { Light, Dark, HighContrast }
 KeyedListDiagnosticKind { NullKey, DuplicateKey }
+ReactorHostKind { WindowHost, HostControl }
 ItemsViewLayoutKind { StackLayout, LinedFlowLayout, UniformGridLayout }
 PersistedScope { Window, Application }
+RenderErrorSource { RootRender, ComponentRender, Reconcile, Effects, Cleanup }
 TemplatedControlKind { ListView, GridView, FlipView }
 V1UnmountDisposition { CollectSelf, ContinueDefaultTraversal, SkipPool }
 BlockStatus { Loading, Loaded, Failed }
@@ -1053,6 +1056,7 @@ WindowStartPosition { Default, CenterOnPrimary, CenterOnOwner, Manual, CenterOnC
 WindowState { Normal, Minimized, Maximized, FullScreen, CompactOverlay }
 WindowStyle { Default, None, ToolWindow }
 WindowTitleBarHeight { Standard, Tall, Collapsed }
+WindowTitleBarTheme { Legacy, UseDefaultAppMode, Light, Dark }
 
 ## Public types (ctors / properties / methods / events)
 # Every public type not already covered above. Members alphabetized within
@@ -4466,6 +4470,7 @@ IReadOnlyList<ReactorTrayIcon> TrayIcons { get; }
 IReadOnlyList<ReactorWindow> Windows { get; }
 IWindowPersistenceStore WindowPersistenceStore { get; set; }
 ReactorWindow PrimaryWindow { get; }
+RenderErrorHandler DefaultRenderErrorHandler { get; set; }
 ShutdownPolicy ShutdownPolicy { get; set; }
 bool DevtoolsEnabled { get; }
 Exit(int exitCode = 0) → void
@@ -4551,6 +4556,7 @@ Register(IReactorDevtoolsHost host) → void
 ### static class ReactorDiagnostics
 IReadOnlyList<KeyedListDiagnostic> RecentKeyedListWarnings { get; }
 ClearRecentKeyedListWarnings() → void
+GetHosts() → IReadOnlyList<ReactorHostInfo>
 
 ### static class ReactorDisplay
 DisplayInfo Primary { get; }
@@ -4586,6 +4592,8 @@ Action<double, double, double> OnRenderComplete { get; set; }
 Border ContentTarget { get; set; }
 ReactorWindow OwningWindow { get; }
 Reconciler Reconciler { get; }
+RenderErrorHandler EffectiveRenderErrorHandler { get; }
+RenderErrorHandler RenderErrorHandler { get; set; }
 Window Window { get; }
 bool IsIdle { get; }
 ref RenderStats Stats { get; }
@@ -4595,15 +4603,31 @@ Mount(Func<RenderContext, Element> renderFunc) → void
 WaitForIdleAsync(int maxYields = 50) → Task
 
 ### class ReactorHostControl
+new()
 new(Component component = null, ILogger logger = null)
 Action<double, double, double> OnRenderComplete { get; set; }
 Func<Component> ComponentFactory { get; set; }
 Reconciler Reconciler { get; }
+RenderErrorHandler EffectiveRenderErrorHandler { get; }
+RenderErrorHandler RenderErrorHandler { get; set; }
+RenderStats Stats { get; }
+Type ComponentType { get; set; }
 object Props { get; set; }
-ref RenderStats Stats { get; }
 Dispose() → void
 Mount(Component component) → void
 Mount(Func<RenderContext, Element> renderFunc) → void
+
+### class ReactorHostInfo
+FrameworkElement HostElement { get; }
+ReactorHost Host { get; }
+ReactorHostControl HostControl { get; }
+ReactorHostKind Kind { get; }
+ReactorWindow ReactorWindow { get; }
+SourceLocation? MountSite { get; }
+UIElement RootControl { get; }
+Window Window { get; }
+string RootComponentName { get; }
+string RootRenderFunctionName { get; }
 
 ### static class ReactorSourceMap
 bool Enabled { get; set; }
@@ -4613,7 +4637,9 @@ GetSource(UIElement control) → SourceLocation?
 new()
 
 ### static class ReactorTrace
+GetComponentControl(long componentId) → UIElement
 Subscribe(Action<ReactorEvent> onEvent, EventLevel level = EventLevel.Verbose, EventKeywords keywords = EventKeywords.All) → IDisposable
+TryGetComponentId(UIElement control, ref long componentId) → bool
 
 ### class ReactorTrayIcon
 TrayIconSpec Spec { get; }
@@ -4836,6 +4862,14 @@ UseWindowPosition() → ValueTuple<double, double>
 UseWindowSize() → ValueTuple<double, double>
 UseWindowSize(Window window) → ValueTuple<double, double>
 UseWindowState() → WindowState
+
+### class RenderError
+Exception Exception { get; }
+RenderErrorSource Source { get; }
+bool IsHostLevel { get; }
+bool IsPropagationRequested { get; }
+string ComponentName { get; }
+Propagate() → void
 
 ### struct RenderStats
 double AvgEffectsMs { get; init; }
@@ -5316,10 +5350,11 @@ GetHashCode() → int
 ToString() → string
 
 ### struct SourceLocation
-new(string FilePath, int LineNumber)
+new(string FilePath, int LineNumber, int ColumnNumber)
+int ColumnNumber { get; init; }
 int LineNumber { get; init; }
 string FilePath { get; init; }
-Deconstruct(ref string FilePath, ref int LineNumber) → void
+Deconstruct(ref string FilePath, ref int LineNumber, ref int ColumnNumber) → void
 Equals(SourceLocation other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
@@ -5881,6 +5916,7 @@ Element Content { get; init; }
 Element RightHeader { get; init; }
 IconData Icon { get; init; }
 WindowTitleBarHeight? HeightOption { get; init; }
+WindowTitleBarTheme? PreferredTheme { get; init; }
 bool AutoRefreshDragRegions { get; init; }
 bool IsBackButtonEnabled { get; init; }
 bool IsBackButtonVisible { get; init; }
@@ -6311,6 +6347,7 @@ BackdropChoice Backdrop { get; init; }
 EmbedRequest Embed { get; init; }
 PresenterKind Presenter { get; init; }
 ReactorWindow Owner { get; init; }
+RenderErrorHandler RenderErrorHandler { get; init; }
 ValueTuple<double, double>? ManualPosition { get; init; }
 WindowCornerStyle CornerStyle { get; init; }
 WindowIcon Icon { get; init; }
@@ -6322,6 +6359,7 @@ WindowStartPosition PersistenceFallback { get; init; }
 WindowStartPosition StartPosition { get; init; }
 WindowStyle Style { get; init; }
 WindowTitleBarHeight? TitleBarHeight { get; init; }
+WindowTitleBarTheme? TitleBarTheme { get; init; }
 bool ActivateOnOpen { get; init; }
 bool IgnorePointerInput { get; init; }
 bool IsMaximizable { get; init; }

@@ -23,7 +23,7 @@ amendments where the original text is wrong.
 >
 > | Surface | Location |
 > |---|---|
-> | `SourceLocation(string FilePath, int LineNumber)` | `src/Reactor/Core/SourceLocation.cs` |
+> | `SourceLocation(string FilePath, int LineNumber, int ColumnNumber)` | `src/Reactor/Core/SourceLocation.cs` |
 > | `Element.CallSite` | `src/Reactor/Core/Element.cs` |
 > | `ReactorSourceMap.Enabled` / `.GetSource(UIElement)` | `src/Reactor/Diagnostics/ReactorSourceMap.cs` |
 > | `[ReactorSourceTransparent]` | `src/Reactor/Diagnostics/ReactorSourceTransparentAttribute.cs` |
@@ -400,6 +400,14 @@ instead of a custom compiler.
 > in `ElementFactory.cs` (the keyed-memo and component-compare arms) while the flag
 > is on.
 
+> **Amended (2026-10-01): column.** With Route A retired, the "greatest common
+> denominator" argument for omitting a column no longer holds. `SourceLocation`
+> gained a third positional member, `int ColumnNumber` (1-based, `0` = unknown);
+> the generator stamps the column of the invoked method's name (the
+> open paren's when name and paren are on different lines, since the line follows
+> the paren). `ToString` and `ToShortString` are unchanged. On 64-bit the column fills existing padding, so the
+> struct stays 16 bytes; on x86 it grows from 8 to 12.
+
 **As shipped** (`src/Reactor/Core/SourceLocation.cs`, abridged — see the file for
 the full doc comments):
 
@@ -408,11 +416,9 @@ the full doc comments):
 
 /// <summary>
 /// Spec 010 — the C# source location that produced an Element.
-/// Deliberately (FilePath, LineNumber) and nothing more: the greatest common
-/// denominator of the two candidate providers, since CallerInfo cannot supply a
-/// column. An interceptor provider knows the column and may add it additively.
+/// ColumnNumber is 1-based (0 = unknown); the interceptor generator stamps it.
 /// </summary>
-public readonly record struct SourceLocation(string FilePath, int LineNumber)
+public readonly record struct SourceLocation(string FilePath, int LineNumber, int ColumnNumber)
 {
     public override string ToString() => $"{FilePath}:{LineNumber}";
 
@@ -639,7 +645,7 @@ When `--preview` is running with dev tools enabled, add an inspect mode:
 | Interceptor generator — generic factories | same | Medium |
 | Packaging: pack as analyzer + `InterceptorsNamespaces` opt-in in `build/Reactor.targets` | `.csproj` / `.targets` | Medium — **see hazard below** |
 | `InterceptsLocationAttribute` polyfill | generator | Small |
-| Runtime flag (`ReactorSourceMap`) + `NeedsTag` arm for unstamped elements | `Reconciler.cs` | Small |
+| Runtime flag (`ReactorSourceMap`); **no** `NeedsTag` arm for unstamped leaves (a stamped element is tagged via its extras bucket). Later amended (#1314): component-boundary wrappers (`Component`/`Func`/`Memo`) are tagged while the flag is on, one `ReactorState` per component | `Reconciler.cs` | Small |
 | ~~`SourceInfo` attached property~~ | — | **Deleted — redundant (§1.3)** |
 | ~~Reconciler mount hook~~ | — | **Deleted — redundant (§1.4)** |
 | Devtools §3.2 wiring: `NodeIdBuilder` rule 2, `SelectorResolver` ReactorSource arm, `includeReactorSource` | `Reactor.Devtools` | Medium |

@@ -490,7 +490,7 @@ public class OutputPathContainmentTests
     /// construction: each copy keeps compiling and keeps returning an answer.
     /// </para>
     /// <para>
-    /// The scope is <c>src/Reactor.Cli/Docs</c> deliberately.
+    /// The scope is <c>tools/Reactor.DocPipeline</c> deliberately.
     /// <c>Microsoft.UI.Reactor.Cli.Check.CompilationLoader</c> has its own
     /// <c>IsUnder</c>; it filters a file enumeration rather than deciding a
     /// write target, so it is out of scope for this PR. It is named here
@@ -511,7 +511,7 @@ public class OutputPathContainmentTests
     public void Containment_rule_has_exactly_one_implementation_in_the_doc_pipeline()
     {
         var docsDir = global::System.IO.Path.Join(
-            FindRepoRoot(), "src", "Reactor.Cli", "Docs");
+            FindRepoRoot(), "tools", "Reactor.DocPipeline");
 
         var sources = global::System.IO.Directory.GetFiles(
             docsDir, "*.cs", global::System.IO.SearchOption.AllDirectories);

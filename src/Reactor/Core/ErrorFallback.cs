@@ -14,6 +14,12 @@ namespace Microsoft.UI.Reactor.Core;
 /// message + stack + inner exception chain) so users can copy a usable repro
 /// without rerunning under a debugger.
 /// </summary>
+/// <remarks>
+/// This is the built-in default. Apps replace it through <see cref="RenderErrorHandler"/>
+/// (<see cref="ReactorApp.DefaultRenderErrorHandler"/>, <c>WindowSpec.RenderErrorHandler</c>,
+/// or a host's <c>RenderErrorHandler</c>); every call site goes through
+/// <see cref="RenderErrorDispatch"/>. (issue #1291)
+/// </remarks>
 internal static class ErrorFallback
 {
     private const string MonoFontStack = "Consolas, Cascadia Mono, Courier New";
@@ -81,4 +87,23 @@ internal static class ErrorFallback
                 IsTextSelectionEnabled = true,
                 FontFamily = WinRTCache.GetFontFamily(MonoFontStack),
             });
+
+    /// <summary>
+    /// Neutral text used when an app-configured <see cref="RenderErrorHandler"/> itself
+    /// fails. An app that configured a handler asked for the exception text to stay off
+    /// screen, so its failure must not fall back to the detailed fallback (issue #1291).
+    /// </summary>
+    internal const string SafeMessage = "Something went wrong.";
+
+    /// <summary>In-tree placeholder with no exception detail. See <see cref="SafeMessage"/>.</summary>
+    public static Element BuildSafeElement(Exception _) =>
+        TextBlock(SafeMessage) with { TextWrapping = TextWrapping.Wrap };
+
+    /// <summary>Host-level panel with no exception detail. See <see cref="SafeMessage"/>.</summary>
+    public static UIElement BuildSafePanel() =>
+        new WinUI.Border
+        {
+            Padding = new Thickness(16),
+            Child = new TextBlock { Text = SafeMessage, TextWrapping = TextWrapping.Wrap },
+        };
 }

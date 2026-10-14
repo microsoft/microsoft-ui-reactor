@@ -27,7 +27,7 @@ public sealed class ApplicationPersistedScope : IPersistedStateScope
     public static ApplicationPersistedScope Default { get; } = new(DefaultCapacity);
 
     private readonly LruCache<string, object?> _cache;
-    private readonly object _memPressureSync = new();
+    private readonly Lock _memPressureSync = new();
     private bool _memPressureRegistered;
     private bool _disposed;
 

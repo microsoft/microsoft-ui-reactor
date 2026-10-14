@@ -4,7 +4,7 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 
 /// <summary>
-/// Issue #989 filed <c>mur docs compile --no-screenshots</c> as the thing that
+/// Issue #989 filed <c>compile --no-screenshots</c> as the thing that
 /// replaced 103 committed screenshots with blank stubs. Phase 3 (capture) is the
 /// pipeline's only binary writer and the flag skips it outright, so the flag is
 /// non-destructive by construction — but "by construction" is exactly the kind
@@ -116,7 +116,7 @@ public class CompileCaptureSkipTests
 
     /// <summary>
     /// The failed-capture exit code must not depend on <c>--ci</c>. A local
-    /// <c>mur docs compile</c> that exits 0 after refreshing zero of N
+    /// <c>compile</c> that exits 0 after refreshing zero of N
     /// screenshots is exactly the silence issue #989 was reported through.
     /// </summary>
     [Fact]

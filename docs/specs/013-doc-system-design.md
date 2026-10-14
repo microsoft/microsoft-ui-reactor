@@ -291,6 +291,13 @@ Reactor already has `PreviewCaptureServer` which captures WinUI window frames vi
 4. **Crop** to the region specified in the manifest
 5. **Save** as PNG (higher quality than JPEG for docs)
 
+> **Update:** the pipeline no longer reads `/frame`. It still launches the doc app through the
+> preview host and switches components with `POST /preview`, but the pixels now come from
+> Windows Graphics Capture through the winapp UI Automation library, in-process (cropped to the
+> client area). `/frame` remains for other preview-host consumers. The pipeline itself moved
+> from `mur docs` to `tools/Reactor.DocPipeline`. See
+> [`docs/contributing/doc-pipeline.md`](../contributing/doc-pipeline.md).
+
 ### Region Types
 
 | Region | Behavior |

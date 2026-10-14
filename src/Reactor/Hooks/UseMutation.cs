@@ -164,7 +164,7 @@ internal sealed class MutationHookState<TInput, TResult> : IDisposable
     private readonly IHookDispatcher? _dispatcher;
     private readonly Action _requestRerender;
     private readonly CancellationTokenSource _unmountCts = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly Mutation<TInput, TResult> _handle;
 
     private int _pendingCount;

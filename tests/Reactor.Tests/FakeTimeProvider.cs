@@ -11,7 +11,7 @@ namespace Microsoft.UI.Reactor.Tests;
 /// </summary>
 internal sealed class FakeTimeProvider : TimeProvider
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private DateTimeOffset _now;
     private readonly List<FakeTimer> _timers = new();
 

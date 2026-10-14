@@ -350,6 +350,44 @@ opt-out for a deliberately bare title bar on an app that ships an icon.
 > `Assets\AppIcon.ico` — and deliberately wanted a bare title bar should add
 > `.NoIcon()` to keep that. Apps that set `.Icon(...)` explicitly are unaffected.
 
+### Caption button theme
+
+The system caption buttons (minimize, maximize, close) are window chrome, and WinUI does
+not carry an element's `RequestedTheme` through to them: an app that themes its content
+opposite to the system keeps system-themed buttons over its own title bar. Declare the
+matching caption theme with `.PreferredTheme(...)`:
+
+```csharp
+var titleBar = TitleBar("My app")
+    .PreferredTheme(isDark ? WindowTitleBarTheme.Dark : WindowTitleBarTheme.Light);
+
+return Border(VStack(titleBar, ToggleSwitch(isDark, setIsDark, header: "Dark mode")))
+    .RequestedTheme(isDark ? ElementTheme.Dark : ElementTheme.Light);
+```
+
+This writes `AppWindow.TitleBar.PreferredTheme` on mount and whenever the value changes.
+No effect is needed. It is opt-in, like WinUI: without a declaration Reactor
+never touches the caption theme, and a value you set on `AppWindow.TitleBar` yourself is
+left alone. Removing the declaration, or unmounting the title bar, restores the value the
+caption had before Reactor first applied one — the platform default, or whatever the app
+had set.
+
+The same knob exists on the spec, for windows without a `TitleBar(...)` element. It wins
+over the element's declaration when both are set, and — unlike the caption height — does
+not require content extension:
+
+```csharp
+public static WindowSpec Spec { get; } = new()
+{
+    Title = "My app",
+    TitleBarTheme = WindowTitleBarTheme.Dark,
+};
+```
+
+| API | Values |
+| --- | --- |
+| `WindowTitleBarTheme` | `Legacy`, `UseDefaultAppMode`, `Light`, `Dark` |
+
 ### Tall title bar
 
 A title bar that hosts navigation chrome — a back button, a pane toggle — uses the

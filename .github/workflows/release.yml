@@ -142,7 +142,7 @@ jobs:
           $tagVersion = '${{ steps.version.outputs.version }}'
           Write-Host "ReactorPublicVersion=$propVersion  tag version=$tagVersion"
           if ($propVersion -ne $tagVersion) {
-            Write-Error "Release tag version '$tagVersion' does not match ReactorPublicVersion '$propVersion' in Directory.Build.props. Before tagging, bump <ReactorPublicVersion> to '$tagVersion' and run: dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots  then commit the regenerated docs/guide."
+            Write-Error "Release tag version '$tagVersion' does not match ReactorPublicVersion '$propVersion' in Directory.Build.props. Before tagging, bump <ReactorPublicVersion> to '$tagVersion' and run: dotnet run --project tools/Reactor.DocPipeline -- compile --no-screenshots  then commit the regenerated docs/guide."
             exit 1
           }
 

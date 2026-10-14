@@ -11,6 +11,8 @@ namespace Microsoft.UI.Reactor.Docking.Native;
 //  Reactor element wrapper). The renderer maps:
 //    • DockTabGroup.Documents → TabViewItemData[] (Title, Content)
 //    • DockTabGroup.SelectedIndex → TabViewElement.SelectedIndex
+//    • DockTabGroup.CompactTabs → TabViewElement.TabWidthMode (never a
+//      mode that leaves an unselected tab blank; see ResolveTabWidthMode)
 //    • DockableContent.CanClose → IsClosable per tab
 //    • DockableContent.Title → Header (string; bidi via WinUI text engine)
 //
@@ -99,27 +101,7 @@ internal static class DockTabGroupRenderer
             return Border(null);
         }
 
-        // §2.8 — apply default tab styling based on content type when the
-        // user hasn't overridden it. All-ToolWindow groups switch to
-        // bottom-position + compact tabs (matches Office / VS tool pane
-        // convention); all-Document or mixed groups stay at the
-        // top-position + full-width default. "User hasn't overridden"
-        // means the group's TabPosition + CompactTabs match the record's
-        // own defaults (Top + non-compact) — apps that pass explicit
-        // values (even if same as defaults) on a ToolWindow group still
-        // get flipped, which is the desired behavior because the typed
-        // contract is that ToolWindow-only groups SHOULD look like a
-        // tool pane.
-        bool allToolWindow = true;
-        for (int i = 0; i < documents.Count; i++)
-        {
-            if (documents[i] is not ToolWindow) { allToolWindow = false; break; }
-        }
-        // TabPosition.Bottom isn't wired through TabViewElement yet — when a
-        // TabStripPlacement property lands, the all-ToolWindow flip applies
-        // here. For now only the CompactTabs flag is auto-resolved.
-        var atDefaults = group.TabPosition == TabPosition.Top && !group.CompactTabs;
-        var resolvedCompact = allToolWindow && atDefaults ? true : group.CompactTabs;
+        var resolvedCompact = ResolveCompactTabs(group);
 
         var tabs = new TabViewItemData[documents.Count];
         for (int i = 0; i < documents.Count; i++)
@@ -168,12 +150,11 @@ internal static class DockTabGroupRenderer
             },
             // §2.2 / §2.8: configurable tab width follows the resolved
             // CompactTabs flag (Equal is the WinUI default for editor
-            // groups; Compact matches the upstream DocumentGroup style
-            // for tool groups). All-ToolWindow groups auto-resolve to
-            // Compact unless the user set explicit non-default values.
-            TabWidthMode = resolvedCompact
-                ? TabViewWidthMode.Compact
-                : TabViewWidthMode.Equal,
+            // groups). All-ToolWindow groups auto-resolve to compact
+            // unless the user set explicit non-default values. Compact is
+            // realized as WinUI's icon-only Compact mode only when every
+            // tab has an icon; see ResolveTabWidthMode.
+            TabWidthMode = ResolveTabWidthMode(resolvedCompact, tabs),
             // Spec 045 §2.6 — when the immediate tear-off pipeline is
             // active on this group, WinUI's intra-strip reorder gesture
             // would otherwise fight our press hook (CanReorderTabs spawns
@@ -210,6 +191,63 @@ internal static class DockTabGroupRenderer
         foreach (var setter in BuildSetters(group, documents, onTabImmediateTearOff))
             element = element.Set(setter);
         return element;
+    }
+
+    /// <summary>
+    /// Spec 045 §2.8 — whether <paramref name="group"/> asks for compact
+    /// (tool-pane) tabs. A group whose panes are all <see cref="ToolWindow"/>s
+    /// and whose <see cref="DockTabGroup.TabPosition"/> and
+    /// <see cref="DockTabGroup.CompactTabs"/> still match the record defaults
+    /// (Top, non-compact) is flipped to compact, matching the Office / VS tool
+    /// pane convention. Otherwise the group's own
+    /// <see cref="DockTabGroup.CompactTabs"/> wins, so all-Document and mixed
+    /// groups keep full-width tabs.
+    /// </summary>
+    /// <remarks>
+    /// An app that passes the literal defaults on a ToolWindow-only group
+    /// still gets the flip: the typed contract is that ToolWindow-only groups
+    /// look like a tool pane. <see cref="TabPosition.Bottom"/> is not wired
+    /// through <see cref="TabViewElement"/> yet, so only the compact flag is
+    /// auto-resolved here.
+    /// </remarks>
+    internal static bool ResolveCompactTabs(DockTabGroup group)
+    {
+        ArgumentNullException.ThrowIfNull(group);
+
+        var documents = group.Documents;
+        for (int i = 0; i < documents.Count; i++)
+        {
+            if (documents[i] is not ToolWindow) return group.CompactTabs;
+        }
+        var atDefaults = group.TabPosition == TabPosition.Top && !group.CompactTabs;
+        return atDefaults || group.CompactTabs;
+    }
+
+    /// <summary>
+    /// Maps a resolved compact request onto a WinUI
+    /// <see cref="TabViewWidthMode"/> without ever producing a blank tab.
+    /// </summary>
+    /// <remarks>
+    /// WinUI's <see cref="TabViewWidthMode.Compact"/> collapses every
+    /// unselected tab to its icon alone. A tab without an icon then renders
+    /// as an empty, unlabeled stub, so <see cref="TabViewWidthMode.Compact"/>
+    /// is only chosen when every tab has one. Docking panes carry no icon
+    /// today, so a compact group resolves to
+    /// <see cref="TabViewWidthMode.SizeToContent"/>: each tab is as wide as
+    /// its title (plus pin/close buttons) rather than stretched to an equal
+    /// share of the strip, and every tab stays identifiable. Non-compact
+    /// groups keep <see cref="TabViewWidthMode.Equal"/>.
+    /// </remarks>
+    internal static TabViewWidthMode ResolveTabWidthMode(bool compact, IReadOnlyList<TabViewItemData> tabs)
+    {
+        ArgumentNullException.ThrowIfNull(tabs);
+
+        if (!compact) return TabViewWidthMode.Equal;
+        for (int i = 0; i < tabs.Count; i++)
+        {
+            if (string.IsNullOrEmpty(tabs[i].Icon)) return TabViewWidthMode.SizeToContent;
+        }
+        return TabViewWidthMode.Compact;
     }
 
     /// <summary>

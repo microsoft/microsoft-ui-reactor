@@ -68,22 +68,24 @@ public static class DockingNativeInterop
                 AutomationProperties.SetName(host,
                     DockingStrings.Get(DockingStringKeys.DockHostLandmark));
 
+                // Bind before the content renders: the host component files
+                // its chord delegates, model and drag gate under the element
+                // it renders, and they have to land under this host.
+                var state = new NativeHostState();
+                state.Identity.Bind(element);
+
                 var content = BuildContent(element);
                 var realized = rec.Reconcile(null, content, null, rerender);
                 host.Child = realized;
 
-                var state = new NativeHostState
-                {
-                    LastElement = element,
-                    LastContent = content,
-                };
+                state.LastContent = content;
                 NativeHostState.SetAttached(host, state);
 
                 // Spec 045 §2.10 — register the host Border with the
                 // live-region announcer so layout-state transitions
                 // (Close, Float, Pin, Dock) raise UIA notifications
-                // against this element. Re-registers on each
-                // DockManager-element instance change in `update`.
+                // against this element. The entry is the host's, so every
+                // DockManager instance the host renders resolves to it.
                 DockHostLiveAnnouncer.Register(element, host);
                 // Spec 045 §2.26 — register the host in the process-
                 // wide registry so MCP tools + devtools introspection
@@ -94,10 +96,8 @@ public static class DockingNativeInterop
 
                 // Spec 045 §2.10 — wire keyboard chord accelerators once
                 // at mount. Each accelerator's Invoked handler resolves the
-                // current chord delegates via DockChordBridge keyed by the
-                // *current* DockManager element (NativeHostState.LastElement).
-                // The component registers fresh delegates each render; the
-                // bridge entry's identity tracks the live element ref.
+                // chord delegates the component registered last, through
+                // the host's identity (NativeHostState.Identity).
                 AttachChordAccelerators(host);
                 return host;
             },
@@ -105,6 +105,12 @@ public static class DockingNativeInterop
             {
                 var state = NativeHostState.GetAttached(host)
                     ?? new NativeHostState();
+                // Bind before the content renders (see mount). Apps build a
+                // new DockManager on almost every render; binding each one to
+                // the host keeps one entry per host in every per-host table,
+                // which is what lets unmount find the floating windows opened
+                // under an earlier instance.
+                state.Identity.Bind(newEl);
 
                 var newContent = BuildContent(newEl);
                 var newChild = rec.Reconcile(state.LastContent, newContent, host.Child, rerender);
@@ -117,18 +123,13 @@ public static class DockingNativeInterop
                 if (!ReferenceEquals(host.Child, newChild))
                     host.Child = newChild;
 
-                // Refresh live-region binding to point at the new element
-                // ref. We do NOT clear the old ref's entry — apps that
-                // rebuild `new DockManager` each render leave a chain of
-                // refs that the ConditionalWeakTable reclaims as the GC
-                // collects each old element. Mirrors DockChordBridge /
-                // DockHostModelBridge so callers holding any past element
-                // ref can still resolve the host (matches the bridge
-                // contract sibling fixtures rely on).
+                // The announcer entry and the registry record belong to the
+                // host, so these refresh them rather than add entries for
+                // newEl: the record now names the element the host renders,
+                // and any element it rendered still resolves the host.
                 DockHostLiveAnnouncer.Register(newEl, host);
                 DockHostRegistry.Register(newEl);
 
-                state.LastElement = newEl;
                 state.LastContent = newContent;
                 NativeHostState.SetAttached(host, state);
                 return null;
@@ -140,21 +141,28 @@ public static class DockingNativeInterop
                 {
                     rec.Reconcile(state.LastContent, null, realized, static () => { });
                 }
-                if (state?.LastElement is { } el)
+                if (state is not null)
                 {
+                    // Clean up through the host's own identity, under which every
+                    // table files this host's entries, whichever DockManager
+                    // instance made them. Resolving it from the element the host
+                    // rendered last would not do: an app that keeps one
+                    // DockManager instance can hand it to a new host before this
+                    // one unmounts (a type change mounts the new child first), and
+                    // the element then resolves to the new host.
+                    var identity = state.Identity;
                     // Spec 045 §2.25 — close floating windows opened by
                     // this host so they don't outlive their DockManager.
-                    // Close fires asynchronously on the OS side; we also
-                    // clear the per-host tracker eagerly so the host can
-                    // be reused / re-mounted without stale references.
-                    foreach (var floating in DockFloatingTracker.SnapshotFor(el))
-                    {
+                    // Close fires asynchronously on the OS side; the host's
+                    // tracker set is dropped eagerly so the host can be
+                    // reused / re-mounted without stale references.
+                    foreach (var floating in DockFloatingTracker.TakeAllFor(identity))
                         floating.Close();
-                        DockFloatingTracker.UnregisterFor(el, floating);
-                    }
-                    DockChordBridge.Clear(el);
-                    DockHostLiveAnnouncer.Clear(el);
-                    DockHostRegistry.Unregister(el);
+                    DockChordBridge.Clear(identity);
+                    DockHostLiveAnnouncer.Clear(identity);
+                    DockHostModelBridge.Clear(identity);
+                    DockDragGateBridge.Clear(identity);
+                    DockHostRegistry.Unregister(identity);
                     // §2.10 — close any in-flight Ctrl+Tab navigator. The
                     // popup's global KeyUp/KeyDown handlers are attached
                     // to XamlRoot.Content and root the host Border via
@@ -202,7 +210,7 @@ public static class DockingNativeInterop
         ka.Invoked += (s, e) =>
         {
             var state = NativeHostState.GetAttached(host);
-            var handlers = DockChordBridge.Get(state?.LastElement);
+            var handlers = state is null ? null : DockChordBridge.Get(state.Identity);
             if (handlers is null) return;
             e.Handled = true;
             invoke(handlers);
@@ -221,7 +229,8 @@ public static class DockingNativeInterop
     /// <summary>Per-Border state attached to the native dock host control.</summary>
     private sealed class NativeHostState
     {
-        public DockManager? LastElement { get; set; }
+        /// <summary>The identity every DockManager this host renders is bound to.</summary>
+        public DockHostIdentity Identity { get; } = new();
         public Element? LastContent { get; set; }
 
         private static readonly ConditionalWeakTable<Border, NativeHostState> _table = new();

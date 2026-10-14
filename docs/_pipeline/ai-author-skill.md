@@ -2,7 +2,7 @@
 
 You are an AI technical writer generating documentation for **Microsoft.UI.Reactor (Reactor)**, a
 declarative UI framework for building native Windows apps in C#. Your output
-must work with the `mur docs compile` pipeline.
+must work with the `dotnet run --project tools/Reactor.DocPipeline -- compile` pipeline.
 
 ## Pipeline Overview
 
@@ -42,7 +42,7 @@ winui-ref: https://learn.microsoft.com/en-us/windows/apps/design/controls/...
 
 #### Tiers (`tier:` field)
 
-Every page declares one tier. The `mur docs compile --validate-only` lint
+Every page declares one tier. The `dotnet run --project tools/Reactor.DocPipeline -- compile --validate-only` lint
 enforces the structural checklist below. Pick the tier the page is *meant*
 to be; do not mark a page Comprehensive that doesn't meet the bar.
 
@@ -161,7 +161,7 @@ inline in prose — it is the only Reactor-specific syntax for cross-axis
 linking; everything else is standard XML doc `<see cref="..."/>` /
 `<seealso cref="..."/>` in the source.
 
-**Cross-link analyzer (`REACTOR_DOC_XLINK_001`)** — `mur docs compile`
+**Cross-link analyzer (`REACTOR_DOC_XLINK_001`)** — `dotnet run --project tools/Reactor.DocPipeline -- compile`
 walks every prose paragraph and flags any mention of a concept that has
 its own page when that mention is not already a link. The concept
 registry is built from (a) template titles, (b) optional
@@ -389,7 +389,7 @@ Rules:
 docs/_pipeline/diagrams/<topic>/<id>.mmd
 ```
 
-`mur docs compile` renders each `.mmd` to
+`dotnet run --project tools/Reactor.DocPipeline -- compile` renders each `.mmd` to
 `docs/guide/images/<topic>/<id>.svg` (content-hash cached so unchanged
 files don't re-render). Reference the rendered SVG with a normal
 Markdown image link:
@@ -401,12 +401,12 @@ Markdown image link:
 Scaffold a new diagram with:
 
 ```
-mur docs new-diagram architecture-overview render-loop
+dotnet run --project tools/Reactor.DocPipeline -- new-diagram architecture-overview render-loop
 ```
 
 This emits a starter `.mmd` with a placeholder graph. Iterate with
-`mur docs render-diagrams --topic architecture-overview` (no full
-compile required). Pass `--skip-diagrams` to `mur docs compile` for
+`dotnet run --project tools/Reactor.DocPipeline -- render-diagrams --topic architecture-overview` (no full
+compile required). Pass `--skip-diagrams` to `dotnet run --project tools/Reactor.DocPipeline -- compile` for
 fast inner-loop runs when you are only editing prose.
 
 A minimal Mermaid example for an Under-the-hood page:
@@ -475,7 +475,7 @@ block (no language tag) — not an SVG.
 - Alt text should describe what the screenshot shows, not what it is:
   "Todo list with two items checked off" not "Screenshot of todo app."
 - For fast screenshot-only iteration, run
-  `mur docs compile --topic <topic> --screenshots <id>[,<id>]` or pass full
+  `dotnet run --project tools/Reactor.DocPipeline -- compile --topic <topic> --screenshots <id>[,<id>]` or pass full
   refs such as `--screenshots docking/two-pane,docking/side-pin`.
 
 ### Tips Sections
@@ -920,5 +920,5 @@ doc to link from a reference page into the conceptual guide.
 - [ ] Tips are specific to Reactor, not generic programming advice
 - [ ] Page has a `## Next Steps` section with links to related and sequential topics
 - [ ] Readme links to all topic pages; all pages are reachable via link traversal
-- [ ] Run `mur docs compile --validate-only` to check all references resolve
+- [ ] Run `dotnet run --project tools/Reactor.DocPipeline -- compile --validate-only` to check all references resolve
 - [ ] Run `python -m mkdocs build --strict` — the publish step and PR CI both use it; a broken cross-link or missing heading anchor aborts the build. Fix the link, don't silence the check.

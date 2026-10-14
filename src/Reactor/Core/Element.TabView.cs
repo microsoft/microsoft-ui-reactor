@@ -99,6 +99,7 @@ public partial record TabViewElement
                     IsClosable = item.IsClosable,
                     Content = mounted,
                 };
+                Reconciler.SyncTabAutomationName(tvi, oldTab: null, item);
                 if (item.Icon is not null) tvi.IconSource = V1.IconResolver.ResolveIconSource(item.Icon);
                 return tvi;
             },
@@ -120,6 +121,7 @@ public partial record TabViewElement
                 {
                     tvi.Header = newItem.Header;
                 }
+                Reconciler.SyncTabAutomationName(tvi, oldItem, newItem);
 
                 if (tvi.IsClosable != newItem.IsClosable) tvi.IsClosable = newItem.IsClosable;
                 if (!Equals(newItem.Icon, oldItem.Icon))

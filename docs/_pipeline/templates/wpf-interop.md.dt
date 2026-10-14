@@ -31,10 +31,11 @@ an `HwndHost` subclass:
 
 Inside the island, the WinUI element you mount is a `ReactorHostControl`.
 
-> **`ReactorHostControl` has no `ComponentType` property.** That property
-> belongs to the WinForms `XamlIslandControl` wrapper, not to the host
-> control itself. On the WinUI side, set `ComponentFactory` (parameterless
-> components) or call `Mount(component)` / `Mount(renderFunc)`.
+> **Set the root from code here.** The island's content is built in C#, so give the
+> `ReactorHostControl` a `ComponentFactory` (parameterless components) or call
+> `Mount(component)` / `Mount(renderFunc)`. Its `ComponentType` property is the
+> markup form, for a host declared in a WinUI XAML page; the WinForms
+> `XamlIslandControl` wrapper has its own, separate `ComponentType`.
 
 ```csharp snippet="wpf-interop/mount-directly"
 ```

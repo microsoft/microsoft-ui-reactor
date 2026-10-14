@@ -2,6 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Reactor.Hooks;
+using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Input;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI;
@@ -276,6 +277,43 @@ class FlakyComponent : Component
     }
 }
 // </snippet:error-boundary-retry>
+
+// <snippet:render-error-handler>
+static class RenderErrorHandlerSetup
+{
+    public static void Configure(WindowSpec settingsSpec, ReactorHost host)
+    {
+        // App-wide default, consulted by every host without its own handler,
+        // including windows opened later, tray flyouts and ReactorHostControl embeds.
+        ReactorApp.DefaultRenderErrorHandler = error =>
+        {
+            Telemetry.Record(error.Exception);   // de-duplicated: see Telemetry below
+            return TextBlock("Something went wrong.");
+        };
+
+        // Per window, applied before the window's first render.
+        ReactorApp.OpenWindow(
+            settingsSpec with { RenderErrorHandler = error => TextBlock($"Settings could not load ({error.Source}).") },
+            _ => TextBlock("Settings"));
+
+        // Per host (ReactorHost or ReactorHostControl).
+        host.RenderErrorHandler = _ => null;   // null keeps the built-in fallback
+    }
+}
+
+static class Telemetry
+{
+    // The handler runs again each time a failing component re-renders, so record each
+    // exception once. The weak table lets recorded exceptions be collected.
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Exception, object> Recorded = new();
+
+    public static void Record(Exception exception)
+    {
+        if (Recorded.TryAdd(exception, Recorded))
+            System.Diagnostics.Debug.WriteLine(exception);
+    }
+}
+// </snippet:render-error-handler>
 
 // <snippet:snap-back>
 class SnapBackDemo : Component

@@ -27,7 +27,7 @@ namespace Microsoft.UI.Reactor.Core.Internal;
 /// </remarks>
 internal sealed class LruCache<TKey, TValue> where TKey : notnull
 {
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private readonly Dictionary<TKey, LinkedListNode<KeyValuePair<TKey, TValue>>> _map;
     private readonly LinkedList<KeyValuePair<TKey, TValue>> _order;
     private int _capacity;

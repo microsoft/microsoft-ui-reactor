@@ -17,12 +17,12 @@ namespace Microsoft.UI.Reactor.Docking.Native;
 //  accelerators directly on the existing Border keeps the visual tree
 //  shape identical to the pre-§2.10 baseline.
 //
-//  ConditionalWeakTable keys on the DockManager *element instance* —
-//  apps that rebuild `new DockManager { … }` on every render rotate
-//  through entries; the table is GC-rooted via Reactor's element
-//  retention until unmount. Mount/update handlers in the interop layer
-//  hold a live ref to the current element, so the bridge entry is
-//  reachable for the lifetime of the host.
+//  The table is keyed by the host (DockHostIdentity), not by the
+//  DockManager *element instance*. Apps that rebuild `new DockManager
+//  { … }` on every render hand the host a new instance each time; keyed by
+//  instance, each render's delegates sat under a key of their own and
+//  unmount cleared only the last. Any instance the host rendered now
+//  resolves to the latest delegates, and unmount clears them.
 // ════════════════════════════════════════════════════════════════════════
 
 internal static class DockChordBridge
@@ -46,19 +46,20 @@ internal static class DockChordBridge
         Action<int>? OpenNavigator = null,
         Action? OpenHiddenPicker = null);
 
-    private static readonly ConditionalWeakTable<DockManager, Handlers> _table = new();
+    private static readonly ConditionalWeakTable<object, Handlers> _table = new();
 
-    public static void Set(DockManager element, Handlers handlers)
-    {
-        _table.Remove(element);
-        _table.Add(element, handlers);
-    }
+    public static void Set(DockManager element, Handlers handlers) =>
+        _table.AddOrUpdate(DockHostIdentity.KeyFor(element), handlers);
 
-    public static Handlers? Get(DockManager? element)
-    {
-        if (element is null) return null;
-        return _table.TryGetValue(element, out var h) ? h : null;
-    }
+    public static Handlers? Get(DockManager? element) =>
+        element is null ? null : Lookup(DockHostIdentity.KeyFor(element));
 
-    public static void Clear(DockManager element) => _table.Remove(element);
+    /// <summary>The delegates <paramref name="host"/>'s component registered last.</summary>
+    public static Handlers? Get(DockHostIdentity host) => Lookup(host);
+
+    public static void Clear(DockManager element) => _table.Remove(DockHostIdentity.KeyFor(element));
+
+    public static void Clear(DockHostIdentity host) => _table.Remove(host);
+
+    private static Handlers? Lookup(object key) => _table.TryGetValue(key, out var h) ? h : null;
 }

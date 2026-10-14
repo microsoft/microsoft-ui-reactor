@@ -62,7 +62,7 @@ internal sealed class WindowMessageMonitor : IDisposable
     // a regression that creates monitors in a tight loop without disposing.
     private const nuint SubclassIdMaxBeforeWarn = (nuint)int.MaxValue;
     private static nuint s_nextSubclassId = 1001;
-    private static readonly object s_subclassIdLock = new();
+    private static readonly Lock s_subclassIdLock = new();
 
     /// <summary>The HWND being monitored.</summary>
     public nint Hwnd => _hwnd;

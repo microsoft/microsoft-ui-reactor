@@ -47,13 +47,21 @@ public class CliHelpNamingTests
         Assert.Contains(expected, stdout);
     }
 
+    /// <summary>
+    /// The doc pipeline is no longer part of <c>mur</c>: its usage line names the
+    /// <c>dotnet run</c> invocation, and that invocation's project must be the assembly
+    /// the command lives in, so the help cannot point at a project that was renamed.
+    /// </summary>
     [Fact]
-    public void DocsHelp_UsageLineNamesShippedToolCommand()
+    public void DocsHelp_UsageLineNamesThePipelineProject()
     {
         var (exitCode, stdout, _) = Capture(() => DocsCommand.Run(["--help"]));
 
         Assert.Equal(0, exitCode);
-        Assert.Contains($"Usage: {Tool} docs ", stdout);
+        Assert.Contains($"Usage: {DocsCommand.Invocation} ", stdout);
+        var pipelineAssembly = typeof(DocsCommand).Assembly.GetName().Name!;
+        Assert.Contains($"--project tools/{pipelineAssembly} --", DocsCommand.Invocation);
+        Assert.DoesNotContain($"{Tool} docs", stdout);
     }
 
     [Fact]
@@ -66,12 +74,12 @@ public class CliHelpNamingTests
     }
 
     [Fact]
-    public void UnknownDocsSubcommand_ErrorNamesShippedToolCommand()
+    public void UnknownDocsSubcommand_ErrorNamesThePipelineInvocation()
     {
         var (exitCode, _, stderr) = Capture(() => DocsCommand.Run(["no-such-subcommand"]));
 
         Assert.Equal(1, exitCode);
-        Assert.Contains($"Unknown command: {Tool} docs no-such-subcommand", stderr);
+        Assert.Contains($"Unknown command: {DocsCommand.Invocation} no-such-subcommand", stderr);
     }
 
     /// <summary>

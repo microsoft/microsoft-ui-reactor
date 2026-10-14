@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Diagnostics;
 using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Xaml;
@@ -160,6 +161,19 @@ internal sealed class App : Component
             setScan($"{mapped} of {total} controls mapped\n\n{string.Join("\n", lines)}");
         }
 
+        void OnListHosts()
+        {
+            var lines = new List<string>();
+            // <snippet:list-hosts>
+            foreach (var host in ReactorDiagnostics.GetHosts())
+            {
+                var root = host.RootComponentName ?? host.RootRenderFunctionName ?? "(not mounted)";
+                lines.Add($"{host.Kind} {host.ReactorWindow?.Key} <{root}> at {host.MountSite}");
+            }
+            // </snippet:list-hosts>
+            setScan(lines.Count == 0 ? "(no live hosts)" : string.Join("\n", lines));
+        }
+
         return VStack(
             Heading("Reactor source map explorer"),
             TextBlock("Click anything on the left. Every element below is a plain display leaf — no callbacks, no keys.")
@@ -173,7 +187,8 @@ internal sealed class App : Component
                     setScan(null);
                 }),
                 Button("Scan visual tree", OnScan),
-                Button("Inspect deepest leaf", OnInspectDeepest)
+                Button("Inspect deepest leaf", OnInspectDeepest),
+                Button("List hosts", OnListHosts)
             ).Spacing(8),
 
             HStack(

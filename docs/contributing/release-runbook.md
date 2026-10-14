@@ -7,7 +7,7 @@ This runbook describes how to prepare and trigger a public Microsoft.UI.Reactor 
 Releases are **tag-driven**, but pushing a tag only *starts* the pipelines — it does **not** publish to NuGet.org. The two steps people most often miss (the approval gate and the two-person rule) are called out below.
 
 1. **Pre-flight** — pick the next `v0.1.0-preview.N` and confirm the tag, GitHub release, and the four NuGet packages don't already exist (`git tag --list`, `gh release view`, NuGet.org).
-2. **Prep PR (bump one property + recompile docs)** — bump `<ReactorPublicVersion>` in the root `Directory.Build.props` to the version you're about to tag, run `mur docs compile --skip-screenshots --skip-diagrams`, and commit the regenerated `docs/guide` pages. That single property is the source of truth: the guide's `{{reactorVersion}}` token and the template's `MicrosoftUIReactorVersion` fallback both derive from it, and `README.md` is version-agnostic (no sweep needed). CI's docs freshness gate fails the PR if you bump the property without recompiling. Land a PR, merge to `main`.
+2. **Prep PR (bump one property + recompile docs)** — bump `<ReactorPublicVersion>` in the root `Directory.Build.props` to the version you're about to tag, run `dotnet run --project tools/Reactor.DocPipeline -- compile --skip-screenshots --skip-diagrams`, and commit the regenerated `docs/guide` pages. That single property is the source of truth: the guide's `{{reactorVersion}}` token and the template's `MicrosoftUIReactorVersion` fallback both derive from it, and `README.md` is version-agnostic (no sweep needed). CI's docs freshness gate fails the PR if you bump the property without recompiling. Land a PR, merge to `main`.
 3. **Tag `main`** — `git checkout main && git pull`, then `git tag -a v<version> -m "Release <version>"` and `git push origin v<version>`. This starts the GitHub `Package` workflow and the OneBranch official pipeline, and publishes the versioned docs site (see [Versioned documentation site](#versioned-documentation-site)).
 4. **Publish (gated)** — the tag push does **not** publish to NuGet.org. Approve the OneBranch `Production_PublishNuGet` stage, then verify the packages appear on NuGet.org.
 5. **Two-person rule** — the publish approver **must be a different person than whoever pushed the tag** (a self-approval is rejected by the compliance gate). Line up a second approver *before* you tag.
@@ -88,9 +88,9 @@ That one property feeds every version-bearing surface, so there is **no `rg` swe
 per-file bump**:
 
 - **Guide docs** — `docs/_pipeline/templates/*.md.dt` reference the version through the
-  `{{reactorVersion}}` token, which `mur docs compile` substitutes from this property.
+  `{{reactorVersion}}` token, which `dotnet run --project tools/Reactor.DocPipeline -- compile` substitutes from this property.
 - **README** — is deliberately version-agnostic (it names no version and links to NuGet /
-  Releases), so it needs no edit at all and `mur docs compile` never touches it.
+  Releases), so it needs no edit at all and `dotnet run --project tools/Reactor.DocPipeline -- compile` never touches it.
 
 Project scaffolding is **not** released from this repo. The `dotnet new reactor` templates ship
 in the Windows App SDK template pack (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`), versioned
@@ -115,7 +115,7 @@ generated `docs/guide/` files directly). Use a full compile for release-prep cha
 some pages (for example `getting-started`) pull snippets from other topics:
 
 ```powershell
-mur docs compile --skip-screenshots --skip-diagrams
+dotnet run --project tools/Reactor.DocPipeline -- compile --skip-screenshots --skip-diagrams
 ```
 
 ## Validate the release PR

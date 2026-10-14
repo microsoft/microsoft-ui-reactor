@@ -1027,7 +1027,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     // creates a forced gutter between adjacent columns so content — including
     // right-aligned numbers and colored pills — can't visually merge into the
     // neighbor cell.
-    private const double CellPadLeft = 8, CellPadTop = 4, CellPadRight = 12, CellPadBottom = 4;
+    internal const double CellPadLeft = 8, CellPadTop = 4, CellPadRight = 12, CellPadBottom = 4;
 
     private static Element RenderCell(
         FieldDescriptor col, object? value, TypeRegistry registry)
@@ -1070,9 +1070,9 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             editor = registry.ResolveEditor(col.FieldType, EditorTier.Standard);
 
         if (editor is not null)
-            return editor(currentValue!, v => state.UpdateEditingValue(v)).Padding(2);
+            return DataGridEditorAlignment.AlignWithCell(editor(currentValue!, v => state.UpdateEditingValue(v)));
 
-        return TextBox(currentValue?.ToString() ?? "", s => state.UpdateEditingValue(s)).Padding(2);
+        return DataGridEditorAlignment.AlignWithCell(TextBox(currentValue?.ToString() ?? "", s => state.UpdateEditingValue(s)));
     }
 
     private static Element RenderRowEditingCell(
@@ -1088,9 +1088,9 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
 
         var colName = col.Name;
         if (editor is not null)
-            return editor(currentValue!, v => state.UpdateRowEditValue(colName, v)).Padding(2);
+            return DataGridEditorAlignment.AlignWithCell(editor(currentValue!, v => state.UpdateRowEditValue(colName, v)));
 
-        return TextBox(currentValue?.ToString() ?? "", s => state.UpdateRowEditValue(colName, s)).Padding(2);
+        return DataGridEditorAlignment.AlignWithCell(TextBox(currentValue?.ToString() ?? "", s => state.UpdateRowEditValue(colName, s)));
     }
 
     // ── Editor focus (#976) ─────────────────────────────────────────

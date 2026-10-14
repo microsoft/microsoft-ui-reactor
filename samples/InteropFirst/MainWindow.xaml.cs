@@ -44,13 +44,10 @@ public sealed partial class MainWindow : Window
             AddCommand: ViewModel.AddCommand,
             DeleteCommand: ViewModel.DeleteCommand);
 
-        // Place the ReactorHostControl in code-behind. WinAppSDK 2.0 preview's
-        // XAML compiler trips when the control appears directly in markup;
-        // this is the same pattern the ReactorHostControlDemo uses.
-        var reactorHost = new ReactorHostControl();
-        reactorHost.Mount(_ =>
+        // The host is declared in MainWindow.xaml; mount its root here because the
+        // root is a render function that reads this window's ViewModel.
+        ReactorHost.Mount(_ =>
             Factories.Component<OrdersDataGrid, OrdersDataGridProps>(props));
-        ReactorHostContainer.Child = reactorHost;
 
         Closed += OnClosed;
     }

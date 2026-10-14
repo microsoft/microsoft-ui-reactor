@@ -147,16 +147,12 @@ examples that fit this shape.
 ## The `mur` CLI
 
 `mur` is Reactor's repo-aware command-line tool. It is the canonical
-entry point for the doc pipeline, the localization workflow, the
-devtools server, and a handful of repo-maintenance utilities. The
-subcommands map one-to-one to the workflows below.
+entry point for the localization workflow, the devtools server, and a
+handful of repo-maintenance utilities. The subcommands map one-to-one to
+the workflows below.
 
 | Subcommand | Purpose | Common invocation |
 |------------|---------|-------------------|
-| `mur docs compile` | Compile the docset (templates + doc apps → `docs/guide/`) | `mur docs compile` |
-| `mur docs check-tier` | Run only the tier lint, without cross-link / reference / emit | `mur docs check-tier --topic hooks` |
-| `mur docs render-diagrams` | Render `.mmd` Mermaid diagrams to `.svg` for fast inner-loop iteration | `mur docs render-diagrams --topic architecture-overview` |
-| `mur docs new-diagram <topic> <id>` | Scaffold a new Mermaid `.mmd` for a topic | `mur docs new-diagram hooks slot-table` |
 | `mur loc` | Run the localization pipeline (`extract`, `translate`, `validate`, `status`, `prune`) | `mur loc extract` |
 | `mur devtools` | Launch the project with `--devtools run`, supervise reloads, and host the MCP endpoint | `mur devtools` |
 | `mur check` | Repo-health checks (cref validity, namespace policy, "did you mean" suggestions) | `mur check` |
@@ -178,7 +174,12 @@ prints the embedded `SKILL.md` agent reference, `mur --api` prints the
 `reactor.api.txt` signatures index, and `mur --regen-api` regenerates
 that index from a source checkout.
 
-`mur docs compile` is the workflow you reach for most often. See
+The doc pipeline is not part of `mur`: it is a contributor tool for the
+Reactor repository, run from a checkout with
+`dotnet run --project tools/Reactor.DocPipeline -- <command>`. Its
+commands are `compile` (templates + doc apps → `docs/guide/`, the one you
+reach for most often), `check-tier` (tier lint only), `render-diagrams`
+and `new-diagram`. See
 [the doc-pipeline contributor guide](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/contributing/doc-pipeline.md)
 for the full surface and the `--validate-only`, `--no-screenshots`
 (alias `--skip-screenshots`), `--skip-diagrams`, `--no-build`,
@@ -233,7 +234,6 @@ a side panel that:
   or `.XYFocusDown` — and flags reference cycles and perpetually-null
   (unresolved) references as diagnostics. See
   [focus &amp; input internals](focus-and-input-internals.md).
-- Exposes a "compile docs" button that shells out to `mur docs compile`.
 
 The extension talks to the MCP endpoint (above), so a panel session is
 just a long-lived `mur devtools` process plus a UI on top. Reactor has

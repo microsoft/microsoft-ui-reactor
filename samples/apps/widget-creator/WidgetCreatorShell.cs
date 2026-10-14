@@ -51,8 +51,8 @@ public sealed class WidgetCreatorShell : Component
     readonly CopilotSdkClient _client;
     readonly GenerationPipeline _pipeline;
     readonly SemaphoreSlim _operationGate = new(1, 1);
-    readonly object _sourceGate = new();
-    readonly object _logGate = new();
+    readonly Lock _sourceGate = new();
+    readonly Lock _logGate = new();
     string _sourceText = "";
     string _logText = "";
 

@@ -21,10 +21,12 @@ namespace Microsoft.UI.Reactor.Docking.Native;
 //  element's AutomationPeer is the supported alternative — same UIA
 //  behavior, zero visual-tree changes.
 //
-//  The bridge is keyed by `DockManager` element instance, paralleling
-//  `DockChordBridge` and `DockHostModelBridge`. The interop layer's
-//  mount handler registers the host Border; the renderer's event paths
-//  invoke `Announce(manager, text)` to fire a polite notification.
+//  The bridge is keyed by the host (DockHostIdentity), paralleling
+//  `DockChordBridge` and `DockHostModelBridge`, so every `DockManager`
+//  instance the host rendered resolves to the host Border until unmount
+//  clears it. The interop layer's mount handler registers the host Border;
+//  the renderer's event paths invoke `Announce(manager, text)` to fire a
+//  polite notification.
 // ════════════════════════════════════════════════════════════════════════
 
 internal static class DockHostLiveAnnouncer
@@ -43,15 +45,14 @@ internal static class DockHostLiveAnnouncer
     /// </summary>
     private const string DockingCategory = "Docking";
 
-    private static readonly ConditionalWeakTable<DockManager, FrameworkElement> _table = new();
+    private static readonly ConditionalWeakTable<object, FrameworkElement> _table = new();
 
-    public static void Register(DockManager element, FrameworkElement host)
-    {
-        _table.Remove(element);
-        _table.Add(element, host);
-    }
+    public static void Register(DockManager element, FrameworkElement host) =>
+        _table.AddOrUpdate(DockHostIdentity.KeyFor(element), host);
 
-    public static void Clear(DockManager element) => _table.Remove(element);
+    public static void Clear(DockManager element) => _table.Remove(DockHostIdentity.KeyFor(element));
+
+    public static void Clear(DockHostIdentity host) => _table.Remove(host);
 
     /// <summary>
     /// Fires a polite UIA notification on the host element registered for
@@ -62,7 +63,7 @@ internal static class DockHostLiveAnnouncer
     public static void Announce(DockManager? element, string message)
     {
         if (element is null || string.IsNullOrEmpty(message)) return;
-        if (!_table.TryGetValue(element, out var host) || host is null) return;
+        if (!_table.TryGetValue(DockHostIdentity.KeyFor(element), out var host) || host is null) return;
         var dq = host.DispatcherQueue;
         if (dq is null || dq.HasThreadAccess)
         {
@@ -81,7 +82,7 @@ internal static class DockHostLiveAnnouncer
     public static FrameworkElement? GetHost(DockManager? element)
     {
         if (element is null) return null;
-        return _table.TryGetValue(element, out var host) ? host : null;
+        return _table.TryGetValue(DockHostIdentity.KeyFor(element), out var host) ? host : null;
     }
 
     /// <summary>

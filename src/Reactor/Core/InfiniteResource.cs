@@ -63,7 +63,7 @@ public sealed record InfiniteResourceOptions(
 /// </remarks>
 public sealed class InfiniteResource<TItem>
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     // Page index → page payload or "in flight" marker.
     private readonly Dictionary<int, PageSlot> _pages = new();

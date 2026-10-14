@@ -2,6 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting.Persistence;
 using Microsoft.UI.Reactor.Navigation;
+using Microsoft.UI.Xaml;
 using static Microsoft.UI.Reactor.Factories;
 
 // <snippet:run>
@@ -448,6 +449,33 @@ static class TallTitleBarSpec
         TitleBarHeight = WindowTitleBarHeight.Tall,
     };
     // </snippet:title-bar-height-spec>
+}
+
+class ThemedCaptionWindow : Component
+{
+    public override Element Render()
+    {
+        var (isDark, setIsDark) = UseState(false);
+
+        // <snippet:title-bar-theme>
+        var titleBar = TitleBar("My app")
+            .PreferredTheme(isDark ? WindowTitleBarTheme.Dark : WindowTitleBarTheme.Light);
+
+        return Border(VStack(titleBar, ToggleSwitch(isDark, setIsDark, header: "Dark mode")))
+            .RequestedTheme(isDark ? ElementTheme.Dark : ElementTheme.Light);
+        // </snippet:title-bar-theme>
+    }
+}
+
+static class ThemedCaptionSpec
+{
+    // <snippet:title-bar-theme-spec>
+    public static WindowSpec Spec { get; } = new()
+    {
+        Title = "My app",
+        TitleBarTheme = WindowTitleBarTheme.Dark,
+    };
+    // </snippet:title-bar-theme-spec>
 }
 
 // <snippet:title-bar-tall-legacy>

@@ -47,7 +47,7 @@ internal static class Issue717ExtentPinFixtures
     private const double ViewportHeight = 240;
     private const double InlineHeight = 90;
 
-    private static Element BuildContent(int n, Action bump)
+    private static Element BuildContent(int n, Action bump, Action<RichTextBlock, int>? rtbSetter = null)
     {
         // Several inline-UI-bearing paragraphs (fixed-height borders) interleaved with
         // narration, so there is real scrollable height and a large combined inline-UI
@@ -66,10 +66,13 @@ internal static class Issue717ExtentPinFixtures
                         "tall enough to scroll well past the viewport."));
         }
 
+        var rtbElement = RichTextBlock(paras) with { IsTextSelectionEnabled = true };
+        if (rtbSetter is not null)
+            rtbElement = rtbElement.Set(rtb => rtbSetter(rtb, n));
+
         return VStack(8.0,
             Button("MutatePin717", bump),
-            ScrollViewer(
-                    (RichTextBlock(paras) with { IsTextSelectionEnabled = true }))
+            ScrollViewer(rtbElement)
                 .Height(ViewportHeight)
                 .Set(sv =>
                 {
@@ -183,6 +186,10 @@ internal static class Issue717ExtentPinFixtures
             bool clampWithoutPin =
                 sv.ScrollableHeight < preScrollable - 0.5 && sv.VerticalOffset < preOffset - 0.5;
             H.Check("Issue717_Collapse_UnpinnedClamps", clampWithoutPin);
+            // Gate (issue #1033): if the simulated collapse cannot reproduce the clamp,
+            // the pinned assertions below degenerate to `0 >= -1` / `|0 - 0| <= 2` and
+            // would report ok in exactly the world where the control is red.
+            if (!clampWithoutPin) return;
 
             // Restore the content and re-park, then repeat the collapse WITH the pin.
             for (int i = 0; i < inlineChildren.Count; i++) inlineChildren[i].Height = savedHeights[i];
@@ -222,16 +229,34 @@ internal static class Issue717ExtentPinFixtures
     /// <c>MinHeight</c> inflation (which would show as stale blank space below a block
     /// whose content legitimately shrank). After a real mutation the floor returns to
     /// the author's original MinHeight within a bounded number of rendered frames.
+    ///
+    /// <para><b>Why the pinned state is sampled from a setter (issue #1033).</b> The
+    /// release runs on <c>CompositionTarget.Rendering</c> two frames after the reconcile,
+    /// and nothing stops those frames from ticking while the fixture is suspended in
+    /// <c>await host.WaitForIdleAsync()</c>. Reading <c>MinHeight</c> after the await
+    /// therefore cannot tell "the pin raised and released the floor" from "the pin never
+    /// raised it" — both read the original value, so a broken pin reported green. A
+    /// read-only <c>.Set</c> observer runs after <c>UpdateRichTextBlocks</c> in the same
+    /// dispatcher turn as the pin, where no frame can interleave, and records the raised
+    /// floor and the pending release deterministically.</para>
     /// </summary>
     internal class Issue717_ExtentPinReleasesAfterContentRecovers(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
+            double floorInReconcile = double.NaN;
+            bool pendingInReconcile = false;
+
             var host = H.CreateHost();
             host.Mount(ctx =>
             {
                 var (n, setN) = ctx.UseState(0);
-                return BuildContent(n, () => setN(n + 1));
+                return BuildContent(n, () => setN(n + 1), (rtb, renderN) =>
+                {
+                    if (renderN != 1 || !double.IsNaN(floorInReconcile)) return;
+                    floorInReconcile = rtb.MinHeight;
+                    pendingInReconcile = Reconciler.IsInlineUiExtentPinPending(rtb);
+                });
             });
 
             await Harness.Render();
@@ -241,14 +266,30 @@ internal static class Issue717ExtentPinFixtures
             if (rtb is null) return;
 
             double originalMinHeight = rtb.MinHeight; // author default (0)
+            double fullHeight = rtb.ActualHeight;
 
+            int baseline = Reconciler.InlineUiPinEngagementCount;
             H.ClickButton("MutatePin717");
             await host.WaitForIdleAsync();
 
-            // Let the compositor frames the pin schedules its release on actually run.
-            await Harness.WaitFor(
-                () => Math.Abs(rtb.MinHeight - originalMinHeight) <= 0.5,
+            // Gate (issue #1033): the release assertion is meaningless unless the pin
+            // engaged, actually raised the floor above the original, and scheduled a
+            // release — otherwise MinHeight sits at the original value and "restored"
+            // passes with nothing exercised.
+            bool engaged = Reconciler.InlineUiPinEngagementCount > baseline;
+            H.Check("Issue717_Release_PinEngaged", engaged);
+            bool raised = floorInReconcile >= fullHeight - 1.0 && floorInReconcile > originalMinHeight + 0.5;
+            H.Check("Issue717_Release_FloorRaisedInReconcile", raised);
+            H.Check("Issue717_Release_ReleasePendingInReconcile", pendingInReconcile);
+            if (!engaged || !raised || !pendingInReconcile) return;
+
+            // The release was proven pending in-turn above, so this predicate turning (or
+            // already being) false means the frame-timed release has run for this block.
+            await Harness.WaitFor(() => !Reconciler.IsInlineUiExtentPinPending(rtb),
                 maxPasses: 90, perPassMs: 12);
+            bool released = !Reconciler.IsInlineUiExtentPinPending(rtb);
+            H.Check("Issue717_Release_ReleaseRan", released);
+            if (!released) return;
 
             H.Check("Issue717_PinReleasedAfterRecovery",
                 Math.Abs(rtb.MinHeight - originalMinHeight) <= 0.5);
@@ -261,16 +302,37 @@ internal static class Issue717ExtentPinFixtures
     /// after <c>UpdateRichTextBlocks</c> in the same reconcile, or on a later render), the
     /// deferred release must NOT overwrite that value with the pre-pin snapshot. The
     /// release restores only while the floor is still the exact value the pin raised.
+    ///
+    /// <para>The author write is a real <c>.Set</c> setter applied in the mutating
+    /// reconcile, so it lands in the same dispatcher turn as the pin — before any
+    /// compositor frame can run the release. The fixture previously wrote
+    /// <c>MinHeight</c> after <c>await host.WaitForIdleAsync()</c>, by which point the
+    /// release could already have fired on a loaded runner: <c>NoClobber_FloorRaised</c>
+    /// then went red intermittently (issue #1033 / PR #1316 CI), and in the same
+    /// interleaving the no-clobber assertion had nothing pending to clobber it.</para>
     /// </summary>
     internal class Issue717_PinReleaseDoesNotClobberAuthorMinHeight(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
+            const double authorMinHeight = 1234.0;
+            double floorInReconcile = double.NaN;
+            bool pendingInReconcile = false;
+
             var host = H.CreateHost();
             host.Mount(ctx =>
             {
                 var (n, setN) = ctx.UseState(0);
-                return BuildContent(n, () => setN(n + 1));
+                return BuildContent(n, () => setN(n + 1), (rtb, renderN) =>
+                {
+                    if (renderN < 1) return;
+                    if (double.IsNaN(floorInReconcile))
+                    {
+                        floorInReconcile = rtb.MinHeight;
+                        pendingInReconcile = Reconciler.IsInlineUiExtentPinPending(rtb);
+                    }
+                    rtb.MinHeight = authorMinHeight;
+                });
             });
 
             await Harness.Render();
@@ -287,22 +349,22 @@ internal static class Issue717ExtentPinFixtures
             H.ClickButton("MutatePin717");
             await host.WaitForIdleAsync();
 
-            // Prove the pin actually engaged and raised the floor, so the no-clobber
-            // assertion below cannot pass vacuously (e.g. if the pin never ran).
-            H.Check("Issue717_NoClobber_PinEngaged",
-                Reconciler.InlineUiPinEngagementCount > baseline);
-            H.Check("Issue717_NoClobber_FloorRaised", rtb.MinHeight >= fullHeight - 1.0);
+            // Prove the pin engaged, raised the floor, and had a release pending at the
+            // moment the author's value was written, so the no-clobber assertion below
+            // cannot pass vacuously. Gate on all three.
+            bool engaged = Reconciler.InlineUiPinEngagementCount > baseline;
+            H.Check("Issue717_NoClobber_PinEngaged", engaged);
+            bool raised = floorInReconcile >= fullHeight - 1.0;
+            H.Check("Issue717_NoClobber_FloorRaised", raised);
+            H.Check("Issue717_NoClobber_ReleasePendingAtAuthorWrite", pendingInReconcile);
+            if (!engaged || !raised || !pendingInReconcile) return;
 
-            // Simulate the author setting a fresh MinHeight while the pin is still pending,
-            // e.g. a `.Set(rtb => rtb.MinHeight = …)` modifier or a subsequent render.
-            const double authorMinHeight = 1234.0;
-            rtb.MinHeight = authorMinHeight;
-
-            // Pump a bounded number of render/compositor passes so the pin's scheduled
-            // release frames elapse (there is no condition to wait on — we are asserting a
-            // non-event, that the release does NOT fire a restore).
-            for (int i = 0; i < 30; i++)
-                await Harness.Render(12);
+            // Wait for the release to actually run, then assert it left the author's value.
+            await Harness.WaitFor(() => !Reconciler.IsInlineUiExtentPinPending(rtb),
+                maxPasses: 90, perPassMs: 12);
+            bool released = !Reconciler.IsInlineUiExtentPinPending(rtb);
+            H.Check("Issue717_NoClobber_ReleaseRan", released);
+            if (!released) return;
 
             // The release must leave the author's value intact, not restore the pre-pin floor.
             H.Check("Issue717_AuthorMinHeightNotClobbered",

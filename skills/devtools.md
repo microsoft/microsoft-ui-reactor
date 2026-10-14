@@ -95,6 +95,13 @@ code 42 to rebuild and relaunch. Useful if you've wired an external MCP
 client to `http://127.0.0.1:54931/mcp` and want it to survive code
 edits. Overkill for one-shot automation.
 
+If another process already holds the port when the app starts, the app
+exits with code 43. A port you pinned with `--mcp-port` is never moved:
+the supervisor reports the conflict and exits 43, so free the port or
+pick another. Without `--mcp-port`, the supervisor picks a new free port,
+prints `using MCP port N across reloads instead`, and relaunches. Take
+the endpoint from that line or the lockfile, not from the first one.
+
 ## Discovering the tool surface
 
 ```bash

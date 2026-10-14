@@ -61,6 +61,285 @@ public sealed partial class Reconciler : IDisposable
     // resolve their concrete brush against the correct effective theme at mount.
     private ElementTheme _ambientRequestedTheme = ElementTheme.Default;
     private int _errorBoundaryDepth;
+
+    /// <summary>
+    /// Component and error-boundary wrappers registered while an <see cref="ErrorBoundaryElement"/>
+    /// mounts or retries its child (issue #1291). <c>null</c> when no boundary is doing so,
+    /// so ordinary mounts pay nothing. When the child throws part-way, the partly built
+    /// subtree is discarded without ever being attached, so normal unmount can never reach
+    /// it; <see cref="RollBackBoundaryMount"/> uses this record to run its components' effect
+    /// cleanups instead of leaving their subscriptions alive until host disposal.
+    /// </summary>
+    private List<UIElement>? _boundaryMountJournal;
+
+    /// <summary>
+    /// Controls whose <see cref="Mount"/> completed while an <see cref="ErrorBoundaryElement"/>
+    /// mounts or retries its child (issue #1291), collapsed as they nest: when a mount
+    /// completes, the roots its children left are replaced by its own control, which reaches
+    /// them through the normal unmount walk. <c>null</c> when no boundary is doing so. After a
+    /// failure, the roots past the boundary's start are the completed subtrees the partly
+    /// built child left behind; <see cref="RollBackBoundaryMount"/> unmounts them, which tears
+    /// down everything a finished control registered (interaction states, keyframe and
+    /// scroll animations, reference edges, <c>.OnUnmount</c>, handler state), not only the
+    /// entries in <see cref="_boundaryMountJournal"/>.
+    /// </summary>
+    private List<UIElement>? _boundaryMountRoots;
+
+    /// <summary>What <see cref="BeginBoundaryMount"/> started and <see cref="EndBoundaryMount"/> restores.</summary>
+    private readonly record struct BoundaryMountRecord(
+        List<UIElement>? OuterJournal, List<UIElement> Journal, int RootsStart, bool OwnsRoots);
+
+    /// <summary>
+    /// Starts recording registrations and completed roots for a boundary's child.
+    /// </summary>
+    private BoundaryMountRecord BeginBoundaryMount()
+    {
+        var outer = _boundaryMountJournal;
+        var journal = new List<UIElement>();
+        _boundaryMountJournal = journal;
+        bool ownsRoots = _boundaryMountRoots is null;
+        _boundaryMountRoots ??= new List<UIElement>();
+        return new BoundaryMountRecord(outer, journal, _boundaryMountRoots.Count, ownsRoots);
+    }
+
+    /// <summary>
+    /// Restores the enclosing record. A child that mounted successfully belongs to the
+    /// enclosing boundary's subtree too, so its registrations move up: if that boundary's
+    /// child fails later, they are discarded with it.
+    /// </summary>
+    private void EndBoundaryMount(BoundaryMountRecord record)
+    {
+        _boundaryMountJournal = record.OuterJournal;
+        if (record.OuterJournal is not null && record.Journal.Count > 0)
+            record.OuterJournal.AddRange(record.Journal);
+        record.Journal.Clear();
+        if (record.OwnsRoots)
+            _boundaryMountRoots = null;
+    }
+
+    /// <summary>True when the boundary's child left anything to roll back.</summary>
+    private bool HasBoundaryMountLeftovers(BoundaryMountRecord record) =>
+        record.Journal.Count > 0 || (_boundaryMountRoots?.Count ?? 0) > record.RootsStart;
+
+    /// <summary>
+    /// Called when a <see cref="Mount"/> completes: its control replaces the roots its
+    /// children recorded, since unmounting it reaches them. No-op unless a boundary is
+    /// recording.
+    /// </summary>
+    private void NoteMountCompleted(int rootsStart, UIElement? control)
+    {
+        if (_boundaryMountRoots is not { } roots || rootsStart < 0) return;
+        if (roots.Count > rootsStart)
+            roots.RemoveRange(rootsStart, roots.Count - rootsStart);
+        if (control is not null)
+            roots.Add(control);
+    }
+
+    /// <summary>
+    /// Discards what a failed boundary child left behind, deepest first: unmounts the
+    /// subtrees that completed (see <see cref="_boundaryMountRoots"/>), then drops the
+    /// remaining wrappers of mounts that never completed from the node tables, running their
+    /// components' effect cleanups and their <c>.OnUnmount</c> actions and tearing down
+    /// navigation hosts. <paramref name="attachedChild"/> is the boundary's previous child on
+    /// a retry, which the caller unmounts itself: completed subtrees attached under it are
+    /// left to that unmount. Entries already handled by the normal unmount path are skipped,
+    /// so nothing runs twice. Every entry is processed even when one fails: failures are
+    /// logged, and one the app declined via <see cref="RenderError.Propagate"/> is rethrown
+    /// once all have run.
+    /// </summary>
+    private void RollBackBoundaryMount(BoundaryMountRecord record, UIElement? attachedChild)
+    {
+        var journal = record.Journal;
+        List<UIElement>? orphans = null;
+        if (_boundaryMountRoots is { } roots && roots.Count > record.RootsStart)
+        {
+            orphans = roots.GetRange(record.RootsStart, roots.Count - record.RootsStart);
+            roots.RemoveRange(record.RootsStart, orphans.Count);
+        }
+
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? propagated = null;
+        void OnCleanupError(Exception ex)
+        {
+            if (RenderErrorDispatch.IsPropagating(ex))
+                propagated ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+            else
+                _logger?.LogWarning(ex, "Teardown threw while discarding a failed ErrorBoundary child");
+        }
+
+        using (IsolateUnmountCleanupFailures(OnCleanupError))
+        {
+            if (orphans is not null)
+            {
+                for (int i = orphans.Count - 1; i >= 0; i--)
+                {
+                    var orphan = orphans[i];
+                    if (attachedChild is not null && IsAttachedUnder(orphan, attachedChild))
+                        continue;
+                    try
+                    {
+                        UnmountRecursive(orphan);
+                    }
+                    catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+                    {
+                        OnCleanupError(ex);
+                    }
+                }
+            }
+
+            for (int i = journal.Count - 1; i >= 0; i--)
+            {
+                var wrapper = journal[i];
+                _errorBoundaryNodes.Remove(wrapper);
+                if (_componentNodes.Remove(wrapper, out var node))
+                {
+                    if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                            global::System.Diagnostics.Tracing.EventLevel.Informational,
+                            Diagnostics.ReactorEventSource.Keywords.Lifecycle))
+                    {
+                        Diagnostics.ReactorEventSource.Log.ComponentUnmount(
+                            Diagnostics.ComponentNames.For(node.Component, node.Element));
+                    }
+                    if (node.DiagnosticId != 0)
+                        Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, wrapper);
+                    RunUnmountCleanups(node);
+                }
+                if (wrapper is FrameworkElement fe && _onUnmountActions.TryGetValue(fe, out var onUnmount))
+                {
+                    _onUnmountActions.Remove(fe);
+                    RunUnmountAction(onUnmount, fe);
+                }
+                if (_navigationHostNodes.ContainsKey(wrapper))
+                    CleanupNavigationHostNode(wrapper);
+            }
+        }
+        journal.Clear();
+        propagated?.Throw();
+    }
+
+    /// <summary>Records a registration made while a boundary child mounts; see <see cref="_boundaryMountJournal"/>.</summary>
+    internal void NoteBoundaryMountRegistration(UIElement control) => _boundaryMountJournal?.Add(control);
+
+    /// <summary>
+    /// When set, unmount runs every component cleanup and <c>.OnUnmount</c> action and hands
+    /// failures here instead of stopping at the first one (issue #1291). Used where a
+    /// teardown must complete regardless — replacing or releasing a tree for a render-error
+    /// outcome, and rolling back a failed boundary child — because the caller forgets the
+    /// tree afterwards and nothing could finish the job later. <c>null</c> keeps the normal
+    /// behaviour: the first failure escapes.
+    /// </summary>
+    private Action<Exception>? _unmountCleanupErrorSink;
+
+    internal IsolatedUnmountScope IsolateUnmountCleanupFailures(Action<Exception> onError)
+    {
+        var previous = _unmountCleanupErrorSink;
+        _unmountCleanupErrorSink = onError;
+        return new IsolatedUnmountScope(this, previous);
+    }
+
+    internal readonly struct IsolatedUnmountScope(Reconciler owner, Action<Exception>? previous) : IDisposable
+    {
+        public void Dispose() => owner._unmountCleanupErrorSink = previous;
+    }
+
+    private void RunUnmountCleanups(ComponentNode node)
+    {
+        if (_unmountCleanupErrorSink is { } sink)
+        {
+            node.Component?.Context.RunCleanupsIsolated(sink);
+            node.Context?.RunCleanupsIsolated(sink);
+        }
+        else
+        {
+            node.Component?.Context.RunCleanups();
+            node.Context?.RunCleanups();
+        }
+    }
+
+    private void RunUnmountAction(Action<FrameworkElement> onUnmount, FrameworkElement control)
+    {
+        if (_unmountCleanupErrorSink is not { } sink)
+        {
+            onUnmount(control);
+            return;
+        }
+        try
+        {
+            onUnmount(control);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            sink(ex);
+        }
+    }
+
+    // True when control sits in ancestor's subtree (logical parent first, then visual).
+    private static bool IsAttachedUnder(UIElement control, UIElement ancestor)
+    {
+        DependencyObject? current = control;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, ancestor)) return true;
+            current = (current as FrameworkElement)?.Parent ?? VisualTreeHelper.GetParent(current);
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// <see cref="RollBackBoundaryMount"/> for a child discarded because an exception is
+    /// escaping the boundary: cleanup failures are logged, never thrown, so they cannot
+    /// replace the exception that is already unwinding.
+    /// </summary>
+    private void RollBackDiscardedBoundaryMount(BoundaryMountRecord record, UIElement? attachedChild)
+    {
+        try
+        {
+            RollBackBoundaryMount(record, attachedChild);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            _logger?.LogWarning(ex, "Effect cleanup threw while discarding an ErrorBoundary child after an escaping exception");
+        }
+    }
+
+    /// <summary>
+    /// Supplies the owning host's effective <see cref="RenderErrorHandler"/> (issue #1291).
+    /// Set by <c>ReactorHost</c> / <c>ReactorHostControl</c>; a reconciler without a host
+    /// falls back to <see cref="ReactorApp.DefaultRenderErrorHandler"/>.
+    /// </summary>
+    internal Func<RenderErrorHandler?>? RenderErrorHandlerProvider { get; set; }
+
+    private RenderErrorHandler? ResolveRenderErrorHandler() =>
+        RenderErrorHandlerProvider is { } provider ? provider() : ReactorApp.DefaultRenderErrorHandler;
+
+    // Nesting depth of the public Reconcile / Mount entry points (issue #1291). The outermost
+    // entry — whichever a caller reaches first — opens a render-error propagation scope, so a
+    // standalone caller (no host render loop) cannot leave propagation markers behind;
+    // recursive mounts and nested passes just count.
+    private int _entryDepth;
+
+    private EntryFrame EnterFrame()
+    {
+        var scope = _entryDepth == 0 ? RenderErrorDispatch.EnterPropagationScope() : default;
+        _entryDepth++;
+        return new EntryFrame(this, scope);
+    }
+
+    private readonly struct EntryFrame(Reconciler owner, RenderErrorDispatch.PropagationScope scope) : IDisposable
+    {
+        public void Dispose()
+        {
+            scope.Dispose();
+            owner._entryDepth--;
+        }
+    }
+
+    /// <summary>In-tree placeholder for a component whose render or effect flush threw.</summary>
+    private Element BuildInTreeFallback(Exception ex, bool inEffects, string? componentName) =>
+        RenderErrorDispatch.BuildInTreeFallback(
+            ResolveRenderErrorHandler(),
+            new RenderError(ex, inEffects ? RenderErrorSource.Effects : RenderErrorSource.ComponentRender,
+                componentName, isHostLevel: false),
+            _logger);
     /// <summary>
     /// Active rerender-callback depth. Throws past
     /// <see cref="MaxRerenderReentrancy"/> so a component that synchronously
@@ -170,6 +449,13 @@ public sealed partial class Reconciler : IDisposable
     internal volatile bool ForceFullRenderPending;
     private bool _forceFullRenderActive;
 
+    // Diagnostics only: the next top-level pass is the retry a host schedules after a
+    // hot-reload hook-order recovery. That retry runs outside a hot-reload pass, so
+    // without this ComponentRendered would attribute its renders to their ordinary
+    // reasons, not "hotReload". Consumed by that pass; never changes render behaviour.
+    internal volatile bool HotReloadRetryPending;
+    private bool _hotReloadRetryActive;
+
     // True for the duration of a hot-reload force pass. Read by ChildReconciler's
     // positional fast path: while a force pass is active, untouched wrapper cells
     // (Component/Memo/Func) in a memoized range must still re-render through the
@@ -203,6 +489,80 @@ public sealed partial class Reconciler : IDisposable
     private HashSet<UIElement>? _dirtyAncestorPath;
     internal bool IsOnDirtyAncestorPath(UIElement? control) =>
         control is not null && _dirtyAncestorPath is { } set && set.Contains(control);
+
+    // For each control on the dirty-ancestor path, the child (a UIElement) or children (a
+    // List<UIElement>, when two self-triggered nodes share an ancestor) the path continues
+    // through. Built by the same walk as _dirtyAncestorPath and cleared with it. It lets
+    // ChildReconciler find which of a panel's children lead to pending work with one IndexOf
+    // per dirty child, so its skip arms never have to read every skipped sibling to ask.
+    private Dictionary<UIElement, object>? _dirtyPathChildren;
+
+    /// <summary>
+    /// Which children of <paramref name="parentControl"/>, held in
+    /// <paramref name="children"/>, lie on the dirty-ancestor path — the children a reconcile of
+    /// this container must descend into even when their elements are unchanged, because a
+    /// component below them updated its own state.
+    /// </summary>
+    /// <remarks>
+    /// Costs one field check when nothing in the pass self-triggered, and one hash lookup when
+    /// something did but this container is not above it. Otherwise each dirty child is located
+    /// with a single <see cref="IChildCollection.IndexOf"/>. When a dirty child can't be located
+    /// in <paramref name="children"/> (a descriptor whose collection is not the parent's own
+    /// <c>Children</c>), or the parent is unknown, the result asks the caller to test each
+    /// skip-eligible child's control instead: slower, but it never skips a pending component.
+    /// </remarks>
+    internal DirtyChildIndices ResolveDirtyChildIndices(UIElement? parentControl, IChildCollection children)
+    {
+        if (_dirtyAncestorPath is not { Count: > 0 } path)
+            return default;
+        if (parentControl is null)
+            return DirtyChildIndices.ProbeEachChild;
+        if (!path.Contains(parentControl))
+            return default;
+        // On the path with no recorded child: the parent is itself a self-triggered control,
+        // and nothing below it is pending.
+        if (_dirtyPathChildren is null || !_dirtyPathChildren.TryGetValue(parentControl, out var recorded))
+            return default;
+
+        if (recorded is UIElement single)
+        {
+            int index = children.IndexOf(single);
+            return index >= 0 ? DirtyChildIndices.At(index) : DirtyChildIndices.ProbeEachChild;
+        }
+
+        var many = (List<UIElement>)recorded;
+        var indices = new int[many.Count];
+        for (int k = 0; k < many.Count; k++)
+        {
+            int index = children.IndexOf(many[k]);
+            if (index < 0)
+                return DirtyChildIndices.ProbeEachChild;
+            indices[k] = index;
+        }
+        return DirtyChildIndices.AtAll(indices);
+    }
+
+    private static void AddDirtyPathChild(Dictionary<UIElement, object> edges, UIElement parent, UIElement child)
+    {
+        if (!edges.TryGetValue(parent, out var existing))
+        {
+            edges[parent] = child;
+            return;
+        }
+        if (existing is UIElement single)
+        {
+            if (!ReferenceEquals(single, child))
+                edges[parent] = new List<UIElement>(2) { single, child };
+            return;
+        }
+        var list = (List<UIElement>)existing;
+        foreach (var known in list)
+        {
+            if (ReferenceEquals(known, child))
+                return;
+        }
+        list.Add(child);
+    }
 
     // ── Reconcile-highlight capture (gated by ReactorFeatureFlags.HighlightReconcileChanges) ──
     private List<UIElement>? _highlightMounted;
@@ -479,6 +839,30 @@ public sealed partial class Reconciler : IDisposable
         /// return; they are not preserved across rent/return cycles.
         /// </summary>
         public ReferenceEdgeBag? ReferenceEdges;
+
+        /// <summary>
+        /// The <c>Resources</c> keys this control's <c>ResourceOverrides</c> wrote, so an
+        /// update that drops a key can strip it (see <c>ApplyResourceOverrides</c>).
+        /// Stored here rather than in a <c>ConditionalWeakTable</c> keyed by
+        /// <see cref="FrameworkElement"/> for the same reason as
+        /// <see cref="EchoSuppressCount"/>: once a control's managed wrapper is collected,
+        /// WinRT projects a new one over the same native object, and a wrapper-keyed table
+        /// then reports no managed keys, so a dropped override stays in <c>fe.Resources</c>.
+        /// <c>ElementPool.CleanElement</c> strips these keys when the control returns to the
+        /// pool, so no renter inherits them.
+        /// </summary>
+        public HashSet<string>? ManagedResourceKeys;
+
+        /// <summary>
+        /// <c>componentId</c> (<c>ReactorEventSource.ComponentRendered</c>) of the component
+        /// whose wrapper this control is; 0 when none. Backs
+        /// <c>ReactorTrace.TryGetComponentId</c>. Stored here rather than in a
+        /// <c>ConditionalWeakTable</c> for the same duplicate-RCW reason as
+        /// <see cref="EchoSuppressCount"/>: an inspector that reaches the control through
+        /// the visual tree may hold a different managed wrapper than the reconciler did.
+        /// Cleared when the component unmounts, before the wrapper can be pooled.
+        /// </summary>
+        public long ComponentDiagnosticId;
     }
 
     internal static class ReactorAttached
@@ -622,19 +1006,38 @@ public sealed partial class Reconciler : IDisposable
     /// summary for the three categories.
     /// </summary>
     /// <remarks>
-    /// Spec 010 deliberately adds NO arm here. A source-mapped element carries
-    /// its <see cref="Element.CallSite"/> in the <see cref="Element.Extensions"/>
+    /// Spec 010 deliberately adds NO arm here for ordinary elements. A source-mapped
+    /// element carries its <see cref="Element.CallSite"/> in the <see cref="Element.Extensions"/>
     /// bucket, so it already satisfies the <c>Extensions is not null</c> test
     /// above and is tagged without further help. An arm keyed on the source-map
     /// flag would only ever tag <em>unstamped</em> elements — which by
     /// definition have no location to read back — while re-introducing exactly
     /// the per-leaf <c>ReactorState</c> allocation PR #468 removed.
+    ///
+    /// <para>The one exception is component boundaries (<see cref="ComponentElement"/>,
+    /// <see cref="FuncElement"/>, <see cref="MemoElement"/>). Their Border wrapper is the
+    /// only realized control that marks where a component starts, so an inspector needs
+    /// the tag to find the boundary — and the component type / render function — even
+    /// when the element carries no location (built while mapping was off, by a factory
+    /// the generator does not reach, or constructed directly). This costs one
+    /// <c>ReactorState</c> per component, never per leaf, and only while
+    /// <see cref="global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/> is on: the type test runs
+    /// first, so leaves never read the flag.</para>
     /// </remarks>
-    private static bool NeedsTag(Element element) =>
+    internal static bool NeedsTag(Element element) =>
         element.HasCallbacks
         || element.Key is not null
         || element.Extensions is not null
-        || HasReferenceModifiers(element);
+        || HasReferenceModifiers(element)
+        || (IsComponentBoundary(element) && global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
+
+    /// <summary>
+    /// True for the elements the reconciler mounts behind a component Border wrapper.
+    /// <c>KeyedMemoElement</c> is deliberately absent: it is transparent and mounts its
+    /// factory output directly, with no wrapper of its own.
+    /// </summary>
+    private static bool IsComponentBoundary(Element element) =>
+        element is ComponentElement or FuncElement or MemoElement;
 
     /// <summary>
     /// Spec 010 — did the source location change across a shallow skip?
@@ -820,6 +1223,10 @@ public sealed partial class Reconciler : IDisposable
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
             return;
         TeardownReferenceEdges(fe);
+        // A detached component wrapper must stop answering for its ComponentRendered id
+        // (both directions), like the unmount path does before pooling.
+        if (state.ComponentDiagnosticId != 0)
+            Diagnostics.ComponentRenderControls.Registry.Forget(state.ComponentDiagnosticId, fe);
         state.Element = null;
         state.Modifiers?.ClearCurrentHandlers();
         state.Modifiers = null;
@@ -918,6 +1325,43 @@ public sealed partial class Reconciler : IDisposable
     ///
     /// The mount and update handlers receive the Reconciler instance so they can
     /// recursively mount/update/unmount child elements without capturing external state.
+    ///
+    /// The reconciler records the element on the control it gets back from <c>mount</c> or
+    /// <c>update</c> (the element tag) wherever it reads the tag back itself: keyed
+    /// reconciliation, the <c>unmount</c> lookup, <c>.Ref(...)</c> cleanup and exit
+    /// transitions. The callbacks don't call <see cref="SetElementTag"/> for those. Code of your
+    /// own that reads the element back with <see cref="GetElementTag(FrameworkElement)"/>, such
+    /// as an event handler, still tags the control itself. The tag lives on a
+    /// <see cref="FrameworkElement"/>. <typeparamref name="TControl"/> may be declared as
+    /// <see cref="UIElement"/>, but in WinUI 3 <see cref="FrameworkElement"/> is its only
+    /// subclass, so every control a registration returns is tagged the same way.
+    ///
+    /// <c>mount</c> and <c>update</c> are expected to return a control the registration owns.
+    /// The tag holds one element, so a control that already carries the tag of an element of
+    /// another type (registration is by exact type, so a derived type counts), for example one
+    /// <c>mount</c> got from <see cref="Mount"/> for a child element, keeps that tag:
+    /// overwriting it would silence that element's own callbacks (the collision issue #942
+    /// tracks for target-wrapping decorators). The registration's key, ref, transitions and
+    /// <c>unmount</c> are not tracked for such a control. To wrap built-in elements, compose
+    /// them in a component instead.
+    ///
+    /// <c>update</c> returns null after patching the control in place; returning the control
+    /// it was handed means the same. Return a different control only when you replaced it.
+    ///
+    /// <c>unmount</c> runs when the reconciler unmounts the control, in place of its own walk
+    /// over the control's children: a child the callbacks mounted through the reconciler has to
+    /// be torn down there, for example with <see cref="UnmountChild"/>. Calling
+    /// <see cref="UnmountChild"/> on the control itself from <c>unmount</c> walks its children
+    /// once rather than calling <c>unmount</c> again. Without an <c>unmount</c> callback the
+    /// reconciler walks the control's children itself. A control that <c>update</c> replaced is
+    /// unmounted wherever the reconciler reconciles the slot that holds it: a panel, a
+    /// <c>Border</c>, a named slot such as <c>SplitView.Pane</c>, a tab's content. A few slots
+    /// that a control fills by hand still swap a replaced control out without <c>unmount</c>:
+    /// <c>CommandBar</c> content, <c>Expander</c> content and header template,
+    /// <c>ContentDialog</c>, <c>Flyout</c> and <c>Popup</c> content, content attached with
+    /// <c>.WithFlyout</c>, <c>.WithContextFlyout</c> or <c>.WithToolTip(element)</c>, and the
+    /// realized item content of <c>ListView</c>, <c>GridView</c>, <c>TreeView&lt;T&gt;</c> and
+    /// templated <c>FlipView</c>.
     ///
     /// Not part of the <c>REACTOR_V1_PREVIEW</c> surface — this is the legacy
     /// type-registry path, public since before Spec 047. The §13 Q17 hardening
@@ -1517,16 +1961,30 @@ public sealed partial class Reconciler : IDisposable
         public bool HasUnmount => _unmount is not null;
 
         public UIElement Mount(Element element, Action requestRerender, Reconciler reconciler)
-            => _mount(reconciler, (TElement)element, requestRerender);
+        {
+            var control = _mount(reconciler, (TElement)element, requestRerender);
+            TagControl(control, element);
+            return control;
+        }
 
         public UIElement? Update(Element oldEl, Element newEl, UIElement control, Action requestRerender, Reconciler reconciler)
         {
             // Guard against control type mismatch (e.g., recycled from pool or element type changed at this position).
             // If the existing control isn't our expected type, force a fresh mount instead of crashing.
-            if (control is not TControl typedControl || oldEl is not TElement typedOldEl)
-                return _mount(reconciler, (TElement)newEl, requestRerender);
+            var result = control is not TControl typedControl || oldEl is not TElement typedOldEl
+                ? _mount(reconciler, (TElement)newEl, requestRerender)
+                : _update(reconciler, typedOldEl, (TElement)newEl, typedControl, requestRerender);
 
-            return _update(reconciler, typedOldEl, (TElement)newEl, typedControl, requestRerender);
+            // Returning the control it was handed means the callback patched it in place, the
+            // same as returning null. The child reconcilers read any non-null result as a
+            // replacement and unmount the control they hold, which would run this registration's
+            // unmount callback against a control that stays mounted. A second managed wrapper
+            // for the same native control counts too.
+            if (result is not null && IsSameControl(result, control))
+                result = null;
+
+            TagControl(result ?? control, newEl);
+            return result;
         }
 
         public void Unmount(UIElement control, Reconciler reconciler)
@@ -1534,8 +1992,49 @@ public sealed partial class Reconciler : IDisposable
             if (control is TControl typedControl)
                 _unmount?.Invoke(reconciler, typedControl);
         }
+
+        // The reconciler tags the control so the callbacks don't have to. The keyed-middle
+        // reconcile finds a surviving child by the key on its tag, the unmount path finds this
+        // registration's unmount callback through it, and .Ref(...) cleanup reads it too.
+        // Same allocation gate as SetElementTagIfNeeded, so an unkeyed, extras-free leaf gets
+        // no ReactorState, except that a registration with an unmount callback always tags:
+        // that lookup goes through the tag whatever the element carries.
+        private void TagControl(UIElement control, Element element)
+        {
+            // The tag lives on FrameworkElement, UIElement's only subclass in WinUI 3, so a
+            // TControl declared as UIElement still arrives here as a FrameworkElement.
+            if (control is not FrameworkElement fe) return;
+            if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+            {
+                // The callback returned a control the reconciler mounted for an element of
+                // another type, such as a child's. That element's own event trampolines and
+                // unmount read the tag, so it keeps it. Registration is by exact type, so a
+                // derived element type is another type here too.
+                if (state.Element is { } owner && owner.GetType() != typeof(TElement)) return;
+                state.Element = element;
+                return;
+            }
+            if (HasUnmount || NeedsTag(element))
+                fe.SetValue(ReactorAttached.StateProperty, new ReactorState { Element = element });
+        }
     }
 
+    /// <summary>
+    /// Reconciles one child slot: brings <paramref name="existingControl"/>, the control mounted
+    /// for <paramref name="oldElement"/>, up to date with <paramref name="newElement"/>, and returns
+    /// the control the slot should now hold.
+    /// </summary>
+    /// <remarks>
+    /// When <paramref name="newElement"/> has the element type and key of
+    /// <paramref name="oldElement"/>, the control is patched in place and returned unchanged,
+    /// unless the update had to build a new control. In every other case the old control is
+    /// unmounted before the new one is returned: a changed element type or key, an update that
+    /// built a new control, or a null or empty <paramref name="newElement"/>, which returns null.
+    /// Without an <paramref name="existingControl"/> the new element is mounted. Put the result in
+    /// the slot when it differs from <paramref name="existingControl"/>. A custom control updates
+    /// the child elements it hosts with this method; in an <c>IElementHandler</c>,
+    /// <c>UpdateContext.ReconcileChild</c> does the same.
+    /// </remarks>
     // <snippet:reconciler-entry>
     public UIElement? Reconcile(
         Element? oldElement,
@@ -1543,7 +2042,10 @@ public sealed partial class Reconciler : IDisposable
         UIElement? existingControl,
         Action requestRerender)
     {
-        // Declared first so it is disposed last: validation changes raised by mount,
+        // A top-level pass is an outermost Reactor frame for render-error propagation
+        // (issue #1291); see EnterFrame. Nested passes and mounts just count.
+        using var entryFrame = EnterFrame();
+        // Declared before the reconcile work so it is disposed after it: validation changes raised by mount,
         // update, or unmount are announced only once the whole pass has finished.
         using var validationScope = Controls.Validation.ValidationRenderScope.BeginReconcile();
         ReferenceDirtySet.BeginCommit();
@@ -1591,6 +2093,8 @@ public sealed partial class Reconciler : IDisposable
             // every component re-runs Render() even when props/deps are unchanged.
             _forceFullRenderActive = ForceFullRenderPending;
             ForceFullRenderPending = false;
+            _hotReloadRetryActive = HotReloadRetryPending;
+            HotReloadRetryPending = false;
 
             // Build the dirty-ancestor path. For every component node
             // whose SelfTriggered is true, walk up the realized visual
@@ -1636,7 +2140,9 @@ public sealed partial class Reconciler : IDisposable
             if (--_debugReconcileDepth == 0)
             {
                 _forceFullRenderActive = false;
+                _hotReloadRetryActive = false;
                 _dirtyAncestorPath?.Clear();
+                _dirtyPathChildren?.Clear();
             }
         }
         }
@@ -1652,22 +2158,30 @@ public sealed partial class Reconciler : IDisposable
         // pass was triggered by a prop change higher up). Avoid the
         // HashSet allocation entirely until we find one.
         HashSet<UIElement>? set = null;
+        Dictionary<UIElement, object>? edges = null;
         foreach (var (control, node) in _componentNodes)
         {
             if (!node.SelfTriggered) continue;
             set ??= _dirtyAncestorPath ?? new HashSet<UIElement>();
+            edges ??= _dirtyPathChildren ?? new Dictionary<UIElement, object>();
             // Add the control itself first — Update on the wrapper
             // element that owns this control needs to bypass too so it
             // reaches the Component's UpdateComponent path.
             set.Add(control);
+            var child = control;
             var cursor = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(control) as UIElement;
             while (cursor is not null)
             {
+                // Record the edge before the early-out: a second self-triggered node joining
+                // an already-walked path still enters it through a child of its own.
+                AddDirtyPathChild(edges, cursor, child);
                 if (!set.Add(cursor)) break; // already on a previously-walked path
+                child = cursor;
                 cursor = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(cursor) as UIElement;
             }
         }
         _dirtyAncestorPath = set;
+        _dirtyPathChildren = edges;
     }
 
     // Tracks top-level Reconcile() entries so trace start/stop only fires once
@@ -1679,6 +2193,62 @@ public sealed partial class Reconciler : IDisposable
     // non-zero value between passes means a nested Reconcile incremented
     // without a matching decrement, which silently suppresses all later spans.
     internal int ReconcileTraceDepthForTests => _reconcileTraceDepth;
+
+    /// <summary>
+    /// Emits <c>ReactorEventSource.ComponentRendered</c> for a component node and keeps
+    /// the id → wrapper registry current. Only called when the event is enabled. A null
+    /// <paramref name="wrapper"/> reports the render without touching the registry
+    /// (a render that threw into an <c>ErrorBoundary</c>, whose wrapper is discarded or
+    /// replaced by the boundary's fallback).
+    /// </summary>
+    private static void EmitComponentRendered(
+        ComponentNode node, UIElement? wrapper, Element element, string reason, long startTimestamp)
+    {
+        long id = node.DiagnosticId;
+        if (id == 0) node.DiagnosticId = id = Diagnostics.ComponentRenderTrace.NextId();
+        // Rechecks the live gate: the decision to trace was made before Render() ran, and a
+        // listener can dispose itself from an earlier event's callback (for instance a
+        // hot-reload hook-order retry's aborted attempt). Nothing is mapped while it is off.
+        if (wrapper is not null && Diagnostics.ComponentRenderTrace.IsEnabled)
+            Diagnostics.ComponentRenderControls.Registry.Track(id, wrapper, mapControlToId: true);
+        Diagnostics.ReactorEventSource.Log.ComponentRendered(
+            Diagnostics.ComponentNames.For(node.Component, element),
+            id,
+            reason,
+            Diagnostics.ComponentRenderTrace.ElapsedMicroseconds(startTimestamp));
+    }
+
+    /// <summary>
+    /// Maps a freshly mounted component's id to its wrapper (event enabled only). If an
+    /// enclosing ErrorBoundary later discards the subtree, its rollback (unmount of completed
+    /// subtrees, or the boundary mount journal) forgets the mapping again. Rechecks the live
+    /// gate: a listener can be disabled from the event's own callback, after the mount
+    /// decided to trace, and nothing is mapped while it is off.
+    /// </summary>
+    private static void TrackMountedComponent(ComponentNode node, UIElement wrapper)
+    {
+        if (Diagnostics.ComponentRenderTrace.IsEnabled)
+            Diagnostics.ComponentRenderControls.Registry.Track(node.DiagnosticId, wrapper, mapControlToId: true);
+    }
+
+    /// <summary>
+    /// <c>ReactorEventSource.RenderError</c> for a component whose Render() threw and was
+    /// replaced by the error fallback. Shared by the mount and update paths so both name
+    /// the component the same way (<see cref="Diagnostics.ComponentNames"/>). Only the
+    /// component name and exception type are written: the sink redacts the message
+    /// (TASK-064), so <paramref name="ex"/>'s virtual <c>Message</c> is never read here —
+    /// an app exception whose <c>Message</c> override throws must not replace the original
+    /// exception on this error path (the ErrorBoundary arms rethrow it unchanged).
+    /// </summary>
+    internal static void EmitRenderError(string componentName, Exception ex)
+    {
+        if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                global::System.Diagnostics.Tracing.EventLevel.Error,
+                Diagnostics.ReactorEventSource.Keywords.Errors))
+        {
+            Diagnostics.ReactorEventSource.Log.RenderError(componentName, ex.GetType().Name, string.Empty);
+        }
+    }
 
     private static void FlushEffectsTraced(RenderContext ctx, string? componentName)
     {
@@ -1730,8 +2300,10 @@ public sealed partial class Reconciler : IDisposable
         // caller is out of scope for this fix.
         if (CanUpdate(oldElement, newElement))
         {
-            var replacement = Update(oldElement, newElement, existingControl, requestRerender);
-            if (replacement is not null && replacement != existingControl)
+            // An update that already unmounted the control it replaced (a target-wrapping flyout
+            // whose Target changes element type) is not followed by a second unmount.
+            var replacement = UpdateSlotChild(oldElement, newElement, existingControl, requestRerender, out var unmountedByUpdate);
+            if (replacement is not null && replacement != existingControl && !unmountedByUpdate)
                 Unmount(existingControl);
             return replacement ?? existingControl;
         }
@@ -1783,6 +2355,17 @@ public sealed partial class Reconciler : IDisposable
         // inside ReconcileImperative; overwrite defensively regardless.
         _componentNodes.Remove(replacement);
         _componentNodes[realized] = freshNode;
+        // Registry bookkeeping: while ComponentRendered is enabled the id moves onto the
+        // realized wrapper. If the listener was disabled (possibly by the fresh mount's own
+        // event callback), drop the mapping the mount gave the soon-discarded replacement
+        // wrapper; the next traced render of this node re-tracks its id onto `realized`.
+        if (freshNode.DiagnosticId != 0)
+        {
+            if (Diagnostics.ComponentRenderTrace.IsEnabled)
+                Diagnostics.ComponentRenderControls.Registry.Track(freshNode.DiagnosticId, realized, mapControlToId: true);
+            else
+                Diagnostics.ComponentRenderControls.Registry.Forget(freshNode.DiagnosticId, replacement);
+        }
 
         // Move the fresh visual subtree into the parented wrapper. Assigning
         // Border.Child detaches it from `replacementWrapper` first (and detaches the
@@ -1809,6 +2392,14 @@ public sealed partial class Reconciler : IDisposable
         // ── Memo check: skip render if props/context unchanged and not self-triggered ──
         bool selfTriggered = node.SelfTriggered;
         node.SelfTriggered = false;
+
+        // ComponentRendered bookkeeping: what forced or let this render through. Plain
+        // locals holding interned constants, so they cost nothing when tracing is off.
+        bool forcedRender = _forceFullRenderActive;
+        string? memoReason = null;
+        // Set when the reason classification below already read the event's gate, so
+        // the render path reuses it instead of checking a second time.
+        bool? traceEnabled = null;
 
         // Hot reload forces every component to re-run Render(); the new method
         // body lives only on the type, not in props/deps, so the memo gate
@@ -1840,6 +2431,16 @@ public sealed partial class Reconciler : IDisposable
 
                 bool contextChanged = HasConsumedContextChanged(node);
                 skipRender = !propsChanged && !contextChanged;
+                // Props components: a props change wins, else it was the context.
+                // Propless components (ShouldUpdate() true or a context change): the
+                // context wins, else nothing could skip it.
+                memoReason = node.Component is IPropsReceiver
+                    ? propsChanged
+                        ? Diagnostics.ComponentRenderTrace.Reasons.Props
+                        : Diagnostics.ComponentRenderTrace.Reasons.Context
+                    : contextChanged
+                        ? Diagnostics.ComponentRenderTrace.Reasons.Context
+                        : Diagnostics.ComponentRenderTrace.Reasons.Parent;
             }
             else if (node.Context is not null && newEl is MemoElement newMemo)
             {
@@ -1851,6 +2452,17 @@ public sealed partial class Reconciler : IDisposable
                     : oldDeps is null || newDeps is null || !DepsEqual(oldDeps, newDeps);
                 bool contextChanged = HasConsumedContextChanged(node);
                 skipRender = !depsChanged && !contextChanged;
+                memoReason = depsChanged
+                    ? Diagnostics.ComponentRenderTrace.Reasons.Props
+                    : Diagnostics.ComponentRenderTrace.Reasons.Context;
+            }
+            else if (newEl is FuncElement
+                && (traceEnabled = Diagnostics.ComponentRenderTrace.IsEnabled).Value
+                && HasConsumedContextChanged(node))
+            {
+                // No gate can skip a function component, so this only refines the
+                // ComponentRendered reason (and is only computed while it is traced).
+                memoReason = Diagnostics.ComponentRenderTrace.Reasons.Context;
             }
 
             if (skipRender)
@@ -1892,11 +2504,20 @@ public sealed partial class Reconciler : IDisposable
         long renderStart = 0;
         if (traceRender)
         {
-            componentName = node.Component?.GetType().Name ?? newEl.GetType().Name;
+            componentName = Diagnostics.ComponentNames.For(node.Component, newEl);
             Diagnostics.ReactorEventSource.Log.ComponentRenderStart(
                 componentName, selfTriggered ? "self" : "parent");
             renderStart = global::System.Diagnostics.Stopwatch.GetTimestamp();
         }
+        bool traceRendered = traceEnabled ?? Diagnostics.ComponentRenderTrace.IsEnabled;
+        long renderedStart = traceRendered ? global::System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+        // The reason is fixed for this render (its inputs do not change below); computed
+        // only while traced. renderReported: the fallback catch already emitted.
+        string? renderedReason = traceRendered
+            ? Diagnostics.ComponentRenderTrace.ClassifyUpdate(
+                forcedRender, HotReloadService.WithinUpdatePass || _hotReloadRetryActive, selfTriggered, memoReason)
+            : null;
+        bool renderReported = false;
 
         Element newChildElement;
         // The RenderContext backing whichever branch we render (component or
@@ -1904,8 +2525,10 @@ public sealed partial class Reconciler : IDisposable
         // hot-reload pass: reset this context's hook state and re-render once.
         RenderContext? renderCtx = node.Component?.Context ?? node.Context;
         bool hotReloadRetried = false;
+        bool inEffects = false;
         while (true)
         {
+            inEffects = false;
             try
             {
                 if (node.Component is not null)
@@ -1922,6 +2545,7 @@ public sealed partial class Reconciler : IDisposable
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(node.Component.Render());
                     }
+                    inEffects = true;
                     FlushEffectsTraced(node.Component.Context, componentName);
                 }
                 else if (node.Context is not null && newEl is FuncElement func)
@@ -1931,6 +2555,7 @@ public sealed partial class Reconciler : IDisposable
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(func.RenderFunc(node.Context));
                     }
+                    inEffects = true;
                     FlushEffectsTraced(node.Context, componentName);
                 }
                 else if (node.Context is not null && newEl is MemoElement memo)
@@ -1940,6 +2565,7 @@ public sealed partial class Reconciler : IDisposable
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(memo.RenderFunc(node.Context));
                     }
+                    inEffects = true;
                     FlushEffectsTraced(node.Context, componentName);
                 }
                 else
@@ -1959,25 +2585,61 @@ public sealed partial class Reconciler : IDisposable
                 && renderCtx is not null
                 && HotReloadService.WithinUpdatePass)
             {
+                // The aborted attempt still ran Render(); report it before logging, so a
+                // slow logger is not charged to it.
+                if (traceRendered)
+                    EmitComponentRendered(node, null, newEl, Diagnostics.ComponentRenderTrace.Reasons.HotReload, renderedStart);
                 _logger?.LogWarning(ex,
                     "Hot reload: hook order/type changed in child component — " +
                     "resetting state and re-rendering: {ComponentName}",
-                    componentName ?? newEl.GetType().Name);
+                    componentName ?? Diagnostics.ComponentNames.For(node.Component, newEl));
                 hotReloadRetried = true;
                 renderCtx.ResetForHotReload();
+                // Time the retry on its own (it reports itself after the loop), starting
+                // after the reset ran the effect cleanups.
+                if (traceRendered)
+                    renderedStart = global::System.Diagnostics.Stopwatch.GetTimestamp();
                 continue;
             }
-            catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
+            // Inside an ErrorBoundary the exception propagates to the boundary, which
+            // renders its fallback. Name the failing component here, at the throw site —
+            // the boundary itself cannot know which descendant threw — so a listener sees
+            // the error even though the app recovered. Rethrown unchanged. No OOM/SO carve-out:
+            // the boundary catches every exception, so every one it recovers from is reported.
+            // Outside a boundary, OOM/SO skip the fallback arm below and propagate to the
+            // host, which also recovers — so they are reported here too. An exception the app
+            // declined via RenderError.Propagate() was already reported where it was thrown,
+            // so it passes through unreported (issue #1291).
+            catch (Exception ex) when ((_errorBoundaryDepth > 0 || ex is OutOfMemoryException or StackOverflowException)
+                && !RenderErrorDispatch.IsPropagating(ex))
             {
-                _logger?.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
-                if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                        global::System.Diagnostics.Tracing.EventLevel.Error,
-                        Diagnostics.ReactorEventSource.Keywords.Errors))
+                // The render still happened: report it, as the trailing arm does for the rest.
+                if (traceRendered)
+                    EmitComponentRendered(node, null, newEl, renderedReason!, renderedStart);
+                EmitRenderError(componentName ?? Diagnostics.ComponentNames.For(node.Component, newEl), ex);
+                throw;
+            }
+            catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException && !RenderErrorDispatch.IsPropagating(ex))
+            {
+                // Report before building the fallback: its time is not this render's, and
+                // a fallback that throws must not swallow the event.
+                if (traceRendered)
                 {
-                    Diagnostics.ReactorEventSource.Log.RenderError(
-                        componentName ?? newEl.GetType().Name, ex.GetType().Name, ex.Message);
+                    EmitComponentRendered(node, control, newEl, renderedReason!, renderedStart);
+                    renderReported = true;
                 }
-                newChildElement = ErrorFallback.BuildElement(ex);
+                var failedName = componentName ?? Diagnostics.ComponentNames.For(node.Component, newEl);
+                _logger?.LogError(ex, "Component Render() threw: {ComponentName}", failedName);
+                // Before the fallback: the app's handler may call Propagate(), which throws.
+                EmitRenderError(failedName, ex);
+                newChildElement = BuildInTreeFallback(ex, inEffects, node.Component?.GetType().Name);
+            }
+            // Every other exception propagates (to an enclosing ErrorBoundary, or a fatal
+            // one to the host); the render still happened, so report it and rethrow.
+            catch (Exception) when (traceRendered)
+            {
+                EmitComponentRendered(node, null, newEl, renderedReason!, renderedStart);
+                throw;
             }
             break;
         }
@@ -1988,6 +2650,8 @@ public sealed partial class Reconciler : IDisposable
                 * 1_000_000.0 / global::System.Diagnostics.Stopwatch.Frequency);
             Diagnostics.ReactorEventSource.Log.ComponentRenderStop(componentName!, renderElapsedUs);
         }
+        if (traceRendered && !renderReported)
+            EmitComponentRendered(node, control, newEl, renderedReason!, renderedStart);
 
         // Dereference the Border wrapper to get the actual child control.
         // Each component is wrapped in a Border as an identity anchor, so we
@@ -2166,9 +2830,21 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Updates a single child element. Returns non-null if the child control was replaced.
-    /// Public so registered type handlers can recursively reconcile children.
+    /// Low-level update of one child control, for callers that have already checked the new
+    /// element can update it in place. Code outside the framework should call
+    /// <see cref="Reconcile"/>, which makes that check and unmounts a control it replaces.
     /// </summary>
+    /// <remarks>
+    /// Patches <paramref name="control"/> to match <paramref name="newEl"/> and returns null, or
+    /// returns a new control when the update had to build one. The caller then unmounts
+    /// <paramref name="control"/> with <see cref="UnmountChild"/> and puts the new control in its
+    /// slot, in that order, as <see cref="Reconcile"/> does: unmounting reads state from the control
+    /// while it is still in the tree, such as a connected-animation snapshot. It doesn't check that
+    /// <paramref name="newEl"/> has the element type and key of <paramref name="oldEl"/>: a changed
+    /// type throws <c>InvalidCastException</c> for a built-in control. The analyzer rule
+    /// <c>REACTOR_LIFECYCLE_003</c> flags calls to this method and offers to switch them to
+    /// <see cref="Reconcile"/>.
+    /// </remarks>
     public UIElement? UpdateChild(Element oldEl, Element newEl, UIElement control, Action requestRerender)
     {
         return Update(oldEl, newEl, control, requestRerender);
@@ -2214,6 +2890,8 @@ public sealed partial class Reconciler : IDisposable
 
     private void UnmountRecursive(UIElement control)
     {
+        NoteUnmountDuringSlotUpdate(control);
+
         // Capture connected animation snapshot while element is still in the visual tree
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
             && caEl.ConnectedAnimationKey is not null)
@@ -2251,7 +2929,7 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
         {
             _onUnmountActions.Remove(umFe);
-            onUnmount(umFe);
+            RunUnmountAction(onUnmount, umFe);
         }
 
         // Issue #917 — a TitleBar going away withdraws both its
@@ -2264,10 +2942,17 @@ public sealed partial class Reconciler : IDisposable
 
         if (_componentNodes.TryGetValue(control, out var node))
         {
-            Diagnostics.ReactorEventSource.Log.ComponentUnmount(
-                node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
-            node.Component?.Context.RunCleanups();
-            node.Context?.RunCleanups();
+            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                    global::System.Diagnostics.Tracing.EventLevel.Informational,
+                    Diagnostics.ReactorEventSource.Keywords.Lifecycle))
+            {
+                Diagnostics.ReactorEventSource.Log.ComponentUnmount(
+                    Diagnostics.ComponentNames.For(node.Component, node.Element));
+            }
+            // The wrapper may be pooled and reused by an unrelated element; drop its id.
+            if (node.DiagnosticId != 0)
+                Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, control);
+            RunUnmountCleanups(node);
             _componentNodes.Remove(control);
         }
 
@@ -2290,10 +2975,13 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // Check registered type unmount handlers via the attached element
-        if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl
-            && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount)
+        if (control is FrameworkElement fe && TryGetReactorState(fe, out var regState)
+            && regState.Element is Element tagEl
+            && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount
+            && TryBeginRegisteredUnmount(regState))
         {
-            reg.Unmount(control, this);
+            try { reg.Unmount(control, this); }
+            finally { EndRegisteredUnmount(regState); }
             return;
         }
 
@@ -2312,9 +3000,49 @@ public sealed partial class Reconciler : IDisposable
 
     private static void CleanupReferenceStateForUnmount(FrameworkElement control, Element? element)
     {
-        element?.Modifiers?.Ref?.SetCurrent(null);
+        // Clear the producer ref only while it still names this control. When an update
+        // replaces a control, ApplyModifiers points the element's ref at the replacement
+        // before the caller unmounts the old control, and the ref must keep it.
+        if (element?.Modifiers?.Ref is { } producerRef && producerRef.Current is { } current
+            && IsSameNativeElement(current, control))
+            producerRef.SetCurrent(null);
         TeardownReferenceEdges(control);
     }
+
+    // Two managed wrappers can front one native element (see ReactorAttached.StateProperty), so
+    // identity falls back to the ReactorState that lives on the native object. When b carries no
+    // ReactorState there is nothing native to compare, and only the same wrapper matches.
+    private static bool IsSameNativeElement(FrameworkElement a, FrameworkElement b) =>
+        ReferenceEquals(a, b)
+        || (b.GetValue(ReactorAttached.StateProperty) is ReactorState state
+            && ReferenceEquals(a.GetValue(ReactorAttached.StateProperty), state));
+
+    // True when an update result is the control it was handed, possibly through a second managed
+    // wrapper, which means the update patched it in place. TypeRegistration.Update and
+    // ReconcileV1Child both decide this here. Every wrapper for a native object reads the same
+    // ReactorState, so the handed-in control gets one if it has none and the result is checked
+    // for it. That allocation happens only when the result is a different wrapper, which is
+    // almost always a genuine replacement, and it lands on the control being replaced.
+    private static bool IsSameControl(UIElement result, UIElement control)
+    {
+        if (ReferenceEquals(result, control)) return true;
+        if (result is not FrameworkElement resultFe || control is not FrameworkElement controlFe)
+            return false;
+        var state = GetOrCreateReactorState(controlFe);
+        return ReferenceEquals(resultFe.GetValue(ReactorAttached.StateProperty), state);
+    }
+
+    // Controls whose RegisterType unmount callback is running, by the ReactorState on the native
+    // control so a second managed wrapper for it is recognized too. A callback that tears its own
+    // control down through the reconciler (UnmountChild on the control it was handed, to reach
+    // the children it mounted) re-enters the unmount path for that control; the re-entrant call
+    // takes the default walk over the children instead of calling the callback again.
+    private HashSet<ReactorState>? _registeredUnmountsRunning;
+
+    private bool TryBeginRegisteredUnmount(ReactorState state) =>
+        (_registeredUnmountsRunning ??= new HashSet<ReactorState>(ReferenceEqualityComparer.Instance)).Add(state);
+
+    private void EndRegisteredUnmount(ReactorState state) => _registeredUnmountsRunning?.Remove(state);
 
     private static void ForEachReactorChildControl(UIElement control, Action<UIElement> visit)
         => ForEachReactorChildControl(control, child => { visit(child); return true; });
@@ -2593,6 +3321,8 @@ public sealed partial class Reconciler : IDisposable
 
     private void UnmountAndCollect(UIElement control, List<FrameworkElement> toPool)
     {
+        NoteUnmountDuringSlotUpdate(control);
+
         // Capture connected animation snapshot while element is still in the visual tree
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
             && caEl.ConnectedAnimationKey is not null)
@@ -2620,7 +3350,7 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
         {
             _onUnmountActions.Remove(umFe);
-            onUnmount(umFe);
+            RunUnmountAction(onUnmount, umFe);
         }
 
         // Issue #917 — mirrors UnmountRecursive: a TitleBar reached through the
@@ -2633,10 +3363,17 @@ public sealed partial class Reconciler : IDisposable
         // Run cleanup logic (component teardown, etc.)
         if (_componentNodes.TryGetValue(control, out var node))
         {
-            Diagnostics.ReactorEventSource.Log.ComponentUnmount(
-                node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
-            node.Component?.Context.RunCleanups();
-            node.Context?.RunCleanups();
+            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                    global::System.Diagnostics.Tracing.EventLevel.Informational,
+                    Diagnostics.ReactorEventSource.Keywords.Lifecycle))
+            {
+                Diagnostics.ReactorEventSource.Log.ComponentUnmount(
+                    Diagnostics.ComponentNames.For(node.Component, node.Element));
+            }
+            // The wrapper may be pooled and reused by an unrelated element; drop its id.
+            if (node.DiagnosticId != 0)
+                Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, control);
+            RunUnmountCleanups(node);
             _componentNodes.Remove(control);
         }
 
@@ -2665,10 +3402,13 @@ public sealed partial class Reconciler : IDisposable
             }
         }
 
-        if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl
-            && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount)
+        if (control is FrameworkElement fe && TryGetReactorState(fe, out var regState)
+            && regState.Element is Element tagEl
+            && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount
+            && TryBeginRegisteredUnmount(regState))
         {
-            reg.Unmount(control, this);
+            try { reg.Unmount(control, this); }
+            finally { EndRegisteredUnmount(regState); }
             // Collect this control for pooling, but do NOT recurse into children —
             // they were created outside Reactor's tree and must not be pooled.
             // (Mirrors UnmountRecursive which returns early in this case.)
@@ -2850,6 +3590,15 @@ public sealed partial class Reconciler : IDisposable
     /// <see cref="UIElement"/> the caller should write back into the slot
     /// (or null when the slot should be cleared).
     ///
+    /// <para>When the update returns a new control for the slot, the control it
+    /// replaced is unmounted here, as a panel's <c>ChildReconciler</c> and the
+    /// component path (<see cref="ReconcileImperative"/>) do. The caller only swaps
+    /// the slot, so without this the old subtree's effect cleanups, refs,
+    /// <c>.OnUnmount</c> actions and handler unmounts never ran. An update that
+    /// returns the control it was handed patched it in place, and an update that
+    /// already unmounted the control it replaced is not followed by a second
+    /// unmount.</para>
+    ///
     /// <para>This exists because the naive replace in early Phase 1
     /// (<c>MountChild</c> + <c>SetChild</c> without comparing old vs new)
     /// destroys descendant state slots on every parent re-render — see the
@@ -2866,8 +3615,12 @@ public sealed partial class Reconciler : IDisposable
         }
         if (oldChild is not null && existing is not null && CanUpdate(oldChild, newChild))
         {
-            var replacement = Update(oldChild, newChild, existing, requestRerender);
-            return replacement ?? existing;
+            var replacement = UpdateSlotChild(oldChild, newChild, existing, requestRerender, out var unmountedByUpdate);
+            if (replacement is null || IsSameControl(replacement, existing))
+                return existing;
+            if (!unmountedByUpdate)
+                Unmount(existing);
+            return replacement;
         }
         // Hot Reload component-identity migration (spec 049 §7) — preserve the
         // child subtree's state across an edit instead of unmount/mount.
@@ -2877,6 +3630,61 @@ public sealed partial class Reconciler : IDisposable
             return existing;
         if (existing is not null) Unmount(existing);
         return Mount(newChild, requestRerender);
+    }
+
+    // The controls the slot updates now running are working on, outermost first, and whether each
+    // has been unmounted while its update ran. ReconcileV1Child and ReconcileImperative (behind the
+    // public Reconcile) run their updates in these frames. A target-wrapping flyout whose Target
+    // changes element type unmounts the old Target itself before it returns the new one
+    // (OverlayLifecycle.UpdateFlyoutElement and its MenuFlyout / CommandBarFlyout twins), and a
+    // second unmount would run the old subtree's handler and registered unmount callbacks again.
+    // Slot updates nest, and a handler deep inside one can unmount a control an outer slot is
+    // updating, so every frame watching the unmounted control is marked, not just the innermost.
+    private UIElement?[] _slotUpdateControls = Array.Empty<UIElement?>();
+    private bool[] _slotUpdateUnmounted = Array.Empty<bool>();
+    private int _slotUpdateDepth;
+
+    private UIElement? UpdateSlotChild(Element oldChild, Element newChild, UIElement existing,
+        Action requestRerender, out bool unmountedByUpdate)
+    {
+        // Every access goes through the fields: a nested frame may grow the arrays.
+        int frame = _slotUpdateDepth;
+        if (frame == _slotUpdateControls.Length)
+        {
+            int size = frame == 0 ? 8 : frame * 2;
+            Array.Resize(ref _slotUpdateControls, size);
+            Array.Resize(ref _slotUpdateUnmounted, size);
+        }
+        _slotUpdateControls[frame] = existing;
+        _slotUpdateUnmounted[frame] = false;
+        _slotUpdateDepth = frame + 1;
+        try
+        {
+            var replacement = Update(oldChild, newChild, existing, requestRerender);
+            unmountedByUpdate = _slotUpdateUnmounted[frame];
+            return replacement;
+        }
+        finally
+        {
+            _slotUpdateControls[frame] = null;
+            _slotUpdateDepth = frame;
+        }
+    }
+
+    // Matched by reference, not IsSameControl. A frame holds the control it watches, and while a
+    // managed wrapper is alive CsWinRT hands back that same wrapper for its native control, so every
+    // path that reaches the control to unmount it (the reference an update was handed, or a walk of
+    // the visual tree) arrives with this reference. IsSameControl's ReactorState compare is for an
+    // update's result, which user code chooses. Here it would add native reads to every unmount
+    // inside a slot update, which is nearly every unmount, and attach a ReactorState to a watched
+    // control that has none.
+    private void NoteUnmountDuringSlotUpdate(UIElement control)
+    {
+        for (int i = 0; i < _slotUpdateDepth; i++)
+        {
+            if (ReferenceEquals(_slotUpdateControls[i], control))
+                _slotUpdateUnmounted[i] = true;
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -3395,6 +4203,9 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     private static readonly Dictionary<UIElement, InteractionStateTracker> _interactionTrackers = new();
 
+    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
+    internal static int InteractionTrackerCountForTests => _interactionTrackers.Count;
+
     private sealed class InteractionStateTracker
     {
         public InteractionState CurrentState;
@@ -3835,6 +4646,11 @@ public sealed partial class Reconciler : IDisposable
     // start count is the only non-vacuous oracle available to an automated test.
     internal int ConnectedAnimationStartCount;
 
+    // Test-only seam, same visibility: counts unmounting sources that were NOT prepared
+    // because WinUI had not yet rendered a frame since their key was last prepared (see
+    // PrepareConnectedAnimationSource). The settled tree is the same either way.
+    internal int ConnectedAnimationPreparationsSkipped;
+
     // Keys this reconcile pass actually published a snapshot for. The flush resolves
     // queued destinations only against these, because ConnectedAnimationService is
     // view-wide and unclaimed preparations are deliberately left to expire on their own
@@ -3849,8 +4665,8 @@ public sealed partial class Reconciler : IDisposable
     // cause one) and costs a hash lookup, so it stays; but it is NOT test-proven, and a
     // future change here should not assume a test would catch a regression.
     //
-    // Bookkeeping only. Nothing is invoked on the service, which is what made the
-    // withdrawn Cancel()-based cleanup crash.
+    // Bookkeeping only. Nothing is invoked on the service, so an unclaimed preparation is
+    // never cancelled; see PrepareConnectedAnimationSource for why a cancel can crash.
     private readonly HashSet<string> _preparedConnectedAnimationKeys = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -3865,20 +4681,42 @@ public sealed partial class Reconciler : IDisposable
     /// those composited at its source's old position until it times out — roughly a
     /// second of the old list ghosting over the new view.
     ///
-    /// <para>That is a known cosmetic wart, deliberately left alone. Withdrawing an
-    /// unclaimed preparation with <c>ConnectedAnimation.Cancel()</c> faults WinUI natively
-    /// (0xC0000005 in Microsoft.UI.Xaml.dll 3.2.3.0): by flush time the source has been
-    /// unmounted and returned to <see cref="ElementPool"/>, so the animation is holding a
-    /// visual that <c>CleanElement</c> has already reset. A crash is strictly worse than a
-    /// ghost, so the ghosts stay until there is a safe way to withdraw a preparation.
-    /// <c>ConnectedAnimation_OrphanOnlyPassDoesNotCrash</c> pins the no-crash behaviour.</para>
+    /// <para>That is a known cosmetic wart, deliberately left alone, because WinUI faults
+    /// (0xC0000005 at <c>CConnectedAnimationService::PreCommit</c>) when a preparation is
+    /// cancelled before it has rendered a frame and its source left the tree by itself.
+    /// The source is removed in the same pass it is prepared in, so WinUI retains it for
+    /// that frame's commit, and only the preparation gives it a composition node; a cancel
+    /// takes the node away and the commit dereferences null (issue #1152). An earlier
+    /// revision withdrew unclaimed preparations with <c>ConnectedAnimation.Cancel()</c> at
+    /// flush time and crashed this way; <c>ConnectedAnimation_OrphanOnlyPassDoesNotCrash</c>
+    /// pins the no-crash behaviour.</para>
+    ///
+    /// <para>Preparing a key that is still in use cancels its earlier animation the same way.
+    /// That happens when two passes run before WinUI renders a frame and both unmount an
+    /// element with the key, so a key is not prepared again until WinUI has rendered a frame
+    /// since its last preparation (<see cref="ConnectedAnimationFrameGate"/>). The skipped
+    /// source does not animate, and the earlier preparation stands. In the round trip that
+    /// reaches this (Go, Back, Go before one frame), the skipped source was mounted after
+    /// the last frame, so it never reached the screen.
+    /// <c>ConnectedAnimation_RepreparedBeforeFrameDoesNotCrash</c> pins this.</para>
+    ///
+    /// <para>Not covered: WinUI also cancels a started animation when its destination leaves
+    /// the tree. A pass that removes a destination before WinUI has rendered a frame since
+    /// its animation started can still fault.</para>
     /// </remarks>
     private void PrepareConnectedAnimationSource(string key, UIElement control)
     {
+        if (ConnectedAnimationFrameGate.IsAwaitingFrame(key))
+        {
+            ConnectedAnimationPreparationsSkipped++;
+            return;
+        }
+
         try
         {
             ConnectedAnimationService.GetForCurrentView().PrepareToAnimate(key, control);
             _preparedConnectedAnimationKeys.Add(key);
+            ConnectedAnimationFrameGate.Prepared(key);
         }
         catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
         {
@@ -4369,7 +5207,10 @@ public sealed partial class Reconciler : IDisposable
         // pooled control reused for a no-OnUnmount element can't fire a stale action
         // (pool reuse remounts with oldM == null, so this can't be gated on oldM).
         if (m.OnUnmountAction is not null)
+        {
             _onUnmountActions.AddOrUpdate(fe, m.OnUnmountAction);
+            _boundaryMountJournal?.Add(fe);
+        }
         else
             _onUnmountActions.Remove(fe);
 
@@ -5342,12 +6183,12 @@ public sealed partial class Reconciler : IDisposable
     // ── Lightweight Styling: per-control resource overrides ────────────────
 
     /// <summary>
-    /// Tracks which resource keys in <see cref="FrameworkElement.Resources"/> were
-    /// set by Reactor (vs. keys set by XAML or other sources). On update, only
-    /// Reactor-managed keys are removed when overrides change.
+    /// Removes every <c>Resources</c> key this control's resource overrides wrote, leaving keys
+    /// set outside Reactor in place. <see cref="ElementPool.CleanElement"/> calls it on pool
+    /// return, because mount applies overrides only for an element that declares some.
     /// </summary>
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, HashSet<string>>
-        _managedResourceKeys = new();
+    internal static void RemoveManagedResourceKeys(FrameworkElement fe)
+        => ApplyResourceOverrides(fe, null, null);
 
     /// <summary>
     /// Applies per-control resource overrides (lightweight styling) to a
@@ -5392,8 +6233,18 @@ public sealed partial class Reconciler : IDisposable
         Microsoft.UI.Reactor.Elements.ResourceOverrides? newOverrides,
         ElementTheme effectiveTheme)
     {
-        // Track which keys Reactor has set on this element
-        var managed = _managedResourceKeys.GetOrCreateValue(fe);
+        // Keys Reactor has set on this element, as opposed to keys set by XAML or other
+        // sources: only these are removed when the overrides change. They live on the
+        // native object (ReactorState.ManagedResourceKeys), because the managed wrapper can
+        // be collected and re-projected between renders. A removal-only call on a control
+        // that never got state has nothing of ours to strip, so it skips creating one.
+        HashSet<string> managed;
+        if (newOverrides is not null)
+            managed = GetOrCreateReactorState(fe).ManagedResourceKeys ??= new HashSet<string>();
+        else if (TryGetReactorState(fe, out var existing) && existing.ManagedResourceKeys is { } keys)
+            managed = keys;
+        else
+            return;
 
         // Remove managed keys that are no longer present in the new overrides.
         // Issue #675 — drive removal off `managed` vs `newOverrides`, independent of
@@ -5657,6 +6508,11 @@ public sealed partial class Reconciler : IDisposable
         /// Accessed from background threads (UseState callbacks) — use volatile field.</summary>
         private volatile bool _selfTriggered;
         public bool SelfTriggered { get => _selfTriggered; set => _selfTriggered = value; }
+        /// <summary>
+        /// <c>componentId</c> of this node in <c>ReactorEventSource.ComponentRendered</c>;
+        /// 0 until the node first renders while that event is enabled.
+        /// </summary>
+        public long DiagnosticId { get; set; }
     }
 
     /// <summary>
@@ -5811,6 +6667,29 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
+    /// Tags the <c>Border</c> wrapper of every mounted component boundary with its element.
+    /// Called on this reconciler's UI thread when <see cref="global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled"/>
+    /// turns on, so boundaries mounted while it was off become discoverable too — including
+    /// cached subtrees that later renders skip without ever reaching <see cref="NeedsTag"/>.
+    /// Walks <c>_componentNodes</c>, which holds every mounted Component/Func/Memo.
+    /// Only untagged wrappers are filled in: a wrapper that already carries an element keeps
+    /// it, because an outer decorator (a <c>Flyout</c> on a component target, for example)
+    /// re-tags the wrapper with its own element and resolves its callbacks and unmount
+    /// cleanup through that tag.
+    /// </summary>
+    internal void TagComponentBoundaries()
+    {
+        foreach (var (wrapper, node) in _componentNodes)
+        {
+            if (wrapper is not FrameworkElement fe || node.Element is not { } element || !IsComponentBoundary(element))
+                continue;
+            if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState { Element: not null })
+                continue;
+            SetElementTagIfNeeded(fe, element);
+        }
+    }
+
+    /// <summary>
     /// Hot Reload (spec 049 §6 step 3). Invokes <paramref name="action"/> once for
     /// every live <see cref="RenderContext"/> tracked by this reconciler — both
     /// function-component contexts (<see cref="ComponentNode.Context"/>) and
@@ -5828,12 +6707,51 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    /// <summary>
+    /// Drops the <c>ComponentRendered</c> id mapping of every component this reconciler
+    /// tracks, for teardown paths that discard the tree without unmounting it
+    /// (<see cref="Dispose"/>, a host replacing its content with the error panel).
+    /// Cheap when tracing was never on: no id was ever issued, so nothing is touched.
+    /// </summary>
+    internal void ForgetComponentDiagnostics()
+    {
+        foreach (var (control, node) in _componentNodes)
+        {
+            if (node.DiagnosticId != 0)
+                Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, control);
+        }
+    }
+
     public void Dispose()
     {
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation;
+        // Standalone disposal is its own outermost frame (issue #1291).
+        using (RenderErrorDispatch.EnterPropagationScope())
+            pendingPropagation = DisposeCollectingPropagation();
+        pendingPropagation?.Throw();
+    }
+
+    /// <summary>
+    /// Disposes and returns, rather than throws, a cleanup exception the app asked to
+    /// propagate. Hosts call this inside their own propagation scope so the root's and the
+    /// reconciler's cleanups share one "only the first propagation is rethrown" decision,
+    /// and the host finishes its own teardown before rethrowing.
+    /// </summary>
+    internal global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? DisposeCollectingPropagation()
+    {
+        // Issue #1291: with a RenderErrorHandler configured, every effect cleanup runs and
+        // each failure is reported (Source = Cleanup). With no handler the first throwing
+        // cleanup escapes as before.
+        // The tree is dropped without unmounting it; its ComponentRendered ids must stop resolving.
+        ForgetComponentDiagnostics();
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation = null;
+        // Resolved per failure (a cleanup may change the handler), not once per batch.
+        Func<RenderErrorHandler?> cleanupHandler = ResolveRenderErrorHandler;
         foreach (var node in _componentNodes.Values)
         {
-            node.Context?.RunCleanups();
-            node.Component?.Context?.RunCleanups();
+            var name = node.Component?.GetType().Name;
+            RenderErrorDispatch.RunCleanups(node.Context, cleanupHandler, name, isHostLevel: false, _logger, ref pendingPropagation);
+            RenderErrorDispatch.RunCleanups(node.Component?.Context, cleanupHandler, name, isHostLevel: false, _logger, ref pendingPropagation);
         }
         _componentNodes.Clear();
         _errorBoundaryNodes.Clear();
@@ -5848,6 +6766,7 @@ public sealed partial class Reconciler : IDisposable
         }
         _navigationHostNodes.Clear();
         _pool.Clear();
+        return pendingPropagation;
     }
 }
 

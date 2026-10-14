@@ -172,6 +172,7 @@ sibling `src/Reactor.Analyzers.Internal/` project instead; see
 | `REACTOR_MEDIA_001` | Info | WebView2 is a direct child of an auto-layout stack (HStack/VStack/FlexRow/FlexColumn) without explicit .Width/.Height | `UnsizedWebViewInStackAnalyzer.cs` |
 | `REACTOR_ANIM_003` | Warning | async lambda to WithAnimation loses the ThreadStatic scope after await | `AnimationScopeAsyncAnalyzer.cs` |
 | `REACTOR_LIFECYCLE_002` | Warning | UseEffect(Action) allocates a timer/subscription/event with no returned cleanup | `EffectCleanupAnalyzer.cs` |
+| `REACTOR_LIFECYCLE_003` | Warning | A custom control updates its hosted child with Reconciler.UpdateChild, which skips the element-type check and leaves a replaced control mounted; use Reconcile (ships a rewrite fix) | `ReconcilerUpdateChildAnalyzer.cs` |
 | `REACTOR_MEMO_001` | Info | Modifiers on a keyed Memo(key,factory) wrapper opt the row out of the recycle cache | `MemoWrapperModifierAnalyzer.cs` |
 | `REACTOR_DYM_001` | Warning | Reactor property/field invoked like a method (e.g. `GridSize.Auto()`) | `NonInvocableMemberParensAnalyzer.cs` |
 | `REACTOR_DYM_002` | Warning | Invented `Theme.*Background` token (e.g. `Theme.AppBackground`); use `Theme.SolidBackground` (`Theme.LayerBackground` → `Theme.LayerFill`) | `ThemeBackgroundSuffixAnalyzer.cs` |

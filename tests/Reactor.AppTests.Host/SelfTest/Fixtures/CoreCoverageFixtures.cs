@@ -1306,6 +1306,101 @@ internal static class CoreCoverageFixtures
         }
     }
 
+    // Issue #1344 — mounting Execute mode with more than one item on either side must keep
+    // only the first item rather than throwing E_INVALIDARG and tearing down the host.
+    internal class SwipeControlExecuteModeMultiItem(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var captured = new global::System.Collections.Generic.List<global::Microsoft.UI.Reactor.Diagnostics.ReactorEvent>();
+            var gate = new global::System.Threading.Lock();
+
+            // Verbose so reconcile/render events also flow: an empty capture then means
+            // EventSource is inert (NativeAOT), not that the warning was dropped.
+            using (global::Microsoft.UI.Reactor.Diagnostics.ReactorTrace.Subscribe(
+                e => { lock (gate) { captured.Add(e); } },
+                global::System.Diagnostics.Tracing.EventLevel.Verbose))
+            {
+                var host = H.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (phase, set) = ctx.UseState(0);
+                    // Inline arrays: a fresh reference every render, as authors typically write them.
+                    // Phase 2 makes the right side valid; phase 3 makes it truncated again.
+                    SwipeItemData[] right = phase switch
+                    {
+                        2 => [new SwipeItemData("Delete")],
+                        3 => [new SwipeItemData("Delete"), new SwipeItemData("Archive")],
+                        _ => [new SwipeItemData("Delete"), new SwipeItemData("Archive"), new SwipeItemData("Flag")],
+                    };
+                    return VStack(
+                        Button("SwipeExecNext", () => set(phase + 1)),
+                        SwipeControl(
+                            TextBlock("execute-swipe"),
+                            leftItems: [new SwipeItemData("Pin"), new SwipeItemData("Mark")],
+                            rightItems: right)
+                        with
+                        {
+                            LeftItemsMode = Microsoft.UI.Xaml.Controls.SwipeMode.Execute,
+                            RightItemsMode = Microsoft.UI.Xaml.Controls.SwipeMode.Execute,
+                        });
+                });
+                await Harness.Render();
+
+                // Assert before the next CreateHost, which replaces this host's content.
+                var sc = H.FindControl<Microsoft.UI.Xaml.Controls.SwipeControl>(_ => true);
+                H.Check("SwipeExec_Mounted", sc is not null && H.FindText("execute-swipe") is not null);
+                H.Check("SwipeExec_LeftCapped", sc?.LeftItems is { Count: 1 } l && l[0].Text == "Pin"
+                    && l.Mode == Microsoft.UI.Xaml.Controls.SwipeMode.Execute);
+                H.Check("SwipeExec_RightCapped", sc?.RightItems is { Count: 1 } r && r[0].Text == "Delete"
+                    && r.Mode == Microsoft.UI.Xaml.Controls.SwipeMode.Execute);
+
+                for (int i = 0; i < 3; i++)
+                {
+                    H.ClickButton("SwipeExecNext");
+                    await Harness.Render();
+                }
+                sc = H.FindControl<Microsoft.UI.Xaml.Controls.SwipeControl>(_ => true);
+                H.Check("SwipeExec_RerenderStillCapped", sc?.LeftItems is { Count: 1 } && sc.RightItems is { Count: 1 });
+
+                // Negative control: Reveal mode with several items must not warn.
+                var revealHost = H.CreateHost();
+                revealHost.Mount(ctx =>
+                    SwipeControl(
+                        TextBlock("reveal-swipe"),
+                        leftItems: [new SwipeItemData("A"), new SwipeItemData("B"), new SwipeItemData("C"), new SwipeItemData("D")]));
+                await Harness.Render();
+                H.Check("SwipeExec_RevealKeepsAll",
+                    H.FindControl<Microsoft.UI.Xaml.Controls.SwipeControl>(_ => true)?.LeftItems?.Count == 4);
+            }
+
+            global::Microsoft.UI.Reactor.Diagnostics.ReactorEvent[] snapshot;
+            lock (gate) { snapshot = captured.ToArray(); }
+            if (snapshot.Length == 0)
+            {
+                H.Skip("SwipeExec_WarningEmitted",
+                    "EventSource delivered no events at all; NativeAOT defaults EventSourceSupport=false, so ETW-based assertions cannot run in this configuration.");
+                return;
+            }
+
+            var warnings = snapshot
+                .Where(e => e.EventName == "Warning" && e.Payload.Count > 2
+                    && e.Payload[1] as string == "SwipeControl.ExecuteItems"
+                    && e.Payload[2] is string)
+                .Select(e => (string)e.Payload[2]!)
+                .ToList();
+            // One warning per side on mount, none for the re-render with fresh arrays or while
+            // the left side stays truncated, and one more when the right side re-enters truncation.
+            H.Check("SwipeExec_WarningEmittedOncePerEntry", warnings.Count == 3);
+            H.Check("SwipeExec_WarningNamesLeft",
+                warnings.Count(m => m.Contains("LeftItems has 2 items", global::System.StringComparison.Ordinal)) == 1);
+            H.Check("SwipeExec_WarningNamesRight",
+                warnings.Count(m => m.Contains("RightItems has 3 items", global::System.StringComparison.Ordinal)) == 1);
+            H.Check("SwipeExec_WarningOnReentry",
+                warnings.Count(m => m.Contains("RightItems has 2 items", global::System.StringComparison.Ordinal)) == 1);
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     //  28. ListBox — mount
     //     Targets: Reconciler.Mount.cs lines 2117-2128

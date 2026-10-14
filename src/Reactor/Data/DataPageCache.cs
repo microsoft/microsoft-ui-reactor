@@ -41,7 +41,7 @@ public class DataPageCache<T>
     private readonly IDataSource<T> _source;
     private readonly int _blockSize;
     private readonly int _maxBlocks;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     // LRU tracking: most recently accessed block index at the end.
     private readonly LinkedList<int> _lruOrder = new();

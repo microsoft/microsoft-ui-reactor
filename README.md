@@ -116,9 +116,9 @@ dotnet run -p:Platform=x64
 
 > **Scaffolding.** Reactor's templates ship in the official Windows App SDK template pack. `winapp new -t reactor` installs that pack on demand and scaffolds in one step; `dotnet new reactor` works too once the pack is installed. The in-repo `Microsoft.UI.Reactor.ProjectTemplates` package that used to provide `dotnet new reactorapp` has been removed; its published versions are deprecated on NuGet.org.
 
-On networks where the public npm or NuGet registries are unreachable, bootstrap detects a recognised package mirror already configured in the user's `~/.npmrc` and NuGet.Config, verifies unauthenticated package access, and uses it only for the bootstrap process — including the optional Visual Studio extension build. Contributors on an unrestricted network keep the public defaults, unchanged. Any mirror can be selected explicitly with `-NpmRegistry <url>` and `-NuGetConfig <path>`; credentials remain in user configuration and are never written to the repository. Package feed URLs must use HTTPS (except loopback development feeds) and cannot embed credentials, query strings, or fragments. The npm mirror must permit direct package downloads because the Copilot SDK's MSBuild download task cannot forward npm credentials.
+On networks where the public NuGet registry is unreachable, bootstrap detects a recognised package mirror already configured in the user's NuGet.Config, verifies unauthenticated package access, and uses it only for the bootstrap process — including the optional Visual Studio extension build. Contributors on an unrestricted network keep the public defaults, unchanged. Any mirror can be selected explicitly with `-NuGetConfig <path>`; credentials remain in user configuration and are never written to the repository. Package feed URLs must use HTTPS (except loopback development feeds) and cannot embed credentials, query strings, or fragments.
 
-The same npm mirror detection also applies to plain `dotnet build` / `dotnet run` / `dotnet test`, which never pass through bootstrap. `src/Reactor.Cli` and two samples reference `GitHub.Copilot.SDK`, whose build targets download a native `copilot` CLI from `registry.npmjs.org`; on a network that blocks it, that download fails the build itself with `MSB3923`. [`tools/CopilotNpmRegistry.props`](tools/CopilotNpmRegistry.props) resolves the mirror from the same user configuration at evaluation time, so every documented command — including the `mur docs compile` the docs freshness gate asks you to run — works unmodified on both networks. To use a different mirror, set `CopilotNpmRegistryUrl` explicitly. `CopilotSkipCliDownload=true` also gets a blocked build moving, but only for compiling: it omits the native binary that `mur loc translate` and the two Copilot SDK samples start at run time, so prefer the mirror when you need a working local CLI. CI sets it because CI never runs those paths.
+`src/Reactor.Cli` and two samples reference `GitHub.Copilot.SDK`, whose build targets download a native `copilot` CLI from the [github/copilot-cli releases](https://github.com/github/copilot-cli/releases) during a plain `dotnet build` / `dotnet run` / `dotnet test` (checksum-verified against the release's `SHA256SUMS.txt`). If that download is blocked on your network, point it at a mirror of those release assets with `CopilotCliReleaseBaseUrl` (or the `COPILOT_CLI_DOWNLOAD_BASE_URL` environment variable), or supply a pre-downloaded binary with `CopilotCliBinaryPath`. `CopilotSkipCliDownload=true` also gets a blocked build moving, but only for compiling: it omits the native binary that `mur loc translate` and the two Copilot SDK samples start at run time. CI sets it because CI never runs those paths.
 
 Prefer to wire it up by hand? **[Getting Started](https://microsoft.github.io/microsoft-ui-reactor/getting-started/#manual-setup)** has a no-magic walkthrough of the exact `dotnet pack` / `dotnet tool install` / `dotnet new install` calls `bootstrap.ps1` makes, plus the full hello-world → todo → calculator tour.
 
@@ -148,7 +148,7 @@ Reactor spans a core framework and a set of higher-level features. Each area bel
 | **Docking & windows** | Visual Studio-style docking — tab tear-off, cross-window dock-in, floating panes, splitters, reserved document area, layout serialization and migration | Draft |
 | **WinForms interop** | Simple hosting of WinUI content inside WinForms apps | Draft |
 | **DevTools & diagnostics** | In-process MCP server for AI agents, UIA tree inspection, layout-cost overlay, screenshot capture, structured log capture, ETW layout events | Draft |
-| **`mur` CLI & analyzers** | App scaffolding, doc pipeline, `mur check` did-you-mean linter, localization tooling, `mur doctor` / `mur upgrade`, 40+ Roslyn analyzers (hooks, commanding, accessibility, theming, pooling, forms) | Draft |
+| **`mur` CLI & analyzers** | App scaffolding, `mur check` did-you-mean linter, localization tooling, `mur doctor` / `mur upgrade`, 40+ Roslyn analyzers (hooks, commanding, accessibility, theming, pooling, forms) | Draft |
 | **Localization** | ICU message format, source generator, CLI tooling (extract, translate, validate), RTL/BiDi | Early |
 | **Data system** | `DataGrid`, `PropertyGrid`, `FormField`, metadata model, async validation, inline editing | Early |
 | **Async resources** | `UseResource` / `UseInfiniteResource` / `UseMutation` — async value states, query caching, pagination, cancellation, optimistic updates | Early |
@@ -249,6 +249,19 @@ We are gathering feedback, pressure-testing the API surface, and refining the pr
 Everything in the repository — framework code, specs, sample apps, test suites — is available for anyone to read, build, and experiment with. Contributions and feedback are welcome from day one.
 
 Expect change. Every line of code in this project is fair game. The DSL syntax may shift as we work with the C# language team, controls may be added or removed, layering may be reorganized. This is your chance to shape the design while the sausage is getting made.
+
+---
+
+## Prefer Rust?
+
+The idea isn't tied to C#. Over in [windows-rs](https://github.com/microsoft/windows-rs),
+the Rust for Windows project, the same experiment is running in Rust:
+[**windows-reactor**](https://github.com/microsoft/windows-rs/blob/HEAD/docs/crates/windows-reactor.md)
+is a declarative WinUI library where components own their state, controls send
+typed messages back, and only the WinUI controls that changed get updated. It's a
+separate library with its own model, available on
+[crates.io](https://crates.io/crates/windows-reactor). Different language, same
+native controls underneath.
 
 ---
 

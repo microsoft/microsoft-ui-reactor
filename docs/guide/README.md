@@ -259,6 +259,17 @@ and `UseEffect` unlocks everything else.
 **Keep components small.** Extract pieces into their own components early.
 Composition is always easier to reason about than a single giant `Render()`.
 
+## Prefer Rust?
+
+The idea isn't tied to C#. Over in [windows-rs](https://github.com/microsoft/windows-rs),
+the Rust for Windows project, the same experiment is running in Rust:
+[**windows-reactor**](https://github.com/microsoft/windows-rs/blob/HEAD/docs/crates/windows-reactor.md)
+is a declarative WinUI library where components own their state, controls send
+typed messages back, and only the WinUI controls that changed get updated. It's a
+separate library with its own model, available on
+[crates.io](https://crates.io/crates/windows-reactor). Different language, same
+native controls underneath.
+
 ## Next Steps
 
 - **[Getting Started](getting-started.md)** — Build your first app, manage state, ship a todo list.

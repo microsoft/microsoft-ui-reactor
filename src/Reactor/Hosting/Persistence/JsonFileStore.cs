@@ -72,7 +72,7 @@ public sealed class JsonFileStore : IWindowPersistenceStore
         new(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
 
     private readonly string _path;
-    private readonly object _ioLock = new();
+    private readonly Lock _ioLock = new();
 
     /// <summary>The on-disk file path.</summary>
     public string Path => _path;

@@ -63,7 +63,7 @@ dotnet test tests/Reactor.AppTests --filter "ClassName=Microsoft.UI.Reactor.AppT
 <!-- /ai:lock -->
 
 The doc apps under `docs/_pipeline/apps/` are a fourth compile gate
-rather than a test suite: `mur docs compile` builds every one of them,
+rather than a test suite: `dotnet run --project tools/Reactor.DocPipeline -- compile` builds every one of them,
 so a snippet in this guide that names a removed API fails the docs
 build.
 

@@ -1,49 +1,31 @@
-# Headless tests for tools/CopilotNpmRegistry.props — the MSBuild-evaluation-time
-# selection of the npm mirror GitHub.Copilot.SDK downloads its native CLI from.
+# Headless tests for the repo's dependency on GitHub.Copilot.SDK's MSBuild
+# contract (tests/build_props/ci/CopilotSdkContract.Tests.ps1): the reviewed SDK
+# version, and the CI-only CopilotSkipCliDownload default in Directory.Build.props.
 #
-# This workflow exists because nothing else can catch that policy regressing.
-# Every CI build sets CI=true, which makes Directory.Build.props set
-# CopilotSkipCliDownload=true, which makes the props file inert — so the whole
-# ordinary matrix (unit tests, selftests, build-solution, docs-build) would stay
-# green with the file deleted. The suite evaluates it directly against synthetic
-# npm configuration instead, needing no network, restore, or credentials.
-#
-# Runs on Windows because the props reads a Windows-shaped ~/.npmrc path, resolved
-# from the MSBuild UserProfile property (i.e. the USERPROFILE environment variable,
-# which is what bootstrap reads and what the suite redirects to drive the fallback
-# branch). `dotnet msbuild` on a bare non-SDK project is the only build work
-# involved, so it is still a seconds-long job. Exits non-zero on any failed
-# assertion.
+# This workflow exists because nothing else can catch that contract breaking. The
+# ordinary matrix runs with the native CLI download already skipped, so it stays
+# green if an SDK bump renames the property or the $(CI) block is deleted. The
+# suite evaluates Directory.Build.props directly, needing no network, restore, or
+# credentials, and pins the reviewed SDK version so a bump fails here until the
+# SDK's targets have been re-read. `dotnet msbuild` on a bare non-SDK project is
+# the only build work involved, so it is a seconds-long job. Exits non-zero on
+# any failed assertion.
 name: Build props tests
 
 on:
   push:
     paths:
-      - 'tools/CopilotNpmRegistry.props'
-      # The suite's differential corpus dot-sources this resolver and requires
-      # the props to agree with it, so a change there can invalidate the claimed
-      # parity while this job stays skipped.
-      - 'tools/BootstrapFeedResolver.ps1'
       - 'Directory.Build.props'
-      # A GitHub.Copilot.SDK version bump can change or drop the
-      # CopilotNpmRegistryUrl contract this props depends on, and no other job
-      # would notice: the ordinary matrix sets CI=true, which makes the props
-      # inert. The suite pins the reviewed SDK version so a bump fails here.
+      # A GitHub.Copilot.SDK version bump can change or drop the MSBuild contract
+      # Directory.Build.props depends on, and no other job would notice.
       - 'Directory.Packages.props'
       - 'tests/build_props/ci/**'
       - '.github/workflows/build-props-lib-tests.yml'
   pull_request:
     paths:
-      - 'tools/CopilotNpmRegistry.props'
-      # The suite's differential corpus dot-sources this resolver and requires
-      # the props to agree with it, so a change there can invalidate the claimed
-      # parity while this job stays skipped.
-      - 'tools/BootstrapFeedResolver.ps1'
       - 'Directory.Build.props'
-      # A GitHub.Copilot.SDK version bump can change or drop the
-      # CopilotNpmRegistryUrl contract this props depends on, and no other job
-      # would notice: the ordinary matrix sets CI=true, which makes the props
-      # inert. The suite pins the reviewed SDK version so a bump fails here.
+      # A GitHub.Copilot.SDK version bump can change or drop the MSBuild contract
+      # Directory.Build.props depends on, and no other job would notice.
       - 'Directory.Packages.props'
       - 'tests/build_props/ci/**'
       - '.github/workflows/build-props-lib-tests.yml'
@@ -52,8 +34,8 @@ permissions:
   contents: read
 
 jobs:
-  copilot-npm-registry:
-    name: CopilotNpmRegistry.props tests
+  copilot-sdk-contract:
+    name: Copilot SDK contract tests
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -67,8 +49,8 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      # The suite clears NPM_CONFIG_* and the Copilot properties itself before
-      # each case, so a runner that happens to export them cannot decide a result.
-      - name: Run CopilotNpmRegistry.props tests
+      # The suite clears CI and CopilotSkipCliDownload itself before each case, so
+      # the runner's own CI=true cannot decide a result.
+      - name: Run Copilot SDK contract tests
         shell: pwsh
-        run: ./tests/build_props/ci/CopilotNpmRegistry.Tests.ps1
+        run: ./tests/build_props/ci/CopilotSdkContract.Tests.ps1

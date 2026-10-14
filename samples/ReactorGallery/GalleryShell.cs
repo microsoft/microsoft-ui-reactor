@@ -128,13 +128,9 @@ class GalleryShell : Component
         Element content;
         if (searchResults != null)
         {
-            content = VStack(16,
-                GalleryControls.PageHeader("Search Results",
-                    $"{searchResults.Length} matching \"{searchQuery}\"")
-                    .Margin(36, 24, 36, 0),
-                GalleryControls.ControlCardGrid(searchResults, navigate.Current)
-                    .Margin(36, 0, 0, 36)
-            );
+            content = CardListPage("search:" + searchQuery, "Search Results",
+                $"{searchResults.Length} matching \"{searchQuery}\"",
+                searchResults, navigate.Current);
         }
         else if (selectedTag == GalleryRoutes.HomeTag)
         {
@@ -152,15 +148,11 @@ class GalleryShell : Component
                 .Where(c => c.Category == categoryName)
                 .ToArray();
 
-            content = VStack(16,
-                GalleryControls.PageHeader(categoryName,
-                    ControlRegistry.IsControlCategory(categoryName)
-                        ? $"{controls.Length} controls in this category"
-                        : $"{controls.Length} topics in this category")
-                    .Margin(36, 24, 36, 0),
-                GalleryControls.ControlCardGrid(controls, navigate.Current)
-                    .Margin(36, 0, 0, 36)
-            );
+            content = CardListPage("category:" + selectedTag, categoryName,
+                ControlRegistry.IsControlCategory(categoryName)
+                    ? $"{controls.Length} controls in this category"
+                    : $"{controls.Length} topics in this category",
+                controls, navigate.Current);
         }
         else
         {
@@ -195,6 +187,9 @@ class GalleryShell : Component
                 ),
                 IsPaneToggleButtonVisible = true,
                 OnPaneToggleRequested = () => setIsPaneOpen(!isPaneOpen),
+                // WinUI does not carry the root's RequestedTheme to the system caption
+                // buttons, so declare the matching theme or they keep the system's.
+                PreferredTheme = isDark ? WindowTitleBarTheme.Dark : WindowTitleBarTheme.Light,
                 IsBackButtonVisible = true,
                 IsBackButtonEnabled = prevTag != null,
                 OnBackRequested = prevTag != null ? () =>
@@ -252,6 +247,24 @@ class GalleryShell : Component
             .RequestedTheme(isDark ? ElementTheme.Dark : ElementTheme.Light)
             .Backdrop(BackdropKind.Mica);
     }
+
+    /// <summary>
+    /// Header + card grid page used by category and search-result views. The page owns
+    /// its vertical scroller: <see cref="GalleryControls.ControlCardGrid"/> disables the
+    /// GridView's internal ScrollViewer so it sizes to content, and NavigationView content
+    /// does not scroll on its own (issue #1298). <paramref name="pageKey"/> identifies the
+    /// list shown, so switching category or query remounts the scroller at the top instead
+    /// of carrying the previous list's offset over.
+    /// </summary>
+    static Element CardListPage(string pageKey, string title, string subtitle, ControlInfo[] controls, Action<string> navigate) =>
+        ScrollView(
+            VStack(16,
+                GalleryControls.PageHeader(title, subtitle)
+                    .Margin(36, 24, 36, 0),
+                GalleryControls.ControlCardGrid(controls, navigate)
+                    .Margin(36, 0, 0, 36)
+            )
+        ).WithKey(pageKey);
 
     /// <summary>
     /// Search text a route implies. Only a <c>/search?q=</c> link carries one; every

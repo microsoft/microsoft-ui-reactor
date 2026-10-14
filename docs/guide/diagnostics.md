@@ -57,8 +57,9 @@ mirror is `[Conditional("DEBUG")]` and compiles out in Release.
 
 The provider's events split across a small set of keywords; spec 044
 adds six subsystem keywords on top of the seven the perf-instrumentation
-page documents, and spec 049 added a seventh (`HotReload`). Pick the
-bits that match what you're triaging:
+page documents, spec 049 added a seventh (`HotReload`), and `RenderDetail`
+carries the per-component render notification. Pick the bits that match what
+you're triaging:
 
 | Keyword | Bit | Covers |
 |---|---|---|
@@ -70,13 +71,15 @@ bits that match what you're triaging:
 | `Theme` | `0x800` | `ThemeApplyFailed` |
 | `Shell` | `0x1000` | `JumpList*` / `ThumbnailToolbar*` / `Tray*` (planned) |
 | `HotReload` | `0x2000` | Hook-state migration across edits (spec 049) |
+| `RenderDetail` | `0x4000` | `ComponentRendered` — one Verbose event per component render, with the reason |
 
 Combine bits with bitwise-or. The most common capture-everything-
 unsurprising mask is `0x1FA0` (`Errors | Hosting | Persistence |
 Navigation | Intl | Theme`) — drops the verbose `State` and
 `EventDispatch` keywords that produce per-state-write spam. Add
 `0x2000` when you are debugging why hot reload reset a component's
-state.
+state, and `0x4000` (at level `5`, Verbose) when you want one
+`ComponentRendered` event per component render.
 
 `Warning` carries a framework-authored diagnostic for a recoverable
 misconfiguration the framework chose to continue past — an unresolved
@@ -91,6 +94,42 @@ three strings:
 
 The message is composed by the framework from developer-authored
 identifiers, never from user data (spec 044 §6.2.1).
+
+### Component render notifications
+
+`ComponentRendered` (EventId 40, `Verbose`, keywords `Render | RenderDetail`)
+fires once each time a component's `Render()` runs — on mount, on update, and
+for a host's root component, including a `Render()` that threw (whether the
+framework's error fallback or an `ErrorBoundary` caught it) — and never for a
+component the memo gate skipped.
+It is what an inspector needs to flash the regions that just re-rendered, or to
+answer *why did this render?*:
+
+| Field | Meaning |
+|---|---|
+| `componentName` | Component type name — `Counter`, or `ItemList<Int32>` for a generic component (`FuncElement` / `MemoElement` for function and memo components); the same name `RenderError` reports |
+| `componentId` | Process-unique id of the mounted instance; stable across its re-renders |
+| `reason` | `mount`, `state`, `props`, `context`, `parent`, `hotReload` or `forced` |
+| `elapsedMicroseconds` | Time in `Render()` (plus the synchronous effect flush for non-root components) |
+
+`state` means an update was requested from inside the component's subtree —
+its own hook, or a descendant's: Reactor re-renders every component on the path
+from the root to the one whose state changed, so ancestors report `state` too.
+A host's root component reports `state` for every non-forced re-render, including
+the ones the host requests itself (theme, high-contrast or animation-setting
+changes).
+`parent` means the parent re-rendered and nothing could skip this component (a
+function component, or a propless `Component` whose `ShouldUpdate()` is true). A
+function component whose consumed context changed reports `context` instead.
+`hotReload` covers every re-render of a hot-reload pass, whatever else changed,
+including the retry after a hook-order change. A component first created during
+the pass reports `mount`.
+
+In process, `ReactorTrace.GetComponentControl(componentId)` resolves an id to the
+control whose bounds are that component's, and `ReactorTrace.TryGetComponentId(control, out id)` goes the other way. Ids
+are only issued while the event is enabled, so subscribe with
+`ReactorTrace.Subscribe(..., EventLevel.Verbose, (EventKeywords)0x4000)` first.
+The payload carries no props, state values, keys or paths.
 
 > **NativeAOT:** the .NET NativeAOT toolchain defaults the `EventSourceSupport`
 > feature switch to `false`, which compiles the whole `EventSource` surface out.

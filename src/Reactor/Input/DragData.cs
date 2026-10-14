@@ -315,7 +315,7 @@ public sealed class DragData
     // once DragStarting returns, so a WeakReference could be collected mid-drag. The
     // reconciler is responsible for calling Unregister in DropCompleted (success or cancel).
     private static readonly Dictionary<Guid, DragData> _transfers = new();
-    private static readonly object _transfersLock = new();
+    private static readonly Lock _transfersLock = new();
 
     internal static Guid Register(DragData data)
     {

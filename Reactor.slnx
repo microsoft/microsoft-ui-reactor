@@ -482,6 +482,12 @@
   <Folder Name="/tools/">
     <Project Path="tools/spec047-aggregator/Spec047Aggregator.csproj" />
   </Folder>
+  <Folder Name="/tools/Reactor.DocPipeline/">
+    <Project Path="tools/Reactor.DocPipeline/Reactor.DocPipeline.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
   <Folder Name="/tools/Reactor.MurCheckGuardrail/">
     <Project Path="tools/Reactor.MurCheckGuardrail/Reactor.MurCheckGuardrail.csproj" />
   </Folder>

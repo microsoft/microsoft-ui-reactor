@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
-using System.Net.Sockets;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -18,7 +17,17 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 /// </summary>
 internal sealed class DevtoolsMcpServer : IDisposable
 {
-    private readonly HttpListener _listener;
+    /// <summary>Created and bound by <see cref="Start"/>; null until then and in stdio mode.</summary>
+    private HttpListener? _listener;
+    /// <summary>
+    /// Serializes the HTTP <see cref="Start"/> (bind, publish, announce) with
+    /// <see cref="Dispose"/> (all of its cleanup): a concurrent Start waits for the
+    /// first one's result, and once Dispose returns nothing is bound or announced.
+    /// </summary>
+    private readonly Lock _lifecycleGate = new();
+    /// <summary>True when the caller pinned <see cref="Port"/>; a pinned port is never moved.</summary>
+    private readonly bool _portPinned;
+    private readonly Func<int> _probePort;
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly Window _window;
     private readonly McpToolRegistry _tools;
@@ -42,7 +51,13 @@ internal sealed class DevtoolsMcpServer : IDisposable
     /// </summary>
     private readonly SemaphoreSlim _dispatchGate = new(initialCount: 16, maxCount: 16);
 
-    public int Port { get; }
+    /// <summary>
+    /// The MCP HTTP port. A pinned port (a positive <c>preferredPort</c>) is used
+    /// as-is. Otherwise this starts as a probed free port that <see cref="Start"/>
+    /// tries first; if another process takes it before the bind, Start moves to a
+    /// freshly probed port. Final once Start returns.
+    /// </summary>
+    public int Port { get; private set; }
     public McpToolRegistry Tools => _tools;
     public string BuildTag => _buildTag;
     public DispatcherQueue DispatcherQueue => _dispatcherQueue;
@@ -62,13 +77,18 @@ internal sealed class DevtoolsMcpServer : IDisposable
     private TextWriter BannerWriter =>
         _transport == McpTransport.Stdio ? Console.Error : Console.Out;
 
+    /// <remarks>
+    /// <paramref name="probePort"/> is a test seam that supplies probed free ports
+    /// for an unpinned server; it defaults to <see cref="LoopbackHttpListener.ProbeFreePort"/>.
+    /// </remarks>
     public DevtoolsMcpServer(
         DispatcherQueue dispatcherQueue,
         Window window,
         int? preferredPort = null,
         DevtoolsLogger? logger = null,
         McpTransport transport = McpTransport.Http,
-        string? projectIdentifier = null)
+        string? projectIdentifier = null,
+        Func<int>? probePort = null)
     {
         _dispatcherQueue = dispatcherQueue;
         _window = window;
@@ -79,9 +99,9 @@ internal sealed class DevtoolsMcpServer : IDisposable
         _projectIdentifier = projectIdentifier;
         _authToken = GenerateToken();
 
-        Port = preferredPort is > 0 ? preferredPort.Value : FindFreePort();
-        _listener = new HttpListener();
-        _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
+        _probePort = probePort ?? LoopbackHttpListener.ProbeFreePort;
+        _portPinned = preferredPort is > 0;
+        Port = _portPinned ? preferredPort!.Value : _probePort();
     }
 
     /// <summary>
@@ -105,35 +125,39 @@ internal sealed class DevtoolsMcpServer : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// HTTP transport: binds the listener (see <see cref="Port"/>) and starts serving.
+    /// A repeated call is a no-op, as <see cref="HttpListener.Start"/> is; a concurrent
+    /// call waits for the first one's result.
+    /// </summary>
+    /// <exception cref="LoopbackPortUnavailableException">
+    /// HTTP transport only: the pinned port is in use, or (practically never) every
+    /// probed port was taken before it could be bound.
+    /// </exception>
     public void Start()
     {
         if (_transport == McpTransport.Http)
         {
-            // SECURITY (TASK-006): bound the IO timers so a slow-loris client
-            // can't park a worker indefinitely. Defaults are minutes; cap at
-            // 10s so any single request fits well inside the dispatch budget.
-            try
+            lock (_lifecycleGate)
             {
-                var tm = _listener.TimeoutManager;
-                tm.HeaderWait = TimeSpan.FromSeconds(10);
-                tm.EntityBody = TimeSpan.FromSeconds(10);
-                tm.IdleConnection = TimeSpan.FromSeconds(15);
-                tm.RequestQueue = TimeSpan.FromSeconds(10);
-            }
-            catch
-            {
-                // TimeoutManager is unavailable on some hosts; the per-read
-                // ContentLength64 cap below is the load-bearing protection.
-            }
-            _listener.Start();
-            _ = ListenAsync().ContinueWith(
-                t => Console.Error.WriteLine($"[devtools:mcp] Listener loop failed: {t.Exception!.GetBaseException()}"),
-                TaskContinuationOptions.OnlyOnFaulted);
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (_listener is not null) return;
 
-            BannerWriter.WriteLine($"[devtools] MCP serving on http://127.0.0.1:{Port}/mcp");
-            BannerWriter.WriteLine($"MCP_TRANSPORT=http");
-            BannerWriter.WriteLine($"MCP_ENDPOINT=http://127.0.0.1:{Port}/mcp");
-            BannerWriter.WriteLine($"MCP_PORT={Port}");
+                // Bind-and-retry rather than probe-then-bind: another process can take
+                // a probed port before HttpListener binds it. A pinned port is never moved.
+                var (listener, port) = LoopbackHttpListener.Start(Port, _portPinned, ConfigureTimeouts, _probePort);
+                _listener = listener;
+                Port = port;
+                _ = ListenAsync(listener).ContinueWith(
+                    t => Console.Error.WriteLine($"[devtools:mcp] Listener loop failed: {t.Exception!.GetBaseException()}"),
+                    TaskContinuationOptions.OnlyOnFaulted);
+
+                BannerWriter.WriteLine($"[devtools] MCP serving on http://127.0.0.1:{Port}/mcp");
+                BannerWriter.WriteLine($"MCP_TRANSPORT=http");
+                BannerWriter.WriteLine($"MCP_ENDPOINT=http://127.0.0.1:{Port}/mcp");
+                BannerWriter.WriteLine($"MCP_PORT={Port}");
+                BannerWriter.Flush();
+            }
         }
         else // Stdio
         {
@@ -247,11 +271,13 @@ internal sealed class DevtoolsMcpServer : IDisposable
 
     public void Dispose()
     {
+        using var gate = _lifecycleGate.EnterScope();
         if (_disposed) return;
         _disposed = true;
         _shutdownCts.Cancel();
-        try { _listener.Stop(); } catch { }
-        try { _listener.Close(); } catch { }
+        // Close also stops the listener; HTTP.sys failures surface as HttpListenerException.
+        try { _listener?.Close(); }
+        catch (HttpListenerException ex) { Console.Error.WriteLine($"[devtools:mcp] Closing the listener failed: {ex.Message}"); }
         try { _stdioLoop?.Dispose(); } catch { }
         try { _logger?.Dispose(); } catch { }
         if (!string.IsNullOrEmpty(_lockfilePath))
@@ -260,14 +286,41 @@ internal sealed class DevtoolsMcpServer : IDisposable
 
     // -- HTTP Loop ---------------------------------------------------------------
 
-    private async Task ListenAsync()
+    /// <summary>
+    /// SECURITY (TASK-006): bound the IO timers so a slow-loris client can't park
+    /// a worker indefinitely. Defaults are minutes; cap at 10s so any single
+    /// request fits well inside the dispatch budget. Runs on every bind attempt's
+    /// listener before it starts.
+    /// </summary>
+    private static void ConfigureTimeouts(HttpListener listener)
     {
-        while (!_disposed && _listener.IsListening)
+        try
+        {
+            var tm = listener.TimeoutManager;
+            tm.HeaderWait = TimeSpan.FromSeconds(10);
+            tm.EntityBody = TimeSpan.FromSeconds(10);
+            tm.IdleConnection = TimeSpan.FromSeconds(15);
+            tm.RequestQueue = TimeSpan.FromSeconds(10);
+        }
+        catch (HttpListenerException)
+        {
+            // HTTP.sys rejected a timeout property; the body cap in HandleRequest
+            // is the load-bearing protection.
+        }
+        catch (PlatformNotSupportedException)
+        {
+            // TimeoutManager is unavailable on non-HTTP.sys hosts.
+        }
+    }
+
+    private async Task ListenAsync(HttpListener listener)
+    {
+        while (!_disposed && listener.IsListening)
         {
             HttpListenerContext ctx;
             try
             {
-                ctx = await _listener.GetContextAsync();
+                ctx = await listener.GetContextAsync();
             }
             catch (ObjectDisposedException) { break; }
             catch (HttpListenerException) { break; }
@@ -583,15 +636,6 @@ internal sealed class DevtoolsMcpServer : IDisposable
                     "devtools-ready",
                     "One-line JSON sentinel emitted on stdout after first render. Fields: endpoint, transport, port, pid, buildTag."),
             });
-    }
-
-    private static int FindFreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
     }
 
     /// <summary>

@@ -54,7 +54,10 @@ public UIElement? Reconcile(
     UIElement? existingControl,
     Action requestRerender)
 {
-    // Declared first so it is disposed last: validation changes raised by mount,
+    // A top-level pass is an outermost Reactor frame for render-error propagation
+    // (issue #1291); see EnterFrame. Nested passes and mounts just count.
+    using var entryFrame = EnterFrame();
+    // Declared before the reconcile work so it is disposed after it: validation changes raised by mount,
     // update, or unmount are announced only once the whole pass has finished.
     using var validationScope = Controls.Validation.ValidationRenderScope.BeginReconcile();
     ReferenceDirtySet.BeginCommit();
@@ -100,6 +103,8 @@ public UIElement? Reconcile(
         // every component re-runs Render() even when props/deps are unchanged.
         _forceFullRenderActive = ForceFullRenderPending;
         ForceFullRenderPending = false;
+        _hotReloadRetryActive = HotReloadRetryPending;
+        HotReloadRetryPending = false;
 
         // Build the dirty-ancestor path. For every component node
         // whose SelfTriggered is true, walk up the realized visual
@@ -141,8 +146,9 @@ branch, and `_reconcileTraceDepth` makes sure nested `Reconcile` calls
 during the same pass don't emit their own start/stop events; only the
 top-level pass logs. `PopulateDirtyAncestorPath()` runs once per
 top-level pass and marks the realized ancestors of every self-triggered
-component so `Update`'s shallow-equality short-circuit still descends to
-a component whose own state changed under structurally unchanged parents.
+component so `Update`'s shallow-equality short-circuit, and the child
+reconciler's per-child skip, still descend to a component whose own
+state changed under structurally unchanged parents.
 
 The reconciler holds debug counters (`DebugElementsDiffed`,
 `DebugElementsSkipped`, `DebugUIElementsCreated`,
@@ -158,7 +164,7 @@ reads these.
 > collection". If you call `Reconcile` from a custom container and
 > ignore the return value, the parent keeps pointing at a control that's
 > about to be unmounted. The framework's own
-> [`ChildReconciler`](#child-reconciler) handles this; custom callers
+> [`ChildReconciler`](#child-reconciler-keyed-vs-positional) handles this; custom callers
 > need to mirror it.
 
 ## Mount — building a control tree
@@ -214,14 +220,21 @@ Modifiers like margin and corner-radius diff the same way, just against
 the merged `ElementModifiers` records. The fallback switch only updates
 structural wrappers such as components and error boundaries; an unchanged
 `KeyedMemoElement` is transparent and returns `null` to keep the
-existing control.
+existing control, unless a component inside it changed its own state, in
+which case the factory runs again and the pass walks down to that
+component.
 
 The early-skip optimization is in two places. At the element level,
 `Element.CanSkipUpdate(oldEl, newEl)` returns true when the records
 are structurally identical, are not theme-sensitive,
 and have the same callback presence — the reconciler can avoid the
 `children.Get(i)` COM call entirely and just refresh the
-[element tag](#element-tag-event-dispatch) if the element carries callbacks. At
+[element tag](#element-tag-event-dispatch) if the element carries callbacks.
+The exception is a child that leads to a self-triggered component: an
+unchanged element there (a reused instance, a memoized wrapper) is still
+updated so the pass reaches the component. The child reconciler finds
+those children by index once per panel, so the other children skip
+without a COM call. At
 the property level, the descriptor or handler short-circuits per
 property: unchanged property → no DP write.
 
@@ -254,10 +267,16 @@ internal static void Reconcile(
     var ambient = AnimationAmbient.Current;
     AnimationKind? ambientKind = ambient is { HasEffect: true } ? ambient.Kind : null;
 
+    // Children that lead to a component which updated its own state. Their elements can be
+    // unchanged — a reused instance, a memoized wrapper, a reused children array — and the
+    // skip arms below must still descend into them, or the pass never reaches the
+    // component. Resolved once here (default when nothing in the pass self-triggered).
+    var dirty = reconciler.ResolveDirtyChildIndices(parentControl, children);
+
     if (hasKeys)
-        ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind);
+        ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
     else
-        ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl);
+        ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
 }
 ```
 
@@ -368,7 +387,11 @@ element has callbacks (`Element.HasCallbacks`), carries a `Key`, has
 `Extensions`, or uses a reference modifier — the four cases where
 downstream code reads the element back through `GetElementTag`. An
 element with none of those never pays for a `ReactorState` allocation
-or the attached-DP write.
+or the attached-DP write. The one addition is diagnostic: while
+`ReactorSourceMap.Enabled` is on, the `Border` wrapper of every
+`Component`, `Func` and `Memo` boundary is tagged too, so an inspector
+can find each component — one allocation per component, never per leaf
+(see [Source mapping](source-mapping.md)).
 
 This is why `Element.HasCallbacks` is load-bearing in the early-skip
 path of the [child reconciler](#child-reconciler-keyed-vs-positional)
@@ -483,10 +506,16 @@ internal static void Reconcile(
     var ambient = AnimationAmbient.Current;
     AnimationKind? ambientKind = ambient is { HasEffect: true } ? ambient.Kind : null;
 
+    // Children that lead to a component which updated its own state. Their elements can be
+    // unchanged — a reused instance, a memoized wrapper, a reused children array — and the
+    // skip arms below must still descend into them, or the pass never reaches the
+    // component. Resolved once here (default when nothing in the pass self-triggered).
+    var dirty = reconciler.ResolveDirtyChildIndices(parentControl, children);
+
     if (hasKeys)
-        ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind);
+        ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
     else
-        ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl);
+        ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
 }
 ```
 

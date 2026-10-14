@@ -17,6 +17,21 @@ internal interface IChildCollection
     void RemoveAt(int index);
     void Move(int oldIndex, int newIndex);
     void Replace(int index, UIElement element);
+
+    /// <summary>
+    /// Index of <paramref name="element"/> in the collection, or -1. The reconciler calls this
+    /// once per dirty child of a container rather than reading every child, so implementations
+    /// over a live collection should answer in a single call.
+    /// </summary>
+    int IndexOf(UIElement element)
+    {
+        for (int i = 0; i < Count; i++)
+        {
+            if (ReferenceEquals(Get(i), element))
+                return i;
+        }
+        return -1;
+    }
 }
 
 /// <summary>
@@ -42,6 +57,7 @@ internal sealed class PanelChildCollection : IChildCollection
 
     public int Count => _children.Count;
     public UIElement Get(int index) => _children[index];
+    public int IndexOf(UIElement element) => _children.IndexOf(element);
     public void Insert(int index, UIElement element) => _children.Insert(index, element);
     public void RemoveAt(int index) => _children.RemoveAt(index);
 

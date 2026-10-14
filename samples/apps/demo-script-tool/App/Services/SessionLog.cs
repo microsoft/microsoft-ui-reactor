@@ -30,7 +30,7 @@ public static class SessionLog
 {
     const int MaxRetainedSessions = 10;
 
-    static readonly object _gate = new();
+    static readonly Lock _gate = new();
     static StreamWriter? _writer;
 
     /// <summary>Path of the current session's log file once <see cref="Init"/> has run.</summary>

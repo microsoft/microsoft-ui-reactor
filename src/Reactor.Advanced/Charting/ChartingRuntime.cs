@@ -15,7 +15,7 @@ namespace Microsoft.UI.Reactor.Charting;
 /// </summary>
 internal static class ChartingRuntime
 {
-    private static readonly object s_gate = new();
+    private static readonly Lock s_gate = new();
     private static volatile bool s_registered;
 
     internal static void Activate()

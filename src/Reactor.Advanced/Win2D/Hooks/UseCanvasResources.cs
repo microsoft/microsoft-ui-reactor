@@ -47,7 +47,7 @@ public static class UseCanvasResourcesHook
         ctx.UseEffect(() =>
         {
             var disposed = false;
-            var gate = new object();
+            var gate = new Lock();
             CanvasDevice? subscribedDevice = null;
 
             void DisposeResource(TResources? resource)

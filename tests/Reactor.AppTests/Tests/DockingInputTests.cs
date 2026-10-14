@@ -31,6 +31,20 @@ public class DockingInputTests : AppTestBase
     private static (int X, int Y) Center(Rectangle r) => (r.X + r.Width / 2, r.Y + r.Height / 2);
 
     /// <summary>
+    /// Bounds of a docking tab's caption: the Text element carrying the pane title. The TabItem
+    /// is named after the title too, but a pinnable tab's centre sits on its pin button, so the
+    /// first element named <paramref name="title"/> is not a safe place to grab or aim at.
+    /// </summary>
+    private Rectangle TabCaptionRect(string title)
+    {
+        var caption = App.Search(title, HostHwnd).FirstOrDefault(m =>
+            m.Name == title && string.Equals(m.Type, "Text", StringComparison.OrdinalIgnoreCase));
+        if (caption is null)
+            throw new WinAppException($"No caption Text named '{title}' found for the docking tab.");
+        return new Rectangle(caption.X, caption.Y, caption.Width, caption.Height);
+    }
+
+    /// <summary>
     /// Drag one tab header onto another pane to merge the two panes into one tab group.
     /// <para>
     /// The dragged tab is grabbed by its HEADER caption (a user picks up a tab by its header). The
@@ -42,16 +56,16 @@ public class DockingInputTests : AppTestBase
     /// <para>
     /// The drop target is computed PRE-DRAG and is stable — this custom tear-off drag does NOT
     /// reflow the surviving pane, so the merge zone stays at the "to" pane's original position. It
-    /// is the X of the "to" tab caption (<see cref="AppTestBase.FindByName"/>, over the tab header)
+    /// is the X of the "to" tab caption (<see cref="TabCaptionRect"/>, over the tab header)
     /// combined with the vertical CENTRE of the "to" pane body (<c>pane:dock-input:&lt;to&gt;</c>
     /// bounds) — the header X alone aims too high, at the caption row.
     /// </para>
     /// </summary>
     private void DragTabOnto(string fromName, string toName)
     {
-        var grab = Center(FindByName(fromName).Rect);
+        var grab = Center(TabCaptionRect(fromName));
 
-        var headerRect = FindByName(toName).Rect;
+        var headerRect = TabCaptionRect(toName);
         var paneId = $"pane:dock-input:{toName.ToLowerInvariant()}";
         var paneRect = App.GetBounds(paneId)
             ?? throw new WinAppException($"Target pane '{paneId}' not found pre-drag for drag-merge.");

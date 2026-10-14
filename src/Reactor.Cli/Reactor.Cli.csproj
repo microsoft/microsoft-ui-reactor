@@ -33,7 +33,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>mur</ToolCommandName>
     <PackageId>Microsoft.UI.Reactor.Cli</PackageId>
-    <Description>Microsoft.UI.Reactor CLI — scaffolding, doc pipeline, find, check, localization, devtools supervisor, and Roslyn analyzer host.</Description>
+    <Description>Microsoft.UI.Reactor CLI — scaffolding, find, check, localization, devtools supervisor, and Roslyn analyzer host.</Description>
     <Authors>Microsoft</Authors>
     <Company>Microsoft</Company>
     <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
@@ -56,9 +56,9 @@
   </PropertyGroup>
 
   <!-- Declare the assembly Windows-only at the metadata level. Dropping the
-       `-windows` TFM (required for PackAsTool) otherwise causes CA1416 to fire
-       on System.Drawing usage in Docs/ImageProcessor.cs. Reactor itself is
-       Windows-only by virtue of WinUI, so this is semantically accurate. -->
+       `-windows` TFM (required for PackAsTool) otherwise lets CA1416 fire on
+       Windows-only APIs. Reactor itself is Windows-only by virtue of WinUI, so
+       this is semantically accurate. -->
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatform">
       <_Parameter1>windows</_Parameter1>
@@ -67,10 +67,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Reactor.Tests" />
-    <!-- Spec 041 Phase 1: doc-pipeline test project consumes the compiler's
-         internal TemplateParser / SnippetExtractor / TierLint / DiagramProcessor
-         surface directly. -->
-    <InternalsVisibleTo Include="Reactor.DocPipeline.Tests" />
     <!-- Spec 038 §8 guardrail tool re-uses PolicyTable so the two sources
          can never drift. The guardrail is offline / CI-only; no runtime
          dependency on it from the CLI itself. -->
@@ -89,12 +85,6 @@
          so every local `dotnet run` worked, while every bootstrap-installed
          `mur check` died at startup with FileNotFoundException. -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
-    <PackageReference Include="System.Drawing.Common" />
-    <PackageReference Include="YamlDotNet" />
-    <PackageReference Include="Vecc.YamlDotNet.Analyzers.StaticGenerator">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>

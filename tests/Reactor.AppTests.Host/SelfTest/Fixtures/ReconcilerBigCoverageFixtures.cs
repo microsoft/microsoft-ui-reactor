@@ -852,11 +852,14 @@ internal static class ReconcilerBigCoverageFixtures
 
             H.ClickButton("SwipePhase");
             await Harness.Render();
-            // SwipeControl may remount instead of update on item changes — assertion
-            // would be flaky. The relevant Update.cs branches still run during the
-            // attempted update before remount, which is what we want for coverage.
-            H.Check("Swipe_AfterUpdate", true);
-            H.Check("Swipe_PathExercised", true);
+            // Issue #1344 — Execute mode with two items used to throw E_INVALIDARG out of
+            // SwipeItems.Append and replace the host with the render-error fallback.
+            var sc = H.FindControl<Microsoft.UI.Xaml.Controls.SwipeControl>(_ => true);
+            H.Check("Swipe_AfterUpdate", sc is not null && H.FindText("swipe-content") is not null);
+            H.Check("Swipe_ExecuteMode", sc?.LeftItems?.Mode == Microsoft.UI.Xaml.Controls.SwipeMode.Execute);
+            H.Check("Swipe_ExecuteCappedToOne", sc?.LeftItems?.Count == 1);
+            H.Check("Swipe_ExecuteKeepsFirst", sc?.LeftItems is { Count: 1 } li && li[0].Text == "Pin");
+            H.Check("Swipe_RightCleared", sc is not null && sc.RightItems is null);
         }
     }
 
@@ -1367,11 +1370,9 @@ internal static class ReconcilerBigCoverageFixtures
             H.ClickButton("CustomPhase");
             await Harness.Render();
             H.Check("CustomReg_Replaced", H.FindText("custom-replaced") is not null);
-            // The unmount callback is invoked through the registered TypeRegistration's
-            // Unmount path; if the framework chose a different teardown (e.g. unmount
-            // via parent), the variable may not increment — keep the test green.
-            _ = unmountCount;
-            H.Check("CustomReg_TypeRegistered", true);
+            // Swapping the slot to a TextBlock unmounts the widget through UnmountRecursive,
+            // which finds the registration's unmount callback through the element tag.
+            H.Check("CustomReg_UnmountCallbackRan", unmountCount == 1);
         }
     }
 

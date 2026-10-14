@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Headless tests for bootstrap's user-scoped npm and NuGet feed selection.
+    Headless tests for bootstrap's user-scoped NuGet feed selection.
 
 .DESCRIPTION
     Runs under PowerShell 7 and Windows PowerShell 5.1. No network access,
@@ -44,90 +44,12 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("bootstrap-feeds-" + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmp | Out-Null
-$originalRegistry = $env:NPM_CONFIG_REGISTRY
-$originalUserConfig = $env:NPM_CONFIG_USERCONFIG
 $originalRestoreConfig = $env:RestoreConfigFile
 $originalRestoreSources = $env:RestoreSources
 
 try {
-    $env:NPM_CONFIG_REGISTRY = $null
-    $env:NPM_CONFIG_USERCONFIG = $null
-
     $profile = Join-Path $tmp 'profile'
     New-Item -ItemType Directory -Path $profile | Out-Null
-    Set-Content (Join-Path $profile '.npmrc') @(
-        'registry=https://registry.npmjs.org/'
-        'registry=https://packagefeedproxy.microsoft.io/npm/'
-    )
-
-    $npm = Resolve-ReactorNpmRegistry -UserProfile $profile
-    Assert-Equal 'https://packagefeedproxy.microsoft.io/npm' $npm.Registry `
-        'automatic npm selection honors the Microsoft proxy in the user .npmrc'
-    Assert-Equal $false $npm.Explicit 'automatic npm selection is marked non-explicit'
-
-    $env:NPM_CONFIG_REGISTRY = 'https://packagefeedproxy.microsoft.io/npm/env/'
-    $npm = Resolve-ReactorNpmRegistry -UserProfile $profile
-    Assert-Equal 'https://packagefeedproxy.microsoft.io/npm/env' $npm.Registry `
-        'NPM_CONFIG_REGISTRY takes precedence over npmrc files'
-    $env:NPM_CONFIG_REGISTRY = $null
-
-    Set-Content (Join-Path $profile '.npmrc') 'registry=https://registry.npmjs.org/'
-    Assert-Equal $null (Resolve-ReactorNpmRegistry -UserProfile $profile) `
-        'public npm configuration leaves the SDK public default unchanged'
-
-    $explicitUserNpmrc = Join-Path $tmp 'managed.npmrc'
-    Set-Content $explicitUserNpmrc 'registry=https://packagefeedproxy.microsoft.io/npm/'
-    $env:NPM_CONFIG_USERCONFIG = $explicitUserNpmrc
-    $npm = Resolve-ReactorNpmRegistry -UserProfile $profile
-    Assert-Equal 'https://packagefeedproxy.microsoft.io/npm' $npm.Registry `
-        'NPM_CONFIG_USERCONFIG takes precedence over the default user .npmrc'
-    $env:NPM_CONFIG_USERCONFIG = $null
-
-    $explicitNpm = Resolve-ReactorNpmRegistry -ExplicitRegistry 'https://mirror.example.test/npm/'
-    Assert-Equal 'https://mirror.example.test/npm' $explicitNpm.Registry `
-        'explicit npm mirror supports non-Microsoft registries'
-    Assert-Equal $true $explicitNpm.Explicit 'explicit npm selection is marked explicit'
-
-    Assert-Throws { Resolve-ReactorNpmRegistry -ExplicitRegistry 'http://mirror.example.test/npm' } `
-        'remote plaintext HTTP npm registry is rejected'
-    Assert-Throws { Resolve-ReactorNpmRegistry -ExplicitRegistry 'https://user:secret@mirror.example.test/npm' } `
-        'credential-bearing npm registry is rejected'
-    Assert-Throws { Resolve-ReactorNpmRegistry -ExplicitRegistry 'https://mirror.example.test/npm?token=secret' } `
-        'query-bearing npm registry is rejected'
-    $loopbackNpm = Resolve-ReactorNpmRegistry -ExplicitRegistry 'http://localhost:4873/npm/'
-    Assert-Equal 'http://localhost:4873/npm' $loopbackNpm.Registry `
-        'loopback HTTP npm registry remains available for local development'
-
-    $script:ObservedMetadataUrl = $null
-    $script:ObservedTarballUrl = $null
-    $metadataRequest = {
-        param($Url)
-        $script:ObservedMetadataUrl = $Url
-        return [pscustomobject]@{
-            'dist-tags' = [pscustomobject]@{ latest = '1.2.3' }
-        }
-    }
-    $tarballRequest = {
-        param($Url)
-        $script:ObservedTarballUrl = $Url
-        return $true
-    }
-    Assert-True (Test-ReactorNpmRegistryAccess `
-            -Registry 'https://packagefeedproxy.microsoft.io/npm' `
-            -Platform 'win32-arm64' `
-            -MetadataRequest $metadataRequest `
-            -TarballRequest $tarballRequest) `
-        'npm proxy probe succeeds only after metadata and tarball access succeed'
-    Assert-Equal 'https://packagefeedproxy.microsoft.io/npm/@github%2Fcopilot-win32-arm64' `
-        $script:ObservedMetadataUrl 'npm probe requests architecture-specific package metadata'
-    Assert-Equal 'https://packagefeedproxy.microsoft.io/npm/@github/copilot-win32-arm64/-/copilot-win32-arm64-1.2.3.tgz' `
-        $script:ObservedTarballUrl 'npm probe requests the architecture-specific tarball without npm authentication'
-    Assert-Equal $false (Test-ReactorNpmRegistryAccess `
-            -Registry 'https://packagefeedproxy.microsoft.io/npm' `
-            -Platform 'win32-x64' `
-            -MetadataRequest $metadataRequest `
-            -TarballRequest { return $false }) `
-        'npm proxy probe fails when unauthenticated tarball access fails'
 
     $appData = Join-Path $tmp 'appdata'
     $nugetDir = Join-Path $appData 'NuGet'
@@ -213,16 +135,14 @@ try {
 
 
     $restoreArgs = Get-ReactorRestoreArguments `
-        -NuGetSource 'https://packagefeedproxy.microsoft.io/nuget/v3/index.json' `
-        -NpmRegistry 'https://packagefeedproxy.microsoft.io/npm'
-    Assert-Equal '-p:RestoreSources=https://packagefeedproxy.microsoft.io/nuget/v3/index.json|-p:CopilotNpmRegistryUrl=https://packagefeedproxy.microsoft.io/npm' `
-        ($restoreArgs -join '|') 'automatic feed arguments propagate NuGet and npm proxies to MSBuild'
+        -NuGetSource 'https://packagefeedproxy.microsoft.io/nuget/v3/index.json'
+    Assert-Equal '-p:RestoreSources=https://packagefeedproxy.microsoft.io/nuget/v3/index.json' `
+        ($restoreArgs -join '|') 'automatic feed arguments propagate the NuGet proxy to MSBuild'
 
     $restoreArgs = Get-ReactorRestoreArguments `
         -NuGetConfig $explicitConfig `
-        -NuGetSource 'https://ignored.example.test/nuget' `
-        -NpmRegistry 'https://mirror.example.test/npm'
-    Assert-Equal "-p:RestoreConfigFile=$explicitConfig|-p:CopilotNpmRegistryUrl=https://mirror.example.test/npm" `
+        -NuGetSource 'https://ignored.example.test/nuget'
+    Assert-Equal "-p:RestoreConfigFile=$explicitConfig" `
         ($restoreArgs -join '|') 'explicit NuGet config takes precedence in MSBuild arguments'
 
     $toolArgs = Get-ReactorToolArguments `
@@ -357,8 +277,6 @@ try {
     Assert-Equal 'before-source' $env:RestoreSources 'restore sources environment is restored after the command'
 }
 finally {
-    $env:NPM_CONFIG_REGISTRY = $originalRegistry
-    $env:NPM_CONFIG_USERCONFIG = $originalUserConfig
     $env:RestoreConfigFile = $originalRestoreConfig
     $env:RestoreSources = $originalRestoreSources
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue

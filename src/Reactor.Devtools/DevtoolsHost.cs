@@ -9,10 +9,19 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 
 internal sealed class DevtoolsHost : IReactorDevtoolsHost
 {
-    private const int DevtoolsReloadExitCode = 42;
+    /// <summary>Mirrors <c>DevtoolsSupervisor.ReloadExitCode</c> in <c>mur devtools</c>.</summary>
+    internal const int DevtoolsReloadExitCode = 42;
+
+    /// <summary>
+    /// Exit code when the MCP port pinned with <c>--mcp-port</c> is in use by
+    /// another process. <c>mur devtools</c> picks a new port when it chose the
+    /// port itself and fails clearly when the user pinned it. Mirrors
+    /// <c>DevtoolsSupervisor.McpPortUnavailableExitCode</c>.
+    /// </summary>
+    internal const int McpPortUnavailableExitCode = 43;
 
     private readonly int _embedGeneration = 1;
-    private readonly object _embedResizeLock = new();
+    private readonly Lock _embedResizeLock = new();
     private (int W, int H) _latestEmbedResize;
     private int _embedResizePending;
 
@@ -59,7 +68,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                 return RunListSubverb(options);
             case DevtoolsSubverb.Run:
                 ReactorApp.DevtoolsEnabled = true;
-                return RunRunSubverb(options, request.Title, request.Width, request.Height, request.FullScreen, request.Configure, request.HostRoot, request.HostRootFactory);
+                return RunRunSubverb(options, request.Title, request.Width, request.Height, request.FullScreen, request.Configure, request.HostRoot, request.HostRootFactory, request.RootMountSite);
             case DevtoolsSubverb.Screenshot:
                 return RunScreenshotSubverb(options, request.Width, request.Height, request.Configure, request.HostRoot);
             case DevtoolsSubverb.Tree:
@@ -181,7 +190,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     }
 
     [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes() and Activator.CreateInstance.")]
-    private bool RunRunSubverb(DevtoolsCliOptions options, string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null)
+    private bool RunRunSubverb(DevtoolsCliOptions options, string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, SourceLocation? rootMountSite = null)
     {
         string? componentName = options.ComponentName;
         Type? componentType = null;
@@ -366,6 +375,15 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                             mcp.AnnounceReady();
                         });
                     }
+                    catch (LoopbackPortUnavailableException ex) when (ExitCodeForMcpStartFailure(ex) is { } exitCode)
+                    {
+                        // Neutral on purpose: under `mur devtools` the port may be one the
+                        // supervisor chose, and the supervisor prints the guidance.
+                        Console.Error.WriteLine(
+                            $"[devtools] MCP port {ex.Port} (--mcp-port) is already in use by another process; " +
+                            $"exiting with code {exitCode}.");
+                        ExitDevtoolsHost(mcp, host, exitCode);
+                    }
                     catch (Exception ex)
                     {
                         Console.Error.WriteLine($"[devtools:mcp] Start failed: {ex}");
@@ -381,6 +399,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                 WindowWidth: width,
                 WindowHeight: height,
                 FullScreen: fullScreen,
+                RootMountSite: PreviewRootMountSite(rootMountSite, hostRoot, hostRootFactory, initialComponentType),
                 InitialWindowSpec: options.EmbedRequested
                     ? BuildEmbedWindowSpec(options, $"Preview — {initialComponentName}", width, height)
                     : BuildPositionedWindowSpec(options, $"Preview — {initialComponentName}", width, height, fullScreen));
@@ -396,6 +415,14 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
         return true;
     }
 
+
+    /// <summary>
+    /// The mount site the preview reports for its first root: the app's <c>Run</c> call when the
+    /// preview mounts that call's own root (its factory, or the same component type), and
+    /// <c>null</c> for any other component, which that call never mounted.
+    /// </summary>
+    internal static SourceLocation? PreviewRootMountSite(SourceLocation? runSite, Type? hostRoot, Func<Component>? hostRootFactory, Type previewedType)
+        => hostRootFactory is not null || previewedType == hostRoot ? runSite : null;
 
     /// <summary>
     /// Builds the initial spec for a non-embedded preview window when <c>--x</c>/<c>--y</c>
@@ -658,6 +685,34 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
         }
         catch { }
         return null;
+    }
+
+    /// <summary>
+    /// Maps an MCP <see cref="DevtoolsMcpServer.Start"/> failure to the exit code
+    /// the devtools child exits with, or null to keep running without MCP (the
+    /// long-standing behavior for other failures). Only a pinned port that is in
+    /// use exits: the user (or <c>mur devtools</c>) asked for exactly that port,
+    /// and a devtools session without its endpoint fails silently for the agent.
+    /// </summary>
+    internal static int? ExitCodeForMcpStartFailure(Exception ex) =>
+        ex is LoopbackPortUnavailableException { Pinned: true } ? McpPortUnavailableExitCode : null;
+
+    private static void ExitDevtoolsHost(DevtoolsMcpServer mcp, ReactorHost host, int exitCode)
+    {
+        try
+        {
+            mcp.Dispose();
+        }
+        finally
+        {
+            // If the dispatcher is already shutting down, exit here so 43 still reaches the supervisor.
+            var enqueued = host.Window.DispatcherQueue.TryEnqueue(() =>
+            {
+                try { host.Window.Close(); }
+                finally { Environment.Exit(exitCode); }
+            });
+            if (!enqueued) Environment.Exit(exitCode);
+        }
     }
 
     private static void RequestDevtoolsReload(DevtoolsMcpServer mcp, ReactorHost host)

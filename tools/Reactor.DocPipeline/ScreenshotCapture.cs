@@ -6,9 +6,11 @@ using System.Text.Json.Nodes;
 namespace Microsoft.UI.Reactor.Cli.Docs;
 
 /// <summary>
-/// Captures screenshots from a running Reactor doc app via the PreviewCaptureServer HTTP API.
-/// Launches the app with <c>--preview --vscode</c> to enable the capture endpoint,
-/// waits for the startup delay, then captures frames via <c>GET /frame</c>.
+/// Captures screenshots of a running Reactor doc app with the winapp UI Automation library.
+/// Launches the app with <c>--preview --vscode</c> so the in-app preview host can switch
+/// between the manifest's components (<c>POST /preview</c>), waits for the startup delay,
+/// then captures the window's client area with Windows Graphics Capture
+/// (<see cref="WinAppCapture"/>).
 /// </summary>
 internal static class ScreenshotCapture
 {
@@ -105,6 +107,13 @@ internal static class ScreenshotCapture
             return new CaptureResult(0, screenshots.Count);
         }
 
+        var windowCapture = WinAppCapture.CreateWindowCapture();
+        if (!windowCapture.IsFrameCaptureSupported)
+        {
+            Console.Error.WriteLine($"    ✗ {WinAppCapture.GraphicsCaptureUnavailable}");
+            return new CaptureResult(0, screenshots.Count);
+        }
+
         var csproj = csprojFiles[0];
         Console.WriteLine($"    Launching {Path.GetFileName(csproj)} for capture...");
 
@@ -151,6 +160,14 @@ internal static class ScreenshotCapture
             Console.WriteLine($"    Waiting {delay}ms for app startup...");
             await Task.Delay(delay);
 
+            // The app is a child of `dotnet run`, so its window is found by owning process.
+            var hwnd = await WinAppCapture.WaitForAppWindowAsync(process.Id, TimeSpan.FromSeconds(10));
+            if (hwnd == IntPtr.Zero)
+            {
+                Console.Error.WriteLine("    ✗ The doc app's window did not appear");
+                return new CaptureResult(0, screenshots.Count);
+            }
+
             // The file-level guard below decides whether a screenshot lands
             // inside topicDir — but that is only meaningful if topicDir is
             // itself inside outputImagesDir, and this line is what establishes
@@ -181,21 +198,6 @@ internal static class ScreenshotCapture
             http.DefaultRequestHeaders.Authorization =
                 new global::System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
-            // Warm-up: the capture server starts its capture timer lazily on the
-            // first /frame call. Kick it now and wait for the first frame so the
-            // first manifest entry doesn't pay the timer-startup latency.
-            // Best-effort: a warm-up that throws must not escape and abort the
-            // whole pass, because CaptureAsync's contract is that every
-            // requested screenshot comes back counted in Written or Failed.
-            try
-            {
-                await PollForFrame(http, port, TimeSpan.FromSeconds(10));
-            }
-            catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException)
-            {
-                Console.Error.WriteLine($"    ⚠ warm-up frame request failed ({ex.GetType().Name}); continuing");
-            }
-
             foreach (var screenshot in screenshots)
             {
                 Console.Write($"    Capturing {screenshot.Id}...");
@@ -214,16 +216,16 @@ internal static class ScreenshotCapture
                             failed++;
                             continue;
                         }
-                        // Wait for the component to render and a new frame to be captured
-                        // At 5 fps, frames arrive every 200ms; wait long enough for
-                        // the switch + layout + at least one fresh capture cycle.
+                        // Let the switch, layout and any entrance transition settle. Same
+                        // settle time the old frame-timer capture used.
                         await Task.Delay(1000);
                     }
 
-                    // The capture timer only starts once a reader hits /frame
-                    // (TASK-025), so the first call returns 204 with no body.
-                    // Poll until a frame is ready or we exceed the deadline.
-                    var frameBytes = await PollForFrame(http, port, TimeSpan.FromSeconds(5), requireContent: true);
+                    // A cold window's first frame is often still blank; keep capturing
+                    // until one has content or the deadline expires (issue #989).
+                    var frameBytes = await WinAppCapture.CaptureUntilContent(
+                        ct => WinAppCapture.CaptureClientAreaAsync(windowCapture, hwnd, ct),
+                        TimeSpan.FromSeconds(5));
                     if (frameBytes.Length == 0)
                     {
                         ReportCaptureFailure(screenshot.Id, "no frame produced within deadline");
@@ -400,85 +402,6 @@ internal static class ScreenshotCapture
     }
 
     /// <summary>
-    /// Polls <c>/frame</c> until the server returns a body the caller can use,
-    /// or the deadline expires. The capture timer starts lazily on first
-    /// reader, so early calls return HTTP 204 with no content.
-    /// </summary>
-    /// <param name="requireContent">
-    /// When true, a decoded frame with no visible content is treated as
-    /// "not ready yet" and polling continues. A cold window's first painted
-    /// frame is often still blank; holding out for a real one turns what used
-    /// to be a corrupt overwrite into a correct capture.
-    /// <para>
-    /// If the deadline expires after at least one blank frame was seen, that
-    /// frame is returned, so the caller gets the same
-    /// <see cref="BlankFrameException"/> it would have seen without this flag
-    /// rather than a different error for the same underlying problem. If no
-    /// frame ever arrived — the server only ever answered 204, or with an empty
-    /// body — the result is empty and the caller reports "no frame produced",
-    /// which is the accurate answer for that case and not a regression this
-    /// flag introduces. The two are distinct failures and neither is masked:
-    /// setting this flag never converts a produced frame into no frame.
-    /// </para>
-    /// </param>
-    /// <remarks>
-    /// The deadline bounds the whole call, not just the gaps between polls.
-    /// Each request carries a token cancelled by whatever time is left, because
-    /// <see cref="HttpClient"/> otherwise applies its own 100-second default —
-    /// twenty times the 5-second deadline this is called with. A server that
-    /// accepts the connection and never answers would then spend the entire
-    /// budget inside a single request, so the loop that exists to outlast a
-    /// cold window's blank first frame would run exactly once and give up.
-    /// The failure direction is safe (no frame, so nothing is written) but the
-    /// retry it silently loses is the thing that turns a blank first frame into
-    /// a correct capture.
-    /// </remarks>
-    internal static async Task<byte[]> PollForFrame(
-        HttpClient http, int port, TimeSpan deadline, bool requireContent = false)
-    {
-        var sw = global::System.Diagnostics.Stopwatch.StartNew();
-        var lastBytes = Array.Empty<byte>();
-        while (true)
-        {
-            var remaining = deadline - sw.Elapsed;
-            if (remaining <= TimeSpan.Zero) break;
-
-            // Filtered on our own token: a cancellation we asked for is the
-            // deadline working, and returning lastBytes is the documented
-            // answer for it. Anything else — a transport fault, or
-            // HttpClient's own timeout if it ever won the race — still
-            // propagates, because a swallowed fault here would surface only as
-            // a capture that is mysteriously short of frames.
-            using var cts = new CancellationTokenSource(remaining);
-            try
-            {
-                using var resp = await http.GetAsync(FrameUrl(port), cts.Token);
-                if (resp.StatusCode == global::System.Net.HttpStatusCode.OK)
-                {
-                    var bytes = await resp.Content.ReadAsByteArrayAsync(cts.Token);
-                    if (bytes.Length > 0)
-                    {
-                        if (!requireContent) return bytes;
-                        lastBytes = bytes;
-                        if (ImageProcessor.FrameHasContent(bytes)) return bytes;
-                    }
-                }
-            }
-            catch (OperationCanceledException) when (cts.IsCancellationRequested)
-            {
-                break;
-            }
-
-            var left = deadline - sw.Elapsed;
-            if (left <= TimeSpan.Zero) break;
-            await Task.Delay(left < PollInterval ? left : PollInterval);
-        }
-        return lastBytes;
-    }
-
-    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(100);
-
-    /// <summary>
     /// How long a component switch may take before it is abandoned.
     /// </summary>
     /// <remarks>
@@ -496,7 +419,7 @@ internal static class ScreenshotCapture
     /// <remarks>
     /// <para>
     /// The request carries a token cancelled after <paramref name="timeout"/> for
-    /// the same reason <see cref="PollForFrame"/> does: an unbounded
+    /// the same reason <see cref="WinAppCapture.CaptureUntilContent"/> bounds each attempt: an unbounded
     /// <see cref="HttpClient"/> call falls back to a 100-second default, and this
     /// one runs <em>once per screenshot</em>. A server that accepts the connection
     /// and never answers would spend that default on every entry in the manifest,
@@ -534,9 +457,8 @@ internal static class ScreenshotCapture
     /// <para>
     /// That was survivable only by accident. <see cref="HttpClient"/>'s 100-second
     /// default timeout was long enough to absorb the stall, so the mismatch was
-    /// invisible until requests were bounded by the 5-second capture deadline —
-    /// at which point every poll is cancelled during the doomed IPv6 attempt and
-    /// no frame is ever retrieved. The deadline did not cause that; it revealed
+    /// invisible until requests were bounded by a short deadline —
+    /// at which point every request is cancelled during the doomed IPv6 attempt. The deadline did not cause that; it revealed
     /// it, and the same machine would have failed every real capture.
     /// </para>
     /// <para>
@@ -545,8 +467,6 @@ internal static class ScreenshotCapture
     /// </para>
     /// </remarks>
     internal const string CaptureHost = "127.0.0.1";
-
-    internal static string FrameUrl(int port) => $"http://{CaptureHost}:{port}/frame";
 
     /// <summary>
     /// Environment variable naming the virtual-desktop origin, as <c>"X,Y"</c>, that

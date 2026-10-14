@@ -13,12 +13,11 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         AppWindow.Resize(new global::Windows.Graphics.SizeInt32(900, 600));
 
-        // Mount a Component class into the left panel
-        var counterHost = new ReactorHostControl();
-        counterHost.Mount(new CounterDemo());
-        CounterPanel.Child = counterHost;
+        // The counter panel is declared in MainWindow.xaml:
+        //   <reactor:ReactorHostControl ComponentType="local:CounterDemo" />
+        // It creates and mounts CounterDemo when it loads.
 
-        // Mount a function component into the right panel
+        // Mount a function component into the right panel from code
         var todoHost = new ReactorHostControl();
         todoHost.Mount(ctx =>
         {

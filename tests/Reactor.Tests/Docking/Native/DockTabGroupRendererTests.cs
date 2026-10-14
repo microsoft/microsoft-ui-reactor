@@ -117,9 +117,14 @@ public class DockTabGroupRendererTests
     }
 
     // ── §2.8: default tab styling derived from content type ────────────
+    //
+    // A compact group must never render an unselected tab as a blank stub.
+    // WinUI's TabViewWidthMode.Compact collapses every unselected tab to its
+    // icon, and docking panes carry no icon, so compact tool groups are
+    // realized as SizeToContent (dense, but every tab shows its title).
 
     [Fact]
-    public void Render_AllToolWindow_DefaultsToCompactTabs()
+    public void Render_AllToolWindow_DefaultsToCompactTabs_SizedToTitles()
     {
         var docs = new DockableContent[]
         {
@@ -134,7 +139,8 @@ public class DockTabGroupRendererTests
             onSelectedIndexChanged: null,
             onTabClosing: null);
 
-        Assert.Equal(TabViewWidthMode.Compact, tab.TabWidthMode);
+        Assert.True(DockTabGroupRenderer.ResolveCompactTabs(group));
+        Assert.Equal(TabViewWidthMode.SizeToContent, tab.TabWidthMode);
     }
 
     [Fact]
@@ -200,11 +206,12 @@ public class DockTabGroupRendererTests
             onSelectedIndexChanged: null,
             onTabClosing: null);
 
-        Assert.Equal(TabViewWidthMode.Compact, tab.TabWidthMode);
+        Assert.True(DockTabGroupRenderer.ResolveCompactTabs(explicitDefaults));
+        Assert.Equal(TabViewWidthMode.SizeToContent, tab.TabWidthMode);
     }
 
     [Fact]
-    public void Render_AllToolWindow_ExplicitCompact_RemainsCompact()
+    public void Render_AllToolWindow_ExplicitCompact_SizesTabsToTitles()
     {
         var docs = new DockableContent[]
         {
@@ -218,7 +225,105 @@ public class DockTabGroupRendererTests
             onSelectedIndexChanged: null,
             onTabClosing: null);
 
-        Assert.Equal(TabViewWidthMode.Compact, tab.TabWidthMode);
+        Assert.True(DockTabGroupRenderer.ResolveCompactTabs(group));
+        Assert.Equal(TabViewWidthMode.SizeToContent, tab.TabWidthMode);
+    }
+
+    [Fact]
+    public void Render_CompactToolStrip_NeverUsesIconOnlyCompactMode()
+    {
+        // The Reactor IDE sample's bottom dock: an explicitly compact tool
+        // strip whose unselected tabs rendered as blank ~34 DIP stubs with
+        // no title and no icon, because WinUI's Compact mode shows only the
+        // icon of an unselected tab and docking panes have none.
+        var docs = new DockableContent[]
+        {
+            new ToolWindow { Title = "Output",     Key = "tool:output" },
+            new ToolWindow { Title = "Terminal",   Key = "tool:terminal" },
+            new ToolWindow { Title = "Error List", Key = "tool:errors" },
+        };
+        var group = new DockTabGroup(
+            docs,
+            TabPosition.Bottom,
+            CompactTabs: true,
+            Role: DockGroupRole.ToolWindowStrip);
+
+        var tab = (TabViewElement)DockTabGroupRenderer.Render(
+            group,
+            d => d.Content,
+            onSelectedIndexChanged: null,
+            onTabClosing: null,
+            onPinRequested: _ => { });
+
+        Assert.NotEqual(TabViewWidthMode.Compact, tab.TabWidthMode);
+        Assert.Equal(new[] { "Output", "Terminal", "Error List" }, tab.Tabs.Select(t => t.Header));
+        Assert.All(tab.Tabs, t => Assert.True(string.IsNullOrEmpty(t.Icon)));
+    }
+
+    // ── §2.8: pure resolution — compact request ────────────────────────
+
+    public enum PaneKind { Tool, Document, Mixed, Untyped }
+
+    [Theory]
+    [InlineData(PaneKind.Tool, TabPosition.Top, false, true)]        // record defaults → flip
+    [InlineData(PaneKind.Tool, TabPosition.Bottom, true, true)]      // explicit compact
+    [InlineData(PaneKind.Tool, TabPosition.Bottom, false, false)]    // customized, not compact
+    [InlineData(PaneKind.Document, TabPosition.Top, false, false)]
+    [InlineData(PaneKind.Document, TabPosition.Top, true, true)]     // explicit compact honored
+    [InlineData(PaneKind.Mixed, TabPosition.Top, false, false)]
+    [InlineData(PaneKind.Untyped, TabPosition.Top, false, false)]
+    public void ResolveCompactTabs_FollowsContentTypeDefaults(
+        PaneKind kind, TabPosition position, bool compactTabs, bool expected)
+    {
+        DockableContent[] docs = kind switch
+        {
+            PaneKind.Tool     => new DockableContent[] { new ToolWindow { Title = "T", Key = "t" } },
+            PaneKind.Document => new DockableContent[] { new Document { Title = "D", Key = "d" } },
+            PaneKind.Mixed    => new DockableContent[]
+            {
+                new Document { Title = "D", Key = "d" },
+                new ToolWindow { Title = "T", Key = "t" },
+            },
+            _                 => new DockableContent[] { new("P") },
+        };
+        var group = new DockTabGroup(docs, position, compactTabs);
+
+        Assert.Equal(expected, DockTabGroupRenderer.ResolveCompactTabs(group));
+    }
+
+    // ── Pure resolution — compact request → WinUI width mode ───────────
+
+    private static TabViewItemData TabWithIcon(string header, string? icon) =>
+        new(header, new TextBlockElement(header)) { Icon = icon };
+
+    [Fact]
+    public void ResolveTabWidthMode_NotCompact_IsEqual()
+    {
+        var tabs = new[] { TabWithIcon("A", "Home"), TabWithIcon("B", null) };
+        Assert.Equal(TabViewWidthMode.Equal, DockTabGroupRenderer.ResolveTabWidthMode(false, tabs));
+    }
+
+    [Fact]
+    public void ResolveTabWidthMode_CompactWithoutIcons_SizesToContent()
+    {
+        var tabs = new[] { TabWithIcon("A", null), TabWithIcon("B", string.Empty) };
+        Assert.Equal(TabViewWidthMode.SizeToContent, DockTabGroupRenderer.ResolveTabWidthMode(true, tabs));
+    }
+
+    [Fact]
+    public void ResolveTabWidthMode_CompactWithOneIconlessTab_SizesToContent()
+    {
+        // A single icon-less tab would be the blank stub whenever it is not
+        // selected, so one missing icon is enough to rule Compact out.
+        var tabs = new[] { TabWithIcon("A", "Home"), TabWithIcon("B", null), TabWithIcon("C", "Setting") };
+        Assert.Equal(TabViewWidthMode.SizeToContent, DockTabGroupRenderer.ResolveTabWidthMode(true, tabs));
+    }
+
+    [Fact]
+    public void ResolveTabWidthMode_CompactWithAllIcons_IsIconOnlyCompact()
+    {
+        var tabs = new[] { TabWithIcon("A", "Home"), TabWithIcon("B", "Setting") };
+        Assert.Equal(TabViewWidthMode.Compact, DockTabGroupRenderer.ResolveTabWidthMode(true, tabs));
     }
 
     // ── §2.2: per-tab pin button on ToolWindow ─────────────────────────

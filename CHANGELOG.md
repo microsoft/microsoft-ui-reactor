@@ -28,6 +28,45 @@ Conventions for contributors:
 
 ### Added
 
+- **Inspector diagnostics: call-site column and a per-component render event**
+  (issue #1326, spec 010 §1.1):
+  - `SourceLocation.ColumnNumber` (1-based, `0` = unknown), a third positional
+    member: `new SourceLocation(path, line)` now needs a column. The source-map generator
+    stamps the column of the invoked method's name, so several calls on one line
+    resolve to distinct positions. `ToString()` stays `file:line`.
+  - `ComponentRendered` on the `Microsoft-UI-Reactor` provider (EventId 40,
+    Verbose, keywords `Render | RenderDetail`; `RenderDetail` = `0x4000` is new):
+    one event per component render, including mount, the host root and a render
+    that threw. The payload carries the component name, a stable `componentId`,
+    the `reason` (`mount` / `state` / `props` / `context` / `parent` /
+    `hotReload` / `forced`) and the elapsed time.
+  - `ReactorTrace.GetComponentControl(long)` and
+    `ReactorTrace.TryGetComponentId(UIElement, out long)` map a `componentId` to
+    the component's on-screen control and back, so an inspector can flash what
+    re-rendered.
+
+- **Inspector diagnostics for hosts, roots and component boundaries** (spec 010).
+  `ReactorDiagnostics.GetHosts()` (`Microsoft.UI.Reactor.Core.Diagnostics`) returns
+  a snapshot of every live `ReactorHost` and `ReactorHostControl` — window,
+  host element, root control, root component or render-function name, and
+  `MountSite`, the `ReactorApp.Run` / `OpenWindow` / `Mount` call that mounted the
+  root (recorded by the source-map generator when source mapping is on). While
+  `ReactorSourceMap.Enabled` is true, every component's wrapper is also tagged, so
+  `Reconciler.GetElementTag` finds each component boundary. Provisional API for
+  external inspectors such as `winapp devtools`.
+
+- **`ReactorHostControl` can be declared in XAML.** It gains a public parameterless
+  constructor (the XAML compiler rejected the old optional-parameter one with
+  `WMC0100`) and a `ComponentType` property, so a hybrid page can write
+  `<reactor:ReactorHostControl ComponentType="local:StatsCard" />`. The root is
+  created through the app's generated XAML type information, so it stays trim- and
+  AOT-safe. A `ComponentType` that is only assigned from code has no such entry; the
+  host shows an error naming the fix (`ComponentFactory` / `Mount`) instead of mounting,
+  and a throwing or null-returning `ComponentFactory` is reported the same way rather
+  than escaping the `Loaded` handler and terminating the app. `samples/ReactorHostControlDemo`
+  now declares its counter host in markup, and `samples/InteropFirst` declares its host
+  with `x:Name` (issue #1324).
+
 - **Getting Started documents the single-file path.** A Reactor app does not need
   a `.csproj`: .NET 10 runs a lone `.cs` file whose `#:package` / `#:property`
   header supplies what a project file otherwise would. The header also references
@@ -60,6 +99,19 @@ Conventions for contributors:
     the framework had no notion of a submit before, so that policy could never
     display anything.
 
+- **Apps can replace the built-in render-error fallback (issue #1291).** Outside an
+  `ErrorBoundary`, a render failure showed a fallback with the full exception text
+  (type, message, stack trace), which a shipped app could not hide. A
+  `RenderErrorHandler` now replaces it, set app-wide
+  (`ReactorApp.DefaultRenderErrorHandler`), per window (`WindowSpec.RenderErrorHandler`)
+  or per host (`ReactorHost` / `ReactorHostControl.RenderErrorHandler`). It sees the
+  root render, child renders, the reconcile pass, effects and dispose-time cleanups,
+  through a `RenderError` that carries the exception and its `Source`. Return an element
+  to show it, `null` to keep the built-in fallback, or call `Propagate()` to route the
+  exception to `ReactorApplication.OnUnhandledException`. A handler that throws (or whose
+  fallback throws) fails closed to a neutral message without exception details. With no
+  handler, behavior is unchanged.
+
 - **Framework mechanics are searchable in the ReactorGallery index (spec 064,
   issue #1275).** `find-ui --source reactor` answered "what is control X" but not
   "how does mechanism Y work": `UseState hook` and `key down event handler`
@@ -84,7 +136,62 @@ Conventions for contributors:
   but too old, `3` pack not installed. It backs `mur doctor` and `bootstrap.ps1`'s verification
   step, which give different remediation for each.
 
+- **Declarative caption-button theme (issue #1297).** `WindowSpec.TitleBarTheme` and
+  `TitleBar(...).PreferredTheme(WindowTitleBarTheme)` set the theme of the window's
+  system caption buttons (`AppWindow.TitleBar.PreferredTheme`). WinUI does not carry
+  an element's `RequestedTheme` through to the caption, so an app that themes its
+  content opposite to the system declares the matching caption theme. Opt-in: with
+  nothing declared Reactor never writes the property, so an imperatively set value is
+  left alone; removing a declaration restores the value the caption had before
+  Reactor first applied one. The spec
+  wins over the element, and — unlike the caption height — no content extension is
+  required. ReactorGallery uses it so its caption buttons follow the gallery theme.
+
+- **`REACTOR_LIFECYCLE_003` — a custom control updates the child it hosts with
+  `Reconciler.UpdateChild` (#1307).** `UpdateChild` is only correct after a check
+  that the new element can update the old control (same element type and key).
+  That check is internal, so code outside the framework can't make it, and
+  `UpdateChild` also leaves a control it replaced mounted for the caller to
+  unmount. A `RegisterType` registration or `IElementHandler` that hosts a child
+  this way throws `InvalidCastException` when the child changes element type, and
+  a replaced child's effect cleanups and unmount callbacks never run and its refs
+  are never cleared. The analyzer points at `Reconciler.Reconcile`, which takes the
+  same arguments, does both, and returns the control the slot should hold
+  (`UpdateContext.ReconcileChild` in a handler). Where the existing control was
+  read from its slot just before the call, the code fix rewrites
+  `var x = r.UpdateChild(…); if (x is not null) slot = x;` into
+  `var x = r.Reconcile(…); if (!ReferenceEquals(x, existing)) slot = x;`, which
+  also empties the slot when the child becomes `Empty()`, and drops a manual
+  `UnmountChild(existing)` made through the same reconciler. It is offered only
+  where that keeps the code's meaning: for instance, not when the body does more
+  than install the result. The rule is silent in the assembly that declares
+  `Reconciler`, whose slot owners make the check first. The repository's two call
+  sites, the data grid's internal `ResizeGrip` and the regedit sample, now use
+  `Reconcile` (neither reached the bad path), and the Extending Reactor Controls
+  guide shows a `RegisterType` host reconciling its child.
+
 ### Changed
+
+- **The doc pipeline moved out of `mur`, and doc screenshots are captured with winapp's
+  Windows Graphics Capture.** `mur docs` is now `dotnet run --project tools/Reactor.DocPipeline --`
+  (`compile`, `check-tier`, `render-diagrams`, `new-diagram`; same options). It is a contributor
+  tool for this repository, so it no longer ships in the `mur` dotnet tool; `mur docs` prints the
+  new command and exits 1. Out of the tool it can target Windows, which `PackAsTool` forbids
+  (NETSDK1146), and capture screenshots in-process with the winapp UI Automation library
+  (`Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation`). The pipeline still launches each doc
+  app through the in-app preview host and switches components with it, but the pixels now come
+  from Windows Graphics Capture instead of the preview host's `PrintWindow` + JPEG frame stream.
+  Images keep the same framing (client area only, physical pixels, the 150% convention), are
+  lossless, and content-crop is typically 1–4 px tighter. Capture no longer waits on the frame
+  stream's warm-up, so a topic is about 8–10 s faster, and it never activates a window: without
+  Graphics Capture a screenshot fails rather than falling back to `PrintWindow`. `mur` also drops
+  its YamlDotNet and System.Drawing.Common dependencies (#1320; spec 013 §4).
+- **`ReactorHostControl.Stats` returns `RenderStats` by value** instead of
+  `ref readonly`. The XAML compiler emits type metadata for every public property of
+  a control used in markup, and the by-ref property generated
+  `typeof(RenderStats&)`, which does not compile. Reads such as `host.Stats.Fps`
+  are unchanged; only `ref` bindings to it and already-compiled binaries are
+  affected. `ReactorHost.Stats` is unchanged (issue #1324).
 
 - **`.Validate(fieldName, value, validators…)` now runs its validators during the
   render that calls it**, instead of only when a `FormField` mounts the element —
@@ -122,7 +229,21 @@ Conventions for contributors:
   `dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>` — since it is
   prerelease-only and a bare `dotnet new install` resolves stable versions.
 
+- **`bootstrap.ps1 -NpmRegistry` is deprecated and ignored.** `GitHub.Copilot.SDK` 1.0.14 no
+  longer downloads its native CLI from npm, so the parameter has nothing to redirect; bootstrap
+  now prints a warning and continues. To redirect the CLI download, set the SDK's
+  `CopilotCliReleaseBaseUrl` MSBuild property or the `COPILOT_CLI_DOWNLOAD_BASE_URL` environment
+  variable, or point `CopilotCliBinaryPath` at a pre-downloaded binary (issue #1292).
+
 ### Removed
+
+- **Removed automatic npm-mirror detection for the Copilot CLI download**
+  (`tools/CopilotNpmRegistry.props` and bootstrap's `~/.npmrc` / `NPM_CONFIG_REGISTRY` probe).
+  `GitHub.Copilot.SDK` 1.0.14 dropped the `CopilotNpmRegistryUrl` property it set and now fetches
+  a SHA-256-verified CLI bundle from the github/copilot-cli GitHub releases, so a configured npm
+  mirror no longer affects `dotnet build`. Builds on networks that block GitHub release downloads
+  should use `CopilotCliReleaseBaseUrl`, `COPILOT_CLI_DOWNLOAD_BASE_URL`, or
+  `CopilotCliBinaryPath` instead (issue #1292).
 
 - **Removed the in-repo `Microsoft.UI.Reactor.ProjectTemplates` package and its
   `dotnet new reactorapp` template** (`tools/Templates/`). Reactor's project templates now ship in
@@ -157,6 +278,135 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Replacing a host's root no longer leaves the old root running** (issue #1326).
+  `ReactorHost.Mount(...)` and `ReactorHostControl.Mount(...)` now retire the
+  outgoing root before installing the new one: its effect cleanups run, and a
+  component root's hook state is reset, so mounting that instance again later starts
+  fresh. Before, the outgoing root's `UseEffect` subscriptions and timers stayed live
+  and could no longer be reached by `Dispose()`. `ReactorHost.Mount(Func<...>)` also
+  clears a previous component root, which the render loop checks first and so kept
+  rendering instead of the new function root. Mounting the instance that is already
+  mounted just re-renders it. A replacement whose first render produces nothing now
+  releases the previous root's content (and its components' effects) instead of leaving
+  it on screen, and a cleanup that throws during the swap is routed like a disposal-time
+  cleanup failure without blocking the new root.
+- **`ReactorWindow`, the tray host and Devtools embedding no longer throw
+  `EntryPointNotFoundException` in x86 processes** (#1365). They imported
+  `GetWindowLongPtrW` / `SetWindowLongPtrW` directly, which 32-bit `user32.dll`
+  does not export. A shared `NativeWindowLong` helper now dispatches to
+  `GetWindowLongW` / `SetWindowLongW` when `IntPtr.Size == 4`; x64 and ARM64
+  behaviour is unchanged.
+- **`RenderError` names the component that threw, and now reports every render
+  error** (issue #1321, spec 044 §6.2.1). For class components the event reported
+  the element record (``ComponentElement`1`` / `ComponentElement`) instead of the
+  component unless the `Render` keyword was also on, so an Errors-only listener
+  such as `winapp devtools logs` could not tell which component failed. It now
+  reports the component's type name (`Counter`; a generic one as `Foo<Int32>`),
+  and the other per-component events agree on it. **Listeners now also receive
+  errors that were previously silent:** a component (class, function or memo)
+  throwing on its first render, a `ReactorHost` / `ReactorHostControl` root
+  component or render function throwing (in `Render()` or in its effects), and any
+  render error an `ErrorBoundary`
+  catches — reported once, at the throw site, even though the app shows the
+  fallback. Same event, same payload; the message stays redacted. Generic
+  component names change from ``Foo`1`` to `Foo<Int32>` in every component event.
+  For these component failures the event is emitted before any `RenderErrorHandler`
+  runs, so it fires whether the handler replaces the fallback or calls `Propagate()` —
+  once per throw either way. `Reconcile` and `Cleanup` failures are not render errors
+  and are not reported on it.
+
+- **DataGrid inline editors no longer shift the cell's text when editing starts**
+  (issue #1340). The built-in TextBox and NumberBox editors used `.Padding(2)` inside
+  WinUI's 32px minimum height, which draws text at the top, so the text moved about 4px
+  up and 5px left as soon as a cell entered edit mode. Text editors now use the cell's
+  horizontal padding and symmetric vertical padding, with `TextControlThemeMinHeight`
+  overridden to 0, so their text lands exactly where the display cell drew it. A custom
+  `col.Editor` keeps any padding, `MinHeight` or `TextControlThemeMinHeight` it sets.
+
+- **A `SwipeControl` side in `SwipeMode.Execute` with more than one item no longer
+  replaces the whole UI with the render-error panel** (issue #1344). WinUI accepts
+  only one item in an Execute-mode `SwipeItems` collection and rejects a second with
+  `E_INVALIDARG`, which escaped the reconciler. Reactor now keeps the first item,
+  ignores the rest, and emits a `SwipeControl.ExecuteItems` diagnostic warning naming
+  the side and how many items were dropped, once each time a side becomes truncated.
+
+- **An `ErrorBoundary` whose child fails part-way through mounting no longer leaves
+  that child's effects running** (issue #1291). A component registers before its
+  effects run, so a child whose second effect threw had already opened whatever its
+  first effect opened (a subscription, a timer), and a control's `.OnMount(...)` had
+  already run. The boundary discarded the half-built subtree without it ever being
+  attached, so nothing could unmount it, and every re-render retried the child and
+  leaked another set. The boundary now rolls the failed child back — the controls
+  that did finish are unmounted (so their interaction states, animations and
+  `.OnUnmount(...)` actions go too), and the components that did not still have their
+  effect cleanups run — both when it first mounts and on each retry. The same applies to the internal boundary
+  around a `RenderErrorHandler` fallback, and when a host replaces or releases its tree
+  for a render-error outcome every cleanup runs even if one of them throws.
+
+- **Dropping an `AutoSuggestBox` right after its text changed can no longer crash
+  the app** (PR #1302, supersedes #559). WinUI raises the box's `TextChanged` from
+  an internal timer 150 ms after its text last changed, keeps that timer running
+  after the box leaves the tree, and does not keep the box alive for it. When the
+  box was unmounted (or its host disposed) inside that window and full GCs ran,
+  the tick called into managed state the GC had already collected, and WinUI
+  fail-fasted the process with `STATUS_STOWED_EXCEPTION` (`0xC000027B`). Reactor
+  now holds the box from the moment it leaves the tree until well after any such
+  tick. This was the intermittent selftest-host crash in the Optional fixtures
+  (`ControlledOptionalTextInputFamily`, `OptionalEchoStrandRegression`, and
+  whichever fixture ran next).
+
+- **ReactorGallery category and search-result pages scroll vertically**
+  (issue #1298). Both views put a bare header and card grid into the
+  `NavigationView` content. The card grid turns off its own scrolling so it can
+  size to its content, and nothing else supplied a scroller, so in a short
+  window the cards below the fold couldn't be reached. Both views now share a
+  page helper that wraps the content in `ScrollView`, matching the control
+  pages and Home.
+
+- **Controls registered with `Reconciler.RegisterType` now carry their element tag, so
+  keyed lists of them keep their place and their `unmount` callback runs** (spec 047
+  §14, PR #1301). The reconciler records each control's element on the control and reads
+  it back in several places, but it left a registered type's control to its own
+  callbacks, which only `XamlInterop` tagged. A keyed registered-type child that survived
+  a re-render was therefore neither moved nor patched: a `Grid` of them that grew or
+  reordered showed stale content at another child's row and column. The `unmount`
+  callback never ran, keyed or not, so the docking host's cleanup (closing its floating
+  windows, unregistering from `DockHostRegistry`) never ran either, and the guide's
+  `editor.Dispose()` example never disposed anything. The docking cleanup now runs, but
+  it covers only the host's latest `DockManager` element, so a window floated under an
+  earlier element still outlives the host; that is a separate docking bug. A
+  `.Ref(...)` on a registered type kept pointing at the removed control, which the pool
+  could already have handed to another element. The reconciler now tags these controls
+  wherever it reads the tag itself: when the element is keyed or carries callbacks,
+  extras or a reference modifier, and always when the registration has an `unmount`
+  callback. A control already tagged for an element of another type, such as one the
+  callback got from `Reconciler.Mount`, keeps that tag. An `update` callback that
+  returns the control it was handed now counts as patching it, where the child
+  reconcilers used to unmount it. Unmounting a replaced control also no longer clears a
+  `.Ref(...)` that has already moved to its replacement. Because `unmount` now runs, it
+  replaces the reconciler's walk over the control's children, as it always has for
+  `XamlInterop`: a registration that mounts children through the reconciler and
+  supplies `unmount` has to unmount them there. Calling `UnmountChild` on the control
+  itself from `unmount` walks its children once rather than calling `unmount` again.
+
+- **A docking host's floating windows close when the host unmounts, whichever
+  `DockManager` they were opened under** (spec 045 §2.25, PR #1305). Apps build a new
+  `DockManager` in their render, and every state change renders again, so a host
+  sees a new element instance on almost every render. The per-host tables
+  (floating windows, `DockHostRegistry`, and the chord, live-announcer, model and
+  drag-gate bridges) were keyed by that instance, and unmount cleaned up only the
+  last one. A pane floated under an earlier instance kept its window open after the
+  host was gone: in the Reactor IDE sample, View ▸ Reset Layout left the floated
+  pane open next to its re-docked copy, and devtools still listed the old host. The
+  tables are now keyed by the host, so unmount closes every window the host opened
+  and clears every table, including the model and drag-gate bridges it never
+  cleared before. Unmount goes through the host itself rather than the element it
+  rendered last, so when an app hands one `DockManager` instance to a new host (a
+  type change mounts the new host first), the old host no longer clears the new
+  host's entries or unlists it. While the host is mounted, `DockHostModel.Floating`
+  no longer drops a floating pane on the next render, and `docking.list` shows the
+  host once, under an id that stays stable, instead of once per render.
+
 - **Apps that reference only `Microsoft.UI.Reactor` are framework-dependent
   again** (regression from #822). The package now depends on
   `Microsoft.WindowsAppSDK.Runtime`; without it the Windows App SDK silently
@@ -166,6 +416,58 @@ Conventions for contributors:
   To move to a newer WinUI, bump the full `Microsoft.WindowsAppSDK` package;
   bumping `Microsoft.WindowsAppSDK.WinUI` on its own now fails the Windows App
   SDK's version check.
+
+- **Devtools servers no longer lose their port to another process between
+  choosing and binding it** (spec 024 §7). `DevtoolsMcpServer` and
+  `PreviewCaptureServer` probed a free loopback port and bound `HttpListener` to
+  it later, so another process could take it in between and `Start` failed with
+  `HttpListenerException` (32). With several selftest hosts on one machine, the
+  `Devtools_*` fixtures failed intermittently. Both servers now bind and, if
+  another process holds the probed port, probe and bind a new one. A port pinned
+  with `--mcp-port` is never moved: the app exits with code 43, and
+  `mur devtools` picks a new port if it chose the port itself, or reports the
+  conflict if the user pinned it.
+
+- **A component's own state change is no longer lost under a reused or memoized
+  element** (extends the dirty-ancestor path from #377). When a panel child
+  was the same element instance on every render — one element reused across
+  renders, such as a single `DockManager`, an explicitly memoized wrapper such as
+  `UseMemo(() => Border(Counter()), [])`, or a reused children array — or was a
+  `Memo(key, …)` used as a plain child, a component inside it that set its own
+  state was marked for re-render but never re-rendered: the reconciler skipped
+  the unchanged child without descending to it. A reused `DockManager`, for
+  example, never applied a queued `model.PinToSide` or `Float`. The child skips
+  now descend into exactly the children that lead to such a component; their
+  siblings still skip without reading a control. A same-key `Memo(key, …)` is
+  still a no-op, except that its factory runs again when a component inside it
+  updates itself.
+
+- **A child that its update replaces is unmounted in a single-child slot too**
+  (spec 047 §14, #1307). When an update handed back a new control for the one
+  child of a `Border`, a named slot such as `SplitView.Pane`, a tab's content, a
+  generated element slot such as `TabView.TabStripHeader`, or a `RichTextBlock`
+  `InlineUI(...)` child, Reactor swapped the new control in but, unlike a panel,
+  never unmounted the old one. The old subtree's effect cleanups, `.OnUnmount`
+  actions and `RegisterType` `unmount` callbacks never ran, a `ValidationRule`
+  in it kept its message, and a ref to a control in it kept pointing at the
+  detached control. A `ValidationVisualizer` in such a slot did this on every
+  re-render, because its update remounts it, and so did a `RegisterType`
+  `update` that returns a new control. Slots that a control fills by hand still
+  swap a replaced control out without unmounting it: `CommandBar` content,
+  `Expander` content and header template, `ContentDialog`, `Flyout` and `Popup`
+  content, `.WithFlyout`, `.WithContextFlyout` and `.WithToolTip(element)`
+  content, and realized item content in `ListView`, `GridView`, `TreeView<T>`
+  and templated `FlipView`.
+
+- **A flyout's old Target is unmounted once, not twice, when its Target changes
+  element type at a component's root or through `Reconciler.Reconcile`** (#1307).
+  A `Flyout`, `MenuFlyout` or `CommandBarFlyout` that wraps a Target unmounts
+  the old Target itself when the Target's element type changes. The reconcile
+  path behind component roots, `ErrorBoundary`, the app root and the public
+  `Reconciler.Reconcile` then unmounted it again, so the old subtree's
+  `RegisterType` `unmount` callbacks and handler unmounts ran twice. That path
+  now notices the update already unmounted it, as single-child slots do. A
+  panel still unmounts such a Target twice.
 
 - **The Forms guide's "Validation Context" example now works as written**
   (issue #1262). Clicking **Register** on an empty form submitted successfully
@@ -261,6 +563,16 @@ Conventions for contributors:
   while the grid itself holds keyboard focus, after tabbing onto it for example, no longer
   moves that focus out of the grid.
 
+- **Compact docking tool tabs are no longer blank, and every docking tab has a UI
+  Automation name (spec 045 §2.2, §2.8, PR #1295).** A `DockTabGroup` with
+  `CompactTabs: true`, or one made up only of `ToolWindow`s (compact by default), used
+  WinUI's `TabViewWidthMode.Compact`, which shows only the icon of an unselected tab.
+  Docking panes have no icon, so every unselected tab rendered as an empty stub with no
+  title. Compact groups now size each tab to its title, and use `Compact` only when every
+  tab has an icon. Tool-window tabs with a pin button also had no UI Automation name,
+  because WinUI names a tab only from a plain-text header; they are now named after their
+  title.
+
 - **The Visual Studio preview failed to start every session.** The extension was built
   against a newer `System.Text.Json` than Visual Studio binds extensions to, so it failed
   to load at runtime. It now tracks the `Microsoft.VisualStudio.SDK` baseline, with a test
@@ -297,6 +609,43 @@ Conventions for contributors:
   `0.1.0-preview.15` and `0.1.0-preview.16` attachments are affected. The packages on NuGet feeds
   come from a separate build and are not. The workflow now packs from per-project builds, which
   produce a platform-neutral copy, and fails if any packed assembly is not AnyCPU (PR #1293).
+- **Keyed `Memo(key, …)` children keep their place when the hand-built list around them grows
+  or reorders** (issue #327). Outside a virtualized list, `Memo(key, factory)` mounts no control
+  of its own; the factory output's control stands in for it. The keyed reconcile could therefore
+  not recognize a `Memo(key, …).WithKey(…)` child that survived a re-render. The child stayed
+  unpatched at its old index while its siblings were placed around it, so a `Grid` gave it
+  another child's row and column. The factory output now carries the wrapper's key.
+- **A resource override dropped from an element could stay applied.** Reactor records which
+  `Resources` keys an element's `.Resources(...)` overrides wrote, so it can remove them once
+  they are dropped, and kept that record in a table keyed by the control's managed wrapper. When
+  the wrapper was garbage-collected, WinRT projected a new one over the same native control and
+  the record came back empty: dropping the override, or changing its keys, after a GC left the
+  old value in the control's `Resources`. The record now lives in the control's `ReactorState`,
+  which is stored on the native object and so survives a wrapper collection (spec 047 §3).
+  Pooled controls leaked the keys too: `ElementPool` recycled a control without them, so the
+  next element to rent it inherited the previous renter's overrides. That happened after a GC
+  for a renter with overrides of its own, and always for one without, because mount only
+  applies overrides an element declares. Returning a control to the pool now strips the keys
+  Reactor wrote. Found through an intermittent `Issue675_TransitionAway_StaleOverrideRemoved`
+  selftest failure; the new `Issue675_TransitionAwayAfterWrapperCollected`,
+  `Issue675_PooledOverrideRenterDoesNotInheritKeys` and
+  `Issue675_PooledPlainRenterDoesNotInheritKeys` fixtures force the GC and fail without the fix
+  (PR #1294).
+- **Two transitions with the same `.ConnectedAnimation(key)` within one frame no longer crash
+  the app** (issue #1152). WinUI takes a connected animation's snapshot in its next frame. A
+  source that has already left the tree stays in its parent's unloading storage until that
+  frame's commit, and only the preparation gives it a composition node. Preparing the same key
+  again before that frame cancels the first animation, so the commit dereferences the node the
+  cancel took away: `0xC0000005` at `CConnectedAnimationService::PreCommit` in
+  `Microsoft.UI.Xaml.dll`. Reactor prepares every keyed element it unmounts, so any two passes
+  that both unmounted the key before WinUI rendered a frame could crash. In CI the selftest host
+  died this way in `ConnectedAnimation_OrphanOnlyPassDoesNotCrash`, in about 5% of runs and in
+  every selftest lane. Reactor now does not prepare a key again until WinUI has rendered a frame
+  since its last preparation, so the second element does not animate. The new
+  `ConnectedAnimation_RepreparedBeforeFrameDoesNotCrash` fixture runs both passes with no frame
+  in between and crashed on every run before the fix. The earlier explanation for the withdrawn
+  `Cancel()` cleanup (PR #1124), that the source had been pooled and reset, was wrong: that crash
+  was this same fault.
 
 - **Reactor packages no longer ship a `.pri`, so consuming apps build at path depths where
   they previously failed (issue #1271).** The index sat beside the assembly in `lib/`, where

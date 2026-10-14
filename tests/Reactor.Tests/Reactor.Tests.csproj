@@ -87,6 +87,7 @@
     <ProjectReference Include="..\..\src\Reactor.Wrappers.Abstractions\Reactor.Wrappers.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Localization.Generator\Reactor.Localization.Generator.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Cli\Reactor.Cli.csproj" />
+    <ProjectReference Include="..\..\tools\Reactor.DocPipeline\Reactor.DocPipeline.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Analyzers\Reactor.Analyzers.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Analyzers.Internal\Reactor.Analyzers.Internal.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Wrappers.Generator\Reactor.Wrappers.Generator.csproj" />

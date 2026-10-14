@@ -419,10 +419,14 @@ public static class ApiIndexGenerator
     // -----------------------------------------------------------------------
     //  Obsolete filtering — keep deprecated surface out of the index so AI agents
     //  don't paste from it. Mirrors what `using` would surface to a real consumer.
+    //  [EditorBrowsable(Never)] members are left out for the same reason: they are
+    //  infrastructure (e.g. hooks only generated code calls) that IntelliSense hides.
     // -----------------------------------------------------------------------
 
     static bool IsObsolete(MemberInfo m) =>
-        m.IsDefined(typeof(ObsoleteAttribute), inherit: false);
+        m.IsDefined(typeof(ObsoleteAttribute), inherit: false)
+        || m.GetCustomAttribute<global::System.ComponentModel.EditorBrowsableAttribute>(inherit: false)?.State
+            == global::System.ComponentModel.EditorBrowsableState.Never;
 
     [RequiresUnreferencedCode(ReflectionJustification)]
     static bool IsEnumMemberObsolete(Type enumType, string name)

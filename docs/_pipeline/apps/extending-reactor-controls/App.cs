@@ -276,7 +276,25 @@ static class PerHostRegistrationExample
         });
         // </snippet:per-host-registration>
     }
+
+    private static void RegisterFrameHost(Reconciler reconciler)
+    {
+        // <snippet:per-host-child-reconcile>
+        reconciler.RegisterType<FramedElement, WinUI.Border>(
+            mount: static (r, el, requestRerender) =>
+                new WinUI.Border { Child = r.Mount(el.Content, requestRerender) },
+            update: static (r, oldEl, newEl, frame, requestRerender) =>
+            {
+                // Patches the child in place, or unmounts it and mounts the new element.
+                var next = r.Reconcile(oldEl.Content, newEl.Content, frame.Child, requestRerender);
+                if (!ReferenceEquals(next, frame.Child)) frame.Child = next;
+                return null;
+            });
+        // </snippet:per-host-child-reconcile>
+    }
 }
+
+sealed record FramedElement(Element Content) : Element;
 
 sealed record MonacoEditorElement(string Text) : Element;
 

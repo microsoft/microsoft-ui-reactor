@@ -1,7 +1,7 @@
 namespace Microsoft.UI.Reactor.Cli.Docs;
 
 /// <summary>
-/// <c>mur docs new-diagram &lt;topic&gt; &lt;id&gt;</c> — scaffold a starter
+/// <c>new-diagram &lt;topic&gt; &lt;id&gt;</c> — scaffold a starter
 /// <c>.mmd</c> file under <c>docs/_pipeline/diagrams/&lt;topic&gt;/</c>.
 /// </summary>
 internal static class NewDiagramCommand
@@ -10,7 +10,7 @@ internal static class NewDiagramCommand
     {
         if (args.Length < 2)
         {
-            Console.Error.WriteLine("Usage: mur docs new-diagram <topic> <id>");
+            Console.Error.WriteLine($"Usage: {DocsCommand.Invocation} new-diagram <topic> <id>");
             return 1;
         }
 

@@ -14,7 +14,7 @@ are the exhaustive index.
 
 ## Generated leaves
 
-The leaf pages in this folder are produced by `mur docs compile`'s
+The leaf pages in this folder are produced by the doc pipeline's `compile`
 reference-generation step (spec 041 §10.4). Each page covers one
 public type / method / property / field / event in the Hooks
 namespace, with sections for Summary, Parameters, Returns,
