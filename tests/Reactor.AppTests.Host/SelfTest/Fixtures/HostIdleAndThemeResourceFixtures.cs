@@ -188,6 +188,8 @@ internal static class HostIdleAndThemeResourceFixtures
             int sameKeyCleanups = 0;
             int flyoutShapeMounts = 0;
             int precedenceMounts = 0;
+            int tipContentMounts = 0;
+            int tipContentCleanups = 0;
             var fixedBrush = new SolidColorBrush(Colors.Orange);
             int wrapperMounts = 0;
             int nestedInnerMounts = 0;
@@ -378,6 +380,24 @@ internal static class HostIdleAndThemeResourceFixtures
                         Memo("precedence", () => Border(TextBlock("PrecedenceProbe")).Background(ThemeRef.Resolve(AppKey, isDark: false)!))
                             .Background(fixedBrush)
                             .OnMount(_ => precedenceMounts++),
+                        // The wrapper's typography beats the output's too.
+                        Memo("fontPrecedence", () => TextBlock("FontPrecedenceProbe")
+                                .FontSize(ThemeRef.Resolve(AppKey, isDark: false) is SolidColorBrush { Color: var c } && c == Colors.Red ? 12 : 14))
+                            .FontSize(30),
+                        // A wrapper with a rich tooltip: the refresh reconciles the tooltip once, like any
+                        // update (a ValidationVisualizer remounts its content on each update).
+                        Memo("tipOnce", () => Border(TextBlock("TipOnceProbe")).Background(ThemeRef.Resolve(AppKey, isDark: false)!))
+                            .Margin(7)
+                            .WithToolTip(ValidationVisualizerDsl.ValidationVisualizer(VisualizerStyle.Inline,
+                                RenderEachTime(fctx =>
+                                {
+                                    fctx.UseEffect(() =>
+                                    {
+                                        tipContentMounts++;
+                                        return () => tipContentCleanups++;
+                                    });
+                                    return TextBlock("TipContent");
+                                }))),
                         // A FlipView whose first item mounts nothing.
                         FlipView(flipGapItems, static s => s, static (s, _) => s == "gap"
                             ? Empty()
@@ -443,7 +463,11 @@ internal static class HostIdleAndThemeResourceFixtures
                 H.Check("ThemeMemo_PrecedenceRerenderAloneKeepsWrapper", PrecedenceColor(target) == Colors.Orange, $"color={PrecedenceColor(target)}");
                 H.Check("ThemeMemo_FlipGapRerenderAloneIsStale", FlipViewItemColor(target, "FlipGapProbe") == Colors.Red,
                     $"color={FlipViewItemColor(target, "FlipGapProbe")}");
-                H.Check("ThemeMemo_FlipItemRerenderAloneIsStale", FlipItemColor(target) == Colors.Red, $"color={FlipItemColor(target)}");
+                H.Check("ThemeMemo_FlipItemRerenderAloneIsStale", FlipViewItemColor(target, "FlipProbe") == Colors.Red,
+                    $"color={FlipViewItemColor(target, "FlipProbe")}");
+                H.Check("ThemeMemo_FontPrecedenceRerenderAloneKeepsWrapper", FindText(target, "FontPrecedenceProbe")?.FontSize == 30,
+                    $"size={FindText(target, "FontPrecedenceProbe")?.FontSize}");
+                int tipMountsBeforeNotify = tipContentMounts;
                 H.Check("ThemeMemo_LegacyNestedRerenderAloneIsStale", ProbeColor(target, "LegacyNestedProbe") == Colors.Red,
                     $"color={ProbeColor(target, "LegacyNestedProbe")}");
                 H.Check("ThemeMemo_CommandHostChildRerenderAloneKept", commandHostChildCleanups == 0 && FindText(target, "CommandHostBefore") is not null,
@@ -503,7 +527,13 @@ internal static class HostIdleAndThemeResourceFixtures
                     $"color={PrecedenceColor(target)} mounts={precedenceMounts}");
                 H.Check("ThemeMemo_FlipGapNotifiedIsBlue", FlipViewItemColor(target, "FlipGapProbe") == Colors.Blue,
                     $"color={FlipViewItemColor(target, "FlipGapProbe")}");
-                H.Check("ThemeMemo_FlipItemNotifiedIsBlue", FlipItemColor(target) == Colors.Blue, $"color={FlipItemColor(target)}");
+                H.Check("ThemeMemo_FlipItemNotifiedIsBlue", FlipViewItemColor(target, "FlipProbe") == Colors.Blue,
+                    $"color={FlipViewItemColor(target, "FlipProbe")}");
+                H.Check("ThemeMemo_FontPrecedenceRefreshKeepsWrapper", FindText(target, "FontPrecedenceProbe")?.FontSize == 30,
+                    $"size={FindText(target, "FontPrecedenceProbe")?.FontSize}");
+                H.Check("ThemeMemo_TooltipReconciledOncePerRefresh", tipContentMounts - tipMountsBeforeNotify == 1
+                    && tipContentMounts - tipContentCleanups == 1,
+                    $"mountsDuringNotify={tipContentMounts - tipMountsBeforeNotify} live={tipContentMounts - tipContentCleanups}");
                 H.Check("ThemeMemo_SameKeyNotifiedIsBlue", ProbeColor(target, "SameKeyProbe") == Colors.Blue,
                     $"color={ProbeColor(target, "SameKeyProbe")}");
                 H.Check("ThemeMemo_SameKeyKeptNotRemounted", sameKeyMounts == 1 && sameKeyCleanups == 0,
@@ -681,10 +711,6 @@ internal static class HostIdleAndThemeResourceFixtures
 
         private static global::Windows.UI.Color? EagerWrapColor(Border target)
             => (FindText(target, "EagerWrapProbe")?.Parent as Border)?.Background is SolidColorBrush b ? b.Color : null;
-
-        private static global::Windows.UI.Color? FlipItemColor(Border target)
-            => FindDescendant<FlipView>(target) is { } fv && fv.Items.Count > 0
-               && fv.Items[0] is TextBlock { Foreground: SolidColorBrush b } ? b.Color : null;
 
         // Whether an element within a few levels above `fe` carries `margin`.
         private static bool AncestorMargin(FrameworkElement? fe, Thickness margin)

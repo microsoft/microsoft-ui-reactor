@@ -293,14 +293,9 @@ public sealed partial class Reconciler
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender);
         // A keyed memo refreshed in place: its output's diff may have rewritten a property this
         // wrapper also sets, and the wrapper's value wins (it applies after the output's at mount).
-        // Write the wrapper's layout and visual values again; nothing else is re-run.
         if (_resourceRefreshActive && newEl is KeyedMemoElement && (result is null || ReferenceEquals(result, control))
-            && modifiers is { } wrapperMods && (wrapperMods.Layout is not null || wrapperMods.Visual is not null)
-            && target is FrameworkElement wrapperFe)
-        {
-            var values = wrapperMods with { OnUpdateAction = null };
-            ApplyModifiers(wrapperFe, values with { Layout = null, Visual = null }, values, requestRerender);
-        }
+            && modifiers is { } wrapperMods && target is FrameworkElement wrapperFe)
+            ReassertWrapperValues(wrapperFe, wrapperMods, requestRerender);
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
         // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is
@@ -1691,6 +1686,40 @@ public sealed partial class Reconciler
         return replacement;
     }
 
+    /// <summary>
+    /// Writes a wrapper's plain property values (layout, visual, typography, enabled state, string
+    /// tooltip, automation name and id, focus and access-key settings) to <paramref name="fe"/>
+    /// again, through <see cref="ApplyModifiers(FrameworkElement, ElementModifiers?, ElementModifiers, Action)"/>
+    /// with only those values unset on the old side. Every other field is identical on both
+    /// sides, so ApplyModifiers leaves it alone (no lifecycle callback, handler or ref change);
+    /// hosted children (a rich tooltip, flyouts) are left out of both, so they are not
+    /// reconciled again, and OnUpdateAction is left out so it runs once per update.
+    /// </summary>
+    private void ReassertWrapperValues(FrameworkElement fe, ElementModifiers m, Action requestRerender)
+    {
+        var current = m with { RichToolTip = null, AttachedFlyout = null, ContextFlyout = null, OnUpdateAction = null };
+        var unset = current with
+        {
+            Layout = null,
+            Visual = null,
+            // A string tooltip is a plain value; next to a rich one it would replace it.
+            ToolTip = m.RichToolTip is null ? null : current.ToolTip,
+            IsEnabled = null,
+            AutomationName = null,
+            AutomationId = null,
+            ElementSoundMode = null,
+            FontFamily = null,
+            FontSize = null,
+            FontWeight = null,
+            HeadingLevel = null,
+            IsTabStop = null,
+            IsHitTestVisible = null,
+            TabIndex = null,
+            AccessKey = null,
+            XYFocusKeyboardNavigation = null,
+        };
+        ApplyModifiers(fe, unset, current, requestRerender);
+    }
     // The keyed memo layers whose refresh is in progress, with the control each was refreshing.
     private List<(object Key, UIElement Control)>? _memoRefreshFrames;
 
