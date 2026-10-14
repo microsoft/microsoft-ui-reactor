@@ -141,12 +141,13 @@ The `<EmbeddedResource Include="..\..\SKILL.md">` line stays — `mur --skill` s
 
 ```
 Microsoft.UI.Reactor.1.0.0-preview.42.nupkg
-├── lib/net10.0-windows10.0.22621/         # ONE lib group — see "Exactly one lib folder"
+├── lib/net10.0-windows10.0.22621/         # exactly one lib folder; see below
 │   ├── Reactor.dll
+│   ├── Reactor.pri
 │   ├── Reactor.xml                        # XML doc comments
 │   └── Reactor/Hosting/
 │       ├── ReactorApplication.xaml        # Application-level XamlControlsResources
-│       └── ReactorApplication.xbf         # compiled form; see "No .pri in lib/" below
+│       └── ReactorApplication.xbf         # compiled form, packed by _PackReactorApplicationXbf
 ├── analyzers/dotnet/cs/
 │   ├── Reactor.Analyzers.dll
 │   └── Reactor.Localization.Generator.dll
@@ -157,109 +158,32 @@ Microsoft.UI.Reactor.1.0.0-preview.42.nupkg
 └── Microsoft.UI.Reactor.nuspec
 ```
 
-Note the folder is `net10.0-windows10.0.22621`, **not** `…22621.0`: NuGet shortens the
-build-output folder name, while `$(TargetFramework)` keeps the trailing `.0`.
-
-### No `.pri` in `lib/` (issue #1271)
-
-None of `Microsoft.UI.Reactor`, `.Advanced` or `.Devtools` ships its generated `.pri`,
-and none ever should. NuGet packs a project's resource index into the build-output
-folder by default, which puts it beside the assembly — and `ResolveAssemblyReference`
-treats a same-base-name `.pri` as a *reference-related file*
-(`AllowedReferenceRelatedFileExtensions` defaults to `.pdb;.xml;.pri;…`). Once it is in
-`_ReferenceRelatedPaths` / `ReferenceCopyLocalPaths`, the Windows App SDK's
-`AddPriPayloadFilesToCopyToOutputDirectoryItems` runs `makepri.exe Dump` on it into
-`$(IntermediateOutputPath)`, and that output path breaks past `MAX_PATH` — failing
-consumer builds with `PRI175` / `PRI222` / `APPX0002` at depths where an equivalent XAML
-app builds fine.
-
-Relocating the file is *not* a fix: a `.pri` that reaches the consumer's layout by any
-route — including a `CopyToOutputDirectory` item from a non-reference folder — also lands
-in `@(PackagingOutputs)`, where `_ExpandPriFiles` hands it to the same task. Measured:
-shipping `Reactor.pri` from a `sidecar/` folder with a plain
-`<None CopyToOutputDirectory="PreserveNewest">` item still produces a
-`makepri.exe Dump -IndexFile …\sidecar\Reactor.pri` invocation. It has to be absent.
-
-**The upstream long-path fix, and why this section outlives it.** The `MAX_PATH` defect
-itself is [microsoft/WindowsAppSDK#6795](https://github.com/microsoft/WindowsAppSDK/issues/6795)
-(`WinAppSdkExpandPriContent` passed a non-extended-length path to `makepri.exe`), fixed in
-`Microsoft.Windows.SDK.BuildTools.MSIX` **1.7.260930100** (closed 2026-10-01). The fix is a
-`\\?\` prefix in the task rather than a shorter path — the dumps still land in
-`$(IntermediateOutputPath)` — so it also covers the expansion path a Reactor app takes.
-Measured at matched depths, varying only the build-tools version:
-
-| consumer | 1.7.251221100 | 1.7.260930100 |
-|---|---|---|
-| pre-fix packages (ship `.pri`), framework-dependent | `PRI175` on `Microsoft.UI.Reactor.Devtools.pri.xml` | builds |
-| this layout (no `.pri`), self-contained | `PRI175` on the SDK's own `Microsoft.WindowsAppRuntime.pri.xml` | builds |
-
-Build tools reach an app only through `Microsoft.WindowsAppSDK.Base`, and every Base release
-to date — 2.0.4 stable and 2.0.5-experimental2 alike — pins `1.7.251221100`. So
-`Microsoft.UI.Reactor` declares its own dependency on 1.7.260930100 (it also fixes
-WindowsAppSDK#6394; see [AOT support](../aot-support.md#publish-time-resources)), and every
-consumer resolves the fixed version. The second row is why that matters even with no `.pri`
-in `lib/`: in a self-contained app the Windows App SDK's own indexes hit the same limit.
-
-The `.pri` removal stands on its own terms. The `.Advanced` and `.Devtools` indexes are
-**entirely empty** and the core one duplicates a file that ships loose, yet each cost every
-consumer a `makepri.exe Dump` per build — six per build with all three referenced, through
-both the reference and the payload path. And an app that pins build tools below Reactor's
-floor would hit the original failure again.
-
-Each of the three csproj files therefore narrows the allow-list that decides what may sit
-in the build-output folder:
-
-```xml
-<!-- core; .Advanced / .Devtools use the same list without .xbf -->
-<DefaultAllowedOutputExtensionsInPackageBuildOutputFolder>.dll; .exe; .winmd; .json; .xml; .xbf</DefaultAllowedOutputExtensionsInPackageBuildOutputFolder>
-```
-
-This is deliberately the **pack**-side knob. `.pri` *generation* is untouched, so
-`ProjectReference` consumers (in-repo samples, selftests, AOT proofs) are unaffected.
-
-What consumers need instead is the loose `ReactorApplication.xbf`, which
-`ReactorApplication.InitializeComponent()` resolves from the app directory. It is packed
-by the `_PackReactorApplicationXbf` target rather than a `<None>` item, because a `<None>`
-guarded with `Exists()` is evaluated before the build produces the file and silently
-shipped a package without it.
-
-### Why removing the `.pri` is safe for packaged apps too
-
-Worth stating because the mechanism differs and the obvious worry is real. For a
-**packaged** (MSIX) consumer the old `lib/` `.pri` was not inert: it reached the app
-layout, so the app's own `makepri New` merged it into `resources.pri`. Measured on a
-packaged consumer of 0.1.0-preview.16, that index contains
-`ms-resource://<App>/Files/Reactor/Hosting/ReactorApplication.xbf`; built against this
-branch, it does not. So the `.pri` genuinely was carrying the sidecar there.
-
-It is still safe to drop, because the loose files carry it either way. Measured on the
-same packaged app, registered and launched:
-
-| packaged consumer | app starts | theme resources resolve |
-|---|---|---|
-| 0.1.0-preview.16 (has `.pri`) | yes | yes |
-| this branch (no `.pri`) | **yes** | **yes** |
-| this branch, loose `.xaml`+`.xbf` deleted | **crashes** | **no** |
-
-The third row is the control: it is what makes the second row evidence rather than a
-coincidence, and it confirms the loose sidecars — not the `.pri` — are load-bearing.
-
 ### Exactly one `lib/` folder
 
-`_PackReactorApplicationXbf` emits the sidecar as **build output** with a `TargetPath`
-(the mechanism satellite assemblies use for `lib/<tfm>/<culture>/`), never as a
-`TfmSpecificPackageFile` with a literal `lib\$(TargetFramework)\…` path.
+NuGet names the build-output folder `net10.0-windows10.0.22621`, while `$(TargetFramework)` is
+`net10.0-windows10.0.22621.0`. A file packed to a literal `lib\$(TargetFramework)\` path
+therefore lands in a second `lib/` folder for the same framework, which is how 0.1.0-preview.16
+shipped `ReactorApplication.xbf`. `_PackReactorApplicationXbf` adds the file as build output
+instead, so NuGet places it beside `Reactor.dll`. It runs at pack time because the `<None>`
+item it replaced was evaluated before the build created the file, so a clean pack left it out.
 
-That literal form is a trap. `$(TargetFramework)` is `net10.0-windows10.0.22621.0` while
-NuGet shortens the build-output folder to `net10.0-windows10.0.22621`, so the package
-grew **two sibling `lib` groups for the same framework** — one with the assemblies, one
-holding nothing but the stray sidecar. NuGet picked the right one by ordering rather than
-by rule. Shipped in 0.1.0-preview.16 and earlier; fixed by letting NuGet place the file.
+### Build-tools dependency
 
-`tests/Reactor.IntegrationTests/Packaging/PriPackagingTests.cs` asserts all of it — no
-`.pri`, the sidecars present, exactly one `lib/` folder per package, a real consumer build
-logging zero `makepri.exe Dump` calls for Reactor packages, and the app `.pri` reaching
-the consumer's publish output.
+`Microsoft.UI.Reactor` depends on `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.260930100. Apps
+otherwise get that package only through `Microsoft.WindowsAppSDK.Base`, and every Base release
+so far (2.0.4, 2.0.5-experimental2) pins 1.7.251221100, which has two bugs that affect Reactor apps:
+
+- Expanding a package's `.pri` with `makepri.exe Dump` fails past `MAX_PATH` (`PRI175`), so apps
+  failed to build in deeply nested folders (issue #1271,
+  [WindowsAppSDK#6795](https://github.com/microsoft/WindowsAppSDK/issues/6795)). Measured with
+  only the build-tools version changed, a consumer of all three Reactor packages at the same
+  depth fails on 1.7.251221100 and builds on 1.7.260930100.
+- An unpackaged app's own `.pri` is left out of its publish output
+  ([WindowsAppSDK#6394](https://github.com/microsoft/WindowsAppSDK/issues/6394)), so the
+  published app crashes at startup or cannot load its own XAML.
+
+Remove the dependency once the Windows App SDK version Reactor depends on resolves
+1.7.260930100 or later by itself.
 
 ### Packaging configuration
 

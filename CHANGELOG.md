@@ -647,24 +647,16 @@ Conventions for contributors:
   `Cancel()` cleanup (PR #1124), that the source had been pooled and reset, was wrong: that crash
   was this same fault.
 
-- **Reactor packages no longer ship a `.pri` (issue #1271).** The index sat beside the
-  assembly in `lib/`, where `ResolveAssemblyReference` treats it as a reference-related file,
-  so every consumer build expanded it with `makepri.exe Dump` into `$(IntermediateOutputPath)`
-  — and on build tools before 1.7.260930100 that path broke past `MAX_PATH` with `PRI175` /
-  `PRI222` / `APPX0002`. Nothing is lost: the `.Advanced` and `.Devtools` indexes were empty
-  and the core one only embedded a second copy of `ReactorApplication.xbf`, which still ships
-  loose. `.pri` *generation* is unchanged, so `ProjectReference` consumers are unaffected. The
-  core package now also exposes one `lib/` folder instead of two for the same target framework.
+- **Apps that reference Reactor no longer fail to build in deeply nested folders, and their
+  publish output now includes the app's `.pri` (issue #1271,
+  [WindowsAppSDK#6394](https://github.com/microsoft/WindowsAppSDK/issues/6394)).**
+  `Microsoft.UI.Reactor` now depends on `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.260930100,
+  which fixes both. If you copied the `_CopyWinUIResourcesForAot` target from
+  `docs/aot-support.md`, you can delete it.
 
-- **Published apps now include their own `.pri`
-  ([WindowsAppSDK#6394](https://github.com/microsoft/WindowsAppSDK/issues/6394)).**
-  `Microsoft.Windows.SDK.BuildTools.MSIX` before 1.7.260930100 leaves an unpackaged app's
-  `.pri` out of its publish output: self-contained apps (AOT or not) crashed at startup with
-  `0xC000027B`, and framework-dependent apps could not load their own XAML. Every Windows App
-  SDK release still resolves an older version, so `Microsoft.UI.Reactor` now depends on
-  1.7.260930100 directly, which also fixes the `MAX_PATH` failure above for the SDK's own
-  `.pri` files. Replaces the per-project `_CopyWinUIResourcesForAot` snippet (removed from 11
-  projects).
+- **The `Microsoft.UI.Reactor` package has a single `lib/` folder and always contains
+  `ReactorApplication.xbf`.** A second `lib/` folder used to hold only that file, and packing
+  from a clean tree left it out.
 
 ### Security
 

@@ -55,26 +55,6 @@
          enforcement can re-enable per-rule. Unresolved crefs are covered by
          the built-in CS1574 (severity configured in src/Reactor/.editorconfig). -->
     <NoWarn>$(NoWarn);CS1591;REACTOR_DOC_001</NoWarn>
-    <!-- Keep Reactor.pri OUT of lib/ (issue #1271). NuGet's pack targets add the
-         project's .pri to the package build-output folder (_AddPriFileToPackBuildOutput)
-         and its default extension allow-list includes .pri, so it lands beside Reactor.dll.
-         Once there, ResolveAssemblyReference relates it to the assembly by base name
-         (AllowedReferenceRelatedFileExtensions defaults to ".pdb;.xml;.pri;…"), which
-         feeds it to the Windows App SDK's WinAppSdkExpandPriContent task — one
-         `makepri.exe Dump` per library .pri, writing into $(IntermediateOutputPath).
-         Those output paths break past MAX_PATH, so a Reactor app failed to build at a
-         depth where the equivalent XAML app built fine. Nothing needs the library .pri:
-         it held a single embedded copy of ReactorApplication.xbf, which also ships loose
-         (see the pack target below) and is resolved from the app directory.
-         This is deliberately the PACK-side knob: .pri generation is untouched, so
-         ProjectReference consumers are unaffected.
-
-         .xbf is ADDED to the list because ReactorApplication.xbf is packed as build
-         output (see _PackReactorApplicationXbf) so that NuGet places it in the same
-         normalized lib/ folder as Reactor.dll. This property is therefore the single
-         statement of what may live in lib/: assemblies, docs — and the compiled XAML
-         sidecar — but never a resource index. -->
-    <DefaultAllowedOutputExtensionsInPackageBuildOutputFolder>.dll; .exe; .winmd; .json; .xml; .xbf</DefaultAllowedOutputExtensionsInPackageBuildOutputFolder>
   </PropertyGroup>
 
   <ItemGroup>
@@ -123,21 +103,11 @@
     <PackageReference Include="MessageFormat" />
   </ItemGroup>
 
-  <!--
-    WindowsAppSDK#6394: an unpackaged app's own .pri and compiled .xbf are built but never
-    copied to the publish output, so a self-contained publish crashes at startup with
-    0xC000027B and a framework-dependent one cannot load its own XAML. The fix shipped in
-    Microsoft.Windows.SDK.BuildTools.MSIX 1.7.260930100, but apps get that package only
-    transitively, through Microsoft.WindowsAppSDK.Base, and every Base release to date still
-    resolves 1.7.251221100. Referencing it here turns the fix into a dependency floor every
-    Reactor consumer inherits (NuGet picks the highest minimum).
-
-    Default PrivateAssets on purpose: the package's targets reach consumers through its
-    buildTransitive folder, and only the version is being raised. Delete this reference (and
-    its PackageVersion) once the Microsoft.WindowsAppSDK version this repo pins resolves
-    1.7.260930100 or later by itself. PriPackagingTests.ConsumerPublishIncludesTheAppPri is what
-    proves the floor reaches consumers.
-  -->
+  <!-- Dependency floor for consumers: 1.7.260930100 fixes PRI expansion past MAX_PATH
+       (issue #1271, WindowsAppSDK#6795) and the app .pri missing from publish output
+       (WindowsAppSDK#6394). Apps otherwise get 1.7.251221100 through
+       Microsoft.WindowsAppSDK.Base. Delete once the pinned Windows App SDK resolves a
+       fixed version by itself. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.MSIX" />
   </ItemGroup>
@@ -220,32 +190,17 @@
     </ItemGroup>
   </Target>
 
-  <!-- Pack the compiled ReactorApplication.xbf sidecar. WinUI's LoadComponent needs
-       it at runtime for ReactorApplication.xaml, and SDK pack includes the .xaml but
-       not the .xbf, so a PackageReference consumer otherwise crashes in native XAML
-       when a control such as TitleBar realizes.
-
-       This runs at PACK time rather than being a <None> item because the .xbf does
-       not exist yet when the project is evaluated, so an Exists() condition on a
-       <None> silently dropped it from a clean `dotnet pack`. Since issue #1271
-       stopped shipping Reactor.pri (which carried an embedded second copy), this
-       file is the only delivery — hence the hard error rather than a silent skip.
-
-       It is emitted as BUILD OUTPUT (with TargetPath for the subfolder, the same
-       mechanism satellite assemblies use for lib/<tfm>/<culture>/) rather than as a
-       TfmSpecificPackageFile with an explicit "lib\$(TargetFramework)\..." path.
-       That path would be literal: $(TargetFramework) is net10.0-windows10.0.22621.0,
-       while NuGet SHORTENS the build-output folder to net10.0-windows10.0.22621. The
-       explicit form therefore created a second, assembly-less lib group for the very
-       same framework — two sibling lib/ folders in the package, which is exactly the
-       kind of ambiguity NuGet's asset selection should never be asked to resolve.
-       Letting NuGet place it keeps one lib folder, whatever it decides to call it. -->
+  <!-- Pack ReactorApplication.xbf, which WinUI's LoadComponent needs at runtime. A pack-time
+       target, because a <None> guarded by Exists() is evaluated before the build creates the
+       file. Packed as build output so it lands in the same lib/ folder as Reactor.dll; a
+       literal lib\$(TargetFramework)\ path created a second lib/ folder. -->
   <PropertyGroup>
     <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);_PackReactorApplicationXbf</TargetsForTfmSpecificBuildOutput>
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.xbf</AllowedOutputExtensionsInPackageBuildOutputFolder>
   </PropertyGroup>
   <Target Name="_PackReactorApplicationXbf">
     <Error Condition="!Exists('$(TargetDir)Reactor\Hosting\ReactorApplication.xbf')"
-           Text="ReactorApplication.xbf was not found at '$(TargetDir)Reactor\Hosting\ReactorApplication.xbf'. It is the only copy of the compiled ReactorApplication.xaml that PackageReference consumers receive (issue #1271), so packing without it would produce a package whose apps crash in native XAML on startup. Build src/Reactor before packing." />
+           Text="ReactorApplication.xbf was not found at '$(TargetDir)Reactor\Hosting\ReactorApplication.xbf'. Build src/Reactor before packing." />
     <ItemGroup>
       <BuildOutputInPackage Include="$(TargetDir)Reactor\Hosting\ReactorApplication.xbf"
                             TargetPath="Reactor\Hosting\ReactorApplication.xbf" />
@@ -306,15 +261,6 @@
          CallSite is silently null. The file carries an idempotence guard so being
          imported from both folders in one evaluation is harmless. -->
     <None Include="build\Reactor.targets" Pack="true" PackagePath="buildTransitive\Microsoft.UI.Reactor.targets" Visible="false" />
-    <!-- ReactorApplication.xbf is packed by the _PackReactorApplicationXbf target
-         below, NOT by a <None> item. A <None Include="$(OutputPath)…"
-         Condition="Exists(…)"> is evaluated when the project is EVALUATED — before
-         the build that produces the .xbf — so a clean `dotnet pack` silently
-         shipped a package without it (measured on this tree: the .xbf appeared only
-         when a previous build had already left one in bin/). That was survivable
-         while Reactor.pri carried an embedded copy; since issue #1271 removed the
-         .pri, this loose file is the ONLY delivery, so it is now resolved at pack
-         time and its absence is a hard error. -->
     <!-- Agent kit packed into the NuGet at `agentkit/`: SKILL.md, every
          skills/*.md sub-skill, the recipes folder, and the generated
          signatures index. Mirrors the source-tree layout. Discoverable from

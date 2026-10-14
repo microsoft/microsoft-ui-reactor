@@ -112,21 +112,13 @@
       sidecar assets. ProjectReference consumers get them from the library
       output automatically, but PackageReference publish only copies assemblies
       unless the package target explicitly marks these files for output/publish.
-
-      There is deliberately NO Reactor.pri item here (issue #1271). The package no
-      longer ships one: it carried a single EmbeddedData copy of the .xbf below, and
-      any .pri that reaches the consumer's layout — whether via lib/ or via a
-      CopyToOutputDirectory item like these — is handed to the Windows App SDK's
-      `makepri.exe Dump` expansion, whose $(IntermediateOutputPath) output path
-      breaks past MAX_PATH on deep trees.
-
-      The loose files below are what satisfy InitializeComponent once the .pri is gone.
-      Measured: the consuming app's own generated .pri then contains NO Reactor entry at
-      all, and the app still resolves ms-appx:///Reactor/Hosting/ReactorApplication.xaml
-      — for an unpackaged app that URI falls back to the file on disk beside the
-      executable. Either sidecar alone is sufficient (the .xaml is parsed when the .xbf
-      is absent); both ship so the compiled path stays available.
     -->
+    <None Include="$(MSBuildThisFileDirectory)..\lib\**\Reactor.pri"
+          Link="Reactor.pri"
+          TargetPath="Reactor.pri"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          Visible="false" />
     <None Include="$(MSBuildThisFileDirectory)..\lib\**\Reactor\Hosting\ReactorApplication.xaml"
           Link="Reactor\Hosting\ReactorApplication.xaml"
           TargetPath="Reactor\Hosting\ReactorApplication.xaml"

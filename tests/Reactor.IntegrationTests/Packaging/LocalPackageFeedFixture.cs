@@ -15,17 +15,8 @@ namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
 
 public sealed class LocalPackageFeedFixture : IDisposable
 {
-    // Deliberately terse names. This directory becomes the consumer's
-    // globalPackagesFolder, so every resolved reference path is rooted here — and the
-    // WinUI XAML compiler is not long-path aware, failing with
-    // "WMC1006: Cannot resolve Assembly or Windows Metadata file" once a reference
-    // crosses MAX_PATH. Measured on CI with the original
-    // "reactor-template-packages-{guid}/nuget-global-packages" naming, the longest
-    // reference (microsoft.windowsappsdk.foundation's projection DLL under a
-    // net6.0-windows... lib folder) landed at exactly 260 characters and failed the
-    // build. "reactor-local-feed-{guid}/nuget-global-packages" reaches 253 — under the
-    // limit, but only 7 characters of headroom. These names take it to 219. Do not
-    // lengthen them back for readability; the headroom is load-bearing.
+    // Terse names on purpose: this folder is the consumers' globalPackagesFolder, and the XAML
+    // compiler fails with WMC1006 once a reference path under it passes MAX_PATH.
     private readonly string _tempRoot = Path.Join(Path.GetTempPath(), $"rlf-{Guid.NewGuid():N}");
 
     public LocalPackageFeedFixture()
