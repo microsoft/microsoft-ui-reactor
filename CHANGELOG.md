@@ -47,6 +47,18 @@ Conventions for contributors:
   `ContentDialog` is tagged with its element so its chrome resolves to the
   `ContentDialog(...)` call site (spec 010, spec 057 §3.1).
 
+- **`REACTOR_DYM_006`: color strings that render gray** (issue #1375, spec 061 §7.3). A new
+  default-on **Warning** flags compile-time-constant color strings that `BrushHelper` can't
+  parse and therefore silently fall back to gray: `.Background("orange")`, `.Foreground("#888")`,
+  or a font name passed to `ResourceBuilder.Set(key, string)` under a `*FontFamily` key. It covers
+  `BrushHelper.Parse`, `ResourceBuilder.Set(string, string)` and the `string` overloads of
+  `Background` / `Foreground` / `BorderBrush` / `WithBorder`, suggests the exact hex (or
+  `new FontFamily(...)` once that `Set` overload exists), and ships a code fix; `mur check`'s new
+  `ColorStringLiteralRule` repeats the rewrite as a `→ try:` hint. Unlike `REACTOR_DYM_001`–`005`
+  it fires on code that compiles, so a project with `TreatWarningsAsErrors` can stop building on
+  an existing gray color. Fix the value, or adjust the severity with
+  `dotnet_diagnostic.REACTOR_DYM_006.severity` in `.editorconfig`.
+
 - **Inspector diagnostics: call-site column and a per-component render event**
   (issue #1326, spec 010 §1.1):
   - `SourceLocation.ColumnNumber` (1-based, `0` = unknown), a third positional
@@ -62,7 +74,8 @@ Conventions for contributors:
   - `ReactorTrace.GetComponentControl(long)` and
     `ReactorTrace.TryGetComponentId(UIElement, out long)` map a `componentId` to
     the component's on-screen control and back, so an inspector can flash what
-    re-rendered.
+    re-rendered. A host root's id only maps forward, to the root content: that
+    control is often also a child component's wrapper, whose id it reports.
 
 - **Inspector diagnostics for hosts, roots and component boundaries** (spec 010).
   `ReactorDiagnostics.GetHosts()` (`Microsoft.UI.Reactor.Core.Diagnostics`) returns
@@ -665,6 +678,17 @@ Conventions for contributors:
   in between and crashed on every run before the fix. The earlier explanation for the withdrawn
   `Cancel()` cleanup (PR #1124), that the source had been pooled and reset, was wrong: that crash
   was this same fault.
+
+- **Apps that reference Reactor no longer fail to build in deeply nested folders, and their
+  publish output now includes the app's `.pri` (issue #1271,
+  [WindowsAppSDK#6394](https://github.com/microsoft/WindowsAppSDK/issues/6394)).**
+  `Microsoft.UI.Reactor` now depends on `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.260930100,
+  which fixes both. If you copied the `_CopyWinUIResourcesForAot` target from
+  `docs/aot-support.md`, you can delete it.
+
+- **The `Microsoft.UI.Reactor` package has a single `lib/` folder and always contains
+  `ReactorApplication.xbf`.** A second `lib/` folder used to hold only that file, and packing
+  from a clean tree left it out.
 
 ### Security
 

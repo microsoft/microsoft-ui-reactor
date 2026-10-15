@@ -16,7 +16,7 @@
   "devDependencies": {
     "@babel/core": "^7.29.7",
     "@babel/preset-env": "^7.29.7",
-    "@babel/runtime": "^7.29.7",
+    "@babel/runtime": "^7.29.10",
     "@react-native-community/cli": "20.2.0",
     "@react-native/babel-preset": "0.82.1",
     "@react-native/eslint-config": "0.87.1",
@@ -24,7 +24,7 @@
     "@react-native/typescript-config": "0.87.1",
     "@types/react": "^19.3.0",
     "eslint": "^8.19.0",
-    "prettier": "3.9.9",
+    "prettier": "3.9.10",
     "react-native-windows": "1.0.0",
     "typescript": "^5.8.3"
   },
