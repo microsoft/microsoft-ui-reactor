@@ -18,6 +18,9 @@ internal static class ChartFixtures
 
     private static WinUIChart? FindChart(Harness h) => h.FindControl<WinUIChart>(_ => true);
 
+    // The renderer's visual size is a float mirror of the control's double layout size.
+    private static bool Near(double actual, double expected) => Math.Abs(actual - expected) < 0.5;
+
     // ItemsSource round-trips through WinRT, which may hand back a copy of an array.
     private static bool SameValues<T>(object? actual, IEnumerable<T> expected) =>
         actual is global::System.Collections.IEnumerable e && e.Cast<object>().SequenceEqual(expected.Cast<object>());
@@ -50,8 +53,8 @@ internal static class ChartFixtures
             var renderer = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementChildVisual(chartForVisual);
             H.Check("Chart_Mount_RendererAttached",
                 renderer is Microsoft.UI.Composition.SpriteVisual sprite
-                && sprite.Size.X == (float)chartForVisual.ActualWidth
-                && sprite.Size.Y == (float)chartForVisual.ActualHeight,
+                && Near(sprite.Size.X, chartForVisual.ActualWidth)
+                && Near(sprite.Size.Y, chartForVisual.ActualHeight),
                 $"renderer={renderer?.GetType().Name} size={renderer?.Size}");
 
             var chart = FindChart(H)!;

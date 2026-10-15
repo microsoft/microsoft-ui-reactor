@@ -37,7 +37,7 @@ class ChartDemo : Component
             .Legend("Monthly results");
 
         // A fresh array is all it takes to redraw; the native Samples object is reused.
-        var days = readings.Select((_, i) => Start.AddDays(7 * i)).ToArray();
+        var days = readings.Select((_, i) => Start.AddDays(7.0 * i)).ToArray();
         var temperature = Chart(
             LineSeries(days, readings, "Temperature",
                     xAxis: DateTimeAxis("Week") with { IntervalType = DateTimeIntervalType.Week, LabelFormat = "month day" },

@@ -37,6 +37,9 @@ internal static partial class TableViewFixtures
 
     private static WinUITableView? FindTable(Harness h) => h.FindControl<WinUITableView>(_ => true);
 
+    // Column widths are layout doubles; compare within a sub-pixel tolerance.
+    private static bool Near(double actual, double expected) => Math.Abs(actual - expected) < 0.01;
+
     internal class MountsRowsAndColumns(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -60,7 +63,7 @@ internal static partial class TableViewFixtures
             H.Check("TableView_Mount_NativeColumns", table is not null
                 && table.Columns.Count == 2
                 && table.Columns[0] is TableViewTextColumn { Header: "Name" } text
-                && text.Width.Value == 140
+                && Near(text.Width.Value, 140)
                 && table.Columns[1] is TableViewTemplateColumn { Header: "Score" },
                 $"columns={table?.Columns.Count}");
             H.Check("TableView_Mount_DefaultStyleApplied",
@@ -105,7 +108,7 @@ internal static partial class TableViewFixtures
             H.Check("TableView_Update_ColumnInstancesPreserved",
                 table is not null && ReferenceEquals(table.Columns[0], nameColumn) && ReferenceEquals(table.Columns[1], scoreColumn));
             H.Check("TableView_Update_ColumnPropsWritten",
-                nameColumn is { Header: "Full name" } && nameColumn.Width.Value == 200,
+                nameColumn is { Header: "Full name" } && Near(nameColumn.Width.Value, 200),
                 $"header={nameColumn?.Header} width={nameColumn?.Width.Value}");
 
             H.ClickButton("Next phase");
@@ -239,7 +242,7 @@ internal static partial class TableViewFixtures
             var table = FindTable(H)!;
             var boundSource = table.ItemsSource;
             H.Check("TableView_Immutable_ReadOnlyOnlyWithoutEditor",
-                table.IsReadOnly == false
+                !table.IsReadOnly
                 && table.Columns[0] is TableViewTextColumn { IsReadOnly: false }
                 && table.Columns[1] is TableViewTextColumn { IsReadOnly: true });
 
@@ -323,40 +326,46 @@ internal static partial class TableViewFixtures
     }
     internal class UnmountTearsDownCells(Harness h) : SelfTestFixtureBase(h)
     {
-        private static int s_mounted;
-        private static int s_cleanedUp;
+        // Owned by one fixture run and handed to each cell through its props.
+        private sealed class EffectCounts
+        {
+            public int Mounted;
+            public int CleanedUp;
+        }
 
-        private sealed class Cell : Component<int>
+        private sealed record CellProps(int Id, EffectCounts Counts);
+
+        private sealed class Cell : Component<CellProps>
         {
             public override Element Render()
             {
+                var counts = Props.Counts;
                 UseEffect(() =>
                 {
-                    Interlocked.Increment(ref s_mounted);
-                    return () => Interlocked.Increment(ref s_cleanedUp);
+                    Interlocked.Increment(ref counts.Mounted);
+                    return () => Interlocked.Increment(ref counts.CleanedUp);
                 }, Array.Empty<object>());
-                return TextBlock($"cell:{Props}");
+                return TextBlock($"cell:{Props.Id}");
             }
         }
 
         public override async Task RunAsync()
         {
-            s_mounted = 0;
-            s_cleanedUp = 0;
+            var counts = new EffectCounts();
             var rows = Rows();
             var host = H.CreateHost();
-            host.Mount(_ => TableView(rows, TemplateColumn<Row>("Id", r => Component<Cell, int>(r.Id)))
+            host.Mount(_ => TableView(rows, TemplateColumn<Row>("Id", r => Component<Cell, CellProps>(new CellProps(r.Id, counts))))
                 .Width(400).Height(200));
 
             H.Check("TableView_Unmount_CellComponentsMounted",
-                await Harness.WaitFor(() => Volatile.Read(ref s_mounted) >= rows.Length, maxPasses: 40, perPassMs: 25),
-                $"mounted={s_mounted}");
+                await Harness.WaitFor(() => Volatile.Read(ref counts.Mounted) >= rows.Length, maxPasses: 40, perPassMs: 25),
+                $"mounted={counts.Mounted}");
 
             host.Mount(_ => TextBlock("TableView unmounted"));
             H.Check("TableView_Unmount_CellEffectsCleanedUp",
-                await Harness.WaitFor(() => Volatile.Read(ref s_cleanedUp) == Volatile.Read(ref s_mounted),
+                await Harness.WaitFor(() => Volatile.Read(ref counts.CleanedUp) == Volatile.Read(ref counts.Mounted),
                     maxPasses: 20, perPassMs: 25),
-                $"mounted={s_mounted} cleanedUp={s_cleanedUp}");
+                $"mounted={counts.Mounted} cleanedUp={counts.CleanedUp}");
         }
     }
 }
