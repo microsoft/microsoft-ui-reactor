@@ -330,7 +330,14 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
             return constant.Value is not null;
 
         if (expression is BinaryExpressionSyntax b && b.IsKind(SyntaxKind.CoalesceExpression))
+        {
+            // A non-null left value can still become null through a user-defined conversion
+            // (`token ?? "red"` with an `implicit operator string` that returns null), so such a
+            // coalesce is never provably non-null, whatever its right side is.
+            if (model.GetOperation(b, cancellationToken) is ICoalesceOperation { ValueConversion.IsUserDefined: true })
+                return false;
             return IsKnownNonNull(b.Left, model, cancellationToken) || IsKnownNonNull(b.Right, model, cancellationToken);
+        }
 
         var any = false;
         foreach (var child in LiveChildren(expression, model, cancellationToken))

@@ -321,6 +321,16 @@ namespace App
             ?? BrushHelper.Parse((string)token ?? {|REACTOR_DYM_006:""orange""|});");
 
     [Fact]
+    public Task Coalesce_over_a_one_way_user_defined_conversion_is_not_provably_non_null() =>
+        // `token ?? "red"` is a string, but a non-null token converts through an operator that may
+        // return null, so the outer "orange" fallback is reachable.
+        RunAsync(@"        sealed class NullableToken
+        {
+            public static implicit operator string(NullableToken t) => null!;
+        }
+        static object M(NullableToken token) => TextBlock(""hi"").Background((token ?? ""red"") ?? {|REACTOR_DYM_006:""orange""|});");
+
+    [Fact]
     public Task Coalesce_fallback_is_dead_when_the_other_branch_throws() =>
         // Execution either yields "red" or throws, so "orange" is unreachable.
         RunAsync(@"        static object M(string c, bool on) => TextBlock(""hi"")
