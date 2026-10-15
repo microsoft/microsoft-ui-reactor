@@ -28,6 +28,8 @@
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
     <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="$(WindowsAppSDKWinUIVersion)" />
     <PackageVersion Include="Microsoft.WindowsAppSDK.Runtime" Version="$(WindowsAppSDKVersion)" />
+    <!-- Raised above what the Windows App SDK resolves; see src/Reactor/Reactor.csproj. -->
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.MSIX" Version="1.7.260930100" />
     <PackageVersion Include="Microsoft.Graphics.Win2D" Version="$(Win2DVersion)" />
   </ItemGroup>
 
@@ -46,7 +48,7 @@
          Analyzer-only (PrivateAssets=all). Version tracks YamlDotNet's major (18.x). -->
     <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.1.0" />
     <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.14" />
-    <PackageVersion Include="MessagePack" Version="2.5.305" />
+    <PackageVersion Include="MessagePack" Version="2.5.307" />
   </ItemGroup>
 
   <ItemGroup>
@@ -92,7 +94,7 @@
     <PackageVersion Include="Microsoft.VisualStudio.Utilities" Version="17.14.40264" />
     <PackageVersion Include="Microsoft.VisualStudio.Composition" Version="17.13.41" />
     <PackageVersion Include="Microsoft.VisualStudio.Sdk.TestFramework.Xunit.v3" Version="17.11.66" />
-    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.7.23" />
+    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.12.1" />
     <PackageVersion Include="Microsoft.VisualStudio.SDK.Analyzers" Version="17.7.113" />
     <PackageVersion Include="Microsoft.VSSDK.BuildTools" Version="18.6.38345" />
   </ItemGroup>

@@ -21,8 +21,8 @@ namespace Microsoft.UI.Reactor.Tests;
 /// </summary>
 public sealed class CallSiteChangedOnSkipTests
 {
-    private static readonly SourceLocation A = new("A.cs", 1);
-    private static readonly SourceLocation B = new("B.cs", 2);
+    private static readonly SourceLocation A = new("A.cs", 1, 0);
+    private static readonly SourceLocation B = new("B.cs", 2, 0);
 
     [Fact]
     public void EqualCallSites_DoNotNeedARefresh()

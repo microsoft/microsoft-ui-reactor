@@ -606,7 +606,7 @@ public class DevtoolsHostCliTests
     [Fact]
     public void PreviewRootMountSite_KeepsRunSiteOnlyForTheAppsOwnRoot()
     {
-        var site = new SourceLocation("App.cs", 12);
+        var site = new SourceLocation("App.cs", 12, 0);
         Func<Component> factory = () => new AppRoot();
 
         Assert.Equal(site, DevtoolsHost.PreviewRootMountSite(site, typeof(AppRoot), factory, typeof(AppRoot)));

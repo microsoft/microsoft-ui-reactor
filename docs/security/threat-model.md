@@ -261,7 +261,7 @@ The Microsoft-internal security-review intake form gave succinct answers about R
 | "CLI/debug tooling runs as developer-invoked user-mode process" | Manifest review of `mur.exe`, install script behavior | No elevation, no scheduled-task install. |
 | "CLI can talk to app as a debugging tool using MCP protocol over HTTP, domain-validated for localhost, with token auth" | `PreviewCaptureServer.cs`, `DevtoolsMcpServer.cs` | Listener prefix bound to `http://127.0.0.1:<port>/`; Host header allow-list at `IsAllowedHost`; bearer constant-time compare at `BearerMatches`. |
 | "No outbound network communication beyond the above" | Repo-wide grep | Only `System.Net.*` usage in `src/Reactor/` is the two `HttpListener` servers above and an `HttpClient` *in CLI Docs subsystem* that targets `127.0.0.1:<port>` of a preview server `mur` itself spawned. |
-| "No unsupported or third-party components" | `ThirdPartyNoticeText.txt`, `Directory.Build.props`, `nuget.config` | Five Microsoft.* / MIT NuGet deps; three source-ported MIT/ISC OSS components (Yoga, md4c, D3); no checked-in `.nupkg` binaries; `nuget.config` clears inherited feeds. |
+| "No unsupported or third-party components" | `ThirdPartyNoticeText.txt`, `Directory.Build.props`, `nuget.config` | Six Microsoft.* / MIT NuGet deps; three source-ported MIT/ISC OSS components (Yoga, md4c, D3); no checked-in `.nupkg` binaries; `nuget.config` clears inherited feeds. |
 | "No prior threat models / security reviews" | Repo audit | This document is the first formal one. README references a 275-finding internal code review — engineering review, not a threat model. |
 
 ## 9. Out-of-scope non-surfaces (with rationale)

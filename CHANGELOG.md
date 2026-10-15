@@ -28,6 +28,36 @@ Conventions for contributors:
 
 ### Added
 
+- **`REACTOR_DYM_006`: color strings that render gray** (issue #1375, spec 061 §7.3). A new
+  default-on **Warning** flags compile-time-constant color strings that `BrushHelper` can't
+  parse and therefore silently fall back to gray: `.Background("orange")`, `.Foreground("#888")`,
+  or a font name passed to `ResourceBuilder.Set(key, string)` under a `*FontFamily` key. It covers
+  `BrushHelper.Parse`, `ResourceBuilder.Set(string, string)` and the `string` overloads of
+  `Background` / `Foreground` / `BorderBrush` / `WithBorder`, suggests the exact hex (or
+  `new FontFamily(...)` once that `Set` overload exists), and ships a code fix; `mur check`'s new
+  `ColorStringLiteralRule` repeats the rewrite as a `→ try:` hint. Unlike `REACTOR_DYM_001`–`005`
+  it fires on code that compiles, so a project with `TreatWarningsAsErrors` can stop building on
+  an existing gray color. Fix the value, or adjust the severity with
+  `dotnet_diagnostic.REACTOR_DYM_006.severity` in `.editorconfig`.
+
+- **Inspector diagnostics: call-site column and a per-component render event**
+  (issue #1326, spec 010 §1.1):
+  - `SourceLocation.ColumnNumber` (1-based, `0` = unknown), a third positional
+    member: `new SourceLocation(path, line)` now needs a column. The source-map generator
+    stamps the column of the invoked method's name, so several calls on one line
+    resolve to distinct positions. `ToString()` stays `file:line`.
+  - `ComponentRendered` on the `Microsoft-UI-Reactor` provider (EventId 40,
+    Verbose, keywords `Render | RenderDetail`; `RenderDetail` = `0x4000` is new):
+    one event per component render, including mount, the host root and a render
+    that threw. The payload carries the component name, a stable `componentId`,
+    the `reason` (`mount` / `state` / `props` / `context` / `parent` /
+    `hotReload` / `forced`) and the elapsed time.
+  - `ReactorTrace.GetComponentControl(long)` and
+    `ReactorTrace.TryGetComponentId(UIElement, out long)` map a `componentId` to
+    the component's on-screen control and back, so an inspector can flash what
+    re-rendered. A host root's id only maps forward, to the root content: that
+    control is often also a child component's wrapper, whose id it reports.
+
 - **Inspector diagnostics for hosts, roots and component boundaries** (spec 010).
   `ReactorDiagnostics.GetHosts()` (`Microsoft.UI.Reactor.Core.Diagnostics`) returns
   a snapshot of every live `ReactorHost` and `ReactorHostControl` — window,
@@ -261,6 +291,24 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Replacing a host's root no longer leaves the old root running** (issue #1326).
+  `ReactorHost.Mount(...)` and `ReactorHostControl.Mount(...)` now retire the
+  outgoing root before installing the new one: its effect cleanups run, and a
+  component root's hook state is reset, so mounting that instance again later starts
+  fresh. Before, the outgoing root's `UseEffect` subscriptions and timers stayed live
+  and could no longer be reached by `Dispose()`. `ReactorHost.Mount(Func<...>)` also
+  clears a previous component root, which the render loop checks first and so kept
+  rendering instead of the new function root. Mounting the instance that is already
+  mounted just re-renders it. A replacement whose first render produces nothing now
+  releases the previous root's content (and its components' effects) instead of leaving
+  it on screen, and a cleanup that throws during the swap is routed like a disposal-time
+  cleanup failure without blocking the new root.
+- **`ReactorWindow`, the tray host and Devtools embedding no longer throw
+  `EntryPointNotFoundException` in x86 processes** (#1365). They imported
+  `GetWindowLongPtrW` / `SetWindowLongPtrW` directly, which 32-bit `user32.dll`
+  does not export. A shared `NativeWindowLong` helper now dispatches to
+  `GetWindowLongW` / `SetWindowLongW` when `IntPtr.Size == 4`; x64 and ARM64
+  behaviour is unchanged.
 - **`RenderError` names the component that threw, and now reports every render
   error** (issue #1321, spec 044 §6.2.1). For class components the event reported
   the element record (``ComponentElement`1`` / `ComponentElement`) instead of the
@@ -611,6 +659,17 @@ Conventions for contributors:
   in between and crashed on every run before the fix. The earlier explanation for the withdrawn
   `Cancel()` cleanup (PR #1124), that the source had been pooled and reset, was wrong: that crash
   was this same fault.
+
+- **Apps that reference Reactor no longer fail to build in deeply nested folders, and their
+  publish output now includes the app's `.pri` (issue #1271,
+  [WindowsAppSDK#6394](https://github.com/microsoft/WindowsAppSDK/issues/6394)).**
+  `Microsoft.UI.Reactor` now depends on `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.260930100,
+  which fixes both. If you copied the `_CopyWinUIResourcesForAot` target from
+  `docs/aot-support.md`, you can delete it.
+
+- **The `Microsoft.UI.Reactor` package has a single `lib/` folder and always contains
+  `ReactorApplication.xbf`.** A second `lib/` folder used to hold only that file, and packing
+  from a clean tree left it out.
 
 ### Security
 

@@ -150,6 +150,7 @@ internal sealed class RuleRegistry
     static IEnumerable<IRulePattern> BuiltInRules() =>
     [
         new ButtonOnClickFactoryMoveRule(),
+        new ColorStringLiteralRule(),
         new GridSizeFactoryParensRule(),
         new GridSizePxRenameRule(),
         new TextBlockStyleHintRule(),

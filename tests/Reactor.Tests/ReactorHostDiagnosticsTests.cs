@@ -41,7 +41,7 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
                 ReactorHostKind.HostControl, host: null, hostControl: null, reactorWindow: null,
                 window: null, hostElement: null, rootControl: null,
                 rootComponent: Root, rootRenderFunction: RenderRoot,
-                mountSite: new SourceLocation(Label, 1));
+                mountSite: new SourceLocation(Label, 1, 0));
     }
 
     private sealed class ProbeComponent : Component
@@ -312,11 +312,13 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
             // Capture is unconditional (Run's site must survive a flag switched on later, as
             // `--devtools app` does); the host's store is what the flag gates.
             ReactorSourceMap.Enabled = false;
-            var token = ReactorSourceMap.EnterRootMountSite("App.cs", 12);
+            var token = ReactorSourceMap.EnterRootMountSite("App.cs", 12, 9);
             try
             {
                 var site = ReactorSourceMap.TakeRootMountSite();
-                Assert.Equal(new SourceLocation("App.cs", 12), site);
+                // The generator stamps the method name's column; it reaches the site.
+                Assert.Equal(new SourceLocation("App.cs", 12, 9), site);
+                Assert.Equal(9, site!.Value.ColumnNumber);
 
                 Assert.Null(ReactorSourceMap.KeepIfEnabled(site));
                 ReactorSourceMap.Enabled = true;
@@ -332,10 +334,10 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
     public void RootMountSite_IsClaimedExactlyOnce()
     {
         ReactorSourceMap.Enabled = true;
-        var token = ReactorSourceMap.EnterRootMountSite("App.cs", 12);
+        var token = ReactorSourceMap.EnterRootMountSite("App.cs", 12, 0);
         try
         {
-            Assert.Equal(new SourceLocation("App.cs", 12), ReactorSourceMap.TakeRootMountSite());
+            Assert.Equal(new SourceLocation("App.cs", 12, 0), ReactorSourceMap.TakeRootMountSite());
             Assert.Null(ReactorSourceMap.TakeRootMountSite());
         }
         finally
@@ -349,20 +351,20 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
     public void RootMountSite_InnermostScopeWins_AndOuterSurvivesForItsOwnMount()
     {
         ReactorSourceMap.Enabled = true;
-        var outer = ReactorSourceMap.EnterRootMountSite("Program.cs", 5);
+        var outer = ReactorSourceMap.EnterRootMountSite("Program.cs", 5, 0);
         try
         {
-            var inner = ReactorSourceMap.EnterRootMountSite("Startup.cs", 30);
+            var inner = ReactorSourceMap.EnterRootMountSite("Startup.cs", 30, 0);
             try
             {
-                Assert.Equal(new SourceLocation("Startup.cs", 30), ReactorSourceMap.TakeRootMountSite());
+                Assert.Equal(new SourceLocation("Startup.cs", 30, 0), ReactorSourceMap.TakeRootMountSite());
             }
             finally
             {
                 ReactorSourceMap.ExitRootMountSite(inner);
             }
 
-            Assert.Equal(new SourceLocation("Program.cs", 5), ReactorSourceMap.TakeRootMountSite());
+            Assert.Equal(new SourceLocation("Program.cs", 5, 0), ReactorSourceMap.TakeRootMountSite());
         }
         finally
         {
@@ -375,7 +377,7 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
     public void RootMountSite_AClosedScopeLeavesNothingForALaterMount()
     {
         ReactorSourceMap.Enabled = true;
-        var token = ReactorSourceMap.EnterRootMountSite("Throws.cs", 7);
+        var token = ReactorSourceMap.EnterRootMountSite("Throws.cs", 7, 0);
         ReactorSourceMap.ExitRootMountSite(token);
 
         Assert.Null(ReactorSourceMap.TakeRootMountSite());
@@ -386,12 +388,12 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
     public void RootMountSite_OutOfOrderExitUnlinksOnlyThatScope()
     {
         ReactorSourceMap.Enabled = true;
-        var outer = ReactorSourceMap.EnterRootMountSite("Outer.cs", 1);
-        var inner = ReactorSourceMap.EnterRootMountSite("Inner.cs", 2);
+        var outer = ReactorSourceMap.EnterRootMountSite("Outer.cs", 1, 0);
+        var inner = ReactorSourceMap.EnterRootMountSite("Inner.cs", 2, 0);
 
         ReactorSourceMap.ExitRootMountSite(outer);
         Assert.Equal(1, ReactorSourceMap.OpenRootMountScopeCountForTest);
-        Assert.Equal(new SourceLocation("Inner.cs", 2), ReactorSourceMap.TakeRootMountSite());
+        Assert.Equal(new SourceLocation("Inner.cs", 2, 0), ReactorSourceMap.TakeRootMountSite());
 
         ReactorSourceMap.ExitRootMountSite(inner);
         Assert.Equal(0, ReactorSourceMap.OpenRootMountScopeCountForTest);
@@ -405,16 +407,16 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
         // (Run included, before it starts WinUI), so scopes are per-thread: a mount on a
         // different thread must never pick up — or steal — this thread's site.
         ReactorSourceMap.Enabled = true;
-        var token = ReactorSourceMap.EnterRootMountSite("Program.cs", 3);
+        var token = ReactorSourceMap.EnterRootMountSite("Program.cs", 3, 0);
         try
         {
-            SourceLocation? claimedElsewhere = new SourceLocation("sentinel", -1);
+            SourceLocation? claimedElsewhere = new SourceLocation("sentinel", -1, 0);
             var thread = new Thread(() => claimedElsewhere = ReactorSourceMap.TakeRootMountSite());
             thread.Start();
             thread.Join();
 
             Assert.Null(claimedElsewhere);
-            Assert.Equal(new SourceLocation("Program.cs", 3), ReactorSourceMap.TakeRootMountSite());
+            Assert.Equal(new SourceLocation("Program.cs", 3, 0), ReactorSourceMap.TakeRootMountSite());
         }
         finally
         {
@@ -429,10 +431,10 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
         // callback mounting a second host, a framework-created window) sees no site
         // rather than the outer call's line.
         ReactorSourceMap.Enabled = true;
-        var token = ReactorSourceMap.EnterRootMountSite("App.cs", 40);
+        var token = ReactorSourceMap.EnterRootMountSite("App.cs", 40, 0);
         try
         {
-            Assert.Equal(new SourceLocation("App.cs", 40), ReactorSourceMap.TakeRootMountSite());
+            Assert.Equal(new SourceLocation("App.cs", 40, 0), ReactorSourceMap.TakeRootMountSite());
             Assert.Null(ReactorSourceMap.TakeRootMountSite());
         }
         finally
@@ -454,8 +456,8 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
     {
         // Two sites that differ in every word: a torn read would surface as a mixed pair
         // (A's file with B's line), a has-value with a null path, or similar.
-        var a = new SourceLocation("A.cs", 111);
-        var b = new SourceLocation("Bbbbbbbb.cs", 222222);
+        var a = new SourceLocation("A.cs", 111, 0);
+        var b = new SourceLocation("Bbbbbbbb.cs", 222222, 0);
         var slot = new RootMountSiteSlot { Value = a };
         var stop = 0;
         var bad = 0;

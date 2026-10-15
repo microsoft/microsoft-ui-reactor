@@ -14,10 +14,10 @@
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",
-    "@as-integrations/express4": "^1.1.2",
+    "@as-integrations/express5": "^1.1.2",
     "better-sqlite3": "^11.7.0",
     "cors": "^2.8.5",
-    "express": "^4.22.2"
+    "express": "^5.3.0"
   },
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || ^23.5.0"
