@@ -300,6 +300,34 @@ namespace App
             .Background(mode switch { ""light"" => {|REACTOR_DYM_006:""orange""|}, _ => c });");
 
     [Fact]
+    public Task Coalesce_fallback_is_dead_when_a_nested_selector_is_provably_non_null() =>
+        RunAsync(@"        const bool DebugBuild = false;
+        static object M(string c, bool on) => TextBlock(""hi"")
+            .Background((DebugBuild ? c : ""red"") ?? ""orange"")
+            .Foreground((on ? ""red"" : ""white"") ?? ""teal"")
+            .BorderBrush((on ? c : ""red"") ?? {|REACTOR_DYM_006:""navy""|});");
+
+    [Fact]
+    public Task Switch_pruning_compares_the_converted_pattern_constant() =>
+        // `1` is an int literal but the pattern converts it to the governing `long`.
+        RunAsync(@"        const long Mode = 1;
+        static object M(string c) => TextBlock(""hi"")
+            .Background(Mode switch { 1 => c, _ => ""orange"" })
+            .Foreground(Mode switch { 2 => c, _ => {|REACTOR_DYM_006:""teal""|} });");
+
+    [Fact]
+    public async Task FontFamily_suggestion_renames_a_named_argument_and_escapes_the_value()
+    {
+        var test = MakeTest(Wrap(
+            @"        static object M(ResourceBuilder r) => r.Set(key: ""ContentControlThemeFontFamily"", color: {|#0:@""C:\Fonts\Mono.ttf#Mono""|});",
+            fontFamilyOverload: true));
+        test.ExpectedDiagnostics.Add(Dym006(0).WithArguments(
+            @"C:\Fonts\Mono.ttf#Mono",
+            @"'ContentControlThemeFontFamily' is a FontFamily resource; did you mean fontFamily: new FontFamily(""C:\\Fonts\\Mono.ttf#Mono"")?"));
+        await test.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task Silent_without_any_Reactor_color_api()
     {
         var test = MakeTest(@"static class C { static string M() => ""orange""; }");

@@ -125,9 +125,8 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
             var brushHelper = compilation.GetTypeByMetadataName(BrushHelperMetadataName);
             if (brushHelper is not null)
             {
-                foreach (var m in brushHelper.GetMembers("Parse").OfType<IMethodSymbol>())
-                    if (HasStringColorParameter(m, str))
-                        methods.Add(m);
+                foreach (var m in brushHelper.GetMembers("Parse").OfType<IMethodSymbol>().Where(m => HasStringColorParameter(m, str)))
+                    methods.Add(m);
             }
 
             IMethodSymbol? resourceSet = null;
@@ -135,10 +134,8 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
             var resourceBuilder = compilation.GetTypeByMetadataName(ResourceBuilderMetadataName);
             if (resourceBuilder is not null)
             {
-                foreach (var m in resourceBuilder.GetMembers("Set").OfType<IMethodSymbol>())
+                foreach (var m in resourceBuilder.GetMembers("Set").OfType<IMethodSymbol>().Where(m => m.Parameters.Length == 2))
                 {
-                    if (m.Parameters.Length != 2)
-                        continue;
                     if (HasStringColorParameter(m, str) && SymbolEqualityComparer.Default.Equals(m.Parameters[0].Type, str))
                     {
                         resourceSet = m;
@@ -155,9 +152,8 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
             if (extensions is not null)
             {
                 foreach (var name in ModifierNames)
-                    foreach (var m in extensions.GetMembers(name).OfType<IMethodSymbol>())
-                        if (m.IsExtensionMethod && HasStringColorParameter(m, str))
-                            methods.Add(m);
+                    foreach (var m in extensions.GetMembers(name).OfType<IMethodSymbol>().Where(m => m.IsExtensionMethod && HasStringColorParameter(m, str)))
+                        methods.Add(m);
             }
 
             return methods.Count == 0 ? null : new Targets(methods.ToImmutable(), resourceSet, fontFamilyParameter);
@@ -226,7 +222,11 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
             // new FontFamily(...) can only replace the whole argument: inside a ?: branch the other
             // branch would still be a string and the expression would stop type-checking.
             var canUseFontFamily = targets.FontFamilyParameterName is not null && expression.Parent is ArgumentSyntax;
-            var finding = ColorStringClassifier.Classify(value, resourceKey, canUseFontFamily);
+            // A named `color:` argument must be renamed too, or the rewritten call won't bind.
+            var renamedArgument = canUseFontFamily && expression.Parent is ArgumentSyntax { NameColon: not null }
+                ? targets.FontFamilyParameterName
+                : null;
+            var finding = ColorStringClassifier.Classify(value, resourceKey, canUseFontFamily, renamedArgument);
             if (finding is not { } f)
                 continue;
 
@@ -267,14 +267,23 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
             yield break;
         }
 
-        IEnumerable<ExpressionSyntax> children = expression switch
+        foreach (var child in LiveChildren(expression, model, cancellationToken))
+            foreach (var item in ConstantStrings(child, model, cancellationToken))
+                yield return item;
+    }
+
+    /// <summary>
+    /// The sub-expressions a value-selecting shape can actually yield. Empty for any other shape.
+    /// </summary>
+    private static IEnumerable<ExpressionSyntax> LiveChildren(ExpressionSyntax expression, SemanticModel model, CancellationToken cancellationToken) =>
+        expression switch
         {
             ParenthesizedExpressionSyntax p => new[] { p.Expression },
             ConditionalExpressionSyntax c => model.GetConstantValue(c.Condition, cancellationToken) is { HasValue: true, Value: bool taken }
                 ? new[] { taken ? c.WhenTrue : c.WhenFalse }
                 : new[] { c.WhenTrue, c.WhenFalse },
             BinaryExpressionSyntax b when b.IsKind(SyntaxKind.CoalesceExpression) =>
-                model.GetConstantValue(b.Left, cancellationToken) is { HasValue: true, Value: not null }
+                IsKnownNonNull(b.Left, model, cancellationToken)
                     ? new[] { b.Left }
                     : new[] { b.Left, b.Right },
             // Arms are only pruned when every pattern is a plain constant and the governing value is a
@@ -282,9 +291,28 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
             SwitchExpressionSyntax sw => LiveArms(sw, model, cancellationToken),
             _ => Array.Empty<ExpressionSyntax>(),
         };
-        foreach (var child in children)
-            foreach (var item in ConstantStrings(child, model, cancellationToken))
-                yield return item;
+
+    /// <summary>
+    /// Whether the expression provably evaluates to a non-null value: a non-null constant, or a
+    /// value-selecting shape whose every live branch is. Unknown (e.g. a variable) is <see langword="false"/>.
+    /// </summary>
+    private static bool IsKnownNonNull(ExpressionSyntax expression, SemanticModel model, CancellationToken cancellationToken)
+    {
+        var constant = model.GetConstantValue(expression, cancellationToken);
+        if (constant.HasValue)
+            return constant.Value is not null;
+
+        if (expression is BinaryExpressionSyntax b && b.IsKind(SyntaxKind.CoalesceExpression))
+            return IsKnownNonNull(b.Left, model, cancellationToken) || IsKnownNonNull(b.Right, model, cancellationToken);
+
+        var any = false;
+        foreach (var child in LiveChildren(expression, model, cancellationToken))
+        {
+            if (!IsKnownNonNull(child, model, cancellationToken))
+                return false;
+            any = true;
+        }
+        return any;
     }
 
     private static IEnumerable<ExpressionSyntax> LiveArms(SwitchExpressionSyntax sw, SemanticModel model, CancellationToken cancellationToken)
@@ -301,7 +329,9 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
             {
                 case DiscardPatternSyntax:
                     return new[] { arm.Expression };
-                case ConstantPatternSyntax cp when model.GetConstantValue(cp.Expression, cancellationToken) is { HasValue: true } armValue:
+                // Compare the pattern constant *converted to the governing type* (`1` against a
+                // `const long` is a long 1), not the boxed source literal.
+                case ConstantPatternSyntax when model.GetOperation(arm.Pattern, cancellationToken) is IConstantPatternOperation { Value.ConstantValue: { HasValue: true } armValue }:
                     if (Equals(armValue.Value, governing.Value))
                         return new[] { arm.Expression };
                     break;

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Linq;
 using System.Composition;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
@@ -36,12 +37,13 @@ public sealed class ColorStringLiteralCodeFix : CodeFixProvider
         var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
         if (root is null) return;
 
-        foreach (var diagnostic in context.Diagnostics)
+        // Only diagnostics the analyzer attached a rewrite to are fixable.
+        foreach (var diagnostic in context.Diagnostics.Where(d =>
+            d.Properties.TryGetValue(ColorStringLiteralAnalyzer.ReplacementProperty, out var r) && r is not null
+            && d.Properties.ContainsKey(ColorStringLiteralAnalyzer.IssueProperty)))
         {
-            if (!diagnostic.Properties.TryGetValue(ColorStringLiteralAnalyzer.ReplacementProperty, out var replacement)
-                || replacement is null
-                || !diagnostic.Properties.TryGetValue(ColorStringLiteralAnalyzer.IssueProperty, out var issue))
-                continue;
+            var replacement = diagnostic.Properties[ColorStringLiteralAnalyzer.ReplacementProperty]!;
+            var issue = diagnostic.Properties[ColorStringLiteralAnalyzer.IssueProperty];
 
             var node = root.FindNode(diagnostic.Location.SourceSpan, getInnermostNodeForTie: true);
             if (node is ArgumentSyntax argument)
@@ -79,7 +81,7 @@ public sealed class ColorStringLiteralCodeFix : CodeFixProvider
 
                 context.RegisterCodeFix(
                     CodeAction.Create(
-                        $"Use new FontFamily(\"{replacement}\")",
+                        $"Use {ColorStringClassifier.FontFamilySuggestion(replacement, null)}",
                         _ => Task.FromResult(context.Document.WithSyntaxRoot(root.ReplaceNode(oldArgument, newArgument))),
                         equivalenceKey: FontFamilyEquivalenceKey),
                     diagnostic);

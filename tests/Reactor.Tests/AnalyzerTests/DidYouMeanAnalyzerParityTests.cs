@@ -175,20 +175,22 @@ namespace App { using static Microsoft.UI.Reactor.Factories; static class C { st
     // Driven end-to-end: the real analyzer reports, its diagnostic is fed to the rule.
 
     [Theory]
-    [InlineData(@"TextBlock(""hi"").Foreground(""#888"")", false)]
-    [InlineData(@"TextBlock(""hi"").Background(""ff00ff"")", false)]
-    [InlineData(@"BrushHelper.Parse(""orange"")", false)]
-    [InlineData(@"new ResourceBuilder().Set(""ButtonBackground"", ""Wheat"")", false)]
-    [InlineData(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", ""Consolas"")", true)]
-    public void Color_string_analyzer_replacement_matches_cli_rule(string expression, bool fontFamilyOverload)
+    // `expected` is the source text the IDE code fix writes in place of the flagged argument (the
+    // code-fix round-trips in ColorStringLiteralAnalyzerTests pin that side); the rule must suggest it.
+    [InlineData(@"TextBlock(""hi"").Foreground(""#888"")", false, @"""#888888""")]
+    [InlineData(@"TextBlock(""hi"").Background(""ff00ff"")", false, @"""#ff00ff""")]
+    [InlineData(@"BrushHelper.Parse(""orange"")", false, @"""#FFA500""")]
+    [InlineData(@"new ResourceBuilder().Set(""ButtonBackground"", ""Wheat"")", false, @"""#F5DEB3""")]
+    [InlineData(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", ""Consolas"")", true, @"new FontFamily(""Consolas"")")]
+    // A named argument must be renamed to bind to the FontFamily overload.
+    [InlineData(@"new ResourceBuilder().Set(key: ""ContentControlThemeFontFamily"", color: ""Consolas"")", true, @"fontFamily: new FontFamily(""Consolas"")")]
+    // Backslashes and quotes are escaped as a regular C# literal, whatever form the source used.
+    [InlineData(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", @""Assets\Fonts\Mono.ttf#Mono """"x"""""")", true, @"new FontFamily(""Assets\\Fonts\\Mono.ttf#Mono \""x\"""")")]
+    public void Color_string_analyzer_replacement_matches_cli_rule(string expression, bool fontFamilyOverload, string expected)
     {
         var (diagnostics, c) = ColorStringLiteralRuleTests.AnalyzeRaw(expression, fontFamilyOverload);
         var d = Assert.Single(diagnostics);
-        var replacement = d.Properties[ColorStringLiteralAnalyzer.ReplacementProperty];
-        Assert.False(string.IsNullOrEmpty(replacement));
-        var expected = d.Properties[ColorStringLiteralAnalyzer.IssueProperty] == "FontFamilyKey"
-            ? $"new FontFamily(\"{replacement}\")"
-            : $"\"{replacement}\"";
+        Assert.False(string.IsNullOrEmpty(d.Properties[ColorStringLiteralAnalyzer.ReplacementProperty]));
 
         var s = ColorStringLiteralRuleTests.RunRule(ColorStringLiteralRuleTests.ToCheckDiag(d), c);
         Assert.NotNull(s);

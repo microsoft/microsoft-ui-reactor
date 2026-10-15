@@ -249,9 +249,10 @@ internal static class ColorStringClassifier
     /// Returns the finding for <paramref name="value"/>, or <see langword="null"/> when BrushHelper
     /// parses it. <paramref name="resourceKey"/> is the constant key of a <c>ResourceBuilder.Set</c>
     /// call (otherwise <see langword="null"/>); <paramref name="fontFamilyOverloadExists"/> says whether
-    /// <c>ResourceBuilder.Set(string, FontFamily)</c> is available to rewrite to.
+    /// <c>ResourceBuilder.Set(string, FontFamily)</c> is available to rewrite to; <paramref name="fontFamilyArgumentName"/>
+    /// is that overload's parameter name when the flagged argument is named (<c>color: "…"</c>) and must be renamed.
     /// </summary>
-    public static ColorStringFinding? Classify(string value, string? resourceKey, bool fontFamilyOverloadExists)
+    public static ColorStringFinding? Classify(string value, string? resourceKey, bool fontFamilyOverloadExists, string? fontFamilyArgumentName = null)
     {
         if (TryParse(value))
             return null;
@@ -262,11 +263,11 @@ internal static class ColorStringClassifier
                 ? new ColorStringFinding(
                     ColorStringIssue.FontFamilyKey,
                     value,
-                    $"'{resourceKey}' is a FontFamily resource; did you mean new FontFamily(\"{value}\")?")
+                    $"'{resourceKey}' is a FontFamily resource; did you mean {FontFamilySuggestion(value, fontFamilyArgumentName)}?")
                 : new ColorStringFinding(
                     ColorStringIssue.FontFamilyKey,
                     null,
-                    $"'{resourceKey}' is a FontFamily resource, but this Set overload only stores color brushes; to change the font, use .FontFamily(\"{value}\") on the element");
+                    $"'{resourceKey}' is a FontFamily resource, but this Set overload only stores color brushes; to change the font, use .FontFamily({Literal(value)}) on the element");
         }
 
         if (value.StartsWith("#", StringComparison.Ordinal))
@@ -308,6 +309,17 @@ internal static class ColorStringClassifier
             null,
             $"use #RRGGBB or #AARRGGBB, a Theme token, or one of {SupportedNames}");
     }
+
+    /// <summary>
+    /// The C# source the FontFamily rewrite produces, e.g. <c>new FontFamily("Consolas")</c>, prefixed with
+    /// <c>name: </c> for a renamed argument. The value is escaped as a regular C# string literal.
+    /// </summary>
+    public static string FontFamilySuggestion(string value, string? argumentName) =>
+        (argumentName is null ? "" : argumentName + ": ") + "new FontFamily(" + Literal(value) + ")";
+
+    // A regular C# string literal for the value (quotes, backslashes and control characters escaped).
+    private static string Literal(string value) =>
+        Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(value, quote: true);
 
     private static bool IsAllHex(string s)
     {

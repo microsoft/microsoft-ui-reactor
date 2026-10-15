@@ -49,9 +49,24 @@ public class ColorStringParityTests
             var finding = AnalyzerClassifier.Classify(value, key, overload)!.Value;
             Assert.NotNull(finding.Replacement);
             Assert.EndsWith("; did you mean " + (finding.Issue.ToString() == "FontFamilyKey"
-                ? $"new FontFamily(\"{finding.Replacement}\")"
+                ? AnalyzerClassifier.FontFamilySuggestion(finding.Replacement!, null)
                 : $"\"{finding.Replacement}\"") + "?", finding.Detail, StringComparison.Ordinal);
         }
+    }
+
+    [Theory]
+    [InlineData("Consolas", null, "new FontFamily(\"Consolas\")")]
+    [InlineData("Consolas", "fontFamily", "fontFamily: new FontFamily(\"Consolas\")")]
+    [InlineData(@"C:\Fonts\a""b.ttf#A", null, @"new FontFamily(""C:\\Fonts\\a\""b.ttf#A"")")]
+    public void FontFamily_suggestion_is_compilable_CSharp(string value, string? argumentName, string expected)
+    {
+        Assert.Equal(expected, AnalyzerClassifier.FontFamilySuggestion(value, argumentName));
+        // And it round-trips: the literal parses back to the original value.
+        var creation = (Microsoft.CodeAnalysis.CSharp.Syntax.ObjectCreationExpressionSyntax)
+            Microsoft.CodeAnalysis.CSharp.SyntaxFactory.ParseExpression(AnalyzerClassifier.FontFamilySuggestion(value, null));
+        Assert.Empty(creation.GetDiagnostics());
+        var literal = (Microsoft.CodeAnalysis.CSharp.Syntax.LiteralExpressionSyntax)creation.ArgumentList!.Arguments[0].Expression;
+        Assert.Equal(value, literal.Token.ValueText);
     }
 
     [Fact]
