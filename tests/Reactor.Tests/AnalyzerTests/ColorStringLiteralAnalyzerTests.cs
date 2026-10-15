@@ -308,6 +308,13 @@ namespace App
             .BorderBrush((on ? c : ""red"") ?? {|REACTOR_DYM_006:""navy""|});");
 
     [Fact]
+    public Task Coalesce_fallback_is_dead_when_the_other_branch_throws() =>
+        // Execution either yields "red" or throws, so "orange" is unreachable.
+        RunAsync(@"        static object M(string c, bool on) => TextBlock(""hi"")
+            .Background((on ? ""red"" : throw new global::System.InvalidOperationException()) ?? ""orange"")
+            .Foreground((on ? c : throw new global::System.InvalidOperationException()) ?? {|REACTOR_DYM_006:""teal""|});");
+
+    [Fact]
     public Task Switch_pruning_compares_the_converted_pattern_constant() =>
         // `1` is an int literal but the pattern converts it to the governing `long`.
         RunAsync(@"        const long Mode = 1;

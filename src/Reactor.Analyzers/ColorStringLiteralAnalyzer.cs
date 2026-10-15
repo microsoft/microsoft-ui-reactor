@@ -293,11 +293,15 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
         };
 
     /// <summary>
-    /// Whether the expression provably evaluates to a non-null value: a non-null constant, or a
-    /// value-selecting shape whose every live branch is. Unknown (e.g. a variable) is <see langword="false"/>.
+    /// Whether the expression provably evaluates to a non-null value: a non-null constant, a
+    /// <c>throw</c> (it never yields at all), or a value-selecting shape whose every live branch is one
+    /// of those. Unknown (e.g. a variable) is <see langword="false"/>.
     /// </summary>
     private static bool IsKnownNonNull(ExpressionSyntax expression, SemanticModel model, CancellationToken cancellationToken)
     {
+        if (expression is ThrowExpressionSyntax)
+            return true;
+
         var constant = model.GetConstantValue(expression, cancellationToken);
         if (constant.HasValue)
             return constant.Value is not null;
