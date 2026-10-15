@@ -58,7 +58,7 @@ public class ColorStringLiteralRuleTests
         var (diags, c) = Analyze(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", ""Consolas"")", fontFamilyOverload: true);
         var s = RunRule(Assert.Single(diags), c);
         Assert.NotNull(s);
-        Assert.Equal("new FontFamily(\"Consolas\")", s!.Text);
+        Assert.Equal("new Microsoft.UI.Xaml.Media.FontFamily(\"Consolas\")", s!.Text);
     }
 
     [Theory]
@@ -121,6 +121,37 @@ public class ColorStringLiteralRuleTests
         Assert.Null(renamed.GetTypeByMetadataName("Microsoft.UI.Reactor.ElementExtensions"));
         Assert.Null(renamed.GetTypeByMetadataName("Microsoft.UI.Reactor.BrushHelper"));
         Assert.Null(RunRule(diag, renamed));
+    }
+
+    [Theory]
+    [InlineData(@"TextBlock(""hi"").Background(""orange"")", false)]
+    [InlineData(@"TextBlock(""hi"").Foreground(color: ""#888"")", false)]
+    [InlineData(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", ""Consolas"")", true)]
+    [InlineData(@"new ResourceBuilder().Set(key: ""ContentControlThemeFontFamily"", color: ""Consolas"")", true)]
+    [InlineData(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", @""C:\Fonts\a""""b.ttf#A"")", true)]
+    public async Task Applying_the_suggestion_compiles_and_clears_the_diagnostic(string expression, bool fontFamilyOverload)
+    {
+        // The source under test has no `using Microsoft.UI.Xaml.Media;`, so an unqualified
+        // `new FontFamily(...)` suggestion would fail with CS0246 here.
+        var (diagnostics, c) = AnalyzeRaw(expression, fontFamilyOverload);
+        var d = Assert.Single(diagnostics);
+        var s = RunRule(ToCheckDiag(d), c);
+        Assert.NotNull(s);
+
+        // A FontFamily suggestion replaces the whole argument (it may carry a renamed `name:`); a color
+        // suggestion replaces only the flagged literal, keeping any `color:` name.
+        var tree = d.Location.SourceTree!;
+        var flagged = tree.GetRoot(TestContext.Current.CancellationToken).FindNode(d.Location.SourceSpan, getInnermostNodeForTie: true);
+        var span = s!.Text.Contains(".FontFamily(", StringComparison.Ordinal)
+            ? flagged.FirstAncestorOrSelf<Microsoft.CodeAnalysis.CSharp.Syntax.ArgumentSyntax>()!.Span
+            : d.Location.SourceSpan;
+        var text = tree.GetText(TestContext.Current.CancellationToken).Replace(span, s.Text);
+        var fixedCompilation = c.ReplaceSyntaxTree(tree, tree.WithChangedText(text));
+
+        Assert.Empty(fixedCompilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(x => x.Severity == DiagnosticSeverity.Error));
+        var after = await fixedCompilation.WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new ColorStringLiteralAnalyzer()))
+            .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken);
+        Assert.DoesNotContain(after, x => x.Id == ColorStringLiteralAnalyzer.DiagnosticId);
     }
 
     internal static (CheckCommand.Diag[] Diags, CSharpCompilation Compilation) Analyze(string expression, bool fontFamilyOverload = false)

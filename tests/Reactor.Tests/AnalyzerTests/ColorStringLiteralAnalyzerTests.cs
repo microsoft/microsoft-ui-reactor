@@ -211,7 +211,7 @@ namespace App
             fontFamilyOverload: true));
         test.ExpectedDiagnostics.Add(Dym006(0).WithArguments(
             "Consolas",
-            "'ContentControlThemeFontFamily' is a FontFamily resource; did you mean new FontFamily(\"Consolas\")?"));
+            "'ContentControlThemeFontFamily' is a FontFamily resource; did you mean new Microsoft.UI.Xaml.Media.FontFamily(\"Consolas\")?"));
         await test.RunAsync(TestContext.Current.CancellationToken);
     }
 
@@ -323,7 +323,7 @@ namespace App
             fontFamilyOverload: true));
         test.ExpectedDiagnostics.Add(Dym006(0).WithArguments(
             @"C:\Fonts\Mono.ttf#Mono",
-            @"'ContentControlThemeFontFamily' is a FontFamily resource; did you mean fontFamily: new FontFamily(""C:\\Fonts\\Mono.ttf#Mono"")?"));
+            @"'ContentControlThemeFontFamily' is a FontFamily resource; did you mean fontFamily: new Microsoft.UI.Xaml.Media.FontFamily(""C:\\Fonts\\Mono.ttf#Mono"")?"));
         await test.RunAsync(TestContext.Current.CancellationToken);
     }
 

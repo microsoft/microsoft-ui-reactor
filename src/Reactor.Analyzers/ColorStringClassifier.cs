@@ -311,11 +311,13 @@ internal static class ColorStringClassifier
     }
 
     /// <summary>
-    /// The C# source the FontFamily rewrite produces, e.g. <c>new FontFamily("Consolas")</c>, prefixed with
-    /// <c>name: </c> for a renamed argument. The value is escaped as a regular C# string literal.
+    /// The C# source the FontFamily rewrite produces, e.g. <c>new Microsoft.UI.Xaml.Media.FontFamily("Consolas")</c>,
+    /// prefixed with <c>name: </c> for a renamed argument. The type is namespace-qualified so the text compiles
+    /// without a <c>using Microsoft.UI.Xaml.Media;</c> (<c>mur check</c> shows it verbatim), and the value is escaped
+    /// as a regular C# string literal.
     /// </summary>
     public static string FontFamilySuggestion(string value, string? argumentName) =>
-        (argumentName is null ? "" : argumentName + ": ") + "new FontFamily(" + Literal(value) + ")";
+        (argumentName is null ? "" : argumentName + ": ") + "new Microsoft.UI.Xaml.Media.FontFamily(" + Literal(value) + ")";
 
     // A regular C# string literal for the value (quotes, backslashes and control characters escaped).
     private static string Literal(string value) =>

@@ -181,11 +181,11 @@ namespace App { using static Microsoft.UI.Reactor.Factories; static class C { st
     [InlineData(@"TextBlock(""hi"").Background(""ff00ff"")", false, @"""#ff00ff""")]
     [InlineData(@"BrushHelper.Parse(""orange"")", false, @"""#FFA500""")]
     [InlineData(@"new ResourceBuilder().Set(""ButtonBackground"", ""Wheat"")", false, @"""#F5DEB3""")]
-    [InlineData(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", ""Consolas"")", true, @"new FontFamily(""Consolas"")")]
+    [InlineData(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", ""Consolas"")", true, @"new Microsoft.UI.Xaml.Media.FontFamily(""Consolas"")")]
     // A named argument must be renamed to bind to the FontFamily overload.
-    [InlineData(@"new ResourceBuilder().Set(key: ""ContentControlThemeFontFamily"", color: ""Consolas"")", true, @"fontFamily: new FontFamily(""Consolas"")")]
+    [InlineData(@"new ResourceBuilder().Set(key: ""ContentControlThemeFontFamily"", color: ""Consolas"")", true, @"fontFamily: new Microsoft.UI.Xaml.Media.FontFamily(""Consolas"")")]
     // Backslashes and quotes are escaped as a regular C# literal, whatever form the source used.
-    [InlineData(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", @""Assets\Fonts\Mono.ttf#Mono """"x"""""")", true, @"new FontFamily(""Assets\\Fonts\\Mono.ttf#Mono \""x\"""")")]
+    [InlineData(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", @""Assets\Fonts\Mono.ttf#Mono """"x"""""")", true, @"new Microsoft.UI.Xaml.Media.FontFamily(""Assets\\Fonts\\Mono.ttf#Mono \""x\"""")")]
     public void Color_string_analyzer_replacement_matches_cli_rule(string expression, bool fontFamilyOverload, string expected)
     {
         var (diagnostics, c) = ColorStringLiteralRuleTests.AnalyzeRaw(expression, fontFamilyOverload);

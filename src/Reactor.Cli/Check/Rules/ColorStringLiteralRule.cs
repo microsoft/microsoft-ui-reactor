@@ -49,7 +49,7 @@ internal sealed partial class ColorStringLiteralRule : IRulePattern
 
         var suggestion = match.Groups["suggestion"].Value;
         var value = match.Groups["value"].Value;
-        var evidence = suggestion.StartsWith("new FontFamily(", StringComparison.Ordinal)
+        var evidence = suggestion.Contains(".FontFamily(", StringComparison.Ordinal)
             ? "*FontFamily key → FontFamily overload"
             : $"'{Truncate(value)}' renders gray";
 

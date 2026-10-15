@@ -55,9 +55,9 @@ public class ColorStringParityTests
     }
 
     [Theory]
-    [InlineData("Consolas", null, "new FontFamily(\"Consolas\")")]
-    [InlineData("Consolas", "fontFamily", "fontFamily: new FontFamily(\"Consolas\")")]
-    [InlineData(@"C:\Fonts\a""b.ttf#A", null, @"new FontFamily(""C:\\Fonts\\a\""b.ttf#A"")")]
+    [InlineData("Consolas", null, "new Microsoft.UI.Xaml.Media.FontFamily(\"Consolas\")")]
+    [InlineData("Consolas", "fontFamily", "fontFamily: new Microsoft.UI.Xaml.Media.FontFamily(\"Consolas\")")]
+    [InlineData(@"C:\Fonts\a""b.ttf#A", null, @"new Microsoft.UI.Xaml.Media.FontFamily(""C:\\Fonts\\a\""b.ttf#A"")")]
     public void FontFamily_suggestion_is_compilable_CSharp(string value, string? argumentName, string expected)
     {
         Assert.Equal(expected, AnalyzerClassifier.FontFamilySuggestion(value, argumentName));
