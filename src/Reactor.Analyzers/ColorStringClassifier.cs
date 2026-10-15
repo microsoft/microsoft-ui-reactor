@@ -46,14 +46,15 @@ internal readonly struct ColorStringFinding
 /// </summary>
 /// <remarks>
 /// <see cref="TryParse"/> is a <b>netstandard2.0 copy</b> of <c>Microsoft.UI.Reactor.BrushHelper.TryParseColor</c>
-/// (the analyzer cannot reference <c>src/Reactor</c>), and the whole class is mirrored
-/// byte-for-byte by the <c>mur check</c> CLI's <c>ColorStringClassifier</c>. <c>ColorStringParityTests</c>
-/// locks all three together — <b>edit them in lockstep</b>.
+/// (the analyzer cannot reference <c>src/Reactor</c>); <c>ColorStringParityTests</c> locks the two
+/// together — <b>edit them in lockstep</b>. Every fixable <see cref="ColorStringFinding.Detail"/> ends in
+/// <c>did you mean X?</c>: the <c>mur check</c> <c>ColorStringLiteralRule</c> lifts <c>X</c> out of the
+/// diagnostic message, so keep that suffix stable.
 /// </remarks>
 internal static class ColorStringClassifier
 {
     /// <summary>The names BrushHelper's switch recognizes (case-insensitive).</summary>
-    public const string SupportedNames = "red, green, blue, white, black, gray, lightgray, transparent";
+    public const string SupportedNames = "red, green, blue, white, black, gray/grey, lightgray/lightgrey, transparent";
 
     /// <summary>The suffix that marks a WinUI FontFamily resource key (e.g. <c>ContentControlThemeFontFamily</c>).</summary>
     public const string FontFamilyKeySuffix = "FontFamily";
@@ -261,11 +262,11 @@ internal static class ColorStringClassifier
                 ? new ColorStringFinding(
                     ColorStringIssue.FontFamilyKey,
                     value,
-                    $"the key '{resourceKey}' names a FontFamily resource; did you mean new FontFamily(\"{value}\")?")
+                    $"'{resourceKey}' is a FontFamily resource; did you mean new FontFamily(\"{value}\")?")
                 : new ColorStringFinding(
                     ColorStringIssue.FontFamilyKey,
                     null,
-                    $"the key '{resourceKey}' names a FontFamily resource, but Set(string, string) only stores color brushes");
+                    $"'{resourceKey}' is a FontFamily resource, but this Set overload only stores color brushes; to change the font, use .FontFamily(\"{value}\") on the element");
         }
 
         if (value.StartsWith("#", StringComparison.Ordinal))
@@ -277,7 +278,7 @@ internal static class ColorStringClassifier
                 return new ColorStringFinding(
                     ColorStringIssue.HexShorthand,
                     expanded,
-                    $"BrushHelper has no #RGB/#ARGB shorthand; did you mean \"{expanded}\"?");
+                    $"#RGB/#ARGB shorthand isn't supported; did you mean \"{expanded}\"?");
             }
             return new ColorStringFinding(
                 ColorStringIssue.MalformedHex,
@@ -299,7 +300,7 @@ internal static class ColorStringClassifier
             return new ColorStringFinding(
                 ColorStringIssue.NamedColor,
                 hex,
-                $"BrushHelper only knows {SupportedNames}; did you mean \"{hex}\"?");
+                $"the only built-in names are {SupportedNames}; did you mean \"{hex}\"?");
         }
 
         return new ColorStringFinding(

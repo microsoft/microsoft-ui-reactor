@@ -1,14 +1,14 @@
 using AnalyzerClassifier = Microsoft.UI.Reactor.Analyzers.ColorStringClassifier;
-using CliClassifier = Microsoft.UI.Reactor.Cli.Check.Rules.ColorStringClassifier;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 
 /// <summary>
-/// REACTOR_DYM_006 parity lock (issue #1375). Three copies of one color grammar must agree:
-/// <c>BrushHelper.TryParseColor</c> (the runtime truth), the netstandard2.0 analyzer's
-/// <c>ColorStringClassifier</c>, and the <c>mur check</c> CLI's copy. If any of them drifts, the
-/// analyzer either flags colors that render fine or misses ones that render gray.
+/// REACTOR_DYM_006 parity lock (issue #1375). Two copies of one color grammar must agree:
+/// <c>BrushHelper.TryParseColor</c> (the runtime truth) and the netstandard2.0 analyzer's
+/// <c>ColorStringClassifier</c>. If they drift, the analyzer either flags colors that render fine or
+/// misses ones that render gray. (The <c>mur check</c> rule reads the analyzer's message, so it has no
+/// grammar of its own; <c>DidYouMeanAnalyzerParityTests</c> covers it.)
 /// </summary>
 public class ColorStringParityTests
 {
@@ -32,37 +32,33 @@ public class ColorStringParityTests
     {
         var runtime = BrushHelper.TryParseColor(value, out _);
         Assert.Equal(runtime, AnalyzerClassifier.TryParse(value));
-        Assert.Equal(runtime, CliClassifier.TryParse(value));
+        // Classify must agree too: a finding exactly when BrushHelper falls back to gray.
+        Assert.Equal(!runtime, AnalyzerClassifier.Classify(value, null, false).HasValue);
     }
 
-    [Theory]
-    [MemberData(nameof(Battery))]
-    public void Analyzer_and_cli_classify_identically(string value)
+    [Fact]
+    public void Every_fixable_detail_ends_in_the_did_you_mean_the_cli_rule_reads()
     {
-        foreach (var key in new[] { null, "ButtonBackground", "ContentControlThemeFontFamily", "FontFamily", "fontfamily" })
+        // ColorStringLiteralRule lifts the rewrite out of "...; did you mean X?". Keep the suffix stable.
+        foreach (var (value, key, overload) in new (string, string?, bool)[]
         {
-            foreach (var overload in new[] { false, true })
-            {
-                var a = AnalyzerClassifier.Classify(value, key, overload);
-                var c = CliClassifier.Classify(value, key, overload);
-                Assert.Equal(a.HasValue, c.HasValue);
-                if (a is { } af && c is { } cf)
-                {
-                    Assert.Equal(af.Issue.ToString(), cf.Issue.ToString());
-                    Assert.Equal(af.Replacement, cf.Replacement);
-                    Assert.Equal(af.Detail, cf.Detail);
-                }
-            }
+            ("#888", null, false), ("FF0000", null, false), ("orange", null, false),
+            ("Consolas", "ContentControlThemeFontFamily", true),
+        })
+        {
+            var finding = AnalyzerClassifier.Classify(value, key, overload)!.Value;
+            Assert.NotNull(finding.Replacement);
+            Assert.EndsWith("; did you mean " + (finding.Issue.ToString() == "FontFamilyKey"
+                ? $"new FontFamily(\"{finding.Replacement}\")"
+                : $"\"{finding.Replacement}\"") + "?", finding.Detail, StringComparison.Ordinal);
         }
     }
 
     [Fact]
-    public void Named_color_tables_are_identical()
+    public void Supported_names_list_matches_BrushHelper()
     {
-        Assert.Equal(
-            AnalyzerClassifier.NamedColorHex.OrderBy(p => p.Key, StringComparer.Ordinal),
-            CliClassifier.NamedColorHex.OrderBy(p => p.Key, StringComparer.Ordinal));
-        Assert.Equal(AnalyzerClassifier.SupportedNames, CliClassifier.SupportedNames);
+        foreach (var name in AnalyzerClassifier.SupportedNames.Split(", ").SelectMany(n => n.Split('/')))
+            Assert.True(BrushHelper.TryParseColor(name, out _), $"'{name}' is listed as supported but BrushHelper rejects it.");
     }
 
     [Fact]

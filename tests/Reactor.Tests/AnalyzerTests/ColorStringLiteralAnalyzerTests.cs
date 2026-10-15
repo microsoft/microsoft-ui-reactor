@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.CSharp.Testing;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Testing;
 using Microsoft.UI.Reactor.Analyzers;
 using Xunit;
@@ -132,7 +133,7 @@ namespace App
         var test = MakeTest(Wrap(@"        static object M() => TextBlock(""hi"").Background({|#0:""orange""|});"));
         test.ExpectedDiagnostics.Add(Dym006(0).WithArguments(
             "orange",
-            "BrushHelper only knows red, green, blue, white, black, gray, lightgray, transparent; did you mean \"#FFA500\"?"));
+            "the only built-in names are red, green, blue, white, black, gray/grey, lightgray/lightgrey, transparent; did you mean \"#FFA500\"?"));
         await test.RunAsync(TestContext.Current.CancellationToken);
     }
 
@@ -170,7 +171,7 @@ namespace App
         var test = MakeTest(Wrap(@"        static object M() => TextBlock(""hi"").Background({|#0:""accent""|});"));
         test.ExpectedDiagnostics.Add(Dym006(0).WithArguments(
             "accent",
-            "use #RRGGBB or #AARRGGBB, a Theme token, or one of red, green, blue, white, black, gray, lightgray, transparent"));
+            "use #RRGGBB or #AARRGGBB, a Theme token, or one of red, green, blue, white, black, gray/grey, lightgray/lightgrey, transparent"));
         await test.RunAsync(TestContext.Current.CancellationToken);
     }
 
@@ -210,7 +211,7 @@ namespace App
             fontFamilyOverload: true));
         test.ExpectedDiagnostics.Add(Dym006(0).WithArguments(
             "Consolas",
-            "the key 'ContentControlThemeFontFamily' names a FontFamily resource; did you mean new FontFamily(\"Consolas\")?"));
+            "'ContentControlThemeFontFamily' is a FontFamily resource; did you mean new FontFamily(\"Consolas\")?"));
         await test.RunAsync(TestContext.Current.CancellationToken);
     }
 
@@ -221,7 +222,20 @@ namespace App
             @"        static object M(ResourceBuilder r) => r.Set(""ContentControlThemeFontFamily"", {|#0:""Consolas""|});"));
         test.ExpectedDiagnostics.Add(Dym006(0).WithArguments(
             "Consolas",
-            "the key 'ContentControlThemeFontFamily' names a FontFamily resource, but Set(string, string) only stores color brushes"));
+            "'ContentControlThemeFontFamily' is a FontFamily resource, but this Set overload only stores color brushes; to change the font, use .FontFamily(\"Consolas\") on the element"));
+        await test.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task FontFamily_key_inside_a_branch_gets_no_FontFamily_suggestion()
+    {
+        // new FontFamily(...) can't replace one branch of a ?: — the other branch is still a string.
+        var test = MakeTest(Wrap(
+            @"        static object M(ResourceBuilder r, bool on) => r.Set(""ContentControlThemeFontFamily"", on ? {|#0:""Consolas""|} : ""red"");",
+            fontFamilyOverload: true));
+        test.ExpectedDiagnostics.Add(Dym006(0).WithArguments(
+            "Consolas",
+            "'ContentControlThemeFontFamily' is a FontFamily resource, but this Set overload only stores color brushes; to change the font, use .FontFamily(\"Consolas\") on the element"));
         await test.RunAsync(TestContext.Current.CancellationToken);
     }
 
@@ -268,10 +282,83 @@ namespace App
         RunAsync(@"        static object M() => TextBlock(""hi"").Background(true ? ""red"" : ""orange"");");
 
     [Fact]
+    public Task Silent_on_dead_branches_the_compiler_does_not_fold() =>
+        // Each expression as a whole is non-constant, so only the constant condition / left side
+        // proves which branch runs. The live branches are still checked.
+        RunAsync(@"        const bool DebugBuild = false;
+        const string Mode = ""dark"";
+        static object M(string c) => TextBlock(""hi"")
+            .Background(DebugBuild ? ""magenta"" : c)
+            .Foreground(!DebugBuild ? c : ""magenta"")
+            .BorderBrush(""red"" ?? c)
+            .WithBorder(Mode switch { ""light"" => ""orange"", ""dark"" => c, _ => ""teal"" })
+            .Background(DebugBuild ? c : {|REACTOR_DYM_006:""navy""|});");
+
+    [Fact]
+    public Task Non_constant_switch_keeps_every_arm() =>
+        RunAsync(@"        static object M(string mode, string c) => TextBlock(""hi"")
+            .Background(mode switch { ""light"" => {|REACTOR_DYM_006:""orange""|}, _ => c });");
+
+    [Fact]
     public async Task Silent_without_any_Reactor_color_api()
     {
         var test = MakeTest(@"static class C { static string M() => ""orange""; }");
         await test.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    // ── Live Reactor surface ────────────────────────────────────────────────────────────────────
+    // Every other test runs against stubs that hardcode `string color`. This one binds to the real
+    // Reactor assembly, so renaming a `color` parameter or moving a type (which would silently turn
+    // the analyzer off) fails here.
+
+    [Fact]
+    public async Task Fires_on_every_covered_api_of_the_live_Reactor_assembly()
+    {
+        var live = Microsoft.UI.Reactor.Tests.CheckCommandTests.Rules.RuleTargetResolutionTests.BuildLiveReactorCompilation();
+
+        var targets = ColorStringLiteralAnalyzer.Targets.Resolve(live);
+        Assert.NotNull(targets);
+        var covered = targets!.Methods
+            .Select(m => $"{m.ContainingType.Name}.{m.Name}({string.Join(", ", m.Parameters.Select(p => p.Type.Name + " " + p.Name))})")
+            .OrderBy(s => s, global::System.StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(new[]
+        {
+            "BrushHelper.Parse(String color)",
+            "ElementExtensions.Background(T el, String color)",
+            "ElementExtensions.BorderBrush(T el, String color)",
+            "ElementExtensions.Foreground(RichTextBlockElement el, String color)",
+            "ElementExtensions.Foreground(RichTextHyperlink link, String color)",
+            "ElementExtensions.Foreground(RichTextParagraph paragraph, String color)",
+            "ElementExtensions.Foreground(RichTextRun run, String color)",
+            "ElementExtensions.Foreground(T el, String color)",
+            "ElementExtensions.WithBorder(T el, String color, Double thickness)",
+            "ResourceBuilder.Set(String key, String color)",
+        }, covered);
+
+        var source = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(@"
+using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Elements;
+using static Microsoft.UI.Reactor.Factories;
+static class LiveProbe
+{
+    static object A() => TextBlock(""x"").Background(""orange"");
+    static object B() => new ResourceBuilder().Set(""ButtonBackground"", ""#888"");
+    static object C() => BrushHelper.Parse(""FF0000"");
+    static object D() => TextBlock(""x"").Foreground(""red"").BorderBrush(""#80FF0000"");
+}", cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = live.AddSyntaxTrees(source);
+        Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken)
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error && d.Location.SourceTree == source));
+
+        var diagnostics = await compilation
+            .WithAnalyzers(global::System.Collections.Immutable.ImmutableArray.Create<Microsoft.CodeAnalysis.Diagnostics.DiagnosticAnalyzer>(new ColorStringLiteralAnalyzer()))
+            .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(
+            new[] { "orange", "#888", "FF0000" },
+            diagnostics.Where(d => d.Id == ColorStringLiteralAnalyzer.DiagnosticId)
+                .OrderBy(d => d.Location.SourceSpan.Start)
+                .Select(d => d.Properties.ContainsKey(ColorStringLiteralAnalyzer.ReplacementProperty) ? source.GetText(TestContext.Current.CancellationToken).ToString(d.Location.SourceSpan).Trim('"') : "?"));
     }
 
     // ── Code fixes ──────────────────────────────────────────────────────────────────────────────
@@ -319,6 +406,20 @@ namespace App
         static object M(ResourceBuilder r) => r.Set(""ContentControlThemeFontFamily"", {|REACTOR_DYM_006:Mono|});",
             @"        const string Mono = ""Consolas"";
         static object M(ResourceBuilder r) => r.Set(""ContentControlThemeFontFamily"", new FontFamily(Mono));",
+            fontFamilyOverload: true);
+
+    [Fact]
+    public Task Fix_renames_named_color_argument_to_the_FontFamily_parameter() =>
+        RunFixAsync(
+            @"        static object M(ResourceBuilder r) => r.Set(key: ""ContentControlThemeFontFamily"", color: {|REACTOR_DYM_006:""Consolas""|});",
+            @"        static object M(ResourceBuilder r) => r.Set(key: ""ContentControlThemeFontFamily"", fontFamily: new FontFamily(""Consolas""));",
+            fontFamilyOverload: true);
+
+    [Fact]
+    public Task No_FontFamily_fix_inside_a_branch() =>
+        RunFixAsync(
+            @"        static object M(ResourceBuilder r, bool on) => r.Set(""ContentControlThemeFontFamily"", on ? {|REACTOR_DYM_006:""Consolas""|} : ""red"");",
+            @"        static object M(ResourceBuilder r, bool on) => r.Set(""ContentControlThemeFontFamily"", on ? {|REACTOR_DYM_006:""Consolas""|} : ""red"");",
             fontFamilyOverload: true);
 
     [Fact]

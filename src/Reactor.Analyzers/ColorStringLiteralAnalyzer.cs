@@ -59,10 +59,16 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
     /// <summary>Property-bag key: the replacement value (literal text, or family name). Absent when there is no fix.</summary>
     public const string ReplacementProperty = "Replacement";
 
+    /// <summary>
+    /// Property-bag key (FontFamily fix only): the value parameter name of
+    /// <c>ResourceBuilder.Set(string, FontFamily)</c>, so a named <c>color:</c> argument can be renamed.
+    /// </summary>
+    public const string FontFamilyParameterProperty = "FontFamilyParameter";
+
     private static readonly LocalizableString Title =
-        "Color string that BrushHelper cannot parse renders gray";
+        "Unrecognized color string renders gray";
     private static readonly LocalizableString MessageFormat =
-        "'{0}' is not a color BrushHelper can parse, so it renders gray; {1}";
+        "'{0}' is not a color string Reactor can parse, so it renders gray — {1}";
     private static readonly LocalizableString Description =
         "BrushHelper.Parse understands only red, green, blue, white, black, gray/grey, lightgray/lightgrey, transparent, #RRGGBB and #AARRGGBB. Anything else silently falls back to a gray brush. This covers BrushHelper.Parse, ResourceBuilder.Set(string, string), and the string overloads of the Background/Foreground/BorderBrush/WithBorder modifiers.";
 
@@ -98,16 +104,18 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
     /// <summary>The resolved color-string APIs for one compilation.</summary>
     internal sealed class Targets
     {
-        private Targets(ImmutableHashSet<IMethodSymbol> methods, IMethodSymbol? resourceSet, bool fontFamilyOverloadExists)
+        private Targets(ImmutableHashSet<IMethodSymbol> methods, IMethodSymbol? resourceSet, string? fontFamilyParameterName)
         {
             Methods = methods;
             ResourceSet = resourceSet;
-            FontFamilyOverloadExists = fontFamilyOverloadExists;
+            FontFamilyParameterName = fontFamilyParameterName;
         }
 
         public ImmutableHashSet<IMethodSymbol> Methods { get; }
         public IMethodSymbol? ResourceSet { get; }
-        public bool FontFamilyOverloadExists { get; }
+
+        /// <summary>The value parameter of <c>ResourceBuilder.Set(string, FontFamily)</c>, or null when that overload doesn't exist.</summary>
+        public string? FontFamilyParameterName { get; }
 
         public static Targets? Resolve(Compilation compilation)
         {
@@ -123,7 +131,7 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
             }
 
             IMethodSymbol? resourceSet = null;
-            var fontFamilyOverload = false;
+            string? fontFamilyParameter = null;
             var resourceBuilder = compilation.GetTypeByMetadataName(ResourceBuilderMetadataName);
             if (resourceBuilder is not null)
             {
@@ -138,7 +146,7 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
                     }
                     else if (m.Parameters[1].Type.ToDisplayString() == FontFamilyMetadataName)
                     {
-                        fontFamilyOverload = true;
+                        fontFamilyParameter = m.Parameters[1].Name;
                     }
                 }
             }
@@ -152,7 +160,7 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
                             methods.Add(m);
             }
 
-            return methods.Count == 0 ? null : new Targets(methods.ToImmutable(), resourceSet, fontFamilyOverload);
+            return methods.Count == 0 ? null : new Targets(methods.ToImmutable(), resourceSet, fontFamilyParameter);
         }
 
         private static bool HasStringColorParameter(IMethodSymbol method, ITypeSymbol str)
@@ -215,7 +223,10 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
 
         foreach (var (expression, value) in ConstantStrings(colorArg.Value.Syntax as ExpressionSyntax, context.SemanticModel, context.CancellationToken))
         {
-            var finding = ColorStringClassifier.Classify(value, resourceKey, targets.FontFamilyOverloadExists);
+            // new FontFamily(...) can only replace the whole argument: inside a ?: branch the other
+            // branch would still be a string and the expression would stop type-checking.
+            var canUseFontFamily = targets.FontFamilyParameterName is not null && expression.Parent is ArgumentSyntax;
+            var finding = ColorStringClassifier.Classify(value, resourceKey, canUseFontFamily);
             if (finding is not { } f)
                 continue;
 
@@ -223,6 +234,8 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
             properties.Add(IssueProperty, f.Issue.ToString());
             if (f.Replacement is not null)
                 properties.Add(ReplacementProperty, f.Replacement);
+            if (f.Issue == ColorStringIssue.FontFamilyKey && f.Replacement is not null)
+                properties.Add(FontFamilyParameterProperty, targets.FontFamilyParameterName);
 
             context.ReportDiagnostic(Diagnostic.Create(
                 Rule,
@@ -236,7 +249,9 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
     /// <summary>
     /// The constant strings an argument can evaluate to, each with the expression that produced it.
     /// A wholly-constant expression yields itself; otherwise only value-<em>selecting</em> shapes are
-    /// walked (parentheses, <c>?:</c>, <c>??</c>, switch arms) — never into nested calls.
+    /// walked (parentheses, <c>?:</c>, <c>??</c>, switch arms) — never into nested calls. Branches a
+    /// constant condition or a constant non-null <c>??</c> left side rules out are skipped, so dead
+    /// code (<c>DebugBuild ? "magenta" : color</c> with a <c>const bool</c>) is never reported.
     /// </summary>
     internal static IEnumerable<(ExpressionSyntax Expression, string Value)> ConstantStrings(
         ExpressionSyntax? expression, SemanticModel model, CancellationToken cancellationToken)
@@ -255,13 +270,45 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
         IEnumerable<ExpressionSyntax> children = expression switch
         {
             ParenthesizedExpressionSyntax p => new[] { p.Expression },
-            ConditionalExpressionSyntax c => new[] { c.WhenTrue, c.WhenFalse },
-            BinaryExpressionSyntax b when b.IsKind(SyntaxKind.CoalesceExpression) => new[] { b.Left, b.Right },
-            SwitchExpressionSyntax sw => sw.Arms.Select(a => a.Expression),
+            ConditionalExpressionSyntax c => model.GetConstantValue(c.Condition, cancellationToken) is { HasValue: true, Value: bool taken }
+                ? new[] { taken ? c.WhenTrue : c.WhenFalse }
+                : new[] { c.WhenTrue, c.WhenFalse },
+            BinaryExpressionSyntax b when b.IsKind(SyntaxKind.CoalesceExpression) =>
+                model.GetConstantValue(b.Left, cancellationToken) is { HasValue: true, Value: not null }
+                    ? new[] { b.Left }
+                    : new[] { b.Left, b.Right },
+            // Arms are only pruned when every pattern is a plain constant and the governing value is a
+            // constant; anything fancier (relational, type, `when`) keeps every arm.
+            SwitchExpressionSyntax sw => LiveArms(sw, model, cancellationToken),
             _ => Array.Empty<ExpressionSyntax>(),
         };
         foreach (var child in children)
             foreach (var item in ConstantStrings(child, model, cancellationToken))
                 yield return item;
+    }
+
+    private static IEnumerable<ExpressionSyntax> LiveArms(SwitchExpressionSyntax sw, SemanticModel model, CancellationToken cancellationToken)
+    {
+        var governing = model.GetConstantValue(sw.GoverningExpression, cancellationToken);
+        if (!governing.HasValue)
+            return sw.Arms.Select(a => a.Expression);
+
+        foreach (var arm in sw.Arms)
+        {
+            if (arm.WhenClause is not null)
+                return sw.Arms.Select(a => a.Expression);
+            switch (arm.Pattern)
+            {
+                case DiscardPatternSyntax:
+                    return new[] { arm.Expression };
+                case ConstantPatternSyntax cp when model.GetConstantValue(cp.Expression, cancellationToken) is { HasValue: true } armValue:
+                    if (Equals(armValue.Value, governing.Value))
+                        return new[] { arm.Expression };
+                    break;
+                default:
+                    return sw.Arms.Select(a => a.Expression);
+            }
+        }
+        return Array.Empty<ExpressionSyntax>();
     }
 }

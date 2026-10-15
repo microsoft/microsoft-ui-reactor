@@ -41,6 +41,18 @@ public class ColorStringLiteralRuleTests
     }
 
     [Fact]
+    public void Reads_the_rewrite_from_the_diagnostic_message_not_the_source()
+    {
+        // The rule trusts the analyzer's message: a message from another source shape still yields its
+        // own did-you-mean, and a REACTOR_DYM_006 whose message carries none stays silent.
+        var (diags, c) = Analyze(@"TextBlock(""hi"").Background(""orange"")");
+        var diag = Assert.Single(diags);
+        var forged = diag with { Message = "'teal' is not a color string Reactor can parse, so it renders gray — the only built-in names are red; did you mean \"#008080\"?" };
+        Assert.Equal("\"#008080\"", RunRule(forged, c)!.Text);
+        Assert.Null(RunRule(diag with { Message = "something else entirely" }, c));
+    }
+
+    [Fact]
     public void Suggests_FontFamily_when_the_overload_exists()
     {
         var (diags, c) = Analyze(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", ""Consolas"")", fontFamilyOverload: true);
@@ -61,17 +73,23 @@ public class ColorStringLiteralRuleTests
     }
 
     [Fact]
-    public void Each_branch_gets_its_own_rewrite_and_disagreeing_branches_stay_silent()
+    public void Each_branch_gets_its_own_rewrite()
     {
-        // Two unparseable branches with different rewrites: the rule only sees the argument, so it
-        // cannot tell which literal the diagnostic is about — silent beats a wrong suggestion.
         var (diags, c) = Analyze(@"TextBlock(""hi"").Background(on ? ""orange"" : ""teal"")");
         Assert.Equal(2, diags.Length);
-        Assert.All(diags, d => Assert.Null(RunRule(d, c)));
+        Assert.Equal(new[] { "\"#FFA500\"", "\"#008080\"" }, diags.Select(d => RunRule(d, c)!.Text));
 
-        // One unparseable branch: unambiguous.
-        (diags, c) = Analyze(@"TextBlock(""hi"").Background(on ? ""orange"" : ""red"")");
-        Assert.Equal("\"#FFA500\"", RunRule(Assert.Single(diags), c)!.Text);
+        // A branch with no rewrite doesn't silence its fixable sibling.
+        (diags, c) = Analyze(@"TextBlock(""hi"").Background(on ? ""orange"" : ""accent"")");
+        Assert.Equal(new[] { "\"#FFA500\"", null }, diags.Select(d => RunRule(d, c)?.Text));
+    }
+
+    [Fact]
+    public void FontFamily_value_inside_a_branch_gets_no_FontFamily_suggestion()
+    {
+        // Matches the code fix, which can't wrap one branch of a ?: in new FontFamily(...).
+        var (diags, c) = Analyze(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", on ? ""Consolas"" : ""red"")", fontFamilyOverload: true);
+        Assert.Null(RunRule(Assert.Single(diags), c));
     }
 
     [Fact]
@@ -143,7 +161,7 @@ namespace App
 
         var found = c.WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new ColorStringLiteralAnalyzer()))
             .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();
-        return (found.Where(d => d.Id == ColorStringLiteralAnalyzer.DiagnosticId).ToArray(), c);
+        return (found.Where(d => d.Id == ColorStringLiteralAnalyzer.DiagnosticId).OrderBy(d => d.Location.SourceSpan.Start).ToArray(), c);
     }
 
     internal static Suggestion? RunRule(CheckCommand.Diag diag, CSharpCompilation c)

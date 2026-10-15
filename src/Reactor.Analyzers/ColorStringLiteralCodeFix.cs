@@ -64,10 +64,23 @@ public sealed class ColorStringLiteralCodeFix : CodeFixProvider
                         SyntaxFactory.Argument(expression.WithoutTrivia()))))
                     .WithTriviaFrom(expression);
 
+                // `color: "Consolas"` must become `<fontFamilyParam>: new FontFamily(...)`, or the call
+                // would no longer bind to the FontFamily overload.
+                var oldArgument = (ArgumentSyntax)expression.Parent!;
+                var newArgument = oldArgument.WithExpression(creation);
+                if (oldArgument.NameColon is { } nameColon)
+                {
+                    if (!diagnostic.Properties.TryGetValue(ColorStringLiteralAnalyzer.FontFamilyParameterProperty, out var parameterName)
+                        || string.IsNullOrEmpty(parameterName))
+                        continue;
+                    newArgument = newArgument.WithNameColon(
+                        nameColon.WithName(SyntaxFactory.IdentifierName(parameterName!).WithTriviaFrom(nameColon.Name)));
+                }
+
                 context.RegisterCodeFix(
                     CodeAction.Create(
                         $"Use new FontFamily(\"{replacement}\")",
-                        _ => Task.FromResult(context.Document.WithSyntaxRoot(root.ReplaceNode(expression, creation))),
+                        _ => Task.FromResult(context.Document.WithSyntaxRoot(root.ReplaceNode(oldArgument, newArgument))),
                         equivalenceKey: FontFamilyEquivalenceKey),
                     diagnostic);
                 continue;
