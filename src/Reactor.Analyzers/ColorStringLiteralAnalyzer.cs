@@ -271,9 +271,26 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
             yield break;
         }
 
+        if (!IsPlainString(expression, model, cancellationToken))
+            yield break;
+
         foreach (var child in LiveChildren(expression, model, cancellationToken))
             foreach (var item in ConstantStrings(child, model, cancellationToken))
                 yield return item;
+    }
+
+    /// <summary>
+    /// Whether a non-constant sub-expression is itself a string value that flows on unchanged. A branch
+    /// of another type (e.g. <c>token ?? "orange"</c> where <c>token</c> is a <c>ColorToken</c> with
+    /// <c>implicit operator string</c>) or one reaching string through a user-defined conversion is a
+    /// boundary: whatever strings it contains, the operator's result is what gets parsed.
+    /// </summary>
+    private static bool IsPlainString(ExpressionSyntax expression, SemanticModel model, CancellationToken cancellationToken)
+    {
+        var typeInfo = model.GetTypeInfo(expression, cancellationToken);
+        if ((typeInfo.Type ?? typeInfo.ConvertedType)?.SpecialType != SpecialType.System_String)
+            return false;
+        return !model.GetConversion(expression, cancellationToken).IsUserDefined;
     }
 
     /// <summary>
@@ -305,6 +322,8 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
     {
         if (expression is ThrowExpressionSyntax)
             return true;
+        if (!IsPlainString(expression, model, cancellationToken))
+            return false;
 
         var constant = model.GetConstantValue(expression, cancellationToken);
         if (constant.HasValue)

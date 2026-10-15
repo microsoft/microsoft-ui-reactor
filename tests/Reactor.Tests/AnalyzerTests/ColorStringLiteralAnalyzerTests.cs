@@ -316,7 +316,9 @@ namespace App
             public static implicit operator ColorToken(string s) => new ColorToken();
             public static implicit operator string(ColorToken t) => ""red"";
         }
-        static object M(ColorToken token) => BrushHelper.Parse(token ?? ""orange"") ?? BrushHelper.Parse((string)token ?? {|REACTOR_DYM_006:""orange""|});");
+        static object M(ColorToken token, bool on) => BrushHelper.Parse(token ?? ""orange"")
+            ?? BrushHelper.Parse(on switch { true => token ?? ""orange"", _ => ""red"" })
+            ?? BrushHelper.Parse((string)token ?? {|REACTOR_DYM_006:""orange""|});");
 
     [Fact]
     public Task Coalesce_fallback_is_dead_when_the_other_branch_throws() =>
