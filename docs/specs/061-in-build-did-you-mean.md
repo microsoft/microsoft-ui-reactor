@@ -369,8 +369,9 @@ rather than a CS code — there is no compiler diagnostic to augment. `mur check
 runs the analyzer bundle, so `REACTOR_DYM_006` appears in the parsed output. Every fixable message ends in
 `did you mean X?`, computed for the exact value the diagnostic points at, so the rule lifts `X` out of the
 message rather than re-deriving it. It has no grammar of its own and can't disagree with the code fix, and
-the `→ try:` suffix keeps the rewrite visible after `mur check` truncates the message. Messages without a
-did-you-mean stay silent. There is deliberately no Tier-1 `HintFor` entry, which would mask the suggestion.
+the `→ try:` suffix keeps the rewrite visible after `mur check` truncates the message. A `*FontFamily`
+key with no rewrite surfaces the message's `.FontFamily("…")` modifier advice the same way; messages with no
+concrete next step (unknown name, malformed hex) stay silent. There is deliberately no Tier-1 `HintFor` entry, which would mask the suggestion.
 `DidYouMeanAnalyzerParityTests` feeds real analyzer diagnostics to the rule and asserts it suggests the
 code fix's rewrite; `ColorStringParityTests` pins the `did you mean` suffix.
 

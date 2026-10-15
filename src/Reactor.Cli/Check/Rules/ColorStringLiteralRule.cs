@@ -12,8 +12,11 @@
 // diagnostic points at. The rule lifts X out of that message rather than
 // re-deriving it, so it can never disagree with the IDE code fix — and since
 // CheckCommand truncates messages to 100 chars, the `→ try:` suffix is what
-// keeps the rewrite visible. Messages without a did-you-mean (unknown name,
-// malformed hex, FontFamily key without the FontFamily overload) stay silent.
+// keeps the rewrite visible. A *FontFamily key without the FontFamily overload
+// has no rewrite of the flagged argument, but its message names the
+// `.FontFamily("…")` element modifier as the way to set the font; the rule
+// surfaces that too, because truncation would otherwise hide it. Messages with
+// no concrete next step (unknown name, malformed hex) stay silent.
 // It deliberately has NO Tier-1 HintFor entry in CheckCommand — that table
 // wins ties and would mask the suggestion.
 //
@@ -40,12 +43,26 @@ internal sealed partial class ColorStringLiteralRule : IRulePattern
     [GeneratedRegex(@"^'(?<value>.*?)' is not a color string Reactor can parse\b.*; did you mean (?<suggestion>.+)\?$", RegexOptions.Singleline)]
     private static partial Regex MessagePattern();
 
+    // `… — '<key>' is a FontFamily resource, but this Set overload only stores color brushes; to change the font, use <X> on the element`
+    [GeneratedRegex(@"^'.*?' is not a color string Reactor can parse\b.*; to change the font, use (?<modifier>\.FontFamily\(.+\)) on the element$", RegexOptions.Singleline)]
+    private static partial Regex FontModifierPattern();
+
     public RuleSuggestion TryMatch(in RuleContext ctx)
     {
         if (ctx.Diagnostic.Id != DiagnosticId) return RuleSuggestion.Silent;
 
-        var match = MessagePattern().Match(ctx.Diagnostic.GetMessage());
-        if (!match.Success) return RuleSuggestion.Silent;
+        var message = ctx.Diagnostic.GetMessage();
+        var match = MessagePattern().Match(message);
+        if (!match.Success)
+        {
+            var modifier = FontModifierPattern().Match(message);
+            return modifier.Success
+                ? new RuleSuggestion(
+                    Text: modifier.Groups["modifier"].Value,
+                    Confidence: 0.9,
+                    Evidence: "*FontFamily key: Set(key, string) only stores brushes")
+                : RuleSuggestion.Silent;
+        }
 
         var suggestion = match.Groups["suggestion"].Value;
         var value = match.Groups["value"].Value;

@@ -61,9 +61,24 @@ public class ColorStringLiteralRuleTests
         Assert.Equal("new Microsoft.UI.Xaml.Media.FontFamily(\"Consolas\")", s!.Text);
     }
 
+    [Fact]
+    public void Without_the_FontFamily_overload_the_modifier_guidance_survives_mur_check_truncation()
+    {
+        // No rewrite of the argument exists, but the message's `.FontFamily(...)` workaround must still
+        // reach the agent: CheckCommand truncates messages to 100 chars, which cuts it off.
+        var (diags, c) = Analyze(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", ""Consolas"")");
+        var diag = Assert.Single(diags);
+        var s = RunRule(diag, c);
+        Assert.NotNull(s);
+        Assert.Equal(".FontFamily(\"Consolas\")", s!.Text);
+
+        var line = diag.Format(s);
+        Assert.DoesNotContain("to change the font", line, StringComparison.Ordinal); // truncated away...
+        Assert.Contains("→ try: .FontFamily(\"Consolas\")", line, StringComparison.Ordinal); // ...but surfaced here
+    }
+
     [Theory]
-    // No concrete rewrite exists for these — the analyzer's message carries the advice.
-    [InlineData(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", ""Consolas"")")]
+    // No concrete next step exists for these — the analyzer's message carries the advice.
     [InlineData(@"TextBlock(""hi"").Background(""accent"")")]
     [InlineData(@"TextBlock(""hi"").Background(""#12345"")")]
     public void Silent_when_there_is_no_concrete_rewrite(string expression)
@@ -87,9 +102,10 @@ public class ColorStringLiteralRuleTests
     [Fact]
     public void FontFamily_value_inside_a_branch_gets_no_FontFamily_suggestion()
     {
-        // Matches the code fix, which can't wrap one branch of a ?: in new FontFamily(...).
+        // Matches the code fix, which can't wrap one branch of a ?: in new FontFamily(...); the element
+        // modifier is the remaining advice.
         var (diags, c) = Analyze(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", on ? ""Consolas"" : ""red"")", fontFamilyOverload: true);
-        Assert.Null(RunRule(Assert.Single(diags), c));
+        Assert.Equal(".FontFamily(\"Consolas\")", RunRule(Assert.Single(diags), c)?.Text);
     }
 
     [Fact]
