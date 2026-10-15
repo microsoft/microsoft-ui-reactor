@@ -47,7 +47,7 @@
          YamlStaticContext for the doc pipeline's YAML DTOs (tools/Reactor.DocPipeline).
          Analyzer-only (PrivateAssets=all). Version tracks YamlDotNet's major (18.x). -->
     <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.1.0" />
-    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.18" />
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.19" />
     <PackageVersion Include="MessagePack" Version="2.5.307" />
   </ItemGroup>
 
@@ -71,8 +71,8 @@
 
   <ItemGroup>
     <!-- Test infrastructure -->
-    <PackageVersion Include="xunit.v3" Version="4.0.1" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.5.1" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.5.1" />
     <!-- Microsoft.Testing.Platform extensions. xunit.v3 v4 dropped the VSTest bridge, so
