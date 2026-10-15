@@ -28,6 +28,18 @@ Conventions for contributors:
 
 ### Added
 
+- **`REACTOR_DYM_006`: color strings that render gray** (issue #1375, spec 061 §7.3). A new
+  default-on **Warning** flags compile-time-constant color strings that `BrushHelper` can't
+  parse and therefore silently fall back to gray: `.Background("orange")`, `.Foreground("#888")`,
+  or a font name passed to `ResourceBuilder.Set(key, string)` under a `*FontFamily` key. It covers
+  `BrushHelper.Parse`, `ResourceBuilder.Set(string, string)` and the `string` overloads of
+  `Background` / `Foreground` / `BorderBrush` / `WithBorder`, suggests the exact hex (or
+  `new FontFamily(...)` once that `Set` overload exists), and ships a code fix; `mur check`'s new
+  `ColorStringLiteralRule` repeats the rewrite as a `→ try:` hint. Unlike `REACTOR_DYM_001`–`005`
+  it fires on code that compiles, so a project with `TreatWarningsAsErrors` can stop building on
+  an existing gray color. Fix the value, or adjust the severity with
+  `dotnet_diagnostic.REACTOR_DYM_006.severity` in `.editorconfig`.
+
 - **Inspector diagnostics: call-site column and a per-component render event**
   (issue #1326, spec 010 §1.1):
   - `SourceLocation.ColumnNumber` (1-based, `0` = unknown), a third positional
