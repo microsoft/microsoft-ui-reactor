@@ -17,13 +17,19 @@ namespace Microsoft.UI.Reactor.Core;
 /// because the dictionary's int keys no longer matched the repeater's
 /// new positions. Keying by string makes the mapping reorder-stable.
 /// </remarks>
-public sealed partial class ElementFactory<T> : IElementFactory
+public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturingFactory
 {
     private IReadOnlyList<T> _items;
     private Func<T, int, Element> _viewBuilder;
     private readonly Reconciler _reconciler;
     private readonly Action _requestRerender;
     private readonly ElementPool? _pool;
+
+    // The host's provider-stack snapshot. GetElement runs from WinUI layout,
+    // outside the traversal that maintains the reconciler's context stack, so
+    // rows replay this instead (see ContextCapture). Null when the factory is
+    // driven directly (tests) — rows then read the live stack as before.
+    ContextCapture? IContextCapturingFactory.ContextCapture { get; set; }
     // Optional state used when ItemsSource is the OC<ReactorRow> path
     // (spec 042). Lets GetElement translate an ItemsRepeater realized
     // index → stable key for _mountedElements lookup. Null when running
@@ -594,6 +600,8 @@ public sealed partial class ElementFactory<T> : IElementFactory
 
         if (index < 0 || index >= _items.Count)
             return new TextBlock { Text = "" };
+
+        using var restoreContext = _reconciler.EnterCapturedContext(((IContextCapturingFactory)this).ContextCapture);
 
         var item = _items[index];
         var element = BuildOrCache(key, item, index, keyed);

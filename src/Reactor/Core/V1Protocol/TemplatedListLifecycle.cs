@@ -52,6 +52,7 @@ internal static class TemplatedListLifecycle
         if (header is not null) listView.Header = header;
 
         Reconciler.SetElementTag(listView, el);
+        reconciler.CaptureContextForHost(listView);
         listView.ItemTemplate = Reconciler.SharedContentControlTemplate.Value;
 
         listView.ContainerContentChanging += (sender, args) =>
@@ -133,6 +134,7 @@ internal static class TemplatedListLifecycle
         if (header is not null) gridView.Header = header;
 
         Reconciler.SetElementTag(gridView, el);
+        reconciler.CaptureContextForHost(gridView);
         gridView.ItemTemplate = Reconciler.SharedContentControlTemplate.Value;
 
         gridView.ContainerContentChanging += (sender, args) =>

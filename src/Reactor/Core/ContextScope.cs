@@ -7,7 +7,7 @@ namespace Microsoft.UI.Reactor.Core;
 /// </summary>
 internal sealed class ContextScope
 {
-    private readonly List<(ContextBase Context, object? Value)> _stack = new();
+    private List<(ContextBase Context, object? Value)> _stack = new();
     private long _version;
 
     internal void Push(IReadOnlyDictionary<ContextBase, object?> values)
@@ -51,4 +51,62 @@ internal sealed class ContextScope
     internal bool HasActiveValues => _stack.Count > 0;
 
     internal long Version => _version;
+
+    internal (ContextBase Context, object? Value)[] Snapshot()
+        => _stack.Count == 0 ? [] : _stack.ToArray();
+
+    /// <summary>
+    /// True when the live stack is a positional prefix of <paramref name="snapshot"/>
+    /// (same contexts, equal values). The traversal pushes providers along the path,
+    /// so at any ancestor of the node that took the snapshot the live stack is a
+    /// prefix of it unless a provider at or above that ancestor changed.
+    /// </summary>
+    internal bool IsPrefixOf((ContextBase Context, object? Value)[] snapshot)
+    {
+        if (_stack.Count > snapshot.Length) return false;
+        for (int i = 0; i < _stack.Count; i++)
+        {
+            if (!ReferenceEquals(_stack[i].Context, snapshot[i].Context)
+                || !Equals(_stack[i].Value, snapshot[i].Value))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Replaces the live stack with <paramref name="snapshot"/> and returns the stack it
+    /// displaced, which the caller must hand back to <see cref="Restore"/>. Replacing
+    /// (rather than pushing on top) keeps a re-entrant realization from observing the
+    /// providers of whatever subtree the traversal happened to be in.
+    /// </summary>
+    internal List<(ContextBase Context, object? Value)> Replace((ContextBase Context, object? Value)[] snapshot)
+    {
+        var previous = _stack;
+        _stack = new List<(ContextBase Context, object? Value)>(snapshot);
+        _version++;
+        return previous;
+    }
+
+    internal void Restore(List<(ContextBase Context, object? Value)> previous)
+    {
+        _stack = previous;
+        _version++;
+    }
+}
+
+/// <summary>
+/// The provider stack as it stood when the reconciler last reconciled a virtualized
+/// host (LazyVStack, ItemsView, ListView, TreeView, …). Those hosts realize rows from
+/// WinUI callbacks — <c>IElementFactory.GetElement</c>, <c>ContainerContentChanging</c> —
+/// that run during layout, outside the traversal that maintains <see cref="ContextScope"/>,
+/// so the row mount replays this snapshot instead of reading whatever the live stack
+/// holds at that moment.
+/// </summary>
+internal sealed class ContextCapture
+{
+    internal (ContextBase Context, object? Value)[] Entries { get; private set; } = [];
+
+    internal void Refresh(ContextScope scope) => Entries = scope.Snapshot();
+
+    internal bool IsStale(ContextScope scope) => !scope.IsPrefixOf(Entries);
 }

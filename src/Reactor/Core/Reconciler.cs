@@ -818,6 +818,11 @@ public sealed partial class Reconciler : IDisposable
         // abstract base.
         public Internal.IItemViewSource? ItemViewSource;
 
+        // Provider stack snapshot for a virtualized host whose rows are realized
+        // from WinUI layout callbacks outside the reconciler traversal (see
+        // ContextCapture). Lives here rather than in a wrapper-keyed CWT so the
+        // realization callback finds it through any managed wrapper of the control.
+        public ContextCapture? ContextCapture;
         // Spec 047 §9.2 / §14 Phase 1 (1.7) — per-control event payload box.
         // Holds a strongly-typed payload struct (e.g. ToggleSwitchEventPayload)
         // discriminated by HandlerType. Populated for ported V1 controls and
@@ -1202,6 +1207,9 @@ public sealed partial class Reconciler : IDisposable
             state.EchoSuppressScopeDepth = 0;
             state.PendingEchoMatch = null;
             state.PendingLabeledBy = null;
+            // A pooled host must not hand its provider values (and the objects they
+            // reference) to an unrelated renter.
+            state.ContextCapture = null;
         }
     }
 
@@ -1248,6 +1256,7 @@ public sealed partial class Reconciler : IDisposable
         state.ValidationRootBinding = null;
         state.ValidationRuleBinding = null;
         state.ValidationAttachedBinding = null;
+        state.ContextCapture = null;
     }
 
     /// <summary>
@@ -1895,6 +1904,89 @@ public sealed partial class Reconciler : IDisposable
     internal T ReadContext<T>(Context<T> context) => _contextScope.Read(context);
 
     internal bool HasActiveContextValues => _contextScope.HasActiveValues;
+
+    // ── Context replay for virtualized realization ─────────────────────
+    //
+    // ItemsRepeater (IElementFactory.GetElement), ListViewBase
+    // (ContainerContentChanging) and the typed TreeView build row content from
+    // WinUI layout callbacks. Those run after the traversal that maintains
+    // _contextScope has unwound (first realization, scrolling) or re-entrantly in
+    // the middle of an unrelated subtree's update (a sibling's synchronous
+    // UpdateLayout), so the live stack is either empty or someone else's. Each
+    // such host captures the stack whenever it is reconciled, and the realization
+    // callbacks replay that capture around the row mount.
+
+    // Gates the per-control capture lookups so apps without a virtualized host
+    // never pay the attached-state read.
+    private bool _hasContextCaptures;
+
+    private static bool MayHostContextCapture(UIElement control)
+        => control is WinUI.ScrollViewer or WinUI.ItemsRepeater or WinUI.ItemsView
+            or WinUI.ListViewBase or WinUI.TreeView;
+
+    /// <summary>
+    /// Registers <paramref name="host"/> as a virtualized host and snapshots the live
+    /// provider stack onto it. Call from the host's Mount, while the traversal is at
+    /// the host; the generic Update path refreshes the snapshot from then on.
+    /// </summary>
+    internal ContextCapture CaptureContextForHost(FrameworkElement host)
+    {
+        global::System.Diagnostics.Debug.Assert(MayHostContextCapture(host),
+            $"{host.GetType().Name} is not covered by MayHostContextCapture; its capture would never refresh.");
+        var state = GetOrCreateReactorState(host);
+        var capture = state.ContextCapture ??= new ContextCapture();
+        capture.Refresh(_contextScope);
+        _hasContextCaptures = true;
+        return capture;
+    }
+
+    private ContextCapture? TryGetContextCapture(UIElement control)
+        => _hasContextCaptures
+            && MayHostContextCapture(control)
+            && ((FrameworkElement)control).GetValue(ReactorAttached.StateProperty) is ReactorState { ContextCapture: { } capture }
+                ? capture
+                : null;
+
+    /// <summary>Re-snapshots a host's provider stack; a no-op for any other control.</summary>
+    internal void RefreshContextCapture(UIElement control)
+        => TryGetContextCapture(control)?.Refresh(_contextScope);
+
+    /// <summary>
+    /// Replaces the live provider stack with <paramref name="capture"/> until the
+    /// returned scope is disposed. A null capture is a no-op.
+    /// </summary>
+    internal CapturedContextScope EnterCapturedContext(ContextCapture? capture)
+        => capture is null
+            ? default
+            : new CapturedContextScope(_contextScope, _contextScope.Replace(capture.Entries));
+
+    /// <inheritdoc cref="EnterCapturedContext(ContextCapture?)"/>
+    internal CapturedContextScope EnterCapturedContext(UIElement host)
+        => EnterCapturedContext(TryGetContextCapture(host));
+
+    /// <summary>
+    /// Registers <paramref name="host"/> (see <see cref="CaptureContextForHost"/>) and
+    /// hands its capture to <paramref name="factory"/> so <c>GetElement</c> replays it.
+    /// </summary>
+    internal void AttachContextCapture(IElementFactory factory, FrameworkElement host)
+    {
+        if (factory is IContextCapturingFactory capturing)
+            capturing.ContextCapture = CaptureContextForHost(host);
+    }
+
+    internal readonly struct CapturedContextScope : IDisposable
+    {
+        private readonly ContextScope? _scope;
+        private readonly List<(ContextBase Context, object? Value)>? _previous;
+
+        internal CapturedContextScope(ContextScope scope, List<(ContextBase Context, object? Value)> previous)
+        {
+            _scope = scope;
+            _previous = previous;
+        }
+
+        public void Dispose() => _scope?.Restore(_previous!);
+    }
 
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.6) — push a stagger scope for child enter
@@ -2751,6 +2843,12 @@ public sealed partial class Reconciler : IDisposable
     {
         if (_componentNodes.TryGetValue(control, out var node)
             && HasConsumedContextChanged(node))
+            return true;
+
+        // A virtualized host has no realized consumer for rows it has yet to realize,
+        // so its own snapshot stands in for them: if the providers above it changed,
+        // decline the skip so the Update path re-snapshots before the next realization.
+        if (TryGetContextCapture(control) is { } capture && capture.IsStale(_contextScope))
             return true;
 
         bool found = false;

@@ -709,6 +709,9 @@ public sealed partial class Reconciler
         if (viewSource is not null && args.ItemIndex >= 0 && args.ItemIndex < viewSource.ItemCount
             && args.ItemContainer.ContentTemplateRoot is ContentControl cc)
         {
+            // Realization runs from layout, outside the traversal — replay the
+            // host's provider stack so the row sees its ancestors' context.
+            using var restoreContext = EnterCapturedContext((UIElement)sender!);
             var itemElement = viewSource.BuildItemView(args.ItemIndex);
             var ctrl = Mount(itemElement, requestRerender);
             cc.Content = ctrl;

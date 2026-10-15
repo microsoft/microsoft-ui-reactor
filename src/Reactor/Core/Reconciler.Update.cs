@@ -176,6 +176,10 @@ public sealed partial class Reconciler
             ctxCount = ctxValues.Count;
         }
 
+        // Virtualized hosts realize rows outside this traversal; keep their provider
+        // snapshot current (no-op for every other control).
+        RefreshContextCapture(control);
+
         UIElement? result;
         try
         {
