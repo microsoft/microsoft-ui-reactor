@@ -4088,6 +4088,12 @@ sibling <code>src/Reactor.Analyzers.Internal/</code> project instead; see
 <td>String passed where a Reactor <code>Element</code> is expected (CS1503) — wrap it in a text factory</td>
 <td><code>StringForElementArgumentAnalyzer.cs</code></td>
 </tr>
+<tr>
+<td><code>REACTOR_DYM_006</code></td>
+<td>Warning</td>
+<td>Constant color string <code>BrushHelper</code> can't parse, so it renders gray (e.g. <code>.Background("orange")</code>, <code>.Foreground("#888")</code>, a font name under a <code>*FontFamily</code> resource key) — suggests the hex value (or <code>new FontFamily(...)</code> once that <code>ResourceBuilder.Set</code> overload exists)</td>
+<td><code>ColorStringLiteralAnalyzer.cs</code></td>
+</tr>
 </tbody>
 </table>
 <p><code>REACTOR_HOOKS_002</code> and <code>_003</code> were the reserved control-flow / data-flow slots
