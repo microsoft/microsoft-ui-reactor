@@ -339,7 +339,7 @@ internal sealed class GridSplitterPage : Component
 
     private static Element Pane(string label) =>
         Border(TextBlock(label).Center())
-            .Background("AliceBlue")
+            .Background("#F0F8FF")
             .CornerRadius(8);
 }
 
@@ -426,7 +426,7 @@ internal sealed class HeaderedContentPage : Component
                     VStack(6,
                         TextBlock("1 Microsoft Way"),
                         TextBlock("Redmond, WA 98052")))
-                    .Background("AliceBlue").CornerRadius(8).Margin(0))
+                    .Background("#F0F8FF").CornerRadius(8).Margin(0))
                 .Width(360));
 }
 
@@ -484,7 +484,7 @@ internal sealed class TabbedCommandBarPage : Component
             "A ribbon-style NavigationView whose tabs are TabbedCommandBarItem (a CommandBar) objects in MenuItems — a WinUI control subtree the prop/event wrapper can't express declaratively, so the tabs are built once through the imperative Setters escape hatch (legitimate here: it's controls, not data). The document body is the declarative content slot.",
             (TabbedCommandBar(
                 content: Border(TextBlock("Document body — pick a ribbon tab above.").Center())
-                    .Background("AliceBlue").CornerRadius(8).Height(150))
+                    .Background("#F0F8FF").CornerRadius(8).Height(150))
                 .Set(BuildTabs))
                 .Height(260));
 

@@ -25,8 +25,8 @@ public sealed class SourceMapElementSlotTests
     [Fact]
     public void ShallowEquals_IgnoresCallSite()
     {
-        var a = TextBlock("same") with { CallSite = new SourceLocation("A.cs", 1) };
-        var b = TextBlock("same") with { CallSite = new SourceLocation("B.cs", 999) };
+        var a = TextBlock("same") with { CallSite = new SourceLocation("A.cs", 1, 0) };
+        var b = TextBlock("same") with { CallSite = new SourceLocation("B.cs", 999, 0) };
 
         Assert.True(Element.ShallowEquals(a, b));
     }
@@ -37,8 +37,8 @@ public sealed class SourceMapElementSlotTests
         // Guards the test above from passing for the wrong reason: if
         // ShallowEquals had degenerated into "always true", the CallSite test
         // would look green while proving nothing.
-        var a = TextBlock("one") with { CallSite = new SourceLocation("A.cs", 1) };
-        var b = TextBlock("two") with { CallSite = new SourceLocation("A.cs", 1) };
+        var a = TextBlock("one") with { CallSite = new SourceLocation("A.cs", 1, 0) };
+        var b = TextBlock("two") with { CallSite = new SourceLocation("A.cs", 1, 0) };
 
         Assert.False(Element.ShallowEquals(a, b));
     }
@@ -48,8 +48,8 @@ public sealed class SourceMapElementSlotTests
     {
         // ShallowEquals is only half the child-skip gate; the reconciler
         // actually calls CanSkipUpdate, so assert the composed predicate too.
-        var a = TextBlock("same") with { CallSite = new SourceLocation("A.cs", 1) };
-        var b = TextBlock("same") with { CallSite = new SourceLocation("B.cs", 999) };
+        var a = TextBlock("same") with { CallSite = new SourceLocation("A.cs", 1, 0) };
+        var b = TextBlock("same") with { CallSite = new SourceLocation("B.cs", 999, 0) };
 
         Assert.True(Element.CanSkipUpdate(a, b));
     }
@@ -65,8 +65,8 @@ public sealed class SourceMapElementSlotTests
         // with source mapping on in a Debug run, `Assert.Equal(expected, actual)`
         // over elements would otherwise start failing purely because the two were
         // constructed on different lines.
-        var a = TextBlock("same") with { CallSite = new SourceLocation("A.cs", 1) };
-        var b = TextBlock("same") with { CallSite = new SourceLocation("B.cs", 999) };
+        var a = TextBlock("same") with { CallSite = new SourceLocation("A.cs", 1, 0) };
+        var b = TextBlock("same") with { CallSite = new SourceLocation("B.cs", 999, 0) };
 
         Assert.Equal(a, b);
         Assert.True(a == b);
@@ -79,8 +79,8 @@ public sealed class SourceMapElementSlotTests
         // Guards the test above from passing for the wrong reason: if Element
         // equality had degenerated into "always true", the CallSite test would
         // look green while proving nothing.
-        var a = TextBlock("one") with { CallSite = new SourceLocation("A.cs", 1) };
-        var b = TextBlock("two") with { CallSite = new SourceLocation("A.cs", 1) };
+        var a = TextBlock("one") with { CallSite = new SourceLocation("A.cs", 1, 0) };
+        var b = TextBlock("two") with { CallSite = new SourceLocation("A.cs", 1, 0) };
 
         Assert.NotEqual(a, b);
     }
@@ -98,8 +98,8 @@ public sealed class SourceMapElementSlotTests
         // reference equality, so building the two independently would make them
         // unequal for a reason that has nothing to do with CallSite.
         var withExtras = TextBlock("same").Grid(row: 1);
-        var a = withExtras with { CallSite = new SourceLocation("A.cs", 1) };
-        var b = withExtras with { CallSite = new SourceLocation("B.cs", 999) };
+        var a = withExtras with { CallSite = new SourceLocation("A.cs", 1, 0) };
+        var b = withExtras with { CallSite = new SourceLocation("B.cs", 999, 0) };
 
         Assert.NotNull(a.Extensions);
         Assert.NotNull(b.Extensions);
@@ -129,8 +129,8 @@ public sealed class SourceMapElementSlotTests
     {
         // Same invariant one level down, on the bucket itself, so a regression
         // is attributed to ElementExtras rather than to Element.
-        var a = new ElementExtras { CallSite = new SourceLocation("A.cs", 1) };
-        var b = new ElementExtras { CallSite = new SourceLocation("B.cs", 999) };
+        var a = new ElementExtras { CallSite = new SourceLocation("A.cs", 1, 0) };
+        var b = new ElementExtras { CallSite = new SourceLocation("B.cs", 999, 0) };
 
         Assert.Equal(a, b);
         Assert.Equal(a.GetHashCode(), b.GetHashCode());
@@ -147,7 +147,7 @@ public sealed class SourceMapElementSlotTests
         // on, factory-built elements are stamped while an expected value built
         // with `new TextBlockElement(...)` is not.
         var bare = TextBlock("same");
-        var stamped = TextBlock("same") with { CallSite = new SourceLocation("A.cs", 1) };
+        var stamped = TextBlock("same") with { CallSite = new SourceLocation("A.cs", 1, 0) };
 
         Assert.Null(bare.Extensions);
         Assert.NotNull(stamped.Extensions);
@@ -161,7 +161,7 @@ public sealed class SourceMapElementSlotTests
         // Pins that the bare-vs-stamped path still detects a real difference,
         // so the test above cannot pass by equality collapsing to "always true".
         var bare = TextBlock("one");
-        var stamped = TextBlock("two") with { CallSite = new SourceLocation("A.cs", 1) };
+        var stamped = TextBlock("two") with { CallSite = new SourceLocation("A.cs", 1, 0) };
 
         Assert.NotEqual(bare, stamped);
     }
@@ -173,7 +173,7 @@ public sealed class SourceMapElementSlotTests
         // behavioral extra must NOT be treated as equivalent to no bucket just
         // because the other side is bare.
         var bare = TextBlock("same");
-        var withRealExtra = TextBlock("same").Grid(row: 1) with { CallSite = new SourceLocation("A.cs", 1) };
+        var withRealExtra = TextBlock("same").Grid(row: 1) with { CallSite = new SourceLocation("A.cs", 1, 0) };
 
         Assert.NotEqual(bare, withRealExtra);
     }
@@ -185,10 +185,10 @@ public sealed class SourceMapElementSlotTests
     {
         // Fluent modifiers are all `with` expressions, so this is what makes
         // .Margin(8).Bold() preserve the stamp without any per-modifier work.
-        var stamped = TextBlock("hi") with { CallSite = new SourceLocation("A.cs", 7) };
+        var stamped = TextBlock("hi") with { CallSite = new SourceLocation("A.cs", 7, 0) };
         var modified = stamped.Margin(8).Bold();
 
-        Assert.Equal(new SourceLocation("A.cs", 7), modified.CallSite);
+        Assert.Equal(new SourceLocation("A.cs", 7, 0), modified.CallSite);
     }
 
     [Fact]
@@ -210,19 +210,19 @@ public sealed class SourceMapElementSlotTests
         // when CI=true) rewrites Windows paths to '/'-separated ones, so a
         // Path.GetFileName-based implementation would return the whole string on
         // a CI-built binary.
-        Assert.Equal(expected, new SourceLocation(path, line).ToShortString());
+        Assert.Equal(expected, new SourceLocation(path, line, 0).ToShortString());
     }
 
     [Fact]
     public void ToString_IsFullPathColonLine()
     {
-        Assert.Equal(@"C:\src\MainPage.cs:34", new SourceLocation(@"C:\src\MainPage.cs", 34).ToString());
+        Assert.Equal(@"C:\src\MainPage.cs:34", new SourceLocation(@"C:\src\MainPage.cs", 34, 0).ToString());
     }
 
     [Fact]
     public void ToShortString_EmptyPathFallsBackToLineNumber()
     {
-        Assert.Equal("34", new SourceLocation("", 34).ToShortString());
+        Assert.Equal("34", new SourceLocation("", 34, 0).ToShortString());
     }
 
     // ── Behavioral-extras predicate (guards the ElementFactory fast paths) ──
@@ -236,7 +236,7 @@ public sealed class SourceMapElementSlotTests
         // keyed-memo cache (ElementFactory.cs) and safe component adoption. Those
         // gates exist to exclude BEHAVIOR that resolution/adoption would drop; a
         // source location carries none.
-        var stamped = TextBlock("hi") with { CallSite = new SourceLocation("A.cs", 1) };
+        var stamped = TextBlock("hi") with { CallSite = new SourceLocation("A.cs", 1, 0) };
 
         Assert.NotNull(stamped.Extensions);          // the bucket really is materialized
         Assert.False(Element.HasBehavioralExtras(stamped));
@@ -260,7 +260,7 @@ public sealed class SourceMapElementSlotTests
         // A stamped element that ALSO carries behavior must still be excluded —
         // the stamp must not mask the behavioral extra.
         var both = (TextBlock("hi").ConnectedAnimation("hero"))
-            with { CallSite = new SourceLocation("A.cs", 1) };
+            with { CallSite = new SourceLocation("A.cs", 1, 0) };
 
         Assert.True(Element.HasBehavioralExtras(both));
     }
@@ -282,7 +282,7 @@ public sealed class SourceMapElementSlotTests
         // non-null" bucket breaks record equality against a never-stamped
         // element. Adding CallSite to IsEmpty is what keeps that true here.
         var bare = TextBlock("hi");
-        var stamped = bare with { CallSite = new SourceLocation("A.cs", 7) };
+        var stamped = bare with { CallSite = new SourceLocation("A.cs", 7, 0) };
         var cleared = stamped with { CallSite = null };
 
         Assert.NotNull(stamped.Extensions);

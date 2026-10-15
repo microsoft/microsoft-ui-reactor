@@ -52,7 +52,7 @@
 
   <!-- Implemented group -->
   <rect class="group" x="20" y="200" width="1080" height="160" rx="8"/>
-  <text class="group-label" x="40" y="222">Implemented — spec 010 (per-element file:line attribution)</text>
+  <text class="group-label" x="40" y="222">Implemented — spec 010 (per-element file:line:column attribution)</text>
 
   <rect class="box-accent" x="40" y="250" width="180" height="56" rx="6"/>
   <text class="label" x="130" y="273" text-anchor="middle">User source</text>
@@ -64,7 +64,7 @@
 
   <rect class="box-accent" x="480" y="250" width="200" height="56" rx="6"/>
   <text class="label" x="580" y="273" text-anchor="middle">Element.CallSite</text>
-  <text class="sub" x="580" y="291" text-anchor="middle">(MyView.cs, 42)</text>
+  <text class="sub" x="580" y="291" text-anchor="middle">(MyView.cs, 42, 16)</text>
 
   <rect class="box-accent" x="710" y="250" width="200" height="56" rx="6"/>
   <text class="label" x="810" y="273" text-anchor="middle">ReactorState</text>

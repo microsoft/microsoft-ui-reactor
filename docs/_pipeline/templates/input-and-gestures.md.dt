@@ -410,7 +410,7 @@ If a parent needs to see the press before children consume it, drop
 down to `.Set(c => c.AddHandler(PointerPressedEvent, handler,
 handledEventsToo: true))` — there is no handled-too overload on the
 `.On*` modifiers themselves. The
-[caveat above](#ai:caveat) goes into the routing detail.
+[caveat above](#the-move-on-confirmation-pattern) goes into the routing detail.
 
 ### Using `.OnKeyDown` for accelerator chords
 

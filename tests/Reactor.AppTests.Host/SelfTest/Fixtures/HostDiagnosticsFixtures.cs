@@ -357,8 +357,8 @@ internal static class HostDiagnosticsFixtures
             using var host = H.CreateHost();
             try
             {
-                var a = new SourceLocation("RemountA.cs", 111);
-                var b = new SourceLocation("RemountBbbbbbbb.cs", 222222);
+                var a = new SourceLocation("RemountA.cs", 111, 0);
+                var b = new SourceLocation("RemountBbbbbbbb.cs", 222222, 0);
                 var root = new Probe();
                 host.Mount(root, a);
                 await host.WaitForIdleAsync();
@@ -407,6 +407,10 @@ internal static class HostDiagnosticsFixtures
                 H.Check("HostDiagRace_NoTornSites", bad == 0, $"torn={bad} of {reads}");
                 H.Check("HostDiagRace_HostAndSiteAlwaysPresent", missing == 0, $"missing host or site in {missing} of {reads}");
                 H.Check("HostDiagRace_FinalSite", InfoFor(host)?.MountSite == a);
+                // Mounting the active instance again keeps the root, but the site follows the call.
+                host.Mount(root, b);
+                H.Check("HostDiagRace_SameInstanceRemountUpdatesSite", InfoFor(host)?.MountSite == b,
+                    $"site={InfoFor(host)?.MountSite?.ToShortString() ?? "null"}");
             }
             finally
             {
@@ -437,7 +441,7 @@ internal static class HostDiagnosticsFixtures
                 // An unrelated root-mount scope left open while the factory island loads.
                 // ComponentFactory has no call site in app code, so it must not borrow this
                 // one; the sentinel being still unclaimed afterwards is what proves it.
-                sentinel = ReactorSourceMap.EnterRootMountSite("Sentinel.cs", 123);
+                sentinel = ReactorSourceMap.EnterRootMountSite("Sentinel.cs", 123, 0);
                 H.SetContent(new StackPanel { Children = { island, factoryIsland } });
                 var rendered = await Harness.WaitFor(
                     () => island.Content is not null && factoryIsland.Content is not null, maxPasses: 40, perPassMs: 10);
@@ -463,9 +467,16 @@ internal static class HostDiagnosticsFixtures
                 H.Check("HostDiagIsland_MountSite",
                     info.MountSite?.LineNumber == mountLine,
                     $"site={info.MountSite?.ToShortString() ?? "null"} expected line {mountLine}");
+                // Mounting the active instance again keeps the root, but the site follows the call.
+                island.Mount(root); var againLine = Line();
+                var againSite = InfoFor(island)?.MountSite;
+                H.Check("HostDiagIsland_SameInstanceRemountUpdatesSite",
+                    againSite?.LineNumber == againLine && againLine != mountLine,
+                    $"site={againSite?.ToShortString() ?? "null"} expected line {againLine}");
 #else
                 _ = mountLine;
                 H.Skip("HostDiagIsland_MountSite", SkipReason);
+                H.Skip("HostDiagIsland_SameInstanceRemountUpdatesSite", SkipReason);
 #endif
 
                 var factoryInfo = InfoFor(factoryIsland);
@@ -546,15 +557,15 @@ internal static class HostDiagnosticsFixtures
                 var remounted = ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.ReactorWindow, win));
                 H.Check("HostDiagWin_RemountedRoot", remounted?.RootComponentName == ExpectedName<IslandRoot>());
 
-                // A render-function remount on top of a component root: ReactorHost keeps
-                // rendering the component (pre-existing behaviour), so the snapshot must keep
-                // describing the component — its type AND its mount site — not the ignored
-                // render function.
-                win.Mount(static _ => TextBlock("hostdiag-ignored-render"));
+                // A render-function remount on top of a component root replaces it (issue
+                // #1326: the component root is retired, and no longer keeps rendering), so the
+                // snapshot describes the render function — its name AND its mount site.
+                win.Mount(static _ => TextBlock("hostdiag-render-remount")); var renderLine = Line();
                 await win.Host.WaitForIdleAsync();
                 var afterRender = ReactorDiagnostics.GetHosts().FirstOrDefault(i => ReferenceEquals(i.ReactorWindow, win));
-                H.Check("HostDiagWin_IgnoredRenderRemountKeepsComponentRoot",
-                    afterRender?.RootComponentName == ExpectedName<IslandRoot>() && afterRender?.RootRenderFunctionName is null);
+                H.Check("HostDiagWin_RenderRemountReplacesComponentRoot",
+                    afterRender?.RootComponentName is null && afterRender?.RootRenderFunctionName is not null,
+                    $"component={afterRender?.RootComponentName ?? "null"} render={afterRender?.RootRenderFunctionName ?? "null"}");
 
 #if REACTOR_SOURCEMAP
                 H.Check("HostDiagWin_OpenWindowSite",
@@ -565,14 +576,14 @@ internal static class HostDiagnosticsFixtures
                 H.Check("HostDiagWin_RemountSite",
                     remounted?.MountSite?.LineNumber == remountLine,
                     $"site={remounted?.MountSite?.ToShortString() ?? "null"} expected line {remountLine}");
-                H.Check("HostDiagWin_IgnoredRenderRemountKeepsComponentSite",
-                    afterRender?.MountSite?.LineNumber == remountLine,
-                    $"site={afterRender?.MountSite?.ToShortString() ?? "null"} expected line {remountLine}");
+                H.Check("HostDiagWin_RenderRemountReportsItsSite",
+                    afterRender?.MountSite?.LineNumber == renderLine,
+                    $"site={afterRender?.MountSite?.ToShortString() ?? "null"} expected line {renderLine}");
 #else
-                _ = openLine; _ = remountLine;
+                _ = openLine; _ = remountLine; _ = renderLine;
                 H.Skip("HostDiagWin_OpenWindowSite", SkipReason);
                 H.Skip("HostDiagWin_RemountSite", SkipReason);
-                H.Skip("HostDiagWin_IgnoredRenderRemountKeepsComponentSite", SkipReason);
+                H.Skip("HostDiagWin_RenderRemountReportsItsSite", SkipReason);
 #endif
             }
             finally

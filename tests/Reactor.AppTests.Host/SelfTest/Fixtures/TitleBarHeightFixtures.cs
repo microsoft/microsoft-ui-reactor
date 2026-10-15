@@ -104,23 +104,27 @@ internal static class TitleBarHeightFixtures
 
     private static async Task CloseAndSettle(params ReactorWindow?[] windows)
     {
-        foreach (var win in windows.Where(w => w is not null))
+        // A native failure reported asynchronously after Close() returns is handled by
+        // the guard (issue #1345); synchronous throws are caught per window below.
+        await AsyncTeardownGuard.CloseAndSettleAsync("SelfTest.TitleBarHeight.CloseAndSettle", () =>
         {
-            // Best-effort teardown, matching the house pattern in
-            // Phase4WindowingFixtures: a window may already be closing,
-            // disposed, or mid-native-teardown (the WinUI TitleBar control
-            // throws teardown-reentry COMExceptions — issue #537). Anything
-            // escaping here would replace a real assertion result with a
-            // teardown error. Reported to the diagnostic sink rather than
-            // Console, which would interleave with the TAP stream.
-            try { win!.Close(); }
-            catch (Exception ex)
+            foreach (var win in windows.Where(w => w is not null))
             {
-                DiagnosticLog.SwallowedError(
-                    LogCategory.Hosting, "SelfTest.TitleBarHeight.CloseAndSettle", ex);
+                // Best-effort teardown, matching the house pattern in
+                // Phase4WindowingFixtures: a window may already be closing,
+                // disposed, or mid-native-teardown (the WinUI TitleBar control
+                // throws teardown-reentry COMExceptions — issue #537). Anything
+                // escaping here would replace a real assertion result with a
+                // teardown error. Reported to the diagnostic sink rather than
+                // Console, which would interleave with the TAP stream.
+                try { win!.Close(); }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.SwallowedError(
+                        LogCategory.Hosting, "SelfTest.TitleBarHeight.CloseAndSettle", ex);
+                }
             }
-        }
-        await Task.Delay(100);
+        }, settleMs: 100);
     }
 
     private static void Report(string label, ReactorWindow win, Microsoft.UI.Xaml.Controls.TitleBar? bar) =>

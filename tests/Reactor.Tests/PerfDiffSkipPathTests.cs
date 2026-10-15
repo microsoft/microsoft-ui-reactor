@@ -616,9 +616,20 @@ public class PerfDiffSkipPathTests
 
     [Theory]
     [InlineData("red", 255, 255, 0, 0)]
+    [InlineData("green", 255, 0, 128, 0)]
+    [InlineData("blue", 255, 0, 0, 255)]
+    [InlineData("white", 255, 255, 255, 255)]
+    [InlineData("black", 255, 0, 0, 0)]
+    [InlineData("gray", 255, 128, 128, 128)]
+    [InlineData("grey", 255, 128, 128, 128)]
+    [InlineData("lightgray", 255, 211, 211, 211)]
+    [InlineData("lightgrey", 255, 211, 211, 211)]
     [InlineData("transparent", 0, 0, 0, 0)]
     [InlineData("#FF8800", 255, 255, 0x88, 0)]
     [InlineData("#8000FF00", 0x80, 0, 255, 0)]
+    // Unrecognized input falls back to gray — the behaviour REACTOR_DYM_006 warns about.
+    [InlineData("orange", 255, 128, 128, 128)]
+    [InlineData("#888", 255, 128, 128, 128)]
     public void ParseColor_Resolves_Named_And_Hex(string input, int a, int r, int g, int b)
     {
         var color = BrushHelper.ParseColor(input);

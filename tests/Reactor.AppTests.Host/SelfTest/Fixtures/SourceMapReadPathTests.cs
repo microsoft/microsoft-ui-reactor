@@ -42,7 +42,7 @@ internal static class SourceMapReadPathTests
     private const string SkipReason =
         "assembly built without REACTOR_SOURCEMAP (Release) - no interceptors compiled in, so there is no call site to read";
 
-    private static readonly SourceLocation HandStamp = new(@"C:\fixture\HandStamped.cs", 4242);
+    private static readonly SourceLocation HandStamp = new(@"C:\fixture\HandStamped.cs", 4242, 0);
 
     /// <summary>
     /// Flag ON: a bare TextBlock — no callbacks, no key, no reference modifiers,

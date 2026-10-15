@@ -10,6 +10,7 @@ using Microsoft.UI.Reactor.Cli.Check;
 using Microsoft.UI.Reactor.Cli.Check.Rules;
 using Microsoft.UI.Reactor.Cli.Check.Suggesters;
 using Microsoft.UI.Reactor.Tests.CheckCommandTests;
+using Microsoft.UI.Reactor.Tests.CheckCommandTests.Rules;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
@@ -166,5 +167,34 @@ namespace App { using static Microsoft.UI.Reactor.Factories; static class C { st
 
         var ctx = new SuggesterContext(comp, diag, pick, receiver, FactoryIndex.Build(comp));
         return new SymbolSuggester().Suggest(ctx);
+    }
+
+    // ── REACTOR_DYM_006 (ColorStringLiteralAnalyzer) <-> ColorStringLiteralRule ──
+    //
+    // The analyzer's code-fix replacement and the rule's `→ try:` text must name the same rewrite.
+    // Driven end-to-end: the real analyzer reports, its diagnostic is fed to the rule.
+
+    [Theory]
+    // `expected` is the source text the IDE code fix writes in place of the flagged argument (the
+    // code-fix round-trips in ColorStringLiteralAnalyzerTests pin that side); the rule must suggest it.
+    [InlineData(@"TextBlock(""hi"").Foreground(""#888"")", false, @"""#888888""")]
+    [InlineData(@"TextBlock(""hi"").Background(""ff00ff"")", false, @"""#ff00ff""")]
+    [InlineData(@"BrushHelper.Parse(""orange"")", false, @"""#FFA500""")]
+    [InlineData(@"new ResourceBuilder().Set(""ButtonBackground"", ""Wheat"")", false, @"""#F5DEB3""")]
+    [InlineData(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", ""Consolas"")", true, @"new Microsoft.UI.Xaml.Media.FontFamily(""Consolas"")")]
+    // A named argument must be renamed to bind to the FontFamily overload.
+    [InlineData(@"new ResourceBuilder().Set(key: ""ContentControlThemeFontFamily"", color: ""Consolas"")", true, @"fontFamily: new Microsoft.UI.Xaml.Media.FontFamily(""Consolas"")")]
+    // Backslashes and quotes are escaped as a regular C# literal, whatever form the source used.
+    [InlineData(@"new ResourceBuilder().Set(""ContentControlThemeFontFamily"", @""Assets\Fonts\Mono.ttf#Mono """"x"""""")", true, @"new Microsoft.UI.Xaml.Media.FontFamily(""Assets\\Fonts\\Mono.ttf#Mono \""x\"""")")]
+    public void Color_string_analyzer_replacement_matches_cli_rule(string expression, bool fontFamilyOverload, string expected)
+    {
+        var (diagnostics, c) = ColorStringLiteralRuleTests.AnalyzeRaw(expression, fontFamilyOverload);
+        var d = Assert.Single(diagnostics);
+        Assert.False(string.IsNullOrEmpty(d.Properties[ColorStringLiteralAnalyzer.ReplacementProperty]));
+
+        var s = ColorStringLiteralRuleTests.RunRule(ColorStringLiteralRuleTests.ToCheckDiag(d), c);
+        Assert.NotNull(s);
+        Assert.Equal("ColorStringLiteralRule", s!.SuggesterName);
+        Assert.Equal(expected, s.Text);
     }
 }

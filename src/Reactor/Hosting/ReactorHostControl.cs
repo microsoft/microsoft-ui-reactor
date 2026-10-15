@@ -58,6 +58,14 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     private global::Windows.UI.ViewManagement.UISettings? _uiSettings;
 
     private Component? _rootComponent;
+    // The root's ReactorEventSource.ComponentRendered bookkeeping (id, first render).
+    // Replaced (not reset) when the root is retired, so a render already in progress keeps
+    // reporting as the root it started with (see _renderingRootDiagnostics).
+    private Microsoft.UI.Reactor.Core.Diagnostics.RootRenderDiagnostics _rootDiagnostics = new();
+    // The root and its diagnostics as of the current Render()'s start: app code in the root's
+    // Render() can Mount() a replacement, and the attempt in progress is still the old root's.
+    private Microsoft.UI.Reactor.Core.Diagnostics.RootRenderDiagnostics? _renderingRootDiagnostics;
+    private Component? _renderingRoot;
     private Func<RenderContext, Element>? _rootRenderFunc;
     private RenderContext? _funcContext;
 
@@ -276,6 +284,171 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     private bool AnyOverlayFlagOn => ReactorFeatureFlags.HighlightReconcileChanges;
 
     /// <summary>
+    /// The root's Render() threw: report the render (as a throwing child component's is)
+    /// and map its id to the error panel that now stands in for the root's content.
+    /// </summary>
+    private void ShowRootRenderError(Exception ex, bool hotReloadRender, string? componentName, double elapsedMilliseconds)
+    {
+        TraceRootRendered(hotReloadRender, elapsedMilliseconds);
+        ShowErrorFallback(ex, RenderErrorSource.RootRender, componentName);
+    }
+
+    /// <summary>ComponentRendered for the root; must run before Reconcile consumes ForceFullRenderPending.</summary>
+    private void TraceRootRendered(bool hotReloadRender, double elapsedMilliseconds)
+        => (_renderingRootDiagnostics ?? _rootDiagnostics).TraceRendered(
+            _renderingRoot is null ? nameof(FuncElement) : Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_renderingRoot, element: null),
+            hotReloadRender, _reconciler.ForceFullRenderPending, elapsedMilliseconds);
+
+    // True when a re-entrant Mount replaced the root this pass is rendering (RetireRoot
+    // swaps the diagnostics instance the pass snapshotted).
+    private bool RootReplacedDuringPass
+        => _renderingRootDiagnostics is { } rendering && !ReferenceEquals(rendering, _rootDiagnostics);
+
+    // Set by RetireRoot while the previous root's content is still shown; cleared once the
+    // replacement renders content, or when it renders nothing and the old tree is released.
+    private bool _releaseReplacedTreeOnNullRender;
+
+    /// <summary>
+    /// A replacement root's render returned null: nothing reconciles the previous root's tree
+    /// away, so release it here (its components unmount and their cleanups run) and show no
+    /// content. A root that merely re-renders to null keeps its content, as before.
+    /// </summary>
+    private void ReleaseReplacedTree()
+    {
+        // The teardown finishes even when one of the old tree's cleanups throws: every
+        // cleanup runs and failures are collected, then routed like disposal's (issue
+        // #1291) once the release is done: reported to the RenderErrorHandler as Cleanup,
+        // or with none the first is rethrown.
+        var cleanupFailures = new List<Exception>();
+        if (_currentTree is not null)
+        {
+            using (_reconciler.IsolateUnmountCleanupFailures(cleanupFailures.Add))
+                _reconciler.Reconcile(_currentTree, null, _currentControl, _requestRenderAction ??= RequestRender);
+        }
+        // Cleared only once the old tree is released: if the release itself failed, the
+        // outer render-error path still sees a pending replacement and releases it there.
+        _releaseReplacedTreeOnNullRender = false;
+        // Installs "no content" through the same path as a render-error outcome that shows
+        // nothing: clears the content, moves the theme listener and window hooks off it.
+        SetErrorContent(null, null, replacesTree: true);
+        _rootDiagnostics.TrackContent(null);
+        if (cleanupFailures.Count > 0)
+        {
+            global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? failure;
+            using (RenderErrorDispatch.EnterPropagationScope())
+                failure = RenderErrorDispatch.ReportCleanupFailures(
+                    cleanupFailures, () => EffectiveRenderErrorHandler, isHostLevel: false, _logger);
+            failure?.Throw();
+        }
+    }
+
+    // Roots replaced re-entrantly during a render pass, retired by the next pass (or Dispose).
+    private List<(Component? Component, RenderContext? FuncContext)>? _deferredRetirements;
+
+    /// <summary>
+    /// Runs a retired root's cleanups (draining all of them; failures routed like disposal's)
+    /// and detaches its contexts from this host. Returns the failure to rethrow, if any.
+    /// </summary>
+    private global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? RetireContexts(
+        Component? component, RenderContext? funcContext)
+    {
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? failure = null;
+        Func<RenderErrorHandler?> cleanupHandler = () => EffectiveRenderErrorHandler;
+        try
+        {
+            using (RenderErrorDispatch.EnterPropagationScope())
+            {
+                RenderErrorDispatch.RunCleanups(component?.Context, cleanupHandler, component?.GetType().Name,
+                    isHostLevel: true, _logger, ref failure, drain: true);
+                RenderErrorDispatch.RunCleanups(funcContext, cleanupHandler, componentName: null,
+                    isHostLevel: true, _logger, ref failure, drain: true);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            // Defensive: the cleanups drain, so only an unexpected dispatch failure lands here.
+            failure ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+        }
+        // Drop (not just clean up) the component's hooks: the caller owns the instance and
+        // may mount it again later, which must then be a fresh mount. Both contexts also
+        // let go of this host, so a retained instance or hook setter neither pins it nor
+        // requests renders of the replacement root.
+        component?.Context.DetachFromHost();
+        funcContext?.DetachFromHost();
+        return failure;
+    }
+
+    /// <summary>
+    /// Retires the roots a previous pass replaced re-entrantly. Runs at the start of the next
+    /// pass, inside its error handling: with no <c>RenderErrorHandler</c> a cleanup failure
+    /// surfaces as that pass's render error (as <c>ReleaseReplacedTree</c>'s does).
+    /// </summary>
+    private void RetireDeferredRoots()
+    {
+        if (_deferredRetirements is not { } deferred) return;
+        _deferredRetirements = null;
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? first = null;
+        foreach (var (component, funcContext) in deferred)
+        {
+            // Every queued root is retired; only the first failure is kept.
+            var failure = RetireContexts(component, funcContext);
+            first ??= failure;
+        }
+        first?.Throw();
+    }
+
+    /// <summary>
+    /// Retires the current root before another is mounted: its effects' cleanups run (as on
+    /// Dispose), whichever kind it was, and both root slots are cleared so the render loop
+    /// (which checks the component root first) only sees the new one.
+    ///
+    /// <para>Cleanup failures are routed like disposal's (issue #1291): with a
+    /// <c>RenderErrorHandler</c> each is reported; with none, the first escapes. Every
+    /// cleanup runs either way. Either way retirement completes first (a failed cleanup is not left
+    /// armed, and the hook state and root slots are cleared), and the failure to rethrow
+    /// is returned so the caller can install the new root before throwing it.</para>
+    ///
+    /// <para>Called re-entrantly from the pass that is rendering the root (its Render() or
+    /// an effect mounted the replacement), the cleanups and detach are deferred to the next
+    /// pass: see <see cref="RetireDeferredRoots"/>.</para>
+    /// </summary>
+    private global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? RetireRoot()
+    {
+        var outgoingComponent = _rootComponent;
+        var outgoingFuncContext = _funcContext;
+        // The slots are cleared before any outgoing cleanup runs: a cleanup can call Mount,
+        // and the root it mounts must not be retired or overwritten by this call's caller
+        // (see _mountGeneration).
+        _rootComponent = null;
+        _rootRenderFunc = null;
+        _funcContext = null;
+        // A fresh instance rather than Reset(): a render of the old root may still be in
+        // progress (it called Mount), and it reports as the old root.
+        _rootDiagnostics.Forget();
+        _rootDiagnostics = new();
+        // The old root's content stays on screen until the replacement renders; if that
+        // render produces nothing, the old tree must still be released (see Render).
+        _releaseReplacedTreeOnNullRender = _currentTree is not null || _currentControl is not null;
+        if (outgoingComponent is null && outgoingFuncContext is null)
+            return null;
+        if (_isRendering)
+        {
+            // Re-entrant: app code in this pass (the root's Render() or an effect) called
+            // Mount. That code is still running against the outgoing contexts, so retiring
+            // them now would let later hooks repopulate them and an effect's returned cleanup
+            // land after the hook list was dropped. Retire them once the pass has exited.
+            (_deferredRetirements ??= new()).Add((outgoingComponent, outgoingFuncContext));
+            return null;
+        }
+        return RetireContexts(outgoingComponent, outgoingFuncContext);
+    }
+
+    // Bumped by every Mount. A mount whose retirement ran a cleanup that mounted another
+    // root sees it changed and leaves that newer root in place (as a cleanup-mounted root
+    // also wins when the retirement is deferred to the next pass).
+    private int _mountGeneration;
+
+    /// <summary>
     /// Mount a Component instance directly. Starts the render loop immediately.
     /// </summary>
     public void Mount(Component component)
@@ -287,21 +460,41 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     public void Mount(Func<RenderContext, Element> renderFunc)
     {
         _activationError = null;
-        _rootComponent = null;
-        _rootRenderFunc = renderFunc;
-        _funcContext = new RenderContext();
-        _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(Diagnostics.ReactorSourceMap.TakeRootMountSite());
+        var mountSite = Diagnostics.ReactorSourceMap.TakeRootMountSite();
+        int generation = ++_mountGeneration;
+        var retireFailure = RetireRoot();
+        if (generation == _mountGeneration)
+        {
+            _rootRenderFunc = renderFunc;
+            _funcContext = new RenderContext();
+            _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
+        }
         RequestRender();
+        retireFailure?.Throw();
     }
 
     private void MountRoot(Component component, SourceLocation? mountSite)
     {
         _activationError = null;
-        _rootRenderFunc = null;
-        _funcContext = null;
-        _rootComponent = component;
-        _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
+        int generation = ++_mountGeneration;
+        // Re-mounting the active instance keeps it (and its effects) alive: retiring it
+        // would run its cleanups and then reuse the same context, whose unchanged effects
+        // would never be scheduled again.
+        if (ReferenceEquals(component, _rootComponent))
+        {
+            // Still an explicit mount: the diagnostics site follows the latest call.
+            _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
+            RequestRender();
+            return;
+        }
+        var retireFailure = RetireRoot();
+        if (generation == _mountGeneration)
+        {
+            _rootComponent = component;
+            _mountSite.Value = Diagnostics.ReactorSourceMap.KeepIfEnabled(mountSite);
+        }
         RequestRender();
+        retireFailure?.Throw();
     }
 
     // Set when Loaded-time root creation failed (issue #1291); cleared by Mount.
@@ -501,6 +694,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             }
             finally
             {
+                _renderingRoot = null;
+                _renderingRootDiagnostics = null;
                 // Reset the gate so future setState calls can enqueue — also when a render
                 // error the app chose to propagate (RenderError.Propagate) escapes Render().
                 Interlocked.Exchange(ref _renderPending, 0);
@@ -549,6 +744,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     private void Render()
     {
         _isRendering = true;
+        // This pass is the hook-order retry if the previous one scheduled it; the marker is
+        // dropped when the pass ends even if it never reconciled (a null or failed root).
+        bool hotReloadRetryPass = _reconciler.HotReloadRetryPending;
         // Atomic capture-and-clear gives us at-most-once recovery per
         // UpdateApplication call:
         //
@@ -591,13 +789,20 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         // additional reset steps, throttling) only need editing here.
         void RecoverFromHookOrder(HookOrderException ex, RenderContext ctx, string mode)
         {
+            double renderMs = _phaseSw.Elapsed.TotalMilliseconds;
             // This path returns without reconciling, so nothing downstream will consume
             // or retire what the aborted render claimed (issue #1262).
             Controls.Validation.ValidationRenderScope.AbandonPendingClaims();
+            // The aborted attempt still ran Render(); report it (the retry reports itself).
+            TraceRootRendered(hotReloadRender: true, renderMs);
             _logger?.LogWarning(ex,
                 "Hot reload: hook order/type changed — resetting {Mode} state and re-rendering",
                 mode);
             ctx.ResetForHotReload();
+            // The retry runs outside a hot-reload pass; keep ComponentRendered attributing
+            // it to hot reload: the root here, and its children via the reconciler.
+            _rootDiagnostics.MarkHotReloadRetry();
+            _reconciler.HotReloadRetryPending = true;
             RequestRender();
         }
 
@@ -608,6 +813,18 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         Component? effectsRoot = null;
         try
         {
+            if (_deferredRetirements is not null)
+            {
+                failurePhase = RenderErrorSource.Cleanup;
+                RetireDeferredRoots();
+                failurePhase = RenderErrorSource.Reconcile;
+            }
+            // Snapshot the root this pass renders, after deferred retirement (whose cleanups
+            // may Mount) and before any of its code runs (which may Mount again; RenderLoop
+            // clears the snapshot when the pass ends).
+            _renderingRoot = _rootComponent;
+            _renderingRootDiagnostics = _rootDiagnostics;
+
             Element? newTree = null;
 
             _phaseSw.Restart();
@@ -631,12 +848,21 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                 }
                 catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
                 {
+                    // Sampled before logging: this is the render's time.
+                    double renderMs = _phaseSw.Elapsed.TotalMilliseconds;
                     _logger?.LogError(ex, "Component Render() threw");
                     // Before the fallback: the app's handler may call Propagate(), which throws.
                     Reconciler.EmitRenderError(
                         Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(renderingRoot, element: null), ex);
-                    ShowErrorFallback(ex, RenderErrorSource.RootRender, renderingRoot.GetType().Name);
+                    ShowRootRenderError(ex, hotReloadRender, renderingRoot.GetType().Name, renderMs);
                     return;
+                }
+                // A propagation the app requested (RenderError.Propagate()) leaves without a
+                // fallback; the root's Render() still ran, so report it on the way out.
+                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled)
+                {
+                    TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
+                    throw;
                 }
             }
             else if (_rootRenderFunc is not null && _funcContext is not null)
@@ -656,11 +882,19 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                 }
                 catch (Exception ex) when (!RenderErrorDispatch.IsPropagating(ex))
                 {
+                    // Sampled before logging: this is the render's time.
+                    double renderMs = _phaseSw.Elapsed.TotalMilliseconds;
                     _logger?.LogError(ex, "Function component threw");
                     // Before the fallback: the app's handler may call Propagate(), which throws.
                     Reconciler.EmitRenderError(nameof(FuncElement), ex);
-                    ShowErrorFallback(ex, RenderErrorSource.RootRender);
+                    ShowRootRenderError(ex, hotReloadRender, componentName: null, renderMs);
                     return;
+                }
+                // See the component branch: report an app-requested propagation on the way out.
+                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled)
+                {
+                    TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
+                    throw;
                 }
             }
             else if (_activationError is not null)
@@ -674,7 +908,27 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
             double treeBuildMs = _phaseSw.Elapsed.TotalMilliseconds;
 
-            if (newTree is null) return;
+            if (newTree is null)
+            {
+                // A root whose Render() returned null still rendered; there is just no
+                // content to reconcile. (No root at all is not a render.)
+                if (_rootComponent is not null || _rootRenderFunc is not null)
+                    TraceRootRendered(hotReloadRender, treeBuildMs);
+                if (_releaseReplacedTreeOnNullRender)
+                    ReleaseReplacedTree();
+                // Commit the render like any other: the root's effects still run, and a
+                // failure among them is routed as an effect failure by the outer catch.
+                failurePhase = RenderErrorSource.Effects;
+                // Captured like the non-null path's, so a failure is named after this root.
+                effectsRoot = _rootComponent;
+                if (effectsRoot is not null)
+                    effectsRoot.Context.FlushEffects();
+                else if (_funcContext is not null)
+                    _funcContext.FlushEffects();
+                failurePhase = RenderErrorSource.Reconcile;
+                return;
+            }
+            TraceRootRendered(hotReloadRender, treeBuildMs);
 
             _phaseSw.Restart();
 
@@ -743,6 +997,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
             _currentControl = newControl;
             _currentTree = newTree;
+            // A root replaced during this pass (it called Mount) still committed its own tree;
+            // that tree is the replacement's to release if its first render produces nothing.
+            _releaseReplacedTreeOnNullRender = RootReplacedDuringPass;
+            _rootDiagnostics.TrackContent(newControl);
 
             // Spec 033 §6 — Backdrop modifier on the root tree is a no-op for
             // ReactorHostControl, which doesn't own its hosting Window. We
@@ -852,6 +1110,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         finally
         {
             _isRendering = false;
+            if (hotReloadRetryPass) _reconciler.HotReloadRetryPending = false;
         }
     }
 
@@ -917,7 +1176,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         // Replacing or releasing the old tree must finish even when one of its cleanups
         // throws: the host forgets that tree afterwards, so anything left registered would
         // stay alive. Every cleanup runs; failures are collected and reported below.
-        var teardownErrors = new RenderErrorDispatch.TeardownErrors(_logger);
+        // A swapped-out root's tree follows the disposal contract instead: its cleanup
+        // failures are collected and offered to the handler once the outcome is installed.
+        var releasedTreeFailures = _releaseReplacedTreeOnNullRender ? new List<Exception>() : null;
+        var teardownErrors = new RenderErrorDispatch.TeardownErrors(_logger, releasedTreeFailures);
         var (content, tree, propagate, replacesTree) = RenderErrorDispatch.BuildHostFallback(
             EffectiveRenderErrorHandler, error, _logger,
             install: element =>
@@ -931,15 +1193,28 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                 using (_reconciler.IsolateUnmountCleanupFailures(teardownErrors.Add))
                     _reconciler.Reconcile(_currentTree, null, _currentControl, rerender);
             },
-            currentIsAppFallback: RenderErrorDispatch.IsAppFallback(_currentTree));
+            // The previous root's tree is still shown after a root swap; like an app fallback,
+            // it must be released rather than abandoned when the replacement fails.
+            currentIsAppFallback: RenderErrorDispatch.IsAppFallback(_currentTree) || _releaseReplacedTreeOnNullRender);
         SetErrorContent(content, tree, replacesTree);
+        // ComponentRendered bookkeeping; see ReactorHost.ShowErrorFallback.
+        if (tree is null)
+            _reconciler.ForgetComponentDiagnostics();
+        _rootDiagnostics.TrackContent(_currentControl);
         teardownErrors.RethrowPropagated();
+        if (releasedTreeFailures is not null)
+            RenderErrorDispatch.ReportReleasedTreeCleanupFailures(
+                releasedTreeFailures, () => EffectiveRenderErrorHandler, _logger)?.Throw();
         if (propagate)
             RenderErrorDispatch.RaiseUnhandled(ex);
     }
 
     private void SetErrorContent(UIElement? errorPanel, Element? errorTree, bool replacesTree)
     {
+        // Whatever was shown has been replaced; nothing is left for ReleaseReplacedTree,
+        // unless this is the outgoing attempt of a root replaced during this pass: the
+        // content it leaves behind is the replacement's to release.
+        _releaseReplacedTreeOnNullRender = RootReplacedDuringPass && (errorPanel is not null || errorTree is not null);
         if (_overlayWiring is not null && _overlayWiring.TryShowErrorInWrapper(errorPanel))
         {
             // shared overlay wrapper took it
@@ -991,6 +1266,18 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         Func<RenderErrorHandler?> cleanupHandler = () => EffectiveRenderErrorHandler;
         using (RenderErrorDispatch.EnterPropagationScope())
         {
+            // Roots replaced re-entrantly by a pass that never got a successor.
+            if (_deferredRetirements is { } deferred)
+            {
+                _deferredRetirements = null;
+                foreach (var (component, funcContext) in deferred)
+                {
+                    // Cleans up and detaches, so a retained old root or setter does not pin
+                    // this disposed host; the first failure escapes once disposal is done.
+                    var failure = RetireContexts(component, funcContext);
+                    pendingPropagation ??= failure;
+                }
+            }
             RenderErrorDispatch.RunCleanups(_rootComponent?.Context, cleanupHandler, _rootComponent?.GetType().Name,
                 isHostLevel: true, _logger, ref pendingPropagation);
             RenderErrorDispatch.RunCleanups(_funcContext, cleanupHandler, componentName: null,
@@ -1000,6 +1287,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             var reconcilerPropagation = _reconciler.DisposeCollectingPropagation();
             pendingPropagation ??= reconcilerPropagation;
         }
+        _rootDiagnostics.Reset();
         _rootComponent = null;
         _rootRenderFunc = null;
         _funcContext = null;

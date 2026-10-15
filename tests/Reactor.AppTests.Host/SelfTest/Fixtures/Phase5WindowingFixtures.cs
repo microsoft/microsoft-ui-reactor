@@ -641,8 +641,14 @@ internal static class Phase5WindowingFixtures
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT { public int Left, Top, Right, Bottom; }
 
+        public static nint GetWindowLongPtr(nint hWnd, int nIndex)
+            => IntPtr.Size == 8 ? GetWindowLongPtr64(hWnd, nIndex) : GetWindowLong32(hWnd, nIndex);
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
+        private static extern int GetWindowLong32(nint hWnd, int nIndex);
+
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
-        public static extern nint GetWindowLongPtr(nint hWnd, int nIndex);
+        private static extern nint GetWindowLongPtr64(nint hWnd, int nIndex);
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
