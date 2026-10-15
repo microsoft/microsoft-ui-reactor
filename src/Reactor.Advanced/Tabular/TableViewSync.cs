@@ -1,6 +1,4 @@
-using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Xaml;
@@ -12,8 +10,9 @@ using SelectionChangedEventArgs = Microsoft.UI.Xaml.Controls.SelectionChangedEve
 namespace Microsoft.UI.Reactor.Advanced.Tabular;
 
 /// <summary>
-/// V1 handler that mounts, updates, and unmounts <see cref="TableViewElement"/> instances
-/// onto the WinUI <see cref="WinUITableView"/>.
+/// The hand-written half of the <see cref="TableViewElement"/> descriptor: the snapshot-diffed
+/// rows, the columns, the Reactor-rendered templates, controlled selection and the events. The
+/// generated half (see <c>TableViewElement.Descriptor.cs</c>) writes the scalar properties.
 /// </summary>
 /// <remarks>
 /// Columns are reconciled by position: a column whose record type is unchanged is updated
@@ -21,21 +20,28 @@ namespace Microsoft.UI.Reactor.Advanced.Tabular;
 /// change, insertion or removal rebuilds the native column list. Template cells are
 /// Reactor subtrees hosted by <see cref="ReactorDataTemplate"/>.
 /// </remarks>
-public sealed partial class TableViewHandler : IElementHandler<TableViewElement, WinUITableView>
+internal static partial class TableViewSync
 {
-    private static readonly ConditionalWeakTable<WinUITableView, TableState> s_states = new();
+    // Per-table state lives on the native control, not in a table keyed by its managed
+    // wrapper: CsWinRT may hand back a fresh wrapper for the same control once the first one
+    // is collected, and a wrapper-keyed lookup would then miss.
+    private static readonly DependencyProperty StateProperty =
+        DependencyProperty.RegisterAttached(
+            "ReactorTableViewState",
+            typeof(TableState),
+            typeof(TableViewSync),
+            new PropertyMetadata(null));
 
-    /// <inheritdoc />
-    public WinUITableView Mount(MountContext ctx, TableViewElement el)
+    private static TableState? GetState(WinUITableView table) => table.GetValue(StateProperty) as TableState;
+
+    public static void Mount(MountContext ctx, WinUITableView table, TableViewElement el)
     {
         ExperimentalControlResources.EnsureMerged<TabularControlsResources>();
 
-        var table = new WinUITableView();
-        Reconciler.SetElementTag(table, el);
         var state = new TableState(ctx.Reconciler, ctx.RequestRerender);
-        s_states.AddOrUpdate(table, state);
+        table.SetValue(StateProperty, state);
 
-        ApplyProperties(table, state, null, el);
+        ApplyTemplates(table, state, el);
         SyncColumns(table, state, el.Columns);
         SyncItems(table, state, el);
 
@@ -90,54 +96,41 @@ public sealed partial class TableViewHandler : IElementHandler<TableViewElement,
             void OnLoaded(object sender, RoutedEventArgs e)
             {
                 table.Loaded -= OnLoaded;
-                if (Reconciler.GetElementTag(table) is TableViewElement current)
-                    ApplySelection(table, current.SelectedIndex);
+                if (GetState(table) is not null && Reconciler.GetElementTag(table) is TableViewElement current)
+                    ApplySelection(table, current);
             }
             table.Loaded += OnLoaded;
         }
-        ctx.ApplySetters(el.Setters, table);
-        return table;
     }
 
-    /// <inheritdoc />
-    public void Update(UpdateContext ctx, TableViewElement oldEl, TableViewElement newEl, WinUITableView table)
+    public static void Update(UpdateContext ctx, WinUITableView table, TableViewElement oldEl, TableViewElement newEl)
     {
-        Reconciler.SetElementTag(table, newEl);
-        if (!s_states.TryGetValue(table, out var state))
+        if (GetState(table) is not { } state)
             return;
 
-        ApplyProperties(table, state, oldEl, newEl);
+        // Retag before the writes below: a controlled Select() raises SelectionChanged
+        // synchronously, and its echo guard compares against the element current at that moment
+        // (the adapter would only retag after this entry returns).
+        Reconciler.SetElementTag(table, newEl);
+        ApplyTemplates(table, state, newEl);
         SyncColumns(table, state, newEl.Columns);
         SyncItems(table, state, newEl);
         if (newEl.SelectedIndex != oldEl.SelectedIndex || !ReferenceEquals(oldEl.ItemsSource, newEl.ItemsSource))
-            ApplySelection(table, newEl.SelectedIndex);
-        ctx.ApplySetters(newEl.Setters, table);
+            ApplySelection(table, newEl);
     }
 
-    /// <inheritdoc />
-    public void Unmount(UnmountContext ctx, WinUITableView table)
+    public static void Unmount(in UnmountContext ctx, WinUITableView table)
     {
-        if (!s_states.TryGetValue(table, out var state)) return;
+        if (GetState(table) is not { } state) return;
         foreach (var column in state.Columns)
             column.UnmountTemplates();
         state.Empty?.UnmountAll();
         state.GroupHeader?.UnmountAll();
-        s_states.Remove(table);
+        table.ClearValue(StateProperty);
     }
 
-    private static void ApplyProperties(WinUITableView t, TableState state, TableViewElement? o, TableViewElement n)
+    private static void ApplyTemplates(WinUITableView t, TableState state, TableViewElement n)
     {
-        var mount = o is null;
-        PropertyDiff.Write(t, static () => WinUITableView.SelectionModeProperty, o?.SelectionMode, n.SelectionMode, mount, v => t.SelectionMode = v!.Value);
-        PropertyDiff.Write(t, static () => WinUITableView.DensityProperty, o?.Density, n.Density, mount, v => t.Density = v!.Value);
-        PropertyDiff.Write(t, static () => WinUITableView.GridLinesVisibilityProperty, o?.GridLinesVisibility, n.GridLinesVisibility, mount, v => t.GridLinesVisibility = v!.Value);
-        PropertyDiff.Write(t, static () => WinUITableView.HeadersVisibilityProperty, o?.HeadersVisibility, n.HeadersVisibility, mount, v => t.HeadersVisibility = v!.Value);
-        PropertyDiff.Write(t, static () => WinUITableView.CanUserSortColumnsProperty, o?.CanUserSortColumns, n.CanUserSortColumns, mount, v => t.CanUserSortColumns = v!.Value);
-        PropertyDiff.Write(t, static () => WinUITableView.CanUserResizeColumnsProperty, o?.CanUserResizeColumns, n.CanUserResizeColumns, mount, v => t.CanUserResizeColumns = v!.Value);
-        PropertyDiff.Write(t, static () => WinUITableView.IsReadOnlyProperty, o is null ? null : EffectiveTableReadOnly(o), EffectiveTableReadOnly(n), mount, v => t.IsReadOnly = v!.Value);
-        PropertyDiff.Write(t, static () => WinUITableView.RowBackgroundProperty, o?.RowBackground, n.RowBackground, mount, v => t.RowBackground = v);
-        PropertyDiff.Write(t, static () => WinUITableView.AlternatingRowBackgroundProperty, o?.AlternatingRowBackground, n.AlternatingRowBackground, mount, v => t.AlternatingRowBackground = v);
-
         // EmptyContent: a template whose content ignores the item.
         if (n.EmptyContent is { } empty)
         {
@@ -183,7 +176,7 @@ public sealed partial class TableViewHandler : IElementHandler<TableViewElement,
     // The control defaults IsReadOnly to true, which would silently swallow the editor a
     // TextColumn onEdit callback or an EditingCell asks for; unless the author says otherwise,
     // a table with such a column is editable.
-    private static bool? EffectiveTableReadOnly(TableViewElement el)
+    internal static bool? EffectiveTableReadOnly(TableViewElement el)
     {
         if (el.IsReadOnly is not null) return el.IsReadOnly;
         foreach (var column in el.Columns)
@@ -193,6 +186,7 @@ public sealed partial class TableViewHandler : IElementHandler<TableViewElement,
         }
         return null;
     }
+
     private static void SyncColumns(WinUITableView table, TableState state, IReadOnlyList<TableColumn> columns)
     {
         var old = state.Columns;
@@ -295,10 +289,14 @@ public sealed partial class TableViewHandler : IElementHandler<TableViewElement,
         }
     }
 
-    private static void ApplySelection(WinUITableView table, int? selectedIndex)
+    private static void ApplySelection(WinUITableView table, TableViewElement el)
     {
-        if (selectedIndex is not int index) return;
+        if (el.SelectedIndex is not int index) return;
         if (table.SelectedIndex == index) return;
+        // The generated SelectionMode write runs after this hand-written entry; a render that
+        // enables selection and selects a row at once must not select under the old mode.
+        if (el.SelectionMode is { } mode && table.SelectionMode != mode)
+            table.SelectionMode = mode;
         if (index < 0) table.DeselectAll();
         else table.Select(index);
     }

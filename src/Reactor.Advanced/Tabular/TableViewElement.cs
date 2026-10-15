@@ -20,7 +20,20 @@ namespace Microsoft.UI.Reactor.Advanced.Tabular;
 /// is written only when it changes between renders, so state the user changes
 /// interactively (column widths, the active sort) survives re-renders.
 /// </remarks>
-public sealed record TableViewElement : Element
+// Spec 058 descriptor-only generation. The generator maps the record's simple control
+// properties by name — SelectionMode, Density, GridLinesVisibility, HeadersVisibility,
+// CanUserSortColumns, CanUserResizeColumns, RowBackground, AlternatingRowBackground — and,
+// with ClearValueOnUnset, clears a property's local value when it returns to null. Everything
+// else is hand-written in TableViewElement.Descriptor.cs (Customize): the snapshot-diffed
+// rows, columns, Reactor-rendered templates, the effective read-only default, controlled
+// selection, and every event (one control holds a single event-payload box, so generated and
+// hand-coded events cannot be mixed, and these need custom logic).
+[global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUITableView), ClearValueOnUnset = true,
+    Exclude = new[] { "SelectionChanged", "Sorting", "Sorted", "BeginningEdit", "CellEditEnding" })]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("ItemsSource")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Columns")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsReadOnly")]
+public sealed partial record TableViewElement : Element
 {
     /// <summary>
     /// The rows. Pass an immutable snapshot — an array or list of records held in component

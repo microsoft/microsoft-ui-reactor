@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Xaml;
@@ -29,7 +28,15 @@ namespace Microsoft.UI.Reactor.Advanced.Charts;
 /// </remarks>
 public sealed class ChartHandler : IElementHandler<ChartElement, WinUIChart>
 {
-    private static readonly ConditionalWeakTable<WinUIChart, ChartState> s_states = new();
+    // State lives on the native control: a lookup keyed by the managed wrapper misses once
+    // CsWinRT hands back a fresh wrapper for the same control (nothing else keeps a chart's
+    // first wrapper alive).
+    private static readonly DependencyProperty StateProperty =
+        DependencyProperty.RegisterAttached(
+            "ReactorChartState",
+            typeof(ChartState),
+            typeof(ChartHandler),
+            new PropertyMetadata(null));
 
     /// <inheritdoc />
     public WinUIChart Mount(MountContext ctx, ChartElement el)
@@ -39,7 +46,7 @@ public sealed class ChartHandler : IElementHandler<ChartElement, WinUIChart>
         var chart = new WinUIChart();
         Reconciler.SetElementTag(chart, el);
         var state = new ChartState();
-        s_states.AddOrUpdate(chart, state);
+        chart.SetValue(StateProperty, state);
 
         ApplyProperties(chart, null, el);
         Sync(chart, state, el.Series);
@@ -51,7 +58,7 @@ public sealed class ChartHandler : IElementHandler<ChartElement, WinUIChart>
     public void Update(UpdateContext ctx, ChartElement oldEl, ChartElement newEl, WinUIChart chart)
     {
         Reconciler.SetElementTag(chart, newEl);
-        if (!s_states.TryGetValue(chart, out var state))
+        if (chart.GetValue(StateProperty) is not ChartState state)
             return;
 
         ApplyProperties(chart, oldEl, newEl);
@@ -60,7 +67,7 @@ public sealed class ChartHandler : IElementHandler<ChartElement, WinUIChart>
     }
 
     /// <inheritdoc />
-    public void Unmount(UnmountContext ctx, WinUIChart chart) => s_states.Remove(chart);
+    public void Unmount(UnmountContext ctx, WinUIChart chart) => chart.ClearValue(StateProperty);
 
     private static void ApplyProperties(WinUIChart c, ChartElement? o, ChartElement n)
     {

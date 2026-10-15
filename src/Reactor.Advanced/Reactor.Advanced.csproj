@@ -72,6 +72,15 @@
   <ItemGroup>
     <ProjectReference Include="..\Reactor\Reactor.csproj"
                       GlobalPropertiesToRemove="PublishTrimmed;PublishAot;RuntimeIdentifier;SelfContained" />
+    <!-- Spec 058 wrapper generator: TableViewElement's simple control properties are
+         generated ([GenerateReactorDescriptor]); the rest is a Customize hook. The
+         attributes assembly ships inside the Microsoft.UI.Reactor package (see
+         Reactor.csproj), so it is referenced privately here rather than as a dependency. -->
+    <ProjectReference Include="..\Reactor.Wrappers.Generator\Reactor.Wrappers.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\Reactor.Wrappers.Abstractions\Reactor.Wrappers.Abstractions.csproj"
+                      PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
