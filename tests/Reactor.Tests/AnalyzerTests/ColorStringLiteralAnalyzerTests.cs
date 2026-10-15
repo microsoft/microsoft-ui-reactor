@@ -308,6 +308,17 @@ namespace App
             .BorderBrush((on ? c : ""red"") ?? {|REACTOR_DYM_006:""navy""|});");
 
     [Fact]
+    public Task Silent_through_a_user_defined_conversion() =>
+        // `token ?? "orange"` is a ColorToken; its operator decides the string BrushHelper receives,
+        // so "orange" is never parsed. Positive control: once the coalesce is over strings, it is.
+        RunAsync(@"        sealed class ColorToken
+        {
+            public static implicit operator ColorToken(string s) => new ColorToken();
+            public static implicit operator string(ColorToken t) => ""red"";
+        }
+        static object M(ColorToken token) => BrushHelper.Parse(token ?? ""orange"") ?? BrushHelper.Parse((string)token ?? {|REACTOR_DYM_006:""orange""|});");
+
+    [Fact]
     public Task Coalesce_fallback_is_dead_when_the_other_branch_throws() =>
         // Execution either yields "red" or throws, so "orange" is unreachable.
         RunAsync(@"        static object M(string c, bool on) => TextBlock(""hi"")

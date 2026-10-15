@@ -208,6 +208,10 @@ public sealed class ColorStringLiteralAnalyzer : DiagnosticAnalyzer
         }
         if (colorArg is null || colorArg.ArgumentKind != ArgumentKind.Explicit)
             return;
+        // Through a user-defined conversion (e.g. a `ColorToken` with `implicit operator string`) the
+        // source strings never reach BrushHelper — the operator's result does — so the syntax says nothing.
+        if (colorArg.Value is IConversionOperation { Conversion.IsUserDefined: true })
+            return;
 
         string? resourceKey = null;
         if (targets.ResourceSet is not null
