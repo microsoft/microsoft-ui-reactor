@@ -290,7 +290,9 @@ jobs:
               # follow the repo's central pin in that case only; a stable pin
               # keeps the template's own default, exactly as before.
               . ../tools/WindowsAppRuntimeId.ps1
-              $sdk = Get-PinnedWindowsAppSdkVersion -PropsPath ../Directory.Build.props
+              # Absolute path: the helper uses [IO.File]::ReadAllText, which resolves
+              # relative paths against the process CWD, not Push-Location's.
+              $sdk = Get-PinnedWindowsAppSdkVersion -PropsPath (Resolve-Path ../Directory.Build.props).ProviderPath
               $wasdkArgs = if ($sdk -like '*-*') { @('--wasdk-version', $sdk) } else { @() }
               Write-Host "WindowsAppSDKVersion=$sdk -> template args: $($wasdkArgs -join ' ')"
               dotnet new reactor -n TestApp --reactor-version 0.0.0-local @wasdkArgs
