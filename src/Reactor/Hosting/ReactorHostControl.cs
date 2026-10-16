@@ -74,6 +74,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
     private Element? _currentTree;
     private UIElement? _currentControl;
+    // The root that produced _currentControl (diagnostics); see RenderedRoot.
+    private RenderedRoot _renderedRoot;
     private int _renderPending;      // 0 or 1 — Interlocked for thread-safe access
     private volatile bool _isRendering;       // only touched on UI thread
     private volatile bool _needsRerender;     // only touched on UI thread
@@ -230,8 +232,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         // already-constructed controls.
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
+        _reconciler.DiagnosticsRootResolver = ResolveDiagnosticsRoot;
         _reconciler.RenderErrorHandlerProvider = () => EffectiveRenderErrorHandler;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        _reconciler.OwningDispatcher = _dispatcherQueue;
         // A standalone ReactorHostControl has no ReactorApp bootstrap, so nothing else
         // sets ReactorApp.UIDispatcher. Cross-thread setState — including the re-render
         // that UseValidationContext schedules when a background async validator raises
@@ -264,6 +268,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         else
             _dispatcherQueue.TryEnqueue(() => { if (!_disposed) _reconciler.TagComponentBoundaries(); });
     }
+
+    Reconciler? Core.Diagnostics.IReactorDiagnosticHost.DiagnosticReconciler => _disposed ? null : _reconciler;
 
     Core.Diagnostics.ReactorHostInfo? Core.Diagnostics.IReactorDiagnosticHost.CaptureDiagnosticInfo()
     {
@@ -391,6 +397,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         foreach (var (component, funcContext) in deferred)
         {
             // Every queued root is retired; only the first failure is kept.
+            // The retired root may be the one diagnostics still describes (it called Mount mid-pass).
+            if (_renderedRoot.SameRootAs(new RenderedRoot(component, funcContext, null)))
+                _renderedRoot = default;
             var failure = RetireContexts(component, funcContext);
             first ??= failure;
         }
@@ -440,6 +449,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             (_deferredRetirements ??= new()).Add((outgoingComponent, outgoingFuncContext));
             return null;
         }
+        // Retired now: its hooks are dropped, so diagnostics no longer describes or writes the
+        // root whose control may still be on screen until the replacement renders.
+        _renderedRoot = default;
         return RetireContexts(outgoingComponent, outgoingFuncContext);
     }
 
@@ -824,6 +836,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             // clears the snapshot when the pass ends).
             _renderingRoot = _rootComponent;
             _renderingRootDiagnostics = _rootDiagnostics;
+            // Same snapshot for component inspection: Render() can Mount() a replacement, and the
+            // tree this pass commits is still the original root's.
+            var passRoot = new RenderedRoot(_rootComponent, _funcContext, _rootRenderFunc);
 
             Element? newTree = null;
 
@@ -997,6 +1012,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
             _currentControl = newControl;
             _currentTree = newTree;
+            _renderedRoot = passRoot;
             // A root replaced during this pass (it called Mount) still committed its own tree;
             // that tree is the replacement's to release if its first render produces nothing.
             _releaseReplacedTreeOnNullRender = RootReplacedDuringPass;
@@ -1225,6 +1241,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         }
         _currentControl = errorPanel;
         _currentTree = errorTree;
+        // A fallback is shown, not the root's output, so no root is described from it.
+        _renderedRoot = default;
         // See ReactorHost.SetErrorContent: when the handler's outcome replaced the tree, the
         // theme listener follows the new content, or is detached when there is none.
         if (replacesTree)
@@ -1293,6 +1311,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         _funcContext = null;
         _currentTree = null;
         _currentControl = null;
+        _renderedRoot = default;
         try { _overlayWiring?.Dispose(); } catch { /* best effort */ }
         _overlayWiring = null;
 

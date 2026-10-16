@@ -96,23 +96,10 @@ internal static class ReferenceOverlay
     /// Maps a reference-entry slot to a human-readable label. Modifier-level edges
     /// have stable, named slots (<see cref="ReferenceSlots"/>); descriptor and
     /// imperative-binding edges allocate ascending slots that carry no author name,
-    /// so they fall back to a kind-tagged generic label.
+    /// so they fall back to a kind-tagged generic label. Shared with
+    /// <c>ReactorDiagnostics.GetReferenceEdges</c> so the two surfaces agree.
     /// </summary>
-    internal static string LabelForSlot(int slot) => slot switch
-    {
-        ReferenceSlots.ModifierRef_LabeledBy => "LabeledBy",
-        ReferenceSlots.ModifierRef_DescribedBy => "DescribedBy",
-        ReferenceSlots.ModifierRef_FlowsTo => "FlowsTo",
-        ReferenceSlots.ModifierRef_FlowsFrom => "FlowsFrom",
-        ReferenceSlots.ModifierRef_XYFocusUp => "XYFocusUp",
-        ReferenceSlots.ModifierRef_XYFocusDown => "XYFocusDown",
-        ReferenceSlots.ModifierRef_XYFocusLeft => "XYFocusLeft",
-        ReferenceSlots.ModifierRef_XYFocusRight => "XYFocusRight",
-        ReferenceSlots.ModifierRef_ToolTipPlacementTarget => "ToolTipPlacementTarget",
-        >= 200_000 => $"modifier#{slot}",
-        >= 100_000 => $"binding#{slot - 100_000}",
-        _ => $"reference#{slot}",
-    };
+    internal static string LabelForSlot(int slot) => ReferenceSlots.Label(slot);
 
     internal static List<ReferenceDiagnostic> BuildDiagnostics(List<ReferenceEdgeInfo> edges)
     {

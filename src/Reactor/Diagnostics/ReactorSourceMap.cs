@@ -166,6 +166,26 @@ public static partial class ReactorSourceMap
     private const int MaxDecoratorDepth = 64;
 
     /// <summary>
+    /// The decorator chain from <paramref name="element"/> (outermost) to its innermost target,
+    /// for diagnostics that must see every level: a decorator mounts its target and then applies
+    /// its own modifiers to the same control, so outer levels win. Stops at a repeated element
+    /// (a cyclic resolver) or after <see cref="MaxDecoratorDepth"/> steps. On-demand only — it
+    /// allocates, unlike <see cref="UnwrapDecorators"/>.
+    /// </summary>
+    internal static IReadOnlyList<Element> DecoratorChain(Element element)
+    {
+        var chain = new List<Element> { element };
+        for (var depth = 0; depth < MaxDecoratorDepth; depth++)
+        {
+            if (DecoratorTarget(chain[^1]) is not { } next) break;
+            foreach (var seen in chain)
+                if (ReferenceEquals(seen, next)) return chain;
+            chain.Add(next);
+        }
+        return chain;
+    }
+
+    /// <summary>
     /// The wrapped element for a target-wrapping decorator, or null for anything else.
     ///
     /// <para>Globally registered decorator handlers can opt in through
