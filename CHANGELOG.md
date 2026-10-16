@@ -291,6 +291,21 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Virtualized list rows now see their ancestors' `Context`** (issue #1386). Rows of
+  `LazyVStack` / `LazyHStack`, `ItemsRepeater<T>`, `ItemsView<T>`, `ListView` / `GridView`
+  (typed and untyped) and `TreeView<T>` are built by WinUI during layout, after the
+  reconciler has finished walking the tree, so `UseContext` in a row returned the
+  context's default value, and hooks built on it misbehaved: child-mode
+  `UseNavigation<T>()` threw "found no ancestor NavigationHost", `UseIntl()` ignored a
+  `LocaleProvider`, and `UseResource` ignored an enclosing `Pending`. A re-render of the
+  parent temporarily fixed the visible rows, but rows that scrolled in afterwards were
+  wrong again. Each list now saves its ancestors' provided values when it is reconciled
+  and restores them while building a row, so rows see the nearest `.Provide(...)` on first
+  display and while scrolling. Rows that previously read a default will now read the
+  provided value. Lists built by a custom handler on `ElementFactory<T>` are covered too;
+  a custom handler that builds rows itself from `ContainerContentChanging` is not.
+  Removing the only `.Provide(...)` above a reference-stable consumer now also re-renders
+  that consumer with the default, which it previously missed.
 - **Replacing a host's root no longer leaves the old root running** (issue #1326).
   `ReactorHost.Mount(...)` and `ReactorHostControl.Mount(...)` now retire the
   outgoing root before installing the new one: its effect cleanups run, and a
