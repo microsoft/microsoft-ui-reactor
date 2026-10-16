@@ -353,11 +353,33 @@ class LightweightStylingExample : Component
 
 ![Lightweight styling](images/styling/lightweight-styling.png)
 
-`ResourceBuilder` supports `.Set(key, ThemeRef)` for theme-reactive
-overrides, `.Set(key, string)` for hex colors, `.Set(key, double)` for
-numeric values, and `.Set(key, CornerRadius)` for corner radius.
+`ResourceBuilder.Set` has explicit overloads for `ThemeRef`, `Brush`,
+color strings, `double`, `CornerRadius`, `Thickness`, `FontWeight`,
+`FontFamily`, `bool`, and `GridLength`. Use `Thickness` for padding
+or border thickness, and `FontWeight` / `FontFamily` for typography resources.
+Literal values retain their types; `ThemeRef` overrides re-resolve on theme changes.
+
+`ResourceBuilder.SetColor(key, color)` stores a literal `Color`, not a brush.
+Use it only for Color-typed resources; brush-typed keys such as `ButtonBackground`
+need the string or `Brush` overload of `Set`. The string overload
+still parses a hex or named color into a brush; it does not store arbitrary
+text. Integer literals continue to select the `double` overload, so pass the
+value type expected by the WinUI resource key rather than relying on conversion.
 Overrides cascade to child elements through WinUI's resource dictionary
 hierarchy.
+
+Font-family resource keys require a `FontFamily` object, not a string:
+
+```csharp
+class FontFamilyResourceExample : Component
+{
+    public override Element Render() =>
+        Button("Code").Resources(r => r
+            .Set("ContentControlThemeFontFamily", new Microsoft.UI.Xaml.Media.FontFamily("Consolas")));
+}
+```
+
+Calling `Set(key, "Consolas")` would select the color-string overload instead.
 
 ## Custom resource access
 
