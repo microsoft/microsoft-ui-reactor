@@ -126,6 +126,16 @@ internal sealed class ContextCapture
 {
     internal (ContextBase Context, object? Value)[] Entries { get; private set; } = [];
 
+    /// <summary>
+    /// Type of the element whose handler registered this capture, or null when it was
+    /// registered outside element dispatch (then any element sharing the control may
+    /// refresh it). Decorators and transparent wrappers that share the host's control
+    /// are a different type, so they do not overwrite the snapshot at the wrong depth.
+    /// </summary>
+    internal Type? OwnerType { get; init; }
+
+    internal bool IsOwnedBy(Element element) => OwnerType is null || OwnerType == element.GetType();
+
     internal void Refresh(ContextScope scope)
     {
         if (!scope.Matches(Entries))

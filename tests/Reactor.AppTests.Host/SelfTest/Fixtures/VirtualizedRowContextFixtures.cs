@@ -243,6 +243,37 @@ internal static class VirtualizedRowContextFixtures
         }
     }
 
+    // The whole decorator is reference-stable and skips at the element level (Border's
+    // single child goes through Update's skip arm). Its skip must not re-snapshot the
+    // shared control at the decorator's depth, which would drop the list's own provider.
+    internal sealed class LazyVStack_OwnProviderUnderSkippedDecorator(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var stableFlyout = Flyout(HalfConsumerList().Provide(RowCtx, "own"), TextBlock("fly"));
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (tick, setTick) = ctx.UseState(0);
+                return VStack(
+                    Button("VCtxDecoSkipBump", () => setTick(tick + 1)),
+                    TextBlock($"vctx-decoskip:{tick}"),
+                    // The Border changes each tick so it is updated, and hands the
+                    // reference-stable Flyout to Update, whose element-level skip arm runs.
+                    Border(stableFlyout).Margin(tick));
+            });
+            await Harness.Render();
+
+            H.ClickButton("VCtxDecoSkipBump");
+            await Harness.Render();
+            H.Check("VirtualizedCtx_DecoSkip_Bumped", H.FindText("vctx-decoskip:1") is not null);
+
+            await ScrollListTo(H, 150 * 30);
+            var scrolled = RowTexts(H, minIndex: 100);
+            H.Check("VirtualizedCtx_DecoSkip_RowsSeeOwnProvider", AllEndWith(scrolled, ":own"), Sample(scrolled));
+        }
+    }
+
     private sealed record NavRowProps(int Index);
 
     private sealed class NavRow : Component<NavRowProps>
@@ -293,6 +324,8 @@ internal static class VirtualizedRowContextFixtures
                     ListView<int>(items, i => i.ToString(), (i, _) => Row(i)).Height(300))
                 .Provide(RowCtx, "provided"));
             await Harness.Render();
+            // Realization can take more than one layout wave (TreeView hosts on Loaded/LayoutUpdated).
+            await Harness.WaitFor(() => RowTexts(H).Count > 0);
 
             var rows = RowTexts(H);
             H.Check("VirtualizedCtx_ListView_Rows", AllEndWith(rows, ":provided"), Sample(rows));
@@ -309,6 +342,8 @@ internal static class VirtualizedRowContextFixtures
                     GridView<int>(items, i => i.ToString(), (i, _) => Row(i)).Height(300))
                 .Provide(RowCtx, "provided"));
             await Harness.Render();
+            // Realization can take more than one layout wave (TreeView hosts on Loaded/LayoutUpdated).
+            await Harness.WaitFor(() => RowTexts(H).Count > 0);
 
             var rows = RowTexts(H);
             H.Check("VirtualizedCtx_GridView_Rows", AllEndWith(rows, ":provided"), Sample(rows));
@@ -325,6 +360,8 @@ internal static class VirtualizedRowContextFixtures
                     ListView(Enumerable.Range(0, 20).Select(Row).ToArray()).Height(300))
                 .Provide(RowCtx, "provided"));
             await Harness.Render();
+            // Realization can take more than one layout wave (TreeView hosts on Loaded/LayoutUpdated).
+            await Harness.WaitFor(() => RowTexts(H).Count > 0);
 
             var rows = RowTexts(H);
             H.Check("VirtualizedCtx_UntypedListView_Rows", AllEndWith(rows, ":provided"), Sample(rows));
@@ -340,6 +377,8 @@ internal static class VirtualizedRowContextFixtures
                     GridView(Enumerable.Range(0, 20).Select(Row).ToArray()).Height(300))
                 .Provide(RowCtx, "provided"));
             await Harness.Render();
+            // Realization can take more than one layout wave (TreeView hosts on Loaded/LayoutUpdated).
+            await Harness.WaitFor(() => RowTexts(H).Count > 0);
 
             var rows = RowTexts(H);
             H.Check("VirtualizedCtx_UntypedGridView_Rows", AllEndWith(rows, ":provided"), Sample(rows));
@@ -356,6 +395,8 @@ internal static class VirtualizedRowContextFixtures
                     ItemsView<int>(items, i => i.ToString(), (i, _) => ItemContainer(Row(i))).Height(300))
                 .Provide(RowCtx, "provided"));
             await Harness.Render();
+            // Realization can take more than one layout wave (TreeView hosts on Loaded/LayoutUpdated).
+            await Harness.WaitFor(() => RowTexts(H).Count > 0);
 
             var rows = RowTexts(H);
             H.Check("VirtualizedCtx_ItemsView_Rows", AllEndWith(rows, ":provided"), Sample(rows));
@@ -372,6 +413,8 @@ internal static class VirtualizedRowContextFixtures
                     TreeView<int>(roots, i => i.ToString(), _ => null, i => Row(i)).Height(300))
                 .Provide(RowCtx, "provided"));
             await Harness.Render();
+            // Realization can take more than one layout wave (TreeView hosts on Loaded/LayoutUpdated).
+            await Harness.WaitFor(() => RowTexts(H).Count > 0);
 
             var rows = RowTexts(H);
             H.Check("VirtualizedCtx_TreeView_Nodes", AllEndWith(rows, ":provided"), Sample(rows));

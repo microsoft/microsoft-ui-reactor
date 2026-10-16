@@ -74,8 +74,12 @@ public sealed partial class Reconciler
         bool pushedStagger = element.StaggerConfig is not null;
         if (pushedStagger)
             PushStaggerScope(element.StaggerConfig!.Delay);
+        var prevReconcilingElement = _reconcilingElement;
         try
         {
+        // The innermost element being mounted owns any virtualized-host context capture
+        // its handler registers (see CaptureContextForHost).
+        _reconcilingElement = element;
         // Publish the effective theme for the subtree — INSIDE the try so the finally
         // restores it on every exit (including an exception during child mount below).
         // Children mounted inside MountXxx and this element's own ApplyResourceOverrides
@@ -244,6 +248,7 @@ public sealed partial class Reconciler
         }
         finally
         {
+            _reconcilingElement = prevReconcilingElement;
             if (pushedStagger)
                 PopStaggerScope();
             if (ctxCount > 0)

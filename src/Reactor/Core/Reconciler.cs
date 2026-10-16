@@ -1935,6 +1935,12 @@ public sealed partial class Reconciler : IDisposable
     // never pay the attached-state read.
     private bool _hasContextCaptures;
 
+    // The innermost element currently in Mount/Update dispatch. A capture registered
+    // by a host handler records this element's type as its owner: a decorator
+    // (Flyout, MenuFlyout, …) or a transparent wrapper shares the host's control but
+    // sits at a shallower depth, so only the owner's own Update/skip may re-snapshot.
+    private Element? _reconcilingElement;
+
     private static bool MayHostContextCapture(UIElement control)
         => control is WinUI.ScrollViewer or WinUI.ItemsRepeater or WinUI.ItemsView
             or WinUI.ListViewBase or WinUI.TreeView;
@@ -1949,7 +1955,7 @@ public sealed partial class Reconciler : IDisposable
         global::System.Diagnostics.Debug.Assert(MayHostContextCapture(host),
             $"{host.GetType().Name} is not covered by MayHostContextCapture; its capture would never refresh.");
         var state = GetOrCreateReactorState(host);
-        var capture = state.ContextCapture ??= new ContextCapture();
+        var capture = state.ContextCapture ??= new ContextCapture { OwnerType = _reconcilingElement?.GetType() };
         capture.Refresh(_contextScope);
         _hasContextCaptures = true;
         return capture;
@@ -1962,20 +1968,27 @@ public sealed partial class Reconciler : IDisposable
                 ? capture
                 : null;
 
-    /// <summary>Re-snapshots a host's provider stack; a no-op for any other control.</summary>
-    internal void RefreshContextCapture(UIElement control)
-        => TryGetContextCapture(control)?.Refresh(_contextScope);
+    /// <summary>
+    /// Re-snapshots a host's provider stack when <paramref name="newEl"/> is the element that
+    /// owns the capture; a no-op for any other control or element.
+    /// </summary>
+    internal void RefreshContextCapture(UIElement control, Element newEl)
+    {
+        if (TryGetContextCapture(control) is { } capture && capture.IsOwnedBy(newEl))
+            capture.Refresh(_contextScope);
+    }
 
     /// <summary>
-    /// Skip-arm counterpart of <see cref="RefreshContextCapture(UIElement)"/>. A host whose
-    /// control is shared with a decorator (Flyout, MenuFlyout, …) is first refreshed by
-    /// the decorator's Update, before the host element's own <c>ContextValues</c> are on
-    /// the stack; when the host element then skips, this re-snapshots at its own depth so
-    /// a <c>.Provide()</c> on the list element itself is not lost.
+    /// Skip-arm counterpart of <see cref="RefreshContextCapture(UIElement, Element)"/>. The
+    /// skip arm runs before the element's own <c>ContextValues</c> are pushed, so they are
+    /// pushed here for the snapshot. A decorator sharing the host's control is not the
+    /// owner, so a skipped decorator leaves the host's snapshot (taken at the host's own
+    /// depth) untouched; if a provider above it changed, the stale check declines that
+    /// skip and the decorator's Update reaches the host element.
     /// </summary>
     internal void RefreshContextCaptureOnSkip(UIElement control, Element newEl)
     {
-        if (TryGetContextCapture(control) is not { } capture) return;
+        if (TryGetContextCapture(control) is not { } capture || !capture.IsOwnedBy(newEl)) return;
         var own = newEl.ContextValues;
         if (own is not { Count: > 0 })
         {

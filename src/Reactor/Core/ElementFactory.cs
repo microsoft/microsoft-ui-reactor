@@ -32,9 +32,21 @@ public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturi
     // when the host is skipped. A factory installed by an out-of-tree handler has
     // none attached and falls back to _ownCapture, which it takes itself at
     // construction and in UpdateInPlace — both run inside the host's Mount/Update,
-    // where the live stack is the host's.
-    ContextCapture? IContextCapturingFactory.ContextCapture { get; set; }
-    private readonly ContextCapture _ownCapture;
+    // where the live stack is the host's. Attaching a host capture drops the
+    // fallback so it cannot pin mount-time provider values for the list's lifetime.
+    private ContextCapture? _hostCapture;
+    private ContextCapture? _ownCapture;
+
+    ContextCapture? IContextCapturingFactory.ContextCapture
+    {
+        get => _hostCapture;
+        set
+        {
+            _hostCapture = value;
+            if (value is not null)
+                _ownCapture = null;
+        }
+    }
     // Optional state used when ItemsSource is the OC<ReactorRow> path
     // (spec 042). Lets GetElement translate an ItemsRepeater realized
     // index → stable key for _mountedElements lookup. Null when running
@@ -313,7 +325,7 @@ public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturi
     {
         _items = items;
         _viewBuilder = viewBuilder;
-        if (((IContextCapturingFactory)this).ContextCapture is null)
+        if (_ownCapture is not null)
             _reconciler.RefreshLiveContext(_ownCapture);
         // A new viewBuilder closure may capture different external state (UseState
         // cells, Observable subscriptions, theme, etc.) than the one that produced the
@@ -609,7 +621,7 @@ public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturi
         if (index < 0 || index >= _items.Count)
             return new TextBlock { Text = "" };
 
-        using var restoreContext = _reconciler.EnterCapturedContext(((IContextCapturingFactory)this).ContextCapture ?? _ownCapture);
+        using var restoreContext = _reconciler.EnterCapturedContext(_hostCapture ?? _ownCapture);
 
         var item = _items[index];
         var element = BuildOrCache(key, item, index, keyed);
