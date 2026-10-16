@@ -97,25 +97,6 @@
   </PropertyGroup>
 
   <!--
-    EXPERIMENTAL CHANNEL ONLY — remove together with the experimental Windows App
-    SDK versions above.
-
-    CS8305 is "this API is for evaluation purposes only" ([Experimental]). This
-    branch opts into one such API deliberately (the code-based DataTemplate
-    constructor), but that is not what trips the Release build: the XAML compiler's
-    *generated* XamlTypeInfo.g.cs references the SDK's own experimental metadata
-    providers (XamlControlsCharts/XamlControlsTabular), so every WinUI project in
-    the repo emits CS8305 from code we do not own and cannot annotate.
-
-    Demoted rather than silenced — WarningsNotAsErrors keeps the diagnostic
-    visible in build output, so a newly-introduced experimental dependency is
-    still reported; it just stops generated SDK code from breaking the build.
-  -->
-  <PropertyGroup>
-    <WarningsNotAsErrors>$(WarningsNotAsErrors);CS8305</WarningsNotAsErrors>
-  </PropertyGroup>
-
-  <!--
     Repository / project URL metadata for every packable project. NuGet.org's
     Microsoft compliance policy (https://aka.ms/Microsoft-NuGet-Compliance)
     REJECTS any Microsoft-signed package that is missing ProjectUrl — the push
