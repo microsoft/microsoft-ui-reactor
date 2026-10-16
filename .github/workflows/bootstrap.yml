@@ -281,7 +281,19 @@ jobs:
               # mur pack-local. The template's normal default may point at a
               # not-yet-published public preview while a release-prep PR is in
               # flight, so opt into the local package version explicitly here
-              dotnet new reactor -n TestApp --reactor-version 0.0.0-local
+              #
+              # The template's --wasdk-version defaults to `*` (latest STABLE).
+              # When the repo pins a prerelease Windows App SDK (e.g. the
+              # -experimental channel), that stable metapackage exact-pins a
+              # different Microsoft.WindowsAppSDK.Runtime than the 0.0.0-local
+              # Reactor package depends on, and restore fails with NU1107. So
+              # follow the repo's central pin in that case only; a stable pin
+              # keeps the template's own default, exactly as before.
+              . ../tools/WindowsAppRuntimeId.ps1
+              $sdk = Get-PinnedWindowsAppSdkVersion -PropsPath ../Directory.Build.props
+              $wasdkArgs = if ($sdk -like '*-*') { @('--wasdk-version', $sdk) } else { @() }
+              Write-Host "WindowsAppSDKVersion=$sdk -> template args: $($wasdkArgs -join ' ')"
+              dotnet new reactor -n TestApp --reactor-version 0.0.0-local @wasdkArgs
               if ($LASTEXITCODE -ne 0) { throw "dotnet new reactor exited $LASTEXITCODE" }
               if (-not (Test-Path 'TestApp/TestApp.csproj')) { throw "TestApp/TestApp.csproj not produced" }
 

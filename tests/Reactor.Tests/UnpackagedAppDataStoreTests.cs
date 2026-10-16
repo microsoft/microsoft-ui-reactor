@@ -169,6 +169,7 @@ public sealed class UnpackagedAppDataStoreTests : IDisposable
         // not roam, so UnpackagedAppDataStore uses the LocalPath surface instead. This
         // test is what stops someone "simplifying" it onto LocalSettings.
         var roamingKey = @"SOFTWARE\" + _publisher;
+        var machineLocalKey = @"SOFTWARE\Classes\Local Settings\Software\" + _publisher;
 
         // ── Positive control ──────────────────────────────────────────────────────
         // A "the key isn't there" assertion is worthless unless the same probe can be
@@ -192,18 +193,39 @@ public sealed class UnpackagedAppDataStoreTests : IDisposable
         // discarded, so a live handle cannot block Dispose's DeleteSubKeyTree and
         // undermine the no-residue guarantee.
         bool controlSeen;
+        bool controlSeenMachineLocal;
         using (var controlKey = global::Microsoft.Win32.Registry.CurrentUser
                    .OpenSubKey(roamingKey + @"\" + ControlProduct))
         {
             controlSeen = controlKey is not null
                 && (controlKey.GetValue("control") as string) == ControlValue;
         }
+        using (var localKey = global::Microsoft.Win32.Registry.CurrentUser
+                   .OpenSubKey(machineLocalKey + @"\" + ControlProduct))
+        {
+            controlSeenMachineLocal = localKey is not null
+                && (localKey.GetValue("control") as string) == ControlValue;
+        }
 
+        // EXPERIMENTAL WINDOWS APP SDK CHANNEL — the spec 063 §6 D1 trigger has FIRED.
+        //
+        // Measured on this branch's bundled runtime (Microsoft.WindowsAppSDK.Foundation
+        // 2.3.13-experimental, loaded from the test project's own bin\ — so it reflects the
+        // PINNED version, not a machine-wide install): LocalSettings now lands in the
+        // machine-local hive, and the roaming key is never created. That is case (b) below,
+        // confirmed, not a broken probe. Until the D1 follow-up is decided, accept either
+        // hive as proof the probe works — it must find the value in EXACTLY one of them —
+        // and keep asserting the property that actually matters: this store writes to
+        // neither. Revert to the roaming-only control if Reactor returns to a runtime
+        // without the WindowsAppSDK#6559 fix.
         Assert.True(
-            controlSeen,
+            controlSeen ^ controlSeenMachineLocal,
             $"""
-            Positive control failed: writing through GetForUnpackaged().LocalSettings did
-            not create HKCU\{roamingKey}\{ControlProduct}.
+            Positive control failed: writing through GetForUnpackaged().LocalSettings must
+            leave the value in EXACTLY one of HKCU\{roamingKey}\{ControlProduct} (roaming,
+            seen={controlSeen}) and HKCU\{machineLocalKey}\{ControlProduct} (machine-local,
+            seen={controlSeenMachineLocal}). Neither means the probe is broken; both means
+            the runtime wrote twice, which no known runtime does.
 
             Two possibilities, and they are distinguishable — do not guess:
 
@@ -250,6 +272,7 @@ public sealed class UnpackagedAppDataStoreTests : IDisposable
         new UnpackagedAppDataStore(_publisher, Product).Write("main", new byte[] { 1, 2, 3 });
 
         Assert.Null(global::Microsoft.Win32.Registry.CurrentUser.OpenSubKey(roamingKey + @"\" + Product));
+        Assert.Null(global::Microsoft.Win32.Registry.CurrentUser.OpenSubKey(machineLocalKey + @"\" + Product));
     }
 
     // ══════════════════════════════════════════════════════════════
