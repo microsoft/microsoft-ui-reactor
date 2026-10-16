@@ -56,10 +56,30 @@ internal sealed class ContextScope
         => _stack.Count == 0 ? [] : _stack.ToArray();
 
     /// <summary>
+    /// True when the live stack holds exactly <paramref name="snapshot"/>: same contexts,
+    /// same value instances. Lets a refresh keep the existing snapshot array instead of
+    /// allocating a new one on every reconcile of the host.
+    /// </summary>
+    internal bool Matches((ContextBase Context, object? Value)[] snapshot)
+    {
+        if (_stack.Count != snapshot.Length) return false;
+        for (int i = 0; i < _stack.Count; i++)
+        {
+            if (!ReferenceEquals(_stack[i].Context, snapshot[i].Context)
+                || !ReferenceEquals(_stack[i].Value, snapshot[i].Value))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
     /// True when the live stack is a positional prefix of <paramref name="snapshot"/>
     /// (same contexts, equal values). The traversal pushes providers along the path,
     /// so at any ancestor of the node that took the snapshot the live stack is a
-    /// prefix of it unless a provider at or above that ancestor changed.
+    /// prefix of it unless a provider at or above that ancestor changed value or was
+    /// added. A <em>removed</em> provider leaves a shorter stack that is still a prefix,
+    /// so callers must detect removal separately (see
+    /// <c>Reconciler.InProviderChangeSubtree</c>).
     /// </summary>
     internal bool IsPrefixOf((ContextBase Context, object? Value)[] snapshot)
     {
@@ -106,7 +126,18 @@ internal sealed class ContextCapture
 {
     internal (ContextBase Context, object? Value)[] Entries { get; private set; } = [];
 
-    internal void Refresh(ContextScope scope) => Entries = scope.Snapshot();
+    internal void Refresh(ContextScope scope)
+    {
+        if (!scope.Matches(Entries))
+            Entries = scope.Snapshot();
+    }
 
-    internal bool IsStale(ContextScope scope) => !scope.IsPrefixOf(Entries);
+    /// <param name="scope">The live stack at an ancestor of (or at) the host.</param>
+    /// <param name="inProviderChangeSubtree">
+    /// True while the traversal is below an element whose provided values changed this
+    /// pass. A removed provider is invisible to the prefix test, so any snapshot taken
+    /// beneath such an element has to be treated as stale.
+    /// </param>
+    internal bool IsStale(ContextScope scope, bool inProviderChangeSubtree)
+        => inProviderChangeSubtree || !scope.IsPrefixOf(Entries);
 }

@@ -126,6 +126,123 @@ internal static class VirtualizedRowContextFixtures
         }
     }
 
+    private static readonly Context<string> OuterCtx = new("outer-default");
+
+    private static LazyVStackElement<int> HalfConsumerList()
+        => LazyVStack<int>(Enumerable.Range(0, 300).ToList(), i => i.ToString(), (i, _) =>
+                i < 100 ? TextBlock($"plain{i}").Height(30) : Row(i))
+            .Height(300);
+
+    // A removed provider leaves a shorter live stack that is still a prefix of the
+    // skipped host's snapshot, so removal needs its own signal.
+    internal sealed class LazyVStack_OnlyProviderRemovedWhileSkipped(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var stableList = HalfConsumerList();
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (on, setOn) = ctx.UseState(true);
+                var body = VStack(
+                    Button("VCtxDropOnly", () => setOn(false)),
+                    TextBlock($"vctx-on:{on}"),
+                    stableList);
+                return on ? body.Provide(RowCtx, "removed") : body;
+            });
+            await Harness.Render();
+
+            H.ClickButton("VCtxDropOnly");
+            await Harness.Render();
+            H.Check("VirtualizedCtx_DropOnly_Toggled", H.FindText("vctx-on:False") is not null);
+
+            await ScrollListTo(H, 150 * 30);
+            var scrolled = RowTexts(H, minIndex: 100);
+            H.Check("VirtualizedCtx_DropOnly_RowsSeeDefault", AllEndWith(scrolled, ":default"), Sample(scrolled));
+        }
+    }
+
+    internal sealed class LazyVStack_InnerProviderRemovedWhileSkipped(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var stableList = HalfConsumerList();
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (on, setOn) = ctx.UseState(true);
+                var inner = Border(stableList);
+                return VStack(
+                        Button("VCtxDropInner", () => setOn(false)),
+                        TextBlock($"vctx-inner:{on}"),
+                        on ? inner.Provide(RowCtx, "removed") : inner)
+                    .Provide(OuterCtx, "stable");
+            });
+            await Harness.Render();
+
+            H.ClickButton("VCtxDropInner");
+            await Harness.Render();
+            H.Check("VirtualizedCtx_DropInner_Toggled", H.FindText("vctx-inner:False") is not null);
+
+            await ScrollListTo(H, 150 * 30);
+            var scrolled = RowTexts(H, minIndex: 100);
+            H.Check("VirtualizedCtx_DropInner_RowsSeeDefault", AllEndWith(scrolled, ":default"), Sample(scrolled));
+        }
+    }
+
+    // Same signal, non-virtualized: removing the LAST provider used to empty the stack,
+    // which short-circuited the reference-stable consumer check entirely.
+    internal sealed class StableConsumer_LastProviderRemoved(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var stableConsumer = Component<EagerConsumer>();
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (on, setOn) = ctx.UseState(true);
+                var body = VStack(Button("VCtxDropEager", () => setOn(false)), stableConsumer);
+                return on ? body.Provide(RowCtx, "removed") : body;
+            });
+            await Harness.Render();
+            H.Check("VirtualizedCtx_DropEager_Before", H.FindText("eager:removed") is not null);
+
+            H.ClickButton("VCtxDropEager");
+            await Harness.Render();
+            H.Check("VirtualizedCtx_DropEager_SeesDefault", H.FindText("eager:default") is not null,
+                H.FindTextContaining("eager:")?.Text ?? "<missing>");
+        }
+    }
+
+    // A decorator (Flyout) shares the host's control and refreshes its snapshot before
+    // the list element's own .Provide() is on the stack; the list then skips.
+    internal sealed class LazyVStack_OwnProviderUnderDecorator(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var stableList = HalfConsumerList().Provide(RowCtx, "own");
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (tick, setTick) = ctx.UseState(0);
+                return VStack(
+                        Button("VCtxDecoBump", () => setTick(tick + 1)),
+                        TextBlock($"vctx-deco:{tick}"),
+                        Flyout(stableList, TextBlock($"fly{tick}")))
+                    .Provide(RowCtx, "outer");
+            });
+            await Harness.Render();
+
+            H.ClickButton("VCtxDecoBump");
+            await Harness.Render();
+            H.Check("VirtualizedCtx_Deco_Bumped", H.FindText("vctx-deco:1") is not null);
+
+            await ScrollListTo(H, 150 * 30);
+            var scrolled = RowTexts(H, minIndex: 100);
+            H.Check("VirtualizedCtx_Deco_RowsSeeOwnProvider", AllEndWith(scrolled, ":own"), Sample(scrolled));
+        }
+    }
+
     private sealed record NavRowProps(int Index);
 
     private sealed class NavRow : Component<NavRowProps>
@@ -179,6 +296,53 @@ internal static class VirtualizedRowContextFixtures
 
             var rows = RowTexts(H);
             H.Check("VirtualizedCtx_ListView_Rows", AllEndWith(rows, ":provided"), Sample(rows));
+        }
+    }
+
+    internal sealed class GridView_RowsSeeProvider(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var items = Enumerable.Range(0, 50).ToList();
+            var host = H.CreateHost();
+            host.Mount(_ => VStack(
+                    GridView<int>(items, i => i.ToString(), (i, _) => Row(i)).Height(300))
+                .Provide(RowCtx, "provided"));
+            await Harness.Render();
+
+            var rows = RowTexts(H);
+            H.Check("VirtualizedCtx_GridView_Rows", AllEndWith(rows, ":provided"), Sample(rows));
+        }
+    }
+
+    // The untyped ListView/GridView handlers have their own ContainerContentChanging bodies.
+    internal sealed class UntypedListView_RowsSeeProvider(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(_ => VStack(
+                    ListView(Enumerable.Range(0, 20).Select(Row).ToArray()).Height(300))
+                .Provide(RowCtx, "provided"));
+            await Harness.Render();
+
+            var rows = RowTexts(H);
+            H.Check("VirtualizedCtx_UntypedListView_Rows", AllEndWith(rows, ":provided"), Sample(rows));
+        }
+    }
+
+    internal sealed class UntypedGridView_RowsSeeProvider(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(_ => VStack(
+                    GridView(Enumerable.Range(0, 20).Select(Row).ToArray()).Height(300))
+                .Provide(RowCtx, "provided"));
+            await Harness.Render();
+
+            var rows = RowTexts(H);
+            H.Check("VirtualizedCtx_UntypedGridView_Rows", AllEndWith(rows, ":provided"), Sample(rows));
         }
     }
 

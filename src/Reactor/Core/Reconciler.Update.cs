@@ -128,6 +128,10 @@ public sealed partial class Reconciler
             if ((HasGestureOrDragSlots(modifiers) || HasGestureOrDragSlots(oldModifiers))
                 && control is FrameworkElement gestFeSE)
                 RefreshGestureDragStateOnSkip(gestFeSE, oldModifiers, modifiers);
+            // A virtualized host that shares its control with a decorator was refreshed
+            // by the decorator's Update at the wrong depth; re-snapshot here (no-op for
+            // every other control, and allocation-free when nothing changed).
+            RefreshContextCaptureOnSkip(control, newEl);
             // No validation refresh here, deliberately (issue #1262). A `.Validate()`
             // verdict is republished only by a component that re-rendered, and that
             // component's output is on the dirty ancestor path, which this arm declines
@@ -175,6 +179,9 @@ public sealed partial class Reconciler
             _contextScope.Push(ctxValues);
             ctxCount = ctxValues.Count;
         }
+        bool providerChanged = !Element.ContextValuesEqual(oldEl.ContextValues, ctxValues);
+        if (providerChanged)
+            EnterProviderChange();
 
         // Virtualized hosts realize rows outside this traversal; keep their provider
         // snapshot current (no-op for every other control).
@@ -356,6 +363,8 @@ public sealed partial class Reconciler
         }
         finally
         {
+            if (providerChanged)
+                ExitProviderChange();
             if (ctxCount > 0)
                 _contextScope.Pop(ctxCount);
             _ambientRequestedTheme = prevAmbientTheme;

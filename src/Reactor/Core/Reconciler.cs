@@ -1903,7 +1903,22 @@ public sealed partial class Reconciler : IDisposable
     // without exposing the traversal stack itself.
     internal T ReadContext<T>(Context<T> context) => _contextScope.Read(context);
 
-    internal bool HasActiveContextValues => _contextScope.HasActiveValues;
+    internal bool HasActiveContextValues => _contextScope.HasActiveValues || _providerChangeDepth > 0;
+
+    // Depth of non-skip Updates, on the current traversal path, whose element's own
+    // ContextValues differ from the previous render's (a provider added, removed or
+    // changed). Removing the LAST provider leaves the live stack empty, which used to
+    // short-circuit every context skip check (HasActiveContextValues) so a
+    // reference-stable consumer below kept the removed value; removing one of several
+    // leaves a shorter stack that a host's snapshot prefix test cannot tell apart from
+    // an ancestor's view. Counting the change lets both checks see it.
+    private int _providerChangeDepth;
+
+    internal bool InProviderChangeSubtree => _providerChangeDepth > 0;
+
+    internal void EnterProviderChange() => _providerChangeDepth++;
+
+    internal void ExitProviderChange() => _providerChangeDepth--;
 
     // ── Context replay for virtualized realization ─────────────────────
     //
@@ -1950,6 +1965,40 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>Re-snapshots a host's provider stack; a no-op for any other control.</summary>
     internal void RefreshContextCapture(UIElement control)
         => TryGetContextCapture(control)?.Refresh(_contextScope);
+
+    /// <summary>
+    /// Skip-arm counterpart of <see cref="RefreshContextCapture(UIElement)"/>. A host whose
+    /// control is shared with a decorator (Flyout, MenuFlyout, …) is first refreshed by
+    /// the decorator's Update, before the host element's own <c>ContextValues</c> are on
+    /// the stack; when the host element then skips, this re-snapshots at its own depth so
+    /// a <c>.Provide()</c> on the list element itself is not lost.
+    /// </summary>
+    internal void RefreshContextCaptureOnSkip(UIElement control, Element newEl)
+    {
+        if (TryGetContextCapture(control) is not { } capture) return;
+        var own = newEl.ContextValues;
+        if (own is not { Count: > 0 })
+        {
+            capture.Refresh(_contextScope);
+            return;
+        }
+        _contextScope.Push(own);
+        try { capture.Refresh(_contextScope); }
+        finally { _contextScope.Pop(own.Count); }
+    }
+
+    /// <summary>
+    /// A standalone snapshot of the live provider stack, for an <see cref="ElementFactory{T}"/>
+    /// whose host never registered one (an out-of-tree handler installing the factory).
+    /// </summary>
+    internal ContextCapture CaptureLiveContext()
+    {
+        var capture = new ContextCapture();
+        capture.Refresh(_contextScope);
+        return capture;
+    }
+
+    internal void RefreshLiveContext(ContextCapture capture) => capture.Refresh(_contextScope);
 
     /// <summary>
     /// Replaces the live provider stack with <paramref name="capture"/> until the
@@ -2848,7 +2897,7 @@ public sealed partial class Reconciler : IDisposable
         // A virtualized host has no realized consumer for rows it has yet to realize,
         // so its own snapshot stands in for them: if the providers above it changed,
         // decline the skip so the Update path re-snapshots before the next realization.
-        if (TryGetContextCapture(control) is { } capture && capture.IsStale(_contextScope))
+        if (TryGetContextCapture(control) is { } capture && capture.IsStale(_contextScope, InProviderChangeSubtree))
             return true;
 
         bool found = false;

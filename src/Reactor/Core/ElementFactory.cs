@@ -27,9 +27,14 @@ public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturi
 
     // The host's provider-stack snapshot. GetElement runs from WinUI layout,
     // outside the traversal that maintains the reconciler's context stack, so
-    // rows replay this instead (see ContextCapture). Null when the factory is
-    // driven directly (tests) — rows then read the live stack as before.
+    // rows replay this instead (see ContextCapture). Built-in hosts attach the
+    // capture registered on their control, which the reconciler also refreshes
+    // when the host is skipped. A factory installed by an out-of-tree handler has
+    // none attached and falls back to _ownCapture, which it takes itself at
+    // construction and in UpdateInPlace — both run inside the host's Mount/Update,
+    // where the live stack is the host's.
     ContextCapture? IContextCapturingFactory.ContextCapture { get; set; }
+    private readonly ContextCapture _ownCapture;
     // Optional state used when ItemsSource is the OC<ReactorRow> path
     // (spec 042). Lets GetElement translate an ItemsRepeater realized
     // index → stable key for _mountedElements lookup. Null when running
@@ -294,6 +299,7 @@ public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturi
         _reconciler = reconciler;
         _requestRerender = requestRerender;
         _pool = pool;
+        _ownCapture = reconciler.CaptureLiveContext();
     }
 
     /// <summary>
@@ -307,6 +313,8 @@ public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturi
     {
         _items = items;
         _viewBuilder = viewBuilder;
+        if (((IContextCapturingFactory)this).ContextCapture is null)
+            _reconciler.RefreshLiveContext(_ownCapture);
         // A new viewBuilder closure may capture different external state (UseState
         // cells, Observable subscriptions, theme, etc.) than the one that produced the
         // cached <see cref="ViewBuilderCacheEntry.Built"/> entries. We can't see through
@@ -601,7 +609,7 @@ public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturi
         if (index < 0 || index >= _items.Count)
             return new TextBlock { Text = "" };
 
-        using var restoreContext = _reconciler.EnterCapturedContext(((IContextCapturingFactory)this).ContextCapture);
+        using var restoreContext = _reconciler.EnterCapturedContext(((IContextCapturingFactory)this).ContextCapture ?? _ownCapture);
 
         var item = _items[index];
         var element = BuildOrCache(key, item, index, keyed);
