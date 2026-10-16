@@ -928,6 +928,7 @@ RenderContext.UseMemo<T>(Func<T> factory, object[] dependencies) → T
 RenderContext.UseMemoCells<T>(IReadOnlyList<T> items, Func<T, int, Element> builder, object[] dependencies) → Element[]
 RenderContext.UseMemoCellsByIndex<T>(IReadOnlyList<T> items, IReadOnlyList<int> changedIndices, Func<T, int, Element> builder, object[] dependencies) → Element[]
 RenderContext.UseMemoCellsByKey<T, TKey>(IReadOnlyList<T> items, Func<T, TKey> keySelector, Func<T, int, Element> builder, object[] dependencies) → Element[]
+RenderContext.UseMultipleFilesPickerAsync(FilePickerOptions options) → Task<IReadOnlyList<StorageFile>>
 RenderContext.UseMutation<TInput, TResult>(Func<TInput, CancellationToken, Task<TResult>> mutator, MutationOptions<TInput, TResult> options = null, IHookDispatcher dispatcher = null) → Mutation<TInput, TResult>
 RenderContext.UseMutation<TInput, TResult>(Func<TInput, CancellationToken, Task<TResult>> mutator, QueryCache cache, MutationOptions<TInput, TResult> options = null, IHookDispatcher dispatcher = null) → Mutation<TInput, TResult>
 RenderContext.UseNavigation<TRoute>() → NavigationHandle<TRoute>
@@ -945,6 +946,7 @@ RenderContext.UseReducer<TState, TAction>(Func<TState, TAction, TState> reducer,
 RenderContext.UseRef<T>(T initialValue = default) → Ref<T>
 RenderContext.UseResource<T>(Func<CancellationToken, Task<T>> fetcher, QueryCache cache, object[] deps, ResourceOptions options = null, IHookDispatcher dispatcher = null) → AsyncValue<T>
 RenderContext.UseResource<T>(Func<CancellationToken, Task<T>> fetcher, object[] deps, ResourceOptions options = null, IHookDispatcher dispatcher = null) → AsyncValue<T>
+RenderContext.UseSaveFilePickerAsync(SaveFilePickerOptions options) → Task<StorageFile>
 RenderContext.UseState<T>(T initialValue, bool threadSafe = false) → ValueTuple<T, Action<T>>
 RenderContext.UseSystemBackButton<TRoute>(NavigationHandle<TRoute> nav, Window window) → void
 RenderContext.UseTrayIcon(TrayIconSpec spec) → ReactorTrayIcon
@@ -2507,7 +2509,9 @@ ToString() → string
 new(IReadOnlyList<string> FileTypeFilter = null, PickerLocationId SuggestedStartLocation = PickerLocationId.DocumentsLibrary, string CommitButtonText = "")
 IReadOnlyList<string> FileTypeFilter { get; init; }
 PickerLocationId SuggestedStartLocation { get; init; }
+PickerViewMode? ViewMode { get; init; }
 string CommitButtonText { get; init; }
+string SettingsIdentifier { get; init; }
 Deconstruct(ref IReadOnlyList<string> FileTypeFilter, ref PickerLocationId SuggestedStartLocation, ref string CommitButtonText) → void
 Equals(FilePickerOptions other) → bool
 Equals(object obj) → bool
@@ -2672,8 +2676,11 @@ bool IsActive { get; }
 
 ### record FolderPickerOptions
 new(PickerLocationId SuggestedStartLocation = PickerLocationId.DocumentsLibrary, string CommitButtonText = "")
+IReadOnlyList<string> FileTypeFilter { get; init; }
 PickerLocationId SuggestedStartLocation { get; init; }
+PickerViewMode? ViewMode { get; init; }
 string CommitButtonText { get; init; }
+string SettingsIdentifier { get; init; }
 Deconstruct(ref PickerLocationId SuggestedStartLocation, ref string CommitButtonText) → void
 Equals(FolderPickerOptions other) → bool
 Equals(object obj) → bool
@@ -4839,6 +4846,7 @@ UseMemo<T, T1, T2, T3>(Func<T> factory, T1 d1, T2 d2, T3 d3) → T
 UseMemo<T, T1, T2>(Func<T> factory, T1 d1, T2 d2) → T
 UseMemo<T, T1>(Func<T> factory, T1 d1) → T
 UseMemo<T>(Func<T> factory, object[] dependencies) → T
+UseMultipleFilesPickerAsync(FilePickerOptions options) → Task<IReadOnlyList<StorageFile>>
 UseNavigation<TRoute>() → NavigationHandle<TRoute>
 UseNavigation<TRoute>(TRoute initial) → NavigationHandle<TRoute>
 UseNavigationLifecycle(Action<NavigatingToContext> onNavigatingTo = null, Action<NavigatedToContext> onNavigatedTo = null, Action<NavigatingFromContext> onNavigatingFrom = null, Action<NavigatedFromContext> onNavigatedFrom = null) → void
@@ -4852,6 +4860,7 @@ UseReducedMotion() → bool
 UseReducer<T>(T initialValue, bool threadSafe = false) → ValueTuple<T, Action<Func<T, T>>>
 UseReducer<TState, TAction>(Func<TState, TAction, TState> reducer, TState initialValue, bool threadSafe = false) → ValueTuple<TState, Action<TAction>>
 UseRef<T>(T initialValue = default) → Ref<T>
+UseSaveFilePickerAsync(SaveFilePickerOptions options) → Task<StorageFile>
 UseState<T>(T initialValue, bool threadSafe = false) → ValueTuple<T, Action<T>>
 UseSystemBackButton<TRoute>(NavigationHandle<TRoute> nav, Window window) → void
 UseTrayIcon(TrayIconSpec spec) → ReactorTrayIcon
@@ -5120,6 +5129,20 @@ ToString() → string
 
 ### static class RtlHelper
 IsRtlLocale(string locale) → bool
+
+### record SaveFilePickerOptions
+new(IReadOnlyDictionary<string, IReadOnlyList<string>> FileTypeChoices, string SuggestedFileName = "", PickerLocationId SuggestedStartLocation = PickerLocationId.DocumentsLibrary, string CommitButtonText = "")
+IReadOnlyDictionary<string, IReadOnlyList<string>> FileTypeChoices { get; init; }
+PickerLocationId SuggestedStartLocation { get; init; }
+StorageFile SuggestedSaveFile { get; init; }
+string CommitButtonText { get; init; }
+string SettingsIdentifier { get; init; }
+string SuggestedFileName { get; init; }
+Deconstruct(ref IReadOnlyDictionary<string, IReadOnlyList<string>> FileTypeChoices, ref string SuggestedFileName, ref PickerLocationId SuggestedStartLocation, ref string CommitButtonText) → void
+Equals(SaveFilePickerOptions other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
 
 ### record ScaleTransition
 new(float From)

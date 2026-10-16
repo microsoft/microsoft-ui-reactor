@@ -855,31 +855,70 @@ Caveats:
 
 ## Pickers
 
-Picker hooks create WinUI storage pickers and initialize them with the owning
+Picker helpers create native `Windows.Storage.Pickers` dialogs and initialize them with the owning
 window HWND, so the picker is modal to the correct window without app code doing
-HWND interop.
+HWND interop. Both `Component` and `RenderContext` expose the same operations:
+
+| Helper | Options | Cancellation |
+| --- | --- | --- |
+| [UseFilePickerAsync](reference/hooks/UseFilePickerAsync.md) | `FilePickerOptions` | `null` |
+| [UseMultipleFilesPickerAsync](reference/hooks/UseMultipleFilesPickerAsync.md) | `FilePickerOptions` | Empty `IReadOnlyList<StorageFile>` |
+| [UseFolderPickerAsync](reference/hooks/UseFolderPickerAsync.md) | `FolderPickerOptions` | `null` |
+| [UseSaveFilePickerAsync](reference/hooks/UseSaveFilePickerAsync.md) | `SaveFilePickerOptions` | `null` |
+
+Open and folder options include file-type filters (null or empty means `"*"`),
+suggested location, commit-button text, an optional view mode, and a settings
+identifier for Windows to remember dialog state. Existing positional constructors
+are unchanged; additional options are init properties. Save options require a
+non-empty dictionary mapping display labels to extension lists, and support a
+suggested file name, location, button text, settings identifier, and existing save
+file. Windows validates extension syntax. The save helper only selects/creates
+the target; the caller must write its contents.
 
 ```csharp
-// Both helpers return null when the user cancels the dialog.
+// Capture helpers during Render; invoke them only from UI-thread events.
 var pickFile = UseFilePickerAsync;
+var pickFiles = UseMultipleFilesPickerAsync;
 var pickFolder = UseFolderPickerAsync;
+var saveFile = UseSaveFilePickerAsync;
 
-return Button("Open...", async () =>
-{
-    var file = await pickFile(new FilePickerOptions(
-        FileTypeFilter: [".txt", ".md"]));
-    if (file is null) return;
-
-    var folder = await pickFolder(new FolderPickerOptions());
-    if (folder is null) return;
-});
+return VStack(
+    Button("Open one...", async () =>
+    {
+        var file = await pickFile(new FilePickerOptions(FileTypeFilter: [".txt", ".md"]));
+        if (file is null) return; // User cancelled.
+    }),
+    Button("Open files...", async () =>
+    {
+        var files = await pickFiles(new FilePickerOptions(FileTypeFilter: [".txt", ".md"]));
+        if (files.Count == 0) return; // User cancelled.
+    }),
+    Button("Select folder...", async () =>
+    {
+        var folder = await pickFolder(new FolderPickerOptions());
+        if (folder is null) return;
+    }),
+    Button("Save as...", async () =>
+    {
+        var file = await saveFile(new SaveFilePickerOptions(
+            new Dictionary<string, IReadOnlyList<string>> { ["Text"] = [".txt"] },
+            SuggestedFileName: "report"));
+        if (file is null) return;
+        // Write the desired content here; selecting a target is not a save.
+    }));
 ```
 
 Caveats:
 
-- Picker hooks must be called on the owning window's UI thread.
+- Unlike positional state hooks, these helpers open a dialog when called. Invoke
+  them from UI-thread event handlers, not during `Render()` or in `Task.Run`.
+- Calling without an owning Reactor window throws `InvalidOperationException`.
+- Picker errors propagate to the caller; cancellation is not an error.
 - Reactor never accepts arbitrary HWNDs; it always uses `UseWindow().NativeWindow`.
-- Tests should inject the picker service rather than opening native dialogs.
+- Framework tests use an internal picker-service seam instead of opening modal dialogs.
+- These helpers retain `Windows.Storage` results; they do not migrate to the
+  separate `Microsoft.Windows.Storage.Pickers` API or change its OS requirements.
+- The native `FolderPicker` supports one folder at a time, not multi-selection.
 
 ## WPF / UWP migration map
 
@@ -899,7 +938,7 @@ fields that were removed and what replaced them.
 | Manual settings persistence | `.WithPersistence(id)` | Opt-in, one line. |
 | `TaskbarItemInfo` | `TaskbarItem` | Facade over progress, overlay, description, thumb buttons. |
 | WPF `JumpTask` / `JumpList` | `JumpListItem` / `JumpList` | Process-wide, not per-window; `UpdateAsync` replaces the whole list. |
-| UWP/WinUI picker HWND setup | `UseFilePickerAsync` / `UseFolderPickerAsync` | Owning HWND is wired automatically. |
+| UWP/WinUI picker HWND setup | Open, multiple-file, folder, and save picker helpers | Owning HWND is wired automatically. |
 
 ## Finding and enumerating windows
 

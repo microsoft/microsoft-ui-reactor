@@ -553,18 +553,40 @@ Caveats:
 
 ## Pickers
 
-Picker hooks create WinUI storage pickers and initialize them with the owning
+Picker helpers create native `Windows.Storage.Pickers` dialogs and initialize them with the owning
 window HWND, so the picker is modal to the correct window without app code doing
-HWND interop.
+HWND interop. Both `Component` and `RenderContext` expose the same operations:
+
+| Helper | Options | Cancellation |
+| --- | --- | --- |
+| <!-- ref:UseFilePickerAsync --> | `FilePickerOptions` | `null` |
+| <!-- ref:UseMultipleFilesPickerAsync --> | `FilePickerOptions` | Empty `IReadOnlyList<StorageFile>` |
+| <!-- ref:UseFolderPickerAsync --> | `FolderPickerOptions` | `null` |
+| <!-- ref:UseSaveFilePickerAsync --> | `SaveFilePickerOptions` | `null` |
+
+Open and folder options include file-type filters (null or empty means `"*"`),
+suggested location, commit-button text, an optional view mode, and a settings
+identifier for Windows to remember dialog state. Existing positional constructors
+are unchanged; additional options are init properties. Save options require a
+non-empty dictionary mapping display labels to extension lists, and support a
+suggested file name, location, button text, settings identifier, and existing save
+file. Windows validates extension syntax. The save helper only selects/creates
+the target; the caller must write its contents.
 
 ```csharp snippet="windows/pickers"
 ```
 
 Caveats:
 
-- Picker hooks must be called on the owning window's UI thread.
+- Unlike positional state hooks, these helpers open a dialog when called. Invoke
+  them from UI-thread event handlers, not during `Render()` or in `Task.Run`.
+- Calling without an owning Reactor window throws `InvalidOperationException`.
+- Picker errors propagate to the caller; cancellation is not an error.
 - Reactor never accepts arbitrary HWNDs; it always uses `UseWindow().NativeWindow`.
-- Tests should inject the picker service rather than opening native dialogs.
+- Framework tests use an internal picker-service seam instead of opening modal dialogs.
+- These helpers retain `Windows.Storage` results; they do not migrate to the
+  separate `Microsoft.Windows.Storage.Pickers` API or change its OS requirements.
+- The native `FolderPicker` supports one folder at a time, not multi-selection.
 
 ## WPF / UWP migration map
 
@@ -584,7 +606,7 @@ fields that were removed and what replaced them.
 | Manual settings persistence | `.WithPersistence(id)` | Opt-in, one line. |
 | `TaskbarItemInfo` | `TaskbarItem` | Facade over progress, overlay, description, thumb buttons. |
 | WPF `JumpTask` / `JumpList` | `JumpListItem` / `JumpList` | Process-wide, not per-window; `UpdateAsync` replaces the whole list. |
-| UWP/WinUI picker HWND setup | `UseFilePickerAsync` / `UseFolderPickerAsync` | Owning HWND is wired automatically. |
+| UWP/WinUI picker HWND setup | Open, multiple-file, folder, and save picker helpers | Owning HWND is wired automatically. |
 
 ## Finding and enumerating windows
 

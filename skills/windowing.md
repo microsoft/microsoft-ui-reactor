@@ -235,9 +235,18 @@ var nearest = ReactorDisplay.NearestTo(window.Position.X, window.Position.Y);
 ## Pickers
 
 ```csharp
-var file = await UseFilePickerAsync(new FilePickerOptions(
-    FileTypeFilter: [".txt", ".md"]));
-var folder = await UseFolderPickerAsync(new FolderPickerOptions());
+// Capture during Render; invoke from UI event handlers, not during Render.
+var pickFile = UseFilePickerAsync;
+var pickFiles = UseMultipleFilesPickerAsync;
+var pickFolder = UseFolderPickerAsync;
+var saveFile = UseSaveFilePickerAsync;
+return VStack(
+    Button("Open", async () => { var file = await pickFile(new(FileTypeFilter: [".txt", ".md"])); }),
+    Button("Open multiple", async () => { var files = await pickFiles(new(FileTypeFilter: [".txt", ".md"])); }),
+    Button("Folder", async () => { var folder = await pickFolder(new()); }),
+    Button("Save", async () => { var file = await saveFile(new(
+        new Dictionary<string, IReadOnlyList<string>> { ["Text"] = [".txt"] },
+        SuggestedFileName: "report")); }));
 ```
 
 Picker hooks run on the owning window's UI thread and automatically initialize

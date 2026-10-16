@@ -1530,6 +1530,7 @@ internal static class SelfTestFixtureRegistry
         "BackdropTransparent_Apply",
         "FilePicker_InitializesWithWindow",
         "FilePicker_ThrowsOffUiThread",
+        "PickerHooks_Suite",
         "AspectRatio_Suite_Math",
         "AspectRatio_Suite_Conform",
         "WindowStyle_ToolWindowExStyleRemoved",
@@ -3603,6 +3604,7 @@ internal static class SelfTestFixtureRegistry
         "BackdropTransparent_Apply" => new Phase7WindowingFixtures.BackdropTransparentApply(harness),
         "FilePicker_InitializesWithWindow" => new Phase7WindowingFixtures.FilePickerInitializesWithWindow(harness),
         "FilePicker_ThrowsOffUiThread" => new Phase7WindowingFixtures.FilePickerThrowsOffUiThread(harness),
+        "PickerHooks_Suite" => new PickerHooksFixtures.Suite(harness),
         "UseSpec054Hooks_Suite" => new Phase7WindowingFixtures.UseSpec054HooksSuite(harness),
         // Spec 036/045 — issue #647 multi-window teardown hardening regression.
         "Window647_PrimaryElectionExcludesAuxiliary" => new WindowLifecycleHardeningFixtures.PrimaryElectionExcludesAuxiliary(harness),

@@ -576,19 +576,36 @@ class PickerDemo : Component
     public override Element Render()
     {
         // <snippet:pickers>
-        // Both helpers return null when the user cancels the dialog.
+        // Capture helpers during Render; invoke them only from UI-thread events.
         var pickFile = UseFilePickerAsync;
+        var pickFiles = UseMultipleFilesPickerAsync;
         var pickFolder = UseFolderPickerAsync;
+        var saveFile = UseSaveFilePickerAsync;
 
-        return Button("Open...", async () =>
-        {
-            var file = await pickFile(new FilePickerOptions(
-                FileTypeFilter: [".txt", ".md"]));
-            if (file is null) return;
-
-            var folder = await pickFolder(new FolderPickerOptions());
-            if (folder is null) return;
-        });
+        return VStack(
+            Button("Open one...", async () =>
+            {
+                var file = await pickFile(new FilePickerOptions(FileTypeFilter: [".txt", ".md"]));
+                if (file is null) return; // User cancelled.
+            }),
+            Button("Open files...", async () =>
+            {
+                var files = await pickFiles(new FilePickerOptions(FileTypeFilter: [".txt", ".md"]));
+                if (files.Count == 0) return; // User cancelled.
+            }),
+            Button("Select folder...", async () =>
+            {
+                var folder = await pickFolder(new FolderPickerOptions());
+                if (folder is null) return;
+            }),
+            Button("Save as...", async () =>
+            {
+                var file = await saveFile(new SaveFilePickerOptions(
+                    new Dictionary<string, IReadOnlyList<string>> { ["Text"] = [".txt"] },
+                    SuggestedFileName: "report"));
+                if (file is null) return;
+                // Write the desired content here; selecting a target is not a save.
+            }));
         // </snippet:pickers>
     }
 }

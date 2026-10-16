@@ -137,6 +137,12 @@ internal static class Phase7WindowingFixtures
             FolderCalls++;
             return Task.FromResult<StorageFolder?>(null);
         }
+
+        public Task<IReadOnlyList<StorageFile>> PickMultipleFilesAsync(nint hwnd, FilePickerOptions options)
+            => Task.FromResult<IReadOnlyList<StorageFile>>([]);
+
+        public Task<StorageFile?> PickSaveFileAsync(nint hwnd, SaveFilePickerOptions options)
+            => Task.FromResult<StorageFile?>(null);
     }
 
     private static async Task<ReactorWindow> OpenAndSettle(WindowSpec spec, Func<Component> root)
