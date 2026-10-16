@@ -140,6 +140,10 @@ internal static class OverlayLifecycle
         return dialog;
     }
 
+    /// <summary>The dialog currently showing for <paramref name="anchor"/>, without taking it.</summary>
+    internal static WinUI.ContentDialog? PeekLiveContentDialog(FrameworkElement anchor)
+        => s_liveDialogs.TryGetValue(anchor, out var dialog) ? dialog : null;
+
     private static void ShowContentDialog(Reconciler reconciler, ContentDialogElement cdEl, FrameworkElement anchor, Action requestRerender)
     {
         // Source XamlRoot from the placeholder so the dialog routes to the
@@ -214,7 +218,7 @@ internal static class OverlayLifecycle
         };
         if (cdEl.SecondaryButtonText is not null) dialog.SecondaryButtonText = cdEl.SecondaryButtonText;
         if (cdEl.CloseButtonText is not null) dialog.CloseButtonText = cdEl.CloseButtonText;
-        dialog.Content = reconciler.Mount(cdEl.Content, requestRerender);
+        dialog.Content = reconciler.MountDialogContent(anchor, cdEl.Content, requestRerender);
         if (xamlRoot is not null) dialog.XamlRoot = xamlRoot;
         // Resolve callbacks through the anchor's live Tag the way Flyout/Popup do,
         // rather than capturing the mount-time element: the dialog re-renders
@@ -225,6 +229,14 @@ internal static class OverlayLifecycle
         Reconciler.ApplySetters(cdEl.Setters, dialog);
         // Publish before showing so the very next render can reach the dialog.
         s_liveDialogs.AddOrUpdate(anchor, dialog);
+        // The visible dialog describes the element too, not only its collapsed placeholder: an
+        // out-of-process inspector sees the dialog. A deferred (Loaded) open finds the
+        // placeholder already published; a mount-time open is covered by the reconciler, which
+        // mirrors the placeholder's value onto the live dialog when it publishes it.
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+            && Diagnostics.ReactorSourcePublisher.IsEnabled
+            && anchor.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string published)
+            dialog.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, published);
         // True when this call still owns the placeholder's tracking entry at
         // close time. False once unmount teardown has taken it, or once a
         // re-open has installed a newer dialog over it.

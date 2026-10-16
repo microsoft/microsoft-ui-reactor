@@ -56,6 +56,24 @@ public sealed class SourceMapTransparentGeneratorTests
                 public static implicit operator Element(string text) => new TextBlockElement(text);
             }
             public record TextBlockElement(string Content) : Element;
+
+            // Hook surface for the static-info pass (declared names / hook names).
+            public sealed class RenderContext
+            {
+                public (T Value, global::System.Action<T> Set) UseState<T>(T initial) => (initial, _ => { });
+                public T UseRef<T>(T initial) => initial;
+                public void UseEffect(global::System.Action effect, params object[] dependencies) { }
+                public bool UseIsActive() => true;
+                public (object Ref, global::System.Action RequestFocus) UseElementFocus() => (new object(), () => { });
+            }
+            public abstract class Component
+            {
+                public abstract Element Render();
+                public RenderContext Context { get; } = new();
+                protected (T Value, global::System.Action<T> Set) UseState<T>(T initial) => (initial, _ => { });
+                protected T UseRef<T>(T initial) => initial;
+                protected void UseEffect(global::System.Action effect, params object[] dependencies) { }
+            }
             public record EmptyElement : Element;
             public readonly record struct SourceLocation(string FilePath, int LineNumber, int ColumnNumber);
         }
@@ -66,11 +84,26 @@ public sealed class SourceMapTransparentGeneratorTests
                 public static Microsoft.UI.Reactor.Core.TextBlockElement TextBlock(string content)
                     => new(content);
 
+                public static Microsoft.UI.Reactor.Core.Element Memo(
+                    global::System.Func<Microsoft.UI.Reactor.Core.RenderContext, Microsoft.UI.Reactor.Core.Element> render,
+                    params object?[] dependencies)
+                    => render(new Microsoft.UI.Reactor.Core.RenderContext());
+
                 public static Microsoft.UI.Reactor.Core.Element VStack(
                     params Microsoft.UI.Reactor.Core.Element?[] children)
                     => children.Length > 0 && children[0] is { } first
                         ? first
                         : new Microsoft.UI.Reactor.Core.EmptyElement();
+            }
+        }
+        namespace Microsoft.UI.Reactor.Hooks
+        {
+            // A component-extension hook: takes the Component, forwards to its RenderContext.
+            public static class UseElementFocusExtensions
+            {
+                public static (object Ref, global::System.Action RequestFocus) UseElementFocus(
+                    this Microsoft.UI.Reactor.Core.Component component)
+                    => component.Context.UseElementFocus();
             }
         }
         namespace Microsoft.UI.Reactor.Diagnostics
@@ -80,8 +113,17 @@ public sealed class SourceMapTransparentGeneratorTests
             public static class ReactorSourceMap
             {
                 public static bool Enabled { get; set; }
+                public static void RegisterStaticInfo(global::System.Reflection.Assembly assembly, global::System.Action<ReactorStaticInfoBuilder> fill) { }
                 public static object? EnterRootMountSite(string filePath, int lineNumber, int columnNumber) => null;
                 public static void ExitRootMountSite(object? token) { }
+            }
+            public sealed class ReactorStaticInfoBuilder
+            {
+                public void Name(string filePath, int lineNumber, int columnNumber, string name) { }
+                public void ComponentHooks(string componentTypeFullName, string hooks) { }
+                public void RenderFunctionHooks(string filePath, int lineNumber, int columnNumber, string hooks) { }
+                public void Roots(string projectDirectory, string? rootDirectory) { }
+                public void Source(string filePath, string fingerprint) { }
             }
         }
         """;
@@ -110,7 +152,7 @@ public sealed class SourceMapTransparentGeneratorTests
     /// error in the emitted file rather than as a wrong string in it.</para>
     /// </summary>
     internal static (ImmutableArray<Diagnostic> Diagnostics, string GeneratedSource) Run(
-        string userCode, bool enabled = true)
+        string userCode, bool enabled = true, IReadOnlyDictionary<string, string>? buildProperties = null)
     {
         // Interceptors are opt-in per namespace; without this the emitted
         // [InterceptsLocation] attributes are CS9137 and the post-generation check below
@@ -139,7 +181,7 @@ public sealed class SourceMapTransparentGeneratorTests
 
         var driver = CSharpGeneratorDriver.Create(
             [new SourceMapInterceptorGenerator().AsSourceGenerator()],
-            optionsProvider: new StubOptions(enabled),
+            optionsProvider: new StubOptions(enabled, buildProperties),
             parseOptions: parseOptions);
 
         driver = (CSharpGeneratorDriver)driver.RunGeneratorsAndUpdateCompilation(
@@ -570,7 +612,8 @@ public sealed class SourceMapTransparentGeneratorTests
     {
         private readonly AnalyzerConfigOptions _global;
 
-        public StubOptions(bool enabled) => _global = new Options(enabled);
+        public StubOptions(bool enabled, IReadOnlyDictionary<string, string>? buildProperties = null)
+            => _global = new Options(enabled, buildProperties);
 
         public override AnalyzerConfigOptions GlobalOptions => _global;
 
@@ -583,13 +626,25 @@ public sealed class SourceMapTransparentGeneratorTests
             internal static readonly Options Empty = new(null);
 
             private readonly string? _reactorSourceMap;
+            private readonly IReadOnlyDictionary<string, string>? _buildProperties;
 
-            internal Options(bool enabled) => _reactorSourceMap = enabled ? "true" : "false";
+            internal Options(bool enabled, IReadOnlyDictionary<string, string>? buildProperties)
+            {
+                _reactorSourceMap = enabled ? "true" : "false";
+                _buildProperties = buildProperties;
+            }
 
             private Options(string? value) => _reactorSourceMap = value;
 
             public override bool TryGetValue(string key, out string value)
             {
+                if (_buildProperties is not null
+                    && key.StartsWith("build_property.", StringComparison.Ordinal)
+                    && _buildProperties.TryGetValue(key.Substring("build_property.".Length), out var property))
+                {
+                    value = property;
+                    return true;
+                }
                 if (key == "build_property.ReactorSourceMap" && _reactorSourceMap is not null)
                 {
                     value = _reactorSourceMap;

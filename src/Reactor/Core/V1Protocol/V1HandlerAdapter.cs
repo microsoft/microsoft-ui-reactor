@@ -13,7 +13,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// the dispatch boundary so the hot path is dictionary lookup + interface
 /// call + cast (the cast is JIT-folded for monomorphic call sites).
 /// </summary>
-internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
+internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV1ChildEnumerator, IV1TeardownOwner
     where TElement : Element
     where TControl : UIElement
 {
@@ -25,6 +25,67 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
     }
 
     public bool HasUnmount => true; // the default-body call is cheap; no point branching.
+
+    /// <summary>
+    /// Whether unmount must reach this handler for teardown the generic unmount walk does not
+    /// do: child slots it does not reach (named slots, item hosts, imperative children, or a
+    /// single-content strategy, or a panel strategy whose collection that walk does not visit), or, for a
+    /// hand-written handler, an <c>Unmount</c> body (NavigationHost detaches its route
+    /// subscription and clears its page cache there). A descriptor's own <c>OnUnmount</c>
+    /// already forces its tag at mount. Only consulted in the Native AOT diagnostics mode that
+    /// skips call-site-only tags, where it keeps the tag unmount dispatch goes through.
+    /// <para>The only strategy the walk is proven to cover is a panel strategy whose collection
+    /// is the control's own <see cref="Microsoft.UI.Xaml.Controls.Panel.Children"/>, the
+    /// collection the walk visits. A single-content strategy writes through an opaque setter,
+    /// and this runs before its child is mounted, so it always keeps the tag.</para>
+    /// </summary>
+    public bool OwnsTeardown(UIElement control)
+        => Reconciler.SkipsCallSiteOnlyTags
+            && (_handler is not Descriptor.IDescriptorBackedHandler
+                || (_handler.ChildrenForUnmount is { } strategy
+                    && strategy is not None<TElement, TControl>
+                    && !(strategy is Panel<TElement, TControl> panel
+                        && control is Microsoft.UI.Xaml.Controls.Panel host and TControl typed
+                        && ReferenceEquals(panel.GetCollection(typed), host.Children))));
+
+    /// <summary>
+    /// The live children this handler's strategy hosts, the ones its unmount tears down
+    /// (single content, named slots, panel children, item-host items). For diagnostics walks that must reach
+    /// Reactor content a control template has not realized yet.
+    /// </summary>
+    public void VisitLiveChildren(UIElement control, Action<UIElement> visit)
+    {
+        if (control is not TControl typed) return;
+        switch (_handler.ChildrenForUnmount)
+        {
+            case SingleContent<TElement, TControl> { GetCurrentChild: { } getCurrent }:
+                if (getCurrent(typed) is UIElement single) visit(single);
+                return;
+            case NamedSlots<TElement, TControl> ns:
+                for (int i = 0; i < ns.Slots.Count; i++)
+                {
+                    if (ns.Slots[i].GetCurrentChild is { } getSlot && getSlot(typed) is UIElement slotChild)
+                        visit(slotChild);
+                }
+                return;
+            case Panel<TElement, TControl> panel:
+            {
+                // The collection can belong to an inner panel the host's template has not
+                // attached yet, outside the visual and logical walks.
+                var panelChildren = panel.GetCollection(typed);
+                for (int i = 0; i < panelChildren.Count; i++)
+                    visit(panelChildren[i]);
+                return;
+            }
+            case ItemsHost<TElement, TControl> host:
+                var collection = host.GetCollection(typed);
+                for (int i = 0; i < collection.Count; i++)
+                {
+                    if (collection[i] is UIElement item) visit(item);
+                }
+                return;
+        }
+    }
 
     // <snippet:adapter-mount>
     public UIElement Mount(Element element, Action requestRerender, Reconciler reconciler)
@@ -39,7 +100,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         // skip the ReactorState allocation for them (§4.4 follow-up).
         // <snippet:element-tag-refresh-mount>
         if (control is FrameworkElement fe)
-            Reconciler.SetElementTagIfNeeded(fe, typedEl);
+            Reconciler.SetElementTagIfNeeded(fe, typedEl, OwnsTeardown(control));
         // </snippet:element-tag-refresh-mount>
 
         // Strategy dispatch — only when the handler declares a non-None Children strategy.
@@ -86,7 +147,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
 
         // <snippet:element-tag-refresh-update>
         if (control is FrameworkElement fe)
-            Reconciler.SetElementTagIfNeeded(fe, typedNew);
+            Reconciler.SetElementTagIfNeeded(fe, typedNew, OwnsTeardown(control));
         // </snippet:element-tag-refresh-update>
 
         var strategy = _handler.Children;
