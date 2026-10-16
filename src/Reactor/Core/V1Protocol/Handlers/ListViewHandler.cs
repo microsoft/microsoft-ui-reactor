@@ -188,6 +188,12 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
                 ChangeEchoSuppressor.BeginSuppress(lv);
             lv.ItemsSource = Enumerable.Range(0, n.Items.Length).ToList();
         }
+        else
+        {
+            // Theme.NotifyResourcesChanged: the kept items still need their theme values
+            // re-applied; reconcile the realized ones in place.
+            ctx.Reconciler.RefreshRealizedItemContainers(lv, n.Items, ctx.RequestRerender);
+        }
 
         Reconciler.SetElementTag(lv, n);
 

@@ -194,12 +194,17 @@ internal static class TemplatedListLifecycle
 
         // FlipView doesn't support ContainerContentChanging (not a ListViewBase).
         // Pre-mount all items — FlipView typically has few items so this is fine.
+        // An item whose view mounts nothing (Empty) has no entry in Items, so the record keeps,
+        // per logical item, whether it did.
+        var mounted = new List<(Element Element, bool HasControl)>(el.ItemCount);
         for (int i = 0; i < el.ItemCount; i++)
         {
             var itemElement = el.BuildItemView(i);
             var ctrl = reconciler.Mount(itemElement, requestRerender);
             if (ctrl is not null) flipView.Items.Add(ctrl);
+            mounted.Add((itemElement, ctrl is not null));
         }
+        Reconciler.GetOrCreateReactorState(flipView).MountedItemElements = mounted;
 
         flipView.SelectionChanged += (s, _) =>
         {
@@ -352,43 +357,62 @@ internal static class TemplatedListLifecycle
 
     internal static UIElement? UpdateFlipView(Reconciler reconciler, TemplatedListElementBase o, TemplatedListElementBase n, WinUI.FlipView fv, Action requestRerender)
     {
-        // FlipView items are pre-mounted directly (no ContainerContentChanging).
-        // Build old element array from o, then reconcile like regular items.
+        // FlipView items are pre-mounted directly (no ContainerContentChanging). Diff each item
+        // against the element it mounted or was last updated to; rebuilding it from o would
+        // re-resolve an eagerly read theme brush to its current value, so a resource refresh
+        // would see no change. An item whose view is Empty has no control in Items, so walk the
+        // controls with their own index. Without a usable record, rebuild from o and treat the
+        // first Items.Count items as the ones holding a control.
         int oldCount = o.ItemCount;
         int newCount = n.ItemCount;
         int shared = Math.Min(oldCount, newCount);
+        var fvState = Reconciler.GetOrCreateReactorState(fv);
+        var recorded = fvState.MountedItemElements is { } r && r.Count == oldCount ? r : null;
+        var nextMounted = new List<(Element Element, bool HasControl)>(newCount);
+        int ci = 0;
 
         for (int i = 0; i < shared; i++)
         {
-            var oldItemElement = o.BuildItemView(i);
+            var (oldItemElement, oldHasControl) = recorded?[i] ?? (o.BuildItemView(i), i < fv.Items.Count);
             var newItemElement = n.BuildItemView(i);
-            if (fv.Items[i] is UIElement existingCtrl && reconciler.CanUpdate(oldItemElement, newItemElement))
+            if (oldHasControl && ci < fv.Items.Count && fv.Items[ci] is UIElement existingCtrl
+                && reconciler.CanUpdate(oldItemElement, newItemElement))
             {
-                var replacement = reconciler.Update(oldItemElement, newItemElement, existingCtrl, requestRerender);
+                var replacement = reconciler.UpdateHostedChild(oldItemElement, newItemElement, existingCtrl, requestRerender);
                 if (replacement is not null && replacement != existingCtrl)
-                    fv.Items[i] = replacement;
+                    fv.Items[ci] = replacement;
+                ci++;
+                nextMounted.Add((newItemElement, true));
+                continue;
             }
-            else
+
+            if (oldHasControl && ci < fv.Items.Count)
             {
-                if (fv.Items[i] is UIElement oldCtrl) reconciler.UnmountChild(oldCtrl);
-                fv.Items[i] = reconciler.Mount(newItemElement, requestRerender)!;
+                if (fv.Items[ci] is UIElement oldCtrl) reconciler.UnmountChild(oldCtrl);
+                fv.Items.RemoveAt(ci);
             }
+            var ctrl = reconciler.Mount(newItemElement, requestRerender);
+            if (ctrl is not null) fv.Items.Insert(ci++, ctrl);
+            nextMounted.Add((newItemElement, ctrl is not null));
         }
 
-        // Remove excess
-        for (int i = oldCount - 1; i >= shared; i--)
+        // Remove excess: every control past the shared items belongs to a removed item.
+        while (fv.Items.Count > ci)
         {
-            if (fv.Items[i] is UIElement oldCtrl) reconciler.UnmountChild(oldCtrl);
-            fv.Items.RemoveAt(i);
+            int last = fv.Items.Count - 1;
+            if (fv.Items[last] is UIElement oldCtrl) reconciler.UnmountChild(oldCtrl);
+            fv.Items.RemoveAt(last);
         }
 
         // Add new
         for (int i = shared; i < newCount; i++)
         {
-            var ctrl = reconciler.Mount(n.BuildItemView(i), requestRerender);
+            var itemElement = n.BuildItemView(i);
+            var ctrl = reconciler.Mount(itemElement, requestRerender);
             if (ctrl is not null) fv.Items.Add(ctrl);
+            nextMounted.Add((itemElement, ctrl is not null));
         }
-
+        fvState.MountedItemElements = nextMounted;
         // Issue #495 — drift-guarded, suppressed write. Previously
         // unconditional, which would write -1 when n.GetSelectedIndex() == -1
         // (the default for TemplatedFlipViewElement<T> is 0, so the prior

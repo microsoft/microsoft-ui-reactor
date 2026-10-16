@@ -15,7 +15,7 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// Manages the render loop: when state changes, re-renders the component
 /// and reconciles the virtual tree against the real WinUI control tree.
 /// </summary>
-public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnosticHost
+public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnosticHost, IThemeResourceListener
 {
 #pragma warning disable CS0414 // Design constant for render-loop limiting; wiring pending
     private static readonly int MaxRenderIterations = 50;
@@ -297,6 +297,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         _window.Closed += _closedHandler;
 
         Core.Diagnostics.ReactorHostRegistry.Register(this);
+        ThemeResourceListeners.Register(this);
     }
 
     void Core.Diagnostics.IReactorDiagnosticHost.TagComponentBoundaries()
@@ -325,6 +326,16 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             rootComponent: _rootComponent,
             rootRenderFunction: _rootRenderFunc,
             mountSite: _mountSite.Value);
+    }
+
+    // Theme.NotifyResourcesChanged: a resource-refresh pass — past memoization AND past
+    // every structural skip, so every theme-resolved value is resolved again.
+    // RequestResourceRefresh and RequestRender are thread-safe.
+    void IThemeResourceListener.OnThemeResourcesChanged()
+    {
+        if (_disposed) return;
+        _reconciler.RequestResourceRefresh();
+        RequestRender();
     }
 
     /// <summary>Ensure the overlay wrapper exists whenever any dev overlay flag is on.</summary>
@@ -624,11 +635,15 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         retireFailure?.Throw();
     }
 
+    // Test seam: runs right after RequestRender reads _isRendering, so a selftest can finish the
+    // in-flight render pass inside that window. Null outside the test.
+    internal static Action<ReactorHost>? RequestRenderAfterRenderingCheckForTest { get; set; }
+
     /// <summary>
     /// Thread-safe: can be called from any thread. Coalesces multiple calls into
     /// a single render. At most one RenderLoop is ever pending on the dispatcher.
     ///
-    /// During render: setState calls set _needsRerender (no enqueue).
+    /// Every call sets _needsRerender first. During render that is all it does (no enqueue).
     /// Between renders: first setState CAS-flips _renderPending 0→1 and enqueues.
     /// _renderPending stays 1 throughout the render, blocking duplicate enqueues.
     ///
@@ -659,19 +674,19 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         if (captured is not null)
             _pendingAmbientAnimation = captured;
 
-        // During render: just flag — the render loop will re-enqueue after Render().
-        if (_isRendering)
-        {
-            _needsRerender = true;
-            return;
-        }
+        // Flag re-render before the _isRendering / CAS checks, as ReactorHostControl does: a caller
+        // off the UI thread (Theme.NotifyResourcesChanged) can read _isRendering == true and lose the
+        // race with the end of that render pass, which has already checked _needsRerender. Writing
+        // the flag first means the pass either sees it or this call finds the gate open and enqueues.
+        _needsRerender = true;
+        bool rendering = _isRendering;
+        RequestRenderAfterRenderingCheckForTest?.Invoke(this);
+
+        // During render: the flag is sufficient — RenderLoop re-checks after Render().
+        if (rendering) return;
 
         // Between renders: CAS 0→1 gates a single TryEnqueue.
-        if (Interlocked.CompareExchange(ref _renderPending, 1, 0) != 0)
-        {
-            _needsRerender = true;
-            return;
-        }
+        if (Interlocked.CompareExchange(ref _renderPending, 1, 0) != 0) return;
 
         // First render synchronous-on-UI-thread: the very first render
         // fires from Mount() inside OnLaunched, which is already on the
@@ -846,6 +861,11 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             _renderingRootDiagnostics = _rootDiagnostics;
 
             Element? newTree = null;
+
+            // Before the root render, so a resource notification that lands while the tree is
+            // being built stays pending for the render it queues instead of being taken by this
+            // pass, whose render may already have read the old resources.
+            _reconciler.BeginRootPass();
 
             _phaseSw.Restart();
 
@@ -1170,6 +1190,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         }
         finally
         {
+            _reconciler.EndRootPass();
             _isRendering = false;
             if (hotReloadRetryPass) _reconciler.HotReloadRetryPending = false;
             ReactorApp.ActiveHostInternal = prevActiveHost;
@@ -1277,60 +1298,18 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     /// Used by test harnesses to replace blind Task.Delay waits.
     /// </summary>
     public Task WaitForIdleAsync(int maxYields = 50)
-    {
-        if (_disposed) return Task.CompletedTask;
-        if (_renderPending == 0 && !_isRendering && !_needsRerender)
-            return Task.CompletedTask;
-
-        // RunContinuationsAsynchronously: TrySetResult is called from a
-        // dispatcher callback, and without this flag any await continuation
-        // would run inline on the dispatcher at Low priority — re-entering
-        // UI logic inside the yield loop and partially defeating its purpose.
-        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        int yields = 0;
-        void CheckIdle()
-        {
-            if (_disposed)
-            {
-                tcs.TrySetResult();
-                return;
-            }
-            if (_renderPending == 0 && !_isRendering && !_needsRerender)
-            {
-                tcs.TrySetResult();
-                return;
-            }
-            if (++yields > maxYields)
-            {
-                // Returning early here is the classic flake source: callers
-                // (e.g. selftest Harness.Render) move on against a half-settled
-                // tree. Log so the next flake is greppable instead of silent.
-                Debug.WriteLine(
-                    $"[Reactor.WaitForIdle] yield cap hit ({maxYields}); " +
-                    $"renderPending={_renderPending} isRendering={_isRendering} needsRerender={_needsRerender}");
-                tcs.TrySetResult();
-                return;
-            }
-            if (!_dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, CheckIdle))
-            {
-                // Queue refused enqueue (shutdown). Complete rather than
-                // hang the caller forever.
-                tcs.TrySetResult();
-            }
-        }
-        if (!_dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, CheckIdle))
-        {
-            // Same fallback for the initial enqueue.
-            tcs.TrySetResult();
-        }
-        return tcs.Task;
-    }
+        => RenderLoopIdle.WaitAsync(
+            () => IsIdle,
+            _dispatcherQueue.TryEnqueue,
+            maxYields,
+            () => $"renderPending={_renderPending} isRendering={_isRendering} needsRerender={_needsRerender}");
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
 
+        ThemeResourceListeners.Unregister(this);
         Core.Diagnostics.ReactorHostRegistry.Unregister(this);
 
         _window.Closed -= _closedHandler;

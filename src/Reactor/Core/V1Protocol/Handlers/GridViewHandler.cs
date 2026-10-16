@@ -166,6 +166,12 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
                 ChangeEchoSuppressor.BeginSuppress(gv);
             gv.ItemsSource = Enumerable.Range(0, n.Items.Length).ToList();
         }
+        else
+        {
+            // Theme.NotifyResourcesChanged: the kept items still need their theme values
+            // re-applied; reconcile the realized ones in place.
+            ctx.Reconciler.RefreshRealizedItemContainers(gv, n.Items, ctx.RequestRerender);
+        }
 
         Reconciler.SetElementTag(gv, n);
 

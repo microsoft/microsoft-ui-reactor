@@ -145,6 +145,8 @@ Border(child).Background(Theme.Ref("AcrylicBackgroundFillColorDefaultBrush"))
 Border(child).WithBorder(Theme.Ref("SurfaceStrokeColorFlyoutBrush"), 1)
 ```
 
+`Theme.Ref` resolutions are cached per `(key, theme)`. If you replace or add a resource at runtime without a theme change (swap a brand dictionary, replace a brush), call `Theme.NotifyResourcesChanged()` afterwards so every host re-resolves it.
+
 #### Per-Subtree Theme Override
 
 Force a subtree to a specific theme variant:
