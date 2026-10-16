@@ -167,6 +167,33 @@ public class ContextCaptureUnitTests
         Assert.True(scope.Version > v1);
     }
 
+    [Fact]
+    public void HasActiveValues_StaysOnDuringEmptyReplay_OnceAProviderWasSeen()
+    {
+        var scope = new ContextScope();
+        Push(scope, Theme, "dark");
+        scope.Pop(1);
+        Assert.False(scope.HasActiveValues);
+
+        var outer = scope.Replace([]);
+        Assert.True(scope.HasActiveValues);
+        var inner = scope.Replace([]);
+        Assert.True(scope.HasActiveValues);
+        scope.Restore(inner);
+        Assert.True(scope.HasActiveValues);
+        scope.Restore(outer);
+        Assert.False(scope.HasActiveValues);
+    }
+
+    [Fact]
+    public void HasActiveValues_StaysOffDuringEmptyReplay_WhenNoProviderWasEverSeen()
+    {
+        var scope = new ContextScope();
+        var previous = scope.Replace([]);
+        Assert.False(scope.HasActiveValues);
+        scope.Restore(previous);
+    }
+
     // ── ContextCapture ───────────────────────────────────────────────
 
     [Fact]

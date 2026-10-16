@@ -14,6 +14,7 @@ internal sealed class ContextScope
     {
         foreach (var (ctx, val) in values)
             _stack.Add((ctx, val));
+        if (values.Count > 0) _everHadValues = true;
         _version++;
     }
 
@@ -48,7 +49,16 @@ internal sealed class ContextScope
         return context.DefaultValueBoxed;
     }
 
-    internal bool HasActiveValues => _stack.Count > 0;
+    internal bool HasActiveValues => _stack.Count > 0 || (_replayDepth > 0 && _everHadValues);
+
+    // A replayed snapshot (Replace) can be EMPTY because the host's last provider was
+    // removed, while the row being realized was built under that provider. With an empty
+    // stack HasActiveValues would disable every context skip check, so a reused row that
+    // is shallow-equal would keep the removed value. While a replay is active, keep the
+    // checks on — but only once this scope has ever seen a provider, so provider-free
+    // apps pay nothing during row realization.
+    private int _replayDepth;
+    private bool _everHadValues;
 
     internal long Version => _version;
 
@@ -103,6 +113,7 @@ internal sealed class ContextScope
     {
         var previous = _stack;
         _stack = new List<(ContextBase Context, object? Value)>(snapshot);
+        _replayDepth++;
         _version++;
         return previous;
     }
@@ -110,6 +121,7 @@ internal sealed class ContextScope
     internal void Restore(List<(ContextBase Context, object? Value)> previous)
     {
         _stack = previous;
+        _replayDepth--;
         _version++;
     }
 }

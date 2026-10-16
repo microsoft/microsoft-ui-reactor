@@ -2,6 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Reactor.Navigation;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -275,6 +276,43 @@ internal static class VirtualizedRowContextFixtures
     }
 
     private sealed record NavRowProps(int Index);
+
+    // A row parked by RecycleElement is not refreshed when the provider is removed;
+    // reusing it for the same row under the now-EMPTY snapshot must still re-check the
+    // context its consumer read, rather than shallow-skip and keep the removed value.
+    // Drives a standalone factory so every Get/Recycle is one the test asked for.
+    internal sealed class Factory_RecycledRowAfterLastProviderRemoved(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            var items = Enumerable.Range(0, 5).ToList();
+            // A reference-stable consumer under a fresh Border: the Border updates, and its
+            // child takes the element-level skip unless a context check declines it.
+            var consumers = items.Select(Row).ToArray();
+            Func<int, int, Element> builder = (i, _) => Border(consumers[i]);
+            var reconciler = new Reconciler();
+
+            ElementFactory<int> factory;
+            using (reconciler.PushContextDisposable(RowCtx, "removed"))
+                factory = new ElementFactory<int>(items, builder, reconciler, static () => { }, pool: null);
+            IElementFactory f = factory;
+
+            static string Text(UIElement c)
+                => (c as Border)?.Child is Border wrapper && wrapper.Child is TextBlock tb ? tb.Text : $"<{c.GetType().Name}>";
+
+            var first = f.GetElement(new ElementFactoryGetArgs { Data = 0 });
+            H.Check("VirtualizedCtx_Recycle_FirstSeesProvider", Text(first) == "row0:removed", Text(first));
+            f.RecycleElement(new ElementFactoryRecycleArgs { Element = first });
+
+            // The host re-renders without the provider: its snapshot is now empty.
+            factory.UpdateInPlace(items, builder);
+
+            var again = f.GetElement(new ElementFactoryGetArgs { Data = 0 });
+            H.Check("VirtualizedCtx_Recycle_ContainerReused", ReferenceEquals(first, again));
+            H.Check("VirtualizedCtx_Recycle_ReusedRowSeesDefault", Text(again) == "row0:default", Text(again));
+            return Task.CompletedTask;
+        }
+    }
 
     private sealed class NavRow : Component<NavRowProps>
     {
