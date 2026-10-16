@@ -67,6 +67,7 @@ internal static class FixtureRegistry
         // ItemClick once-fire guard (issue #679 (a) — E2E real-pointer-click coverage of
         // the ListViewHandler once-subscribe contract across re-renders + items change)
         "ItemClick_OnceFire",
+        "ItemsHost_SkippedGesture",
 
         // ItemClick toggle-path double-subscribe guard (issue #779 — E2E proof that
         // toggling OnItemClick off then on again still fires exactly once, on both
@@ -239,6 +240,7 @@ internal static class FixtureRegistry
 
         // ItemClick once-fire guard (issue #679 (a))
         "ItemClick_OnceFire" => ItemClickE2EFixtures.OnceFire(ctx),
+        "ItemsHost_SkippedGesture" => Factories.Component<ItemsHostGestureFixture>(),
 
         // ItemClick toggle-path double-subscribe guard (issue #779)
         "ItemClick_ToggleListView" => ItemClickE2EFixtures.ToggleListView(ctx),

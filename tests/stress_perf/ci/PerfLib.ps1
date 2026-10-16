@@ -87,7 +87,7 @@ $script:MicroNsAutoFlag = $false
 
 # Canonical reconciler micro-suite size: the FULL emitted comparison set. That is the
 # spec-047 M1-M13 set, the M14 DSL-cascade alloc instrument (PR #665), PLUS 3 supplementary
-# benches (ids OAlloc / OUpdate / C207) that
+# benches (ids OAlloc / OUpdate / C207), plus IH1-IH6 ItemsHost benches, that
 # BenchCatalog.All also runs for `--variant Reactor`. The source of truth is
 # tests/perf_bench/PerfBench.ControlModel/Benches/AllBenches.cs (BenchCatalog.All); there is
 # NO bench-id allowlist in Read-MicroBenchResults, so every Reactor 'ok' row is compared and a
@@ -97,7 +97,7 @@ $script:MicroNsAutoFlag = $false
 # is indistinguishable from a clean full run. A drift-guard test (RunPerfBenchmark.Tests)
 # asserts this equals the BenchCatalog.All count so the two can't silently diverge -- keep them
 # in sync when the suite changes.
-$script:MicroExpectedBenchCount = 17
+$script:MicroExpectedBenchCount = 23
 
 function ConvertTo-PerfDouble {
     <#
@@ -752,7 +752,7 @@ function Format-PerfMicroSection {
                              mistaken for a clean absence.
     .PARAMETER ExpectedCount Canonical bench count for the N/<expected> completeness check
                              (defaults to $script:MicroExpectedBenchCount = the full emitted
-                             set: spec-047 M1-M13 + 3 supplementary); 0 disables the check.
+                             set: spec-047 M1-M14 + 3 supplementary + IH1-IH6 ItemsHost benches); 0 disables the check.
     #>
     param(
         [AllowNull()][object[]]$Micro,
@@ -773,7 +773,7 @@ function Format-PerfMicroSection {
             ''
             '> [!WARNING]'
             "> **Micro-suite omitted this run** &mdash; $reason."
-            "> The ns/op + allocated-bytes/op reconciler deltas (spec-047 M1&ndash;M13 + 3 supplementary) are unavailable for this comparison &mdash; a harness/runner condition, **not** a clean result. See the workflow run log for the per-side detail."
+            "> The ns/op + allocated-bytes/op reconciler deltas (spec-047 M1&ndash;M14 + 3 supplementary + IH1&ndash;IH6 ItemsHost benches) are unavailable for this comparison &mdash; a harness/runner condition, **not** a clean result. See the workflow run log for the per-side detail."
             ''
         )
     }

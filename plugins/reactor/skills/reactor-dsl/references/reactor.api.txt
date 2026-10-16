@@ -1800,6 +1800,7 @@ HandCodedEvent<TPayload, TDelegate>(Action<TControl, TDelegate> subscribe, Func<
 Immediate<TPayload>(Func<TElement, Delegate> callbackGate, DependencyProperty observeProperty, DependencyPropertyChangedCallback observeCallback, Func<TPayload, bool> observeSlotIsNull, Action<TPayload, DependencyPropertyChangedCallback> setObserveSlot, RoutedEventHandler loadedHook) → ControlDescriptor<TElement, TControl>
 Imperative(Action<TControl, TElement> mount, Action<TControl, TElement, TElement> update) → ControlDescriptor<TElement, TControl>
 ImperativeBridged(Action<MountContext, TControl, TElement> mount, Action<UpdateContext, TControl, TElement, TElement> update) → ControlDescriptor<TElement, TControl>
+ImperativeBridged(Action<MountContext, TControl, TElement> mount, Action<UpdateContext, TControl, TElement, TElement> update, Action<UnmountContext, TControl> unmount) → ControlDescriptor<TElement, TControl>
 Initial<TValue>(Func<TElement, TValue> get, Action<TControl, TValue> set) → ControlDescriptor<TElement, TControl>
 InitialOnly<TValue>(Func<TElement, TValue> get, Action<TControl, TValue> set) → ControlDescriptor<TElement, TControl>
 OneWay<TValue>(Func<TElement, Optional<TValue>> get, Action<TControl, TValue> set, DependencyProperty dp, IEqualityComparer<TValue> comparer = null) → ControlDescriptor<TElement, TControl>
@@ -3120,6 +3121,7 @@ ToString() → string
 
 ### record ItemsHost<TElement, TControl>
 new(Func<TElement, IReadOnlyList<object>> GetItems, Func<TControl, IList<object>> GetCollection)
+Action<TControl, IList<object>> SetCollection { get; init; }
 Func<TControl, IList<object>> GetCollection { get; init; }
 Func<TElement, IReadOnlyList<object>> GetItems { get; init; }
 Func<object, object, bool> ItemEquals { get; init; }
