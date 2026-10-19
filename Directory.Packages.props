@@ -35,19 +35,19 @@
 
   <ItemGroup>
     <!-- Framework runtime dependencies -->
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="System.Drawing.Common" Version="10.0.12" />
-    <PackageVersion Include="System.Text.Json" Version="10.0.12" />
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="System.Drawing.Common" Version="10.0.13" />
+    <PackageVersion Include="System.Text.Json" Version="10.0.13" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.13" />
     <PackageVersion Include="System.Reflection.DispatchProxy" Version="4.8.2" />
     <PackageVersion Include="MessageFormat" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.0-rc.1.26425.128" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.0-rc.2.26504.105" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <!-- Roslyn source generator that emits a static (reflection-free / NativeAOT-safe)
          YamlStaticContext for the doc pipeline's YAML DTOs (tools/Reactor.DocPipeline).
          Analyzer-only (PrivateAssets=all). Version tracks YamlDotNet's major (18.x). -->
     <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.1.0" />
-    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.19" />
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.22" />
     <PackageVersion Include="MessagePack" Version="2.5.307" />
   </ItemGroup>
 
@@ -56,7 +56,7 @@
          `winapp ui`, used in-process. Its Windows Graphics Capture build needs a Windows 10
          19041+ TFM. The DI container is how the library hands out IWindowCapture. -->
     <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation" Version="0.7.1" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
   </ItemGroup>
 
   <ItemGroup>
@@ -83,7 +83,7 @@
     <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.5.1" />
     <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="2.5.1" />
     <PackageVersion Include="SharpFuzz" Version="2.3.0" />
-    <PackageVersion Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.2.8" />
+    <PackageVersion Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="4.0.0" />
   </ItemGroup>
 
   <ItemGroup>
