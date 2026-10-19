@@ -3694,6 +3694,23 @@ depends on it, so the fixture still proves something everywhere. Put an
 issue number in the reason when the skip marks a real product gap: a
 skip is never evidence the product works, only that this run did not
 establish otherwise.</p>
+<p>To read the realized tree back after a state change, await the host's
+render loop instead of a fixed delay: both <code>ReactorHost</code> and the XAML
+island host <code>ReactorHostControl</code> expose <code>WaitForIdleAsync()</code> (and an
+<code>IsIdle</code> property), which completes once every pending render and
+re-render has run. From the island selftest:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">setCount</span><span class="o">!</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">H</span><span class="p">.</span><span class="n">Check</span><span class="p">(</span><span class="s">&quot;HostCtrlIdle_BusyAfterSetState&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">!</span><span class="n">host</span><span class="p">.</span><span class="n">IsIdle</span><span class="p">);</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="k">await</span><span class="w"> </span><span class="n">host</span><span class="p">.</span><span class="n">WaitForIdleAsync</span><span class="p">();</span><span class="w">   </span><span class="c1">// no Task.Delay: the island&#39;s tree is now realized</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="n">H</span><span class="p">.</span><span class="n">Check</span><span class="p">(</span><span class="s">&quot;HostCtrlIdle_UpdatedWithoutDelay&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="n">host</span><span class="p">.</span><span class="n">Content</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">TextBlock</span><span class="p">)</span><span class="o">?.</span><span class="n">Text</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="s">&quot;Idle:1&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">    </span><span class="s">$&quot;content={(host.Content as TextBlock)?.Text ?? &quot;</span><span class="k">null</span><span class="s">&quot;}&quot;</span><span class="p">);</span>
+</code></pre></div>
+<p><code>WaitForIdleAsync</code> can also complete before the host is idle: after
+<code>maxYields</code> dispatcher yields (50 by default), or immediately when the
+dispatcher refuses work during shutdown. When the readback must be
+settled, check <code>host.IsIdle</code> after the await, or pass a larger
+<code>maxYields</code>.</p>
 <h2 id="tips">Tips<a class="headerlink" href="#tips" title="Permanent link">&para;</a></h2>
 <p><strong>Don't drive the unit fixture from <code>Task.Delay</code>.</strong> If an effect
 schedules async work, expose its completion task so the test can

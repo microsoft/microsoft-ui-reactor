@@ -1306,6 +1306,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#editing-app-resources-at-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Editing app resources at runtime
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#per-element-theme-override-scope" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3606,6 +3617,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#editing-app-resources-at-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Editing app resources at runtime
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#per-element-theme-override-scope" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4211,41 +4233,65 @@ text with <code>Theme.Accent</code>, anywhere the brush is referenced:</p>
 dictionaries — the values may need to be different hues to stay
 legible. Pair with <code>Theme.AccentText</code> overrides if the brand contrast
 differs from the system pair.</p>
+<h3 id="editing-app-resources-at-runtime">Editing app resources at runtime<a class="headerlink" href="#editing-app-resources-at-runtime" title="Permanent link">&para;</a></h3>
+<p>Switching Light/Dark (<code>.RequestedTheme(...)</code>, the system theme, high
+contrast) needs nothing extra. Changing what a resource key <em>means</em> at
+runtime does — replacing a brush in an app-level dictionary, merging or
+removing a brand dictionary, or a live edit from an inspector. Reactor
+caches each resolved <code>(key, theme)</code> brush and only drops that cache on a
+theme or palette change, so tell it explicitly. Keep app brushes in your
+own dictionary merged into <code>Application.Current.Resources</code> (the app
+dictionary itself is <code>XamlControlsResources</code> and rejects direct entries):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">const</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="n">AppKey</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;SelfTestBrandBrush&quot;</span><span class="p">;</span><span class="w"> </span><span class="c1">// the key the UI reads with Theme.Ref(AppKey)</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="kt">var</span><span class="w"> </span><span class="n">resources</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ResourceDictionary</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">[</span><span class="n">AppKey</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">SolidColorBrush</span><span class="p">(</span><span class="n">Colors</span><span class="p">.</span><span class="n">Red</span><span class="p">)</span><span class="w"> </span><span class="p">};</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">Application</span><span class="p">.</span><span class="n">Current</span><span class="p">.</span><span class="n">Resources</span><span class="p">.</span><span class="n">MergedDictionaries</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="n">resources</span><span class="p">);</span>
+</code></pre></div>
+<p>Later, at runtime, change the entry and notify Reactor:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">resources</span><span class="p">[</span><span class="n">AppKey</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">SolidColorBrush</span><span class="p">(</span><span class="n">Colors</span><span class="p">.</span><span class="n">Green</span><span class="p">);</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="n">Theme</span><span class="p">.</span><span class="n">NotifyResourcesChanged</span><span class="p">();</span>
+</code></pre></div>
+<p><code>Theme.NotifyResourcesChanged()</code> clears the resolution cache and
+re-renders every live host past component memoization and the skip of
+unchanged elements, so <code>ThemeRef</code> modifiers, <code>.Resources(...)</code> theme
+overrides and <code>ThemeRef.Resolve(...)</code> calls in <code>Render</code> all pick up the
+new value, memoized subtrees included. It is safe to call from any
+thread; await a host's <code>WaitForIdleAsync()</code> to observe the result.
+Mutating an existing brush's <code>Color</code> in place does not need it.</p>
 <h3 id="per-element-theme-override-scope">Per-element theme override scope<a class="headerlink" href="#per-element-theme-override-scope" title="Permanent link">&para;</a></h3>
 <p>Pin one panel to a different scheme while the rest of the app follows
 the system. The key is to apply <code>.RequestedTheme(...)</code> to the
 <strong>region root</strong> — the container whose children should resolve against
 the override — rather than to a leaf element:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1">// Per-element theme override scope — a single panel forced to Dark</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="c1">// inside an otherwise Light app, without app-wide RequestedTheme.</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">ScopedThemeOverrideExample</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="p">{</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">    </span><span class="p">{</span>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span>
-<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="w">            </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;Default scheme&quot;</span><span class="p">),</span>
-<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">            </span><span class="n">Border</span><span class="p">(</span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
-<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="w">                </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Default scheme — follows the app theme.&quot;</span><span class="p">)</span>
-<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="w">                    </span><span class="p">.</span><span class="n">Foreground</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">PrimaryText</span><span class="p">),</span>
-<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="w">                </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Card stroke and background also follow.&quot;</span><span class="p">)</span>
-<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a><span class="w">                    </span><span class="p">.</span><span class="n">Foreground</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">SecondaryText</span><span class="p">)</span>
-<a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a><span class="w">            </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">16</span><span class="p">)).</span><span class="n">Background</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">CardBackground</span><span class="p">)</span>
-<a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a><span class="w">             </span><span class="p">.</span><span class="n">WithBorder</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">CardStroke</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">).</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">8</span><span class="p">),</span>
-<a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a>
-<a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a><span class="w">            </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;Dark scope — bound to a region root&quot;</span><span class="p">),</span>
-<a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a><span class="w">            </span><span class="n">Border</span><span class="p">(</span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
-<a id="__codelineno-10-19" name="__codelineno-10-19" href="#__codelineno-10-19"></a><span class="w">                </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;This subtree is always dark.&quot;</span><span class="p">)</span>
-<a id="__codelineno-10-20" name="__codelineno-10-20" href="#__codelineno-10-20"></a><span class="w">                    </span><span class="p">.</span><span class="n">Foreground</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">PrimaryText</span><span class="p">),</span>
-<a id="__codelineno-10-21" name="__codelineno-10-21" href="#__codelineno-10-21"></a><span class="w">                </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;ThemeRef descendants resolve against the override.&quot;</span><span class="p">)</span>
-<a id="__codelineno-10-22" name="__codelineno-10-22" href="#__codelineno-10-22"></a><span class="w">                    </span><span class="p">.</span><span class="n">Foreground</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">SecondaryText</span><span class="p">)</span>
-<a id="__codelineno-10-23" name="__codelineno-10-23" href="#__codelineno-10-23"></a><span class="w">            </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">16</span><span class="p">)).</span><span class="n">Background</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">CardBackground</span><span class="p">)</span>
-<a id="__codelineno-10-24" name="__codelineno-10-24" href="#__codelineno-10-24"></a><span class="w">             </span><span class="p">.</span><span class="n">WithBorder</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">CardStroke</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">).</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span>
-<a id="__codelineno-10-25" name="__codelineno-10-25" href="#__codelineno-10-25"></a><span class="w">             </span><span class="c1">// Region root carries the override — leaf-level overrides</span>
-<a id="__codelineno-10-26" name="__codelineno-10-26" href="#__codelineno-10-26"></a><span class="w">             </span><span class="c1">// are the anti-pattern called out in Common Mistakes.</span>
-<a id="__codelineno-10-27" name="__codelineno-10-27" href="#__codelineno-10-27"></a><span class="w">             </span><span class="p">.</span><span class="n">RequestedTheme</span><span class="p">(</span><span class="n">ElementTheme</span><span class="p">.</span><span class="n">Dark</span><span class="p">)</span>
-<a id="__codelineno-10-28" name="__codelineno-10-28" href="#__codelineno-10-28"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
-<a id="__codelineno-10-29" name="__codelineno-10-29" href="#__codelineno-10-29"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-10-30" name="__codelineno-10-30" href="#__codelineno-10-30"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1">// Per-element theme override scope — a single panel forced to Dark</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="c1">// inside an otherwise Light app, without app-wide RequestedTheme.</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">ScopedThemeOverrideExample</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="p">{</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">            </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;Default scheme&quot;</span><span class="p">),</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="w">            </span><span class="n">Border</span><span class="p">(</span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">                </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Default scheme — follows the app theme.&quot;</span><span class="p">)</span>
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="w">                    </span><span class="p">.</span><span class="n">Foreground</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">PrimaryText</span><span class="p">),</span>
+<a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a><span class="w">                </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Card stroke and background also follow.&quot;</span><span class="p">)</span>
+<a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a><span class="w">                    </span><span class="p">.</span><span class="n">Foreground</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">SecondaryText</span><span class="p">)</span>
+<a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a><span class="w">            </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">16</span><span class="p">)).</span><span class="n">Background</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">CardBackground</span><span class="p">)</span>
+<a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a><span class="w">             </span><span class="p">.</span><span class="n">WithBorder</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">CardStroke</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">).</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">8</span><span class="p">),</span>
+<a id="__codelineno-12-16" name="__codelineno-12-16" href="#__codelineno-12-16"></a>
+<a id="__codelineno-12-17" name="__codelineno-12-17" href="#__codelineno-12-17"></a><span class="w">            </span><span class="n">SubHeading</span><span class="p">(</span><span class="s">&quot;Dark scope — bound to a region root&quot;</span><span class="p">),</span>
+<a id="__codelineno-12-18" name="__codelineno-12-18" href="#__codelineno-12-18"></a><span class="w">            </span><span class="n">Border</span><span class="p">(</span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-12-19" name="__codelineno-12-19" href="#__codelineno-12-19"></a><span class="w">                </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;This subtree is always dark.&quot;</span><span class="p">)</span>
+<a id="__codelineno-12-20" name="__codelineno-12-20" href="#__codelineno-12-20"></a><span class="w">                    </span><span class="p">.</span><span class="n">Foreground</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">PrimaryText</span><span class="p">),</span>
+<a id="__codelineno-12-21" name="__codelineno-12-21" href="#__codelineno-12-21"></a><span class="w">                </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;ThemeRef descendants resolve against the override.&quot;</span><span class="p">)</span>
+<a id="__codelineno-12-22" name="__codelineno-12-22" href="#__codelineno-12-22"></a><span class="w">                    </span><span class="p">.</span><span class="n">Foreground</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">SecondaryText</span><span class="p">)</span>
+<a id="__codelineno-12-23" name="__codelineno-12-23" href="#__codelineno-12-23"></a><span class="w">            </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">16</span><span class="p">)).</span><span class="n">Background</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">CardBackground</span><span class="p">)</span>
+<a id="__codelineno-12-24" name="__codelineno-12-24" href="#__codelineno-12-24"></a><span class="w">             </span><span class="p">.</span><span class="n">WithBorder</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">CardStroke</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">).</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span>
+<a id="__codelineno-12-25" name="__codelineno-12-25" href="#__codelineno-12-25"></a><span class="w">             </span><span class="c1">// Region root carries the override — leaf-level overrides</span>
+<a id="__codelineno-12-26" name="__codelineno-12-26" href="#__codelineno-12-26"></a><span class="w">             </span><span class="c1">// are the anti-pattern called out in Common Mistakes.</span>
+<a id="__codelineno-12-27" name="__codelineno-12-27" href="#__codelineno-12-27"></a><span class="w">             </span><span class="p">.</span><span class="n">RequestedTheme</span><span class="p">(</span><span class="n">ElementTheme</span><span class="p">.</span><span class="n">Dark</span><span class="p">)</span>
+<a id="__codelineno-12-28" name="__codelineno-12-28" href="#__codelineno-12-28"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-12-29" name="__codelineno-12-29" href="#__codelineno-12-29"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-12-30" name="__codelineno-12-30" href="#__codelineno-12-30"></a><span class="p">}</span>
 </code></pre></div>
 <p>The overridden subtree's <code>ThemeRef</code> resolutions walk up to the nearest
 explicit <code>RequestedTheme</code>, so cards, buttons, and text inside the
@@ -4254,8 +4300,8 @@ preview pane, a dark-mode-only video player, or a marketing surface
 embedded in an otherwise-light app.</p>
 <h2 id="common-mistakes">Common Mistakes<a class="headerlink" href="#common-mistakes" title="Permanent link">&para;</a></h2>
 <h3 id="hardcoded-color-literals-where-a-token-exists">Hardcoded color literals where a token exists<a class="headerlink" href="#hardcoded-color-literals-where-a-token-exists" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1">// Don&#39;t — frozen across themes.</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Subtitle&quot;</span><span class="p">).</span><span class="n">Foreground</span><span class="p">(</span><span class="s">&quot;#888888&quot;</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1">// Don&#39;t — frozen across themes.</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Subtitle&quot;</span><span class="p">).</span><span class="n">Foreground</span><span class="p">(</span><span class="s">&quot;#888888&quot;</span><span class="p">);</span>
 </code></pre></div>
 <p>The grey looks correct in light mode and washes out in dark mode.
 <code>Theme.SecondaryText</code> is the right token — the brush resolves to the
@@ -4263,11 +4309,11 @@ right grey in both themes. The <code>REACTOR_THEME_001</code> analyzer flags hex
 literals that match a known token's resolved value with a code-fix to
 the typed accessor.</p>
 <h3 id="using-themeref-when-a-typed-accessor-exists">Using <code>Theme.Ref</code> when a typed accessor exists<a class="headerlink" href="#using-themeref-when-a-typed-accessor-exists" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1">// Don&#39;t — works today, fragile to renames.</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="p">.</span><span class="n">Background</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">Ref</span><span class="p">(</span><span class="s">&quot;AccentFillColorDefaultBrush&quot;</span><span class="p">))</span>
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1">// Do — refactor-safe and discoverable.</span>
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="p">.</span><span class="n">Background</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">Accent</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1">// Don&#39;t — works today, fragile to renames.</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="p">.</span><span class="n">Background</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">Ref</span><span class="p">(</span><span class="s">&quot;AccentFillColorDefaultBrush&quot;</span><span class="p">))</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="c1">// Do — refactor-safe and discoverable.</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="p">.</span><span class="n">Background</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">Accent</span><span class="p">)</span>
 </code></pre></div>
 <p>The typed accessor produces the same <code>ThemeRef</code> record-struct as the
 string lookup — at render time they're identical. The difference is at
@@ -4276,21 +4322,21 @@ time against the typed accessor and silently returns <code>null</code> (system
 default) against <code>Theme.Ref</code>. See the caveat above for the full
 rationale.</p>
 <h3 id="setting-requestedtheme-on-a-leaf-element">Setting <code>RequestedTheme</code> on a leaf element<a class="headerlink" href="#setting-requestedtheme-on-a-leaf-element" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1">// Don&#39;t — the leaf&#39;s theme override doesn&#39;t cascade because there are</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="c1">// no descendants to receive it. The button&#39;s own brushes resolve, but</span>
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="c1">// the surrounding panel and any sibling controls do not.</span>
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="n">Border</span><span class="p">(</span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
-<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">    </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Click&quot;</span><span class="p">).</span><span class="n">RequestedTheme</span><span class="p">(</span><span class="n">ElementTheme</span><span class="p">.</span><span class="n">Dark</span><span class="p">),</span><span class="w">  </span><span class="c1">// leaf override</span>
-<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">    </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Caption&quot;</span><span class="p">)</span><span class="w">                                </span><span class="c1">// unaffected</span>
-<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="p">))</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1">// Don&#39;t — the leaf&#39;s theme override doesn&#39;t cascade because there are</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="c1">// no descendants to receive it. The button&#39;s own brushes resolve, but</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="c1">// the surrounding panel and any sibling controls do not.</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="n">Border</span><span class="p">(</span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">    </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Click&quot;</span><span class="p">).</span><span class="n">RequestedTheme</span><span class="p">(</span><span class="n">ElementTheme</span><span class="p">.</span><span class="n">Dark</span><span class="p">),</span><span class="w">  </span><span class="c1">// leaf override</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">    </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Caption&quot;</span><span class="p">)</span><span class="w">                                </span><span class="c1">// unaffected</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="p">))</span>
 </code></pre></div>
 <p><code>RequestedTheme</code> is a <code>FrameworkElement</code> property that flows <strong>down</strong>
 the visual tree. Apply it to the region root — the highest element
 whose descendants should resolve against the override — not to a single
 leaf. The right shape is the per-element scope pattern above.</p>
 <h3 id="reaching-for-set-for-theme-properties">Reaching for <code>.Set</code> for theme properties<a class="headerlink" href="#reaching-for-set-for-theme-properties" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1">// Don&#39;t — the modifier exists.</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Save&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">onSave</span><span class="p">).</span><span class="n">Set</span><span class="p">(</span><span class="n">c</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">RequestedTheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ElementTheme</span><span class="p">.</span><span class="n">Dark</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1">// Don&#39;t — the modifier exists.</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Save&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">onSave</span><span class="p">).</span><span class="n">Set</span><span class="p">(</span><span class="n">c</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">RequestedTheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ElementTheme</span><span class="p">.</span><span class="n">Dark</span><span class="p">);</span>
 </code></pre></div>
 <p>The <code>.RequestedTheme(...)</code> modifier participates in property diffing —
 the next render that removes the modifier walks the property back to
