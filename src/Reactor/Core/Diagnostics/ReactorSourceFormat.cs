@@ -115,6 +115,15 @@ internal static class ReactorSourceFormat
     }
 
     /// <summary>
+    /// <see cref="KindOf"/>, computed once per element type. Owned weakly by the type, so a
+    /// collectible plug-in's element types can still unload; the cached value is a plain string.
+    /// </summary>
+    internal static string CachedKindOf(Type elementType)
+        => s_kinds.GetValue(elementType, static t => KindOf(t));
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<Type, string> s_kinds = new();
+
+    /// <summary>
     /// Component display name — the same name the component events report
     /// (<see cref="ComponentNames"/>), so a reader can correlate this property with
     /// <c>RenderError</c> / <c>ComponentRendered</c>.

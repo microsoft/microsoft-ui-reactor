@@ -26,11 +26,22 @@ namespace Microsoft.UI.Reactor.Diagnostics;
 /// move a call onto a location the table gives another element. After a hot-reload update every
 /// lookup is unknown rather than wrong (<see cref="InvalidateStaticFactsForHotReload"/>), and
 /// hosts drop the facts already published on their next render (<see cref="StaticFactsRevision"/>).</para>
+///
+/// <para><b>Unloadable plug-ins.</b> A source-mapped assembly in a collectible
+/// <c>AssemblyLoadContext</c> registers like any other, and must still be able to unload.
+/// Everything that would keep it alive (the pending fill callback, which is code in that
+/// assembly, and its component-hook table) is owned weakly by the assembly through a
+/// <c>ConditionalWeakTable</c>; the
+/// location-keyed tables hold strings only.</para>
 /// </summary>
 public static partial class ReactorSourceMap
 {
     private static readonly global::System.Threading.Lock s_staticGate = new();
-    private static List<(global::System.Reflection.Assembly Assembly, Action<ReactorStaticInfoBuilder> Fill)>? s_pendingStatic;
+    // Fill callbacks not yet applied, owned weakly by their assembly (a callback is code in
+    // that assembly, so a strong list would keep a collectible plug-in from unloading).
+    // s_pendingCount > 0 is the lock-free "something pending" check.
+    private static global::System.Runtime.CompilerServices.ConditionalWeakTable<global::System.Reflection.Assembly, List<Action<ReactorStaticInfoBuilder>>>? s_pendingStatic;
+    private static int s_pendingCount;
     private static ReactorStaticInfoBuilder? s_static;
     private static int s_factsRevision;
     private static int s_hotReloaded;
@@ -86,7 +97,10 @@ public static partial class ReactorSourceMap
         ArgumentNullException.ThrowIfNull(assembly);
         ArgumentNullException.ThrowIfNull(fill);
         lock (s_staticGate)
-            (s_pendingStatic ??= new()).Add((assembly, fill));
+        {
+            (s_pendingStatic ??= new()).GetOrCreateValue(assembly).Add(fill);
+            Volatile.Write(ref s_pendingCount, s_pendingCount + 1);
+        }
     }
 
     /// <summary>
@@ -113,13 +127,14 @@ public static partial class ReactorSourceMap
     {
         if (StaticFactsInvalidatedByHotReload) return null;
         var table = StaticInfo();
-        if (table is null || table.ComponentHookTable.Count == 0) return null;
+        if (table is null || !table.HasComponentHooks) return null;
         for (Type? type = componentType; type is not null; type = type.BaseType)
         {
             var open = type.IsGenericType && !type.IsGenericTypeDefinition ? type.GetGenericTypeDefinition() : type;
-            if (open == typeof(global::Microsoft.UI.Reactor.Core.Component) || open == typeof(global::Microsoft.UI.Reactor.Core.Component<>) || !table.Assemblies.Contains(open.Assembly))
+            if (open == typeof(global::Microsoft.UI.Reactor.Core.Component) || open == typeof(global::Microsoft.UI.Reactor.Core.Component<>)
+                || !table.TryGetAssemblyHooks(open.Assembly, out var assemblyHooks))
                 return null;
-            if (open.FullName is { } key && table.ComponentHookTable.TryGetValue((open.Assembly, key), out var hooks))
+            if (open.FullName is { } key && assemblyHooks.TryGetValue(key, out var hooks))
                 return hooks.Length == 0 ? null : hooks;
         }
         return null;
@@ -217,11 +232,11 @@ public static partial class ReactorSourceMap
 
     private static ReactorStaticInfoBuilder? StaticInfo()
     {
-        if (Volatile.Read(ref s_pendingStatic) is null) return Volatile.Read(ref s_static);
+        if (Volatile.Read(ref s_pendingCount) == 0) return Volatile.Read(ref s_static);
 
         lock (s_staticGate)
         {
-            if (s_pendingStatic is { } pending)
+            if (s_pendingCount != 0 && s_pendingStatic is { } pending)
             {
                 // A later assembly load can queue more entries after readers already hold
                 // the published table, which they read without the lock. Build a fresh one
@@ -234,17 +249,18 @@ public static partial class ReactorSourceMap
                     // file unattributable, so they are re-checked (see StaticFactsRevision).
                     Interlocked.Increment(ref s_factsRevision);
                 }
-                foreach (var (assembly, fill) in pending)
+                // An entry whose plug-in has already unloaded is simply gone from the table.
+                foreach (var (assembly, fills) in pending)
                 {
                     table.CurrentAssembly = assembly;
-                    table.Assemblies.Add(assembly);
-                    fill(table);
+                    foreach (var fill in fills) fill(table);
                 }
                 table.CurrentAssembly = null;
                 // Publish the table BEFORE clearing the marker: a reader that sees the marker
                 // cleared (lock-free path above) must also see the table it stands for.
                 Volatile.Write(ref s_static, table);
-                Volatile.Write(ref s_pendingStatic, null);
+                s_pendingStatic = null;
+                Volatile.Write(ref s_pendingCount, 0);
             }
             return s_static;
         }
@@ -263,21 +279,38 @@ public sealed class ReactorStaticInfoBuilder
     internal List<string> ProjectDirectories { get; } = new();
     internal List<string> RootDirectories { get; } = new();
 
-    /// <summary>Source-mapped assemblies whose facts are in the table.</summary>
-    internal HashSet<global::System.Reflection.Assembly> Assemblies { get; } = new();
+    // Per source-mapped assembly, its class components' hooks (open generic type full name →
+    // hooks): full names are only unique within one assembly. Owned weakly by the assembly, so
+    // a collectible plug-in can unload; an assembly with an entry (even empty) is source-mapped.
+    private readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<global::System.Reflection.Assembly, Dictionary<string, string>> _componentHooks = new();
+    private Dictionary<string, string>? _currentHooks;
 
-    /// <summary>The assembly whose fill callback is running (keys its component hooks).</summary>
-    internal global::System.Reflection.Assembly? CurrentAssembly { get; set; }
+    /// <summary>Whether any component hooks were recorded (a fast path for the common empty table).</summary>
+    internal bool HasComponentHooks { get; private set; }
+
+    /// <summary>
+    /// The assembly whose fill callback is running: marks it source-mapped and keys the
+    /// component hooks recorded next. Only the hook table is selected; no reference is kept.
+    /// </summary>
+    internal global::System.Reflection.Assembly? CurrentAssembly
+    {
+        set => _currentHooks = value is null ? null : _componentHooks.GetOrCreateValue(value);
+    }
+
+    /// <summary>The component hooks of a source-mapped assembly; false for any other assembly.</summary>
+    internal bool TryGetAssemblyHooks(global::System.Reflection.Assembly assembly, out Dictionary<string, string> hooks)
+        => _componentHooks.TryGetValue(assembly, out hooks!);
 
     internal void CopyFrom(ReactorStaticInfoBuilder other)
     {
         foreach (var (k, v) in other.NameTable) NameTable[k] = v;
-        foreach (var (k, v) in other.ComponentHookTable) ComponentHookTable[k] = v;
+        foreach (var (assembly, hooks) in other._componentHooks)
+            _componentHooks.AddOrUpdate(assembly, new Dictionary<string, string>(hooks, StringComparer.Ordinal));
+        HasComponentHooks = other.HasComponentHooks;
         foreach (var (k, v) in other.RenderFunctionHookTable) RenderFunctionHookTable[k] = v;
         foreach (var (k, v) in other.FileFingerprints) FileFingerprints[k] = v;
         ProjectDirectories.AddRange(other.ProjectDirectories);
         RootDirectories.AddRange(other.RootDirectories);
-        Assemblies.UnionWith(other.Assemblies);
     }
 
     /// <summary>
@@ -296,7 +329,6 @@ public sealed class ReactorStaticInfoBuilder
     // facts (two libraries mapping their roots to /_/ can share a path, line and column):
     // unknown, never one library's name or hooks on the other's controls.
     internal Dictionary<SourceLocation, string?> NameTable { get; } = new();
-    internal Dictionary<(global::System.Reflection.Assembly Assembly, string FullName), string> ComponentHookTable { get; } = new();
     internal Dictionary<SourceLocation, string?> RenderFunctionHookTable { get; } = new();
 
     /// <summary>Records that the element created at this call site was assigned to <paramref name="name"/>.</summary>
@@ -333,8 +365,11 @@ public sealed class ReactorStaticInfoBuilder
     /// </summary>
     public void ComponentHooks(string componentTypeFullName, string hooks)
     {
-        if (CurrentAssembly is { } assembly)
-            ComponentHookTable[(assembly, componentTypeFullName)] = hooks;
+        if (_currentHooks is { } assemblyHooks)
+        {
+            assemblyHooks[componentTypeFullName] = hooks;
+            HasComponentHooks = true;
+        }
     }
 
     /// <summary>Records the <c>hooks=</c> value for a render function passed to the call at this site.</summary>

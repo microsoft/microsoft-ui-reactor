@@ -191,8 +191,10 @@ public sealed class StaticInfoTests : IDisposable
         table.CurrentAssembly = second;
         table.ComponentHooks("App.Counter", "0:b@2");
 
-        Assert.Equal("0:a@1", table.ComponentHookTable[(first, "App.Counter")]);
-        Assert.Equal("0:b@2", table.ComponentHookTable[(second, "App.Counter")]);
+        Assert.True(table.TryGetAssemblyHooks(first, out var firstHooks));
+        Assert.True(table.TryGetAssemblyHooks(second, out var secondHooks));
+        Assert.Equal("0:a@1", firstHooks["App.Counter"]);
+        Assert.Equal("0:b@2", secondHooks["App.Counter"]);
     }
 
     [Fact]

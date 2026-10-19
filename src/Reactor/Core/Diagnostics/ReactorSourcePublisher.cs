@@ -337,7 +337,7 @@ internal static class ReactorSourcePublisher
 
         string? name = site?.DeclaredName;
         var parts = Cache.Parts.GetOrAdd(
-            new ValueShape(site, owner, effective.GetType(), mounts, root, name, hooks ?? rootHooks),
+            new ValueShape(site, owner, ReactorSourceFormat.CachedKindOf(effective.GetType()), mounts, root, name, hooks ?? rootHooks),
             static shape => ValueParts.Create(shape));
         var keyText = ReactorSourceFormat.KeyText(effective.Key ?? element.Key);
         return keyText is null
@@ -349,9 +349,11 @@ internal static class ReactorSourcePublisher
     // site, component and element types, the source map's names and hooks), so the formatted
     // text is cached per shape: the cache is bounded by the app's call sites, the per-control
     // work is a lookup plus (for keyed elements) one concat, and unkeyed controls with the
-    // same shape share one string instance.
+    // same shape share one string instance. The element kind is its formatted string, never
+    // the Type: this cache lives for the process, and must not keep a collectible plug-in's
+    // element type (and so its AssemblyLoadContext) alive.
     private readonly record struct ValueShape(
-        SourceLocation? Site, string? Owner, Type Kind, string? Mounts, string? Root, string? Name, string? Hooks);
+        SourceLocation? Site, string? Owner, string Kind, string? Mounts, string? Root, string? Name, string? Hooks);
 
     // In a holder class: the guard on every reconciler call site reads IsEnabled, which runs this
     // type's static initializer even when publishing is off; the cache is only allocated on first use.
@@ -390,7 +392,7 @@ internal static class ReactorSourcePublisher
                     full.ColumnNumber)
                 : shape.Site;
             var head = ReactorSourceFormat.Build(
-                published, shape.Owner, ReactorSourceFormat.KindOf(shape.Kind), shape.Mounts, shape.Root, rel: rel);
+                published, shape.Owner, shape.Kind, shape.Mounts, shape.Root, rel: rel);
             if (shape.Site is { } site && AtKey(head) is { } atKey)
                 RecordSource(atKey, site);
             // Build's fixed "v=1" prefix, then only name/hooks: exactly the fields after key.
