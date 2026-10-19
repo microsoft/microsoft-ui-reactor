@@ -4,13 +4,12 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
-using Windows.Storage;
-using Windows.Storage.Pickers;
+using Microsoft.Windows.Storage.Pickers;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
-/// <summary>Spec 054 Phase 7 fixtures for title-bar inference, transparent backdrop, and picker HWND initialization.</summary>
+/// <summary>Spec 054 Phase 7 fixtures for title-bar inference, transparent backdrop, and picker owner-window initialization.</summary>
 internal static class Phase7WindowingFixtures
 {
     private static void EnsureUIDispatcher()
@@ -57,11 +56,11 @@ internal static class Phase7WindowingFixtures
 
     private sealed class PickerComponent : Component
     {
-        public Func<Task<StorageFile?>>? Pick { get; private set; }
+        public Func<Task<PickFileResult?>>? Pick { get; private set; }
 
         public override Element Render()
         {
-            Pick = () => UseFilePickerAsync(new FilePickerOptions());
+            Pick = () => PickFileAsync(new FilePickerOptions());
             return TextBlock("picker");
         }
     }
@@ -101,8 +100,8 @@ internal static class Phase7WindowingFixtures
             return VStack(
                 aspectMounted ? Component<WindowAspectRatioHookChild>() : TextBlock("aspect unmounted"),
                 TextBlock($"hooks {count}"),
-                Button("File", () => _ = UseFilePickerAsync(fileOptions)).OnMount(fe => FileButton = (Button)fe),
-                Button("Folder", () => _ = UseFolderPickerAsync(folderOptions)).OnMount(fe => FolderButton = (Button)fe));
+                Button("File", () => _ = PickFileAsync(fileOptions)).OnMount(fe => FileButton = (Button)fe),
+                Button("Folder", () => _ = PickFolderAsync(folderOptions)).OnMount(fe => FolderButton = (Button)fe));
         }
     }
 
@@ -116,33 +115,36 @@ internal static class Phase7WindowingFixtures
     }
     private sealed class StubPickerService : IPickerService
     {
-        public nint LastHwnd { get; private set; }
+        public Microsoft.UI.WindowId LastOwner { get; private set; }
         public int FileCalls { get; private set; }
         public int FolderCalls { get; private set; }
         public FilePickerOptions? LastFileOptions { get; private set; }
         public FolderPickerOptions? LastFolderOptions { get; private set; }
 
-        public Task<StorageFile?> PickFileAsync(nint hwnd, FilePickerOptions options)
+        public Task<PickFileResult?> PickFileAsync(Microsoft.UI.WindowId owner, FilePickerOptions options)
         {
-            LastHwnd = hwnd;
+            LastOwner = owner;
             LastFileOptions = options;
             FileCalls++;
-            return Task.FromResult<StorageFile?>(null);
+            return Task.FromResult<PickFileResult?>(null);
         }
 
-        public Task<StorageFolder?> PickFolderAsync(nint hwnd, FolderPickerOptions options)
+        public Task<PickFolderResult?> PickFolderAsync(Microsoft.UI.WindowId owner, FolderPickerOptions options)
         {
-            LastHwnd = hwnd;
+            LastOwner = owner;
             LastFolderOptions = options;
             FolderCalls++;
-            return Task.FromResult<StorageFolder?>(null);
+            return Task.FromResult<PickFolderResult?>(null);
         }
 
-        public Task<IReadOnlyList<StorageFile>> PickMultipleFilesAsync(nint hwnd, FilePickerOptions options)
-            => Task.FromResult<IReadOnlyList<StorageFile>>([]);
+        public Task<IReadOnlyList<PickFileResult>> PickMultipleFilesAsync(Microsoft.UI.WindowId owner, FilePickerOptions options)
+            => Task.FromResult<IReadOnlyList<PickFileResult>>([]);
 
-        public Task<StorageFile?> PickSaveFileAsync(nint hwnd, SaveFilePickerOptions options)
-            => Task.FromResult<StorageFile?>(null);
+        public Task<IReadOnlyList<PickFolderResult>> PickMultipleFoldersAsync(Microsoft.UI.WindowId owner, FolderPickerOptions options)
+            => Task.FromResult<IReadOnlyList<PickFolderResult>>([]);
+
+        public Task<PickFileResult?> PickSaveFileAsync(Microsoft.UI.WindowId owner, SaveFilePickerOptions options)
+            => Task.FromResult<PickFileResult?>(null);
     }
 
     private static async Task<ReactorWindow> OpenAndSettle(WindowSpec spec, Func<Component> root)
@@ -445,8 +447,7 @@ internal static class Phase7WindowingFixtures
             try
             {
                 await component.Pick!();
-                var expected = WinRT.Interop.WindowNative.GetWindowHandle(win.NativeWindow);
-                H.Check("FilePicker_InitializesWithWindow", service.FileCalls == 1 && service.LastHwnd == expected);
+                H.Check("FilePicker_InitializesWithWindow", service.FileCalls == 1 && service.LastOwner == win.AppWindow.Id);
             }
             finally
             {
@@ -527,19 +528,19 @@ internal static class Phase7WindowingFixtures
                 H.Check("UseIsCovered_RerendersOnZOrderChange", coveredUpdated);
 
                 Invoke(component.FileButton!);
-                var expected = WinRT.Interop.WindowNative.GetWindowHandle(win.NativeWindow);
-                H.Check("UseFilePickerAsync_RoutesThroughPickerService", service.FileCalls == 1 && service.LastHwnd == expected);
+                var expected = win.AppWindow.Id;
+                H.Check("PickFileAsync_RoutesThroughPickerService", service.FileCalls == 1 && service.LastOwner == expected);
                 var fileOpts = service.LastFileOptions;
-                H.Check("UseFilePickerAsync_RoutesThroughPickerService_Options",
+                H.Check("PickFileAsync_RoutesThroughPickerService_Options",
                     fileOpts is not null
                     && fileOpts.FileTypeFilter?.FirstOrDefault() == ".txt"
                     && fileOpts.SuggestedStartLocation == PickerLocationId.PicturesLibrary
                     && fileOpts.CommitButtonText == "Open Test");
 
                 Invoke(component.FolderButton!);
-                H.Check("UseFolderPickerAsync_RoutesThroughPickerService", service.FolderCalls == 1 && service.LastHwnd == expected);
+                H.Check("PickFolderAsync_RoutesThroughPickerService", service.FolderCalls == 1 && service.LastOwner == expected);
                 var folderOpts = service.LastFolderOptions;
-                H.Check("UseFolderPickerAsync_RoutesThroughPickerService_Options",
+                H.Check("PickFolderAsync_RoutesThroughPickerService_Options",
                     folderOpts is not null
                     && folderOpts.SuggestedStartLocation == PickerLocationId.Desktop
                     && folderOpts.CommitButtonText == "Select Test");

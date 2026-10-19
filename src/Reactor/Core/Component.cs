@@ -162,17 +162,25 @@ public abstract class Component
     protected void UseClosingGuard(Func<bool> canClose)
         => Context.UseClosingGuard(canClose);
 
-    protected Task<global::Windows.Storage.StorageFile?> UseFilePickerAsync(FilePickerOptions options)
-        => Context.UseFilePickerAsync(options);
+    /// <summary>Opens a single-file picker owned by this component's window. Not a hook: call from a UI-thread event handler.</summary>
+    protected Task<Microsoft.Windows.Storage.Pickers.PickFileResult?> PickFileAsync(FilePickerOptions options)
+        => Context.PickFileAsync(options);
 
-    protected Task<IReadOnlyList<global::Windows.Storage.StorageFile>> UseMultipleFilesPickerAsync(FilePickerOptions options)
-        => Context.UseMultipleFilesPickerAsync(options);
+    /// <summary>Opens a multiple-file picker owned by this component's window. Not a hook: call from a UI-thread event handler.</summary>
+    protected Task<IReadOnlyList<Microsoft.Windows.Storage.Pickers.PickFileResult>> PickMultipleFilesAsync(FilePickerOptions options)
+        => Context.PickMultipleFilesAsync(options);
 
-    protected Task<global::Windows.Storage.StorageFolder?> UseFolderPickerAsync(FolderPickerOptions options)
-        => Context.UseFolderPickerAsync(options);
+    /// <summary>Opens a single-folder picker owned by this component's window. Not a hook: call from a UI-thread event handler.</summary>
+    protected Task<Microsoft.Windows.Storage.Pickers.PickFolderResult?> PickFolderAsync(FolderPickerOptions options)
+        => Context.PickFolderAsync(options);
 
-    protected Task<global::Windows.Storage.StorageFile?> UseSaveFilePickerAsync(SaveFilePickerOptions options)
-        => Context.UseSaveFilePickerAsync(options);
+    /// <summary>Opens a multiple-folder picker owned by this component's window. Not a hook: call from a UI-thread event handler.</summary>
+    protected Task<IReadOnlyList<Microsoft.Windows.Storage.Pickers.PickFolderResult>> PickMultipleFoldersAsync(FolderPickerOptions options)
+        => Context.PickMultipleFoldersAsync(options);
+
+    /// <summary>Opens a save-file picker owned by this component's window. Not a hook: call from a UI-thread event handler.</summary>
+    protected Task<Microsoft.Windows.Storage.Pickers.PickFileResult?> PickSaveFileAsync(SaveFilePickerOptions options)
+        => Context.PickSaveFileAsync(options);
 
     /// <summary>Subscribes to the host window's position-changed event and re-renders on move. (spec 054 §5.5)</summary>
     protected (double X, double Y) UseWindowPosition()

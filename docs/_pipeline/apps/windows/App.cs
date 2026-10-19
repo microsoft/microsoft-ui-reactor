@@ -576,35 +576,36 @@ class PickerDemo : Component
     public override Element Render()
     {
         // <snippet:pickers>
-        // Capture helpers during Render; invoke them only from UI-thread events.
-        var pickFile = UseFilePickerAsync;
-        var pickFiles = UseMultipleFilesPickerAsync;
-        var pickFolder = UseFolderPickerAsync;
-        var saveFile = UseSaveFilePickerAsync;
-
+        // Pickers are not hooks: call them directly from UI-thread event handlers.
         return VStack(
             Button("Open one...", async () =>
             {
-                var file = await pickFile(new FilePickerOptions(FileTypeFilter: [".txt", ".md"]));
+                var file = await PickFileAsync(new FilePickerOptions(FileTypeFilter: [".txt", ".md"]));
                 if (file is null) return; // User cancelled.
+                var text = await File.ReadAllTextAsync(file.Path);
             }),
             Button("Open files...", async () =>
             {
-                var files = await pickFiles(new FilePickerOptions(FileTypeFilter: [".txt", ".md"]));
+                var files = await PickMultipleFilesAsync(new FilePickerOptions
+                {
+                    Title = "Choose notes",
+                    FileTypeChoices = [new("Notes", [".txt", ".md"]), new("JSON", [".json"])],
+                });
                 if (files.Count == 0) return; // User cancelled.
             }),
-            Button("Select folder...", async () =>
+            Button("Select folders...", async () =>
             {
-                var folder = await pickFolder(new FolderPickerOptions());
-                if (folder is null) return;
+                var folders = await PickMultipleFoldersAsync(new FolderPickerOptions());
+                if (folders.Count == 0) return;
             }),
             Button("Save as...", async () =>
             {
-                var file = await saveFile(new SaveFilePickerOptions(
-                    new Dictionary<string, IReadOnlyList<string>> { ["Text"] = [".txt"] },
+                var target = await PickSaveFileAsync(new SaveFilePickerOptions(
+                    [new("Text", [".txt"]), new("Markdown", [".md"])],
                     SuggestedFileName: "report"));
-                if (file is null) return;
-                // Write the desired content here; selecting a target is not a save.
+                if (target is null) return;
+                // Selecting a target is not a save: write the content yourself.
+                await File.WriteAllTextAsync(target.Path, "report body");
             }));
         // </snippet:pickers>
     }

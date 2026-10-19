@@ -553,41 +553,62 @@ Caveats:
 
 ## Pickers
 
-Picker helpers create native `Windows.Storage.Pickers` dialogs and initialize them with the owning
-window HWND, so the picker is modal to the correct window without app code doing
-HWND interop. Both `Component` and `RenderContext` expose the same operations:
+Picker methods create `Microsoft.Windows.Storage.Pickers` dialogs owned by the
+component's window, so each dialog is modal to the right window without any
+HWND interop. They also work in elevated (administrator) apps, unlike the UWP
+`Windows.Storage.Pickers` dialogs. `Component` and `RenderContext` expose the
+same operations:
 
-| Helper | Options | Cancellation |
-| --- | --- | --- |
-| <!-- ref:UseFilePickerAsync --> | `FilePickerOptions` | `null` |
-| <!-- ref:UseMultipleFilesPickerAsync --> | `FilePickerOptions` | Empty `IReadOnlyList<StorageFile>` |
-| <!-- ref:UseFolderPickerAsync --> | `FolderPickerOptions` | `null` |
-| <!-- ref:UseSaveFilePickerAsync --> | `SaveFilePickerOptions` | `null` |
+| Method | Options | Returns | Cancellation |
+| --- | --- | --- | --- |
+| `PickFileAsync` | `FilePickerOptions` | `PickFileResult?` | `null` |
+| `PickMultipleFilesAsync` | `FilePickerOptions` | `IReadOnlyList<PickFileResult>` | Empty list |
+| `PickFolderAsync` | `FolderPickerOptions` | `PickFolderResult?` | `null` |
+| `PickMultipleFoldersAsync` | `FolderPickerOptions` | `IReadOnlyList<PickFolderResult>` | Empty list |
+| `PickSaveFileAsync` | `SaveFilePickerOptions` | `PickFileResult?` | `null` |
 
-Open and folder options include file-type filters (null or empty means `"*"`),
-suggested location, commit-button text, an optional view mode, and a settings
-identifier for Windows to remember dialog state. Existing positional constructors
-are unchanged; additional options are init properties. Save options require a
-non-empty dictionary mapping display labels to extension lists, and support a
-suggested file name, location, button text, settings identifier, and existing save
-file. Windows validates extension syntax. The save helper only selects/creates
-the target; the caller must write its contents.
+Each result exposes the chosen `Path`. Open the file with `System.IO`, or with
+`StorageFile.GetFileFromPathAsync` when you need a `StorageFile`.
+
+All three option records share a suggested start location, commit-button text,
+a dialog `Title`, a `SettingsIdentifier` that Windows uses to remember dialog state,
+`SuggestedFolder` (always open there), and `SuggestedStartFolder` (open there until
+Windows remembers a location). Both folder properties take absolute paths. Open
+and folder options add an optional `ViewMode`. File options add:
+
+- `FileTypeFilter`: extensions such as `".txt"`. Null or empty shows all files.
+- `FileTypeChoices`: an ordered list of `FileTypeChoice(label, extensions)` groups.
+  When non-empty, it replaces `FileTypeFilter`.
+- `InitialFileTypeIndex`: the entry selected first. Null lets Windows choose.
+
+Save options require at least one `FileTypeChoice`. The list order is the order
+Windows shows, and the first entry is the default unless `InitialFileTypeIndex`
+says otherwise. Labels must be unique and non-blank, and every choice needs at
+least one extension. Save options also take a suggested file name,
+`DefaultFileExtension`, and `ShowOverwritePrompt` (default `true`). The save
+method only selects a target path; the caller must create and write the file.
+
+Both `Windows.Storage.Pickers` and `Microsoft.Windows.Storage.Pickers` define
+`PickerLocationId` and `PickerViewMode`, so import only the
+`Microsoft.Windows.Storage.Pickers` namespace in files that build picker options.
 
 ```csharp snippet="windows/pickers"
 ```
 
 Caveats:
 
-- Unlike positional state hooks, these helpers open a dialog when called. Invoke
-  them from UI-thread event handlers, not during `Render()` or in `Task.Run`.
-- Calling without an owning Reactor window throws `InvalidOperationException`.
+- These methods are not hooks: they reserve no hook slot and open a dialog when
+  called. Call them from UI-thread event handlers, not during `Render()` or in
+  `Task.Run`. Their `Pick*` names keep the hook-rules analyzer quiet in handlers.
+- The owner is the window that last rendered the component, not whichever window
+  is active when the handler runs. If that window has closed, or the component
+  never rendered in a Reactor window, the call throws `InvalidOperationException`.
+- Option validation (missing or duplicate file-type choices) throws `ArgumentException`
+  before any dialog opens. Windows validates extension syntax and folder paths.
 - Picker errors propagate to the caller; cancellation is not an error.
-- Reactor never accepts arbitrary HWNDs; it always uses `UseWindow().NativeWindow`.
 - Framework tests use an internal picker-service seam instead of opening modal dialogs.
-- These helpers retain `Windows.Storage` results; they do not migrate to the
-  separate `Microsoft.Windows.Storage.Pickers` API or change its OS requirements.
-- The native `FolderPicker` supports one folder at a time, not multi-selection.
-
+- Content hosted through `ReactorHostControl` has no owning Reactor window of its
+  own, so it cannot rely on these methods to pick the correct owner.
 ## WPF / UWP migration map
 
 Coming from a pre-054 Reactor app instead? See
@@ -606,7 +627,7 @@ fields that were removed and what replaced them.
 | Manual settings persistence | `.WithPersistence(id)` | Opt-in, one line. |
 | `TaskbarItemInfo` | `TaskbarItem` | Facade over progress, overlay, description, thumb buttons. |
 | WPF `JumpTask` / `JumpList` | `JumpListItem` / `JumpList` | Process-wide, not per-window; `UpdateAsync` replaces the whole list. |
-| UWP/WinUI picker HWND setup | Open, multiple-file, folder, and save picker helpers | Owning HWND is wired automatically. |
+| UWP/WinUI picker HWND setup | `PickFileAsync`, `PickMultipleFilesAsync`, `PickFolderAsync`, `PickMultipleFoldersAsync`, `PickSaveFileAsync` | Owner window is wired automatically; results are paths. |
 
 ## Finding and enumerating windows
 

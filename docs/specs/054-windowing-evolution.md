@@ -1100,22 +1100,54 @@ return Border(...).PointerPressed(_ => beginDrag());
 
 `beginDrag` is stable across re-renders (same delegate identity).
 
-### 8.3 `UseFolderPicker` / `UseFilePicker` — auto-`InitializeWithWindow`
+### 8.3 Owner-window pickers — `PickFileAsync` / `PickFolderAsync` / …
 
-Already-built helpers for the WinRT pickers that need `IInitializeWithWindow`
-called with the host HWND. Removes the boilerplate the source proposal
-calls out in §5.2.
+Helpers for the native file and folder pickers that remove the owner-window
+boilerplate the source proposal calls out in §5.2.
 
 ```csharp
-public sealed class FilePickerOptions { /* … */ }
-public Task<StorageFile?> RenderContext.UseFilePickerAsync(FilePickerOptions options);
-public Task<StorageFolder?> RenderContext.UseFolderPickerAsync(FolderPickerOptions options);
+// using Microsoft.Windows.Storage.Pickers;
+public Task<PickFileResult?> RenderContext.PickFileAsync(FilePickerOptions options);
+public Task<IReadOnlyList<PickFileResult>> RenderContext.PickMultipleFilesAsync(FilePickerOptions options);
+public Task<PickFolderResult?> RenderContext.PickFolderAsync(FolderPickerOptions options);
+public Task<IReadOnlyList<PickFolderResult>> RenderContext.PickMultipleFoldersAsync(FolderPickerOptions options);
+public Task<PickFileResult?> RenderContext.PickSaveFileAsync(SaveFilePickerOptions options);
+public sealed record FileTypeChoice(string Label, IReadOnlyList<string> Extensions);
 ```
 
-Implementation: `UseWindow().NativeWindow.GetWindowHandle()` →
-`WinRT.Interop.InitializeWithWindow.Initialize`. The pickers themselves
-are out of scope of windowing, but the boilerplate-elimination story
-naturally belongs here.
+`Component` exposes the same five as protected forwarders.
+
+**Revision (issue #1374).** The first cut shipped as `Use*PickerAsync` helpers
+over the UWP `Windows.Storage.Pickers` + `InitializeWithWindow`, returning
+`StorageFile` / `StorageFolder`. It was revised before 1.0:
+
+- **API.** Built on `Microsoft.Windows.Storage.Pickers` (Windows App SDK 1.8+;
+  spec 003 §20.3's recommendation). Pickers are constructed from the owner's
+  `AppWindow.Id`, so there is no HWND/COM interop, and they work in elevated
+  apps. Results are path-based `PickFileResult` / `PickFolderResult`.
+- **Options.** `Title`, `SuggestedFolder`, `SuggestedStartFolder`,
+  `InitialFileTypeIndex`, open-picker `FileTypeChoices`, and save-only
+  `DefaultFileExtension` / `ShowOverwritePrompt` were added.
+  `FolderPickerOptions.FileTypeFilter` and `SaveFilePickerOptions.SuggestedSaveFile`
+  were removed (no native equivalent). `FileTypeChoices` is an ordered
+  `IReadOnlyList<FileTypeChoice>` because order sets the default entry; labels must
+  be unique and non-blank and each choice needs an extension, validated before the
+  owner lookup.
+- **Owner window.** The owner was read from `ReactorApp.ActiveHostInternal` at call
+  time. Pickers run from event handlers, outside render, where that field names
+  the most recently rendered or constructed host (or null after any host is
+  disposed). With two windows, A's picker parented to B, and every picker threw
+  once any window closed. `RenderContext` now captures the owning window in
+  `BeginRender` (where `ReactorHost.Render` scopes that field to itself), clears
+  it on detach, and refuses a closed owner. Content rendered through
+  `ReactorHostControl`, which does not scope the field, keeps the pre-existing
+  limitation shared by every window hook.
+- **Naming.** `HookRulesAnalyzer` treats any `Use[A-Z]*` method on
+  `Component` / `RenderContext` as a hook, so calling the old names from a click
+  lambda raised REACTOR_HOOKS_001 and from a named handler REACTOR_HOOKS_005. The
+  pickers reserve no hook slot and must not run during render, so they were
+  renamed `Pick*Async` rather than exempted from the analyzer.
+- **Additions.** `PickMultipleFoldersAsync` (the new `FolderPicker` supports it).
 
 ---
 
@@ -1241,7 +1273,7 @@ No risk — purely additive.
 
 ### Phase 7 — Picker boilerplate elimination _(small)_
 
-- `UseFilePickerAsync` / `UseFolderPickerAsync`.
+- `PickFileAsync` / `PickMultipleFilesAsync` / `PickFolderAsync` / `PickMultipleFoldersAsync` / `PickSaveFileAsync` (originally shipped as `Use*PickerAsync`; see §8.3).
 
 Lives more in the data-system area than windowing; could be split off
 into its own spec if scoping requires.
@@ -1373,7 +1405,7 @@ response.
 | `WindowMessageReceived` | ◯ deferred (design preserved) | §7.6 |
 | Monitor enumeration | ▲ `ReactorDisplay` | §6.7 |
 | Splash screen | ❌ separate spec | — |
-| Picker `InitializeWithWindow` helpers | ▲ `UseFilePickerAsync` etc. | §8.3 |
+| Picker `InitializeWithWindow` helpers | ▲ `PickFileAsync` etc. (`Microsoft.Windows.Storage.Pickers`) | §8.3 |
 | `Window.Cursor` per-window cursor | ❌ deferred | — |
 | `Window.AllowsTransparency` (WPF) | ❌ rejected (see `IsTransparent`) | §7.1 |
 | `Window.WindowChrome` (WPF) | ✅ already covered by `TitleBar(...)` + `CornerStyle` + `WindowStyle` | §6.1 / §6.2 / §6.6 |

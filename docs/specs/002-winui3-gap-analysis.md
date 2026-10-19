@@ -910,7 +910,7 @@ redirection before calling `ReactorApp.Run`.
 |---|---|---|
 | **Printing** | Passthrough | Use PrintManagerInterop directly with the HWND from `ReactorHost.Window` |
 | **Clipboard** | Passthrough | Use Windows.ApplicationModel.DataTransfer.Clipboard |
-| **File Pickers** | Exposed | `UseFilePickerAsync(FilePickerOptions)` → `Task<StorageFile?>` — owner-window initialization is handled for you |
+| **File Pickers** | Exposed | `PickFileAsync(FilePickerOptions)` → `Task<PickFileResult?>` (`Microsoft.Windows.Storage.Pickers`) — owner-window initialization is handled for you |
 
 **Verdict: mostly passthrough, with file pickers wrapped.** File picking was the one OS service
 where the HWND-initialization dance was both mandatory and easy to get wrong, so it has a hook.
@@ -1012,7 +1012,7 @@ is kept as a record so the document's own history stays auditable.
 | P2 | ManipulationMode modifier | **Still open** |
 | P3 | Activation kinds | **Shipped** — `LaunchActivation` / `LaunchKind` / `DeepLinkMap` (§19). **Single-instancing did not** — `AppInstance` redirection is still the app's job |
 | P3 | InkCanvas / InkToolbar | **Still open** |
-| P3 | App service wrappers | **Partly** — `UseFilePickerAsync` shipped; clipboard and printing still raw (§20) |
+| P3 | App service wrappers | **Partly** — `PickFileAsync` and the other picker methods shipped; clipboard and printing still raw (§20) |
 
 ### Top Gaps to Address (Priority Order)
 

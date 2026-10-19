@@ -909,10 +909,8 @@ RenderContext.UseEffect<T1>(Func<Action> effectWithCleanup, T1 d1) → void
 RenderContext.UseElementFocus(FocusState state = FocusState.Programmatic) → ValueTuple<ElementRef, Action>
 RenderContext.UseElementRef<T>() → ElementRef<T>
 RenderContext.UseExternalStore<TSnapshot>(Func<Action, Action> subscribe, Func<TSnapshot> getSnapshot, IEqualityComparer<TSnapshot> comparer = null) → TSnapshot
-RenderContext.UseFilePickerAsync(FilePickerOptions options) → Task<StorageFile>
 RenderContext.UseFocus() → FocusManager
 RenderContext.UseFocusTrap(bool isActive) → FocusTrapHandle
-RenderContext.UseFolderPickerAsync(FolderPickerOptions options) → Task<StorageFolder>
 RenderContext.UseHighContrast() → bool
 RenderContext.UseHighContrastScheme() → string
 RenderContext.UseInfiniteResource<TItem, TCursor>(Func<TCursor, CancellationToken, Task<Page<TItem, TCursor>>> fetchPage, QueryCache cache, object[] deps, InfiniteResourceOptions options = null, IHookDispatcher dispatcher = null, Func<int, TCursor> cursorFromPageIndex = null) → InfiniteResource<TItem>
@@ -928,7 +926,6 @@ RenderContext.UseMemo<T>(Func<T> factory, object[] dependencies) → T
 RenderContext.UseMemoCells<T>(IReadOnlyList<T> items, Func<T, int, Element> builder, object[] dependencies) → Element[]
 RenderContext.UseMemoCellsByIndex<T>(IReadOnlyList<T> items, IReadOnlyList<int> changedIndices, Func<T, int, Element> builder, object[] dependencies) → Element[]
 RenderContext.UseMemoCellsByKey<T, TKey>(IReadOnlyList<T> items, Func<T, TKey> keySelector, Func<T, int, Element> builder, object[] dependencies) → Element[]
-RenderContext.UseMultipleFilesPickerAsync(FilePickerOptions options) → Task<IReadOnlyList<StorageFile>>
 RenderContext.UseMutation<TInput, TResult>(Func<TInput, CancellationToken, Task<TResult>> mutator, MutationOptions<TInput, TResult> options = null, IHookDispatcher dispatcher = null) → Mutation<TInput, TResult>
 RenderContext.UseMutation<TInput, TResult>(Func<TInput, CancellationToken, Task<TResult>> mutator, QueryCache cache, MutationOptions<TInput, TResult> options = null, IHookDispatcher dispatcher = null) → Mutation<TInput, TResult>
 RenderContext.UseNavigation<TRoute>() → NavigationHandle<TRoute>
@@ -946,7 +943,6 @@ RenderContext.UseReducer<TState, TAction>(Func<TState, TAction, TState> reducer,
 RenderContext.UseRef<T>(T initialValue = default) → Ref<T>
 RenderContext.UseResource<T>(Func<CancellationToken, Task<T>> fetcher, QueryCache cache, object[] deps, ResourceOptions options = null, IHookDispatcher dispatcher = null) → AsyncValue<T>
 RenderContext.UseResource<T>(Func<CancellationToken, Task<T>> fetcher, object[] deps, ResourceOptions options = null, IHookDispatcher dispatcher = null) → AsyncValue<T>
-RenderContext.UseSaveFilePickerAsync(SaveFilePickerOptions options) → Task<StorageFile>
 RenderContext.UseState<T>(T initialValue, bool threadSafe = false) → ValueTuple<T, Action<T>>
 RenderContext.UseSystemBackButton<TRoute>(NavigationHandle<TRoute> nav, Window window) → void
 RenderContext.UseTrayIcon(TrayIconSpec spec) → ReactorTrayIcon
@@ -2547,13 +2543,28 @@ ToString() → string
 
 ### record FilePickerOptions
 new(IReadOnlyList<string> FileTypeFilter = null, PickerLocationId SuggestedStartLocation = PickerLocationId.DocumentsLibrary, string CommitButtonText = "")
+IReadOnlyList<FileTypeChoice> FileTypeChoices { get; init; }
 IReadOnlyList<string> FileTypeFilter { get; init; }
 PickerLocationId SuggestedStartLocation { get; init; }
 PickerViewMode? ViewMode { get; init; }
+int? InitialFileTypeIndex { get; init; }
 string CommitButtonText { get; init; }
 string SettingsIdentifier { get; init; }
+string SuggestedFolder { get; init; }
+string SuggestedStartFolder { get; init; }
+string Title { get; init; }
 Deconstruct(ref IReadOnlyList<string> FileTypeFilter, ref PickerLocationId SuggestedStartLocation, ref string CommitButtonText) → void
 Equals(FilePickerOptions other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record FileTypeChoice
+new(string Label, IReadOnlyList<string> Extensions)
+IReadOnlyList<string> Extensions { get; init; }
+string Label { get; init; }
+Deconstruct(ref string Label, ref IReadOnlyList<string> Extensions) → void
+Equals(FileTypeChoice other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
@@ -2716,11 +2727,13 @@ bool IsActive { get; }
 
 ### record FolderPickerOptions
 new(PickerLocationId SuggestedStartLocation = PickerLocationId.DocumentsLibrary, string CommitButtonText = "")
-IReadOnlyList<string> FileTypeFilter { get; init; }
 PickerLocationId SuggestedStartLocation { get; init; }
 PickerViewMode? ViewMode { get; init; }
 string CommitButtonText { get; init; }
 string SettingsIdentifier { get; init; }
+string SuggestedFolder { get; init; }
+string SuggestedStartFolder { get; init; }
+string Title { get; init; }
 Deconstruct(ref PickerLocationId SuggestedStartLocation, ref string CommitButtonText) → void
 Equals(FolderPickerOptions other) → bool
 Equals(object obj) → bool
@@ -4873,6 +4886,11 @@ ToString() → string
 
 ### class RenderContext
 new()
+PickFileAsync(FilePickerOptions options) → Task<PickFileResult>
+PickFolderAsync(FolderPickerOptions options) → Task<PickFolderResult>
+PickMultipleFilesAsync(FilePickerOptions options) → Task<IReadOnlyList<PickFileResult>>
+PickMultipleFoldersAsync(FolderPickerOptions options) → Task<IReadOnlyList<PickFolderResult>>
+PickSaveFileAsync(SaveFilePickerOptions options) → Task<PickFileResult>
 UseBreakpoint(Window window, double minWidth) → bool
 UseBreakpoint(double minWidth) → bool
 UseCallback(Action callback, object[] dependencies) → Action
@@ -4896,8 +4914,6 @@ UseEffect<T1, T2>(Func<Action> effectWithCleanup, T1 d1, T2 d2) → void
 UseEffect<T1>(Action effect, T1 d1) → void
 UseEffect<T1>(Func<Action> effectWithCleanup, T1 d1) → void
 UseExternalStore<TSnapshot>(Func<Action, Action> subscribe, Func<TSnapshot> getSnapshot, IEqualityComparer<TSnapshot> comparer = null) → TSnapshot
-UseFilePickerAsync(FilePickerOptions options) → Task<StorageFile>
-UseFolderPickerAsync(FolderPickerOptions options) → Task<StorageFolder>
 UseHighContrast() → bool
 UseHighContrastScheme() → string
 UseIntl() → IntlAccessor
@@ -4908,7 +4924,6 @@ UseMemo<T, T1, T2, T3>(Func<T> factory, T1 d1, T2 d2, T3 d3) → T
 UseMemo<T, T1, T2>(Func<T> factory, T1 d1, T2 d2) → T
 UseMemo<T, T1>(Func<T> factory, T1 d1) → T
 UseMemo<T>(Func<T> factory, object[] dependencies) → T
-UseMultipleFilesPickerAsync(FilePickerOptions options) → Task<IReadOnlyList<StorageFile>>
 UseNavigation<TRoute>() → NavigationHandle<TRoute>
 UseNavigation<TRoute>(TRoute initial) → NavigationHandle<TRoute>
 UseNavigationLifecycle(Action<NavigatingToContext> onNavigatingTo = null, Action<NavigatedToContext> onNavigatedTo = null, Action<NavigatingFromContext> onNavigatingFrom = null, Action<NavigatedFromContext> onNavigatedFrom = null) → void
@@ -4922,7 +4937,6 @@ UseReducedMotion() → bool
 UseReducer<T>(T initialValue, bool threadSafe = false) → ValueTuple<T, Action<Func<T, T>>>
 UseReducer<TState, TAction>(Func<TState, TAction, TState> reducer, TState initialValue, bool threadSafe = false) → ValueTuple<TState, Action<TAction>>
 UseRef<T>(T initialValue = default) → Ref<T>
-UseSaveFilePickerAsync(SaveFilePickerOptions options) → Task<StorageFile>
 UseState<T>(T initialValue, bool threadSafe = false) → ValueTuple<T, Action<T>>
 UseSystemBackButton<TRoute>(NavigationHandle<TRoute> nav, Window window) → void
 UseTrayIcon(TrayIconSpec spec) → ReactorTrayIcon
@@ -5193,14 +5207,19 @@ ToString() → string
 IsRtlLocale(string locale) → bool
 
 ### record SaveFilePickerOptions
-new(IReadOnlyDictionary<string, IReadOnlyList<string>> FileTypeChoices, string SuggestedFileName = "", PickerLocationId SuggestedStartLocation = PickerLocationId.DocumentsLibrary, string CommitButtonText = "")
-IReadOnlyDictionary<string, IReadOnlyList<string>> FileTypeChoices { get; init; }
+new(IReadOnlyList<FileTypeChoice> FileTypeChoices, string SuggestedFileName = "", PickerLocationId SuggestedStartLocation = PickerLocationId.DocumentsLibrary, string CommitButtonText = "")
+IReadOnlyList<FileTypeChoice> FileTypeChoices { get; init; }
 PickerLocationId SuggestedStartLocation { get; init; }
-StorageFile SuggestedSaveFile { get; init; }
+bool ShowOverwritePrompt { get; init; }
+int? InitialFileTypeIndex { get; init; }
 string CommitButtonText { get; init; }
+string DefaultFileExtension { get; init; }
 string SettingsIdentifier { get; init; }
 string SuggestedFileName { get; init; }
-Deconstruct(ref IReadOnlyDictionary<string, IReadOnlyList<string>> FileTypeChoices, ref string SuggestedFileName, ref PickerLocationId SuggestedStartLocation, ref string CommitButtonText) → void
+string SuggestedFolder { get; init; }
+string SuggestedStartFolder { get; init; }
+string Title { get; init; }
+Deconstruct(ref IReadOnlyList<FileTypeChoice> FileTypeChoices, ref string SuggestedFileName, ref PickerLocationId SuggestedStartLocation, ref string CommitButtonText) → void
 Equals(SaveFilePickerOptions other) → bool
 Equals(object obj) → bool
 GetHashCode() → int

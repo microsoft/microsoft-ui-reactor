@@ -16,6 +16,11 @@ public sealed class RenderContext
     private ContextScope? _contextScope;
     private int _uiThreadId;
 
+    // The window whose host last rendered this context. Picker calls run from event
+    // handlers, outside render, where ReactorApp.ActiveHostInternal is whichever host
+    // rendered or was constructed most recently (or null after any host is disposed).
+    private Microsoft.UI.Reactor.ReactorWindow? _owningWindow;
+
     /// <summary>
     /// Time source used by time-based hooks (currently <see cref="UseCommand(Command)"/>'s
     /// <see cref="Command.DebounceMs"/> window). Defaults to <see cref="TimeProvider.System"/>;
@@ -28,6 +33,7 @@ public sealed class RenderContext
         _hookIndex = 0;
         _requestRerender = requestRerender;
         _uiThreadId = Environment.CurrentManagedThreadId;
+        _owningWindow = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
     }
 
     internal void BeginRender(Action requestRerender, ContextScope contextScope)
@@ -36,6 +42,7 @@ public sealed class RenderContext
         _requestRerender = requestRerender;
         _contextScope = contextScope;
         _uiThreadId = Environment.CurrentManagedThreadId;
+        _owningWindow = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
     }
 
     /// <summary>
@@ -2037,58 +2044,79 @@ public sealed class RenderContext
 
     internal static IPickerService PickerService { get; set; } = new DefaultPickerService();
 
-    /// <summary>
-    /// Opens a single-file picker initialized with the owning window HWND. Must be called on the UI thread.
-    /// </summary>
-    /// <remarks>Call from an event handler, not during Render. Cancellation returns null.</remarks>
-    public Task<global::Windows.Storage.StorageFile?> UseFilePickerAsync(FilePickerOptions options)
+    /// <summary>Opens a single-file picker owned by this component's window.</summary>
+    /// <remarks>
+    /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
+    /// that last rendered this component. Cancellation returns null.
+    /// </remarks>
+    public Task<Microsoft.Windows.Storage.Pickers.PickFileResult?> PickFileAsync(FilePickerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        var hwnd = GetPickerWindowHandle(nameof(UseFilePickerAsync));
-        return PickerService.PickFileAsync(hwnd, options);
+        PickerOptionsValidation.Validate(options);
+        var owner = GetPickerOwner(nameof(PickFileAsync));
+        return PickerService.PickFileAsync(owner, options);
     }
 
-    /// <summary>Opens a multiple-file picker on the owning window's UI thread.</summary>
-    /// <remarks>Call from an event handler, not during Render. Cancellation returns an empty list.</remarks>
-    public Task<IReadOnlyList<global::Windows.Storage.StorageFile>> UseMultipleFilesPickerAsync(FilePickerOptions options)
+    /// <summary>Opens a multiple-file picker owned by this component's window.</summary>
+    /// <remarks>
+    /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
+    /// that last rendered this component. Cancellation returns an empty list.
+    /// </remarks>
+    public Task<IReadOnlyList<Microsoft.Windows.Storage.Pickers.PickFileResult>> PickMultipleFilesAsync(FilePickerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        var hwnd = GetPickerWindowHandle(nameof(UseMultipleFilesPickerAsync));
-        return PickerService.PickMultipleFilesAsync(hwnd, options);
+        PickerOptionsValidation.Validate(options);
+        var owner = GetPickerOwner(nameof(PickMultipleFilesAsync));
+        return PickerService.PickMultipleFilesAsync(owner, options);
     }
 
-    /// <summary>
-    /// Opens a folder picker initialized with the owning window HWND. Must be called on the UI thread.
-    /// </summary>
-    /// <remarks>Call from an event handler, not during Render. Cancellation returns null.</remarks>
-    public Task<global::Windows.Storage.StorageFolder?> UseFolderPickerAsync(FolderPickerOptions options)
+    /// <summary>Opens a single-folder picker owned by this component's window.</summary>
+    /// <remarks>
+    /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
+    /// that last rendered this component. Cancellation returns null.
+    /// </remarks>
+    public Task<Microsoft.Windows.Storage.Pickers.PickFolderResult?> PickFolderAsync(FolderPickerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        var hwnd = GetPickerWindowHandle(nameof(UseFolderPickerAsync));
-        return PickerService.PickFolderAsync(hwnd, options);
+        var owner = GetPickerOwner(nameof(PickFolderAsync));
+        return PickerService.PickFolderAsync(owner, options);
     }
 
-    /// <summary>Opens a save-file picker on the owning window's UI thread.</summary>
-    /// <remarks>Call from an event handler, not during Render. Cancellation returns null. Writing to the returned file is the caller's responsibility.</remarks>
-    public Task<global::Windows.Storage.StorageFile?> UseSaveFilePickerAsync(SaveFilePickerOptions options)
+    /// <summary>Opens a multiple-folder picker owned by this component's window.</summary>
+    /// <remarks>
+    /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
+    /// that last rendered this component. Cancellation returns an empty list.
+    /// </remarks>
+    public Task<IReadOnlyList<Microsoft.Windows.Storage.Pickers.PickFolderResult>> PickMultipleFoldersAsync(FolderPickerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        var hwnd = GetPickerWindowHandle(nameof(UseSaveFilePickerAsync));
-        return PickerService.PickSaveFileAsync(hwnd, options);
+        var owner = GetPickerOwner(nameof(PickMultipleFoldersAsync));
+        return PickerService.PickMultipleFoldersAsync(owner, options);
     }
 
-    private static nint GetPickerWindowHandle(string hookName)
+    /// <summary>Opens a save-file picker owned by this component's window.</summary>
+    /// <remarks>
+    /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
+    /// that last rendered this component. Cancellation returns null. Selecting a target does not
+    /// create or write the file; that is the caller's responsibility.
+    /// </remarks>
+    public Task<Microsoft.Windows.Storage.Pickers.PickFileResult?> PickSaveFileAsync(SaveFilePickerOptions options)
     {
-        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow
-            ?? throw new InvalidOperationException($"{hookName} requires an owning ReactorWindow.");
-        EnsurePickerOnUiThread(win, hookName);
-        return win.Hwnd;
+        ArgumentNullException.ThrowIfNull(options);
+        PickerOptionsValidation.Validate(options);
+        var owner = GetPickerOwner(nameof(PickSaveFileAsync));
+        return PickerService.PickSaveFileAsync(owner, options);
     }
 
-    private static void EnsurePickerOnUiThread(Microsoft.UI.Reactor.ReactorWindow win, string hookName)
+    private Microsoft.UI.WindowId GetPickerOwner(string operation)
     {
+        var win = _owningWindow
+            ?? throw new InvalidOperationException($"{operation} requires an owning ReactorWindow.");
+        if (win.IsDisposed)
+            throw new InvalidOperationException($"{operation} requires an open owning ReactorWindow.");
         if (!win.NativeWindow.DispatcherQueue.HasThreadAccess)
-            throw new InvalidOperationException($"{hookName} must be called on the owning window's UI thread.");
+            throw new InvalidOperationException($"{operation} must be called on the owning window's UI thread.");
+        return win.AppWindow.Id;
     }
 
     /// <summary>
@@ -2541,6 +2569,7 @@ public sealed class RenderContext
         ClearHookState();
         _requestRerender = null;
         _contextScope = null;
+        _owningWindow = null;
     }
 
     /// <summary>

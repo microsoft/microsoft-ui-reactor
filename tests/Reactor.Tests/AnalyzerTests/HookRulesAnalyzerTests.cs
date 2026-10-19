@@ -1339,4 +1339,108 @@ namespace App
         };
         await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
     }
+
+    // ── Picker helpers (issue #1374) ──────────────────────────────────
+    // The pickers are not hooks: they reserve no slot and must run from event handlers.
+    // The Pick* names keep HOOKS_001/005 quiet there; the Use*-named control proves the same
+    // call shapes do reach the analyzer, so the clean result is not vacuous.
+
+    private const string PickerStubs = @"
+using System.Threading.Tasks;
+
+namespace Microsoft.UI.Reactor.Core
+{
+    public class RenderContext
+    {
+        public Task<object> PickFileAsync(object options) => Task.FromResult<object>(null);
+        public Task<object> PickMultipleFilesAsync(object options) => Task.FromResult<object>(null);
+        public Task<object> PickFolderAsync(object options) => Task.FromResult<object>(null);
+        public Task<object> PickMultipleFoldersAsync(object options) => Task.FromResult<object>(null);
+        public Task<object> PickSaveFileAsync(object options) => Task.FromResult<object>(null);
+        public Task<object> UseFilePickerAsync(object options) => Task.FromResult<object>(null);
+    }
+
+    public abstract class Component
+    {
+        protected internal RenderContext Context { get; } = new RenderContext();
+        public abstract string Render();
+        protected Task<object> PickFileAsync(object options) => Context.PickFileAsync(options);
+        protected Task<object> PickMultipleFilesAsync(object options) => Context.PickMultipleFilesAsync(options);
+        protected Task<object> PickFolderAsync(object options) => Context.PickFolderAsync(options);
+        protected Task<object> PickMultipleFoldersAsync(object options) => Context.PickMultipleFoldersAsync(options);
+        protected Task<object> PickSaveFileAsync(object options) => Context.PickSaveFileAsync(options);
+        protected Task<object> UseFilePickerAsync(object options) => Context.UseFilePickerAsync(options);
+    }
+}
+";
+
+    [Fact]
+    public async Task Pickers_Called_From_Handlers_Through_Component_Are_Not_Reported()
+    {
+        var test = PickerStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    static void Button(System.Func<Task> onClick) { }
+
+    public override string Render()
+    {
+        Button(async () => { await PickFileAsync(null); await this.PickMultipleFilesAsync(null); });
+        Button(async () => { if (System.DateTime.Now.Ticks > 0) await PickFolderAsync(null); });
+        Button(async () => { await PickMultipleFoldersAsync(null); });
+        Button(OnSave);
+        return """";
+    }
+
+    private async Task OnSave() => await PickSaveFileAsync(null);
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier> { TestCode = test };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Pickers_Called_From_Handlers_Through_RenderContext_Are_Not_Reported()
+    {
+        var test = PickerStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    static void Button(System.Func<Task> onClick) { }
+
+    public override string Render()
+    {
+        var ctx = Context;
+        Button(async () => { await Context.PickFileAsync(null); await ctx.PickMultipleFilesAsync(null); });
+        Button(async () => { if (System.DateTime.Now.Ticks > 0) await ctx.PickFolderAsync(null); });
+        Button(async () => { await ctx.PickMultipleFoldersAsync(null); });
+        Button(() => OnSave(ctx));
+        return """";
+    }
+
+    private static async Task OnSave(Microsoft.UI.Reactor.Core.RenderContext ctx) => await ctx.PickSaveFileAsync(null);
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier> { TestCode = test };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Use_Named_Picker_In_The_Same_Handler_Shapes_Is_Reported()
+    {
+        var test = PickerStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    static void Button(System.Func<Task> onClick) { }
+
+    public override string Render()
+    {
+        var ctx = Context;
+        Button(async () => { await {|REACTOR_HOOKS_001:UseFilePickerAsync(null)|}; });
+        Button(async () => { await {|REACTOR_HOOKS_001:ctx.UseFilePickerAsync(null)|}; });
+        Button(OnOpen);
+        return """";
+    }
+
+    private async Task OnOpen() => await {|REACTOR_HOOKS_005:Context.UseFilePickerAsync(null)|};
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier> { TestCode = test };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
 }

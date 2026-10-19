@@ -1,6 +1,6 @@
 ---
 name: reactor-windowing
-description: "Reactor top-level windowing cookbook: WindowSpec, OpenWindow, draggable windows, borderless/tool windows, placement persistence, taskbar visibility, z-order, aspect ratio, SizeToContent, displays, taskbar integration, and picker HWND wiring."
+description: "Reactor top-level windowing cookbook: WindowSpec, OpenWindow, draggable windows, borderless/tool windows, placement persistence, taskbar visibility, z-order, aspect ratio, SizeToContent, displays, taskbar integration, and owner-window file/folder pickers."
 when_to_invoke:
   - "open a window"
   - "secondary window"
@@ -257,22 +257,25 @@ taskbar.Progress.Value = 0.25;
 var displays = UseDisplays();
 var nearest = ReactorDisplay.NearestTo(window.Position.X, window.Position.Y);
 
-// Capture the helpers during Render; invoke them only from UI event handlers.
-var pickFile = UseFilePickerAsync;
-var pickFiles = UseMultipleFilesPickerAsync;
-var pickFolder = UseFolderPickerAsync;
-var saveFile = UseSaveFilePickerAsync;
+// Pickers are not hooks: call them directly from UI-thread event handlers, never during Render.
+// using Microsoft.Windows.Storage.Pickers;  (not Windows.Storage.Pickers: both define PickerLocationId)
 return VStack(
-    Button("Open", async () => { var file = await pickFile(new(FileTypeFilter: [".txt"])); }),
-    Button("Open multiple", async () => { var files = await pickFiles(new(FileTypeFilter: [".txt"])); }),
-    Button("Folder", async () => { var folder = await pickFolder(new()); }),
-    Button("Save", async () => { var file = await saveFile(new(
-        new Dictionary<string, IReadOnlyList<string>> { ["Text"] = [".txt"] },
-        SuggestedFileName: "report")); }));
+    Button("Open", async () => { var file = await PickFileAsync(new(FileTypeFilter: [".txt"])); if (file is null) return; var text = await File.ReadAllTextAsync(file.Path); }),
+    Button("Open multiple", async () => { var files = await PickMultipleFilesAsync(new() { FileTypeChoices = [new("Notes", [".txt", ".md"])] }); }),
+    Button("Folder", async () => { var folder = await PickFolderAsync(new()); }),
+    Button("Folders", async () => { var folders = await PickMultipleFoldersAsync(new()); }),
+    Button("Save", async () => { var target = await PickSaveFileAsync(new(
+        [new("Text", [".txt"]), new("Markdown", [".md"])], SuggestedFileName: "report"));
+        if (target is not null) await File.WriteAllTextAsync(target.Path, "body"); }));
 ```
 
-Picker helpers must be invoked from UI-thread event handlers, not during Render, and use the owning HWND;
-there is no arbitrary HWND parameter.
+`PickFileAsync` / `PickMultipleFilesAsync` / `PickFolderAsync` / `PickMultipleFoldersAsync` / `PickSaveFileAsync`
+return `PickFileResult` / `PickFolderResult` (`Microsoft.Windows.Storage.Pickers`, exposing `.Path`); cancellation
+returns `null` or an empty list. The owner is the window that last rendered the component (not whichever window is
+active), the dialog works in elevated apps, and the call throws `InvalidOperationException` if that window has
+closed. `FileTypeChoices` is an ordered `IReadOnlyList<FileTypeChoice>` whose order sets the default entry; labels
+must be unique. Options also take `Title`, `SuggestedFolder`, `SuggestedStartFolder`, `InitialFileTypeIndex`, and
+(save) `DefaultFileExtension` / `ShowOverwritePrompt`. There is no arbitrary HWND parameter.
 
 ## Render errors
 

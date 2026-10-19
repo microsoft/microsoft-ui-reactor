@@ -290,6 +290,8 @@ public sealed partial class ReactorWindow : IDisposable
 
     internal nint Hwnd => _hwnd;
 
+    internal bool IsDisposed => _disposed;
+
     /// <summary>
     /// When <c>true</c>, this window is an auxiliary surface (e.g. a docking
     /// tear-off floating window) that must never be elected the application's

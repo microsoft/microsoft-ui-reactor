@@ -1860,8 +1860,8 @@ and accessibility remain design work.
 | `UseDisplays()` | Display-change controller exposes `Signal<IReadOnlyList<DisplayInfo>>`. | Display service signal/list. |
 | `UseWindowAspectRatio(double?)` | Controller applies/removes aspect lock on mount/update/unmount. | Imperative host/window effect with cleanup/update. |
 | `UseWindowDragMove()` | Instance method or service callback field. | Direct host/window action exposed by context/service. |
-| `UseFilePickerAsync(options)` | Plain async service method; store result in a signal only if UI should react. | Direct injected service call; not reactive unless result is stored in a signal. |
-| `UseFolderPickerAsync(options)` | Same as file picker. | Same as file picker. |
+| `PickFileAsync(options)` | Plain async service method; store result in a signal only if UI should react. | Direct injected service call; not reactive unless result is stored in a signal. |
+| `PickFolderAsync(options)` | Same as file picker. | Same as file picker. |
 | `UseWindowState()` | Window-state controller exposes `Signal<WindowState>`. | Window state signal. |
 | `UseIsActive()` | Activation controller exposes `Signal<bool>`. | Activation signal. |
 | `UseClosingGuard(canClose)` | Controller registers/unregisters the predicate. | Effect registering closing handler; cleanup unregisters. |

@@ -47,16 +47,15 @@ lifecycle methods.
 | <!-- ref:UseExternalStore --> | `TSnapshot` | Bridge subscribe/getSnapshot stores into Reactor and re-render only when the snapshot changes. |
 | <!-- ref:UseResource --> | `AsyncValue<T>` | Cached async read (see [Async Resources](async-resources.md)). |
 | <!-- ref:UsePersisted --> | `(T, Action<T>)` | `UseState` that survives unmount/remount within the process — in-memory, cleared on exit (see [Persistence](persistence.md)). |
-| <!-- ref:UseFilePickerAsync --> / <!-- ref:UseMultipleFilesPickerAsync --> | `Task<StorageFile?>` / `Task<IReadOnlyList<StorageFile>>` | Open one or multiple files (see [Pickers](windows.md#pickers)). |
-| <!-- ref:UseFolderPickerAsync --> / <!-- ref:UseSaveFilePickerAsync --> | `Task<StorageFolder?>` / `Task<StorageFile?>` | Select a folder or save-file target (see [Pickers](windows.md#pickers)). |
 
 ### Pattern: pick files from a click handler
 
-Picker helpers are the exception to positional hook rules: they do not allocate
-state slots and must run from UI-thread event handlers, not during `Render()`.
-Cancellation returns `null` for single-file, folder, and save dialogs, or an empty
-list for multiple files. See [Pickers](windows.md#pickers) for the full options and
-the open/folder/save pattern:
+The picker methods (`PickFileAsync`, `PickMultipleFilesAsync`, `PickFolderAsync`,
+`PickMultipleFoldersAsync`, `PickSaveFileAsync`) are deliberately **not** hooks: they
+reserve no state slot and must run from UI-thread event handlers, not during
+`Render()`. Call them directly inside the handler. Cancellation returns `null` for
+single-file, folder, and save dialogs, or an empty list for multiple selections. See
+[Pickers](windows.md#pickers) for the full options and the open/folder/save pattern:
 
 ```csharp snippet="windows/pickers"
 ```
