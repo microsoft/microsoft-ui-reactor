@@ -244,6 +244,15 @@ public sealed partial class Reconciler
         };
         }
 
+        // A transparent layer (a keyed Memo, a flyout wrapping its target) shares its inner
+        // element's control. When the inner update hands back a different control (a target whose
+        // type changed, a handler that always remounts), that control is new to this layer too, so
+        // its own modifiers apply with mount semantics (all written, OnMount runs) rather than as an
+        // old->new diff. Nested layers each see the same different control and do the same.
+        if (result is not null && !ReferenceEquals(result, control)
+            && newEl is KeyedMemoElement or FlyoutElement or MenuFlyoutElement or CommandBarFlyoutElement)
+            oldModifiers = null;
+
         // Apply inline modifiers after update. When old modifiers existed but new
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
         // stale values (same principle as the flex attached-property fix).
@@ -1177,7 +1186,7 @@ public sealed partial class Reconciler
         if (newChild is not null && oldChild is not null
             && getControl() is UIElement existing && CanUpdate(oldChild, newChild))
         {
-            var replacement = Update(oldChild, newChild, existing, requestRerender);
+            var replacement = UpdateHostedChild(oldChild, newChild, existing, requestRerender);
             if (replacement is not null) setControl(replacement);
         }
         else if (newChild is not null)
@@ -1232,18 +1241,12 @@ public sealed partial class Reconciler
             var oldItemElement = GetElementTag(cc);
             var newItemElement = viewSource.BuildItemView(index);
 
-            if (oldItemElement is not null && cc.Content is UIElement existingCtrl && CanUpdate(oldItemElement, newItemElement))
-            {
-                var replacement = Update(oldItemElement, newItemElement, existingCtrl, requestRerender);
-                if (replacement is not null && !ReferenceEquals(cc.Content, replacement))
-                    cc.Content = replacement;
-            }
-            else
-            {
-                if (cc.Content is UIElement oldCtrl)
-                    Unmount(oldCtrl);
-                cc.Content = Mount(newItemElement, requestRerender);
-            }
+            // ReconcileV1Child updates in place when it can and remounts otherwise, and either way
+            // unmounts a control it replaced (e.g. a same-key Memo whose output changed shape
+            // during a resource refresh), so the old item's effects and refs are cleaned up.
+            var next = ReconcileV1Child(oldItemElement, newItemElement, cc.Content as UIElement, requestRerender);
+            if (!ReferenceEquals(cc.Content, next))
+                cc.Content = next;
             SetElementTag(cc, newItemElement);
 
             // Issue #951 — the container survives re-renders, so its automation
@@ -1469,7 +1472,7 @@ public sealed partial class Reconciler
             && CanUpdate(oldContentEl, newContentEl))
         {
             // Reconcile in place
-            var replacement = Update(oldContentEl, newContentEl, existingCtrl, requestRerender);
+            var replacement = UpdateHostedChild(oldContentEl, newContentEl, existingCtrl, requestRerender);
             if (replacement is not null && !ReferenceEquals(liveNode.Content, replacement))
                 liveNode.Content = replacement;
         }
@@ -1567,10 +1570,10 @@ public sealed partial class Reconciler
 
     /// <summary>
     /// A same-key <c>Memo(key, …)</c> whose subtree holds a component that updated its own
-    /// state, or any same-key memo during a resource-refresh pass (where nothing skips, so the
-    /// whole subtree is walked and its theme values are applied again; a value the factory
-    /// resolved eagerly with <c>ThemeRef.Resolve</c> is equal on both sides and is not, which
-    /// the styling guide documents). The mounted inner element is not kept, so re-run the factory — pure by contract,
+    /// state, or any same-key memo during a resource-refresh pass (nothing skips there, so the
+    /// whole subtree is walked and its Theme.Ref values applied again; a brush the factory
+    /// resolved eagerly is equal on both sides and stays as it is, as the styling guide documents).
+    /// The mounted inner element is not kept, so re-run the factory — pure by contract,
     /// so its output describes what is mounted — and reconcile that output against itself.
     /// Old and new are the same instances all the way down, so every branch skips by reference
     /// except the dirty-ancestor path, which descends to the component. Nothing is compared

@@ -226,6 +226,8 @@ public sealed class ElementPool : IDisposable
     {
         // Common properties
         Reconciler.ClearElementTag(fe);
+        // Refresh snapshots hold the previous renter's element graphs and describe its mount.
+        Reconciler.ClearRefreshSnapshots(fe);
         // SECURITY (TASK-060): clear the Current* user-handler delegates on
         // pool return so a pooled control can't fire the previous component's
         // captured rerender closure into the next mount. The underlying

@@ -1,4 +1,5 @@
 using Microsoft.UI;
+using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
@@ -251,6 +252,11 @@ internal static class HostIdleAndThemeResourceFixtures
             var sameKey = new Counter();
             var legacyNested = new Counter();
             var flyoutTarget = new Counter();
+            // Hosted and transparent-wrapper slots whose child comes back as a different control.
+            var replacedTarget = new Counter();
+            var popupContent = new Counter();
+            int visualizerWrapperMounts = 0;
+            int flyoutWrapperMounts = 0;
             try
             {
                 // Disposed at the end of this block, before finally restores the active host.
@@ -270,6 +276,7 @@ internal static class HostIdleAndThemeResourceFixtures
                         () => [Empty(), Memo("emptyItem", () => Empty()), TextBlock("GapItemProbe").Foreground(Theme.Ref(AppKey))]);
                     var lvItems = ctx.UseMemo<Element[]>(
                         () => [TextBlock("LvItemProbe").Foreground(Theme.Ref(AppKey)), TextBlock("LvSecond")]);
+                    var flipGapItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["gap", "shown"]);
                     var gvItems = ctx.UseMemo<Element[]>(
                         () => [TextBlock("GvItemProbe").Foreground(Theme.Ref(AppKey))]);
                     var lazyItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["lazy"]);
@@ -290,6 +297,25 @@ internal static class HostIdleAndThemeResourceFixtures
                         Memo("flyoutOuter", () => Flyout(
                             Memo("flyoutInner", () => flyoutTarget.Probe("FlyoutTargetProbe", AppKey)),
                             TextBlock("FlyoutTip"))),
+                        // A memo whose output's handler always remounts (ValidationVisualizer): the new
+                        // control gets the memo's modifiers and OnMount, as at mount.
+                        Memo("visualizerWrapper", () => ValidationVisualizerDsl.ValidationVisualizer(VisualizerStyle.Inline,
+                                TextBlock("VisualizerWrapProbe")))
+                            .Margin(9)
+                            .OnMount(_ => visualizerWrapperMounts++),
+                        // A flyout whose target changes type on an ordinary render: the old target is torn
+                        // down exactly once, and the flyout's own modifiers reach the new one.
+                        Flyout(tick == 0 ? replacedTarget.Probe("ReplacedTargetBefore", AppKey) : Border(TextBlock("ReplacedTargetAfter")),
+                                TextBlock("ReplacedTargetTip"))
+                            .Margin(19)
+                            .OnMount(_ => flyoutWrapperMounts++),
+                        // A popup child whose update always builds a fresh control: one live copy.
+                        Popup(ValidationVisualizerDsl.ValidationVisualizer(VisualizerStyle.Inline,
+                            popupContent.Probe("PopupContentProbe", AppKey))),
+                        // A FlipView whose first item mounts nothing.
+                        FlipView(flipGapItems, static s => s, static (s, _) => s == "gap"
+                            ? Empty()
+                            : TextBlock("FlipGapProbe").Foreground(Theme.Ref(AppKey))),
                         ComboBox(gapItems, default, null),
                         ComboBox(listItems, default, null),
                         ListView(lvItems),
@@ -320,6 +346,14 @@ internal static class HostIdleAndThemeResourceFixtures
                 setTick!(1);
                 await host.WaitForIdleAsync();
                 H.Check("ThemeMemo_Rerendered", FindText(target, "tick:1") is not null);
+                var replacedBorder = FindText(target, "ReplacedTargetAfter")?.Parent as Border;
+                H.Check("Replace_FlyoutTargetTornDownOnce", replacedTarget.Mounts == 1 && replacedTarget.Cleanups == 1,
+                    $"mounts={replacedTarget.Mounts} cleanups={replacedTarget.Cleanups}");
+                H.Check("Replace_FlyoutModifiersReachNewTarget", replacedBorder?.Margin == new Thickness(19) && flyoutWrapperMounts == 2,
+                    $"margin={replacedBorder?.Margin.ToString() ?? "(not found)"} mounts={flyoutWrapperMounts}");
+                H.Check("Replace_PopupContentOneLiveCopy", popupContent.Mounts >= 2 && popupContent.Mounts - popupContent.Cleanups == 1,
+                    $"mounts={popupContent.Mounts} cleanups={popupContent.Cleanups}");
+                H.Check("ThemeMemo_VisualizerWrapperRerenderAloneMountedOnce", visualizerWrapperMounts == 1, $"mounts={visualizerWrapperMounts}");
                 // A user expansion and selection, which rebuilding the TreeView or swapping the
                 // ListView's ItemsSource would reset.
                 var treeView = FindTreeView(target, "TreeRoot");
@@ -349,6 +383,10 @@ internal static class HostIdleAndThemeResourceFixtures
                 foreach (var probe in stale.Append("RenderResolvedProbe"))
                     H.Check($"ThemeMemo_{probe}NotifiedIsBlue", ProbeColor(target, probe) == Colors.Blue, $"color={ProbeColor(target, probe)}");
                 H.Check("ThemeMemo_ListItemNotifiedIsBlue", ListItemColor(target) == Colors.Blue, $"color={ListItemColor(target)}");
+                H.Check("ThemeMemo_FlipGapNotifiedIsBlue", FlipViewItemColor(target, "FlipGapProbe") == Colors.Blue);
+                H.Check("ThemeMemo_VisualizerWrapperRemountRunsOnMount", visualizerWrapperMounts == 2
+                    && AncestorMargin(FindText(target, "VisualizerWrapProbe"), new Thickness(9)),
+                    $"mounts={visualizerWrapperMounts} margin={AncestorMargin(FindText(target, "VisualizerWrapProbe"), new Thickness(9))}");
                 H.Check("ThemeMemo_GapItemNotifiedIsBlue", ListItemColor(target, "GapItemProbe") == Colors.Blue);
                 foreach (var (name, counter) in new[] { ("SameKey", sameKey), ("LegacyNested", legacyNested), ("FlyoutTarget", flyoutTarget) })
                     H.Check($"ThemeMemo_{name}KeptNotRemounted", counter.Mounts == 1 && counter.Cleanups == 0,
@@ -402,6 +440,24 @@ internal static class HostIdleAndThemeResourceFixtures
         private static global::Windows.UI.Color? ListItemColor(Border target, string probe = "ListItemProbe")
             => (FindComboBoxes(target).SelectMany(cb => cb.Items.OfType<TextBlock>()).FirstOrDefault(t => t.Text == probe)
                     ?.Foreground as SolidColorBrush)?.Color;
+
+        // The item TextBlock with this text, in any FlipView under root.
+        private static global::Windows.UI.Color? FlipViewItemColor(DependencyObject root, string text)
+        {
+            if (root is FlipView fv)
+            {
+                foreach (var item in fv.Items)
+                {
+                    if (item is TextBlock { Foreground: SolidColorBrush b } tb && tb.Text == text) return b.Color;
+                }
+            }
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                if (FlipViewItemColor(VisualTreeHelper.GetChild(root, i), text) is { } found) return found;
+            }
+            return null;
+        }
 
         private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
         {

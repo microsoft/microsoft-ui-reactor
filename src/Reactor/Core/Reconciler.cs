@@ -539,10 +539,10 @@ public sealed partial class Reconciler : IDisposable
             if (i < 0 || i >= items.Length) continue;
             var next = ReconcileV1Child(items[i], items[i], existing, requestRerender);
             if (next is not null && !ReferenceEquals(next, existing))
-            {
                 cc.Content = next;
-                PropagateItemAutomationName(container, next);
-            }
+            // The item's own automation name can change in place too (a keyed memo whose output
+            // reads a resource), so forward it after every reconcile, as RefreshRealizedContainers does.
+            PropagateItemAutomationName(container, cc.Content as UIElement);
         }
     }
 
@@ -929,6 +929,13 @@ public sealed partial class Reconciler : IDisposable
         public HashSet<string>? ManagedResourceKeys;
 
         /// <summary>
+        /// For a templated <c>FlipView</c>: whether each logical item realized a control. An item
+        /// whose view mounts nothing (Empty) has no entry in <c>Items</c>, so updates map logical
+        /// items to entries through this.
+        /// </summary>
+        public List<bool>? FlipViewItemHasControl;
+
+        /// <summary>
         /// For an <c>ItemsHost</c> control: the collection entry each logical item realized
         /// (-1 when it mounted nothing), recorded when the items are filled, so a resource
         /// refresh can reconcile kept items in place (<c>ItemsHost.RefreshKeptItems</c>).
@@ -1266,6 +1273,23 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
+    /// Drops the item maps on a control (a FlipView's realized items, an ItemsHost's entries).
+    /// They describe one mount, so a control leaving the tree, to the pool or for good, must not
+    /// keep them.
+    /// </summary>
+    internal static void ClearRefreshSnapshots(FrameworkElement fe)
+    {
+        if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+            ClearRefreshSnapshots(state);
+    }
+
+    internal static void ClearRefreshSnapshots(ReactorState state)
+    {
+        state.FlipViewItemHasControl = null;
+        state.ItemsHostEntries = null;
+    }
+
+    /// <summary>
     /// Clears the Current* user-handler delegates from the per-element
     /// ModifierEventHandlerState while leaving the trampoline subscription on the
     /// underlying control. Call from <see cref="ElementPool.CleanElement"/>
@@ -1316,8 +1340,8 @@ public sealed partial class Reconciler : IDisposable
         state.EchoSuppressScopeDepth = 0;
         state.PendingEchoMatch = null;
         state.PendingLabeledBy = null;
-        // Describes the items this control showed; a detached control has none.
-        state.ItemsHostEntries = null;
+        // Item maps describe the items this control showed; a detached control has none.
+        ClearRefreshSnapshots(state);
         // Issue #1262 — a retired control must not keep a ValidationContext (or a
         // pending async rule) alive through a binding the normal FormField /
         // ValidationRule unmount path never got to clear. Neutralize before dropping
@@ -1685,7 +1709,7 @@ public sealed partial class Reconciler : IDisposable
                 rs.EchoSuppressScopeDepth = 0;
                 rs.PendingEchoMatch = null;
                 rs.PendingLabeledBy = null;
-                rs.ItemsHostEntries = null;
+                ClearRefreshSnapshots(rs);
                 rs.Element = null;
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).
@@ -2938,6 +2962,30 @@ public sealed partial class Reconciler : IDisposable
     {
         return Update(oldEl, newEl, control, requestRerender);
     }
+
+    /// <summary>
+    /// <see cref="Update"/> for a hosted child slot (dialog/popup/flyout/tooltip content, tree and
+    /// list item containers) whose owner swaps a replacement in. When the update hands back a
+    /// different control, the old one is unmounted here (unless the update already did) so its
+    /// effects, refs and unmount callbacks don't outlive it. Returns the replacement, or null
+    /// when the existing control was kept: a drop-in for <see cref="Update"/> at those sites.
+    /// </summary>
+    internal UIElement? UpdateHostedChild(Element oldEl, Element newEl, UIElement existing, Action requestRerender)
+    {
+        var replacement = UpdateSlotChild(oldEl, newEl, existing, requestRerender, out var unmountedByUpdate);
+        if (replacement is null || IsSameControl(replacement, existing)) return null;
+        if (!unmountedByUpdate) Unmount(existing);
+        return replacement;
+    }
+
+    /// <summary>
+    /// <see cref="UpdateChild"/> for a caller that unmounts a replaced control: reports whether
+    /// the update already unmounted it (e.g. a same-key Memo remounting its output during a
+    /// resource refresh), so the caller doesn't unmount it twice.
+    /// </summary>
+    internal UIElement? UpdateChildTracked(Element oldEl, Element newEl, UIElement control, Action requestRerender,
+        out bool unmountedByUpdate)
+        => UpdateSlotChild(oldEl, newEl, control, requestRerender, out unmountedByUpdate);
 
     /// <summary>
     /// Unmounts a child control. Public so registered type handlers can unmount children.
@@ -5046,7 +5094,7 @@ public sealed partial class Reconciler : IDisposable
             var existingTip = WinUI.ToolTipService.GetToolTip(fe) as UIElement;
             if (oldTipEl is not null && existingTip is not null && CanUpdate(oldTipEl, m.RichToolTip))
             {
-                var replacement = Update(oldTipEl, m.RichToolTip, existingTip, requestRerender);
+                var replacement = UpdateHostedChild(oldTipEl, m.RichToolTip, existingTip, requestRerender);
                 if (replacement is not null)
                     WinUI.ToolTipService.SetToolTip(fe, replacement);
             }
@@ -6430,7 +6478,7 @@ public sealed partial class Reconciler : IDisposable
             var oldContent = oldEl is ContentFlyoutElement oldCf ? oldCf.Content : null;
             if (oldContent is not null && flyout.Content is UIElement existingContent && CanUpdate(oldContent, newCf.Content))
             {
-                var replacement = Update(oldContent, newCf.Content, existingContent, requestRerender);
+                var replacement = UpdateHostedChild(oldContent, newCf.Content, existingContent, requestRerender);
                 if (replacement is not null && !ReferenceEquals(flyout.Content, replacement))
                     flyout.Content = replacement;
             }
@@ -6457,7 +6505,7 @@ public sealed partial class Reconciler : IDisposable
         {
             if (CanUpdate(oldEl, newEl))
             {
-                var replacement = Update(oldEl, newEl, existingCtrl, requestRerender);
+                var replacement = UpdateHostedChild(oldEl, newEl, existingCtrl, requestRerender);
                 if (replacement is not null && !ReferenceEquals(plainFlyout.Content, replacement))
                     plainFlyout.Content = replacement;
             }
