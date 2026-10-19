@@ -657,6 +657,10 @@
          <lastmod>2026-10-19</lastmod>
     </url>
     <url>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMultipleFilesPickerAsync/</loc>
+         <lastmod>2026-10-19</lastmod>
+    </url>
+    <url>
          <loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMutation/</loc>
          <lastmod>2026-10-19</lastmod>
     </url>
@@ -710,6 +714,10 @@
     </url>
     <url>
          <loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseResourceExtensions/</loc>
+         <lastmod>2026-10-19</lastmod>
+    </url>
+    <url>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseSaveFilePickerAsync/</loc>
          <lastmod>2026-10-19</lastmod>
     </url>
     <url>

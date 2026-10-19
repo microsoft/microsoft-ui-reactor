@@ -4799,28 +4799,90 @@ shape and raises <code>DisplayLayoutChanged</code> when Windows reports a layout
 <li><code>NearestTo</code> accepts DIP coordinates in Reactor's approximate display space.</li>
 </ul>
 <h2 id="pickers">Pickers<a class="headerlink" href="#pickers" title="Permanent link">&para;</a></h2>
-<p>Picker hooks create WinUI storage pickers and initialize them with the owning
+<p>Picker helpers create native <code>Windows.Storage.Pickers</code> dialogs and initialize them with the owning
 window HWND, so the picker is modal to the correct window without app code doing
-HWND interop.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="c1">// Both helpers return null when the user cancels the dialog.</span>
+HWND interop. Both <code>Component</code> and <code>RenderContext</code> expose the same operations:</p>
+<table>
+<thead>
+<tr>
+<th>Helper</th>
+<th>Options</th>
+<th>Cancellation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../reference/hooks/UseFilePickerAsync/">UseFilePickerAsync</a></td>
+<td><code>FilePickerOptions</code></td>
+<td><code>null</code></td>
+</tr>
+<tr>
+<td><a href="../reference/hooks/UseMultipleFilesPickerAsync/">UseMultipleFilesPickerAsync</a></td>
+<td><code>FilePickerOptions</code></td>
+<td>Empty <code>IReadOnlyList&lt;StorageFile&gt;</code></td>
+</tr>
+<tr>
+<td><a href="../reference/hooks/UseFolderPickerAsync/">UseFolderPickerAsync</a></td>
+<td><code>FolderPickerOptions</code></td>
+<td><code>null</code></td>
+</tr>
+<tr>
+<td><a href="../reference/hooks/UseSaveFilePickerAsync/">UseSaveFilePickerAsync</a></td>
+<td><code>SaveFilePickerOptions</code></td>
+<td><code>null</code></td>
+</tr>
+</tbody>
+</table>
+<p>Open and folder options include file-type filters (null or empty means <code>"*"</code>),
+suggested location, commit-button text, an optional view mode, and a settings
+identifier for Windows to remember dialog state. Existing positional constructors
+are unchanged; additional options are init properties. Save options require a
+non-empty dictionary mapping display labels to extension lists, and support a
+suggested file name, location, button text, settings identifier, and existing save
+file. Windows validates extension syntax. The save helper only selects/creates
+the target; the caller must write its contents.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="c1">// Capture helpers during Render; invoke them only from UI-thread events.</span>
 <a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="kt">var</span><span class="w"> </span><span class="n">pickFile</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseFilePickerAsync</span><span class="p">;</span>
-<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="kt">var</span><span class="w"> </span><span class="n">pickFolder</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseFolderPickerAsync</span><span class="p">;</span>
-<a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a>
-<a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a><span class="k">return</span><span class="w"> </span><span class="nf">Button</span><span class="p">(</span><span class="s">&quot;Open...&quot;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span>
-<a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a><span class="p">{</span>
-<a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a><span class="w">    </span><span class="kt">var</span><span class="w"> </span><span class="n">file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="n">pickFile</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">FilePickerOptions</span><span class="p">(</span>
-<a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a><span class="w">        </span><span class="n">FileTypeFilter</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s">&quot;.txt&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;.md&quot;</span><span class="p">]));</span>
-<a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">file</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">null</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
-<a id="__codelineno-23-10" name="__codelineno-23-10" href="#__codelineno-23-10"></a>
-<a id="__codelineno-23-11" name="__codelineno-23-11" href="#__codelineno-23-11"></a><span class="w">    </span><span class="kt">var</span><span class="w"> </span><span class="n">folder</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="n">pickFolder</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">FolderPickerOptions</span><span class="p">());</span>
-<a id="__codelineno-23-12" name="__codelineno-23-12" href="#__codelineno-23-12"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">folder</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">null</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
-<a id="__codelineno-23-13" name="__codelineno-23-13" href="#__codelineno-23-13"></a><span class="p">});</span>
+<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="kt">var</span><span class="w"> </span><span class="n">pickFiles</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseMultipleFilesPickerAsync</span><span class="p">;</span>
+<a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="kt">var</span><span class="w"> </span><span class="n">pickFolder</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseFolderPickerAsync</span><span class="p">;</span>
+<a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a><span class="kt">var</span><span class="w"> </span><span class="n">saveFile</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseSaveFilePickerAsync</span><span class="p">;</span>
+<a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a>
+<a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span>
+<a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a><span class="w">    </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Open one...&quot;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-23-10" name="__codelineno-23-10" href="#__codelineno-23-10"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="n">pickFile</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">FilePickerOptions</span><span class="p">(</span><span class="n">FileTypeFilter</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s">&quot;.txt&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;.md&quot;</span><span class="p">]));</span>
+<a id="__codelineno-23-11" name="__codelineno-23-11" href="#__codelineno-23-11"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">file</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">null</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="c1">// User cancelled.</span>
+<a id="__codelineno-23-12" name="__codelineno-23-12" href="#__codelineno-23-12"></a><span class="w">    </span><span class="p">}),</span>
+<a id="__codelineno-23-13" name="__codelineno-23-13" href="#__codelineno-23-13"></a><span class="w">    </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Open files...&quot;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-23-14" name="__codelineno-23-14" href="#__codelineno-23-14"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-23-15" name="__codelineno-23-15" href="#__codelineno-23-15"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">files</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="n">pickFiles</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">FilePickerOptions</span><span class="p">(</span><span class="n">FileTypeFilter</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s">&quot;.txt&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;.md&quot;</span><span class="p">]));</span>
+<a id="__codelineno-23-16" name="__codelineno-23-16" href="#__codelineno-23-16"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">files</span><span class="p">.</span><span class="n">Count</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span><span class="w"> </span><span class="c1">// User cancelled.</span>
+<a id="__codelineno-23-17" name="__codelineno-23-17" href="#__codelineno-23-17"></a><span class="w">    </span><span class="p">}),</span>
+<a id="__codelineno-23-18" name="__codelineno-23-18" href="#__codelineno-23-18"></a><span class="w">    </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Select folder...&quot;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-23-19" name="__codelineno-23-19" href="#__codelineno-23-19"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-23-20" name="__codelineno-23-20" href="#__codelineno-23-20"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">folder</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="n">pickFolder</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">FolderPickerOptions</span><span class="p">());</span>
+<a id="__codelineno-23-21" name="__codelineno-23-21" href="#__codelineno-23-21"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">folder</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">null</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<a id="__codelineno-23-22" name="__codelineno-23-22" href="#__codelineno-23-22"></a><span class="w">    </span><span class="p">}),</span>
+<a id="__codelineno-23-23" name="__codelineno-23-23" href="#__codelineno-23-23"></a><span class="w">    </span><span class="n">Button</span><span class="p">(</span><span class="s">&quot;Save as...&quot;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-23-24" name="__codelineno-23-24" href="#__codelineno-23-24"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-23-25" name="__codelineno-23-25" href="#__codelineno-23-25"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="n">saveFile</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">SaveFilePickerOptions</span><span class="p">(</span>
+<a id="__codelineno-23-26" name="__codelineno-23-26" href="#__codelineno-23-26"></a><span class="w">            </span><span class="k">new</span><span class="w"> </span><span class="n">Dictionary</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="n">IReadOnlyList</span><span class="o">&lt;</span><span class="kt">string</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">[</span><span class="s">&quot;Text&quot;</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s">&quot;.txt&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-23-27" name="__codelineno-23-27" href="#__codelineno-23-27"></a><span class="w">            </span><span class="n">SuggestedFileName</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;report&quot;</span><span class="p">));</span>
+<a id="__codelineno-23-28" name="__codelineno-23-28" href="#__codelineno-23-28"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">file</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">null</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<a id="__codelineno-23-29" name="__codelineno-23-29" href="#__codelineno-23-29"></a><span class="w">        </span><span class="c1">// Write the desired content here; selecting a target is not a save.</span>
+<a id="__codelineno-23-30" name="__codelineno-23-30" href="#__codelineno-23-30"></a><span class="w">    </span><span class="p">}));</span>
 </code></pre></div>
 <p>Caveats:</p>
 <ul>
-<li>Picker hooks must be called on the owning window's UI thread.</li>
+<li>Unlike positional state hooks, these helpers open a dialog when called. Invoke
+  them from UI-thread event handlers, not during <code>Render()</code> or in <code>Task.Run</code>.</li>
+<li>Calling without an owning Reactor window throws <code>InvalidOperationException</code>.</li>
+<li>Picker errors propagate to the caller; cancellation is not an error.</li>
 <li>Reactor never accepts arbitrary HWNDs; it always uses <code>UseWindow().NativeWindow</code>.</li>
-<li>Tests should inject the picker service rather than opening native dialogs.</li>
+<li>Framework tests use an internal picker-service seam instead of opening modal dialogs.</li>
+<li>These helpers retain <code>Windows.Storage</code> results; they do not migrate to the
+  separate <code>Microsoft.Windows.Storage.Pickers</code> API or change its OS requirements.</li>
+<li>The native <code>FolderPicker</code> supports one folder at a time, not multi-selection.</li>
 </ul>
 <h2 id="wpf-uwp-migration-map">WPF / UWP migration map<a class="headerlink" href="#wpf-uwp-migration-map" title="Permanent link">&para;</a></h2>
 <p>Coming from a pre-054 Reactor app instead? See
@@ -4887,7 +4949,7 @@ fields that were removed and what replaced them.</p>
 </tr>
 <tr>
 <td>UWP/WinUI picker HWND setup</td>
-<td><code>UseFilePickerAsync</code> / <code>UseFolderPickerAsync</code></td>
+<td>Open, multiple-file, folder, and save picker helpers</td>
 <td>Owning HWND is wired automatically.</td>
 </tr>
 </tbody>
