@@ -2137,7 +2137,7 @@ public sealed partial class Reconciler : IDisposable
             owner._ambientRequestedTheme = ambientTheme;
             _staggerScope = null;
 
-            _previousStack = capture is not null ? owner._contextScope.Replace(capture.Entries) : null;
+            _previousStack = capture is not null ? owner._contextScope.Replace(capture.Entries, capture.Generation) : null;
 
             _swapHost = owner.OwnerHost is not null;
             _previousHost = _swapHost ? ReactorApp.ActiveHostInternal : null;

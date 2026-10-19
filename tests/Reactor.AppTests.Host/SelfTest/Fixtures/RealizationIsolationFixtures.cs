@@ -321,6 +321,52 @@ internal static class RealizationIsolationFixtures
         }
     }
 
+    // ── Nested host mounted while an outdated snapshot is replayed ────────────
+
+    // A provider is removed, and before the traversal refreshes the outer host's snapshot,
+    // a row is realized from the outdated snapshot and mounts a nested host. That nested
+    // host's snapshot holds the removed provider, so it must not record the current
+    // generation — otherwise a later skip check treats it as current and its later rows
+    // read the removed value. Drives a standalone outer factory so the ordering is exact.
+    internal sealed class NestedHostMountedDuringStaleReplay_IsNotCurrent(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            var reconciler = new Reconciler();
+            Func<int, int, Element> builder = (i, _) =>
+                LazyVStack<int>(Enumerable.Range(0, 30).ToList(), j => j.ToString(), (j, _) =>
+                    TextBlock($"sr{i}.{j}").Height(30)).Height(120);
+
+            ElementFactory<int> outer;
+            using (reconciler.PushContextDisposable(Ctx, "removed"))
+                outer = new ElementFactory<int>(Enumerable.Range(0, 5).ToList(), builder, reconciler, static () => { }, pool: null);
+
+            // The pass that removes the provider: a non-skip Update whose own provided
+            // values changed. Inside it, an earlier sibling forces layout, so a row is
+            // realized from the outer snapshot before the traversal reaches the outer
+            // host; then the traversal reaches the (reference-stable) nested host.
+            reconciler.EnterProviderChange();
+            try
+            {
+                var row = ((IElementFactory)outer).GetElement(new ElementFactoryGetArgs { Data = 0 });
+                var nestedSv = row as ScrollViewer;
+                var nested = (nestedSv?.Content as ItemsRepeater)?.ItemTemplate as IContextCapturingFactory;
+                H.Check("Iso_StaleReplay_NestedHostMounted", nested?.ContextCapture is { Entries.Length: 1 },
+                    $"entries={nested?.ContextCapture?.Entries.Length}");
+                if (nestedSv is null) return Task.CompletedTask;
+
+                // The live stack is now empty (the removal happened): the nested host's
+                // snapshot still holds the removed provider, so it must decline the skip.
+                H.Check("Iso_StaleReplay_NestedHostDeclinesSkip", reconciler.ShouldDeclineSkip(nestedSv));
+            }
+            finally
+            {
+                reconciler.ExitProviderChange();
+            }
+            return Task.CompletedTask;
+        }
+    }
+
     // ── Ancestor theme changes in the same pass that realizes rows ───────────
 
     private sealed class ForcerWithDep : Component<IndexProps>

@@ -255,6 +255,27 @@ public class ContextCaptureUnitTests
     }
 
     [Fact]
+    public void Capture_TakenDuringReplay_RecordsTheReplayedGeneration()
+    {
+        // Outer snapshot taken under a provider, then the provider is removed.
+        var scope = new ContextScope();
+        Push(scope, Theme, "dark");
+        var outer = Captured(scope);
+        scope.Pop(1);
+        scope.BumpProviderGeneration();
+
+        // A row realized from the (now outdated) outer snapshot mounts a nested host.
+        var previous = scope.Replace(outer.Entries, outer.Generation);
+        var nested = Captured(scope);
+        Assert.Equal(outer.Generation, nested.Generation);
+        Assert.False(nested.IsStale(scope)); // consistent with the replayed stack
+        scope.Restore(previous);
+
+        // Back in the live traversal the nested snapshot must not look current.
+        Assert.True(nested.IsStale(scope));
+    }
+
+    [Fact]
     public void Capture_Refresh_KeepsArrayWhenNothingChanged()
     {
         var scope = new ContextScope();

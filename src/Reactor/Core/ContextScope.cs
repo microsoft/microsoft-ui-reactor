@@ -76,6 +76,19 @@ internal sealed class ContextScope
 
     internal void BumpProviderGeneration() => ProviderGeneration++;
 
+    // Generations of the snapshots currently being replayed (innermost last). While a
+    // replay is active the live stack IS that snapshot, so a nested host captured from it
+    // must record the snapshot's generation — not the current one, which would mark
+    // possibly-outdated replayed values as current.
+    private readonly List<long> _replayGenerations = new();
+
+    /// <summary>
+    /// The generation the live stack's contents correspond to: the replayed snapshot's
+    /// while a replay is active, otherwise <see cref="ProviderGeneration"/>.
+    /// </summary>
+    internal long SnapshotGeneration
+        => _replayGenerations.Count > 0 ? _replayGenerations[^1] : ProviderGeneration;
+
     internal (ContextBase Context, object? Value)[] Snapshot()
         => _stack.Count == 0 ? [] : _stack.ToArray();
 
@@ -124,9 +137,20 @@ internal sealed class ContextScope
     /// providers of whatever subtree the traversal happened to be in.
     /// </summary>
     internal List<(ContextBase Context, object? Value)> Replace((ContextBase Context, object? Value)[] snapshot)
+        => Replace(snapshot, SnapshotGeneration);
+
+    /// <summary>
+    /// Replaces the live stack with <paramref name="snapshot"/>, recording the provider
+    /// generation it was taken at (see <see cref="SnapshotGeneration"/>), and returns the
+    /// displaced stack for <see cref="Restore"/>.
+    /// </summary>
+    /// <param name="snapshot">The provider entries to replay.</param>
+    /// <param name="generation">The <see cref="ProviderGeneration"/> <paramref name="snapshot"/> was taken at.</param>
+    internal List<(ContextBase Context, object? Value)> Replace((ContextBase Context, object? Value)[] snapshot, long generation)
     {
         var previous = _stack;
         _stack = new List<(ContextBase Context, object? Value)>(snapshot);
+        _replayGenerations.Add(generation);
         _replayDepth++;
         _version++;
         return previous;
@@ -135,6 +159,7 @@ internal sealed class ContextScope
     internal void Restore(List<(ContextBase Context, object? Value)> previous)
     {
         _stack = previous;
+        _replayGenerations.RemoveAt(_replayGenerations.Count - 1);
         _replayDepth--;
         _version++;
     }
@@ -162,14 +187,14 @@ internal sealed class ContextCapture
 
     internal bool IsOwnedBy(Element element) => OwnerType is null || OwnerType == element.GetType();
 
-    /// <summary><see cref="ContextScope.ProviderGeneration"/> when <see cref="Entries"/> was taken.</summary>
+    /// <summary><see cref="ContextScope.SnapshotGeneration"/> when <see cref="Entries"/> was taken.</summary>
     internal long Generation { get; private set; } = -1;
 
     internal void Refresh(ContextScope scope)
     {
         if (!scope.Matches(Entries))
             Entries = scope.Snapshot();
-        Generation = scope.ProviderGeneration;
+        Generation = scope.SnapshotGeneration;
     }
 
     /// <summary>Reconcile pass in which the host was last reached (see <see cref="PassTheme"/>).</summary>
@@ -201,5 +226,5 @@ internal sealed class ContextCapture
 
     /// <param name="scope">The live stack at an ancestor of (or at) the host.</param>
     internal bool IsStale(ContextScope scope)
-        => Generation != scope.ProviderGeneration || !scope.IsPrefixOf(Entries);
+        => Generation != scope.SnapshotGeneration || !scope.IsPrefixOf(Entries);
 }
