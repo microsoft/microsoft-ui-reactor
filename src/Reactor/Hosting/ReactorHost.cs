@@ -1077,6 +1077,15 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
                     TraceRootRendered(hotReloadRender, treeBuildMs);
                 if (_releaseReplacedTreeOnNullRender)
                     ReleaseReplacedTree();
+                // The root rendered (to nothing) and its hooks are live: publish it like the
+                // non-null path does, so diagnostics can reach it. Claimed only into an empty
+                // container, as for an Empty() render.
+                if (!passRoot.IsEmpty)
+                {
+                    _renderedRoot = passRoot;
+                    if (_currentControl is null && ContentTarget is { Child: null } nullTarget && !OwnsContentTarget(nullTarget))
+                        ClaimContentTarget();
+                }
                 // Commit the render like any other: the root's effects still run, and a
                 // failure among them is routed as an effect failure by the outer catch.
                 failurePhase = RenderErrorSource.Effects;

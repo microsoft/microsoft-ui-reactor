@@ -975,6 +975,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                     TraceRootRendered(hotReloadRender, treeBuildMs);
                 if (_releaseReplacedTreeOnNullRender)
                     ReleaseReplacedTree();
+                // The root rendered (to nothing) and its hooks are live: publish it like the
+                // non-null path does, so diagnostics can reach it through this control.
+                if (!passRoot.IsEmpty)
+                    _renderedRoot = passRoot;
                 // Commit the render like any other: the root's effects still run, and a
                 // failure among them is routed as an effect failure by the outer catch.
                 failurePhase = RenderErrorSource.Effects;

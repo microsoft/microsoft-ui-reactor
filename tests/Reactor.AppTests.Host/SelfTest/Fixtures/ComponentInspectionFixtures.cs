@@ -442,6 +442,24 @@ internal static class ComponentInspectionFixtures
                         occupied.Child is not null && IsRoot(ReactorDiagnostics.DescribeComponent(occupied)));
                 }
 
+                // A replacement root whose render returns null releases the previous content and is
+                // described at its (now empty) container.
+                var nullTarget = new Border();
+                using (var nullHost = new ReactorHost(H.Window) { ContentTarget = nullTarget })
+                {
+                    nullHost.Mount(new RootCounter());
+                    await Harness.Render();
+                    nullHost.Mount(ctx =>
+                    {
+                        var (s, _) = ctx.UseState("null-root");
+                        return null!;
+                    });
+                    await Harness.Render();
+                    H.Check("RootAnchor_NullRenderRootDescribedAtContainer",
+                        nullTarget.Child is null
+                        && ReactorDiagnostics.DescribeComponent(nullTarget) is { IsRoot: true, Kind: "function", State: [{ Value: "\"null-root\"" }] });
+                }
+
                 // Overlay teardown writes the (empty) raw content back and reclaims the container,
                 // even though another host claimed it while the wrapper was installed.
                 var overlayBefore = ReactorFeatureFlags.HighlightReconcileChanges;
@@ -553,6 +571,18 @@ internal static class ComponentInspectionFixtures
                     maxPasses: 16, perPassMs: 10);
                 H.Check("RootAnchor_HostControlEmptyRoot",
                     ReactorDiagnostics.DescribeComponent(hostControl) is { IsRoot: true, Kind: "function", State: [{ Value: "\"hc-empty\"" }] });
+
+                // A root whose render returns null rendered too: its hooks are live and it is
+                // described at the control.
+                hostControl.Mount(ctx =>
+                {
+                    var (s, _) = ctx.UseState("hc-null");
+                    return null!;
+                });
+                await Harness.WaitFor(() => ReactorDiagnostics.DescribeComponent(hostControl) is { State: [{ Value: "\"hc-null\"" }] },
+                    maxPasses: 16, perPassMs: 10);
+                H.Check("RootAnchor_HostControlNullRenderRoot",
+                    ReactorDiagnostics.DescribeComponent(hostControl) is { IsRoot: true, Kind: "function", State: [{ Value: "\"hc-null\"" }] });
 
                 hostControl.Dispose();
                 H.Check("RootAnchor_DisposedHostControlNotDescribed", ReactorDiagnostics.DescribeComponent(hostControl) is null);
