@@ -50,6 +50,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     private UIElement? _currentControl;
     // The root that produced _currentControl (diagnostics); see RenderedRoot.
     private RenderedRoot _renderedRoot;
+    // An error fallback (not the root's output) is displayed; a null render keeps it shown.
+    private bool _showingErrorContent;
     private int _renderPending;    // 0 or 1 — Interlocked for thread-safe access
     private volatile bool _isRendering;     // only touched on UI thread
     private volatile bool _needsRerender;   // only touched on UI thread
@@ -1080,7 +1082,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
                 // The root rendered (to nothing) and its hooks are live: publish it like the
                 // non-null path does, so diagnostics can reach it. Claimed only into an empty
                 // container, as for an Empty() render.
-                if (!passRoot.IsEmpty)
+                // Not while it keeps an error fallback on screen: that content is not the root's.
+                if (!passRoot.IsEmpty && !_showingErrorContent)
                 {
                     _renderedRoot = passRoot;
                     if (_currentControl is null && ContentTarget is { Child: null } nullTarget && !OwnsContentTarget(nullTarget))
@@ -1210,6 +1213,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             _currentControl = newControl;
             _currentTree = newTree;
             _renderedRoot = passRoot;
+            _showingErrorContent = false;
             // An Empty() render may write nothing (the container was already empty), yet the
             // container now shows this root: claim it alongside the published root. Only an empty
             // container: an occupied one still shows another host's content, which keeps it.
@@ -1611,6 +1615,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         _currentTree = errorTree;
         // A fallback is shown, not the root's output, so no root is described from it.
         _renderedRoot = default;
+        _showingErrorContent = errorPanel is not null || errorTree is not null;
         // When the handler's outcome replaced (and released) the tree, the theme listener
         // moves to the new content like any content swap, or is detached when there is none,
         // so it neither pins the released root nor misses a ThemeRef-bound app fallback. The

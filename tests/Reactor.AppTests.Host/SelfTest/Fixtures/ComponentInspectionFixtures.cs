@@ -337,12 +337,15 @@ internal static class ComponentInspectionFixtures
             // The root shows an app-supplied render-error fallback: that is not the root's output,
             // so neither the container nor the fallback control describes the root.
             var fail = false;
+            var retryNull = false;
+            var nullRetries = 0;
             var fbHost = H.CreateHost();
             fbHost.RenderErrorHandler = _ => TextBlock("root-app-fallback");
             fbHost.Mount(ctx =>
             {
                 var (s, _) = ctx.UseState("ok");
                 if (fail) throw new InvalidOperationException("root render failed");
+                if (retryNull) { nullRetries++; return null!; }
                 return TextBlock($"root-recovered:{s}");
             });
             await Harness.Render();
@@ -359,6 +362,17 @@ internal static class ComponentInspectionFixtures
             if (fallback is null || fbTarget is null) return;
             H.Check("RootAnchor_AppFallbackContainerNotDescribed", ReactorDiagnostics.DescribeComponent(fbTarget) is null);
             H.Check("RootAnchor_AppFallbackControlNotDescribed", ReactorDiagnostics.DescribeComponent(fallback) is null);
+            // A retry that renders null keeps the fallback on screen; it is still not the root's output.
+            fail = false;
+            retryNull = true;
+            fbHost.RequestRender();
+            await Harness.Render();
+            await Harness.Render();
+            H.Check("RootAnchor_NullRetryKeepsFallbackUnattributed",
+                nullRetries > 0 && ReferenceEquals(H.FindText("root-app-fallback"), fallback)
+                && ReactorDiagnostics.DescribeComponent(fbTarget) is null
+                && ReactorDiagnostics.DescribeComponent(fallback) is null);
+            retryNull = false;
             fail = false;
             fbHost.RequestRender();
             await Harness.WaitFor(() => H.FindText("root-recovered:ok") is not null, maxPasses: 16, perPassMs: 10);
@@ -583,6 +597,33 @@ internal static class ComponentInspectionFixtures
                     maxPasses: 16, perPassMs: 10);
                 H.Check("RootAnchor_HostControlNullRenderRoot",
                     ReactorDiagnostics.DescribeComponent(hostControl) is { IsRoot: true, Kind: "function", State: [{ Value: "\"hc-null\"" }] });
+
+                // Throw → fallback, then a retry that renders null: the fallback stays on screen and
+                // the control describes nothing.
+                var hcFail = true;
+                var hcNull = false;
+                var hcNullRenders = 0;
+                Action<string>? hcSet = null;
+                hostControl.RenderErrorHandler = _ => TextBlock("hc-fallback");
+                hostControl.Mount(ctx =>
+                {
+                    var (s, set) = ctx.UseState("hc-retry");
+                    hcSet = set;
+                    if (hcFail) throw new InvalidOperationException("host control root failed");
+                    if (hcNull) { hcNullRenders++; return null!; }
+                    return TextBlock($"hc-retry:{s}");
+                });
+                await Harness.WaitFor(() => H.FindText("hc-fallback") is not null, maxPasses: 16, perPassMs: 10);
+                var hcFallback = H.FindText("hc-fallback");
+                hcFail = false;
+                hcNull = true;
+                hcSet?.Invoke("hc-retry-null");
+                await Harness.Render();
+                await Harness.Render();
+                H.Check("RootAnchor_HostControlNullRetryKeepsFallbackUnattributed",
+                    hcNullRenders > 0 && hcFallback is not null && ReferenceEquals(H.FindText("hc-fallback"), hcFallback)
+                    && ReactorDiagnostics.DescribeComponent(hostControl) is null);
+                hostControl.RenderErrorHandler = null;
 
                 hostControl.Dispose();
                 H.Check("RootAnchor_DisposedHostControlNotDescribed", ReactorDiagnostics.DescribeComponent(hostControl) is null);

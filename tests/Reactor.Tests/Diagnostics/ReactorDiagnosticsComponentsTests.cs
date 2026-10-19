@@ -641,6 +641,16 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
+    public void Props_WithAByRefLikeMember_ReportItUnavailable_AndStillListTheRest()
+    {
+        // ReadOnlyMemory<char>.Span cannot be read through reflection (it cannot be boxed).
+        var node = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), "hello".AsMemory()) };
+        var rows = ComponentHandle.FromNode(node, () => true).Describe().Props;
+        Assert.Contains(rows, r => r.Name == "Span" && r.Value == "<value unavailable>");
+        Assert.Contains(rows, r => r.Name == "Length" && r.Value == "5");
+    }
+
+    [Fact]
     public void Props_WithNoReadableMembers_NameTheTypeAndNeverItsToString()
     {
         // The same fallback a trimmed app hits when property metadata is gone: the object's

@@ -356,12 +356,16 @@ internal static class DiagnosticText
             object? value;
             try
             {
-                value = property.GetValue(props);
+                // A byref-like value (Span<T>, ReadOnlyMemory<T>.Span) cannot be boxed, so reflection
+                // cannot read it; its row says so instead of failing the whole description.
+                value = property.PropertyType.IsByRefLike
+                    ? new OpaqueValue("<value unavailable>")
+                    : property.GetValue(props);
             }
-            catch (global::System.Reflection.TargetInvocationException)
+            catch (Exception ex) when (ex is global::System.Reflection.TargetInvocationException or NotSupportedException)
             {
-                // A throwing getter still gets its row, so the member is visible; the exception
-                // text is not shown because it can carry the value.
+                // A throwing getter (or a read reflection does not support) still gets its row, so
+                // the member is visible; the exception text is not shown because it can carry the value.
                 value = new OpaqueValue("<value unavailable>");
             }
             rows.Add((property.Name, property.PropertyType, value));
