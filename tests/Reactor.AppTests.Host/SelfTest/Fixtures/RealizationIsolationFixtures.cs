@@ -367,6 +367,46 @@ internal static class RealizationIsolationFixtures
         }
     }
 
+    // ── Reused row drops its own provider around a stable nested host ─────────
+
+    // A recycled row is reused for the same item, and the new row element no longer
+    // carries its own .Provide. The nested list is reference-stable, so the row's Update
+    // reaches it through the skip check while the outer snapshot is being replayed. The
+    // provider change inside the replay must make the nested snapshot stale.
+    internal sealed class ReusedRowDropsOwnProvider_NestedHostRefreshes(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            var reconciler = new Reconciler();
+            var stableInner = LazyVStack<int>(Enumerable.Range(0, 30).ToList(), j => j.ToString(), (j, _) =>
+                TextBlock($"ru{j}").Height(30)).Height(120);
+            var items = Enumerable.Range(0, 5).ToList();
+            Func<int, int, Element> withProvider = (_, _) => VStack(stableInner).Provide(Ctx, "row-local");
+            Func<int, int, Element> withoutProvider = (_, _) => VStack(stableInner);
+
+            var outer = new ElementFactory<int>(items, withProvider, reconciler, static () => { }, pool: null);
+            IElementFactory f = outer;
+
+            var first = f.GetElement(new ElementFactoryGetArgs { Data = 0 });
+            ContextCapture? NestedCapture(UIElement row)
+                => ((row as StackPanel ?? (row as Panel))?.Children.OfType<ScrollViewer>().FirstOrDefault()?.Content
+                        as ItemsRepeater)?.ItemTemplate is IContextCapturingFactory c ? c.ContextCapture : null;
+            var nestedBefore = NestedCapture(first);
+            H.Check("Iso_RowLocal_NestedSeesRowProvider", nestedBefore is { Entries.Length: 1 },
+                $"entries={nestedBefore?.Entries.Length} root={first.GetType().Name}");
+
+            f.RecycleElement(new ElementFactoryRecycleArgs { Element = first });
+            outer.UpdateInPlace(items, withoutProvider);
+            var again = f.GetElement(new ElementFactoryGetArgs { Data = 0 });
+
+            H.Check("Iso_RowLocal_ContainerReused", ReferenceEquals(first, again));
+            var nestedAfter = NestedCapture(again);
+            H.Check("Iso_RowLocal_NestedDroppedRemovedProvider", nestedAfter is { Entries.Length: 0 },
+                $"entries={nestedAfter?.Entries.Length}");
+            return Task.CompletedTask;
+        }
+    }
+
     // ── Ancestor theme changes in the same pass that realizes rows ───────────
 
     private sealed class ForcerWithDep : Component<IndexProps>

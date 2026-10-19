@@ -276,6 +276,44 @@ public class ContextCaptureUnitTests
     }
 
     [Fact]
+    public void ProviderChangeDuringReplay_InvalidatesSnapshotsTakenUnderIt()
+    {
+        var scope = new ContextScope();
+        var outer = Captured(scope);            // current, empty
+
+        var previous = scope.Replace(outer.Entries, outer.Generation);
+        Push(scope, Theme, "row-local");        // a reused row's own provider, still on
+        var nested = Captured(scope);
+        Assert.False(nested.IsStale(scope));
+
+        scope.Pop(1);                           // the reused row drops its .Provide
+        scope.BumpProviderGeneration();
+        Assert.True(nested.IsStale(scope));     // shorter stack is a prefix; generation catches it
+        var refreshed = Captured(scope);
+        scope.Restore(previous);
+
+        // The replay was current, so a snapshot refreshed after the change is current live.
+        Assert.False(refreshed.IsStale(scope));
+    }
+
+    [Fact]
+    public void ProviderChangeDuringStaleReplay_NeverYieldsACurrentSnapshot()
+    {
+        var scope = new ContextScope();
+        Push(scope, Theme, "removed");
+        var outer = Captured(scope);
+        scope.Pop(1);
+        scope.BumpProviderGeneration();         // outer snapshot is now stale
+
+        var previous = scope.Replace(outer.Entries, outer.Generation);
+        scope.BumpProviderGeneration();         // a provider change inside the replayed row
+        var nested = Captured(scope);
+        scope.Restore(previous);
+
+        Assert.True(nested.IsStale(scope));     // still holds the removed provider
+    }
+
+    [Fact]
     public void Capture_Refresh_KeepsArrayWhenNothingChanged()
     {
         var scope = new ContextScope();

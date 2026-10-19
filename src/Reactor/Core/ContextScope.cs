@@ -74,7 +74,22 @@ internal sealed class ContextScope
     /// </summary>
     internal long ProviderGeneration { get; private set; }
 
-    internal void BumpProviderGeneration() => ProviderGeneration++;
+    internal void BumpProviderGeneration()
+    {
+        var before = ProviderGeneration++;
+        if (_replayGenerations.Count == 0) return;
+        // A provider changed inside a replayed subtree (e.g. a reused row dropped its own
+        // .Provide): the replayed stack changed, so snapshots taken under it before the
+        // change are no longer current. A replay that was current moves to the new live
+        // generation; one that was already stale gets a value no live generation can
+        // ever equal, so nothing captured from it is treated as current afterwards.
+        int top = _replayGenerations.Count - 1;
+        _replayGenerations[top] = _replayGenerations[top] == before ? ProviderGeneration : _staleReplaySeq--;
+    }
+
+    // Distinct negative generations for stale replays that saw a provider change.
+    // Live generations are non-negative and ContextCapture uses long.MinValue for "none".
+    private long _staleReplaySeq = -1;
 
     // Generations of the snapshots currently being replayed (innermost last). While a
     // replay is active the live stack IS that snapshot, so a nested host captured from it
@@ -188,7 +203,7 @@ internal sealed class ContextCapture
     internal bool IsOwnedBy(Element element) => OwnerType is null || OwnerType == element.GetType();
 
     /// <summary><see cref="ContextScope.SnapshotGeneration"/> when <see cref="Entries"/> was taken.</summary>
-    internal long Generation { get; private set; } = -1;
+    internal long Generation { get; private set; } = long.MinValue;
 
     internal void Refresh(ContextScope scope)
     {
@@ -221,7 +236,7 @@ internal sealed class ContextCapture
     internal void Clear()
     {
         Entries = [];
-        Generation = -1;
+        Generation = long.MinValue;
     }
 
     /// <param name="scope">The live stack at an ancestor of (or at) the host.</param>
