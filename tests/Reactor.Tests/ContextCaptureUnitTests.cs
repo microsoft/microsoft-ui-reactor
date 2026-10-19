@@ -1,4 +1,3 @@
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Reactor.Core;
 using Xunit;
 
@@ -200,7 +199,7 @@ public class ContextCaptureUnitTests
     private static ContextCapture Captured(ContextScope scope)
     {
         var capture = new ContextCapture();
-        capture.Refresh(scope, ElementTheme.Default);
+        capture.Refresh(scope);
         return capture;
     }
 
@@ -215,7 +214,7 @@ public class ContextCaptureUnitTests
         Push(scope, Count, 1); // provider added above the host
         Assert.True(capture.IsStale(scope));
 
-        capture.Refresh(scope, ElementTheme.Default);
+        capture.Refresh(scope);
         Assert.False(capture.IsStale(scope));
     }
 
@@ -233,7 +232,7 @@ public class ContextCaptureUnitTests
         scope.BumpProviderGeneration(); // what the reconciler does for a changed provider
         Assert.True(capture.IsStale(scope));
 
-        capture.Refresh(scope, ElementTheme.Default);
+        capture.Refresh(scope);
         Assert.False(capture.IsStale(scope));
         Assert.Single(capture.Entries);
     }
@@ -263,23 +262,14 @@ public class ContextCaptureUnitTests
         var capture = Captured(scope);
         var first = capture.Entries;
 
-        capture.Refresh(scope, ElementTheme.Default);
+        capture.Refresh(scope);
         Assert.Same(first, capture.Entries);
 
         scope.Pop(1);
         Push(scope, Theme, "light");
-        capture.Refresh(scope, ElementTheme.Default);
+        capture.Refresh(scope);
         Assert.NotSame(first, capture.Entries);
         Assert.Equal("light", capture.Entries[0].Value);
-    }
-
-    [Fact]
-    public void Capture_RecordsAmbientTheme()
-    {
-        var scope = new ContextScope();
-        var capture = new ContextCapture();
-        capture.Refresh(scope, ElementTheme.Dark);
-        Assert.Equal(ElementTheme.Dark, capture.AmbientTheme);
     }
 
     [Fact]

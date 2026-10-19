@@ -1,6 +1,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
+using Microsoft.UI.Reactor.Elements;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -240,7 +241,7 @@ internal static class RealizationIsolationFixtures
             });
             await Harness.Render();
 
-            ScrollViewer Outer() => H.FindControl<ScrollViewer>(s => s.Content is ItemsRepeater && s.Height == 300)!;
+            ScrollViewer Outer() => H.FindControl<ScrollViewer>(s => s.Content is ItemsRepeater && global::System.Math.Abs(s.Height - 300.0) < 0.001)!;
             H.Check("Iso_Nested_Row0Realized", H.FindText("n0.0 plain") is not null);
 
             // Park outer row 0 (with its nested host) by scrolling far away.
@@ -317,6 +318,76 @@ internal static class RealizationIsolationFixtures
             Reconciler.DetachReactorState(sv);
             H.Check("Iso_Detach_FactoryAliasReleased", capture.Entries.Length == 0,
                 $"entries={capture.Entries.Length}");
+        }
+    }
+
+    // ── Ancestor theme changes while the host is skipped ─────────────────────
+
+    // No Context providers anywhere: the provider checks are not even consulted. The
+    // list is reference-stable, so a theme toggle on its parent skips it, and rows
+    // realized afterwards must still resolve ThemeRef overrides against the NEW theme.
+    internal sealed class AncestorThemeToggledWhileSkipped_RowsResolveNewTheme(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const string SrcKey = "IsoThemeSrcBrush";
+        private const string TargetKey = "IsoThemeTargetBrush";
+
+        public override async Task RunAsync()
+        {
+            var light = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 0, 0, 220));
+            var dark = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 220, 0, 0));
+            var dict = new ResourceDictionary();
+            dict.ThemeDictionaries["Light"] = new ResourceDictionary { [SrcKey] = light };
+            dict.ThemeDictionaries["Dark"] = new ResourceDictionary { [SrcKey] = dark };
+            Application.Current.Resources.MergedDictionaries.Add(dict);
+            ThemeRef.InvalidateResolutionCache();
+            try
+            {
+                bool appIsDark = Application.Current.RequestedTheme == ApplicationTheme.Dark;
+                var first = appIsDark ? ElementTheme.Light : ElementTheme.Dark;
+                var second = appIsDark ? ElementTheme.Dark : ElementTheme.Light;
+                SolidColorBrush BrushFor(ElementTheme t) => t == ElementTheme.Dark ? dark : light;
+
+                var stableList = LazyVStack<int>(Enumerable.Range(0, 300).ToList(), i => i.ToString(), (i, _) =>
+                        TextBlock($"th{i}").Height(30).Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey))))
+                    .Height(300);
+
+                var host = H.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (flipped, setFlipped) = ctx.UseState(false);
+                    return VStack(
+                            Button("IsoThemeFlip", () => setFlipped(true)),
+                            TextBlock($"iso-theme:{flipped}"),
+                            stableList)
+                        .RequestedTheme(flipped ? second : first);
+                });
+                await Harness.Render();
+
+                var row0 = H.FindText("th0");
+                H.Check("Iso_Theme_MountResolvesAncestor",
+                    row0?.Resources.TryGetValue(TargetKey, out var b0) == true && ReferenceEquals(b0, BrushFor(first)));
+
+                H.ClickButton("IsoThemeFlip");
+                await Harness.Render();
+                H.Check("Iso_Theme_Flipped", H.FindText("iso-theme:True") is not null);
+
+                var sv = H.FindControl<ScrollViewer>(s => s.Content is ItemsRepeater)!;
+                sv.ChangeView(null, 150 * 30, null, disableAnimation: true);
+                await Harness.Render();
+                await Harness.Render();
+
+                var scrolled = H.FindAllControls<TextBlock>(t => t.Text?.StartsWith("th1", StringComparison.Ordinal) == true
+                        && int.TryParse(t.Text.AsSpan(2), out var n) && n >= 100)
+                    .ToList();
+                int right = scrolled.Count(t => t.Resources.TryGetValue(TargetKey, out var b) && ReferenceEquals(b, BrushFor(second)));
+                H.Check("Iso_Theme_ScrolledRowsResolveNewTheme", scrolled.Count > 0 && right == scrolled.Count,
+                    $"right={right}/{scrolled.Count}");
+            }
+            finally
+            {
+                Application.Current.Resources.MergedDictionaries.Remove(dict);
+                ThemeRef.InvalidateResolutionCache();
+            }
         }
     }
 }

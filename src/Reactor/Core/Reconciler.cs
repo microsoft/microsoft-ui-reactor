@@ -1971,7 +1971,7 @@ public sealed partial class Reconciler : IDisposable
             $"{host.GetType().Name} is not covered by MayHostContextCapture; its capture would never refresh.");
         var state = GetOrCreateReactorState(host);
         var capture = state.ContextCapture ??= new ContextCapture { OwnerType = _reconcilingElement?.GetType() };
-        capture.Refresh(_contextScope, _ambientRequestedTheme);
+        capture.Refresh(_contextScope);
         _hasContextCaptures = true;
         return capture;
     }
@@ -1987,10 +1987,10 @@ public sealed partial class Reconciler : IDisposable
     /// Re-snapshots a host's provider stack when <paramref name="newEl"/> is the element that
     /// owns the capture; a no-op for any other control or element.
     /// </summary>
-    internal void RefreshContextCapture(UIElement control, Element newEl, ElementTheme effectiveTheme)
+    internal void RefreshContextCapture(UIElement control, Element newEl)
     {
         if (TryGetContextCapture(control) is { } capture && capture.IsOwnedBy(newEl))
-            capture.Refresh(_contextScope, effectiveTheme);
+            capture.Refresh(_contextScope);
     }
 
     /// <summary>
@@ -2001,17 +2001,17 @@ public sealed partial class Reconciler : IDisposable
     /// untouched; if a provider above it changed, the stale check declines that skip and
     /// the decorator's Update reaches the host element.
     /// </summary>
-    internal void RefreshContextCaptureOnSkip(UIElement control, Element newEl, ElementTheme effectiveTheme)
+    internal void RefreshContextCaptureOnSkip(UIElement control, Element newEl)
     {
         if (TryGetContextCapture(control) is not { } capture || !capture.IsOwnedBy(newEl)) return;
         var own = newEl.ContextValues;
         if (own is not { Count: > 0 })
         {
-            capture.Refresh(_contextScope, effectiveTheme);
+            capture.Refresh(_contextScope);
             return;
         }
         _contextScope.Push(own);
-        try { capture.Refresh(_contextScope, effectiveTheme); }
+        try { capture.Refresh(_contextScope); }
         finally { _contextScope.Pop(own.Count); }
     }
 
@@ -2022,18 +2022,19 @@ public sealed partial class Reconciler : IDisposable
     internal ContextCapture CaptureLiveContext()
     {
         var capture = new ContextCapture();
-        capture.Refresh(_contextScope, _ambientRequestedTheme);
+        capture.Refresh(_contextScope);
         return capture;
     }
 
-    internal void RefreshLiveContext(ContextCapture capture) => capture.Refresh(_contextScope, _ambientRequestedTheme);
+    internal void RefreshLiveContext(ContextCapture capture) => capture.Refresh(_contextScope);
 
     /// <summary>
     /// Opens a realization frame for building a row outside (or re-entrantly inside) the
     /// traversal. Until the returned scope is disposed:
     /// <list type="bullet">
-    ///   <item><description>the live provider stack is replaced with <paramref name="capture"/>
-    ///     and the ambient theme with the one captured at the host;</description></item>
+    ///   <item><description>the live provider stack is replaced with <paramref name="capture"/>,
+    ///     and the ambient theme is read live off <paramref name="host"/> (see
+    ///     <see cref="LiveAmbientTheme"/>);</description></item>
     ///   <item><description>the in-flight pass's per-subtree bookkeeping is set aside, so the
     ///     row is not recorded in an ErrorBoundary's rollback lists (a failing boundary child
     ///     would otherwise tear down a live row in an unrelated list), a row that throws gets
@@ -2042,12 +2043,29 @@ public sealed partial class Reconciler : IDisposable
     ///   <item><description>the owning host is the active host, so window-scoped hooks in the
     ///     row resolve this window even outside the host's render pass.</description></item>
     /// </list>
-    /// A null capture still isolates; it just leaves the provider stack and theme as they are.
+    /// A null capture still isolates; it just leaves the provider stack as it is.
     /// </summary>
-    internal RealizationFrame EnterRealization(ContextCapture? capture) => new(this, capture);
+    internal RealizationFrame EnterRealization(ContextCapture? capture, UIElement? host)
+        => new(this, capture, LiveAmbientTheme(host));
 
-    /// <inheritdoc cref="EnterRealization(ContextCapture?)"/>
-    internal RealizationFrame EnterRealization(UIElement host) => EnterRealization(TryGetContextCapture(host));
+    /// <inheritdoc cref="EnterRealization(ContextCapture?, UIElement?)"/>
+    internal RealizationFrame EnterRealization(UIElement host) => EnterRealization(TryGetContextCapture(host), host);
+
+    /// <summary>
+    /// The theme a row realized into <paramref name="host"/> should resolve ThemeRef
+    /// resource overrides against. Read from the host itself rather than captured at
+    /// reconcile time: the host is in the tree, so its <c>ActualTheme</c> already reflects
+    /// every ancestor <c>RequestedTheme</c> — including one that changed while the host was
+    /// skipped. Returns <see cref="ElementTheme.Default"/> when that matches the app theme,
+    /// preserving the reconciler's "no ancestor override" meaning.
+    /// </summary>
+    private static ElementTheme LiveAmbientTheme(UIElement? host)
+    {
+        if (host is not FrameworkElement fe) return ElementTheme.Default;
+        var actual = fe.ActualTheme;
+        var app = Application.Current?.RequestedTheme == ApplicationTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
+        return actual == app ? ElementTheme.Default : actual;
+    }
 
     /// <summary>
     /// Registers <paramref name="host"/> (see <see cref="CaptureContextForHost"/>) and
@@ -2073,7 +2091,7 @@ public sealed partial class Reconciler : IDisposable
         private readonly bool _swapHost;
         private readonly ReactorHost? _previousHost;
 
-        internal RealizationFrame(Reconciler owner, ContextCapture? capture)
+        internal RealizationFrame(Reconciler owner, ContextCapture? capture, ElementTheme ambientTheme)
         {
             _owner = owner;
             _previousTheme = owner._ambientRequestedTheme;
@@ -2089,17 +2107,10 @@ public sealed partial class Reconciler : IDisposable
             owner._errorBoundaryDepth = 0;
             owner._providerChangeDepth = 0;
             owner._reconcilingElement = null;
+            owner._ambientRequestedTheme = ambientTheme;
             _staggerScope = null;
 
-            if (capture is not null)
-            {
-                _previousStack = owner._contextScope.Replace(capture.Entries);
-                owner._ambientRequestedTheme = capture.AmbientTheme;
-            }
-            else
-            {
-                _previousStack = null;
-            }
+            _previousStack = capture is not null ? owner._contextScope.Replace(capture.Entries) : null;
 
             _swapHost = owner.OwnerHost is not null;
             _previousHost = _swapHost ? ReactorApp.ActiveHostInternal : null;

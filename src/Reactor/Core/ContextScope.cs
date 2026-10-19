@@ -1,5 +1,3 @@
-using Microsoft.UI.Xaml;
-
 namespace Microsoft.UI.Reactor.Core;
 
 /// <summary>
@@ -165,18 +163,11 @@ internal sealed class ContextCapture
     /// <summary><see cref="ContextScope.ProviderGeneration"/> when <see cref="Entries"/> was taken.</summary>
     internal long Generation { get; private set; } = -1;
 
-    /// <summary>
-    /// The ancestor-resolved <c>RequestedTheme</c> at the host, so ThemeRef resource
-    /// overrides on realized rows resolve against the same theme as the rest of the subtree.
-    /// </summary>
-    internal ElementTheme AmbientTheme { get; private set; }
-
-    internal void Refresh(ContextScope scope, ElementTheme ambientTheme)
+    internal void Refresh(ContextScope scope)
     {
         if (!scope.Matches(Entries))
             Entries = scope.Snapshot();
         Generation = scope.ProviderGeneration;
-        AmbientTheme = ambientTheme;
     }
 
     /// <summary>
