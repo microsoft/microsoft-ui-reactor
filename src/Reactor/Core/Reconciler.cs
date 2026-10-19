@@ -929,11 +929,12 @@ public sealed partial class Reconciler : IDisposable
         public HashSet<string>? ManagedResourceKeys;
 
         /// <summary>
-        /// For a templated <c>FlipView</c>: whether each logical item realized a control. An item
-        /// whose view mounts nothing (Empty) has no entry in <c>Items</c>, so updates map logical
-        /// items to entries through this.
+        /// For a templated <c>FlipView</c>: per logical item, the element it mounted or was last
+        /// updated to and whether it realized a control. Updates diff against it (as a templated
+        /// ListView diffs against the element tagged on its container) and map logical items to
+        /// <c>Items</c> entries through it: an item whose view is Empty has no entry.
         /// </summary>
-        public List<bool>? FlipViewItemHasControl;
+        public List<(Element Element, bool HasControl)>? MountedItemElements;
 
         /// <summary>
         /// For an <c>ItemsHost</c> control: the collection entry each logical item realized
@@ -1273,7 +1274,7 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Drops the item maps on a control (a FlipView's realized items, an ItemsHost's entries).
+    /// Drops the item records on a control (a FlipView's mounted items, an ItemsHost's entries).
     /// They describe one mount, so a control leaving the tree, to the pool or for good, must not
     /// keep them.
     /// </summary>
@@ -1285,7 +1286,7 @@ public sealed partial class Reconciler : IDisposable
 
     internal static void ClearRefreshSnapshots(ReactorState state)
     {
-        state.FlipViewItemHasControl = null;
+        state.MountedItemElements = null;
         state.ItemsHostEntries = null;
     }
 

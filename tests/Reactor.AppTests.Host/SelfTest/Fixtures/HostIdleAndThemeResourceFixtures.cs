@@ -257,6 +257,8 @@ internal static class HostIdleAndThemeResourceFixtures
             var popupContent = new Counter();
             int visualizerWrapperMounts = 0;
             int flyoutWrapperMounts = 0;
+            // A FlipView item object changed in place, then shown again in a fresh array.
+            var flipItem = new FlipItem { Name = "flip-before" };
             try
             {
                 // Disposed at the end of this block, before finally restores the active host.
@@ -277,6 +279,7 @@ internal static class HostIdleAndThemeResourceFixtures
                     var lvItems = ctx.UseMemo<Element[]>(
                         () => [TextBlock("LvItemProbe").Foreground(Theme.Ref(AppKey)), TextBlock("LvSecond")]);
                     var flipGapItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["gap", "shown"]);
+                    IReadOnlyList<FlipItem> flipMutable = [flipItem];
                     var gvItems = ctx.UseMemo<Element[]>(
                         () => [TextBlock("GvItemProbe").Foreground(Theme.Ref(AppKey))]);
                     var lazyItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["lazy"]);
@@ -312,6 +315,7 @@ internal static class HostIdleAndThemeResourceFixtures
                         // A popup child whose update always builds a fresh control: one live copy.
                         Popup(ValidationVisualizerDsl.ValidationVisualizer(VisualizerStyle.Inline,
                             popupContent.Probe("PopupContentProbe", AppKey))),
+                        FlipView(flipMutable, static i => "only", static (i, _) => TextBlock(i.Name)),
                         // A FlipView whose first item mounts nothing.
                         FlipView(flipGapItems, static s => s, static (s, _) => s == "gap"
                             ? Empty()
@@ -343,9 +347,11 @@ internal static class HostIdleAndThemeResourceFixtures
                 if (lazyFactory is not null) lazyFactory.ShouldSkipRefresh = static () => true;
 
                 resources[AppKey] = new SolidColorBrush(Colors.Blue);
+                flipItem.Name = "flip-after";
                 setTick!(1);
                 await host.WaitForIdleAsync();
                 H.Check("ThemeMemo_Rerendered", FindText(target, "tick:1") is not null);
+                H.Check("Replace_FlipViewItemChangedInPlaceUpdates", FlipViewHasText(target, "flip-after") && !FlipViewHasText(target, "flip-before"));
                 var replacedBorder = FindText(target, "ReplacedTargetAfter")?.Parent as Border;
                 H.Check("Replace_FlyoutTargetTornDownOnce", replacedTarget.Mounts == 1 && replacedTarget.Cleanups == 1,
                     $"mounts={replacedTarget.Mounts} cleanups={replacedTarget.Cleanups}");
@@ -413,6 +419,19 @@ internal static class HostIdleAndThemeResourceFixtures
                 Application.Current.Resources.MergedDictionaries.Remove(resources);
                 ThemeRef.InvalidateResolutionCache();
             }
+        }
+
+        private sealed class FlipItem { public string Name = ""; }
+
+        private static bool FlipViewHasText(DependencyObject root, string text)
+        {
+            if (root is FlipView fv && fv.Items.OfType<TextBlock>().Any(t => t.Text == text)) return true;
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                if (FlipViewHasText(VisualTreeHelper.GetChild(root, i), text)) return true;
+            }
+            return false;
         }
 
         // A stateful component (an effect that runs once per mount) showing a themed TextBlock.
