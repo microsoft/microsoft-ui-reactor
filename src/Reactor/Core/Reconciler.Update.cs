@@ -131,7 +131,7 @@ public sealed partial class Reconciler
             // A virtualized host's own skipped element re-snapshots here at its own depth
             // (no-op for every other control or a decorator sharing it, and
             // allocation-free when nothing changed).
-            RefreshContextCaptureOnSkip(control, newEl);
+            RefreshContextCaptureOnSkip(control, newEl, effectiveTheme);
             // No validation refresh here, deliberately (issue #1262). A `.Validate()`
             // verdict is republished only by a component that re-rendered, and that
             // component's output is on the dirty ancestor path, which this arm declines
@@ -186,7 +186,7 @@ public sealed partial class Reconciler
         // Virtualized hosts realize rows outside this traversal; keep their provider
         // snapshot current (no-op for every other control, and for a decorator that
         // shares the host's control — the host element's own Update refreshes it).
-        RefreshContextCapture(control, newEl);
+        RefreshContextCapture(control, newEl, effectiveTheme);
 
         var prevReconcilingElement = _reconcilingElement;
         _reconcilingElement = newEl;

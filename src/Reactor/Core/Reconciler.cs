@@ -320,9 +320,18 @@ public sealed partial class Reconciler : IDisposable
     private EntryFrame EnterFrame()
     {
         var scope = _entryDepth == 0 ? RenderErrorDispatch.EnterPropagationScope() : default;
+        if (_entryDepth == 0)
+            _passId++;
         _entryDepth++;
         return new EntryFrame(this, scope);
     }
+
+    // Identifies the outermost Reconcile/Mount pass in flight (advanced on entry at depth
+    // 0). A virtualized host records the pass and the subtree theme it was reached with,
+    // so a row realized re-entrantly later in the SAME pass can use that pending theme:
+    // the native RequestedTheme modifier is only applied after children are dispatched,
+    // so the host's ActualTheme still shows the previous theme at that point.
+    private long _passId;
 
     private readonly struct EntryFrame(Reconciler owner, RenderErrorDispatch.PropagationScope scope) : IDisposable
     {
@@ -1972,6 +1981,7 @@ public sealed partial class Reconciler : IDisposable
         var state = GetOrCreateReactorState(host);
         var capture = state.ContextCapture ??= new ContextCapture { OwnerType = _reconcilingElement?.GetType() };
         capture.Refresh(_contextScope);
+        capture.NotePass(_passId, _ambientRequestedTheme);
         _hasContextCaptures = true;
         return capture;
     }
@@ -1987,10 +1997,13 @@ public sealed partial class Reconciler : IDisposable
     /// Re-snapshots a host's provider stack when <paramref name="newEl"/> is the element that
     /// owns the capture; a no-op for any other control or element.
     /// </summary>
-    internal void RefreshContextCapture(UIElement control, Element newEl)
+    internal void RefreshContextCapture(UIElement control, Element newEl, ElementTheme effectiveTheme)
     {
         if (TryGetContextCapture(control) is { } capture && capture.IsOwnedBy(newEl))
+        {
             capture.Refresh(_contextScope);
+            capture.NotePass(_passId, effectiveTheme);
+        }
     }
 
     /// <summary>
@@ -2001,9 +2014,10 @@ public sealed partial class Reconciler : IDisposable
     /// untouched; if a provider above it changed, the stale check declines that skip and
     /// the decorator's Update reaches the host element.
     /// </summary>
-    internal void RefreshContextCaptureOnSkip(UIElement control, Element newEl)
+    internal void RefreshContextCaptureOnSkip(UIElement control, Element newEl, ElementTheme effectiveTheme)
     {
         if (TryGetContextCapture(control) is not { } capture || !capture.IsOwnedBy(newEl)) return;
+        capture.NotePass(_passId, effectiveTheme);
         var own = newEl.ContextValues;
         if (own is not { Count: > 0 })
         {
@@ -2023,10 +2037,15 @@ public sealed partial class Reconciler : IDisposable
     {
         var capture = new ContextCapture();
         capture.Refresh(_contextScope);
+        capture.NotePass(_passId, _ambientRequestedTheme);
         return capture;
     }
 
-    internal void RefreshLiveContext(ContextCapture capture) => capture.Refresh(_contextScope);
+    internal void RefreshLiveContext(ContextCapture capture)
+    {
+        capture.Refresh(_contextScope);
+        capture.NotePass(_passId, _ambientRequestedTheme);
+    }
 
     /// <summary>
     /// Opens a realization frame for building a row outside (or re-entrantly inside) the
@@ -2046,10 +2065,18 @@ public sealed partial class Reconciler : IDisposable
     /// A null capture still isolates; it just leaves the provider stack as it is.
     /// </summary>
     internal RealizationFrame EnterRealization(ContextCapture? capture, UIElement? host)
-        => new(this, capture, LiveAmbientTheme(host));
+        => new(this, capture, RealizationTheme(capture, host));
 
     /// <inheritdoc cref="EnterRealization(ContextCapture?, UIElement?)"/>
     internal RealizationFrame EnterRealization(UIElement host) => EnterRealization(TryGetContextCapture(host), host);
+
+    // Inside the pass that last reached the host, the theme that pass is applying to the
+    // host's subtree (its native RequestedTheme modifier lands only after children are
+    // dispatched); otherwise the host's live ActualTheme.
+    private ElementTheme RealizationTheme(ContextCapture? capture, UIElement? host)
+        => capture is not null && _entryDepth > 0 && capture.PassId == _passId
+            ? capture.PassTheme
+            : LiveAmbientTheme(host);
 
     /// <summary>
     /// The theme a row realized into <paramref name="host"/> should resolve ThemeRef

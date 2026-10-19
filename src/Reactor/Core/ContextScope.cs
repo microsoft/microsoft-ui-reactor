@@ -1,3 +1,5 @@
+using Microsoft.UI.Xaml;
+
 namespace Microsoft.UI.Reactor.Core;
 
 /// <summary>
@@ -168,6 +170,22 @@ internal sealed class ContextCapture
         if (!scope.Matches(Entries))
             Entries = scope.Snapshot();
         Generation = scope.ProviderGeneration;
+    }
+
+    /// <summary>Reconcile pass in which the host was last reached (see <see cref="PassTheme"/>).</summary>
+    internal long PassId { get; private set; } = -1;
+
+    /// <summary>
+    /// The subtree theme the host was reached with in pass <see cref="PassId"/>. Only
+    /// meaningful while that pass is still in flight: afterwards the host's native
+    /// <c>ActualTheme</c> is authoritative and is read live instead.
+    /// </summary>
+    internal ElementTheme PassTheme { get; private set; }
+
+    internal void NotePass(long passId, ElementTheme theme)
+    {
+        PassId = passId;
+        PassTheme = theme;
     }
 
     /// <summary>
