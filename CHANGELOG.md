@@ -28,6 +28,37 @@ Conventions for contributors:
 
 ### Added
 
+- **Component inspection for devtools: `ReactorDiagnostics.DescribeComponent`,
+  `TrySetState`, `Rerender`, `GetAppliedProperties`, `GetReferenceEdges`.** An
+  inspector can go from a realized control to the component behind it: its name,
+  kind, props, hooks and consumed contexts as a text `ComponentSnapshot`; set a
+  `UseState` / `UseReducer` / `UsePersisted` value from text (parsed to the hook's
+  type, refused with a reason otherwise) and re-render it; list the WinUI
+  properties a control's modifiers set (including the caption-derived default
+  `AutomationProperties.Name`); and list the references it declares, including
+  pending ones whose target has not mounted. Component snapshots and property
+  lists are text — no live component, element or hook object; a resolved
+  reference edge carries its mounted target control. Reads
+  are on demand and UI-thread-affine. The render path gains only reference
+  stores: per component, `UseContext` records the context it read and
+  reference-list wiring keeps the authored list; per host render, the host
+  records which root produced the displayed control (and, when it renders into its
+  `ContentTarget`, that it owns it). With source mapping on, an open
+  `ContentDialog` is tagged with its element so its chrome resolves to the
+  `ContentDialog(...)` call site (spec 010, spec 057 §3.1).
+
+- **`REACTOR_DYM_006`: color strings that render gray** (issue #1375, spec 061 §7.3). A new
+  default-on **Warning** flags compile-time-constant color strings that `BrushHelper` can't
+  parse and therefore silently fall back to gray: `.Background("orange")`, `.Foreground("#888")`,
+  or a font name passed to `ResourceBuilder.Set(key, string)` under a `*FontFamily` key. It covers
+  `BrushHelper.Parse`, `ResourceBuilder.Set(string, string)` and the `string` overloads of
+  `Background` / `Foreground` / `BorderBrush` / `WithBorder`, suggests the exact hex (or
+  `new FontFamily(...)` once that `Set` overload exists), and ships a code fix; `mur check`'s new
+  `ColorStringLiteralRule` repeats the rewrite as a `→ try:` hint. Unlike `REACTOR_DYM_001`–`005`
+  it fires on code that compiles, so a project with `TreatWarningsAsErrors` can stop building on
+  an existing gray color. Fix the value, or adjust the severity with
+  `dotnet_diagnostic.REACTOR_DYM_006.severity` in `.editorconfig`.
+
 - **Inspector diagnostics: call-site column and a per-component render event**
   (issue #1326, spec 010 §1.1):
   - `SourceLocation.ColumnNumber` (1-based, `0` = unknown), a third positional
@@ -90,6 +121,21 @@ Conventions for contributors:
   than escaping the `Loaded` handler and terminating the app. `samples/ReactorHostControlDemo`
   now declares its counter host in markup, and `samples/InteropFirst` declares its host
   with `x:Name` (issue #1324).
+
+- **`ReactorHostControl.IsIdle` / `WaitForIdleAsync(int maxYields = 50)`**, matching
+  `ReactorHost`. Await it after a `setState` or `Mount` to read a XAML island's realized
+  tree back once its render loop settles, instead of waiting on wall-clock time. Both
+  hosts now share one idle-wait loop (issue #1327).
+
+- **`Theme.NotifyResourcesChanged()`** for runtime resource edits (a brand dictionary
+  swap, a replaced brush in an app-level dictionary, an inspector's live
+  resource edit). Reactor caches each resolved `(key, theme)` brush, and until now cleared
+  that cache only on a theme or palette change, so such an edit was invisible to `ThemeRef`
+  modifiers, overrides and `ThemeRef.Resolve`. The call clears the cache and re-renders
+  every live host past memoization and the skip of unchanged elements. Callable from
+  any thread (issue #1327). A brush resolved eagerly and kept (`ThemeRef.Resolve` inside a
+  memo factory, or stored in state) is a fixed value and is not refreshed; bind it with
+  `Theme.Ref` instead.
 
 - **Getting Started documents the single-file path.** A Reactor app does not need
   a `.csproj`: .NET 10 runs a lone `.cs` file whose `#:package` / `#:property`
@@ -670,6 +716,17 @@ Conventions for contributors:
   in between and crashed on every run before the fix. The earlier explanation for the withdrawn
   `Cancel()` cleanup (PR #1124), that the source had been pooled and reset, was wrong: that crash
   was this same fault.
+
+- **Apps that reference Reactor no longer fail to build in deeply nested folders, and their
+  publish output now includes the app's `.pri` (issue #1271,
+  [WindowsAppSDK#6394](https://github.com/microsoft/WindowsAppSDK/issues/6394)).**
+  `Microsoft.UI.Reactor` now depends on `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.260930100,
+  which fixes both. If you copied the `_CopyWinUIResourcesForAot` target from
+  `docs/aot-support.md`, you can delete it.
+
+- **The `Microsoft.UI.Reactor` package has a single `lib/` folder and always contains
+  `ReactorApplication.xbf`.** A second `lib/` folder used to hold only that file, and packing
+  from a clean tree left it out.
 
 ### Security
 

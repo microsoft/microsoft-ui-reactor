@@ -15,7 +15,9 @@ namespace Microsoft.UI.Reactor.IntegrationTests.Packaging;
 
 public sealed class LocalPackageFeedFixture : IDisposable
 {
-    private readonly string _tempRoot = Path.Join(Path.GetTempPath(), $"reactor-local-feed-{Guid.NewGuid():N}");
+    // Terse names on purpose: this folder is the consumers' globalPackagesFolder, and the XAML
+    // compiler fails with WMC1006 once a reference path under it passes MAX_PATH.
+    private readonly string _tempRoot = Path.Join(Path.GetTempPath(), $"rlf-{Guid.NewGuid():N}");
 
     public LocalPackageFeedFixture()
     {
@@ -25,7 +27,7 @@ public sealed class LocalPackageFeedFixture : IDisposable
         var packageSuffix = Guid.NewGuid().ToString("N")[..12];
         PackageVersion = $"0.0.0-feed-smoke-{packageSuffix}";
         PackageSourceDir = CreateDirectory("packages");
-        NugetPackagesDir = CreateDirectory("nuget-global-packages");
+        NugetPackagesDir = CreateDirectory("gp");
         var nugetHttpCacheDir = CreateDirectory("nuget-http-cache");
         var dotnetCliHomeDir = CreateDirectory("dotnet-home");
         RunArchitecture = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "arm64" : "x64";

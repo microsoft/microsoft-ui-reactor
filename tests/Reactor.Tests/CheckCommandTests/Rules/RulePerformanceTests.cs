@@ -66,6 +66,21 @@ namespace Microsoft.UI.Reactor
     {
         public static ButtonElement Button(string label, Action? onClick = null) => new(label);
     }
+    public static class BrushHelper
+    {
+        public static object Parse(string color) => null!;
+    }
+    public static class ElementExtensions
+    {
+        public static T Background<T>(this T el, string color) where T : Element => el;
+    }
+}
+namespace Microsoft.UI.Reactor.Elements
+{
+    public sealed class ResourceBuilder
+    {
+        public ResourceBuilder Set(string key, string color) => this;
+    }
 }";
 
     const string TestSource = @"

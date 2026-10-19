@@ -205,6 +205,7 @@ sibling `src/Reactor.Analyzers.Internal/` project instead; see
 | `REACTOR_DYM_003` | Warning | Mistyped Reactor factory name in call position (e.g. `Buton(...)`) | `FuzzyFactoryNameAnalyzer.cs` |
 | `REACTOR_DYM_004` | Warning | Reactor factory called with too few arguments (CS7036), single unique overload — suggests the parameter shape | `MissingFactoryArgumentAnalyzer.cs` |
 | `REACTOR_DYM_005` | Warning | String passed where a Reactor `Element` is expected (CS1503) — wrap it in a text factory | `StringForElementArgumentAnalyzer.cs` |
+| `REACTOR_DYM_006` | Warning | Constant color string `BrushHelper` can't parse, so it renders gray (e.g. `.Background("orange")`, `.Foreground("#888")`, a font name under a `*FontFamily` resource key) — suggests the hex value (or `new FontFamily(...)` once that `ResourceBuilder.Set` overload exists) | `ColorStringLiteralAnalyzer.cs` |
 
 `REACTOR_HOOKS_002` and `_003` were the reserved control-flow / data-flow slots
 (variable hook counts across early returns, async boundaries inside `UseEffect`);

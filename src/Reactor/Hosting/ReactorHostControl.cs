@@ -41,7 +41,7 @@ namespace Microsoft.UI.Reactor.Hosting;
 ///   - Error boundary with fallback UI
 ///   - Clean lifecycle via Loaded/Unloaded
 /// </summary>
-public sealed partial class ReactorHostControl : ContentControl, IDisposable, Core.Diagnostics.IReactorDiagnosticHost
+public sealed partial class ReactorHostControl : ContentControl, IDisposable, Core.Diagnostics.IReactorDiagnosticHost, IThemeResourceListener
 {
 #pragma warning disable CS0414 // Design constant for render-loop limiting; wiring pending
     private static readonly int MaxRenderIterations = 50;
@@ -79,6 +79,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
     private Element? _currentTree;
     private UIElement? _currentControl;
+    // The root that produced _currentControl (diagnostics); see RenderedRoot.
+    private RenderedRoot _renderedRoot;
+    // An error fallback (not the root's output) is displayed; a null render keeps it shown.
+    private bool _showingErrorContent;
     private int _renderPending;      // 0 or 1 — Interlocked for thread-safe access
     private volatile bool _isRendering;       // only touched on UI thread
     private volatile bool _needsRerender;     // only touched on UI thread
@@ -240,8 +244,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
             && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
             Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
+        _reconciler.DiagnosticsRootResolver = ResolveDiagnosticsRoot;
         _reconciler.RenderErrorHandlerProvider = () => EffectiveRenderErrorHandler;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        _reconciler.OwningDispatcher = _dispatcherQueue;
         // A standalone ReactorHostControl has no ReactorApp bootstrap, so nothing else
         // sets ReactorApp.UIDispatcher. Cross-thread setState — including the re-render
         // that UseValidationContext schedules when a background async validator raises
@@ -261,6 +267,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         Unloaded += OnUnloaded;
 
         Core.Diagnostics.ReactorHostRegistry.Register(this);
+        ThemeResourceListeners.Register(this);
 
         if (component is not null)
             MountRoot(component, mountSite: null);
@@ -274,6 +281,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         else
             _dispatcherQueue.TryEnqueue(() => { if (!_disposed) _reconciler.TagComponentBoundaries(); });
     }
+
+    Reconciler? Core.Diagnostics.IReactorDiagnosticHost.DiagnosticReconciler => _disposed ? null : _reconciler;
 
     Core.Diagnostics.ReactorHostInfo? Core.Diagnostics.IReactorDiagnosticHost.CaptureDiagnosticInfo()
     {
@@ -289,6 +298,16 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             rootComponent: _rootComponent,
             rootRenderFunction: _rootRenderFunc,
             mountSite: _mountSite.Value);
+    }
+
+    // Theme.NotifyResourcesChanged: a resource-refresh pass — past memoization AND past
+    // every structural skip, so every theme-resolved value is resolved again.
+    // RequestResourceRefresh and RequestRender are thread-safe.
+    void IThemeResourceListener.OnThemeResourcesChanged()
+    {
+        if (_disposed) return;
+        _reconciler.RequestResourceRefresh();
+        RequestRender();
     }
 
     private bool AnyOverlayFlagOn => ReactorFeatureFlags.HighlightReconcileChanges;
@@ -472,6 +491,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         foreach (var (component, funcContext) in deferred)
         {
             // Every queued root is retired; only the first failure is kept.
+            // The retired root may be the one diagnostics still describes (it called Mount mid-pass).
+            if (_renderedRoot.SameRootAs(new RenderedRoot(component, funcContext, null)))
+                _renderedRoot = default;
             var failure = RetireContexts(component, funcContext);
             first ??= failure;
         }
@@ -521,6 +543,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             (_deferredRetirements ??= new()).Add((outgoingComponent, outgoingFuncContext));
             return null;
         }
+        // Retired now: its hooks are dropped, so diagnostics no longer describes or writes the
+        // root whose control may still be on screen until the replacement renders.
+        _renderedRoot = default;
         return RetireContexts(outgoingComponent, outgoingFuncContext);
     }
 
@@ -798,6 +823,34 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     }
 
     /// <summary>
+    /// True when the render loop has no pending or in-flight render and no
+    /// re-render queued for the next tick — same contract as
+    /// <see cref="ReactorHost.IsIdle"/>. Safe to read from any thread. A disposed
+    /// control reports idle: it will never render again.
+    /// </summary>
+    public bool IsIdle =>
+        _disposed ||
+        (Volatile.Read(ref _renderPending) == 0 &&
+         !_isRendering &&
+         !_needsRerender);
+
+    /// <summary>
+    /// Completes once the render loop is idle (see <see cref="IsIdle"/>) — after a
+    /// <c>setState</c>, a <see cref="Mount(Component)"/>, or any other change that
+    /// schedules a render, await this before reading the realized tree back. Yields to
+    /// the dispatcher at Low priority so Normal-priority renders and Low-priority
+    /// re-renders all complete first; gives up after <paramref name="maxYields"/>
+    /// yields, or immediately if the dispatcher is shutting down. Same contract as
+    /// <see cref="ReactorHost.WaitForIdleAsync"/>; callable from any thread.
+    /// </summary>
+    public Task WaitForIdleAsync(int maxYields = 50)
+        => RenderLoopIdle.WaitAsync(
+            () => IsIdle,
+            _dispatcherQueue.TryEnqueue,
+            maxYields,
+            () => $"renderPending={_renderPending} isRendering={_isRendering} needsRerender={_needsRerender}");
+
+    /// <summary>
     /// Hot Reload state migration entry point (spec 049 §6). Mirror of
     /// <c>ReactorHost.MigrateHotReloadState</c> for the in-XAML host control.
     /// Runs once at the start of a hot-reload render pass, before any component
@@ -909,8 +962,16 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             _renderingRootDiagnostics = _rootDiagnostics;
             _renderingMountSite = _mountSite.Value;
             _renderingFunctionRoot = _rootComponent is null && _rootRenderFunc is not null;
+            // Same snapshot for component inspection: Render() can Mount() a replacement, and the
+            // tree this pass commits is still the original root's.
+            var passRoot = new RenderedRoot(_rootComponent, _funcContext, _rootRenderFunc);
 
             Element? newTree = null;
+
+            // Before the root render, so a resource notification that lands while the tree is
+            // being built stays pending for the render it queues instead of being taken by this
+            // pass, whose render may already have read the old resources.
+            _reconciler.BeginRootPass();
 
             _phaseSw.Restart();
 
@@ -1004,6 +1065,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                 if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
                     && Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
                     RepublishRetainedRoot();
+                // The root rendered (to nothing) and its hooks are live: publish it like the
+                // non-null path does, so diagnostics can reach it through this control.
+                // Not while it keeps an error fallback on screen: that content is not the root's.
+                if (!passRoot.IsEmpty && !_showingErrorContent)
+                    _renderedRoot = passRoot;
                 // Commit the render like any other: the root's effects still run, and a
                 // failure among them is routed as an effect failure by the outer catch.
                 failurePhase = RenderErrorSource.Effects;
@@ -1093,6 +1159,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
             _currentControl = newControl;
             _currentTree = newTree;
+            _renderedRoot = passRoot;
+            _showingErrorContent = false;
             // A root replaced during this pass (it called Mount) still committed its own tree;
             // that tree is the replacement's to release if its first render produces nothing.
             _releaseReplacedTreeOnNullRender = RootReplacedDuringPass;
@@ -1211,6 +1279,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         }
         finally
         {
+            _reconciler.EndRootPass();
             _isRendering = false;
             if (hotReloadRetryPass) _reconciler.HotReloadRetryPending = false;
         }
@@ -1336,6 +1405,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         }
         _currentControl = errorPanel;
         _currentTree = errorTree;
+        // A fallback is shown, not the root's output, so no root is described from it.
+        _renderedRoot = default;
+        _showingErrorContent = errorPanel is not null || errorTree is not null;
         // See ReactorHost.SetErrorContent: when the handler's outcome replaced the tree, the
         // theme listener follows the new content, or is detached when there is none.
         if (replacesTree)
@@ -1359,6 +1431,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         if (_disposed) return;
         _disposed = true;
 
+        ThemeResourceListeners.Unregister(this);
         Core.Diagnostics.ReactorHostRegistry.Unregister(this);
 
         Loaded -= OnLoaded;
@@ -1404,6 +1477,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         _funcContext = null;
         _currentTree = null;
         _currentControl = null;
+        _renderedRoot = default;
         try { _overlayWiring?.Dispose(); } catch { /* best effort */ }
         _overlayWiring = null;
 

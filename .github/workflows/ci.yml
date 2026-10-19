@@ -613,7 +613,7 @@ jobs:
       # (measured on upload-artifact v7.0.1, 2026-09).
       - name: Upload TRX
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-trx-${{ matrix.shard }}
           path: TestResults/**/app-tests.trx
@@ -844,7 +844,7 @@ jobs:
 
       - name: Upload TAP output
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: aot-selftest-tap-${{ matrix.shard }}
           path: aot-selftest-output.tap
@@ -926,7 +926,7 @@ jobs:
 
       - name: Upload published binary on failure
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: aot-hello-world-publish
           path: ${{ runner.temp }}/aot-hello-world

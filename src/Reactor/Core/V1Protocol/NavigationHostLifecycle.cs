@@ -127,8 +127,9 @@ internal static class NavigationHostLifecycle
         {
             // Route unchanged — reconcile the existing child element in place
             var newChildElement = node.RouteMap(currentRoute);
+            bool unmountedByUpdate = false;
             var replacement = node.CurrentChildControl is not null
-                ? reconciler.UpdateChild(node.CurrentChildElement, newChildElement, node.CurrentChildControl, requestRerender)
+                ? reconciler.UpdateChildTracked(node.CurrentChildElement, newChildElement, node.CurrentChildControl, requestRerender, out unmountedByUpdate)
                 : reconciler.Mount(newChildElement, requestRerender);
 
             if (replacement is not null && node.CurrentChildControl is not null)
@@ -139,7 +140,7 @@ internal static class NavigationHostLifecycle
                     grid.Children[idx] = replacement;
                 else
                     grid.Children.Add(replacement);
-                reconciler.UnmountChild(node.CurrentChildControl);
+                if (!unmountedByUpdate) reconciler.UnmountChild(node.CurrentChildControl);
                 node.CurrentChildControl = replacement;
             }
             else if (replacement is not null)

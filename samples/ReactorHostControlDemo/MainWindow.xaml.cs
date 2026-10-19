@@ -47,9 +47,9 @@ public sealed partial class MainWindow : Window
                 ).Margin(16, 8, 16, 16),
 
                 items.Count == 0
-                    ? TextBlock("All done!").Foreground("#888").HAlign(HorizontalAlignment.Center).Margin(16)
+                    ? TextBlock("All done!").Foreground("#888888").HAlign(HorizontalAlignment.Center).Margin(16)
                     : TextBlock($"{items.Count} item{(items.Count == 1 ? "" : "s")} remaining")
-                        .Foreground("#888").HAlign(HorizontalAlignment.Center).Margin(0, 0, 0, 16)
+                        .Foreground("#888888").HAlign(HorizontalAlignment.Center).Margin(0, 0, 0, 16)
             );
         });
         TodoPanel.Child = todoHost;

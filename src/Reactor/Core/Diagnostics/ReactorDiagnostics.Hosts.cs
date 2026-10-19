@@ -293,6 +293,13 @@ internal interface IReactorDiagnosticHost
     /// on its own UI thread. A disposed host does nothing.
     /// </summary>
     void TagComponentBoundaries();
+
+    /// <summary>
+    /// The host's reconciler, for component lookup (<c>Reconciler.TryFindComponentNode</c>);
+    /// null once the host is disposed. Read on the caller's thread; the lookup itself filters
+    /// by the reconciler's owning dispatcher before touching it.
+    /// </summary>
+    Reconciler? DiagnosticReconciler { get; }
 }
 
 /// <summary>

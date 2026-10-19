@@ -166,8 +166,9 @@ internal static class SelfTestRunner
 
     // Fixtures known to assert-fail under NativeAOT, captured by running
     // tests/Reactor.AppTests.Host/probe-aot-skips.ps1 against the AOT-published
-    // Host. As of WindowsAppSDK#6394 workaround (see Reactor.AppTests.Host.csproj
-    // _CopyWinUIResourcesForAot target), all NATIVE_CRASH skips are gone. What is
+    // Host. Since the WindowsAppSDK#6394 fix (the project .pri reaches the AOT
+    // publish output, via the build tools Reactor depends on), all NATIVE_CRASH
+    // skips are gone. What is
     // left is the buckets below: the UseObservableTree property walk, the
     // Devtools fixtures that reflect over members the trimmer removes,
     // PropertyGrid auto-discovery, the Issue142 XAML-metadata-provider edge

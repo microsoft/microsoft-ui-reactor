@@ -825,11 +825,86 @@ public sealed partial class Reconciler : IDisposable
     // IsOnDirtyAncestorPath gate alone does not cover this case.
     internal bool ForceFullRenderActive => _forceFullRenderActive;
 
-    // True only during a force pass and only for the wrapper elements whose
-    // skip would prevent ReconcileComponent from running. Used by Update()
-    // and ChildReconciler to bypass their structural-equality short-circuits.
+    // Theme.NotifyResourcesChanged signal: the host's next root pass is a force pass that
+    // ALSO declines every structural skip, not just the wrapper ones. A reference-equal
+    // subtree (a reused or UseMemo'd element) is otherwise skipped wholesale, and its
+    // ThemeRef modifiers / ThemeRef-backed resource overrides would never be re-applied
+    // against the edited resources. Implies a force pass. Set from any thread; taken
+    // atomically by BeginRootPass, so a request racing that pass is kept for the next one
+    // rather than lost, and only the host's root pass can consume it.
+    private int _resourceRefreshPending;
+    private bool _resourceRefreshArmed;
+    private bool _resourceRefreshActive;
+
+    /// <summary>Requests a resource-refresh pass (see above). Thread-safe.</summary>
+    internal void RequestResourceRefresh() => Interlocked.Exchange(ref _resourceRefreshPending, 1);
+
+    /// <summary>
+    /// Called by a host before its root render: moves a pending resource refresh onto that
+    /// pass's <see cref="Reconcile"/>. Out-of-band top-level reconciles (ElementFactory
+    /// realizing or refreshing a row) don't call it, so they can't consume the request.
+    /// UI thread only; pair with <see cref="EndRootPass"/> in a finally.
+    /// </summary>
+    internal void BeginRootPass() => _resourceRefreshArmed |= Interlocked.Exchange(ref _resourceRefreshPending, 0) != 0;
+
+    /// <summary>
+    /// Ends a host root pass. A request <see cref="BeginRootPass"/> armed that the pass never
+    /// consumed (the render failed or returned before reconciling) goes back to pending.
+    /// </summary>
+    internal void EndRootPass()
+    {
+        if (!_resourceRefreshArmed) return;
+        _resourceRefreshArmed = false;
+        Interlocked.Exchange(ref _resourceRefreshPending, 1);
+    }
+
+    internal bool ResourceRefreshPendingForTest => Volatile.Read(ref _resourceRefreshPending) != 0;
+    internal bool ResourceRefreshArmedForTest => _resourceRefreshArmed;
+
+    // True only during a force pass, for the wrapper elements whose skip would prevent
+    // ReconcileComponent from running — and for every element during a resource-refresh
+    // pass. Used by Update() and ChildReconciler to bypass their structural-equality
+    // short-circuits.
     internal bool ForceRenderThroughWrapper(Element el) =>
-        _forceFullRenderActive && el is ComponentElement or MemoElement or FuncElement;
+        _forceFullRenderActive
+        && (_resourceRefreshActive || el is ComponentElement or MemoElement or FuncElement);
+
+    // True for the duration of a resource-refresh pass. Read by the skip arms that are not
+    // shallow-equality gates (a KeyedMemoElement with an unchanged key, an ItemsHost whose
+    // item list is unchanged) so they still reconcile their element children.
+    internal bool ResourceRefreshActive => _resourceRefreshActive;
+
+    /// <summary>
+    /// For a ListView/GridView whose item array was kept (same reference) during a resource
+    /// refresh: reconcile each realized container's item in place, so theme values inside
+    /// kept items are re-applied without swapping ItemsSource (which would reset selection
+    /// and scroll). Unrealized items mount later against the already-cleared cache. Walks
+    /// the realized panel children (O(realized)), as <c>RefreshRealizedContainers</c> does,
+    /// rather than probing every index of a virtualized list.
+    /// </summary>
+    internal void RefreshRealizedItemContainers(
+        WinUI.ListViewBase list, Element[] items, Action requestRerender)
+    {
+        if (!_resourceRefreshActive || list.ItemsPanelRoot is not { } panel) return;
+        // Snapshot: reconciling may mount controls, and Children can't change mid-enumeration.
+        var realized = panel.Children
+            .OfType<WinUI.Primitives.SelectorItem>()
+            .Select(static container => (Container: container, Shell: container.ContentTemplateRoot as WinUI.ContentControl))
+            .Where(static c => c.Shell?.Content is UIElement)
+            .ToList();
+        foreach (var (container, cc) in realized)
+        {
+            var existing = (UIElement)cc!.Content;
+            int i = list.IndexFromContainer(container);
+            if (i < 0 || i >= items.Length) continue;
+            var next = ReconcileV1Child(items[i], items[i], existing, requestRerender);
+            if (next is not null && !ReferenceEquals(next, existing))
+                cc.Content = next;
+            // The item's own automation name can change in place too (a keyed memo whose output
+            // reads a resource), so forward it after every reconcile, as RefreshRealizedContainers does.
+            PropagateItemAutomationName(container, cc.Content as UIElement);
+        }
+    }
 
     // Set of realized UIElements that lie on the path from the root to a
     // ComponentNode whose <see cref="ComponentNode.SelfTriggered"/> is true.
@@ -1160,6 +1235,8 @@ public sealed partial class Reconciler : IDisposable
         // on a mismatch. Cleared on resolve, on unset, and everywhere the echo
         // state is cleared (pool return / ClearCurrentEventHandlers /
         // DetachReactorState) so a stale arm can't fire into a later lifecycle.
+        // A Loaded resolution that still finds no target leaves it set: the request
+        // is genuinely still pending, which ReactorDiagnostics.GetReferenceEdges reports.
         public string? PendingLabeledBy;
         // Spec 042 Phase 1 — keyed-list reconciliation state. Set when the
         // host element is a templated items control (ListView/GridView/
@@ -1212,6 +1289,21 @@ public sealed partial class Reconciler : IDisposable
         /// pool, so no renter inherits them.
         /// </summary>
         public HashSet<string>? ManagedResourceKeys;
+
+        /// <summary>
+        /// For a templated <c>FlipView</c>: per logical item, the element it mounted or was last
+        /// updated to and whether it realized a control. Updates diff against it (as a templated
+        /// ListView diffs against the element tagged on its container) and map logical items to
+        /// <c>Items</c> entries through it: an item whose view is Empty has no entry.
+        /// </summary>
+        public List<(Element Element, bool HasControl)>? MountedItemElements;
+
+        /// <summary>
+        /// For an <c>ItemsHost</c> control: the collection entry each logical item realized
+        /// (-1 when it mounted nothing), recorded when the items are filled, so a resource
+        /// refresh can reconcile kept items in place (<c>ItemsHost.RefreshKeptItems</c>).
+        /// </summary>
+        public int[]? ItemsHostEntries;
 
         /// <summary>
         /// <c>componentId</c> (<c>ReactorEventSource.ComponentRendered</c>) of the component
@@ -1604,6 +1696,23 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
+    /// Drops the item records on a control (a FlipView's mounted items, an ItemsHost's entries).
+    /// They describe one mount, so a control leaving the tree, to the pool or for good, must not
+    /// keep them.
+    /// </summary>
+    internal static void ClearRefreshSnapshots(FrameworkElement fe)
+    {
+        if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+            ClearRefreshSnapshots(state);
+    }
+
+    internal static void ClearRefreshSnapshots(ReactorState state)
+    {
+        state.MountedItemElements = null;
+        state.ItemsHostEntries = null;
+    }
+
+    /// <summary>
     /// Clears the Current* user-handler delegates from the per-element
     /// ModifierEventHandlerState while leaving the trampoline subscription on the
     /// underlying control. Call from <see cref="ElementPool.CleanElement"/>
@@ -1655,6 +1764,8 @@ public sealed partial class Reconciler : IDisposable
         state.EchoSuppressScopeDepth = 0;
         state.PendingEchoMatch = null;
         state.PendingLabeledBy = null;
+        // Item maps describe the items this control showed; a detached control has none.
+        ClearRefreshSnapshots(state);
         // Issue #1262 — a retired control must not keep a ValidationContext (or a
         // pending async rule) alive through a binding the normal FormField /
         // ValidationRule unmount path never got to clear. Neutralize before dropping
@@ -2022,6 +2133,7 @@ public sealed partial class Reconciler : IDisposable
                 rs.EchoSuppressScopeDepth = 0;
                 rs.PendingEchoMatch = null;
                 rs.PendingLabeledBy = null;
+                ClearRefreshSnapshots(rs);
                 rs.Element = null;
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).
@@ -2231,6 +2343,7 @@ public sealed partial class Reconciler : IDisposable
         var edge = GetOrCreateReferenceListEdge(ctrl, slot);
         edge.Recompute = recompute;
         edge.Clear = clearTarget; // retained so teardown can empty the target list (CR-002)
+        edge.Authored = cells;
         edge.Handler ??= _ => edge.Recompute?.Invoke(ctrl);
 
         var next = new List<Microsoft.UI.Reactor.Input.ElementRef>();
@@ -2264,8 +2377,12 @@ public sealed partial class Reconciler : IDisposable
 
     internal static void TeardownReferenceEdges(FrameworkElement ctrl)
     {
-        if (ctrl.GetValue(ReactorAttached.StateProperty) is not ReactorState state
-            || state.ReferenceEdges is null)
+        if (ctrl.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
+            return;
+        // A deferred .LabeledBy("id") that never resolved is reference state too: a retained,
+        // unpooled control must not keep reporting it after unmount.
+        state.PendingLabeledBy = null;
+        if (state.ReferenceEdges is null)
             return;
 
         foreach (var edge in state.ReferenceEdges.Edges.Values)
@@ -2287,6 +2404,7 @@ public sealed partial class Reconciler : IDisposable
             // Empty the target relationship list (DescribedBy / FlowsTo / FlowsFrom) — CR-002.
             edge.Clear?.Invoke(ctrl);
             edge.Cells.Clear();
+            edge.Authored = null;
             edge.Handler = null;
             edge.Recompute = null;
             edge.Clear = null;
@@ -2513,9 +2631,12 @@ public sealed partial class Reconciler : IDisposable
                 (_highlightMounted ??= new()).Clear();
                 (_highlightModified ??= new()).Clear();
             }
-            // Consume the hot-reload signal exactly once per top-level pass so
-            // every component re-runs Render() even when props/deps are unchanged.
-            _forceFullRenderActive = ForceFullRenderPending;
+            // Consume the hot-reload and resource-refresh signals exactly once per
+            // top-level pass so every component re-runs Render() even when props/deps
+            // are unchanged (and, for a resource refresh, no element is skipped).
+            _resourceRefreshActive = _resourceRefreshArmed;
+            _resourceRefreshArmed = false;
+            _forceFullRenderActive = ForceFullRenderPending || _resourceRefreshActive;
             ForceFullRenderPending = false;
             _hotReloadRetryActive = HotReloadRetryPending;
             HotReloadRetryPending = false;
@@ -2564,6 +2685,7 @@ public sealed partial class Reconciler : IDisposable
             if (--_debugReconcileDepth == 0)
             {
                 _forceFullRenderActive = false;
+                _resourceRefreshActive = false;
                 _hotReloadRetryActive = false;
                 _dirtyAncestorPath?.Clear();
                 _dirtyPathChildren?.Clear();
@@ -3105,7 +3227,7 @@ public sealed partial class Reconciler : IDisposable
     /// before invoking the parent requestRerender, so the memo check is bypassed.
     /// Captures the node directly to avoid accessing _componentNodes from background threads.
     /// </summary>
-    private static Action CreateComponentRerender(ComponentNode node, Action requestRerender)
+    private Action CreateComponentRerender(ComponentNode node, Action requestRerender)
     {
         return () =>
         {
@@ -3121,11 +3243,13 @@ public sealed partial class Reconciler : IDisposable
             // SECURITY (TASK-063): if invoked off the UI thread (e.g.,
             // setState(threadSafe:true) firing from a worker, or a worker
             // that owns its own DispatcherQueue), marshal onto the UI
-            // dispatcher captured at host bring-up so we don't race the
-            // reconciler and ElementPool from a background thread.
-            // A non-null GetForCurrentThread() doesn't imply UI affinity —
-            // the only authoritative check is HasThreadAccess on the UI DQ.
-            var uiDq = Microsoft.UI.Reactor.ReactorApp.UIDispatcher;
+            // dispatcher so we don't race the reconciler and ElementPool from
+            // a background thread. That is this reconciler's owning thread
+            // (its host's), not the process-wide one: hosts on a second UI
+            // thread must render on theirs. A non-null GetForCurrentThread()
+            // doesn't imply UI affinity — the only authoritative check is
+            // HasThreadAccess on the UI DQ.
+            var uiDq = OwningDispatcher ?? Microsoft.UI.Reactor.ReactorApp.UIDispatcher;
             bool onUiThread = false;
             if (uiDq is not null)
             {
@@ -3278,6 +3402,30 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
+    /// <see cref="Update"/> for a hosted child slot (dialog/popup/flyout/tooltip content, tree and
+    /// list item containers) whose owner swaps a replacement in. When the update hands back a
+    /// different control, the old one is unmounted here (unless the update already did) so its
+    /// effects, refs and unmount callbacks don't outlive it. Returns the replacement, or null
+    /// when the existing control was kept: a drop-in for <see cref="Update"/> at those sites.
+    /// </summary>
+    internal UIElement? UpdateHostedChild(Element oldEl, Element newEl, UIElement existing, Action requestRerender)
+    {
+        var replacement = UpdateSlotChild(oldEl, newEl, existing, requestRerender, out var unmountedByUpdate);
+        if (replacement is null || IsSameControl(replacement, existing)) return null;
+        if (!unmountedByUpdate) Unmount(existing);
+        return replacement;
+    }
+
+    /// <summary>
+    /// <see cref="UpdateChild"/> for a caller that unmounts a replaced control: reports whether
+    /// the update already unmounted it (e.g. a same-key Memo remounting its output during a
+    /// resource refresh), so the caller doesn't unmount it twice.
+    /// </summary>
+    internal UIElement? UpdateChildTracked(Element oldEl, Element newEl, UIElement control, Action requestRerender,
+        out bool unmountedByUpdate)
+        => UpdateSlotChild(oldEl, newEl, control, requestRerender, out unmountedByUpdate);
+
+    /// <summary>
     /// Unmounts a child control. Public so registered type handlers can unmount children.
     /// </summary>
     public void UnmountChild(UIElement control)
@@ -3318,6 +3466,9 @@ public sealed partial class Reconciler : IDisposable
     private void UnmountRecursive(UIElement control)
     {
         NoteUnmountDuringSlotUpdate(control);
+        // Before any early exit: an unmounted control an app still holds must not keep a
+        // FlipView's mounted item elements alive.
+        if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);
 
         // Capture connected animation snapshot while element is still in the visual tree
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
@@ -3749,6 +3900,9 @@ public sealed partial class Reconciler : IDisposable
     private void UnmountAndCollect(UIElement control, List<FrameworkElement> toPool)
     {
         NoteUnmountDuringSlotUpdate(control);
+        // Before any early exit: an unmounted control an app still holds must not keep a
+        // FlipView's mounted item elements alive.
+        if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);
 
         // Capture connected animation snapshot while element is still in the visual tree
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
@@ -4181,11 +4335,22 @@ public sealed partial class Reconciler : IDisposable
     public static void ApplyDefaultAutomationName(FrameworkElement fe, string? caption)
     {
         if (fe is null) return;
-        if (string.IsNullOrWhiteSpace(caption)) return;
+        if (DefaultAutomationNameFromCaption(caption) is not { } trimmed) return;
         var existing = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(fe);
         if (!string.IsNullOrEmpty(existing)) return;
-        var trimmed = caption.Length > 100 ? caption.Substring(0, 100) : caption;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, trimmed);
+    }
+
+    /// <summary>
+    /// The name <see cref="ApplyDefaultAutomationName"/> / <see cref="UpdateDefaultAutomationName"/>
+    /// write for <paramref name="caption"/> (null when they write nothing). Shared with
+    /// <c>ReactorDiagnostics.GetAppliedProperties</c> so the reported default cannot drift
+    /// from the one applied.
+    /// </summary>
+    internal static string? DefaultAutomationNameFromCaption(string? caption)
+    {
+        if (string.IsNullOrWhiteSpace(caption)) return null;
+        return caption.Length > 100 ? caption.Substring(0, 100) : caption;
     }
 
     // Update variant: a label change ("+ 1" → "+ 2") should update UIA Name as
@@ -4203,14 +4368,24 @@ public sealed partial class Reconciler : IDisposable
     public static void UpdateDefaultAutomationName(FrameworkElement fe, string? oldCaption, string? newCaption)
     {
         if (fe is null) return;
-        if (string.IsNullOrWhiteSpace(newCaption)) return;
+        if (DefaultAutomationNameFromCaption(newCaption) is not { } trimmed) return;
         var current = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(fe);
-        bool authorOverride =
-            !string.IsNullOrEmpty(current) &&
-            (oldCaption is null || !string.Equals(current, oldCaption, StringComparison.Ordinal));
-        if (authorOverride) return;
-        var trimmed = newCaption.Length > 100 ? newCaption.Substring(0, 100) : newCaption;
+        if (!MayReplaceDefaultAutomationName(current, oldCaption)) return;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, trimmed);
+    }
+
+    /// <summary>
+    /// True when the live name is Reactor's own default for <paramref name="oldCaption"/> (or
+    /// empty), so a caption change may replace it. The default for a long caption is its
+    /// truncated form (<see cref="DefaultAutomationNameFromCaption"/>), so both the full and the
+    /// truncated caption count as Reactor's; any other value is the author's and is kept.
+    /// </summary>
+    internal static bool MayReplaceDefaultAutomationName(string? current, string? oldCaption)
+    {
+        if (string.IsNullOrEmpty(current)) return true;
+        if (oldCaption is null) return false;
+        return string.Equals(current, oldCaption, StringComparison.Ordinal)
+            || string.Equals(current, DefaultAutomationNameFromCaption(oldCaption), StringComparison.Ordinal);
     }
 
     internal static string? ExtractElementCaption(Element? element) => element switch
@@ -5385,7 +5560,7 @@ public sealed partial class Reconciler : IDisposable
             var existingTip = WinUI.ToolTipService.GetToolTip(fe) as UIElement;
             if (oldTipEl is not null && existingTip is not null && CanUpdate(oldTipEl, m.RichToolTip))
             {
-                var replacement = Update(oldTipEl, m.RichToolTip, existingTip, requestRerender);
+                var replacement = UpdateHostedChild(oldTipEl, m.RichToolTip, existingTip, requestRerender);
                 if (replacement is not null)
                     WinUI.ToolTipService.SetToolTip(fe, replacement);
             }
@@ -5913,10 +6088,15 @@ public sealed partial class Reconciler : IDisposable
                     fe.Loaded -= OnLoaded;
                     if (!TryGetReactorState(fe, out var pending) || pending.PendingLabeledBy != labelId)
                         return;
-                    pending.PendingLabeledBy = null;
                     var deferred = FindByAutomationId(fe, labelId);
                     if (deferred is not null)
+                    {
+                        pending.PendingLabeledBy = null;
                         Microsoft.UI.Xaml.Automation.AutomationProperties.SetLabeledBy(fe, deferred);
+                    }
+                    // Not found: the request stays recorded as pending (still unresolved), so
+                    // ReactorDiagnostics.GetReferenceEdges keeps reporting it. Nothing retries it
+                    // here; a later render that changes or drops the id, or pool return, retires it.
                 }
                 fe.Loaded += OnLoaded;
             }
@@ -6724,6 +6904,13 @@ public sealed partial class Reconciler : IDisposable
                 fe.Resources[key] = resolved;
                 managed.Add(key);
             }
+            else if (!newOverrides.Literals.ContainsKey(key) && managed.Remove(key))
+            {
+                // The source resource went away (e.g. a dictionary removed before
+                // Theme.NotifyResourcesChanged): drop the brush this override wrote earlier
+                // instead of leaving it stale. A literal for the same key, written above, stays.
+                fe.Resources.Remove(key);
+            }
         }
     }
 
@@ -6762,7 +6949,7 @@ public sealed partial class Reconciler : IDisposable
             var oldContent = oldEl is ContentFlyoutElement oldCf ? oldCf.Content : null;
             if (oldContent is not null && flyout.Content is UIElement existingContent && CanUpdate(oldContent, newCf.Content))
             {
-                var replacement = Update(oldContent, newCf.Content, existingContent, requestRerender);
+                var replacement = UpdateHostedChild(oldContent, newCf.Content, existingContent, requestRerender);
                 if (replacement is not null && !ReferenceEquals(flyout.Content, replacement))
                     flyout.Content = replacement;
             }
@@ -6789,7 +6976,7 @@ public sealed partial class Reconciler : IDisposable
         {
             if (CanUpdate(oldEl, newEl))
             {
-                var replacement = Update(oldEl, newEl, existingCtrl, requestRerender);
+                var replacement = UpdateHostedChild(oldEl, newEl, existingCtrl, requestRerender);
                 if (replacement is not null && !ReferenceEquals(plainFlyout.Content, replacement))
                     plainFlyout.Content = replacement;
             }
@@ -7167,6 +7354,8 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? DisposeCollectingPropagation()
     {
+        // Hosts dispose through here rather than Dispose(); a disposed reconciler's nodes are dead.
+        _disposedForDiagnostics = true;
         // Issue #1291: with a RenderErrorHandler configured, every effect cleanup runs and
         // each failure is reported (Source = Cleanup). With no handler the first throwing
         // cleanup escapes as before.

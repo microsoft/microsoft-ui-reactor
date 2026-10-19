@@ -74,6 +74,10 @@ updates:
       - dependency-name: "Microsoft.WindowsAppSDK.WinUI"
       - dependency-name: "Microsoft.WindowsAppSDK.Runtime"
       - dependency-name: "Microsoft.Graphics.Win2D"
+      # A floor Microsoft.UI.Reactor ships to its consumers; it moves by hand with the
+      # Windows App SDK (src/Reactor/Reactor.csproj). Also held back via IGNORE_PACKAGES
+      # in .github/workflows/windows-nuget-updates.yml.
+      - dependency-name: "Microsoft.Windows.SDK.BuildTools.MSIX"
       # MessagePack is a transitive dependency (Microsoft.VisualStudio.SDK ->
       # StreamJsonRpc) pinned in Directory.Packages.props to the 2.x line for
       # StreamJsonRpc compatibility, at >= 2.5.302 for the GHSA-hv8m-jj95-wg3x

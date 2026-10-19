@@ -8,6 +8,10 @@ namespace Microsoft.UI.Reactor.Core;
 public abstract class ContextBase
 {
     internal abstract object? DefaultValueBoxed { get; }
+    // Diagnostics (ReactorDiagnostics.Components): non-generic access to T and the
+    // declaration name without reflection.
+    internal abstract Type ValueType { get; }
+    internal virtual string? DiagnosticName => null;
 }
 
 /// <summary>
@@ -26,4 +30,6 @@ public sealed class Context<T> : ContextBase
     }
 
     internal override object? DefaultValueBoxed => DefaultValue;
+    internal override Type ValueType => typeof(T);
+    internal override string? DiagnosticName => DebugName;
 }

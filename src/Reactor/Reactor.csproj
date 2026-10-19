@@ -103,6 +103,15 @@
     <PackageReference Include="MessageFormat" />
   </ItemGroup>
 
+  <!-- Dependency floor for consumers: 1.7.260930100 fixes PRI expansion past MAX_PATH
+       (issue #1271, WindowsAppSDK#6795) and the app .pri missing from publish output
+       (WindowsAppSDK#6394). Apps otherwise get 1.7.251221100 through
+       Microsoft.WindowsAppSDK.Base. Delete once the pinned Windows App SDK resolves a
+       fixed version by itself. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.MSIX" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Reactor.Localization.Generator\Reactor.Localization.Generator.csproj"
                       OutputItemType="Analyzer"
@@ -181,6 +190,22 @@
     </ItemGroup>
   </Target>
 
+  <!-- Pack ReactorApplication.xbf, which WinUI's LoadComponent needs at runtime. A pack-time
+       target, because a <None> guarded by Exists() is evaluated before the build creates the
+       file. Packed as build output so it lands in the same lib/ folder as Reactor.dll; a
+       literal lib\$(TargetFramework)\ path created a second lib/ folder. -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);_PackReactorApplicationXbf</TargetsForTfmSpecificBuildOutput>
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.xbf</AllowedOutputExtensionsInPackageBuildOutputFolder>
+  </PropertyGroup>
+  <Target Name="_PackReactorApplicationXbf">
+    <Error Condition="!Exists('$(TargetDir)Reactor\Hosting\ReactorApplication.xbf')"
+           Text="ReactorApplication.xbf was not found at '$(TargetDir)Reactor\Hosting\ReactorApplication.xbf'. Build src/Reactor before packing." />
+    <ItemGroup>
+      <BuildOutputInPackage Include="$(TargetDir)Reactor\Hosting\ReactorApplication.xbf"
+                            TargetPath="Reactor\Hosting\ReactorApplication.xbf" />
+    </ItemGroup>
+  </Target>
 
   <!-- Bundle the analyzer + source-generator DLLs into the framework package
        so consumers get them automatically. See spec 022 §5. The analyzer
@@ -236,15 +261,6 @@
          CallSite is silently null. The file carries an idempotence guard so being
          imported from both folders in one evaluation is harmless. -->
     <None Include="build\Reactor.targets" Pack="true" PackagePath="buildTransitive\Microsoft.UI.Reactor.targets" Visible="false" />
-    <!-- WinUI LoadComponent needs the compiled XBF sidecar at runtime for
-         ReactorApplication.xaml. SDK pack includes the XAML but not the XBF by
-         default, so PackageReference consumers otherwise crash in native XAML
-         when controls such as TitleBar realize. -->
-    <None Include="$(OutputPath)Reactor\Hosting\ReactorApplication.xbf"
-          Pack="true"
-          PackagePath="lib\$(TargetFramework)\Reactor\Hosting\"
-          Visible="false"
-          Condition="Exists('$(OutputPath)Reactor\Hosting\ReactorApplication.xbf')" />
     <!-- Agent kit packed into the NuGet at `agentkit/`: SKILL.md, every
          skills/*.md sub-skill, the recipes folder, and the generated
          signatures index. Mirrors the source-tree layout. Discoverable from
