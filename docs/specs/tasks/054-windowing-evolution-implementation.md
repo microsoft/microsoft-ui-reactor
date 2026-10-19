@@ -733,7 +733,7 @@ Purely additive.
       `Window.SystemBackdrop is TransparentBackdrop` on supported
       builds.
 
-### 7.3 `UseFilePickerAsync` / `UseFolderPickerAsync` (spec §8.3)
+### 7.3 Picker helpers (spec §8.3)
 
 - [x] Add `FilePickerOptions` / `FolderPickerOptions` records (filters,
       suggested-folder, etc. — minimum viable shape; pickers are out
@@ -742,6 +742,12 @@ Purely additive.
       `Task<StorageFile?>`.
 - [x] Add `RenderContext.UseFolderPickerAsync(FolderPickerOptions)` →
       `Task<StorageFolder?>`.
+- [x] Add `RenderContext.UseMultipleFilesPickerAsync(FilePickerOptions)` →
+      `Task<IReadOnlyList<StorageFile>>`, with an empty list on cancellation.
+- [x] Add `RenderContext.UseSaveFilePickerAsync(SaveFilePickerOptions)` →
+      `Task<StorageFile?>`, with null on cancellation; the caller writes the file.
+- [x] Expose all four helpers on `Component`; capture during Render and invoke
+      from UI-thread event handlers.
 - [x] Implementation: `UseWindow().NativeWindow.GetWindowHandle()` →
       `WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd)`.
       **Must run on the UI thread**; throw if called off-thread (R12).

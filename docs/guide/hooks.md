@@ -36,6 +36,49 @@ lifecycle methods.
 | [UseExternalStore](reference/hooks/UseExternalStore.md) | `TSnapshot` | Bridge subscribe/getSnapshot stores into Reactor and re-render only when the snapshot changes. |
 | [UseResource](reference/hooks/UseResource.md) | `AsyncValue<T>` | Cached async read (see [Async Resources](async-resources.md)). |
 | [UsePersisted](reference/hooks/UsePersisted.md) | `(T, Action<T>)` | `UseState` that survives unmount/remount within the process — in-memory, cleared on exit (see [Persistence](persistence.md)). |
+| [UseFilePickerAsync](reference/hooks/UseFilePickerAsync.md) / [UseMultipleFilesPickerAsync](reference/hooks/UseMultipleFilesPickerAsync.md) | `Task<StorageFile?>` / `Task<IReadOnlyList<StorageFile>>` | Open one or multiple files (see [Pickers](windows.md#pickers)). |
+| [UseFolderPickerAsync](reference/hooks/UseFolderPickerAsync.md) / [UseSaveFilePickerAsync](reference/hooks/UseSaveFilePickerAsync.md) | `Task<StorageFolder?>` / `Task<StorageFile?>` | Select a folder or save-file target (see [Pickers](windows.md#pickers)). |
+
+### Pattern: pick files from a click handler
+
+Picker helpers are the exception to positional hook rules: they do not allocate
+state slots and must run from UI-thread event handlers, not during `Render()`.
+Cancellation returns `null` for single-file, folder, and save dialogs, or an empty
+list for multiple files. See [Pickers](windows.md#pickers) for the full options and
+the open/folder/save pattern:
+
+```csharp
+// Capture helpers during Render; invoke them only from UI-thread events.
+var pickFile = UseFilePickerAsync;
+var pickFiles = UseMultipleFilesPickerAsync;
+var pickFolder = UseFolderPickerAsync;
+var saveFile = UseSaveFilePickerAsync;
+
+return VStack(
+    Button("Open one...", async () =>
+    {
+        var file = await pickFile(new FilePickerOptions(FileTypeFilter: [".txt", ".md"]));
+        if (file is null) return; // User cancelled.
+    }),
+    Button("Open files...", async () =>
+    {
+        var files = await pickFiles(new FilePickerOptions(FileTypeFilter: [".txt", ".md"]));
+        if (files.Count == 0) return; // User cancelled.
+    }),
+    Button("Select folder...", async () =>
+    {
+        var folder = await pickFolder(new FolderPickerOptions());
+        if (folder is null) return;
+    }),
+    Button("Save as...", async () =>
+    {
+        var file = await saveFile(new SaveFilePickerOptions(
+            new Dictionary<string, IReadOnlyList<string>> { ["Text"] = [".txt"] },
+            SuggestedFileName: "report"));
+        if (file is null) return;
+        // Write the desired content here; selecting a target is not a save.
+    }));
+```
 
 Every hook on this page is summarized again in the auto-generated
 [hooks reference](reference/hooks/index.md); the rest of the page is the
