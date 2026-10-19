@@ -337,14 +337,10 @@ edge's `Target`, the mounted control it points at.
 
 Values are formatted for display: strings are quoted, collections are summarised
 as `List<T> (n items)` from the count they advertise (a lazy sequence is never
-enumerated and shows `(count unknown)`), long values are cut at 200 characters,
-and secrets — a `SecureString`; a type, collection element type or member name
-ending in `Password`, `Secret`, `Credential`, `Token`, `ApiKey`, `PrivateKey` or
-`ConnectionString`; an object whose own text, or a string, names such a member
-with a value (`AccessToken=…`, a record with a `Password` property) — are
-reported as
-`<redacted>` and are never editable; nor is a value written that would read back
-redacted.
+enumerated and shows `(count unknown)`), and long values are cut at 200 characters.
+Values are not redacted: like other in-process inspectors, Reactor reports what
+the app holds, and an inspector that shows or forwards values where a secret must
+not appear (a log, a recording, an AI agent) decides what to hide.
 `TrySetState` accepts numbers, single characters, `true`/`false`, enum member
 names (a `[Flags]` combination only of declared bits), dates, time spans, GUIDs,
 plain text and their nullables (`null` clears a

@@ -1978,16 +1978,15 @@ GetHashCode() → int
 ToString() → string
 
 ### record DiagnosticValue
-new(int Index, string Name, string Kind, string Type, string Value, bool Editable, bool Redacted, bool MigratedByHotReload)
+new(int Index, string Name, string Kind, string Type, string Value, bool Editable, bool MigratedByHotReload)
 bool Editable { get; init; }
 bool MigratedByHotReload { get; init; }
-bool Redacted { get; init; }
 int Index { get; init; }
 string Kind { get; init; }
 string Name { get; init; }
 string Type { get; init; }
 string Value { get; init; }
-Deconstruct(ref int Index, ref string Name, ref string Kind, ref string Type, ref string Value, ref bool Editable, ref bool Redacted, ref bool MigratedByHotReload) → void
+Deconstruct(ref int Index, ref string Name, ref string Kind, ref string Type, ref string Value, ref bool Editable, ref bool MigratedByHotReload) → void
 Equals(DiagnosticValue other) → bool
 Equals(object obj) → bool
 GetHashCode() → int

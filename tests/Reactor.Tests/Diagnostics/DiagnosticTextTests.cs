@@ -7,7 +7,7 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Tests.Diagnostics;
 
 /// <summary>
-/// Formatting, redaction and parsing rules of <see cref="DiagnosticText"/> — the text every
+/// Formatting and parsing rules of <see cref="DiagnosticText"/> — the text every
 /// <see cref="ReactorDiagnostics"/> value goes through. These pin the winapp DevTools agent's
 /// behaviour, which this code replaces.
 /// </summary>
@@ -37,23 +37,23 @@ public class DiagnosticTextTests
     [Fact]
     public void Format_QuotesAndEscapesStrings()
     {
-        Assert.Equal("\"a \\\"b\\\"\\n\\\\c\"", DiagnosticText.Format("", typeof(string), "a \"b\"\n\\c").Text);
+        Assert.Equal("\"a \\\"b\\\"\\n\\\\c\"", DiagnosticText.Format(typeof(string), "a \"b\"\n\\c"));
     }
 
     // A comma-decimal culture discriminates: invariant output ("1.5") differs from de-DE ("1,5").
     [CulturedFact(new[] { "de-DE" })]
     public void Format_PrimitivesUseInvariantCulture()
     {
-        Assert.Equal("1.5", DiagnosticText.Format("", typeof(double), 1.5).Text);
-        Assert.Equal("True", DiagnosticText.Format("", typeof(bool), true).Text);
-        Assert.Equal("null", DiagnosticText.Format("", typeof(string), null).Text);
+        Assert.Equal("1.5", DiagnosticText.Format(typeof(double), 1.5));
+        Assert.Equal("True", DiagnosticText.Format(typeof(bool), true));
+        Assert.Equal("null", DiagnosticText.Format(typeof(string), null));
     }
 
     [Fact]
     public void TryCount_ReadsOnlyAPublicGetter()
     {
         Assert.Null(DiagnosticText.TryCount(new PrivateCountGetter()));
-        Assert.Equal("PrivateCountGetter (count unknown)", DiagnosticText.Format("", typeof(PrivateCountGetter), new PrivateCountGetter()).Text);
+        Assert.Equal("PrivateCountGetter (count unknown)", DiagnosticText.Format(typeof(PrivateCountGetter), new PrivateCountGetter()));
     }
 
     private sealed class PrivateCountGetter : IEnumerable<int>
@@ -71,7 +71,7 @@ public class DiagnosticTextTests
         var local = new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.FromHours(-7)).AddTicks(89);
         foreach (var (type, value) in new (Type, object)[] { (typeof(DateTime), utc), (typeof(DateTimeOffset), local) })
         {
-            var text = DiagnosticText.Format("", type, value).Text;
+            var text = DiagnosticText.Format(type, value);
             Assert.True(DiagnosticText.TryParse(text, type, out var parsed, out var error), error);
             Assert.Equal(value, parsed);
             if (parsed is DateTime d) Assert.Equal(DateTimeKind.Utc, d.Kind);
@@ -82,18 +82,18 @@ public class DiagnosticTextTests
     [Fact]
     public void Format_SummarisesCollectionsByTheCountTheyAdvertise()
     {
-        Assert.Equal("List<int> (3 items)", DiagnosticText.Format("", typeof(List<int>), new List<int> { 1, 2, 3 }).Text);
-        Assert.Equal("int[] (2 items)", DiagnosticText.Format("", typeof(int[]), new[] { 1, 2 }).Text);
+        Assert.Equal("List<int> (3 items)", DiagnosticText.Format(typeof(List<int>), new List<int> { 1, 2, 3 }));
+        Assert.Equal("int[] (2 items)", DiagnosticText.Format(typeof(int[]), new[] { 1, 2 }));
         // HashSet<T> has no non-generic ICollection; its public Count is read instead.
-        Assert.Equal("HashSet<string> (1 item)", DiagnosticText.Format("", typeof(HashSet<string>), new HashSet<string> { "a" }).Text);
+        Assert.Equal("HashSet<string> (1 item)", DiagnosticText.Format(typeof(HashSet<string>), new HashSet<string> { "a" }));
     }
 
     [Fact]
     public void Format_NeverEnumeratesALazySequence()
     {
         var lazy = new CountingSequence();
-        Assert.Equal("IEnumerable<int> (count unknown)", DiagnosticText.Format("", typeof(IEnumerable<int>), Lazy(5)).Text);
-        Assert.Equal($"{nameof(CountingSequence)} (count unknown)", DiagnosticText.Format("", typeof(CountingSequence), lazy).Text);
+        Assert.Equal("IEnumerable<int> (count unknown)", DiagnosticText.Format(typeof(IEnumerable<int>), Lazy(5)));
+        Assert.Equal($"{nameof(CountingSequence)} (count unknown)", DiagnosticText.Format(typeof(CountingSequence), lazy));
         Assert.Equal(0, lazy.Enumerations);
     }
 
@@ -106,14 +106,14 @@ public class DiagnosticTextTests
     public void Format_CompilerGeneratedCollectionType_IsNamedAfterTheDeclaredType()
     {
         IReadOnlyList<int> value = [1, 2];
-        Assert.Equal("IReadOnlyList<int> (2 items)", DiagnosticText.Format("", typeof(IReadOnlyList<int>), value).Text);
+        Assert.Equal("IReadOnlyList<int> (2 items)", DiagnosticText.Format(typeof(IReadOnlyList<int>), value));
     }
 
     [Fact]
     public void Format_ACollectionIsSummarised_ItsOwnToStringIsNeverCalled()
     {
         var bag = new SelfFormatting();
-        Assert.Equal($"{nameof(SelfFormatting)} (count unknown)", DiagnosticText.Format("", typeof(SelfFormatting), bag).Text);
+        Assert.Equal($"{nameof(SelfFormatting)} (count unknown)", DiagnosticText.Format(typeof(SelfFormatting), bag));
         Assert.Equal(0, bag.ToStringCalls);
         Assert.Equal(0, bag.Enumerations);
     }
@@ -121,7 +121,7 @@ public class DiagnosticTextTests
     [Fact]
     public void Format_TruncatesLongValues()
     {
-        var text = DiagnosticText.Format("", typeof(string), new string('x', 500)).Text;
+        var text = DiagnosticText.Format(typeof(string), new string('x', 500));
         // The payload is cut, and both quote delimiters survive.
         Assert.Equal("\"" + new string('x', DiagnosticText.MaxValueLength) + "...\"", text);
     }
@@ -131,9 +131,9 @@ public class DiagnosticTextTests
     {
         // 199 x's then an emoji (two UTF-16 units): the cut would land between its halves.
         var value = new string('x', DiagnosticText.MaxValueLength - 1) + "\U0001F600tail";
-        var quoted = DiagnosticText.Format("", typeof(string), value).Text;
+        var quoted = DiagnosticText.Format(typeof(string), value);
         Assert.Equal("\"" + new string('x', DiagnosticText.MaxValueLength - 1) + "...\"", quoted);
-        var plain = DiagnosticText.FormatPlain("Text", value).Text;
+        var plain = DiagnosticText.FormatPlain(value);
         Assert.Equal(new string('x', DiagnosticText.MaxValueLength - 1) + "...", plain);
     }
 
@@ -141,74 +141,20 @@ public class DiagnosticTextTests
     public void Format_TruncationNeverSplitsAnEscapeSequence()
     {
         // 199 x's then a backslash: escaped, the cut would land between "\" and "\".
-        var text = DiagnosticText.Format("", typeof(string), new string('x', DiagnosticText.MaxValueLength - 1) + "\\tail").Text;
+        var text = DiagnosticText.Format(typeof(string), new string('x', DiagnosticText.MaxValueLength - 1) + "\\tail");
         Assert.Equal("\"" + new string('x', DiagnosticText.MaxValueLength - 1) + "...\"", text);
     }
 
-    // ── Redaction ───────────────────────────────────────────────────
-
-    [Theory]
-    [InlineData("Password")]
-    [InlineData("adminPassword")]
-    [InlineData("ApiSecret")]
-    [InlineData("UserCredential")]
-    [InlineData("AccessToken")]
-    [InlineData("RefreshToken")]
-    [InlineData("ApiKey")]
-    [InlineData("PrivateKey")]
-    [InlineData("ConnectionString")]
-    public void Format_RedactsBySecretName(string name)
-    {
-        var (text, redacted) = DiagnosticText.Format(name, typeof(string), "hunter2");
-        Assert.True(redacted);
-        Assert.Equal("<redacted>", text);
-    }
-
-    [Fact]
-    public void Format_RedactsBySecretType_DeclaredOrRuntime()
-    {
-        Assert.True(DiagnosticText.Format("", typeof(UserCredential), new UserCredential("u", "p")).Redacted);
-        Assert.True(DiagnosticText.Format("", typeof(object), new UserCredential("u", "p")).Redacted);
-        using var secure = new global::System.Security.SecureString();
-        Assert.True(DiagnosticText.Format("", typeof(global::System.Security.SecureString), secure).Redacted);
-    }
-
-    [Fact]
-    public void Format_DoesNotRedactNullOrOrdinaryNames()
-    {
-        Assert.False(DiagnosticText.Format("Password", typeof(string), null).Redacted);
-        Assert.False(DiagnosticText.Format("PasswordHint", typeof(string), "h").Redacted);
-        Assert.False(DiagnosticText.Format("Name", typeof(string), "n").Redacted);
-        // A bare "Key" is not a secret: WinUI's AccessKey is an ordinary modifier.
-        Assert.Equal(("S", false), DiagnosticText.FormatPlain("AccessKey", "S"));
-    }
-
-    [Fact]
-    public void Format_RedactsSecretNamedOrSecretTypedCollections_RatherThanSummarisingThem()
-    {
-        Assert.Equal(("<redacted>", true), DiagnosticText.Format("ApiSecret", typeof(List<string>), new List<string> { "k" }));
-        Assert.True(DiagnosticText.Format("", typeof(List<UserCredential>), new List<UserCredential>()).Redacted);
-        Assert.True(DiagnosticText.Format("", typeof(UserCredential[]), new UserCredential[1]).Redacted);
-        Assert.True(DiagnosticText.Format("", typeof(object), new Dictionary<string, UserCredential>()).Redacted);
-    }
+    // ── Values are shown as they are ───────────────────────────────
 
     private sealed record LoginForm(string User, string Password);
-    private sealed record Hints(string User, string PasswordHint);
 
     [Fact]
-    public void Format_RedactsAnObjectWhoseOwnTextShowsASecretMember()
+    public void Format_ShowsValuesUnredacted_HidingIsTheInspectorsCall()
     {
-        // A record's ToString() prints its members — Password included.
-        var (text, redacted) = DiagnosticText.Format("Form", typeof(LoginForm), new LoginForm("me", "hunter2"));
-        Assert.True(redacted);
-        Assert.DoesNotContain("hunter2", text);
-
-        Assert.Equal(("Hints { User = me, PasswordHint = pet }", false), DiagnosticText.Format("", typeof(Hints), new Hints("me", "pet")));
-    }
-
-    private sealed class HandWritten(string text)
-    {
-        public override string ToString() => text;
+        Assert.Equal("\"AccessToken=hunter2\"", DiagnosticText.Format(typeof(string), "AccessToken=hunter2"));
+        Assert.Equal("LoginForm { User = me, Password = hunter2 }", DiagnosticText.Format(typeof(LoginForm), new LoginForm("me", "hunter2")));
+        Assert.Equal("hunter2", DiagnosticText.FormatPlain("hunter2"));
     }
 
     private sealed class ThrowsOnToString
@@ -233,76 +179,23 @@ public class DiagnosticTextTests
     [Fact]
     public void Format_AThrowingCountIsReportedUnknown_InsteadOfFailing()
     {
-        Assert.Equal(("CountThrows (count unknown)", false), DiagnosticText.Format("", typeof(CountThrows), new CountThrows()));
+        Assert.Equal("CountThrows (count unknown)", DiagnosticText.Format(typeof(CountThrows), new CountThrows()));
     }
 
     [Fact]
     public void Format_AThrowingToStringShowsTheType_InsteadOfFailing()
     {
-        Assert.Equal(("ThrowsOnToString (ToString() threw InvalidOperationException)", false),
-            DiagnosticText.Format("", typeof(ThrowsOnToString), new ThrowsOnToString()));
-        Assert.Equal(("FormattableThrows (ToString() threw FormatException)", false),
-            DiagnosticText.FormatPlain("", new FormattableThrows()));
-    }
-
-    [Theory]
-    [InlineData("ApiSecret: hunter2")]
-    [InlineData("user=me; AccessToken=hunter2")]
-    public void Format_RedactsHandWrittenTextNamingASecretMember(string text)
-    {
-        var (shown, redacted) = DiagnosticText.Format("", typeof(HandWritten), new HandWritten(text));
-        Assert.True(redacted);
-        Assert.DoesNotContain("hunter2", shown);
-    }
-
-    [Theory]
-    [InlineData("AccessToken=hunter2")]
-    [InlineData("Server=db;User Id=me;Password=hunter2;")]
-    [InlineData("apiKey: hunter2")]
-    [InlineData("{\"Password\":\"hunter2\"}")]
-    [InlineData("{ 'accessToken': 'hunter2' }")]
-    [InlineData("{\"Password\":\" hunter2\"}")]
-    [InlineData("{\"Password\":\",hunter2\"}")]
-    [InlineData("{\"Password\":\";hunter2\"}")]
-    public void Format_RedactsAStringCarryingALabelledSecret(string text)
-    {
-        var (shown, redacted) = DiagnosticText.Format("", typeof(string), text);
-        Assert.True(redacted);
-        Assert.DoesNotContain("hunter2", shown);
-    }
-
-    [Theory]
-    [InlineData("Password:")]
-    [InlineData("Enter your Password: ")]
-    [InlineData("Forgot password?")]
-    public void Format_KeepsABareSecretLabel(string text)
-        => Assert.False(DiagnosticText.Format("", typeof(string), text).Redacted);
-
-    [Fact]
-    public void FormatPlain_DoesNotQuote_ButStillRedacts()
-    {
-        Assert.Equal(("Save", false), DiagnosticText.FormatPlain("AutomationName", "Save"));
-        Assert.Equal(("<redacted>", true), DiagnosticText.FormatPlain("Password", "x"));
-    }
-
-    private sealed class FormattableSecret : IFormattable
-    {
-        public string ToString(string? format, IFormatProvider? provider) => "ApiKey: hunter2";
+        Assert.Equal("ThrowsOnToString (ToString() threw InvalidOperationException)",
+            DiagnosticText.Format(typeof(ThrowsOnToString), new ThrowsOnToString()));
+        Assert.Equal("FormattableThrows (ToString() threw FormatException)",
+            DiagnosticText.FormatPlain(new FormattableThrows()));
     }
 
     [Fact]
-    public void FormatPlain_RedactsLabelledSecretText_InEveryValueShape()
+    public void FormatPlain_DoesNotQuote()
     {
-        Assert.Equal(("<redacted>", true), DiagnosticText.FormatPlain("ToolTip", "AccessToken=hunter2"));
-        Assert.Equal(("<redacted>", true), DiagnosticText.FormatPlain("", new FormattableSecret()));
-        Assert.Equal(("<redacted>", true), DiagnosticText.FormatPlain("", new HandWritten("Password = hunter2")));
-        // A bare label is ordinary UI text, as is a JSON member with an empty value.
-        Assert.Equal(("Password:", false), DiagnosticText.FormatPlain("ToolTip", "Password:"));
-        Assert.Equal(("{\"Password\":\"\"}", false), DiagnosticText.FormatPlain("ToolTip", "{\"Password\":\"\"}"));
-        Assert.Equal(("{\"Password\":\" \"}", false), DiagnosticText.FormatPlain("ToolTip", "{\"Password\":\" \"}"));
+        Assert.Equal("Save", DiagnosticText.FormatPlain("Save"));
     }
-
-    // ── Parsing ─────────────────────────────────────────────────────
 
     private sealed class SelfFormattingRefs : IReadOnlyList<global::Microsoft.UI.Reactor.Input.ElementRef>
     {
@@ -311,17 +204,17 @@ public class DiagnosticTextTests
         public global::Microsoft.UI.Reactor.Input.ElementRef this[int index] { get { Touched = true; throw new InvalidOperationException(); } }
         public IEnumerator<global::Microsoft.UI.Reactor.Input.ElementRef> GetEnumerator() { Touched = true; throw new InvalidOperationException(); }
         global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-        public override string ToString() { Touched = true; return "ApiKey: hunter2"; }
+        public override string ToString() { Touched = true; return "refs"; }
     }
 
     [Fact]
     public void FormatPlain_SummarisesCollectionsByCount_WithoutCallingTheirToStringOrEnumerator()
     {
         var refs = new SelfFormattingRefs();
-        Assert.Equal(("SelfFormattingRefs (2 items)", false), DiagnosticText.FormatPlain("DescribedByRefs", refs));
+        Assert.Equal("SelfFormattingRefs (2 items)", DiagnosticText.FormatPlain(refs));
         Assert.False(refs.Touched);
         var array = new[] { new global::Microsoft.UI.Reactor.Input.ElementRef() };
-        Assert.Equal(" (1 item)", DiagnosticText.FormatPlain("FlowsToRefs", array).Text[^9..]);
+        Assert.Equal(" (1 item)", DiagnosticText.FormatPlain(array)[^9..]);
     }
 
     // ── Parsing ─────────────────────────────────────────────────────

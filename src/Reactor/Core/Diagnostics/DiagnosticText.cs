@@ -6,14 +6,13 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 
 /// <summary>
 /// How <see cref="ReactorDiagnostics"/> turns live values into text and text back into values:
-/// formatting (quoted strings, summarised collections, truncation), secret redaction and
-/// state parsing. Reactor owns this so every inspector shows and parses values the same way
-/// and never has to hold a live object to do it. Mirrors the winapp DevTools agent's
-/// <c>ReactorComponents</c> / <c>ReactorElementProps</c> rules so its output is unchanged.
+/// formatting (quoted strings, summarised collections, truncation) and state parsing. Reactor
+/// owns this so every inspector shows and parses values the same way and never has to hold a
+/// live object to do it. Values are shown as they are: whether to hide any (a password field,
+/// a token) is the inspector's call, not Reactor's.
 /// </summary>
 internal static class DiagnosticText
 {
-    internal const string Redacted = "<redacted>";
     internal const int MaxValueLength = 200;
 
     /// <summary><c>int</c>, <c>int?</c>, <c>List&lt;TaskItem&gt;</c>: the type as C# reads it.</summary>
@@ -82,95 +81,29 @@ internal static class DiagnosticText
             type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(TimeSpan) || type == typeof(Guid);
     }
 
-    /// <summary>Whether a value of this type is a secret: a <c>SecureString</c> or a password-, secret- or credential-like type.</summary>
-    internal static bool IsSecretType(Type? type)
-    {
-        if (type is null) return false;
-        type = Nullable.GetUnderlyingType(type) ?? type;
-        return type.FullName == "System.Security.SecureString" || IsSecretName(TypeName(type));
-    }
-
     /// <summary>
-    /// <see cref="IsSecretType"/>, or a collection of secrets: an array whose element type, or a
-    /// generic type with a type argument, that is a secret (<c>List&lt;UserCredential&gt;</c>).
+    /// A component value (prop, hook, context) as shown to the developer: collections
+    /// summarised, strings quoted, long text cut.
     /// </summary>
-    internal static bool HoldsSecretType(Type? type)
+    internal static string Format(Type? declared, object? value)
     {
-        if (type is null) return false;
-        if (IsSecretType(type)) return true;
-        if (type.IsArray && type.GetElementType() is { } element) return HoldsSecretType(element);
-        if (type.IsGenericType)
-        {
-            foreach (var argument in type.GetGenericArguments())
-                if (HoldsSecretType(argument)) return true;
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Whether a member or type name says its value is a secret: it ends in <c>Password</c>,
-    /// <c>Secret</c>, <c>Credential</c>, <c>Token</c>, <c>ApiKey</c>, <c>PrivateKey</c> or
-    /// <c>ConnectionString</c> (any case). A bare <c>Key</c> is not enough — WinUI's
-    /// <c>AccessKey</c> is an ordinary property.
-    /// </summary>
-    internal static bool IsSecretName(string? name)
-    {
-        if (name is not { Length: > 0 }) return false;
-        foreach (var suffix in s_secretSuffixes)
-            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return true;
-        return false;
-    }
-
-    private static readonly string[] s_secretSuffixes =
-        ["Password", "Secret", "Credential", "Token", "ApiKey", "PrivateKey", "ConnectionString"];
-
-    // A member of a secret name followed by a value, inside an object's own text or a string:
-    // "Password = …" in a record's compiler-generated ToString(), "ApiSecret: …" in a hand-written
-    // one, "AccessToken=…" in a connection-style string, "\"Password\":\"…\"" in JSON. A bare label
-    // ("Password:") or an empty or whitespace-only quoted value has nothing after the separator and
-    // does not match. Inside quotes any non-space character is a value (",hunter2" included);
-    // unquoted, a delimiter (",", ";", "}", "]") ends the label instead.
-    private static readonly global::System.Text.RegularExpressions.Regex s_secretMemberInText = new(
-        @"\b\w*(?:Password|Secret|Credential|Token|ApiKey|PrivateKey|ConnectionString)[""']?\s*[=:]\s*(?:""\s*[^""\s]|'\s*[^'\s]|[^\s,;}\]""'])",
-        global::System.Text.RegularExpressions.RegexOptions.IgnoreCase | global::System.Text.RegularExpressions.RegexOptions.CultureInvariant);
-
-    /// <summary>
-    /// A component value (prop, hook, context) as shown to the developer: redacted when its name
-    /// or type says it is a secret, collections summarised, strings quoted, long text cut.
-    /// </summary>
-    internal static (string Text, bool Redacted) Format(string name, Type? declared, object? value)
-    {
-        if (value is SecretValue) return (Redacted, true);
-        if (value is not null && (IsSecretName(name) || HoldsSecretType(declared) || HoldsSecretType(value.GetType())))
-            return (Redacted, true);
-
         if (value is not null && IsListLike(value))
-            return (CollectionSummary(value, declared), false);
-
+            return CollectionSummary(value, declared);
         if (value is string s)
-        {
-            // A string can carry a labelled secret itself ("AccessToken=…", a connection string).
-            if (s_secretMemberInText.IsMatch(s)) return (Redacted, true);
-            return (Quote(s), false);
-        }
-
-        return FormatPlain(name, value);
+            return Quote(s);
+        return FormatPlain(value);
     }
 
     /// <summary>
-    /// A value as an element record or modifier carries it: unquoted, redacted when the name says
-    /// it is a secret or when the value's own text shows a secret-named member, long text cut.
-    /// Used for applied properties.
+    /// A value as an element record or modifier carries it: unquoted, long text cut. Used for
+    /// applied properties.
     /// </summary>
-    internal static (string Text, bool Redacted) FormatPlain(string name, object? value)
+    internal static string FormatPlain(object? value)
     {
-        if (IsSecretName(name) && value is not null and not Delegate)
-            return (Redacted, true);
-
         // A collection (DescribedByRefs, …) is summarised by count, never by its own ToString(),
         // which can enumerate it on the UI thread.
         if (value is not null && IsListLike(value))
-            return (CollectionSummary(value, null), false);
+            return CollectionSummary(value, null);
 
         string text;
         switch (value)
@@ -194,11 +127,7 @@ internal static class DiagnosticText
                 text = OwnText(value, value.ToString);
                 break;
         }
-        // Any text — a string, a formattable value, an object's own ToString() (a record prints
-        // its members) — can carry a labelled secret ("AccessToken=…", "Password = …"); withhold
-        // the whole value rather than leak it.
-        if (value is not null && s_secretMemberInText.IsMatch(text)) return (Redacted, true);
-        return (Truncate(text), false);
+        return Truncate(text);
     }
 
     /// <summary>
@@ -322,7 +251,7 @@ internal static class DiagnosticText
     [UnconditionalSuppressMessage("Trimming", "IL2075",
         Justification = "Diagnostics-only read of the props object's public properties. When trimming has removed that " +
                         "metadata the reader finds no properties and falls back to a single row naming the props type " +
-                        "(never its ToString(), which could print a secret member), so it degrades rather than fails.")]
+                        "(never its ToString(), an arbitrary app method), so it degrades rather than fails.")]
     internal static IReadOnlyList<(string Name, Type Type, object? Value)> PropRows(object? props, Type? declared)
     {
         // A typed component with null props still has a Props row, so it reads differently from a
@@ -332,20 +261,11 @@ internal static class DiagnosticText
                 ? global::System.Array.Empty<(string, Type, object?)>()
                 : new[] { ("Props", declared, (object?)null) };
         var type = props.GetType();
-        // A scalar (anything shown by its value, as Format and TryParse treat it) or a
-        // secret-bearing props type stays one row, so Format shows or redacts it whole instead of
-        // listing members (a Guid's none, a DateTime's Ticks/Kind/…, a SessionToken's Value).
-        if (IsScalar(type) || props is string or Enum || IsListLike(props)
-            || HoldsSecretType(declared) || HoldsSecretType(type))
+        // A scalar (anything shown by its value, as Format and TryParse treat it) stays one row,
+        // so Format shows it whole instead of listing members (a Guid's none, a DateTime's
+        // Ticks/Kind/…).
+        if (IsScalar(type) || props is string or Enum || IsListLike(props))
             return new[] { ("Props", declared ?? type, (object?)props) };
-
-        // A hand-written ToString() that labels a secret ("ApiKey: …") marks the whole object as
-        // secret, the same rule Format applies to a value's own text, so its members are not listed
-        // one by one. A record's compiler-generated text only lists its members, which are already
-        // redacted row by row, so records are not judged by it.
-        if (HasOwnToString(type) && !HasGeneratedRecordText(type)
-            && s_secretMemberInText.IsMatch(OwnText(props, props.ToString)))
-            return new[] { ("Props", declared ?? type, (object?)SecretValue.Instance) };
 
         var rows = new List<(string, Type, object?)>();
         // A public getter, not just CanRead: `public string X { private get; set; }` is not readable surface.
@@ -371,7 +291,7 @@ internal static class DiagnosticText
             rows.Add((property.Name, property.PropertyType, value));
         }
         // No readable members (none declared, or their metadata trimmed away): name the type rather
-        // than fall back to ToString(), which for a record would print every member, secrets included.
+        // than fall back to ToString(), an arbitrary app method.
         if (rows.Count == 0)
             rows.Add(("Props", declared ?? type, new OpaqueValue($"{FriendlyTypeName(type)} (members unavailable)")));
         return rows;
@@ -381,55 +301,6 @@ internal static class DiagnosticText
     internal sealed class OpaqueValue(string text)
     {
         public override string ToString() => text;
-    }
-
-    /// <summary>Stands in for a value withheld as a secret; <see cref="Format"/> reports it redacted.</summary>
-    internal sealed class SecretValue
-    {
-        internal static readonly SecretValue Instance = new();
-        private SecretValue() { }
-        public override string ToString() => Redacted;
-    }
-
-    [UnconditionalSuppressMessage("Trimming", "IL2070",
-        Justification = "Diagnostics-only probe for a ToString override; trimmed metadata reports none, so no own-text check runs.")]
-    private static bool HasOwnToString(Type type)
-        => type.GetMethod(nameof(ToString), global::System.Type.EmptyTypes) is { } m && m.DeclaringType != typeof(object)
-            && m.DeclaringType != typeof(ValueType);
-
-    // A record whose text is entirely compiler-generated: ToString and PrintMembers both carry
-    // [CompilerGenerated], so the text only lists members (redacted row by row). A hand-written
-    // ToString or PrintMembers — or metadata trimmed away — fails this, and the own-text check runs.
-    [UnconditionalSuppressMessage("Trimming", "IL2070",
-        Justification = "Diagnostics-only probe; if trimmed, the object is judged by its own text, which can only redact more.")]
-    [UnconditionalSuppressMessage("Trimming", "IL2075",
-        Justification = "Diagnostics-only walk of the record base chain; trimmed metadata fails the probe, which can only redact more.")]
-    private static bool HasGeneratedRecordText(Type type)
-    {
-        const global::System.Reflection.BindingFlags Any =
-            global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Instance;
-        if (type.GetMethod("<Clone>$", Any) is null) return false;
-        // Generated text also prints public fields, which PropRows does not list, so a record with
-        // any is judged by its own text.
-        if (type.GetFields(global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Instance).Length > 0)
-            return false;
-        var toString = type.GetMethod(nameof(ToString), global::System.Type.EmptyTypes);
-        if (toString is null || !toString.IsDefined(typeof(global::System.Runtime.CompilerServices.CompilerGeneratedAttribute), false))
-            return false;
-        // A derived record's generated PrintMembers calls base.PrintMembers, so every record in the
-        // chain must print through a generated PrintMembers declared on its own type; a hand-written
-        // one anywhere up the chain can print a secret under another member's name.
-        for (var t = type; t is not null && t != typeof(object); t = t.BaseType)
-        {
-            var printMembers = t.GetMethod("PrintMembers", Any | global::System.Reflection.BindingFlags.DeclaredOnly,
-                null, new[] { typeof(global::System.Text.StringBuilder) }, null);
-            if (printMembers is null
-                || !printMembers.IsDefined(typeof(global::System.Runtime.CompilerServices.CompilerGeneratedAttribute), false))
-                return false;
-            if (t.BaseType is { } baseType && baseType.GetMethod("<Clone>$", Any) is null)
-                break; // reached the root record (its base is a non-record class)
-        }
-        return true;
     }
 
     // A collection whose ToString() is object's (prints the type name) is summarised by count; a

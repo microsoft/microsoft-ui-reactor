@@ -61,7 +61,6 @@ public class ReactorDiagnosticsComponentsTests
         Assert.Equal(new[] { "int", "string", "int", "int", "string", "", "string" }, hooks.Select(h => h.Type));
         Assert.Equal(new[] { true, true, true, false, false, false, false }, hooks.Select(h => h.Editable));
         Assert.All(hooks, h => Assert.Equal("", h.Name));
-        Assert.All(hooks, h => Assert.False(h.Redacted));
     }
 
     [Fact]
@@ -88,17 +87,16 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
-    public void State_SecretTypeIsRedactedAndNotEditable()
+    public void State_ValuesAreShownUnredacted()
     {
         var r = new Renderer();
         r.Begin();
         r.Context.UseState(new UserCredential("me", "hunter2"));
-        r.Context.UseState<string?>("plain");
+        r.Context.UseState<string?>("AccessToken=abc");
 
         var hooks = ForContext(r.Context).Describe().State;
-        Assert.Equal(("<redacted>", true, false), (hooks[0].Value, hooks[0].Redacted, hooks[0].Editable));
-        Assert.DoesNotContain("hunter2", hooks[0].Value);
-        Assert.Equal(("\"plain\"", false, true), (hooks[1].Value, hooks[1].Redacted, hooks[1].Editable));
+        Assert.Equal(("UserCredential { User = me, Password = hunter2 }", false), (hooks[0].Value, hooks[0].Editable));
+        Assert.Equal(("\"AccessToken=abc\"", true), (hooks[1].Value, hooks[1].Editable));
     }
 
     [Fact]
@@ -193,8 +191,6 @@ public class ReactorDiagnosticsComponentsTests
         r.Context.UseRef(5);
         r.Context.UseEffect(() => { }, 1);
         r.Context.UseState(new List<int>());
-        r.Context.UseState(new UserCredential("me", "pw"));
-        r.Context.UseState("Server=db;Password=hunter2");
         var handle = ForContext(r.Context);
 
         AssertRefused(handle, 0, "abc", "'abc' is not a valid int");
@@ -203,9 +199,7 @@ public class ReactorDiagnosticsComponentsTests
         AssertRefused(handle, 2, "1", "has kind 'effect'");
         AssertRefused(handle, 3, "x", "List<int> cannot be set from text");
         AssertRefused(handle, 3, "null", "List<int> cannot be set from text");
-        AssertRefused(handle, 4, "x", "holds a secret");
-        AssertRefused(handle, 5, "x", "holds a secret");
-        AssertRefused(handle, 6, "1", "has no hook 6");
+        AssertRefused(handle, 4, "1", "has no hook 4");
         AssertRefused(handle, -1, "1", "has no hook -1");
 
         Assert.Equal("1", handle.Describe().State[0].Value);
@@ -220,35 +214,29 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
-    public void State_ANullSecretTypedValue_IsNotAdvertisedEditable()
+    public void State_ANullNullableEnum_IsEditable()
     {
         var r = new Renderer();
         r.Begin();
-        r.Context.UseState<ApiSecret?>(null);
+        r.Context.UseState<Mode?>(null);
         var handle = ForContext(r.Context);
 
         var hook = Assert.Single(handle.Describe().State);
-        Assert.Equal(("null", false, false), (hook.Value, hook.Redacted, hook.Editable));
-        AssertRefused(handle, 0, "On", "holds a secret");
+        Assert.Equal(("null", true), (hook.Value, hook.Editable));
+        Assert.True(handle.TrySetState(0, "On", out var error), error);
+        Assert.Equal("On", handle.Describe().State[0].Value);
     }
 
-    private enum ApiSecret { Off, On }
-
     [Fact]
-    public void TrySetState_RefusesAValueItsNextSnapshotWouldRedact()
+    public void TrySetState_WritesTextThatLooksLikeASecret()
     {
         var r = new Renderer();
         r.Begin();
         r.Context.UseState("plain");
         var handle = ForContext(r.Context);
 
-        AssertRefused(handle, 0, "AccessToken=abc123", "looks like a secret; it is not written from diagnostics");
-
-        Assert.Equal("\"plain\"", handle.Describe().State[0].Value);
-        Assert.Equal(0, r.Rerenders);
-        // An ordinary value on the same hook is still written.
-        Assert.True(handle.TrySetState(0, "hello", out var error), error);
-        Assert.Equal("\"hello\"", handle.Describe().State[0].Value);
+        Assert.True(handle.TrySetState(0, "AccessToken=abc123", out var error), error);
+        Assert.Equal("\"AccessToken=abc123\"", handle.Describe().State[0].Value);
     }
 
     [Fact]
@@ -346,13 +334,13 @@ public class ReactorDiagnosticsComponentsTests
 
         Assert.Equal(new[]
         {
-            new DiagnosticValue(1, "ThemeName", "provided", "string", "\"dark\"", false, false, false),
-            new DiagnosticValue(2, "Other", "default", "int", "4", false, false, false),
+            new DiagnosticValue(1, "ThemeName", "provided", "string", "\"dark\"", false, false),
+            new DiagnosticValue(2, "Other", "default", "int", "4", false, false),
         }, contexts);
     }
 
     [Fact]
-    public void Contexts_SecretNamedContextIsRedacted_InContextsAndState()
+    public void Contexts_ValuesAreShownUnredacted_InContextsAndState()
     {
         var apiSecret = new Context<string>("", "ApiSecret");
         var r = new Renderer();
@@ -361,9 +349,8 @@ public class ReactorDiagnosticsComponentsTests
         r.Context.UseContext(apiSecret);
 
         var snapshot = ForContext(r.Context).Describe();
-        Assert.True(snapshot.Contexts.Single().Redacted);
-        Assert.True(snapshot.State.Single().Redacted);
-        Assert.DoesNotContain("s3cr3t", snapshot.Contexts.Single().Value + snapshot.State.Single().Value);
+        Assert.Equal("\"s3cr3t\"", snapshot.Contexts.Single().Value);
+        Assert.Equal("\"s3cr3t\"", snapshot.State.Single().Value);
     }
 
     [Fact]
@@ -382,9 +369,8 @@ public class ReactorDiagnosticsComponentsTests
 
         var snapshot = ForContext(r.Context).Describe();
         Assert.Equal("ApiSecret", snapshot.Contexts.Single().Name);
-        Assert.True(snapshot.Contexts.Single().Redacted);
-        Assert.True(snapshot.State.Single().Redacted);
-        Assert.DoesNotContain("s3cr3t", snapshot.Contexts.Single().Value + snapshot.State.Single().Value);
+        Assert.Equal("\"s3cr3t\"", snapshot.Contexts.Single().Value);
+        Assert.Equal("\"s3cr3t\"", snapshot.State.Single().Value);
     }
 
     private sealed class CountingText
@@ -468,12 +454,12 @@ public class ReactorDiagnosticsComponentsTests
 
         Assert.Equal(("Counter", "class", false), (s.Name, s.Kind, s.IsRoot));
         // The instance's current props win over the element's (they diverge when a memoized
-        // parent skips re-rendering this child); a *Password member is redacted.
+        // parent skips re-rendering this child).
         Assert.Equal(new[]
         {
-            new DiagnosticValue(0, "Start", "prop", "int", "3", false, false, false),
-            new DiagnosticValue(1, "Label", "prop", "string", "\"go\"", false, false, false),
-            new DiagnosticValue(2, "AdminPassword", "prop", "string", "<redacted>", false, true, false),
+            new DiagnosticValue(0, "Start", "prop", "int", "3", false, false),
+            new DiagnosticValue(1, "Label", "prop", "string", "\"go\"", false, false),
+            new DiagnosticValue(2, "AdminPassword", "prop", "string", "\"pw\"", false, false),
         }, s.Props);
     }
 
@@ -485,7 +471,7 @@ public class ReactorDiagnosticsComponentsTests
         var s = ComponentHandle.FromNode(node, () => true).Describe();
 
         Assert.Equal("Generic", s.Name);
-        Assert.Equal(new[] { new DiagnosticValue(0, "Props", "prop", "int", "7", false, false, false) }, s.Props);
+        Assert.Equal(new[] { new DiagnosticValue(0, "Props", "prop", "int", "7", false, false) }, s.Props);
     }
 
     [Fact]
@@ -517,70 +503,11 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
-    public void Props_WhoseOwnTextLabelsASecret_AreOneRedactedRow_RecordsStillListMembers()
+    public void Props_AreListedMemberByMember_Unredacted()
     {
-        var labelled = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new ApiConfig()) };
-        var row = Assert.Single(ComponentHandle.FromNode(labelled, () => true).Describe().Props);
-        Assert.Equal(("Props", "<redacted>", true), (row.Name, row.Value, row.Redacted));
-
-        // A record's generated text names AdminPassword too, but its rows are redacted one by one.
         var record = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new AdminRecord(2, "hunter2")) };
         var rows = ComponentHandle.FromNode(record, () => true).Describe().Props;
-        Assert.Equal(new[] { ("Step", "2", false), ("AdminPassword", "<redacted>", true) }, rows.Select(r => (r.Name, r.Value, r.Redacted)));
-
-        // A record with a hand-written ToString is judged by that text like any other object.
-        var handWritten = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new HandWrittenRecord("hunter2")) };
-        var hwRow = Assert.Single(ComponentHandle.FromNode(handWritten, () => true).Describe().Props);
-        Assert.Equal(("Props", "<redacted>", true), (hwRow.Name, hwRow.Value, hwRow.Redacted));
-
-        // Generated text also prints public fields, which are not listed as rows: a record with a
-        // secret field is judged by its text rather than leaking its other members.
-        var withField = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new FieldRecord("visible", "hunter2")) };
-        var fieldRow = Assert.Single(ComponentHandle.FromNode(withField, () => true).Describe().Props);
-        Assert.Equal(("Props", "<redacted>", true), (fieldRow.Name, fieldRow.Value, fieldRow.Redacted));
-    }
-
-    private sealed record FieldRecord(string Value, string Stored)
-    {
-        public readonly string AdminPassword = Stored;
-    }
-
-    [Fact]
-    public void Props_ADerivedRecordOverAHandWrittenBase_IsJudgedByItsText_ADerivedGeneratedOneListsMembers()
-    {
-        var overHandWritten = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new DerivedOverHandWritten("hunter2", 1)) };
-        var row = Assert.Single(ComponentHandle.FromNode(overHandWritten, () => true).Describe().Props);
-        Assert.Equal(("Props", "<redacted>", true), (row.Name, row.Value, row.Redacted));
-
-        var overGenerated = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new DerivedOverGenerated("a", 2)) };
-        var rows = ComponentHandle.FromNode(overGenerated, () => true).Describe().Props;
-        Assert.Equal(new[] { "Extra", "Name" }, rows.Select(r => r.Name).OrderBy(n => n, StringComparer.Ordinal));
-    }
-
-    private record HandWrittenBase(string Value)
-    {
-        protected virtual bool PrintMembers(global::System.Text.StringBuilder builder)
-        {
-            builder.Append("Password = ").Append(Value);
-            return true;
-        }
-    }
-
-    private sealed record DerivedOverHandWritten(string Value, int Extra) : HandWrittenBase(Value);
-
-    private record GeneratedBase(string Name);
-
-    private sealed record DerivedOverGenerated(string Name, int Extra) : GeneratedBase(Name);
-
-    private sealed record HandWrittenRecord(string Value)
-    {
-        public override string ToString() => "ApiKey: " + Value;
-    }
-
-    private sealed class ApiConfig
-    {
-        public string Value => "hunter2";
-        public override string ToString() => "ApiKey: " + Value;
+        Assert.Equal(new[] { ("Step", "2"), ("AdminPassword", "\"hunter2\"") }, rows.Select(r => (r.Name, r.Value)));
     }
 
     private sealed record AdminRecord(int Step, string AdminPassword);
@@ -598,26 +525,14 @@ public class ReactorDiagnosticsComponentsTests
     }
 
     [Fact]
-    public void Props_OfASecretBearingType_AreOneRedactedRow_NotListedMemberByMember()
-    {
-        var node = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new SessionToken("s3cr3t")) };
-
-        var row = Assert.Single(ComponentHandle.FromNode(node, () => true).Describe().Props);
-
-        Assert.Equal(("Props", "<redacted>", true), (row.Name, row.Value, row.Redacted));
-    }
-
-    [Fact]
     public void Props_SkipAPropertyWhoseGetterIsNotPublic()
     {
         var node = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new PrivateGetterProps()) };
 
         var props = ComponentHandle.FromNode(node, () => true).Describe().Props;
 
-        Assert.Equal(new[] { new DiagnosticValue(0, "Visible", "prop", "string", "\"v\"", false, false, false) }, props);
+        Assert.Equal(new[] { new DiagnosticValue(0, "Visible", "prop", "string", "\"v\"", false, false) }, props);
     }
-
-    private sealed record SessionToken(string Value);
 
     private sealed class PrivateGetterProps
     {
@@ -635,8 +550,8 @@ public class ReactorDiagnosticsComponentsTests
 
         Assert.Equal(new[]
         {
-            new DiagnosticValue(0, "Good", "prop", "int", "1", false, false, false),
-            new DiagnosticValue(1, "Bad", "prop", "int", "<value unavailable>", false, false, false),
+            new DiagnosticValue(0, "Good", "prop", "int", "1", false, false),
+            new DiagnosticValue(1, "Bad", "prop", "int", "<value unavailable>", false, false),
         }, props);
     }
 
@@ -654,26 +569,13 @@ public class ReactorDiagnosticsComponentsTests
     public void Props_WithNoReadableMembers_NameTheTypeAndNeverItsToString()
     {
         // The same fallback a trimmed app hits when property metadata is gone: the object's
-        // own text could print a secret member, so it must not be used.
+        // own ToString() is arbitrary app code, so it is not used.
         var node = new Reconciler.ComponentNode { Component = new Plain(), Element = new ComponentElement(typeof(Plain), new FieldOnlyProps("hunter2")) };
 
         var row = ComponentHandle.FromNode(node, () => true).Describe().Props.Single();
 
-        Assert.Equal(new DiagnosticValue(0, "Props", "prop", "FieldOnlyProps", "FieldOnlyProps (members unavailable)", false, false, false), row);
+        Assert.Equal(new DiagnosticValue(0, "Props", "prop", "FieldOnlyProps", "FieldOnlyProps (members unavailable)", false, false), row);
     }
-
-    [Fact]
-    public void State_ARecordWithASecretMemberIsRedacted()
-    {
-        var r = new Renderer();
-        r.Begin();
-        r.Context.UseState(new LoginState("me", "hunter2"));
-
-        var hook = Assert.Single(ForContext(r.Context).Describe().State);
-        Assert.Equal(("<redacted>", true, false), (hook.Value, hook.Redacted, hook.Editable));
-    }
-
-    private sealed record LoginState(string User, string Password);
 
     private static Element RenderList(RenderContext _) => new EmptyElement();
 
@@ -999,5 +901,5 @@ public class ReactorDiagnosticsComponentsTests
     }
 }
 
-/// <summary>A credential-like state value: its type name marks it a secret.</summary>
+/// <summary>A credential-like state value (shown as-is: hiding values is the inspector's call).</summary>
 internal sealed record UserCredential(string User, string Password);

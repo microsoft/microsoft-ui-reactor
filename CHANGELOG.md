@@ -37,8 +37,8 @@ Conventions for contributors:
   properties a control's modifiers set (including the caption-derived default
   `AutomationProperties.Name`); and list the references it declares, including
   pending ones whose target has not mounted. Component snapshots and property
-  lists are text — no live component, element or hook object — with secrets
-  redacted; a resolved reference edge carries its mounted target control. Reads
+  lists are text — no live component, element or hook object; a resolved
+  reference edge carries its mounted target control. Reads
   are on demand and UI-thread-affine. The render path gains only reference
   stores: per component, `UseContext` records the context it read and
   reference-list wiring keeps the authored list; per host render, the host

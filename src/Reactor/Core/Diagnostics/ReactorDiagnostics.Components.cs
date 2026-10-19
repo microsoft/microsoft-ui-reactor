@@ -42,14 +42,11 @@ public sealed record ComponentSnapshot(
 /// <c>string?</c> reads <c>string</c>. Empty when the hook has no value.</param>
 /// <param name="Value">The value as text: strings quoted, collections summarised as
 /// <c>List&lt;T&gt; (n items)</c> (<c>(count unknown)</c> for a sequence that does not advertise
-/// its count — it is never enumerated), long values cut at 200 characters, secrets
-/// <c>&lt;redacted&gt;</c>. Empty when the hook has no value (effects).</param>
+/// its count — it is never enumerated), long values cut at 200 characters. Values are not
+/// redacted: an inspector that shows them where a secret must not appear hides them itself.
+/// Empty when the hook has no value (effects).</param>
 /// <param name="Editable">True when <see cref="ReactorDiagnostics.TrySetState"/> can set it from
-/// text: a state, reducer or persisted hook of a text-typed value that is not a secret.</param>
-/// <param name="Redacted">True when <paramref name="Value"/> was withheld because the value is a
-/// secret: a <c>SecureString</c>; a type, collection element type or name ending in Password,
-/// Secret, Credential, Token, ApiKey, PrivateKey or ConnectionString; or a string or object whose own text names such a member with a value (<c>AccessToken=…</c>, a record with a
-/// <c>Password</c> property).</param>
+/// text: a state, reducer or persisted hook of a text-typed value.</param>
 /// <param name="MigratedByHotReload">For hooks: true when the most recent hot-reload pass
 /// migrated this value to an edited type. Always false for props and contexts.</param>
 public sealed record DiagnosticValue(
@@ -59,7 +56,6 @@ public sealed record DiagnosticValue(
     string Type,
     string Value,
     bool Editable,
-    bool Redacted,
     bool MigratedByHotReload);
 
 /// <summary>
@@ -121,7 +117,7 @@ public static partial class ReactorDiagnostics
     /// <param name="error">Why the edit was refused, when this returns false.</param>
     /// <returns>True when the value was written (including when it was already equal).</returns>
     /// <remarks>
-    /// Only state, reducer and persisted hooks of a text-typed value can be set; secrets never are.
+    /// Only state, reducer and persisted hooks of a text-typed value can be set.
     /// Must be called on the UI thread that renders the component.
     /// </remarks>
     [Microsoft.UI.Reactor.Hosting.UIThreadOnly]
@@ -192,7 +188,7 @@ public static partial class ReactorDiagnostics
     }
 
     internal static AppliedProperty ToText(AppliedModifier m)
-        => new(m.Modifier, m.Property, DiagnosticText.FormatPlain(m.Modifier, m.Value).Text);
+        => new(m.Modifier, m.Property, DiagnosticText.FormatPlain(m.Value));
 
     /// <summary>
     /// Every public member is UI-thread-affine: component tables are unsynchronized and
@@ -320,9 +316,8 @@ internal sealed class ComponentHandle
         for (int i = 0; i < rows.Count; i++)
         {
             var (name, type, value) = rows[i];
-            var (text, redacted) = DiagnosticText.Format(name, type, value);
-            values[i] = new DiagnosticValue(i, name, "prop", DiagnosticText.FriendlyTypeName(type), text,
-                Editable: false, redacted, MigratedByHotReload: false);
+            values[i] = new DiagnosticValue(i, name, "prop", DiagnosticText.FriendlyTypeName(type),
+                DiagnosticText.Format(type, value), Editable: false, MigratedByHotReload: false);
         }
         return values;
     }
@@ -337,23 +332,20 @@ internal sealed class ComponentHandle
             var cell = _context.DiagnosticHookAt(i);
             var valueType = cell.DiagnosticValueType;
             string text = "";
-            bool redacted = false;
             if (cell.DiagnosticKind == HookKind.Context && contexts?.FirstOrDefault(c => c.Index == i) is { } contextRow)
             {
-                // Already formatted for Contexts (with the context's name for redaction): reuse it, so
-                // one snapshot runs app formatting code once and both rows agree.
-                (text, redacted) = (contextRow.Value, contextRow.Redacted);
+                // Already formatted for Contexts: reuse it, so one snapshot runs app formatting
+                // code once and both rows agree.
+                text = contextRow.Value;
             }
             else if (cell.DiagnosticKind is not (HookKind.Effect or HookKind.NavigationLifecycle or HookKind.Unknown))
             {
-                (text, redacted) = DiagnosticText.Format("", valueType, cell.DiagnosticValue);
+                text = DiagnosticText.Format(valueType, cell.DiagnosticValue);
             }
             values[i] = new DiagnosticValue(i, "", HookKindText(cell.DiagnosticKind),
                 valueType is null ? "" : DiagnosticText.FriendlyTypeName(valueType), text,
-                // The same type-level gate TrySetState applies, so a null secret-typed value is not
-                // advertised as editable either.
-                Editable: cell.DiagnosticCanSet && !redacted && DiagnosticText.IsEditable(valueType) && !DiagnosticText.IsSecretType(valueType),
-                redacted, cell.Migrated);
+                Editable: cell.DiagnosticCanSet && DiagnosticText.IsEditable(valueType),
+                cell.Migrated);
         }
         return values;
     }
@@ -375,9 +367,9 @@ internal sealed class ComponentHandle
             // App code: a value's Equals override can throw; one bad value must not fail the description.
             try { isDefault = ReferenceEquals(value, fallback) || (value is not null && value.Equals(fallback)); }
             catch (Exception ex) when (ex is not (OutOfMemoryException or StackOverflowException)) { isDefault = false; }
-            var (text, redacted) = DiagnosticText.Format(name, ctx.ValueType, value);
             (result ??= new()).Add(new DiagnosticValue(i, name, isDefault ? "default" : "provided",
-                DiagnosticText.FriendlyTypeName(ctx.ValueType), text, Editable: false, redacted, MigratedByHotReload: false));
+                DiagnosticText.FriendlyTypeName(ctx.ValueType), DiagnosticText.Format(ctx.ValueType, value),
+                Editable: false, MigratedByHotReload: false));
         }
         return result is null ? global::System.Array.Empty<DiagnosticValue>() : result;
     }
@@ -407,21 +399,9 @@ internal sealed class ComponentHandle
             error = $"hook {hookIndex} of <{Name}> has no value type";
             return false;
         }
-        if (DiagnosticText.IsSecretType(valueType) || DiagnosticText.Format("", valueType, cell.DiagnosticValue).Redacted)
-        {
-            error = $"hook {hookIndex} of <{Name}> holds a secret; it is not written from diagnostics";
-            return false;
-        }
         if (!DiagnosticText.TryParse(text, valueType, out var parsed, out var parseError))
         {
             error = parseError;
-            return false;
-        }
-        // The same rule that redacts a read refuses a write, so a value the next snapshot would
-        // hide (a string such as "AccessToken=…") is never written from diagnostics either.
-        if (DiagnosticText.Format("", valueType, parsed).Redacted)
-        {
-            error = $"the value for hook {hookIndex} of <{Name}> looks like a secret; it is not written from diagnostics";
             return false;
         }
         if (!_context.TrySetHookValueForDiagnostics(hookIndex, parsed))
