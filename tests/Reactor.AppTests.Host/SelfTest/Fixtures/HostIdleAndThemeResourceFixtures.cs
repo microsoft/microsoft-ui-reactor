@@ -280,6 +280,7 @@ internal static class HostIdleAndThemeResourceFixtures
                         () => [TextBlock("LvItemProbe").Foreground(Theme.Ref(AppKey)), TextBlock("LvSecond")]);
                     var flipGapItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["gap", "shown"]);
                     IReadOnlyList<FlipItem> flipMutable = [flipItem];
+                    var flipGapItemsHeld = ctx.UseMemo<IReadOnlyList<string>>(() => ["held"]);
                     var gvItems = ctx.UseMemo<Element[]>(
                         () => [TextBlock("GvItemProbe").Foreground(Theme.Ref(AppKey))]);
                     var lazyItems = ctx.UseMemo<IReadOnlyList<string>>(() => ["lazy"]);
@@ -316,6 +317,8 @@ internal static class HostIdleAndThemeResourceFixtures
                         Popup(ValidationVisualizerDsl.ValidationVisualizer(VisualizerStyle.Inline,
                             popupContent.Probe("PopupContentProbe", AppKey))),
                         FlipView(flipMutable, static i => "only", static (i, _) => TextBlock(i.Name)),
+                        // In its own panel, so removing it doesn't shift the outer positional diff.
+                        VStack(tick < 2 ? FlipView(flipGapItemsHeld, static s => s, static (_, _) => TextBlock("HeldFlipProbe")) : Empty()),
                         // A FlipView whose first item mounts nothing.
                         FlipView(flipGapItems, static s => s, static (s, _) => s == "gap"
                             ? Empty()
@@ -411,6 +414,16 @@ internal static class HostIdleAndThemeResourceFixtures
                 // </snippet:runtime-resource-edit>
                 await host.WaitForIdleAsync();
                 H.Check("ThemeMemo_SecondEditIsGreen", ProbeColor(target) == Colors.Green, $"color={ProbeColor(target)}");
+
+                // A FlipView an app holds after it leaves the tree does not keep its item elements.
+                var heldFlip = FindFlipViewWithText(target, "HeldFlipProbe");
+                bool flipRecorded = heldFlip is not null && Reconciler.TryGetReactorState(heldFlip, out var flipState)
+                    && flipState.MountedItemElements is { Count: > 0 };
+                setTick!(2);
+                await host.WaitForIdleAsync();
+                H.Check("Replace_UnmountedFlipViewDropsItemRecord", flipRecorded && FindFlipViewWithText(target, "HeldFlipProbe") is null
+                    && !(Reconciler.TryGetReactorState(heldFlip!, out var heldState) && heldState.MountedItemElements is not null),
+                    $"recorded={flipRecorded}");
             }
             finally
             {
@@ -422,6 +435,17 @@ internal static class HostIdleAndThemeResourceFixtures
         }
 
         private sealed class FlipItem { public string Name = ""; }
+
+        private static FlipView? FindFlipViewWithText(DependencyObject root, string text)
+        {
+            if (root is FlipView fv && fv.Items.OfType<TextBlock>().Any(t => t.Text == text)) return fv;
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                if (FindFlipViewWithText(VisualTreeHelper.GetChild(root, i), text) is { } found) return found;
+            }
+            return null;
+        }
 
         private static bool FlipViewHasText(DependencyObject root, string text)
         {

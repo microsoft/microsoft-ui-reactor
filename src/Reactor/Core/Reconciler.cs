@@ -3029,6 +3029,9 @@ public sealed partial class Reconciler : IDisposable
     private void UnmountRecursive(UIElement control)
     {
         NoteUnmountDuringSlotUpdate(control);
+        // Before any early exit: an unmounted control an app still holds must not keep a
+        // FlipView's mounted item elements alive.
+        if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);
 
         // Capture connected animation snapshot while element is still in the visual tree
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
@@ -3460,6 +3463,9 @@ public sealed partial class Reconciler : IDisposable
     private void UnmountAndCollect(UIElement control, List<FrameworkElement> toPool)
     {
         NoteUnmountDuringSlotUpdate(control);
+        // Before any early exit: an unmounted control an app still holds must not keep a
+        // FlipView's mounted item elements alive.
+        if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);
 
         // Capture connected animation snapshot while element is still in the visual tree
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
