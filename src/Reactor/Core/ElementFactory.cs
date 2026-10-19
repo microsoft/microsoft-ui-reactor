@@ -339,8 +339,10 @@ public sealed partial class ElementFactory<T> : IElementFactory
     internal void RefreshRealizedItems(Microsoft.UI.Xaml.Controls.ItemsRepeater repeater)
     {
         // If scrolling restarted after the render was dispatched, skip reconciliation.
-        // The next settle timer will pick it up when scrolling truly stops.
-        if (ShouldSkipRefresh?.Invoke() == true)
+        // The next settle timer will pick it up when scrolling truly stops. A resource refresh
+        // (Theme.NotifyResourcesChanged) is a one-shot pass with no later settle to catch up,
+        // so it reconciles the realized rows even mid-scroll.
+        if (!_reconciler.ResourceRefreshActive && ShouldSkipRefresh?.Invoke() == true)
             return;
 
         // Snapshot the keys we currently believe are realized. The actual

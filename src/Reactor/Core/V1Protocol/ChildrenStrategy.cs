@@ -160,6 +160,47 @@ public sealed record ItemsHost<TElement, TControl>(
     /// Default = reference + value equality via
     /// <see cref="object.Equals(object,object)"/>.</summary>
     public Func<object?, object?, bool>? ItemEquals { get; init; }
+
+    /// <summary>
+    /// Called when an Update keeps the item list (same list, or every item equal). Outside a
+    /// resource-refresh pass that is the whole update. During one
+    /// (<see cref="Theme.NotifyResourcesChanged"/>) each <see cref="Element"/> item is still
+    /// reconciled in place, so theme values inside the kept items are re-applied.
+    /// </summary>
+    internal void RefreshKeptItems(
+        Reconciler reconciler, TControl control,
+        IReadOnlyList<object> oldItems, IReadOnlyList<object> newItems, Action requestRerender)
+    {
+        if (!reconciler.ResourceRefreshActive) return;
+        // Which collection entry each item realized (or -1), recorded when the items were
+        // filled. An item that mounted nothing (Empty, a memo of Empty, ...) has no entry.
+        if (oldItems.Count != newItems.Count
+            || control is not FrameworkElement fe
+            || !Reconciler.TryGetReactorState(fe, out var state)
+            || state.ItemsHostEntries is not { } entries
+            || entries.Length != newItems.Count)
+            return;
+        var collection = GetCollection(control);
+        for (int i = 0; i < newItems.Count; i++)
+        {
+            int entry = entries[i];
+            if (entry < 0 || entry >= collection.Count) continue;
+            if (newItems[i] is Element newChild && oldItems[i] is Element oldChild
+                && collection[entry] is UIElement existing)
+            {
+                var updated = reconciler.ReconcileV1Child(oldChild, newChild, existing, requestRerender);
+                if (updated is not null && !ReferenceEquals(updated, existing))
+                    collection[entry] = updated;
+            }
+        }
+    }
+
+    /// <summary>Records which collection entry each item realized (-1 for none).</summary>
+    internal void RememberEntries(TControl control, int[] entries)
+    {
+        if (control is FrameworkElement fe)
+            Reconciler.GetOrCreateReactorState(fe).ItemsHostEntries = entries;
+    }
 }
 
 /// <summary>Placeholder for future ItemsHost options (virtualization mode,
@@ -352,10 +393,22 @@ public sealed record TreeChildren<TElement, TControl>(
 {
     void IItemsBinderStrategy.Bind(FrameworkElement control, Element? oldElement, Element element, Reconciler reconciler, Action requestRerender, bool isMount)
     {
-        _ = oldElement; // positional rebuild reads only the new tree
         var tree = (TControl)control;
         var nodes = GetNodes((TElement)element);
         bool hasContentElements = HasAnyContentElement(nodes);
+
+        // A resource-refresh pass (Theme.NotifyResourcesChanged) updates every element, even an
+        // unchanged TreeView that is otherwise skipped. When the node tree has the same shape
+        // (the same array, or a fresh but equivalent one from the DSL), refresh mounted node
+        // content in place rather than rebuilding, which would reset expansion, selection and
+        // descendant state.
+        if (!isMount && reconciler.ResourceRefreshActive
+            && oldElement is TElement oldTyped && GetNodes(oldTyped) is var oldNodes && SameShape(oldNodes, nodes))
+        {
+            if (hasContentElements)
+                RefreshTreeContent(tree.RootNodes, oldNodes, nodes, reconciler, requestRerender);
+            return;
+        }
 
         if (isMount)
         {
@@ -412,6 +465,51 @@ public sealed record TreeChildren<TElement, TControl>(
         return node;
     }
 #pragma warning restore CS0618
+
+    // Same node structure: equal text, expansion and children, and content elements in the same
+    // places. Arrays are compared by shape, not reference, because the DSL builds fresh ones.
+    private static bool SameShape(IReadOnlyList<TreeViewNodeData> a, IReadOnlyList<TreeViewNodeData> b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+        {
+            var x = a[i];
+            var y = b[i];
+#pragma warning disable CS0618
+            if (x.Content != y.Content || x.IsExpanded != y.IsExpanded
+                || (x.ContentElement is null) != (y.ContentElement is null)
+                || (x.Children is null) != (y.Children is null))
+                return false;
+#pragma warning restore CS0618
+            if (x.Children is not null && !SameShape(x.Children, y.Children!)) return false;
+        }
+        return true;
+    }
+
+    private static void RefreshTreeContent(
+        IList<WinUI.TreeViewNode> treeNodes, IReadOnlyList<TreeViewNodeData> oldData,
+        IReadOnlyList<TreeViewNodeData> newData, Reconciler reconciler, Action requestRerender)
+    {
+        for (int i = 0; i < treeNodes.Count && i < newData.Count; i++)
+        {
+            var node = treeNodes[i];
+            var o = oldData[i];
+            var d = newData[i];
+#pragma warning disable CS0618
+            if (d.ContentElement is { } content)
+            {
+                // Either side may be Empty, which mounts nothing: reconcile against whatever is
+                // there (possibly nothing) and take the result even when it is null.
+                var existing = node.Content as UIElement;
+                var next = reconciler.ReconcileV1Child(o.ContentElement, content, existing, requestRerender);
+                if (!ReferenceEquals(existing, next)) node.Content = next;
+            }
+#pragma warning restore CS0618
+            if (d.Children is not null && o.Children is not null)
+                RefreshTreeContent(node.Children, o.Children, d.Children, reconciler, requestRerender);
+        }
+    }
 
     private static void UnmountTreeContent(IList<WinUI.TreeViewNode> nodes, Reconciler reconciler)
     {
