@@ -43,7 +43,7 @@ $packagesProps = Join-Path $repoRoot 'Directory.Packages.props'
 # CopilotSkipCliDownload still gates the native CLI download, and that
 # CopilotCliReleaseBaseUrl / COPILOT_CLI_DOWNLOAD_BASE_URL / CopilotCliBinaryPath
 # still behave as Directory.Build.props and README.md describe. Then bump this.
-$reviewedSdkVersion = '1.0.19'
+$reviewedSdkVersion = '1.0.22'
 $sdkPinned = [regex]::Match(
     [IO.File]::ReadAllText($packagesProps),
     '<PackageVersion\s+Include="GitHub\.Copilot\.SDK"\s+Version="(?<v>[^"]+)"').Groups['v'].Value
