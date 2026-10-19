@@ -4257,6 +4257,11 @@ overrides and <code>ThemeRef.Resolve(...)</code> calls in <code>Render</code> al
 new value, memoized subtrees included. It is safe to call from any
 thread; await a host's <code>WaitForIdleAsync()</code> to observe the result.
 Mutating an existing brush's <code>Color</code> in place does not need it.</p>
+<p>A brush you resolve <em>eagerly</em> and keep is not refreshed: a
+<code>ThemeRef.Resolve(...)</code> inside a <code>UseMemo</code> or <code>Memo(key, ...)</code> factory, or a
+resolved brush stored in state, is a fixed value Reactor can't trace back
+to its key. Bind it instead (<code>.Foreground(Theme.Ref(key))</code>), or resolve it
+in <code>Render</code> outside the memo.</p>
 <h3 id="per-element-theme-override-scope">Per-element theme override scope<a class="headerlink" href="#per-element-theme-override-scope" title="Permanent link">&para;</a></h3>
 <p>Pin one panel to a different scheme while the rest of the app follows
 the system. The key is to apply <code>.RequestedTheme(...)</code> to the
