@@ -182,6 +182,10 @@ public sealed partial class Reconciler
         bool providerChanged = !Element.ContextValuesEqual(oldEl.ContextValues, ctxValues);
         if (providerChanged)
             EnterProviderChange();
+        bool themeChanged = (oldModifiers?.RequestedTheme ?? ElementTheme.Default)
+            != (modifiers?.RequestedTheme ?? ElementTheme.Default);
+        if (themeChanged)
+            EnterThemeChange();
 
         // Virtualized hosts realize rows outside this traversal; keep their provider
         // snapshot current (no-op for every other control, and for a decorator that
@@ -368,6 +372,8 @@ public sealed partial class Reconciler
         finally
         {
             _reconcilingElement = prevReconcilingElement;
+            if (themeChanged)
+                ExitThemeChange();
             if (providerChanged)
                 ExitProviderChange();
             if (ctxCount > 0)

@@ -157,7 +157,10 @@ internal sealed class ContextScope
     /// <summary>
     /// Replaces the live stack with <paramref name="snapshot"/>, recording the provider
     /// generation it was taken at (see <see cref="SnapshotGeneration"/>), and returns the
-    /// displaced stack for <see cref="Restore"/>.
+    /// displaced stack for <see cref="Restore"/>. Replaying an outdated snapshot gets a
+    /// fresh token that no live generation and no other replay can ever equal, so a
+    /// snapshot taken from it is never treated as current — not after the replay, and not
+    /// by a later replay of the same outdated snapshot.
     /// </summary>
     /// <param name="snapshot">The provider entries to replay.</param>
     /// <param name="generation">The <see cref="ProviderGeneration"/> <paramref name="snapshot"/> was taken at.</param>
@@ -165,7 +168,7 @@ internal sealed class ContextScope
     {
         var previous = _stack;
         _stack = new List<(ContextBase Context, object? Value)>(snapshot);
-        _replayGenerations.Add(generation);
+        _replayGenerations.Add(generation == ProviderGeneration ? generation : _staleReplaySeq--);
         _replayDepth++;
         _version++;
         return previous;
@@ -222,10 +225,18 @@ internal sealed class ContextCapture
     /// </summary>
     internal ElementTheme PassTheme { get; private set; }
 
-    internal void NotePass(long passId, ElementTheme theme)
+    /// <summary>
+    /// The reconciler's theme generation when the host was last reached. An ancestor's
+    /// <c>RequestedTheme</c> change advances it, so a skipped host is detected as needing
+    /// to re-record its subtree theme (see <see cref="PassTheme"/>).
+    /// </summary>
+    internal long ThemeGeneration { get; private set; } = long.MinValue;
+
+    internal void NotePass(long passId, ElementTheme theme, long themeGeneration)
     {
         PassId = passId;
         PassTheme = theme;
+        ThemeGeneration = themeGeneration;
     }
 
     /// <summary>

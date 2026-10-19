@@ -255,7 +255,7 @@ public class ContextCaptureUnitTests
     }
 
     [Fact]
-    public void Capture_TakenDuringReplay_RecordsTheReplayedGeneration()
+    public void Capture_TakenDuringStaleReplay_IsNeverCurrent()
     {
         // Outer snapshot taken under a provider, then the provider is removed.
         var scope = new ContextScope();
@@ -267,12 +267,42 @@ public class ContextCaptureUnitTests
         // A row realized from the (now outdated) outer snapshot mounts a nested host.
         var previous = scope.Replace(outer.Entries, outer.Generation);
         var nested = Captured(scope);
-        Assert.Equal(outer.Generation, nested.Generation);
+        Assert.NotEqual(scope.ProviderGeneration, nested.Generation);
         Assert.False(nested.IsStale(scope)); // consistent with the replayed stack
         scope.Restore(previous);
 
         // Back in the live traversal the nested snapshot must not look current.
         Assert.True(nested.IsStale(scope));
+
+        // Nor in a later replay of the same outdated snapshot.
+        previous = scope.Replace(outer.Entries, outer.Generation);
+        Assert.True(nested.IsStale(scope));
+        scope.Restore(previous);
+    }
+
+    [Fact]
+    public void RepeatedReuse_ParkedGrandchildStaysStale()
+    {
+        // Copilot round 8: the outer factory keeps its generation-0 snapshot while a
+        // reused row drops its own .Provide; a parked grandchild list still holds the
+        // removed provider. A SECOND reuse must not re-stamp the nested list with gen 0.
+        var scope = new ContextScope();
+        var outer = Captured(scope);                         // gen 0, empty, never refreshed
+
+        var r1 = scope.Replace(outer.Entries, outer.Generation);
+        Push(scope, Theme, "row-local");
+        var grandchild = Captured(scope);                    // [row-local] @ gen 0
+        scope.Pop(1);
+        scope.BumpProviderGeneration();                      // first reuse drops .Provide
+        var inner = Captured(scope);                         // empty @ live gen
+        scope.Restore(r1);
+
+        var r2 = scope.Replace(outer.Entries, outer.Generation); // outer is now stale
+        inner.Refresh(scope);                                // inner refreshed under that replay
+        var r3 = scope.Replace(inner.Entries, inner.Generation); // inner realizes the grandchild
+        Assert.True(grandchild.IsStale(scope));
+        scope.Restore(r3);
+        scope.Restore(r2);
     }
 
     [Fact]

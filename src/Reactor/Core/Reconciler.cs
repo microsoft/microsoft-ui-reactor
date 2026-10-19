@@ -1918,7 +1918,7 @@ public sealed partial class Reconciler : IDisposable
     // without exposing the traversal stack itself.
     internal T ReadContext<T>(Context<T> context) => _contextScope.Read(context);
 
-    internal bool HasActiveContextValues => _contextScope.HasActiveValues || _providerChangeDepth > 0;
+    internal bool HasActiveContextValues => _contextScope.HasActiveValues || _providerChangeDepth > 0 || _themeChangeDepth > 0;
 
     // Depth of non-skip Updates, on the current traversal path, whose element's own
     // ContextValues differ from the previous render's (a provider added, removed or
@@ -1935,6 +1935,22 @@ public sealed partial class Reconciler : IDisposable
     }
 
     internal void ExitProviderChange() => _providerChangeDepth--;
+
+    // Same idea for RequestedTheme: depth of non-skip Updates on the current path whose
+    // own RequestedTheme changed, plus a generation bumped alongside. A virtualized host
+    // records the generation when it is reached; a host skipped below a theme change
+    // would keep the previous pass's subtree theme, so the skip check declines it once
+    // and its Update re-records the pending theme for rows realized later in the pass.
+    private int _themeChangeDepth;
+    private long _themeGeneration;
+
+    internal void EnterThemeChange()
+    {
+        _themeChangeDepth++;
+        _themeGeneration++;
+    }
+
+    internal void ExitThemeChange() => _themeChangeDepth--;
 
     /// <summary>
     /// The host that owns this reconciler, or null for a standalone reconciler or a
@@ -1981,7 +1997,7 @@ public sealed partial class Reconciler : IDisposable
         var state = GetOrCreateReactorState(host);
         var capture = state.ContextCapture ??= new ContextCapture { OwnerType = _reconcilingElement?.GetType() };
         capture.Refresh(_contextScope);
-        capture.NotePass(_passId, _ambientRequestedTheme);
+        capture.NotePass(_passId, _ambientRequestedTheme, _themeGeneration);
         _hasContextCaptures = true;
         return capture;
     }
@@ -2002,7 +2018,7 @@ public sealed partial class Reconciler : IDisposable
         if (TryGetContextCapture(control) is { } capture && capture.IsOwnedBy(newEl))
         {
             capture.Refresh(_contextScope);
-            capture.NotePass(_passId, effectiveTheme);
+            capture.NotePass(_passId, effectiveTheme, _themeGeneration);
         }
     }
 
@@ -2017,7 +2033,7 @@ public sealed partial class Reconciler : IDisposable
     internal void RefreshContextCaptureOnSkip(UIElement control, Element newEl, ElementTheme effectiveTheme)
     {
         if (TryGetContextCapture(control) is not { } capture || !capture.IsOwnedBy(newEl)) return;
-        capture.NotePass(_passId, effectiveTheme);
+        capture.NotePass(_passId, effectiveTheme, _themeGeneration);
         var own = newEl.ContextValues;
         if (own is not { Count: > 0 })
         {
@@ -2037,14 +2053,14 @@ public sealed partial class Reconciler : IDisposable
     {
         var capture = new ContextCapture();
         capture.Refresh(_contextScope);
-        capture.NotePass(_passId, _ambientRequestedTheme);
+        capture.NotePass(_passId, _ambientRequestedTheme, _themeGeneration);
         return capture;
     }
 
     internal void RefreshLiveContext(ContextCapture capture)
     {
         capture.Refresh(_contextScope);
-        capture.NotePass(_passId, _ambientRequestedTheme);
+        capture.NotePass(_passId, _ambientRequestedTheme, _themeGeneration);
     }
 
     /// <summary>
@@ -2113,6 +2129,7 @@ public sealed partial class Reconciler : IDisposable
         private readonly List<UIElement>? _previousRoots;
         private readonly int _previousBoundaryDepth;
         private readonly int _previousProviderChangeDepth;
+        private readonly int _previousThemeChangeDepth;
         private readonly Element? _previousReconcilingElement;
         private readonly StaggerScope? _previousStagger;
         private readonly bool _swapHost;
@@ -2126,6 +2143,7 @@ public sealed partial class Reconciler : IDisposable
             _previousRoots = owner._boundaryMountRoots;
             _previousBoundaryDepth = owner._errorBoundaryDepth;
             _previousProviderChangeDepth = owner._providerChangeDepth;
+            _previousThemeChangeDepth = owner._themeChangeDepth;
             _previousReconcilingElement = owner._reconcilingElement;
             _previousStagger = _staggerScope;
 
@@ -2133,6 +2151,7 @@ public sealed partial class Reconciler : IDisposable
             owner._boundaryMountRoots = null;
             owner._errorBoundaryDepth = 0;
             owner._providerChangeDepth = 0;
+            owner._themeChangeDepth = 0;
             owner._reconcilingElement = null;
             owner._ambientRequestedTheme = ambientTheme;
             _staggerScope = null;
@@ -2158,6 +2177,7 @@ public sealed partial class Reconciler : IDisposable
             owner._boundaryMountRoots = _previousRoots;
             owner._errorBoundaryDepth = _previousBoundaryDepth;
             owner._providerChangeDepth = _previousProviderChangeDepth;
+            owner._themeChangeDepth = _previousThemeChangeDepth;
             owner._reconcilingElement = _previousReconcilingElement;
             _staggerScope = _previousStagger;
         }
@@ -3023,7 +3043,8 @@ public sealed partial class Reconciler : IDisposable
         // A virtualized host has no realized consumer for rows it has yet to realize,
         // so its own snapshot stands in for them: if the providers above it changed,
         // decline the skip so the Update path re-snapshots before the next realization.
-        if (TryGetContextCapture(control) is { } capture && capture.IsStale(_contextScope))
+        if (TryGetContextCapture(control) is { } capture
+            && (capture.IsStale(_contextScope) || capture.ThemeGeneration != _themeGeneration))
             return true;
 
         bool found = false;

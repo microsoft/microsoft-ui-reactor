@@ -489,6 +489,80 @@ internal static class RealizationIsolationFixtures
         }
     }
 
+    // ── Stable list below an ancestor theme change, realized in the same pass ─
+
+    // The list element is reference-stable (child-level skip) and its items do not
+    // change; a later sibling's effect scrolls it and forces layout during the same
+    // update that flips the ancestor's RequestedTheme. Newly realized rows must resolve
+    // against the new theme, not the host's still-old ActualTheme.
+    internal sealed class StableListRealizedDuringThemeChangingPass_UsesPendingTheme(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const string SrcKey = "IsoStablePassSrcBrush";
+        private const string TargetKey = "IsoStablePassTargetBrush";
+
+        public override async Task RunAsync()
+        {
+            var light = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 0, 0, 180));
+            var dark = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 180, 0, 0));
+            var dict = new ResourceDictionary();
+            dict.ThemeDictionaries["Light"] = new ResourceDictionary { [SrcKey] = light };
+            dict.ThemeDictionaries["Dark"] = new ResourceDictionary { [SrcKey] = dark };
+            Application.Current.Resources.MergedDictionaries.Add(dict);
+            ThemeRef.InvalidateResolutionCache();
+            s_forceLayout = null;
+            try
+            {
+                bool appIsDark = Application.Current.RequestedTheme == ApplicationTheme.Dark;
+                var first = appIsDark ? ElementTheme.Light : ElementTheme.Dark;
+                var second = appIsDark ? ElementTheme.Dark : ElementTheme.Light;
+                SolidColorBrush BrushFor(ElementTheme t) => t == ElementTheme.Dark ? dark : light;
+
+                var stableList = LazyVStack<int>(Enumerable.Range(0, 300).ToList(), i => i.ToString(), (i, _) =>
+                        TextBlock($"sp{i}").Height(30).Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey))))
+                    .Height(300);
+
+                var host = H.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (phase, setPhase) = ctx.UseState(0);
+                    return VStack(
+                        Button("IsoStablePassGo", () => setPhase(1)),
+                        VStack(stableList, Component<ForcerWithDep, IndexProps>(new IndexProps(phase)))
+                            .RequestedTheme(phase == 0 ? first : second));
+                });
+                await Harness.Render();
+
+                int realizedInPass = 0;
+                s_forceLayout = () =>
+                {
+                    var sv = H.FindControl<ScrollViewer>(s => s.Content is ItemsRepeater)!;
+                    sv.ChangeView(null, 150 * 30, null, disableAnimation: true);
+                    sv.UpdateLayout();
+                    (sv.XamlRoot?.Content as UIElement)?.UpdateLayout();
+                    realizedInPass = H.FindAllControls<TextBlock>(t => t.Text?.StartsWith("sp1", StringComparison.Ordinal) == true
+                        && int.TryParse(t.Text.AsSpan(2), out var n) && n >= 100).Count;
+                };
+
+                H.ClickButton("IsoStablePassGo");
+                await Harness.Render();
+                s_forceLayout = null;
+
+                var rows = H.FindAllControls<TextBlock>(t => t.Text?.StartsWith("sp1", StringComparison.Ordinal) == true
+                        && int.TryParse(t.Text.AsSpan(2), out var n) && n >= 100)
+                    .ToList();
+                int right = rows.Count(t => t.Resources.TryGetValue(TargetKey, out var b) && ReferenceEquals(b, BrushFor(second)));
+                H.Check("Iso_StablePass_RowsRealizedInPass", realizedInPass > 0, $"inPass={realizedInPass}");
+                H.Check("Iso_StablePass_RowsUseNewTheme", rows.Count > 0 && right == rows.Count, $"right={right}/{rows.Count}");
+            }
+            finally
+            {
+                s_forceLayout = null;
+                Application.Current.Resources.MergedDictionaries.Remove(dict);
+                ThemeRef.InvalidateResolutionCache();
+            }
+        }
+    }
+
     // ── Ancestor theme changes while the host is skipped ─────────────────────
 
     // No Context providers anywhere: the provider checks are not even consulted. The
