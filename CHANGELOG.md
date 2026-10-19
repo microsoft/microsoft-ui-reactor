@@ -91,7 +91,9 @@ Conventions for contributors:
   that cache only on a theme or palette change, so such an edit was invisible to `ThemeRef`
   modifiers, overrides and `ThemeRef.Resolve`. The call clears the cache and re-renders
   every live host past memoization and the skip of unchanged elements. Callable from
-  any thread (issue #1327).
+  any thread (issue #1327). A brush resolved eagerly and kept (`ThemeRef.Resolve` inside a
+  memo factory, or stored in state) is a fixed value and is not refreshed; bind it with
+  `Theme.Ref` instead.
 
 - **Getting Started documents the single-file path.** A Reactor app does not need
   a `.csproj`: .NET 10 runs a lone `.cs` file whose `#:package` / `#:property`

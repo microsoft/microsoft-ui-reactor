@@ -460,6 +460,12 @@ new value, memoized subtrees included. It is safe to call from any
 thread; await a host's `WaitForIdleAsync()` to observe the result.
 Mutating an existing brush's `Color` in place does not need it.
 
+A brush you resolve *eagerly* and keep is not refreshed: a
+`ThemeRef.Resolve(...)` inside a `UseMemo` or `Memo(key, ...)` factory, or a
+resolved brush stored in state, is a fixed value Reactor can't trace back
+to its key. Bind it instead (`.Foreground(Theme.Ref(key))`), or resolve it
+in `Render` outside the memo.
+
 ### Per-element theme override scope
 
 Pin one panel to a different scheme while the rest of the app follows

@@ -252,11 +252,11 @@ internal static class ChildReconciler
         if (reconciler.CanUpdate(oldEl, newEl))
         {
             existingControl ??= children.Get(i);
-            var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate);
+            var replacement = reconciler.UpdateChild(oldEl, newEl, existingControl, requestRerender);
             if (replacement is not null)
             {
                 // Child type changed at runtime — replace in place
-                if (!unmountedByUpdate) reconciler.UnmountChild(existingControl);
+                reconciler.UnmountChild(existingControl);
                 children.Replace(i, replacement);
             }
         }
@@ -346,10 +346,10 @@ internal static class ChildReconciler
             if (prefixLen < childCount)
             {
                 existingControl ??= children.Get(prefixLen);
-                var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate);
+                var replacement = reconciler.UpdateChild(oldEl, newEl, existingControl, requestRerender);
                 if (replacement is not null)
                 {
-                    if (!unmountedByUpdate) reconciler.UnmountChild(existingControl);
+                    reconciler.UnmountChild(existingControl);
                     children.Replace(prefixLen, replacement);
                 }
             }
@@ -401,10 +401,10 @@ internal static class ChildReconciler
             if (panelIdx >= 0 && panelIdx < childCount)
             {
                 existingControl ??= children.Get(panelIdx);
-                var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate);
+                var replacement = reconciler.UpdateChild(oldEl, newEl, existingControl, requestRerender);
                 if (replacement is not null)
                 {
-                    if (!unmountedByUpdate) reconciler.UnmountChild(existingControl);
+                    reconciler.UnmountChild(existingControl);
                     children.Replace(panelIdx, replacement);
                 }
             }
@@ -771,16 +771,14 @@ internal static class ChildReconciler
             // that adds a CanSkipUpdate fast-path here MUST mirror Reconciler.Update's skip arm
             // (ApplyThemeBindings + ApplyResourceOverrides) or it will re-introduce the #701/#675
             // staleness — see Issue675ResourceOverrideSkipFixtures.KeyedMiddleReorderReResolves.
-            var existing = _children.Get(panelIdx);
-            var replacement = _reconciler.UpdateChildTracked(
+            var replacement = _reconciler.UpdateChild(
                 _oldChildren[_oldStart + oldRelIdx],
                 _newChildren[_newStart + newIdx],
-                existing,
-                _requestRerender,
-                out var unmountedByUpdate);
+                _children.Get(panelIdx),
+                _requestRerender);
             if (replacement is not null)
             {
-                if (!unmountedByUpdate) _reconciler.UnmountChild(existing);
+                _reconciler.UnmountChild(_children.Get(panelIdx));
                 _children.Replace(panelIdx, replacement);
             }
         }

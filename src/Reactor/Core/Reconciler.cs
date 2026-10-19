@@ -539,10 +539,10 @@ public sealed partial class Reconciler : IDisposable
             if (i < 0 || i >= items.Length) continue;
             var next = ReconcileV1Child(items[i], items[i], existing, requestRerender);
             if (next is not null && !ReferenceEquals(next, existing))
+            {
                 cc.Content = next;
-            // The item's own automation name can change in place too (a keyed memo whose output
-            // reads a resource), so forward it after every reconcile, as RefreshRealizedContainers does.
-            PropagateItemAutomationName(container, cc.Content as UIElement);
+                PropagateItemAutomationName(container, next);
+            }
         }
     }
 
@@ -929,31 +929,6 @@ public sealed partial class Reconciler : IDisposable
         public HashSet<string>? ManagedResourceKeys;
 
         /// <summary>
-        /// The factory output each <see cref="KeyedMemoElement"/> layer realized on this control
-        /// last, keyed by its <see cref="KeyedMemoElement.MemoKey"/>, so a resource-refresh pass
-        /// can diff a fresh output against what is mounted (<c>RefreshKeyedMemo</c>). Nested memos,
-        /// including ones separated by a transparent decorator such as a flyout's target, share
-        /// one control, so each layer keeps its own entry: the first inline, any others in
-        /// <see cref="MoreKeyedMemoOutputs"/>. Stored here, not in a table keyed by the managed
-        /// wrapper, for the same reason as <see cref="ManagedResourceKeys"/>. Cleared on pool
-        /// return; read only for a keyed memo's control, and guarded by <c>CanUpdate</c>.
-        /// </summary>
-        public object? KeyedMemoKey;
-
-        /// <summary>The output recorded for <see cref="KeyedMemoKey"/>.</summary>
-        public Element? KeyedMemoOutput;
-
-        /// <summary>Outputs of further memo layers sharing this control.</summary>
-        public List<KeyValuePair<object, Element>>? MoreKeyedMemoOutputs;
-
-        /// <summary>
-        /// For a templated <c>FlipView</c>: per logical item, the element it mounted or was last updated to and whether it realized a control,
-        /// so an update diffs against what is realized rather than a view rebuilt from the old
-        /// element (a rebuild re-resolves eagerly read theme brushes to their current values).
-        /// </summary>
-        public List<(Element Element, bool HasControl)>? MountedItemElements;
-
-        /// <summary>
         /// For an <c>ItemsHost</c> control: the collection entry each logical item realized
         /// (-1 when it mounted nothing), recorded when the items are filled, so a resource
         /// refresh can reconcile kept items in place (<c>ItemsHost.RefreshKeptItems</c>).
@@ -1291,26 +1266,6 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Drops the resource-refresh snapshots on a control (each keyed memo layer's recorded output,
-    /// a FlipView's mounted items, an ItemsHost's entry map). They hold element graphs and describe
-    /// one mount, so a control leaving the tree, to the pool or for good, must not keep them.
-    /// </summary>
-    internal static void ClearRefreshSnapshots(FrameworkElement fe)
-    {
-        if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
-            ClearRefreshSnapshots(state);
-    }
-
-    internal static void ClearRefreshSnapshots(ReactorState state)
-    {
-        state.KeyedMemoKey = null;
-        state.KeyedMemoOutput = null;
-        state.MoreKeyedMemoOutputs = null;
-        state.MountedItemElements = null;
-        state.ItemsHostEntries = null;
-    }
-
-    /// <summary>
     /// Clears the Current* user-handler delegates from the per-element
     /// ModifierEventHandlerState while leaving the trampoline subscription on the
     /// underlying control. Call from <see cref="ElementPool.CleanElement"/>
@@ -1361,9 +1316,8 @@ public sealed partial class Reconciler : IDisposable
         state.EchoSuppressScopeDepth = 0;
         state.PendingEchoMatch = null;
         state.PendingLabeledBy = null;
-        // The refresh snapshots can root an element graph (a keyed memo's realized output holds
-        // its callbacks and setters); a detached, app-held control must not keep it alive.
-        ClearRefreshSnapshots(state);
+        // Describes the items this control showed; a detached control has none.
+        state.ItemsHostEntries = null;
         // Issue #1262 — a retired control must not keep a ValidationContext (or a
         // pending async rule) alive through a binding the normal FormField /
         // ValidationRule unmount path never got to clear. Neutralize before dropping
@@ -1731,7 +1685,7 @@ public sealed partial class Reconciler : IDisposable
                 rs.EchoSuppressScopeDepth = 0;
                 rs.PendingEchoMatch = null;
                 rs.PendingLabeledBy = null;
-                ClearRefreshSnapshots(rs);
+                rs.ItemsHostEntries = null;
                 rs.Element = null;
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).
@@ -2275,8 +2229,6 @@ public sealed partial class Reconciler : IDisposable
             {
                 _forceFullRenderActive = false;
                 _resourceRefreshActive = false;
-                _freshForWrapperMount = null;
-                _freshMountFromDispatch = null;
                 _hotReloadRetryActive = false;
                 _dirtyAncestorPath?.Clear();
                 _dirtyPathChildren?.Clear();
@@ -2988,30 +2940,6 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// <see cref="Update"/> for a hosted child slot (dialog/popup/flyout/tooltip content, tree and
-    /// list item containers) whose owner swaps a replacement in. When the update hands back a
-    /// different control, the old one is unmounted here (unless the update already did) so its
-    /// effects, refs and unmount callbacks don't outlive it. Returns the replacement, or null
-    /// when the existing control was kept: a drop-in for <see cref="Update"/> at those sites.
-    /// </summary>
-    internal UIElement? UpdateHostedChild(Element oldEl, Element newEl, UIElement existing, Action requestRerender)
-    {
-        var replacement = UpdateSlotChild(oldEl, newEl, existing, requestRerender, out var unmountedByUpdate);
-        if (replacement is null || IsSameControl(replacement, existing)) return null;
-        if (!unmountedByUpdate) Unmount(existing);
-        return replacement;
-    }
-
-    /// <summary>
-    /// <see cref="UpdateChild"/> for a caller that unmounts a replaced control: reports whether
-    /// the update already unmounted it (e.g. a same-key Memo remounting its output during a
-    /// resource refresh), so the caller doesn't unmount it twice.
-    /// </summary>
-    internal UIElement? UpdateChildTracked(Element oldEl, Element newEl, UIElement control, Action requestRerender,
-        out bool unmountedByUpdate)
-        => UpdateSlotChild(oldEl, newEl, control, requestRerender, out unmountedByUpdate);
-
-    /// <summary>
     /// Unmounts a child control. Public so registered type handlers can unmount children.
     /// </summary>
     public void UnmountChild(UIElement control)
@@ -3052,9 +2980,6 @@ public sealed partial class Reconciler : IDisposable
     private void UnmountRecursive(UIElement control)
     {
         NoteUnmountDuringSlotUpdate(control);
-        // Before any early exit: an unmounted control an app still holds must not keep the
-        // refresh snapshots' element graphs alive.
-        if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);
 
         // Capture connected animation snapshot while element is still in the visual tree
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
@@ -3486,9 +3411,6 @@ public sealed partial class Reconciler : IDisposable
     private void UnmountAndCollect(UIElement control, List<FrameworkElement> toPool)
     {
         NoteUnmountDuringSlotUpdate(control);
-        // Before any early exit: an unmounted control an app still holds must not keep the
-        // refresh snapshots' element graphs alive.
-        if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);
 
         // Capture connected animation snapshot while element is still in the visual tree
         if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
@@ -5124,7 +5046,7 @@ public sealed partial class Reconciler : IDisposable
             var existingTip = WinUI.ToolTipService.GetToolTip(fe) as UIElement;
             if (oldTipEl is not null && existingTip is not null && CanUpdate(oldTipEl, m.RichToolTip))
             {
-                var replacement = UpdateHostedChild(oldTipEl, m.RichToolTip, existingTip, requestRerender);
+                var replacement = Update(oldTipEl, m.RichToolTip, existingTip, requestRerender);
                 if (replacement is not null)
                     WinUI.ToolTipService.SetToolTip(fe, replacement);
             }
@@ -6508,7 +6430,7 @@ public sealed partial class Reconciler : IDisposable
             var oldContent = oldEl is ContentFlyoutElement oldCf ? oldCf.Content : null;
             if (oldContent is not null && flyout.Content is UIElement existingContent && CanUpdate(oldContent, newCf.Content))
             {
-                var replacement = UpdateHostedChild(oldContent, newCf.Content, existingContent, requestRerender);
+                var replacement = Update(oldContent, newCf.Content, existingContent, requestRerender);
                 if (replacement is not null && !ReferenceEquals(flyout.Content, replacement))
                     flyout.Content = replacement;
             }
@@ -6535,7 +6457,7 @@ public sealed partial class Reconciler : IDisposable
         {
             if (CanUpdate(oldEl, newEl))
             {
-                var replacement = UpdateHostedChild(oldEl, newEl, existingCtrl, requestRerender);
+                var replacement = Update(oldEl, newEl, existingCtrl, requestRerender);
                 if (replacement is not null && !ReferenceEquals(plainFlyout.Content, replacement))
                     plainFlyout.Content = replacement;
             }

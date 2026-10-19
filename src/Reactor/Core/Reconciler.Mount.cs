@@ -119,7 +119,7 @@ public sealed partial class Reconciler
             // factory output) when it changes, so the mounted inner is never re-derived from
             // the old factory. Any modifiers on the wrapper itself are applied by the
             // post-dispatch ApplyModifiers below, exactly like any other element.
-            KeyedMemoElement km => MountKeyedMemo(km, requestRerender),
+            KeyedMemoElement km => Mount(WithWrapperKey(km.Factory() ?? EmptyElement.Instance, km.Key), requestRerender),
             // EmptyElement is a no-op sentinel — callers (Reconcile, panel
             // children loops, ChildReconciler) already filter it before
             // reaching Mount, but MountContext.MountChild does not, so a V1
@@ -276,86 +276,6 @@ public sealed partial class Reconciler
         wrapperKey is null || inner is EmptyElement || inner.Key == wrapperKey
             ? inner
             : inner with { Key = wrapperKey };
-
-    private UIElement? MountKeyedMemo(KeyedMemoElement km, Action requestRerender)
-    {
-        var inner = WithWrapperKey(km.Factory() ?? EmptyElement.Instance, km.Key);
-        var control = Mount(inner, requestRerender);
-        // Nested memos share the realized control, so each layer records its own output. On a
-        // fresh control the layers inside this one have already recorded; this one goes on top.
-        if (control is FrameworkElement fe)
-        {
-            var state = GetOrCreateReactorState(fe);
-            SetKeyedMemoOutput(state, km.MemoKey, CountKeyedMemoOutputs(state, km.MemoKey), inner);
-        }
-        return control;
-    }
-
-    // The outputs recorded on a control are kept in the order their layers mounted, innermost
-    // first; layers with an equal MemoKey are told apart by that order (nth among the key's
-    // entries). RefreshKeyedMemo walks them outermost first.
-
-    internal static int CountKeyedMemoOutputs(ReactorState state, object memoKey)
-    {
-        int count = state.KeyedMemoKey is { } first && first.Equals(memoKey) ? 1 : 0;
-        if (state.MoreKeyedMemoOutputs is { } more)
-            count += more.Count(entry => entry.Key.Equals(memoKey));
-        return count;
-    }
-
-    /// <summary>The <paramref name="nth"/> output recorded for <paramref name="memoKey"/>, or null.</summary>
-    internal static Element? GetKeyedMemoOutput(ReactorState state, object memoKey, int nth)
-    {
-        if (state.KeyedMemoKey is { } first && first.Equals(memoKey))
-        {
-            if (nth == 0) return state.KeyedMemoOutput;
-            nth--;
-        }
-        if (state.MoreKeyedMemoOutputs is { } more)
-        {
-            foreach (var entry in more.Where(entry => entry.Key.Equals(memoKey)))
-            {
-                if (nth == 0) return entry.Value;
-                nth--;
-            }
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Replaces the <paramref name="nth"/> output recorded for <paramref name="memoKey"/>, or
-    /// appends one when fewer are recorded.
-    /// </summary>
-    internal static void SetKeyedMemoOutput(ReactorState state, object memoKey, int nth, Element output)
-    {
-        if (state.KeyedMemoKey is null)
-        {
-            state.KeyedMemoKey = memoKey;
-            state.KeyedMemoOutput = output;
-            return;
-        }
-        if (state.KeyedMemoKey.Equals(memoKey))
-        {
-            if (nth == 0)
-            {
-                state.KeyedMemoOutput = output;
-                return;
-            }
-            nth--;
-        }
-        var more = state.MoreKeyedMemoOutputs ??= new();
-        for (int i = 0; i < more.Count; i++)
-        {
-            if (!more[i].Key.Equals(memoKey)) continue;
-            if (nth == 0)
-            {
-                more[i] = new(memoKey, output);
-                return;
-            }
-            nth--;
-        }
-        more.Add(new(memoKey, output));
-    }
 
     /// <summary>
     /// Final dispatch arm: the four resolution arms in <see cref="Mount"/>
