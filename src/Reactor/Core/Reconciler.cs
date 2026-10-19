@@ -937,6 +937,7 @@ public sealed partial class Reconciler : IDisposable
         /// </summary>
         public Action<FrameworkElement>? OnUnmountAction;
 
+        /// <summary>
         /// The factory output each <see cref="KeyedMemoElement"/> layer realized on this control
         /// last, keyed by its <see cref="KeyedMemoElement.MemoKey"/>, so a resource-refresh pass
         /// can diff a fresh output against what is mounted (<c>RefreshKeyedMemo</c>). Nested memos,
