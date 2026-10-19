@@ -1208,7 +1208,9 @@ public sealed partial class Reconciler : IDisposable
             state.PendingEchoMatch = null;
             state.PendingLabeledBy = null;
             // A pooled host must not hand its provider values (and the objects they
-            // reference) to an unrelated renter.
+            // reference) to an unrelated renter. Empty the capture before dropping it:
+            // the host's ElementFactory aliases the same instance.
+            state.ContextCapture?.Clear();
             state.ContextCapture = null;
         }
     }
@@ -1256,6 +1258,10 @@ public sealed partial class Reconciler : IDisposable
         state.ValidationRootBinding = null;
         state.ValidationRuleBinding = null;
         state.ValidationAttachedBinding = null;
+        // A retired host's native subtree (and its ItemTemplate factory, which aliases
+        // this capture) can outlive Reactor ownership — e.g. a nested list inside a
+        // parked repeater row — so release the provider values, not just the reference.
+        state.ContextCapture?.Clear();
         state.ContextCapture = null;
     }
 
@@ -1908,17 +1914,26 @@ public sealed partial class Reconciler : IDisposable
     // Depth of non-skip Updates, on the current traversal path, whose element's own
     // ContextValues differ from the previous render's (a provider added, removed or
     // changed). Removing the LAST provider leaves the live stack empty, which used to
-    // short-circuit every context skip check (HasActiveContextValues) so a
-    // reference-stable consumer below kept the removed value; removing one of several
-    // leaves a shorter stack that a host's snapshot prefix test cannot tell apart from
-    // an ancestor's view. Counting the change lets both checks see it.
+    // short-circuit every context skip check (HasActiveContextValues), so a
+    // reference-stable consumer below kept the removed value. Host snapshots use the
+    // longer-lived ContextScope.ProviderGeneration instead (bumped alongside).
     private int _providerChangeDepth;
 
-    internal bool InProviderChangeSubtree => _providerChangeDepth > 0;
-
-    internal void EnterProviderChange() => _providerChangeDepth++;
+    internal void EnterProviderChange()
+    {
+        _providerChangeDepth++;
+        _contextScope.BumpProviderGeneration();
+    }
 
     internal void ExitProviderChange() => _providerChangeDepth--;
+
+    /// <summary>
+    /// The host that owns this reconciler, or null for a standalone reconciler or a
+    /// <c>ReactorHostControl</c>. Window-scoped hooks resolve "the rendering host" through
+    /// <see cref="ReactorApp.ActiveHostInternal"/>, which is only pushed for the host's
+    /// own render pass; realization restores it from here.
+    /// </summary>
+    internal ReactorHost? OwnerHost { get; set; }
 
     // ── Context replay for virtualized realization ─────────────────────
     //
@@ -1929,7 +1944,7 @@ public sealed partial class Reconciler : IDisposable
     // the middle of an unrelated subtree's update (a sibling's synchronous
     // UpdateLayout), so the live stack is either empty or someone else's. Each
     // such host captures the stack whenever it is reconciled, and the realization
-    // callbacks replay that capture around the row mount.
+    // callbacks replay that capture around the row mount (see EnterRealization).
 
     // Gates the per-control capture lookups so apps without a virtualized host
     // never pay the attached-state read.
@@ -1956,7 +1971,7 @@ public sealed partial class Reconciler : IDisposable
             $"{host.GetType().Name} is not covered by MayHostContextCapture; its capture would never refresh.");
         var state = GetOrCreateReactorState(host);
         var capture = state.ContextCapture ??= new ContextCapture { OwnerType = _reconcilingElement?.GetType() };
-        capture.Refresh(_contextScope);
+        capture.Refresh(_contextScope, _ambientRequestedTheme);
         _hasContextCaptures = true;
         return capture;
     }
@@ -1972,31 +1987,31 @@ public sealed partial class Reconciler : IDisposable
     /// Re-snapshots a host's provider stack when <paramref name="newEl"/> is the element that
     /// owns the capture; a no-op for any other control or element.
     /// </summary>
-    internal void RefreshContextCapture(UIElement control, Element newEl)
+    internal void RefreshContextCapture(UIElement control, Element newEl, ElementTheme effectiveTheme)
     {
         if (TryGetContextCapture(control) is { } capture && capture.IsOwnedBy(newEl))
-            capture.Refresh(_contextScope);
+            capture.Refresh(_contextScope, effectiveTheme);
     }
 
     /// <summary>
-    /// Skip-arm counterpart of <see cref="RefreshContextCapture(UIElement, Element)"/>. The
-    /// skip arm runs before the element's own <c>ContextValues</c> are pushed, so they are
-    /// pushed here for the snapshot. A decorator sharing the host's control is not the
-    /// owner, so a skipped decorator leaves the host's snapshot (taken at the host's own
-    /// depth) untouched; if a provider above it changed, the stale check declines that
-    /// skip and the decorator's Update reaches the host element.
+    /// Skip-arm counterpart of <see cref="RefreshContextCapture"/>. The skip arm runs
+    /// before the element's own <c>ContextValues</c> are pushed, so they are pushed here
+    /// for the snapshot. A decorator sharing the host's control is not the owner, so a
+    /// skipped decorator leaves the host's snapshot (taken at the host's own depth)
+    /// untouched; if a provider above it changed, the stale check declines that skip and
+    /// the decorator's Update reaches the host element.
     /// </summary>
-    internal void RefreshContextCaptureOnSkip(UIElement control, Element newEl)
+    internal void RefreshContextCaptureOnSkip(UIElement control, Element newEl, ElementTheme effectiveTheme)
     {
         if (TryGetContextCapture(control) is not { } capture || !capture.IsOwnedBy(newEl)) return;
         var own = newEl.ContextValues;
         if (own is not { Count: > 0 })
         {
-            capture.Refresh(_contextScope);
+            capture.Refresh(_contextScope, effectiveTheme);
             return;
         }
         _contextScope.Push(own);
-        try { capture.Refresh(_contextScope); }
+        try { capture.Refresh(_contextScope, effectiveTheme); }
         finally { _contextScope.Pop(own.Count); }
     }
 
@@ -2007,24 +2022,32 @@ public sealed partial class Reconciler : IDisposable
     internal ContextCapture CaptureLiveContext()
     {
         var capture = new ContextCapture();
-        capture.Refresh(_contextScope);
+        capture.Refresh(_contextScope, _ambientRequestedTheme);
         return capture;
     }
 
-    internal void RefreshLiveContext(ContextCapture capture) => capture.Refresh(_contextScope);
+    internal void RefreshLiveContext(ContextCapture capture) => capture.Refresh(_contextScope, _ambientRequestedTheme);
 
     /// <summary>
-    /// Replaces the live provider stack with <paramref name="capture"/> until the
-    /// returned scope is disposed. A null capture is a no-op.
+    /// Opens a realization frame for building a row outside (or re-entrantly inside) the
+    /// traversal. Until the returned scope is disposed:
+    /// <list type="bullet">
+    ///   <item><description>the live provider stack is replaced with <paramref name="capture"/>
+    ///     and the ambient theme with the one captured at the host;</description></item>
+    ///   <item><description>the in-flight pass's per-subtree bookkeeping is set aside, so the
+    ///     row is not recorded in an ErrorBoundary's rollback lists (a failing boundary child
+    ///     would otherwise tear down a live row in an unrelated list), a row that throws gets
+    ///     its own in-tree fallback instead of escaping into WinUI layout, and stagger and
+    ///     provider-change state from the surrounding subtree does not leak in;</description></item>
+    ///   <item><description>the owning host is the active host, so window-scoped hooks in the
+    ///     row resolve this window even outside the host's render pass.</description></item>
+    /// </list>
+    /// A null capture still isolates; it just leaves the provider stack and theme as they are.
     /// </summary>
-    internal CapturedContextScope EnterCapturedContext(ContextCapture? capture)
-        => capture is null
-            ? default
-            : new CapturedContextScope(_contextScope, _contextScope.Replace(capture.Entries));
+    internal RealizationFrame EnterRealization(ContextCapture? capture) => new(this, capture);
 
-    /// <inheritdoc cref="EnterCapturedContext(ContextCapture?)"/>
-    internal CapturedContextScope EnterCapturedContext(UIElement host)
-        => EnterCapturedContext(TryGetContextCapture(host));
+    /// <inheritdoc cref="EnterRealization(ContextCapture?)"/>
+    internal RealizationFrame EnterRealization(UIElement host) => EnterRealization(TryGetContextCapture(host));
 
     /// <summary>
     /// Registers <paramref name="host"/> (see <see cref="CaptureContextForHost"/>) and
@@ -2036,18 +2059,70 @@ public sealed partial class Reconciler : IDisposable
             capturing.ContextCapture = CaptureContextForHost(host);
     }
 
-    internal readonly struct CapturedContextScope : IDisposable
+    internal readonly struct RealizationFrame : IDisposable
     {
-        private readonly ContextScope? _scope;
-        private readonly List<(ContextBase Context, object? Value)>? _previous;
+        private readonly Reconciler _owner;
+        private readonly List<(ContextBase Context, object? Value)>? _previousStack;
+        private readonly ElementTheme _previousTheme;
+        private readonly List<UIElement>? _previousJournal;
+        private readonly List<UIElement>? _previousRoots;
+        private readonly int _previousBoundaryDepth;
+        private readonly int _previousProviderChangeDepth;
+        private readonly Element? _previousReconcilingElement;
+        private readonly StaggerScope? _previousStagger;
+        private readonly bool _swapHost;
+        private readonly ReactorHost? _previousHost;
 
-        internal CapturedContextScope(ContextScope scope, List<(ContextBase Context, object? Value)> previous)
+        internal RealizationFrame(Reconciler owner, ContextCapture? capture)
         {
-            _scope = scope;
-            _previous = previous;
+            _owner = owner;
+            _previousTheme = owner._ambientRequestedTheme;
+            _previousJournal = owner._boundaryMountJournal;
+            _previousRoots = owner._boundaryMountRoots;
+            _previousBoundaryDepth = owner._errorBoundaryDepth;
+            _previousProviderChangeDepth = owner._providerChangeDepth;
+            _previousReconcilingElement = owner._reconcilingElement;
+            _previousStagger = _staggerScope;
+
+            owner._boundaryMountJournal = null;
+            owner._boundaryMountRoots = null;
+            owner._errorBoundaryDepth = 0;
+            owner._providerChangeDepth = 0;
+            owner._reconcilingElement = null;
+            _staggerScope = null;
+
+            if (capture is not null)
+            {
+                _previousStack = owner._contextScope.Replace(capture.Entries);
+                owner._ambientRequestedTheme = capture.AmbientTheme;
+            }
+            else
+            {
+                _previousStack = null;
+            }
+
+            _swapHost = owner.OwnerHost is not null;
+            _previousHost = _swapHost ? ReactorApp.ActiveHostInternal : null;
+            if (_swapHost)
+                ReactorApp.ActiveHostInternal = owner.OwnerHost;
         }
 
-        public void Dispose() => _scope?.Restore(_previous!);
+        public void Dispose()
+        {
+            var owner = _owner;
+            if (owner is null) return;
+            if (_previousStack is not null)
+                owner._contextScope.Restore(_previousStack);
+            if (_swapHost)
+                ReactorApp.ActiveHostInternal = _previousHost;
+            owner._ambientRequestedTheme = _previousTheme;
+            owner._boundaryMountJournal = _previousJournal;
+            owner._boundaryMountRoots = _previousRoots;
+            owner._errorBoundaryDepth = _previousBoundaryDepth;
+            owner._providerChangeDepth = _previousProviderChangeDepth;
+            owner._reconcilingElement = _previousReconcilingElement;
+            _staggerScope = _previousStagger;
+        }
     }
 
     /// <summary>
@@ -2910,7 +2985,7 @@ public sealed partial class Reconciler : IDisposable
         // A virtualized host has no realized consumer for rows it has yet to realize,
         // so its own snapshot stands in for them: if the providers above it changed,
         // decline the skip so the Update path re-snapshots before the next realization.
-        if (TryGetContextCapture(control) is { } capture && capture.IsStale(_contextScope, InProviderChangeSubtree))
+        if (TryGetContextCapture(control) is { } capture && capture.IsStale(_contextScope))
             return true;
 
         bool found = false;

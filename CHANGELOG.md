@@ -306,6 +306,22 @@ Conventions for contributors:
   a custom handler that builds rows itself from `ContainerContentChanging` is not.
   Removing the only `.Provide(...)` above a reference-stable consumer now also re-renders
   that consumer with the default, which it previously missed.
+- **Building a list row in the middle of another update no longer corrupts that update**
+  (issue #1386). WinUI can ask a virtualized list for rows synchronously while Reactor is
+  still applying an unrelated update, for example when an effect or a control's own
+  property setter calls `UpdateLayout()`. Such rows used to join that update's
+  bookkeeping:
+  - If the update was mounting an `ErrorBoundary` whose child then failed, the boundary's
+    rollback tore down those rows too: they stayed on screen with their effects cleaned
+    up, so they stopped updating.
+  - A row that threw was reported to that unrelated boundary, which then showed its
+    fallback.
+  - Rows built while scrolling saw no window host (or another window's), so window-scoped
+    hooks such as `UseWindow` could resolve the wrong window in multi-window apps.
+
+  Row building now sets the surrounding update's state aside and restores the list's own
+  context, theme and window host, so a failing row shows its own error and a failing
+  boundary only rolls back its own subtree.
 - **Replacing a host's root no longer leaves the old root running** (issue #1326).
   `ReactorHost.Mount(...)` and `ReactorHostControl.Mount(...)` now retire the
   outgoing root before installing the new one: its effect cleanups run, and a

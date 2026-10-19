@@ -716,7 +716,7 @@ public sealed partial class Reconciler
         {
             // Realization runs from layout, outside the traversal — replay the
             // host's provider stack so the row sees its ancestors' context.
-            using var restoreContext = EnterCapturedContext((UIElement)sender!);
+            using var realization = EnterRealization((UIElement)sender!);
             var itemElement = viewSource.BuildItemView(args.ItemIndex);
             var ctrl = Mount(itemElement, requestRerender);
             cc.Content = ctrl;

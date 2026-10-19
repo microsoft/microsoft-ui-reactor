@@ -177,7 +177,7 @@ public sealed partial class Reconciler
 
         // Runs from ContainerContentChanging / Loaded / LayoutUpdated, outside the
         // traversal — replay the tree's provider stack for the node view.
-        using var restoreContext = EnterCapturedContext(treeView);
+        using var realization = EnterRealization(treeView);
         var view = el.BuildView(data);
         cc.Content = Mount(view, requestRerender);
         SetElementTag(cc, view);

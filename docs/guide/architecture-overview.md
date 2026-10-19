@@ -155,7 +155,7 @@ public UIElement GetElement(ElementFactoryGetArgs args)
     if (index < 0 || index >= _items.Count)
         return new TextBlock { Text = "" };
 
-    using var restoreContext = _reconciler.EnterCapturedContext(_hostCapture ?? _ownCapture);
+    using var restoreContext = _reconciler.EnterRealization(_hostCapture ?? _ownCapture);
 
     var item = _items[index];
     var element = BuildOrCache(key, item, index, keyed);

@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Reactor.Core;
 using Xunit;
 
@@ -196,34 +197,62 @@ public class ContextCaptureUnitTests
 
     // ── ContextCapture ───────────────────────────────────────────────
 
+    private static ContextCapture Captured(ContextScope scope)
+    {
+        var capture = new ContextCapture();
+        capture.Refresh(scope, ElementTheme.Default);
+        return capture;
+    }
+
     [Fact]
     public void Capture_IsStale_TracksValueChangesAndAdditions()
     {
         var scope = new ContextScope();
         Push(scope, Theme, "dark");
-        var capture = new ContextCapture();
-        capture.Refresh(scope);
-        Assert.False(capture.IsStale(scope, inProviderChangeSubtree: false));
+        var capture = Captured(scope);
+        Assert.False(capture.IsStale(scope));
 
         Push(scope, Count, 1); // provider added above the host
-        Assert.True(capture.IsStale(scope, inProviderChangeSubtree: false));
+        Assert.True(capture.IsStale(scope));
 
-        capture.Refresh(scope);
-        Assert.False(capture.IsStale(scope, inProviderChangeSubtree: false));
+        capture.Refresh(scope, ElementTheme.Default);
+        Assert.False(capture.IsStale(scope));
     }
 
     [Fact]
-    public void Capture_IsStale_RemovedProviderNeedsTheProviderChangeSignal()
+    public void Capture_IsStale_RemovedProviderNeedsTheGenerationSignal()
     {
         var scope = new ContextScope();
         Push(scope, Theme, "dark");
         Push(scope, Count, 1);
-        var capture = new ContextCapture();
-        capture.Refresh(scope);
+        var capture = Captured(scope);
 
         scope.Pop(1); // provider removed: the shorter stack is still a prefix
-        Assert.False(capture.IsStale(scope, inProviderChangeSubtree: false));
-        Assert.True(capture.IsStale(scope, inProviderChangeSubtree: true));
+        Assert.False(capture.IsStale(scope));
+
+        scope.BumpProviderGeneration(); // what the reconciler does for a changed provider
+        Assert.True(capture.IsStale(scope));
+
+        capture.Refresh(scope, ElementTheme.Default);
+        Assert.False(capture.IsStale(scope));
+        Assert.Single(capture.Entries);
+    }
+
+    [Fact]
+    public void Capture_IsStale_GenerationOutlivesTheChangingPass()
+    {
+        // A host that was NOT reached in the pass that removed the provider (a nested
+        // host inside a parked row) must still be stale when it is reached later, under
+        // a stack that by then looks like an ancestor's.
+        var scope = new ContextScope();
+        Push(scope, Theme, "dark");
+        var nested = Captured(scope);
+        scope.Pop(1);
+        scope.BumpProviderGeneration();
+
+        var previous = scope.Replace([]); // later realization replays the outer snapshot
+        Assert.True(nested.IsStale(scope));
+        scope.Restore(previous);
     }
 
     [Fact]
@@ -231,17 +260,37 @@ public class ContextCaptureUnitTests
     {
         var scope = new ContextScope();
         Push(scope, Theme, "dark");
-        var capture = new ContextCapture();
-        capture.Refresh(scope);
+        var capture = Captured(scope);
         var first = capture.Entries;
 
-        capture.Refresh(scope);
+        capture.Refresh(scope, ElementTheme.Default);
         Assert.Same(first, capture.Entries);
 
         scope.Pop(1);
         Push(scope, Theme, "light");
-        capture.Refresh(scope);
+        capture.Refresh(scope, ElementTheme.Default);
         Assert.NotSame(first, capture.Entries);
         Assert.Equal("light", capture.Entries[0].Value);
+    }
+
+    [Fact]
+    public void Capture_RecordsAmbientTheme()
+    {
+        var scope = new ContextScope();
+        var capture = new ContextCapture();
+        capture.Refresh(scope, ElementTheme.Dark);
+        Assert.Equal(ElementTheme.Dark, capture.AmbientTheme);
+    }
+
+    [Fact]
+    public void Capture_Clear_ReleasesValuesAndIsStale()
+    {
+        var scope = new ContextScope();
+        Push(scope, Data, new Payload("big"));
+        var capture = Captured(scope);
+
+        capture.Clear();
+        Assert.Empty(capture.Entries);
+        Assert.True(capture.IsStale(scope));
     }
 }

@@ -1,3 +1,5 @@
+using Microsoft.UI.Xaml;
+
 namespace Microsoft.UI.Reactor.Core;
 
 /// <summary>
@@ -62,6 +64,18 @@ internal sealed class ContextScope
 
     internal long Version => _version;
 
+    /// <summary>
+    /// Advances whenever an element's own provided values change between renders (a
+    /// provider added, removed or re-valued). A host snapshot records the generation it
+    /// was taken at; a mismatch means some provider changed since, and the snapshot is
+    /// re-taken the next time the reconciler reaches the host. Unlike a check scoped to
+    /// the pass that removed the provider, this survives until the host is reached —
+    /// e.g. a nested host inside a recycled row that comes back in a later pass.
+    /// </summary>
+    internal long ProviderGeneration { get; private set; }
+
+    internal void BumpProviderGeneration() => ProviderGeneration++;
+
     internal (ContextBase Context, object? Value)[] Snapshot()
         => _stack.Count == 0 ? [] : _stack.ToArray();
 
@@ -89,7 +103,7 @@ internal sealed class ContextScope
     /// prefix of it unless a provider at or above that ancestor changed value or was
     /// added. A <em>removed</em> provider leaves a shorter stack that is still a prefix,
     /// so callers must detect removal separately (see
-    /// <c>Reconciler.InProviderChangeSubtree</c>).
+    /// <see cref="ProviderGeneration"/>).
     /// </summary>
     internal bool IsPrefixOf((ContextBase Context, object? Value)[] snapshot)
     {
@@ -148,18 +162,35 @@ internal sealed class ContextCapture
 
     internal bool IsOwnedBy(Element element) => OwnerType is null || OwnerType == element.GetType();
 
-    internal void Refresh(ContextScope scope)
+    /// <summary><see cref="ContextScope.ProviderGeneration"/> when <see cref="Entries"/> was taken.</summary>
+    internal long Generation { get; private set; } = -1;
+
+    /// <summary>
+    /// The ancestor-resolved <c>RequestedTheme</c> at the host, so ThemeRef resource
+    /// overrides on realized rows resolve against the same theme as the rest of the subtree.
+    /// </summary>
+    internal ElementTheme AmbientTheme { get; private set; }
+
+    internal void Refresh(ContextScope scope, ElementTheme ambientTheme)
     {
         if (!scope.Matches(Entries))
             Entries = scope.Snapshot();
+        Generation = scope.ProviderGeneration;
+        AmbientTheme = ambientTheme;
+    }
+
+    /// <summary>
+    /// Releases the snapshot's provider values. The capture object can be aliased (an
+    /// <see cref="ElementFactory{T}"/> holds the same instance), so a host leaving Reactor's
+    /// ownership empties it rather than only dropping its own reference.
+    /// </summary>
+    internal void Clear()
+    {
+        Entries = [];
+        Generation = -1;
     }
 
     /// <param name="scope">The live stack at an ancestor of (or at) the host.</param>
-    /// <param name="inProviderChangeSubtree">
-    /// True while the traversal is below an element whose provided values changed this
-    /// pass. A removed provider is invisible to the prefix test, so any snapshot taken
-    /// beneath such an element has to be treated as stale.
-    /// </param>
-    internal bool IsStale(ContextScope scope, bool inProviderChangeSubtree)
-        => inProviderChangeSubtree || !scope.IsPrefixOf(Entries);
+    internal bool IsStale(ContextScope scope)
+        => Generation != scope.ProviderGeneration || !scope.IsPrefixOf(Entries);
 }
