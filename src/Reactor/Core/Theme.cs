@@ -45,14 +45,59 @@ public readonly record struct ThemeRef(string ResourceKey)
     // for an unknown key (so missing keys aren't re-walked). Brushes resolved from a
     // ThemeDictionary are shared instances today, so returning the cached reference
     // is identical to the prior behavior.
-    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<(string Key, string Theme), Brush?> s_resolutionCache = new();
+    // Each entry is stamped with the invalidation generation it was resolved under. A resolve
+    // that started before InvalidateResolutionCache and publishes after it carries an older
+    // generation, so it is never served: Clear() alone is not a barrier for in-flight resolves.
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<(string Key, string Theme), (int Generation, Brush? Brush)> s_resolutionCache = new();
+    private static int s_resolutionGeneration;
 
     /// <summary>
     /// Drops every cached <see cref="ResolveForTheme"/> result. Called by the host
-    /// when the effective theme or the system palette changes so the next resolve
-    /// re-reads the (now-updated) ThemeDictionaries.
+    /// when the effective theme or the system palette changes, and by
+    /// <see cref="Theme.NotifyResourcesChanged"/>, so the next resolve re-reads the
+    /// (now-updated) dictionaries. Thread-safe.
     /// </summary>
-    internal static void InvalidateResolutionCache() => s_resolutionCache.Clear();
+    internal static void InvalidateResolutionCache()
+    {
+        Interlocked.Increment(ref s_resolutionGeneration);
+        s_resolutionCache.Clear();
+    }
+
+    private static bool TryGetCurrentResolution((string Key, string Theme) cacheKey, int generation, out Brush? brush)
+    {
+        // Also re-check the live generation: an invalidation that has incremented it but not yet
+        // cleared the dictionary must not serve the entry it is about to drop.
+        if (s_resolutionCache.TryGetValue(cacheKey, out var entry) && entry.Generation == generation
+            && Volatile.Read(ref s_resolutionGeneration) == generation)
+        {
+            brush = entry.Brush;
+            return true;
+        }
+        brush = null;
+        return false;
+    }
+
+    /// <summary>Test seam: number of cached resolutions.</summary>
+    internal static int ResolutionCacheCountForTest => s_resolutionCache.Count;
+
+    /// <summary>Test seam: the current invalidation generation.</summary>
+    internal static int ResolutionGenerationForTest => Volatile.Read(ref s_resolutionGeneration);
+
+    /// <summary>
+    /// Test seam: plants a cache entry, stamped with <paramref name="generation"/> (default:
+    /// the current one). Headless tests cannot construct a <see cref="Brush"/>, so this is the
+    /// only way to prove an invalidation empties the cache and that a late publish is ignored.
+    /// </summary>
+    internal static void SeedResolutionCacheForTest(string resourceKey, string themeName, int? generation = null)
+        => s_resolutionCache[(resourceKey, themeName)] = (generation ?? ResolutionGenerationForTest, null);
+
+    /// <summary>Test seam: whether a lookup would be served from the cache.</summary>
+    internal static bool IsResolutionCachedForTest(string resourceKey, string themeName)
+        => TryGetCurrentResolution((resourceKey, themeName), ResolutionGenerationForTest, out _);
+
+    /// <summary>Test seam: whether a lookup that captured <paramref name="capturedGeneration"/> would be served.</summary>
+    internal static bool IsResolutionCachedForTest(string resourceKey, string themeName, int capturedGeneration)
+        => TryGetCurrentResolution((resourceKey, themeName), capturedGeneration, out _);
 
     private static Brush? ResolveForTheme(string resourceKey, string themeName)
     {
@@ -64,7 +109,8 @@ public readonly record struct ThemeRef(string ResourceKey)
         if (resources is null) return null;
 
         var cacheKey = (resourceKey, themeName);
-        if (s_resolutionCache.TryGetValue(cacheKey, out var cached))
+        int generation = Volatile.Read(ref s_resolutionGeneration);
+        if (TryGetCurrentResolution(cacheKey, generation, out var cached))
             return cached;
 
         var resolved = ResolveForThemeUncached(resources, resourceKey, themeName);
@@ -75,7 +121,7 @@ public readonly record struct ThemeRef(string ResourceKey)
         // wouldn't be cleared). Unknown keys are rare and re-walking them is the
         // same cost as before this cache existed, so this is strictly safe.
         if (resolved is not null)
-            s_resolutionCache[cacheKey] = resolved;
+            s_resolutionCache[cacheKey] = (generation, resolved);
         return resolved;
     }
 
@@ -217,4 +263,37 @@ public static class Theme
     /// (e.g., defined in XamlControlsResources or added via app resources).
     /// </summary>
     public static ThemeRef Ref(string resourceKey) => new(resourceKey);
+
+    /// <summary>
+    /// Tells Reactor that application resources were edited at runtime, so theme
+    /// references resolve again and every live host re-renders with the new values.
+    /// </summary>
+    /// <remarks>
+    /// <para>Call it after changing <c>Application.Current.Resources</c> in a way that is
+    /// <em>not</em> a theme change — replacing a brush in a <c>ThemeDictionaries</c> entry,
+    /// merging or removing a brand dictionary, or an inspector's live resource edit. Reactor
+    /// caches each resolved <c>(resource key, theme)</c> brush and only drops that cache
+    /// when the effective theme or the system palette changes, so without this call such an
+    /// edit is not seen. Not needed for a Light/Dark/high-contrast switch
+    /// (<c>RequestedTheme</c>) or for mutating an existing brush's <c>Color</c>; both are
+    /// already picked up.</para>
+    /// <para>What it does: clears the resolution cache behind <see cref="ThemeRef"/>, then
+    /// asks every live <see cref="Microsoft.UI.Reactor.Hosting.ReactorHost"/> and
+    /// <see cref="Microsoft.UI.Reactor.Hosting.ReactorHostControl"/> for a full re-render that
+    /// bypasses component memoization and the reconciler's skip of unchanged elements, so
+    /// memoized and reused subtrees are refreshed too. That re-resolves
+    /// <c>.Resources(...)</c> theme overrides, re-applies <see cref="ThemeRef"/> modifiers
+    /// such as <c>.Background(Theme.Accent)</c>, and re-runs any
+    /// <see cref="ThemeRef.Resolve(string, bool)"/> call in a <c>Render</c> method.</para>
+    /// <para>Callable from any thread; the re-renders are scheduled on each host's UI
+    /// thread. Await a host's <c>WaitForIdleAsync()</c> to observe the result.</para>
+    /// <para>On a host's UI thread, a host that has no content yet re-renders inline, and its
+    /// render can throw. Every other host is still notified; then the exception is rethrown
+    /// (an <see cref="global::System.AggregateException"/> when several hosts threw).</para>
+    /// </remarks>
+    public static void NotifyResourcesChanged()
+    {
+        ThemeRef.InvalidateResolutionCache();
+        ThemeResourceListeners.NotifyAll();
+    }
 }
