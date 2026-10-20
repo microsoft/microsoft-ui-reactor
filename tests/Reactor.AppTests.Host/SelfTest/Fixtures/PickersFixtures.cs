@@ -49,6 +49,11 @@ internal static class PickersFixtures
         public Func<Task<IReadOnlyList<PickFolderResult>>> PickFolders = null!;
         public Func<Task<PickFileResult?>> PickSave = null!;
 
+        // Nested class and function components render through the reconciler's
+        // BeginRender overload, not the root one, so they carry their own owner.
+        public PickerProbe ChildProbe { get; } = new();
+        public PickerProbe FuncProbe { get; } = new();
+
         public override Element Render()
         {
             // Component forwarding for files, the RenderContext entry point for folders.
@@ -58,7 +63,67 @@ internal static class PickersFixtures
             PickFolders = () => Context.PickMultipleFoldersAsync(FolderOptions);
             PickSave = () => PickSaveFileAsync(SaveOptions);
             Operations = [() => PickSingle(), () => PickMultiple(), () => PickFolder(), () => PickFolders(), () => PickSave()];
-            return TextBlock("pickers");
+            var funcProbe = FuncProbe;
+            return VStack(
+                TextBlock("pickers"),
+                Component<PickerChild, PickerProbe>(ChildProbe),
+                RenderEachTime(ctx =>
+                {
+                    funcProbe.Pick = () => ctx.PickFileAsync(new FilePickerOptions());
+                    return TextBlock("function picker");
+                }));
+        }
+    }
+
+    internal sealed class PickerProbe
+    {
+        public Func<Task>? Pick;
+        public ReactorWindow? ActiveAtRender;
+    }
+
+    private sealed class PickerChild : Component<PickerProbe>
+    {
+        public override Element Render()
+        {
+            Props.Pick = () => PickFileAsync(new FilePickerOptions());
+            return TextBlock("child picker");
+        }
+    }
+
+    // Opens a window from inside its own render, which constructs another ReactorHost
+    // and so repoints ReactorApp.ActiveHostInternal in the middle of the opener's pass.
+    private sealed class MidRenderOpener : Component
+    {
+        public override Element Render()
+        {
+            UseOpenWindow(WindowKey.Of(MidRenderWindowKey), new WindowSpec { Title = "Pickers C", Width = 240, Height = 180 },
+                () => new PickerComponent());
+            return TextBlock("opener");
+        }
+    }
+
+    private const string MidRenderWindowKey = "pickers-mid-render";
+
+    private sealed class MidRenderRoot : Component
+    {
+        public PickerProbe SiblingProbe { get; } = new();
+        public Action? OpenNow;
+
+        public override Element Render()
+        {
+            var (open, setOpen) = UseState(false);
+            OpenNow = () => setOpen(true);
+            var probe = SiblingProbe;
+            return VStack(
+                open ? Component<MidRenderOpener>() : TextBlock("closed"),
+                // Renders on every pass, after the opener, so it records whatever owner
+                // is current once the other window exists.
+                RenderEachTime(ctx =>
+                {
+                    probe.Pick = () => ctx.PickFileAsync(new FilePickerOptions());
+                    probe.ActiveAtRender = ReactorApp.ActiveHostInternal?.OwningWindow;
+                    return TextBlock("sibling picker");
+                }));
         }
     }
 
@@ -68,8 +133,8 @@ internal static class PickersFixtures
         public object? Options;
         public string? Operation;
         public int Calls;
-        public IReadOnlyList<PickFileResult> Files = new List<PickFileResult>();
-        public IReadOnlyList<PickFolderResult> Folders = new List<PickFolderResult>();
+        public readonly IReadOnlyList<PickFileResult> Files = new List<PickFileResult>();
+        public readonly IReadOnlyList<PickFolderResult> Folders = new List<PickFolderResult>();
         public Exception? Error;
 
         private Task<T> Record<T>(WindowId owner, object options, string operation, T result)
@@ -151,9 +216,9 @@ internal static class PickersFixtures
                     H.Check($"Pickers_OffUiThread_{OperationNames[i]}", rejected && stub.Calls == calls);
                     var error = new InvalidOperationException("picker failure");
                     stub.Error = error;
-                    Exception? actual = null;
+                    InvalidOperationException? actual = null;
                     try { await component.Operations[i](); }
-                    catch (Exception ex) { actual = ex; }
+                    catch (InvalidOperationException ex) { actual = ex; }
                     H.Check($"Pickers_Error_{OperationNames[i]}", ReferenceEquals(actual, error));
                     stub.Error = null;
                 }
@@ -237,6 +302,8 @@ internal static class PickersFixtures
                 }
                 await b.Operations[0]();
                 H.Check("Pickers_OwningWindow_BRoutesToB", stub.Owner == ownerB);
+                await CheckNested("BeforeClose", a, ownerA);
+                await CheckNested("BeforeCloseB", b, ownerB);
 
                 windowB.Close();
                 await Harness.Render(100);
@@ -245,12 +312,14 @@ internal static class PickersFixtures
                 for (int i = 0; i < a.Operations.Length; i++)
                 {
                     var calls = stub.Calls;
-                    Exception? error = null;
+                    // The owner lookup reports a missing or closed owner as InvalidOperationException.
+                    InvalidOperationException? error = null;
                     try { await a.Operations[i](); }
-                    catch (Exception ex) { error = ex; }
+                    catch (InvalidOperationException ex) { error = ex; }
                     H.Check($"Pickers_OwningWindow_AfterClose_{OperationNames[i]}",
                         error is null && stub.Calls == calls + 1 && stub.Operation == OperationNames[i] && stub.Owner == ownerA);
                 }
+                await CheckNested("AfterClose", a, ownerA);
 
                 // B's component outlived its window: its pickers must refuse rather than
                 // parent a dialog to a closed (or unrelated) window.
@@ -263,11 +332,87 @@ internal static class PickersFixtures
                     H.Check($"Pickers_OwningWindow_ClosedOwnerRejected_{OperationNames[i]}",
                         message is not null && message.Contains("owning ReactorWindow", StringComparison.Ordinal) && stub.Calls == calls);
                 }
+
+                // Replacing A's root retires the old root's context (DetachFromHost): a retained
+                // instance must stop opening pickers over the window it no longer renders into.
+                windowA.Host.Mount(new PickerComponent());
+                await windowA.Host.WaitForIdleAsync();
+                await Harness.Render(100);
+                for (int i = 0; i < a.Operations.Length; i++)
+                {
+                    var calls = stub.Calls;
+                    string? message = null;
+                    try { await a.Operations[i](); }
+                    catch (InvalidOperationException ex) { message = ex.Message; }
+                    H.Check($"Pickers_OwningWindow_RetiredRootRejected_{OperationNames[i]}",
+                        message == $"{OperationName(i)} requires an owning ReactorWindow." && stub.Calls == calls);
+                }
             }
             finally
             {
                 RenderContext.PickerService = previous;
                 windowB?.Close();
+                windowA?.Close();
+                await Harness.Render(100);
+            }
+
+            async Task CheckNested(string phase, PickerComponent component, WindowId owner)
+            {
+                stub.Owner = default;
+                await component.ChildProbe.Pick!();
+                H.Check($"Pickers_OwningWindow_{phase}_ChildComponent", stub.Operation == "single" && stub.Owner == owner);
+                stub.Owner = default;
+                await component.FuncProbe.Pick!();
+                H.Check($"Pickers_OwningWindow_{phase}_FunctionComponent", stub.Operation == "single" && stub.Owner == owner);
+            }
+        }
+
+        private static string OperationName(int i) => i switch
+        {
+            0 => "PickFileAsync",
+            1 => "PickMultipleFilesAsync",
+            2 => "PickFolderAsync",
+            3 => "PickMultipleFoldersAsync",
+            _ => "PickSaveFileAsync",
+        };
+    }
+
+    /// <summary>
+    /// Opening a window during another window's render constructs a host, which repoints
+    /// <c>ReactorApp.ActiveHostInternal</c> for the rest of the opener's pass. Components that
+    /// render after it in the opener's window must still record the opener's window as owner.
+    /// </summary>
+    internal sealed class OwnerSurvivesMidRenderOpen(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            ReactorApp.UIDispatcher ??= DispatcherQueue.GetForCurrentThread();
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            var previous = RenderContext.PickerService;
+            var stub = new StubPickerService();
+            RenderContext.PickerService = stub;
+            var root = new MidRenderRoot();
+            ReactorWindow? windowA = null;
+            try
+            {
+                windowA = await Open("Pickers mid-render", root);
+                root.OpenNow!();
+                await windowA.Host.WaitForIdleAsync();
+                await Harness.Render(100);
+                var windowC = ReactorApp.FindWindow(WindowKey.Of(MidRenderWindowKey));
+                // Oracle guards: the other window exists, and while the sibling rendered the
+                // process-wide host named it rather than A, so recording A is not something a
+                // global lookup could produce.
+                H.Check("Pickers_MidRenderOpen_OtherWindowOpened", windowC is not null && !ReferenceEquals(windowC, windowA));
+                H.Check("Pickers_MidRenderOpen_ActiveHostMovedDuringRender", windowC is not null && ReferenceEquals(root.SiblingProbe.ActiveAtRender, windowC));
+
+                await root.SiblingProbe.Pick!();
+                H.Check("Pickers_MidRenderOpen_SiblingKeepsOwner", stub.Operation == "single" && stub.Owner == windowA.AppWindow.Id);
+            }
+            finally
+            {
+                RenderContext.PickerService = previous;
+                ReactorApp.FindWindow(WindowKey.Of(MidRenderWindowKey))?.Close();
                 windowA?.Close();
                 await Harness.Render(100);
             }

@@ -16,9 +16,11 @@ public sealed class RenderContext
     private ContextScope? _contextScope;
     private int _uiThreadId;
 
-    // The window whose host last rendered this context. Picker calls run from event
-    // handlers, outside render, where ReactorApp.ActiveHostInternal is whichever host
-    // rendered or was constructed most recently (or null after any host is disposed).
+    // The window whose host last rendered this context, supplied by that host's reconciler.
+    // Picker calls run from event handlers, outside render, so they cannot read the
+    // process-wide ReactorApp.ActiveHostInternal: it names whichever host rendered or was
+    // constructed most recently (a window opened mid-render overwrites it), is not scoped
+    // for virtualized-row renders, and is null after any host is disposed.
     private Microsoft.UI.Reactor.ReactorWindow? _owningWindow;
 
     /// <summary>
@@ -29,20 +31,26 @@ public sealed class RenderContext
     internal global::System.TimeProvider TimeProvider { get; set; } = global::System.TimeProvider.System;
 
     internal void BeginRender(Action requestRerender)
+        => BeginRender(requestRerender, owningWindow: null);
+
+    internal void BeginRender(Action requestRerender, Microsoft.UI.Reactor.ReactorWindow? owningWindow)
     {
         _hookIndex = 0;
         _requestRerender = requestRerender;
         _uiThreadId = Environment.CurrentManagedThreadId;
-        _owningWindow = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        _owningWindow = owningWindow;
     }
 
     internal void BeginRender(Action requestRerender, ContextScope contextScope)
+        => BeginRender(requestRerender, contextScope, owningWindow: null);
+
+    internal void BeginRender(Action requestRerender, ContextScope contextScope, Microsoft.UI.Reactor.ReactorWindow? owningWindow)
     {
         _hookIndex = 0;
         _requestRerender = requestRerender;
         _contextScope = contextScope;
         _uiThreadId = Environment.CurrentManagedThreadId;
-        _owningWindow = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        _owningWindow = owningWindow;
     }
 
     /// <summary>

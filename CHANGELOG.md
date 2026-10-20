@@ -219,6 +219,21 @@ Conventions for contributors:
 
 ### Changed
 
+- **Picker helpers moved to `Microsoft.Windows.Storage.Pickers` and renamed as non-hooks**
+  (issue #1374, spec 054 §8.3). Breaking: `UseFilePickerAsync` / `UseMultipleFilesPickerAsync`
+  / `UseFolderPickerAsync` / `UseSaveFilePickerAsync` are now `PickFileAsync` /
+  `PickMultipleFilesAsync` / `PickFolderAsync` / `PickSaveFileAsync` (plus the new
+  `PickMultipleFoldersAsync`) on `RenderContext` and `Component`, and return path-based
+  `PickFileResult` / `PickFolderResult` instead of `StorageFile` / `StorageFolder`. Call them
+  directly from event handlers; the hook-rules analyzer no longer flags them. Option enums
+  come from `Microsoft.Windows.Storage.Pickers`; `SaveFilePickerOptions.FileTypeChoices` is an
+  ordered `IReadOnlyList<FileTypeChoice>` (order sets the default entry); `Title`,
+  `SuggestedFolder`, `SuggestedStartFolder`, `InitialFileTypeIndex`, open-picker
+  `FileTypeChoices`, `DefaultFileExtension` and `ShowOverwritePrompt` are new;
+  `FolderPickerOptions.FileTypeFilter` and `SaveFilePickerOptions.SuggestedSaveFile` are
+  removed. The dialog is owned by the window whose host rendered the component (previously
+  whichever window was most recently active, which with several windows picked the wrong one
+  and threw after any window closed), and the pickers now work in elevated apps.
 - **The doc pipeline moved out of `mur`, and doc screenshots are captured with winapp's
   Windows Graphics Capture.** `mur docs` is now `dotnet run --project tools/Reactor.DocPipeline --`
   (`compile`, `check-tier`, `render-diagrams`, `new-diagram`; same options). It is a contributor

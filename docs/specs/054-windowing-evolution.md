@@ -1137,11 +1137,14 @@ over the UWP `Windows.Storage.Pickers` + `InitializeWithWindow`, returning
   time. Pickers run from event handlers, outside render, where that field names
   the most recently rendered or constructed host (or null after any host is
   disposed). With two windows, A's picker parented to B, and every picker threw
-  once any window closed. `RenderContext` now captures the owning window in
-  `BeginRender` (where `ReactorHost.Render` scopes that field to itself), clears
-  it on detach, and refuses a closed owner. Content rendered through
-  `ReactorHostControl`, which does not scope the field, keeps the pre-existing
-  limitation shared by every window hook.
+  once any window closed. Each host's `Reconciler` now carries its
+  `ReactorWindow` (`Reconciler.OwningWindow`, set when the window claims the host),
+  and every `BeginRender` records it on the `RenderContext`. The process-wide field
+  is not consulted, so a window opened mid-render or a virtualized row rendered
+  outside the host's pass still records the right owner. The owner is cleared on
+  detach and a closed owner is refused. `ReactorHostControl` and directly
+  constructed hosts have no `ReactorWindow`, so the pickers throw there; callers
+  construct the native picker from `XamlRoot.ContentIslandEnvironment.AppWindowId`.
 - **Naming.** `HookRulesAnalyzer` treats any `Use[A-Z]*` method on
   `Component` / `RenderContext` as a hook, so calling the old names from a click
   lambda raised REACTOR_HOOKS_001 and from a named handler REACTOR_HOOKS_005. The

@@ -600,15 +600,20 @@ Caveats:
 - These methods are not hooks: they reserve no hook slot and open a dialog when
   called. Call them from UI-thread event handlers, not during `Render()` or in
   `Task.Run`. Their `Pick*` names keep the hook-rules analyzer quiet in handlers.
-- The owner is the window that last rendered the component, not whichever window
-  is active when the handler runs. If that window has closed, or the component
-  never rendered in a Reactor window, the call throws `InvalidOperationException`.
+- The owner is the window whose host rendered the component (including nested and
+  virtualized-row components), not whichever window is active when the handler
+  runs. If that window has closed, or the component's root was replaced, the call
+  throws `InvalidOperationException`.
 - Option validation (missing or duplicate file-type choices) throws `ArgumentException`
   before any dialog opens. Windows validates extension syntax and folder paths.
 - Picker errors propagate to the caller; cancellation is not an error.
 - Framework tests use an internal picker-service seam instead of opening modal dialogs.
-- Content hosted through `ReactorHostControl` has no owning Reactor window of its
-  own, so it cannot rely on these methods to pick the correct owner.
+- Content hosted through `ReactorHostControl` (or a `ReactorHost` you construct
+  yourself) has no owning `ReactorWindow`, so these methods throw
+  `InvalidOperationException` there. Construct the native picker directly from the
+  hosting window instead, for example
+  `new Microsoft.Windows.Storage.Pickers.FileOpenPicker(xamlRoot.ContentIslandEnvironment.AppWindowId)`.
+
 ## WPF / UWP migration map
 
 Coming from a pre-054 Reactor app instead? See

@@ -1539,6 +1539,7 @@ internal static class SelfTestFixtureRegistry
         "FilePicker_ThrowsOffUiThread",
         "Pickers_Suite",
         "Pickers_OwningWindow",
+        "Pickers_OwnerSurvivesMidRenderOpen",
         "AspectRatio_Suite_Math",
         "AspectRatio_Suite_Conform",
         "WindowStyle_ToolWindowExStyleRemoved",
@@ -3624,6 +3625,7 @@ internal static class SelfTestFixtureRegistry
         "FilePicker_ThrowsOffUiThread" => new Phase7WindowingFixtures.FilePickerThrowsOffUiThread(harness),
         "Pickers_Suite" => new PickersFixtures.Suite(harness),
         "Pickers_OwningWindow" => new PickersFixtures.OwningWindow(harness),
+        "Pickers_OwnerSurvivesMidRenderOpen" => new PickersFixtures.OwnerSurvivesMidRenderOpen(harness),
         "UseSpec054Hooks_Suite" => new Phase7WindowingFixtures.UseSpec054HooksSuite(harness),
         // Spec 036/045 — issue #647 multi-window teardown hardening regression.
         "Window647_PrimaryElectionExcludesAuxiliary" => new WindowLifecycleHardeningFixtures.PrimaryElectionExcludesAuxiliary(harness),

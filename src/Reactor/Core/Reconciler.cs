@@ -51,6 +51,14 @@ public sealed partial class Reconciler : IDisposable
     internal readonly ILogger? _logger;
     private readonly List<(string Key, UIElement Target)> _pendingConnectedAnimationStarts = new();
     private readonly ContextScope _contextScope = new();
+
+    /// <summary>
+    /// The <see cref="Microsoft.UI.Reactor.ReactorWindow"/> whose host owns this reconciler, or
+    /// null for hosts without one (<see cref="Microsoft.UI.Reactor.Hosting.ReactorHostControl"/>,
+    /// directly constructed hosts). Every component context it renders records it as its picker
+    /// owner, including renders outside the host's render pass (virtualized rows).
+    /// </summary>
+    internal Microsoft.UI.Reactor.ReactorWindow? OwningWindow { get; set; }
     // Ancestor-aware effective theme for the subtree currently being mounted/updated,
     // threaded top-down through Mount/Update (an element's own RequestedTheme wins,
     // otherwise the subtree inherits its ancestor's). ElementTheme.Default means "no
@@ -2662,7 +2670,7 @@ public sealed partial class Reconciler : IDisposable
                         receiver.SetProps(compEl.Props);
                     }
 
-                    node.Component.Context.BeginRender(componentRerender, _contextScope);
+                    node.Component.Context.BeginRender(componentRerender, _contextScope, OwningWindow);
                     using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(node.Component.Render());
@@ -2672,7 +2680,7 @@ public sealed partial class Reconciler : IDisposable
                 }
                 else if (node.Context is not null && newEl is FuncElement func)
                 {
-                    node.Context.BeginRender(componentRerender, _contextScope);
+                    node.Context.BeginRender(componentRerender, _contextScope, OwningWindow);
                     using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(func.RenderFunc(node.Context));
@@ -2682,7 +2690,7 @@ public sealed partial class Reconciler : IDisposable
                 }
                 else if (node.Context is not null && newEl is MemoElement memo)
                 {
-                    node.Context.BeginRender(componentRerender, _contextScope);
+                    node.Context.BeginRender(componentRerender, _contextScope, OwningWindow);
                     using (ValidationRenderScope.Begin(ReadContext(ValidationContexts.Current)))
                     {
                         newChildElement = ValidationRenderScope.ApplyProvide(memo.RenderFunc(node.Context));

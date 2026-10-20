@@ -733,35 +733,19 @@ Purely additive.
       `Window.SystemBackdrop is TransparentBackdrop` on supported
       builds.
 
-### 7.3 Picker helpers (spec §8.3)
+### 7.3 Picker helpers (spec §8.3) — superseded by 7.3a
 
-- [x] Add `FilePickerOptions` / `FolderPickerOptions` records (filters,
-      suggested-folder, etc. — minimum viable shape; pickers are out
-      of scope for windowing beyond the `InitializeWithWindow` helper).
-- [x] Add `RenderContext.UseFilePickerAsync(FilePickerOptions)` →
-      `Task<StorageFile?>`.
-- [x] Add `RenderContext.UseFolderPickerAsync(FolderPickerOptions)` →
-      `Task<StorageFolder?>`.
-- [x] Add `RenderContext.UseMultipleFilesPickerAsync(FilePickerOptions)` →
-      `Task<IReadOnlyList<StorageFile>>`, with an empty list on cancellation.
-- [x] Add `RenderContext.UseSaveFilePickerAsync(SaveFilePickerOptions)` →
-      `Task<StorageFile?>`, with null on cancellation; the caller writes the file.
-- [x] Expose all four helpers on `Component`; capture during Render and invoke
-      from UI-thread event handlers.
-- [x] Implementation: `UseWindow().NativeWindow.GetWindowHandle()` →
-      `WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd)`.
-      **Must run on the UI thread**; throw if called off-thread (R12).
-      **Must use the owning window's HWND**; do not accept arbitrary
-      HWND parameters (R12).
-- [x] Selftest `FilePicker_InitializesWithWindow` — use a mock /
-      `IPickerService` test double; assert `InitializeWithWindow` was
-      called with the owning HWND.
-- [x] Note in the PR description: §8.3 is per spec a candidate to split
-      into its own spec (§11 Q5 in the source spec 053; not this spec —
-      054 doesn't have an explicit Q on it, but the §10 phase wording
-      flags it). If scoping requires, lift this section out into a
-      follow-up spec; otherwise land here.
+The first cut shipped `Use{File,MultipleFiles,Folder,SaveFile}PickerAsync` over the
+UWP `Windows.Storage.Pickers` + `InitializeWithWindow`, returning `StorageFile` /
+`StorageFolder`, with owner resolution through `ReactorApp.ActiveHostInternal`.
+Issue #1374 replaced all of that before 1.0; 7.3a is the current shape. The items
+below record what that first cut delivered and stay checked for history only.
 
+- [x] Option records, the four helpers on `RenderContext` and `Component`, null /
+      empty-list cancellation, UI-thread-only calls, and no arbitrary-HWND parameter (R12).
+- [x] Selftest `FilePicker_InitializesWithWindow` against an `IPickerService` test
+      double (now asserts the owner `WindowId`).
+- [x] PR note that §8.3 could be split into its own spec; it stayed here.
 ### 7.3a Picker migration to `Microsoft.Windows.Storage.Pickers` (issue #1374)
 
 - [x] Rebuild the helpers on `Microsoft.Windows.Storage.Pickers` (`WindowId`
@@ -778,13 +762,18 @@ Purely additive.
       ordered `IReadOnlyList<FileTypeChoice>`, validated before the owner lookup.
       Remove `FolderPickerOptions.FileTypeFilter` and
       `SaveFilePickerOptions.SuggestedSaveFile`.
-- [x] Capture the owning window on `RenderContext` during render instead of
-      reading `ReactorApp.ActiveHostInternal` at call time; reject a closed owner.
-- [x] Selftest `Pickers_OwningWindow`: with A then B open, A's helpers route to
-      A before and after B closes; B's helpers are rejected after B closes.
-      Mutation-checked against the call-time lookup.
+- [x] Record the owning window on each `RenderContext` from its host's reconciler
+      (`Reconciler.OwningWindow`, set when a `ReactorWindow` claims its host) at every
+      `BeginRender`, instead of reading the process-wide `ReactorApp.ActiveHostInternal`.
+      Clear it on `DetachFromHost`; reject a closed owner.
+- [x] Selftest `Pickers_OwningWindow`: with A then B open, A's helpers (root, nested
+      class component, function component) route to A before and after B closes; B's
+      helpers are rejected after B closes; a retired root is rejected. Mutation-checked.
+- [x] Selftest `Pickers_OwnerSurvivesMidRenderOpen`: a window opened mid-render does
+      not become the owner of components that render after it in the opener's window.
 - [x] Selftest `Pickers_Suite`: native option read-back, including
       insertion-ordered `FileTypeChoices` on open and save pickers.
+
 ### 7.4 Phase 7 exit gate
 
 - [x] Selftests registered in both places.
