@@ -292,8 +292,9 @@ internal static class OverlayLifecycle
             ownsClose = s_liveDialogs.TryGetValue(anchor, out var tracked) && ReferenceEquals(tracked, dialog);
             if (ownsClose) s_liveDialogs.Remove(anchor);
             // A caller can keep the dialog through .Set(...); a closed dialog must not keep
-            // resolving to (and keeping alive) its element. No-op when it was never tagged.
-            Reconciler.SetElementTag(dialog, null);
+            // resolving to (and keeping alive) its element, nor keep the published
+            // ReactorSource that Native AOT's GetSource falls back to. No-op when untagged.
+            Reconciler.ClearElementTag(dialog);
             // Unmount the content: it was mounted at open time and nothing else
             // tears it down, so every open/close cycle would otherwise leak its
             // component cleanups. Already null when teardown took ownership.

@@ -1403,6 +1403,44 @@ internal class ReactorSource_LiveDialogPublished(Harness h) : SelfTestFixtureBas
             await Harness.Render(50);
             flipHost.Dispose();
             H.SetContent(null);
+
+            // A dialog the app keeps (through .Set) stops describing its element once it
+            // closes: no published value, and no GetSource, in both tag modes.
+            var noAgent = ReactorSourcePublisher.NoManagedAgent;
+            var mapped = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled;
+            try
+            {
+                Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
+                foreach (var skipTags in new[] { false, true })
+                {
+                    ReactorSourcePublisher.NoManagedAgent = skipTags;
+                    var title = skipTags ? "SourceKeptSkip" : "SourceKeptTagged";
+                    WinUI.ContentDialog? kept = null;
+                    var keptHost = H.CreateHost();
+                    keptHost.Mount(_ => VStack(
+                        (ContentDialog(title, TextBlock("live-dialog-kept-body"), "OK") with { IsOpen = true }).Set(d => kept = d)));
+                    var shownDialog = await ContentDialogProbe.WaitForOpen(H, title, 2_000);
+                    var openValue = kept is null ? null : ReactorDiagnostics.GetSource(kept);
+                    var openSite = kept is null ? null : Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(kept);
+                    shownDialog?.Hide();
+                    await Harness.Render(50);
+                    await Harness.Render(50);
+                    var closedValue = kept is null ? null : ReactorDiagnostics.GetSource(kept);
+                    var closedSite = kept is null ? null : Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(kept);
+                    Console.WriteLine($"# kept dialog ({title}): open {openValue} @ {openSite}; closed {closedValue} @ {closedSite}");
+                    H.Check($"ReactorSource_LiveDialog_{title}_ClosedDialogStopsDescribingItsElement",
+                        openValue?.Contains("|element=ContentDialog", StringComparison.Ordinal) == true
+                        && closedValue is null
+                        && (openSite is null || closedSite is null));
+                    keptHost.Dispose();
+                    H.SetContent(null);
+                }
+            }
+            finally
+            {
+                ReactorSourcePublisher.NoManagedAgent = noAgent;
+                Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = mapped;
+            }
         }
         finally
         {
