@@ -319,9 +319,14 @@ internal static class WindowHookOwnerFixtures
             finally
             {
                 Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.SetBaseDirectoryForTests(null);
-                ReactorApp.FindWindow(WindowKey.Of(SecondMidRenderWindowKey))?.Close();
-                ReactorApp.FindWindow(WindowKey.Of(MidRenderWindowKey))?.Close();
-                a?.Close();
+                // A had a WinUI TitleBar: a native failure reported after Close() returns would
+                // otherwise fail-fast the host (issue #1345).
+                await AsyncTeardownGuard.CloseAndSettleAsync("SelfTest.WindowHookOwner.MidRenderOpen.Close", () =>
+                {
+                    ReactorApp.FindWindow(WindowKey.Of(SecondMidRenderWindowKey))?.Close();
+                    ReactorApp.FindWindow(WindowKey.Of(MidRenderWindowKey))?.Close();
+                    a?.Close();
+                }, settleMs: 100);
                 await Harness.Render(100);
                 try { global::System.IO.Directory.Delete(scratch, recursive: true); }
                 catch (Exception ex) when (ex is global::System.IO.IOException or UnauthorizedAccessException)
@@ -344,7 +349,7 @@ internal static class WindowHookOwnerFixtures
             ReactorApp.UIDispatcher ??= DispatcherQueue.GetForCurrentThread();
             ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
             ReactorWindow? b = null;
-            // Disposed when the method returns, after the finally has removed it from the tree.
+            // Disposed explicitly in the teardown guard below; the using is the backstop.
             using var hostControl = new ReactorHostControl();
             try
             {
@@ -378,8 +383,15 @@ internal static class WindowHookOwnerFixtures
             finally
             {
                 ApplicationPersistedScope.Default.Remove(PersistKey);
-                H.SetContent(null);
-                b?.Close();
+                // The embed rendered a WinUI TitleBar that no window claimed; tearing it down can
+                // report a native failure asynchronously (issue #1345). Remove and dispose it
+                // inside the guard rather than at scope exit, then close B.
+                await AsyncTeardownGuard.CloseAndSettleAsync("SelfTest.WindowHookOwner.HostControl.Teardown", () =>
+                {
+                    H.SetContent(null);
+                    hostControl.Dispose();
+                    b?.Close();
+                }, settleMs: 100);
                 await Harness.Render(100);
             }
         }
