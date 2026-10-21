@@ -4990,9 +4990,15 @@ ToString() → string
 new()
 Set(string key, Brush brush) → ResourceBuilder
 Set(string key, CornerRadius value) → ResourceBuilder
+Set(string key, FontFamily value) → ResourceBuilder
+Set(string key, FontWeight value) → ResourceBuilder
+Set(string key, GridLength value) → ResourceBuilder
 Set(string key, ThemeRef themeRef) → ResourceBuilder
+Set(string key, Thickness value) → ResourceBuilder
+Set(string key, bool value) → ResourceBuilder
 Set(string key, double value) → ResourceBuilder
 Set(string key, string color) → ResourceBuilder
+SetColor(string key, Color value) → ResourceBuilder
 
 ### record ResourceOptions
 new(TimeSpan? StaleTime = null, TimeSpan? CacheTime = null, int RetryCount = 0, bool RefetchOnMount = true, string CacheKey = null, bool RefetchOnWindowFocus = false)

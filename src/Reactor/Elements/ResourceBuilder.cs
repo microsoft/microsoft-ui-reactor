@@ -1,12 +1,14 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
+using Windows.UI;
+using Windows.UI.Text;
 
 namespace Microsoft.UI.Reactor.Elements;
 
 /// <summary>
 /// Immutable snapshot of per-control resource overrides built by <see cref="ResourceBuilder"/>.
-/// Contains both literal values (colors, doubles, corner radii) and theme-reactive
+/// Contains both literal resource values and theme-reactive
 /// <see cref="ThemeRef"/> entries that are re-resolved on theme change.
 /// </summary>
 public sealed record ResourceOverrides(
@@ -69,7 +71,7 @@ public sealed class ResourceBuilder
         return this;
     }
 
-    /// <summary>Sets a numeric resource override (e.g., <c>ButtonBorderThemeThickness</c>).</summary>
+    /// <summary>Sets a numeric resource override (e.g., <c>BreadcrumbBarItemThemeFontSize</c>).</summary>
     public ResourceBuilder Set(string key, double value)
     {
         _literals[key] = value;
@@ -78,6 +80,51 @@ public sealed class ResourceBuilder
 
     /// <summary>Sets a corner radius resource override (e.g., <c>ControlCornerRadius</c>).</summary>
     public ResourceBuilder Set(string key, CornerRadius value)
+    {
+        _literals[key] = value;
+        return this;
+    }
+
+    /// <summary>Sets a thickness resource override (e.g., <c>BreadcrumbBarChevronPadding</c>).</summary>
+    public ResourceBuilder Set(string key, Thickness value)
+    {
+        _literals[key] = value;
+        return this;
+    }
+
+    /// <summary>Sets a font weight resource override (e.g., <c>BreadcrumbBarItemFontWeight</c>).</summary>
+    public ResourceBuilder Set(string key, FontWeight value)
+    {
+        _literals[key] = value;
+        return this;
+    }
+
+    /// <summary>Sets a font family resource override (e.g., <c>ContentControlThemeFontFamily</c>).</summary>
+    public ResourceBuilder Set(string key, FontFamily value)
+    {
+        _literals[key] = value;
+        return this;
+    }
+
+    /// <summary>Sets a Boolean resource override (e.g., <c>GridViewItemSelectionCheckMarkVisualEnabled</c>).</summary>
+    public ResourceBuilder Set(string key, bool value)
+    {
+        _literals[key] = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets a literal color resource override, not a brush. Use the string or
+    /// <see cref="Brush"/> overload for resources that expect a brush.
+    /// </summary>
+    public ResourceBuilder SetColor(string key, Color value)
+    {
+        _literals[key] = value;
+        return this;
+    }
+
+    /// <summary>Sets a grid length resource override (e.g., <c>ContentDialogButtonSpacing</c>).</summary>
+    public ResourceBuilder Set(string key, GridLength value)
     {
         _literals[key] = value;
         return this;

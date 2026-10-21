@@ -1499,8 +1499,8 @@ public abstract record Element
 
         // Literals: compare by VALUE. Brushes are re-parsed to fresh instances each render
         // (e.g. .Set("X", "#0078D4")), so reference compare would false-decline the skip for
-        // an UNCHANGED literal-override cell — use BrushesEqual; other literal kinds (double,
-        // CornerRadius) are value types whose Equals is correct.
+        // an UNCHANGED literal-override cell. FontFamily also compares by value (Source),
+        // not WinRT wrapper identity. The remaining literal kinds are value types.
         var la = a.Literals;
         var lb = b.Literals;
         if (la.Count != lb.Count) return false;
@@ -1527,6 +1527,8 @@ public abstract record Element
         if (ReferenceEquals(a, b)) return true;
         if (a is null || b is null) return false;
         if (a is Brush ba && b is Brush bb) return BrushesEqual(ba, bb);
+        if (a is Microsoft.UI.Xaml.Media.FontFamily fa && b is Microsoft.UI.Xaml.Media.FontFamily fb)
+            return FontFamiliesEqual(fa, fb);
         return a.Equals(b);
     }
 }
