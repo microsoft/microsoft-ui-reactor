@@ -140,7 +140,7 @@ Button(""Save as..."", async () =>
         await File.WriteAllTextAsync(target.Path, $""Saved from the Reactor gallery at {DateTime.Now:t}."");
         setSaved($""Wrote {target.Path}"");
     }
-    catch (IOException ex)
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
     {
         // An async lambda passed to Button is async void: handle failures here.
         setSaved($""Failed: {ex.Message}"");
