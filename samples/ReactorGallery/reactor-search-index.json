@@ -1278,7 +1278,7 @@
         {
           "header": "Min & Max Track Sizes",
           "language": "csharp",
-          "code": "var (gridWidth, setGridWidth) = UseState(420.0);\n\nVStack(8,\n    Grid(\n        // Clamp a track's computed size with MinSize / MaxSize.\n        columns: [GridSize.Star().MinSize(120), GridSize.Star(), GridSize.Star().MaxSize(100)],\n        rows: [GridSize.Auto],\n        Border(TextBlock(\"1*, min 120\")).Grid(row: 0, column: 0),\n        Border(TextBlock(\"1*\")).Grid(row: 0, column: 1),\n        Border(TextBlock(\"1*, max 100\")).Grid(row: 0, column: 2)\n    ).Width(gridWidth),\n    Slider(gridWidth, 200, 700, setGridWidth))"
+          "code": "var (gridWidth, setGridWidth) = UseState(420.0);\n\nVStack(8,\n    Grid(\n        // Clamp a track's computed size with MinSize / MaxSize.\n        columns: [GridSize.Star().MinSize(120), GridSize.Star(), GridSize.Star().MaxSize(100)],\n        rows: [GridSize.Auto],\n        Border(TextBlock(\"1*, min 120\")).Grid(row: 0, column: 0),\n        Border(TextBlock(\"1*\")).Grid(row: 0, column: 1),\n        Border(TextBlock(\"1*, max 100\")).Grid(row: 0, column: 2)\n    ).Width(gridWidth),\n    Slider(gridWidth, 200, 700, setGridWidth).AutomationName(\"Grid width\"))"
         }
       ]
     },
