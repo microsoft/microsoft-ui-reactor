@@ -648,7 +648,7 @@ internal static class PickersFixtures
             var stub = new StubPickerService();
             RenderContext.PickerService = stub;
             var component = new PickerComponent();
-            var control = new global::Microsoft.UI.Reactor.Hosting.ReactorHostControl();
+            using var control = new global::Microsoft.UI.Reactor.Hosting.ReactorHostControl();
             global::Microsoft.UI.Xaml.Window? windowA = null, windowB = null;
             try
             {
@@ -717,7 +717,6 @@ internal static class PickersFixtures
             finally
             {
                 RenderContext.PickerService = previous;
-                control.Dispose();
                 windowB?.Close();
                 windowA?.Close();
                 await Harness.Render(100);
