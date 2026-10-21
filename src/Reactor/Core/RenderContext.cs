@@ -2483,6 +2483,12 @@ public sealed class RenderContext
 
     private void RunCleanupsCore(Action<Exception>? onCleanupError)
     {
+        // Cleanups run when this context unmounts or is rolled back (nested components
+        // included), so it no longer renders into its window: a retained delegate must not
+        // open a picker over it. Cleared first so a throwing cleanup cannot skip it; a
+        // context that renders again (hot-reload reset) re-records it in BeginRender.
+        _owningWindow = null;
+
         // Phase 1: Run effect cleanups. Drain BOTH the committed cleanup and any
         // staged-but-not-yet-flushed cleanup: when a render changes an effect's
         // deps it moves the old cleanup into PendingCleanup (to run at the next

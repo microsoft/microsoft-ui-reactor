@@ -104,6 +104,13 @@ internal static class PickersFixtures
 
     private const string MidRenderWindowKey = "pickers-mid-render";
 
+    // A replacement root whose tree shares nothing with PickerComponent's, so the old
+    // root's nested components unmount instead of being reused in place.
+    private sealed class ReplacementRoot : Component
+    {
+        public override Element Render() => TextBlock("replaced");
+    }
+
     private sealed class MidRenderRoot : Component
     {
         public PickerProbe SiblingProbe { get; } = new();
@@ -335,7 +342,7 @@ internal static class PickersFixtures
 
                 // Replacing A's root retires the old root's context (DetachFromHost): a retained
                 // instance must stop opening pickers over the window it no longer renders into.
-                windowA.Host.Mount(new PickerComponent());
+                windowA.Host.Mount(new ReplacementRoot());
                 await windowA.Host.WaitForIdleAsync();
                 await Harness.Render(100);
                 for (int i = 0; i < a.Operations.Length; i++)
@@ -346,6 +353,18 @@ internal static class PickersFixtures
                     catch (InvalidOperationException ex) { message = ex.Message; }
                     H.Check($"Pickers_OwningWindow_RetiredRootRejected_{OperationNames[i]}",
                         message == $"{OperationName(i)} requires an owning ReactorWindow." && stub.Calls == calls);
+                }
+                // The replaced root's nested class and function components unmount through the
+                // reconciler's cleanup path, not DetachFromHost; their retained delegates must
+                // refuse too, even though window A is still open.
+                foreach (var (name, probe) in new[] { ("ChildComponent", a.ChildProbe), ("FunctionComponent", a.FuncProbe) })
+                {
+                    var calls = stub.Calls;
+                    string? message = null;
+                    try { await probe.Pick!(); }
+                    catch (InvalidOperationException ex) { message = ex.Message; }
+                    H.Check($"Pickers_OwningWindow_RetiredRoot{name}Rejected",
+                        message == "PickFileAsync requires an owning ReactorWindow." && stub.Calls == calls);
                 }
             }
             finally
