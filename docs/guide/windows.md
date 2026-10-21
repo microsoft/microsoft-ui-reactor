@@ -50,7 +50,13 @@ Caveats:
   keeps closing a transient floating window from firing
   `OnPrimaryWindowClosed` and exiting the app.
 - `UseWindow()` returns the owning `ReactorWindow` inside a window component and
-  `null` outside one (for example tray flyouts).
+  `null` outside one (for example tray flyouts and `ReactorHostControl` embeds).
+  The owner is the window whose host renders the component, including nested
+  components and virtualized rows, even while another window is the most
+  recently opened or rendered one. The other window hooks (`UseDpi`,
+  `UseWindowState`, `UseIsActive`, `UseClosingGuard`, …) resolve the same window
+  and return their "outside a window" values when there is none; there is no
+  fallback to another open window.
 
 ## Sizing & resizing
 

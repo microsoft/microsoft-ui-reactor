@@ -5221,15 +5221,20 @@ public partial record TitleBarElement(
             },
         });
         return d
-            .Imperative(
-                mount:  static (c, e) => global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Apply(c, e, force: true),
-                update: static (c, _, e) => global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Apply(c, e, force: false))
-            .Imperative(
-                mount: static (c, e) => RegisterWindowTitleBar(c, e),
-                update: static (c, _, e) =>
+            // Bridged so the handlers read the owning window from the reconciler mounting the
+            // control, not from ReactorApp.ActiveHostInternal, which a window opened mid-render
+            // repoints and which virtualized-row and ReactorHostControl renders never scope.
+            .ImperativeBridged(
+                mount:  static (ctx, c, e) => global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Apply(
+                    c, e, ctx.Reconciler.OwningWindow, force: true),
+                update: static (ctx, c, _, e) => global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Apply(
+                    c, e, ctx.Reconciler.OwningWindow, force: false))
+            .ImperativeBridged(
+                mount: static (ctx, c, e) => RegisterWindowTitleBar(c, e, ctx.Reconciler),
+                update: static (ctx, c, _, e) =>
                 {
-                    ApplyTitleBarPreferredTheme(c, e);
-                    ApplyTitleBarHeightOption(c, e);
+                    ApplyTitleBarPreferredTheme(c, e, ctx.Reconciler.OwningWindow);
+                    ApplyTitleBarHeightOption(c, e, ctx.Reconciler.OwningWindow);
                 })
             .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarEventPayload,
                 global::Windows.Foundation.TypedEventHandler<WinUI.TitleBar, object>>(
@@ -5250,11 +5255,14 @@ public partial record TitleBarElement(
     // Issue #511 / PR #455 regression: ExtendsContentIntoTitleBar must flip BEFORE the WinUI
     // TitleBar's own Loaded handler runs UpdatePaddingsForCaptionButtons(); apply synchronously
     // in the Imperative mount (mirrors the legacy MountTitleBar path).
-    private static void RegisterWindowTitleBar(WinUI.TitleBar titleBar, TitleBarElement element)
+    private static void RegisterWindowTitleBar(
+        WinUI.TitleBar titleBar, TitleBarElement element, global::Microsoft.UI.Reactor.Core.Reconciler reconciler)
     {
-        if (global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal is { } host)
+        // The XAML window of the ReactorHost whose reconciler mounts this control. Null for
+        // ReactorHostControl content, which must not claim some other window's title bar.
+        if (reconciler.HostWindow is { } hostWindow)
         {
-            var owningWindow = host.OwningWindow;
+            var owningWindow = reconciler.OwningWindow;
             // Record that a WinUI TitleBar control is mounted in this window —
             // including the explicit-false case below where we skip SetTitleBar.
             // The control corrupts the heap on teardown when the window is NOT in
@@ -5263,25 +5271,25 @@ public partial record TitleBarElement(
             owningWindow?.MarkTitleBarControlPresent(titleBar);
             // The caption theme is legal whether or not the window is content-extended,
             // so it is applied ahead of the explicit-false early return. (issue #1297)
-            ApplyTitleBarPreferredTheme(titleBar, element);
+            ApplyTitleBarPreferredTheme(titleBar, element, owningWindow);
 
             var explicitValue = owningWindow?.Spec.ExtendsContentIntoTitleBar;
             if (explicitValue == false) return;
             if (explicitValue is null)
-                host.Window.ExtendsContentIntoTitleBar = true;
-            host.Window.SetTitleBar(titleBar);
+                hostWindow.ExtendsContentIntoTitleBar = true;
+            hostWindow.SetTitleBar(titleBar);
         }
 
-        ApplyTitleBarHeightOption(titleBar, element);
+        ApplyTitleBarHeightOption(titleBar, element, reconciler.OwningWindow);
     }
 
     /// <summary>
     /// Applies <see cref="PreferredTheme"/> to the owning window's caption. A bare
     /// <c>ReactorHost</c> has no caption to theme, so it is a no-op there. (issue #1297)
     /// </summary>
-    private static void ApplyTitleBarPreferredTheme(WinUI.TitleBar titleBar, TitleBarElement element) =>
-        global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow
-            ?.SetElementTitleBarTheme(element.PreferredTheme, titleBar);
+    private static void ApplyTitleBarPreferredTheme(
+        WinUI.TitleBar titleBar, TitleBarElement element, global::Microsoft.UI.Reactor.ReactorWindow? owningWindow) =>
+        owningWindow?.SetElementTitleBarTheme(element.PreferredTheme, titleBar);
 
     /// <summary>
     /// Applies <see cref="HeightOption"/>. (issue #917)
@@ -5303,10 +5311,10 @@ public partial record TitleBarElement(
     /// this entry, writes the author's value.
     /// </para>
     /// </summary>
-    private static void ApplyTitleBarHeightOption(WinUI.TitleBar titleBar, TitleBarElement element)
+    private static void ApplyTitleBarHeightOption(
+        WinUI.TitleBar titleBar, TitleBarElement element, global::Microsoft.UI.Reactor.ReactorWindow? window)
     {
         var explicitHeight = element.Modifiers?.Height is not null;
-        var window = global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
         if (window is not null)
         {
             window.SetElementTitleBarHeight(element.HeightOption, titleBar, explicitHeight);
@@ -5327,10 +5335,10 @@ public partial record TitleBarElement(
     /// still-tall <c>TitleBar(...)</c> falls back to the implied tall height
     /// rather than to auto. No-ops when the author owns the height. (issue #917)
     /// </summary>
-    internal static void SyncControlHeightAfterModifiers(WinUI.TitleBar titleBar, TitleBarElement element)
+    internal static void SyncControlHeightAfterModifiers(
+        WinUI.TitleBar titleBar, TitleBarElement element, global::Microsoft.UI.Reactor.ReactorWindow? window)
     {
         if (element.Modifiers?.Height is not null) return;
-        var window = global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
         if (window is not null) window.SyncTitleBarControlHeight();
         else if (element.HeightOption == WindowTitleBarHeight.Tall)
             titleBar.Height = TallTitleBarControlHeight;

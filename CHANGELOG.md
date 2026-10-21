@@ -340,6 +340,21 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Window hooks resolve the window that renders the component, not the most recently
+  active host** (issue #1396, spec 036 §7.1). `UseWindow`, the parameterless
+  `UseWindowSize`, `UseWindowPosition`, `UseIsCovered`, `UseWindowAspectRatio`,
+  `UseWindowDragMove`, `UseWindowState`, `UseIsActive`, `UseClosingGuard`, `UseDpi`,
+  `UsePersisted(PersistedScope.Window)` and the `TitleBar` element now read the owner the
+  host's reconciler records on each component, the same owner the picker methods use. Before,
+  they read the process-wide active host, so a sibling rendered after a window opened
+  mid-render (`UseOpenWindow`) and a virtualized row realized by `LazyVStack` /
+  `ElementFactory` got another window: its size, DPI and persisted scope, and a closing guard,
+  aspect lock or `TitleBar` registered on it. Content with no owning `ReactorWindow` (tray
+  flyouts, `ReactorHostControl`, a `ReactorHost` over a raw `Window`) gets the documented
+  "outside a window" values. Behaviour change: `ReactorHostControl` content previously saw an
+  unrelated host's window and now sees none, and a `TitleBar` inside it no longer claims
+  that window's caption.
+
 - **Replacing a host's root no longer leaves the old root running** (issue #1326).
   `ReactorHost.Mount(...)` and `ReactorHostControl.Mount(...)` now retire the
   outgoing root before installing the new one: its effect cleanups run, and a

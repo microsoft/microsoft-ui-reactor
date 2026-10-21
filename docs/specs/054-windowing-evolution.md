@@ -1145,6 +1145,9 @@ over the UWP `Windows.Storage.Pickers` + `InitializeWithWindow`, returning
   detach and a closed owner is refused. `ReactorHostControl` and directly
   constructed hosts have no `ReactorWindow`, so the pickers throw there; callers
   construct the native picker from `XamlRoot.ContentIslandEnvironment.AppWindowId`.
+  The window hooks (`UseWindow`, `UseDpi`, `UseWindowPosition`, …), `UsePersisted`'s
+  window scope and the `TitleBar` element read the same recorded owner during render
+  (issue #1396, spec 036 §7.1).
 - **Naming.** `HookRulesAnalyzer` treats any `Use[A-Z]*` method on
   `Component` / `RenderContext` as a hook, so calling the old names from a click
   lambda raised REACTOR_HOOKS_001 and from a named handler REACTOR_HOOKS_005. The

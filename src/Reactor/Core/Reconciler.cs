@@ -55,10 +55,29 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// The <see cref="Microsoft.UI.Reactor.ReactorWindow"/> whose host owns this reconciler, or
     /// null for hosts without one (<see cref="Microsoft.UI.Reactor.Hosting.ReactorHostControl"/>,
-    /// directly constructed hosts). Every component context it renders records it as its picker
-    /// owner, including renders outside the host's render pass (virtualized rows).
+    /// directly constructed hosts). Every component context it renders records it as its window
+    /// owner (read by the window hooks and the picker methods), including renders outside the
+    /// host's render pass (virtualized rows); TitleBar mount/update/unmount read it directly.
     /// </summary>
     internal Microsoft.UI.Reactor.ReactorWindow? OwningWindow { get; set; }
+
+    /// <summary>
+    /// The XAML <see cref="Window"/> of the <see cref="Microsoft.UI.Reactor.Hosting.ReactorHost"/> that
+    /// owns this reconciler, with or without a <see cref="OwningWindow"/>; null for
+    /// <see cref="Microsoft.UI.Reactor.Hosting.ReactorHostControl"/>. Lets a mounting
+    /// <c>TitleBar</c> claim its own host's window instead of whichever host is ambient.
+    /// </summary>
+    internal Window? HostWindow { get; set; }
+
+    // Issue #917 — withdraws an unmounting TitleBar from this reconciler's own window (not the
+    // ambient host's). Skipped once the window is closing or disposed: ReactorWindow.Dispose
+    // already drops its title-bar bookkeeping, and resetting the caption state of a window
+    // being torn down would undo PrepareTitleBarForClose (issue #537).
+    private void WithdrawTitleBar(WinUI.TitleBar unmounting)
+    {
+        if (OwningWindow is { IsClosingOrDisposed: false } window)
+            window.ClearTitleBarControl(unmounting);
+    }
     // Ancestor-aware effective theme for the subtree currently being mounted/updated,
     // threaded top-down through Mount/Update (an element's own RequestedTheme wins,
     // otherwise the subtree inherits its ancestor's). ElementTheme.Default means "no
@@ -3095,9 +3114,8 @@ public sealed partial class Reconciler : IDisposable
         // ExtendsContentIntoTitleBar inference and its caption-height
         // contribution from the owning window, so a window that merely used to
         // host one is not left content-extended and tall for its lifetime.
-        if (control is WinUI.TitleBar unmountingBar
-            && global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow is { } titleBarWindow)
-            titleBarWindow.ClearTitleBarControl(unmountingBar);
+        if (control is WinUI.TitleBar unmountingBar)
+            WithdrawTitleBar(unmountingBar);
 
         if (_componentNodes.TryGetValue(control, out var node))
         {
@@ -3518,9 +3536,8 @@ public sealed partial class Reconciler : IDisposable
         // Issue #917 — mirrors UnmountRecursive: a TitleBar reached through the
         // pooling traversal (nested in a poolable container) must also withdraw
         // its inference and caption-height contribution.
-        if (control is WinUI.TitleBar pooledUnmountingBar
-            && global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow is { } pooledTitleBarWindow)
-            pooledTitleBarWindow.ClearTitleBarControl(pooledUnmountingBar);
+        if (control is WinUI.TitleBar pooledUnmountingBar)
+            WithdrawTitleBar(pooledUnmountingBar);
 
         // Run cleanup logic (component teardown, etc.)
         if (_componentNodes.TryGetValue(control, out var node))

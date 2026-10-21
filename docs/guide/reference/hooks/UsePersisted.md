@@ -43,11 +43,11 @@ process-wide state.
 
 ### Discussion
 
-`PersistedScope.Window` resolves to the active host's
-`ReactorWindow.PersistedScope` when the
-host has an owning window; otherwise it falls back to the process-wide
-scope so unit-test contexts (which never construct a window) keep their
-existing semantics. Two windows of the same component class therefore
+`PersistedScope.Window` resolves to the
+`ReactorWindow.PersistedScope` of the window whose host
+renders this component; content without an owning window (tray flyouts,
+`ReactorHostControl`, unit-test contexts) falls back to the process-wide
+scope. Two windows of the same component class therefore
 hold independent state under `PersistedScope.Window`.
 (spec 036 §3.4 / §4.4 — closes spec 033 §7.5.)
 

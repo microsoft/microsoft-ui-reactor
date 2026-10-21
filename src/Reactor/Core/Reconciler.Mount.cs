@@ -179,7 +179,7 @@ public sealed partial class Reconciler
         if (control is WinUI.TitleBar tbCtl)
         {
             if (element is TitleBarElement tbEl)
-                TitleBarElement.SyncControlHeightAfterModifiers(tbCtl, tbEl);
+                TitleBarElement.SyncControlHeightAfterModifiers(tbCtl, tbEl, OwningWindow);
 
             // Anything that changed since the pre-modifier observation came from a
             // modifier; whether it recurs depends on the phase.
