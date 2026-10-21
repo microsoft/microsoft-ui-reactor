@@ -119,10 +119,13 @@ internal static class PickersFixtures
     }
 
     internal static string ReleasedMessage(string operation)
-        => $"{operation} was called from a component that is no longer mounted in a ReactorWindow.";
+        => $"{operation} was called from a component that is no longer mounted.";
 
     internal static string ClosedMessage(string operation)
-        => $"{operation} was called after the component's ReactorWindow closed.";
+        => $"{operation} was called after the component's window closed or its host was disposed.";
+
+    internal static string DetachedMessage(string operation)
+        => $"{operation} was called while the component's ReactorHostControl is not loaded in a window.";
 
     // Opens a window from inside its own render, which constructs another ReactorHost
     // and so repoints ReactorApp.ActiveHostInternal in the middle of the opener's pass.
@@ -588,6 +591,189 @@ internal static class PickersFixtures
             }
             finally
             {
+                window?.Close();
+                await Harness.Render(100);
+            }
+        }
+    }
+
+    private static global::Microsoft.UI.Xaml.Window OpenRawWindow(string title, global::Microsoft.UI.Xaml.UIElement? content)
+    {
+        var window = new global::Microsoft.UI.Xaml.Window { Title = title, Content = content };
+        window.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(320, 240));
+        window.Activate();
+        return window;
+    }
+
+    private static async Task<string?> PickMessage(Func<Task> pick)
+    {
+        try { await pick(); }
+        catch (InvalidOperationException ex) { return ex.Message; }
+        return null;
+    }
+
+    // Every operation of a mounted PickerComponent, plus its nested class, function and memo
+    // components, routes to the expected window with the component's own options.
+    private static async Task CheckRoutes(Harness h, string prefix, StubPickerService stub, PickerComponent component, WindowId owner)
+    {
+        for (int i = 0; i < component.Operations.Length; i++)
+        {
+            stub.Owner = default;
+            stub.Operation = null;
+            var error = await PickMessage(component.Operations[i]);
+            h.Check($"{prefix}_Routes_{OperationNames[i]}", error is null && stub.Operation == OperationNames[i]
+                && stub.Owner == owner && ReferenceEquals(stub.Options, ExpectedOptions(component, i)));
+        }
+        foreach (var (name, probe) in new[] { ("ChildComponent", component.ChildProbe), ("FunctionComponent", component.FuncProbe), ("MemoComponent", component.MemoProbe) })
+        {
+            stub.Owner = default;
+            stub.Operation = null;
+            var error = await PickMessage(probe.Pick!);
+            h.Check($"{prefix}_{name}", error is null && stub.Operation == "single" && stub.Owner == owner);
+        }
+    }
+
+    /// <summary>
+    /// Issue #1395: content hosted by <see cref="global::Microsoft.UI.Reactor.Hosting.ReactorHostControl"/> has no
+    /// <see cref="ReactorWindow"/>, so the picker owner is resolved from the window the control
+    /// is loaded in, at call time. A detached control refuses; a reparented one follows its new
+    /// window; a disposed one has released its owner.
+    /// </summary>
+    internal sealed class HostControl(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            ReactorApp.UIDispatcher ??= DispatcherQueue.GetForCurrentThread();
+            var previous = RenderContext.PickerService;
+            var stub = new StubPickerService();
+            RenderContext.PickerService = stub;
+            var component = new PickerComponent();
+            var control = new global::Microsoft.UI.Reactor.Hosting.ReactorHostControl();
+            global::Microsoft.UI.Xaml.Window? windowA = null, windowB = null;
+            try
+            {
+                control.Mount(component);
+                windowA = OpenRawWindow("Pickers host control A", control);
+                await control.WaitForIdleAsync();
+                await Harness.Render(150);
+                var ownerA = windowA.AppWindow.Id;
+                // Oracle guards: the control rendered, its window is not the harness window, and no
+                // process-wide host names it, so routing to A can only come from the control itself.
+                H.Check("Pickers_HostControl_Rendered", component.Operations.Length == OperationNames.Length);
+                H.Check("Pickers_HostControl_DistinctFromHarness", ownerA != H.Window.AppWindow.Id);
+                H.Check("Pickers_HostControl_NotTheActiveHost", !ReferenceEquals(ReactorApp.ActiveHostInternal?.Window, windowA));
+
+                await CheckRoutes(H, "Pickers_HostControl", stub, component, ownerA);
+
+                // A row realized by the list's layout renders outside the control's render pass.
+                component.Bump();
+                await control.WaitForIdleAsync();
+                var rowRealized = await Harness.WaitFor(() => component.RowProbe.Pick is not null, maxPasses: 20, perPassMs: 25);
+                H.Check("Pickers_HostControl_RowRealized", rowRealized);
+                if (rowRealized)
+                {
+                    stub.Owner = default;
+                    await component.RowProbe.Pick!();
+                    H.Check("Pickers_HostControl_VirtualizedRow", stub.Operation == "single" && stub.Owner == ownerA);
+                }
+
+                var calls = stub.Calls;
+                bool offThreadRejected = false;
+                try { await Task.Run(component.Operations[0]); }
+                catch (InvalidOperationException ex) { offThreadRejected = ex.Message.Contains("UI thread", StringComparison.Ordinal); }
+                H.Check("Pickers_HostControl_OffUiThread", offThreadRejected && stub.Calls == calls);
+
+                // Removing the control from its window unloads it without unmounting the tree
+                // (issue #344): the call is refused until it is in a window again.
+                windowA.Content = null;
+                await Harness.Render(150);
+                H.Check("Pickers_HostControl_Unloaded", !control.IsLoaded);
+                for (int i = 0; i < component.Operations.Length; i++)
+                {
+                    calls = stub.Calls;
+                    var message = await PickMessage(component.Operations[i]);
+                    H.Check($"Pickers_HostControl_Detached_{OperationNames[i]}",
+                        message == DetachedMessage(OwningWindow.OperationName(i)) && stub.Calls == calls);
+                }
+
+                // Reparented into another window, without re-rendering: the owner follows it.
+                windowB = OpenRawWindow("Pickers host control B", control);
+                await Harness.Render(150);
+                var ownerB = windowB.AppWindow.Id;
+                H.Check("Pickers_HostControl_ReattachedDistinctOwner", control.IsLoaded && ownerB != ownerA);
+                await CheckRoutes(H, "Pickers_HostControl_Reattached", stub, component, ownerB);
+
+                // Disposing the control unmounts its tree, which releases the owner.
+                control.Dispose();
+                await Harness.Render(50);
+                for (int i = 0; i < component.Operations.Length; i++)
+                {
+                    calls = stub.Calls;
+                    var message = await PickMessage(component.Operations[i]);
+                    H.Check($"Pickers_HostControl_Disposed_{OperationNames[i]}",
+                        message == ReleasedMessage(OwningWindow.OperationName(i)) && stub.Calls == calls);
+                }
+            }
+            finally
+            {
+                RenderContext.PickerService = previous;
+                control.Dispose();
+                windowB?.Close();
+                windowA?.Close();
+                await Harness.Render(100);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Issue #1395: a <see cref="global::Microsoft.UI.Reactor.Hosting.ReactorHost"/> constructed over a raw <c>Window</c> has no
+    /// <see cref="ReactorWindow"/>; its pickers are owned by that window, and closing it releases them.
+    /// </summary>
+    internal sealed class RawWindowHost(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            ReactorApp.UIDispatcher ??= DispatcherQueue.GetForCurrentThread();
+            var previous = RenderContext.PickerService;
+            var stub = new StubPickerService();
+            RenderContext.PickerService = stub;
+            var component = new PickerComponent();
+            global::Microsoft.UI.Xaml.Window? window = null;
+            try
+            {
+                window = OpenRawWindow("Pickers raw host", content: null);
+                var host = new global::Microsoft.UI.Reactor.Hosting.ReactorHost(window);
+                host.Mount(component);
+                await host.WaitForIdleAsync();
+                await Harness.Render(100);
+                var owner = window.AppWindow.Id;
+                H.Check("Pickers_RawWindowHost_NoReactorWindow", host.OwningWindow is null && owner != H.Window.AppWindow.Id);
+
+                await CheckRoutes(H, "Pickers_RawWindowHost", stub, component, owner);
+
+                var calls = stub.Calls;
+                bool offThreadRejected = false;
+                try { await Task.Run(component.Operations[0]); }
+                catch (InvalidOperationException ex) { offThreadRejected = ex.Message.Contains("UI thread", StringComparison.Ordinal); }
+                H.Check("Pickers_RawWindowHost_OffUiThread", offThreadRejected && stub.Calls == calls);
+
+                // Closing the window disposes the host (its Closed handler), which unmounts the tree.
+                var closing = window;
+                window = null;
+                closing.Close();
+                await Harness.Render(100);
+                H.Check("Pickers_RawWindowHost_HostDisposed", host.IsDisposed);
+                for (int i = 0; i < component.Operations.Length; i++)
+                {
+                    calls = stub.Calls;
+                    var message = await PickMessage(component.Operations[i]);
+                    H.Check($"Pickers_RawWindowHost_Closed_{OperationNames[i]}",
+                        message == ReleasedMessage(OwningWindow.OperationName(i)) && stub.Calls == calls);
+                }
+            }
+            finally
+            {
+                RenderContext.PickerService = previous;
                 window?.Close();
                 await Harness.Render(100);
             }

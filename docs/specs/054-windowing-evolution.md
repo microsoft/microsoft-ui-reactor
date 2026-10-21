@@ -1142,9 +1142,18 @@ over the UWP `Windows.Storage.Pickers` + `InitializeWithWindow`, returning
   and every `BeginRender` records it on the `RenderContext`. The process-wide field
   is not consulted, so a window opened mid-render or a virtualized row rendered
   outside the host's pass still records the right owner. The owner is cleared on
-  detach and a closed owner is refused. `ReactorHostControl` and directly
-  constructed hosts have no `ReactorWindow`, so the pickers throw there; callers
-  construct the native picker from `XamlRoot.ContentIslandEnvironment.AppWindowId`.
+  detach and a closed owner is refused.
+- **Embedded owners (issue #1395).** The reconciler carries an internal owner
+  resolver (`IContentOwner`, `Reconciler.Owner`) rather than a `ReactorWindow`, and
+  every `BeginRender` records it. Each host implements it: a `ReactorHost` resolves
+  the `Window` it was constructed over (`AppWindow.Id`), whether or not a
+  `ReactorWindow` claimed it, and refuses once the host is disposed, the window
+  closed, or the claiming `ReactorWindow` is closing. A `ReactorHostControl` resolves
+  `XamlRoot.ContentIslandEnvironment.AppWindowId` at call time, so a reparented
+  control follows its new window, and reports a distinct error while unloaded
+  (Unloaded does not unmount the tree, issue #344). Both check the host's dispatcher
+  thread first. The errors stay distinct: never rendered under a host, no longer
+  mounted, window closed or host disposed, control not loaded, wrong thread.
 - **Naming.** `HookRulesAnalyzer` treats any `Use[A-Z]*` method on
   `Component` / `RenderContext` as a hook, so calling the old names from a click
   lambda raised REACTOR_HOOKS_001 and from a named handler REACTOR_HOOKS_005. The

@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Core;
+using Microsoft.Windows.Storage.Pickers;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests;
@@ -25,7 +26,7 @@ public class PickerTests
     [MemberData(nameof(Operations))]
     public void MissingWindowReportsTheRequestedOperation(string operation)
     {
-        // A context that never rendered inside a ReactorWindow host has no owner.
+        // A context that never rendered under a host has no owner.
         var context = new RenderContext();
         var error = Assert.Throws<InvalidOperationException>(() => Invoke(context, operation, validOptions: true));
         Assert.Equal(NoOwnerMessage(operation), error.Message);
@@ -103,10 +104,139 @@ public class PickerTests
         Assert.Equal("", options.DefaultFileExtension);
     }
 
-    // A context that never rendered in a ReactorWindow (ReactorHostControl content, or no host
-    // at all) gets the message that names the hosting limitation and its workaround.
+    // The status is passed as an int: ContentOwnerStatus is internal and theory methods are public.
+    public static TheoryData<string, int, string> UnavailableOwners()
+    {
+        var data = new TheoryData<string, int, string>();
+        foreach (var operation in new[] { "PickFileAsync", "PickMultipleFilesAsync", "PickFolderAsync", "PickMultipleFoldersAsync", "PickSaveFileAsync" })
+        {
+            data.Add(operation, (int)ContentOwnerStatus.Closed, $"{operation} was called after the component's window closed or its host was disposed.");
+            data.Add(operation, (int)ContentOwnerStatus.Detached, $"{operation} was called while the component's ReactorHostControl is not loaded in a window.");
+            data.Add(operation, (int)ContentOwnerStatus.WrongThread, $"{operation} must be called on the owning window's UI thread.");
+        }
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(UnavailableOwners))]
+    public void UnavailableOwnerIsReportedAndNeverReachesThePicker(string operation, int status, string message)
+    {
+        var owner = new FakeOwner { Status = (ContentOwnerStatus)status };
+        var service = new RecordingPickerService();
+        var context = new RenderContext();
+        context.BeginRender(static () => { }, owner);
+        WithService(service, () =>
+        {
+            var error = Assert.Throws<InvalidOperationException>(() => Invoke(context, operation, validOptions: true));
+            Assert.Equal(message, error.Message);
+        });
+        Assert.Equal(1, owner.Lookups);
+        Assert.Null(service.Operation);
+    }
+
+    [Theory]
+    [MemberData(nameof(Operations))]
+    public void AvailableOwnerRoutesTheResolvedWindowId(string operation)
+    {
+        // The id is resolved at call time, not captured at render: a host control moved to
+        // another window after its last render must route to the new window.
+        var owner = new FakeOwner { Status = ContentOwnerStatus.Available, Id = new WindowId(41) };
+        var service = new RecordingPickerService();
+        var context = new RenderContext();
+        context.BeginRender(static () => { }, owner);
+        owner.Id = new WindowId(42);
+        WithService(service, () => Invoke(context, operation, validOptions: true));
+        Assert.Equal(operation, service.Operation);
+        Assert.Equal(new WindowId(42), service.Owner);
+    }
+
+    [Fact]
+    public void UnmountAndRootRetirementReleaseTheOwner()
+    {
+        var owner = new FakeOwner { Status = ContentOwnerStatus.Available, Id = new WindowId(7) };
+        var service = new RecordingPickerService();
+        var unmounted = new RenderContext();
+        unmounted.BeginRender(static () => { }, owner);
+        unmounted.RunCleanups();
+        var retired = new RenderContext();
+        retired.BeginRender(static () => { }, owner);
+        retired.DetachFromHost();
+        WithService(service, () =>
+        {
+            foreach (var context in new[] { unmounted, retired })
+            {
+                var error = Assert.Throws<InvalidOperationException>(() => { _ = context.PickFileAsync(new()); });
+                Assert.Equal("PickFileAsync was called from a component that is no longer mounted.", error.Message);
+            }
+        });
+        Assert.Equal(0, owner.Lookups);
+        Assert.Null(service.Operation);
+
+        // A context that renders again (hot-reload reset) re-records its owner.
+        unmounted.BeginRender(static () => { }, owner);
+        WithService(service, () => { _ = unmounted.PickFileAsync(new()); });
+        Assert.Equal(new WindowId(7), service.Owner);
+    }
+
+    [Fact]
+    public void OwningReactorWindowIsNullWithoutAWindowOwner()
+    {
+        var context = new RenderContext();
+        Assert.Null(context.OwningReactorWindow);
+        context.BeginRender(static () => { }, new FakeOwner());
+        Assert.Null(context.OwningReactorWindow);
+    }
+
+    private static void WithService(IPickerService service, Action action)
+    {
+        var previous = RenderContext.PickerService;
+        RenderContext.PickerService = service;
+        try { action(); }
+        finally { RenderContext.PickerService = previous; }
+    }
+
+    private sealed class FakeOwner : IContentOwner
+    {
+        public ContentOwnerStatus Status;
+        public WindowId Id;
+        public int Lookups;
+        public ReactorWindow? ReactorWindow => null;
+
+        public ContentOwnerStatus TryGetWindowId(out WindowId id)
+        {
+            Lookups++;
+            id = Status == ContentOwnerStatus.Available ? Id : default;
+            return Status;
+        }
+    }
+
+    private sealed class RecordingPickerService : IPickerService
+    {
+        public string? Operation;
+        public WindowId Owner;
+
+        private Task<T> Record<T>(WindowId owner, string operation, T result)
+        {
+            Owner = owner;
+            Operation = operation;
+            return Task.FromResult(result);
+        }
+
+        public Task<PickFileResult?> PickFileAsync(WindowId owner, FilePickerOptions options)
+            => Record<PickFileResult?>(owner, "PickFileAsync", null);
+        public Task<IReadOnlyList<PickFileResult>> PickMultipleFilesAsync(WindowId owner, FilePickerOptions options)
+            => Record<IReadOnlyList<PickFileResult>>(owner, "PickMultipleFilesAsync", []);
+        public Task<PickFolderResult?> PickFolderAsync(WindowId owner, FolderPickerOptions options)
+            => Record<PickFolderResult?>(owner, "PickFolderAsync", null);
+        public Task<IReadOnlyList<PickFolderResult>> PickMultipleFoldersAsync(WindowId owner, FolderPickerOptions options)
+            => Record<IReadOnlyList<PickFolderResult>>(owner, "PickMultipleFoldersAsync", []);
+        public Task<PickFileResult?> PickSaveFileAsync(WindowId owner, SaveFilePickerOptions options)
+            => Record<PickFileResult?>(owner, "PickSaveFileAsync", null);
+    }
+
+    // A context that never rendered under a host (no reconciler-supplied owner).
     private static string NoOwnerMessage(string operation) =>
-        $"{operation} requires a component rendered in a ReactorWindow. Content hosted by ReactorHostControl, or by a ReactorHost you construct, has no owning window: construct the Microsoft.Windows.Storage.Pickers picker from the hosting window's AppWindow.Id instead.";
+        $"{operation} requires a component rendered by a Reactor host (a ReactorWindow, ReactorHostControl or ReactorHost).";
     private static void Invoke(RenderContext context, string operation, bool validOptions)
     {
         FilePickerOptions file = validOptions ? new() : null!;

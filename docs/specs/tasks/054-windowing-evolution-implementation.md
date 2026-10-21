@@ -763,7 +763,8 @@ below record what that first cut delivered and stay checked for history only.
       Remove `FolderPickerOptions.FileTypeFilter` and
       `SaveFilePickerOptions.SuggestedSaveFile`.
 - [x] Record the owning window on each `RenderContext` from its host's reconciler
-      (`Reconciler.OwningWindow`, set when a `ReactorWindow` claims its host) at every
+      (`Reconciler.OwningWindow`, set when a `ReactorWindow` claims its host; since
+      #1395 `Reconciler.Owner`) at every
       `BeginRender`, instead of reading the process-wide `ReactorApp.ActiveHostInternal`.
       Clear it on `DetachFromHost`; reject a closed owner.
 - [x] Selftest `Pickers_OwningWindow`: with A then B open, A's helpers (root, nested
@@ -773,6 +774,13 @@ below record what that first cut delivered and stay checked for history only.
       not become the owner of components that render after it in the opener's window.
 - [x] Selftest `Pickers_Suite`: native option read-back, including
       insertion-ordered `FileTypeChoices` on open and save pickers.
+- [x] Issue #1395: replace the recorded `ReactorWindow` with an owner resolver
+      (`IContentOwner`, `Reconciler.Owner`) implemented by `ReactorHost` (its `Window`)
+      and `ReactorHostControl` (`XamlRoot.ContentIslandEnvironment.AppWindowId`, at
+      call time). Selftests `Pickers_HostControl` (routing, nested and virtualized
+      components, unloaded rejection, reparent into a second window, dispose) and
+      `Pickers_RawWindowHost`; unit tests map each resolver state to its error.
+      Mutation-checked.
 
 ### 7.4 Phase 7 exit gate
 

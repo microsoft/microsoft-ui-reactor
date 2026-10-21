@@ -233,7 +233,9 @@ Conventions for contributors:
   `FolderPickerOptions.FileTypeFilter` and `SaveFilePickerOptions.SuggestedSaveFile` are
   removed. The dialog is owned by the window whose host rendered the component (previously
   whichever window was most recently active, which with several windows picked the wrong one
-  and threw after any window closed), and the pickers now work in elevated apps.
+  and threw after any window closed), and the pickers now work in elevated apps. They also
+  work in content hosted by `ReactorHostControl` (owned by the window the control is loaded
+  in; issue #1395) and by a `ReactorHost` constructed over a raw `Window`.
 - **The doc pipeline moved out of `mur`, and doc screenshots are captured with winapp's
   Windows Graphics Capture.** `mur docs` is now `dotnet run --project tools/Reactor.DocPipeline --`
   (`compile`, `check-tier`, `render-diagrams`, `new-diagram`; same options). It is a contributor
