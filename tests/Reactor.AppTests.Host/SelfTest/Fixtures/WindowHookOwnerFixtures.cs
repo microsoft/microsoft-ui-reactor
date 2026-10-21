@@ -324,7 +324,10 @@ internal static class WindowHookOwnerFixtures
                 a?.Close();
                 await Harness.Render(100);
                 try { global::System.IO.Directory.Delete(scratch, recursive: true); }
-                catch (Exception ex) when (ex is global::System.IO.IOException or UnauthorizedAccessException) { }
+                catch (Exception ex) when (ex is global::System.IO.IOException or UnauthorizedAccessException)
+                {
+                    global::System.Diagnostics.Debug.WriteLine($"[Reactor] WindowHookOwner scratch cleanup failed for {scratch}: {ex}");
+                }
             }
         }
     }
@@ -341,7 +344,8 @@ internal static class WindowHookOwnerFixtures
             ReactorApp.UIDispatcher ??= DispatcherQueue.GetForCurrentThread();
             ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
             ReactorWindow? b = null;
-            ReactorHostControl? hostControl = null;
+            // Disposed when the method returns, after the finally has removed it from the tree.
+            using var hostControl = new ReactorHostControl();
             try
             {
                 b = await Open("Hook owner B", new ProbeOnlyRoot(), 320, 220);
@@ -352,7 +356,6 @@ internal static class WindowHookOwnerFixtures
                 b.IsActive = false;
                 var guardsB = b.ClosingGuardCountForTests;
                 var record = new HookRecord();
-                hostControl = new ReactorHostControl();
                 hostControl.Mount(new ProbeHost(record));
                 H.SetContent(new Border { Child = hostControl });
                 var rendered = await Harness.WaitFor(() => record.Renders > 0, maxPasses: 20, perPassMs: 25);
@@ -376,7 +379,6 @@ internal static class WindowHookOwnerFixtures
             {
                 ApplicationPersistedScope.Default.Remove(PersistKey);
                 H.SetContent(null);
-                hostControl?.Dispose();
                 b?.Close();
                 await Harness.Render(100);
             }
@@ -425,7 +427,10 @@ internal static class WindowHookOwnerFixtures
                         if (slots < 0) slots = ctx.DiagnosticHookCount;
                         else if (slots != ctx.DiagnosticHookCount) failure ??= new InvalidOperationException($"slot count {slots} -> {ctx.DiagnosticHookCount}");
                     }
-                    catch (Exception ex) { failure ??= ex; }
+                    // HookOrderException derives from InvalidOperationException; a state-type
+                    // mismatch surfaces as an InvalidCastException.
+                    catch (InvalidOperationException ex) { failure ??= ex; }
+                    catch (InvalidCastException ex) { failure ??= ex; }
                 }
                 H.Check($"HookOwner_SlotShape_Stable ({failure?.GetType().Name}: {failure?.Message})", failure is null);
             }
