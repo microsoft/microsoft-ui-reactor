@@ -767,7 +767,7 @@ internal static class PickersFixtures
                 {
                     calls = stub.Calls;
                     var message = await PickMessage(component.Operations[i]);
-                    H.Check($"Pickers_RawWindowHost_Closed_{OperationNames[i]}",
+                    H.Check($"Pickers_RawWindowHost_Released_{OperationNames[i]}",
                         message == ReleasedMessage(OwningWindow.OperationName(i)) && stub.Calls == calls);
                 }
             }
@@ -775,6 +775,112 @@ internal static class PickersFixtures
             {
                 RenderContext.PickerService = previous;
                 window?.Close();
+                await Harness.Render(100);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Issue #1395: the hosts without a <see cref="ReactorWindow"/> refuse a picker call made from
+    /// a component cleanup while they tear down (a <c>ReactorHostControl</c> being disposed, a raw
+    /// window closing), and a function root mounted directly on either host records its owner.
+    /// </summary>
+    internal sealed class EmbeddedTeardownAndFunctionRoots(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            ReactorApp.UIDispatcher ??= DispatcherQueue.GetForCurrentThread();
+            var previous = RenderContext.PickerService;
+            var stub = new StubPickerService();
+            RenderContext.PickerService = stub;
+            try
+            {
+                await RunCleanup("HostControl", stub, async pair =>
+                {
+                    var control = new global::Microsoft.UI.Reactor.Hosting.ReactorHostControl();
+                    control.Mount(new CleanupRoot(pair));
+                    var window = OpenRawWindow("Pickers host control cleanup", control);
+                    await control.WaitForIdleAsync();
+                    await Harness.Render(150);
+                    // The control is disposed while still loaded in its window, so only the
+                    // disposed check stands between a sibling's cleanup and a live owner.
+                    return () => { control.Dispose(); window.Close(); };
+                });
+                await RunCleanup("RawWindowHost", stub, async pair =>
+                {
+                    var window = OpenRawWindow("Pickers raw host cleanup", content: null);
+                    var host = new global::Microsoft.UI.Reactor.Hosting.ReactorHost(window);
+                    host.Mount(new CleanupRoot(pair));
+                    await host.WaitForIdleAsync();
+                    await Harness.Render(100);
+                    return window.Close;
+                });
+
+                await RunFunctionRoot("HostControl", stub, async (render, title) =>
+                {
+                    var control = new global::Microsoft.UI.Reactor.Hosting.ReactorHostControl();
+                    control.Mount(render);
+                    var window = OpenRawWindow(title, control);
+                    await control.WaitForIdleAsync();
+                    await Harness.Render(150);
+                    return (window, () => { control.Dispose(); window.Close(); });
+                });
+                await RunFunctionRoot("RawWindowHost", stub, async (render, title) =>
+                {
+                    var window = OpenRawWindow(title, content: null);
+                    var host = new global::Microsoft.UI.Reactor.Hosting.ReactorHost(window);
+                    host.Mount(render);
+                    await host.WaitForIdleAsync();
+                    await Harness.Render(100);
+                    return (window, window.Close);
+                });
+            }
+            finally
+            {
+                RenderContext.PickerService = previous;
+            }
+        }
+
+        private async Task RunCleanup(string name, StubPickerService stub, Func<CleanupPair, Task<Action>> mount)
+        {
+            var pair = new CleanupPair();
+            var calls = stub.Calls;
+            var tearDown = await mount(pair);
+            H.Check($"Pickers_{name}Cleanup_Mounted", pair.Pick[0] is not null && pair.Pick[1] is not null);
+            tearDown();
+            await Harness.Render(100);
+
+            var messages = pair.Messages.Where(m => m is not null).ToList();
+            H.Check($"Pickers_{name}Cleanup_ClosedOwnerRejected", messages.Contains(ClosedMessage("PickFileAsync")));
+            H.Check($"Pickers_{name}Cleanup_BothRejected", messages.Count == 2
+                && messages.All(m => m == ClosedMessage("PickFileAsync") || m == ReleasedMessage("PickFileAsync")));
+            H.Check($"Pickers_{name}Cleanup_NoPicker", stub.Calls == calls);
+        }
+
+        private async Task RunFunctionRoot(
+            string name,
+            StubPickerService stub,
+            Func<Func<RenderContext, Element>, string, Task<(global::Microsoft.UI.Xaml.Window Window, Action TearDown)>> mount)
+        {
+            Func<Task>? pick = null;
+            var (window, tearDown) = await mount(ctx =>
+            {
+                pick = () => ctx.PickFileAsync(new FilePickerOptions());
+                return TextBlock("function root picker");
+            }, $"Pickers function root {name}");
+            try
+            {
+                H.Check($"Pickers_{name}FunctionRoot_Rendered", pick is not null);
+                if (pick is null) return;
+                stub.Owner = default;
+                stub.Operation = null;
+                var error = await PickMessage(pick);
+                H.Check($"Pickers_{name}FunctionRoot_Routes", error is null
+                    && stub.Operation == "single" && stub.Owner == window.AppWindow.Id);
+            }
+            finally
+            {
+                tearDown();
                 await Harness.Render(100);
             }
         }

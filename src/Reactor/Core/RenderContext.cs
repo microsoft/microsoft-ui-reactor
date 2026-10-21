@@ -2068,7 +2068,7 @@ public sealed class RenderContext
     /// <summary>Opens a single-file picker owned by this component's window.</summary>
     /// <remarks>
     /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
-    /// whose host renders this component (for ReactorHostControl, the window it is loaded in); once the component unmounts, the call throws. Cancellation returns null.
+    /// whose host renders this component (for ReactorHostControl, the window it is loaded in). Throws <see cref="InvalidOperationException"/> once the component unmounts, its window closes or its host is disposed, or while its ReactorHostControl is not loaded. Cancellation returns null.
     /// </remarks>
     public Task<Microsoft.Windows.Storage.Pickers.PickFileResult?> PickFileAsync(FilePickerOptions options)
     {
@@ -2081,7 +2081,7 @@ public sealed class RenderContext
     /// <summary>Opens a multiple-file picker owned by this component's window.</summary>
     /// <remarks>
     /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
-    /// whose host renders this component (for ReactorHostControl, the window it is loaded in); once the component unmounts, the call throws. Cancellation returns an empty list.
+    /// whose host renders this component (for ReactorHostControl, the window it is loaded in). Throws <see cref="InvalidOperationException"/> once the component unmounts, its window closes or its host is disposed, or while its ReactorHostControl is not loaded. Cancellation returns an empty list.
     /// </remarks>
     public Task<IReadOnlyList<Microsoft.Windows.Storage.Pickers.PickFileResult>> PickMultipleFilesAsync(FilePickerOptions options)
     {
@@ -2094,7 +2094,7 @@ public sealed class RenderContext
     /// <summary>Opens a single-folder picker owned by this component's window.</summary>
     /// <remarks>
     /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
-    /// whose host renders this component (for ReactorHostControl, the window it is loaded in); once the component unmounts, the call throws. Cancellation returns null.
+    /// whose host renders this component (for ReactorHostControl, the window it is loaded in). Throws <see cref="InvalidOperationException"/> once the component unmounts, its window closes or its host is disposed, or while its ReactorHostControl is not loaded. Cancellation returns null.
     /// </remarks>
     public Task<Microsoft.Windows.Storage.Pickers.PickFolderResult?> PickFolderAsync(FolderPickerOptions options)
     {
@@ -2106,7 +2106,7 @@ public sealed class RenderContext
     /// <summary>Opens a multiple-folder picker owned by this component's window.</summary>
     /// <remarks>
     /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
-    /// whose host renders this component (for ReactorHostControl, the window it is loaded in); once the component unmounts, the call throws. Cancellation returns an empty list.
+    /// whose host renders this component (for ReactorHostControl, the window it is loaded in). Throws <see cref="InvalidOperationException"/> once the component unmounts, its window closes or its host is disposed, or while its ReactorHostControl is not loaded. Cancellation returns an empty list.
     /// </remarks>
     public Task<IReadOnlyList<Microsoft.Windows.Storage.Pickers.PickFolderResult>> PickMultipleFoldersAsync(FolderPickerOptions options)
     {
@@ -2118,7 +2118,7 @@ public sealed class RenderContext
     /// <summary>Opens a save-file picker owned by this component's window.</summary>
     /// <remarks>
     /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
-    /// whose host renders this component (for ReactorHostControl, the window it is loaded in); once the component unmounts, the call throws. Cancellation returns null. Selecting a target does not
+    /// whose host renders this component (for ReactorHostControl, the window it is loaded in). Throws <see cref="InvalidOperationException"/> once the component unmounts, its window closes or its host is disposed, or while its ReactorHostControl is not loaded. Cancellation returns null. Selecting a target does not
     /// create or write the file; that is the caller's responsibility.
     /// </remarks>
     public Task<Microsoft.Windows.Storage.Pickers.PickFileResult?> PickSaveFileAsync(SaveFilePickerOptions options)

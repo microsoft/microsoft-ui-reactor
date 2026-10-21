@@ -1137,9 +1137,10 @@ over the UWP `Windows.Storage.Pickers` + `InitializeWithWindow`, returning
   time. Pickers run from event handlers, outside render, where that field names
   the most recently rendered or constructed host (or null after any host is
   disposed). With two windows, A's picker parented to B, and every picker threw
-  once any window closed. Each host's `Reconciler` now carries its
-  `ReactorWindow` (`Reconciler.OwningWindow`, set when the window claims the host),
-  and every `BeginRender` records it on the `RenderContext`. The process-wide field
+  once any window closed. Each host's `Reconciler` then carried its
+  `ReactorWindow` (`Reconciler.OwningWindow`, set when the window claimed the host;
+  replaced by the owner resolver below), and every `BeginRender` recorded it on the
+  `RenderContext`. The process-wide field
   is not consulted, so a window opened mid-render or a virtualized row rendered
   outside the host's pass still records the right owner. The owner is cleared on
   detach and a closed owner is refused.

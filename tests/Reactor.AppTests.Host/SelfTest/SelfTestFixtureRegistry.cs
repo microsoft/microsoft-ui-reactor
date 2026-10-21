@@ -1543,6 +1543,7 @@ internal static class SelfTestFixtureRegistry
         "Pickers_ClosedWindowRejectedDuringCleanup",
         "Pickers_HostControl",
         "Pickers_RawWindowHost",
+        "Pickers_EmbeddedTeardownAndFunctionRoots",
         "AspectRatio_Suite_Math",
         "AspectRatio_Suite_Conform",
         "WindowStyle_ToolWindowExStyleRemoved",
@@ -3632,6 +3633,7 @@ internal static class SelfTestFixtureRegistry
         "Pickers_ClosedWindowRejectedDuringCleanup" => new PickersFixtures.ClosedWindowRejectedDuringCleanup(harness),
         "Pickers_HostControl" => new PickersFixtures.HostControl(harness),
         "Pickers_RawWindowHost" => new PickersFixtures.RawWindowHost(harness),
+        "Pickers_EmbeddedTeardownAndFunctionRoots" => new PickersFixtures.EmbeddedTeardownAndFunctionRoots(harness),
         "UseSpec054Hooks_Suite" => new Phase7WindowingFixtures.UseSpec054HooksSuite(harness),
         // Spec 036/045 — issue #647 multi-window teardown hardening regression.
         "Window647_PrimaryElectionExcludesAuxiliary" => new WindowLifecycleHardeningFixtures.PrimaryElectionExcludesAuxiliary(harness),
