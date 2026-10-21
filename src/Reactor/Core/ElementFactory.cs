@@ -460,6 +460,8 @@ public sealed partial class ElementFactory<T> : IElementFactory
                     // previous row's call site (spec 010).
                     if (child is FrameworkElement adoptedFe)
                         Reconciler.SetElementTagIfNeeded(adoptedFe, newElement);
+                    if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
+                        Reconciler.AdoptPublishedSource(child, replacement);
                 }
                 else
                 {
@@ -636,6 +638,8 @@ public sealed partial class ElementFactory<T> : IElementFactory
                     // location follows the row that is actually live (spec 010).
                     if (reused is FrameworkElement adoptedFe)
                         Reconciler.SetElementTagIfNeeded(adoptedFe, element);
+                    if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
+                        Reconciler.AdoptPublishedSource(reused, replacement);
                 }
                 else
                 {

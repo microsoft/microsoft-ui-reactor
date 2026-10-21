@@ -251,6 +251,34 @@ Same shape as Boundary A: loopback-only HTTP (`http://127.0.0.1:<port>/mcp`) wit
 
 **Residual risk:** if `mur` were ever extended to follow URL-style attach targets (e.g., `mur attach https://...`), the threat model expands to cover network identity. **As of the audit date, no such target exists.** Adding one would require revisiting this document.
 
+### 7.7 Inspector diagnostics on controls (`ReactorDiagnostics.SourceProperty`)
+
+**Files:** `src/Reactor/Core/Diagnostics/ReactorSourcePublisher.cs`, `ReactorSourceFormat.cs`, `ReactorDiagnostics.Source.cs`; `src/Reactor/Diagnostics/ReactorSourceMap.StaticInfo.cs`; `build/Reactor.targets` (`$(ReactorDiagnostics)`).
+**Activation:** two gates, both required. At build time, the `Reactor.DevtoolsSupport` feature switch. `$(ReactorDiagnostics)` defaults it on in Debug, Release needs `-p:ReactorDiagnostics=true`, and an explicit project setting wins. At launch, the environment variable `REACTOR_DIAGNOSTICS=1`.
+**Behavior:** writes a string attached DependencyProperty (`.ReactorSource`) on each realized control. It holds the DSL call site (path, line, column), the owning component's type name, the element kind, the element key, the identifier the element was assigned to, and the component's hook variable names. Any XamlDiagnostics client attached to the process can read it. That includes WinUI DevTools, VS Live Property Explorer, and Native AOT apps, because no managed agent is involved.
+
+**Comparison with XAML's runtime source info** (the `SrcInfo` XamlDiagnostics reports from XBF line info):
+
+| | XAML (XBF line info) | Reactor (`ReactorSource`) |
+|---|---|---|
+| Default | Debug builds | Debug builds (`$(ReactorDiagnostics)`) |
+| Release | Opt-in | Opt-in (`-p:ReactorDiagnostics=true`) |
+| Runtime gate | Debugger / XamlDiagnostics attach | `REACTOR_DIAGNOSTICS=1` at launch (nothing is written otherwise) |
+| Path form | Package-relative (`ms-appx:///Pages/Main.xaml`) | Project-relative (`Pages/Main.cs`). Solution-root-relative with `rel=root` for files outside the project. File name only with `rel=0` for files outside both. Deterministic PathMap paths (`/_/…`, `/_1/…`) are kept as they are; any other absolute path is reduced to its file name. Never an absolute developer path. |
+| Readers | Processes that can attach XamlDiagnostics: the same user or an administrator | Same |
+| Trimmed when off | — | Yes. The publishing code is removed from trimmed / Native AOT builds without the switch; the AOT Hello-World trim assertions pin this. |
+
+**Mitigations:**
+
+- Both gates are required. A shipped Release app carries no publishing code (it is trimmed). A Debug app that was not launched for inspection writes nothing.
+- Paths are relativized before they are written, as XAML's are. `Element.CallSite` and `ReactorSourceMap.GetSource` keep full paths; they are in-process APIs and are not exposed through the visual tree.
+- The values are developer-authored identifiers (type, variable and hook names) plus the element key. No props, no state values, no user-visible text.
+
+**Residual risk:**
+
+- An element **key** can be data-derived (for example a list keyed by an email address). In diagnostics mode it is readable by any same-user XamlDiagnostics client, just as it is visible in-process. Keys that are user data should not be inspected on shared machines.
+- `-p:ReactorDiagnostics=true` in a Release build embeds the source-map tables (relative names and lines, plus the absolute project directory used to relativize) in the binary. Do not distribute a build made with it.
+
 ## 8. Threat enumeration against the internal security-review intake
 
 The Microsoft-internal security-review intake form gave succinct answers about Reactor's security posture. This section expands each answer with evidence:
@@ -314,3 +342,4 @@ Microsoft's internal Security Assessment policy lists six trust-boundary trigger
 | Date | Author | Change |
 |---|---|---|
 | 2026-05-21 | Chris Anderson | Initial draft for internal security-review intake. Captures runtime baseline at commit `2335e75f`. |
+| 2026-10-02 | Copilot (for the WinUI DevTools effort) | §7.7: inspector diagnostics published on controls (`ReactorSource`); XAML source-info parity (gating, relative paths). |

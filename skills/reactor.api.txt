@@ -4614,12 +4614,15 @@ ToString() → string
 Register(IReactorDevtoolsHost host) → void
 
 ### static class ReactorDiagnostics
+DependencyProperty SourceProperty { get; }
 IReadOnlyList<KeyedListDiagnostic> RecentKeyedListWarnings { get; }
+bool IsSourcePublishingEnabled { get; }
 ClearRecentKeyedListWarnings() → void
 DescribeComponent(UIElement element) → ComponentSnapshot
 GetAppliedProperties(UIElement control) → IReadOnlyList<AppliedProperty>
 GetHosts() → IReadOnlyList<ReactorHostInfo>
 GetReferenceEdges(UIElement control) → IReadOnlyList<ReferenceEdgeSnapshot>
+GetSource(DependencyObject element) → string
 Rerender(UIElement element) → bool
 TrySetState(UIElement element, int hookIndex, string text, ref string error) → bool
 
@@ -4987,9 +4990,15 @@ ToString() → string
 new()
 Set(string key, Brush brush) → ResourceBuilder
 Set(string key, CornerRadius value) → ResourceBuilder
+Set(string key, FontFamily value) → ResourceBuilder
+Set(string key, FontWeight value) → ResourceBuilder
+Set(string key, GridLength value) → ResourceBuilder
 Set(string key, ThemeRef themeRef) → ResourceBuilder
+Set(string key, Thickness value) → ResourceBuilder
+Set(string key, bool value) → ResourceBuilder
 Set(string key, double value) → ResourceBuilder
 Set(string key, string color) → ResourceBuilder
+SetColor(string key, Color value) → ResourceBuilder
 
 ### record ResourceOptions
 new(TimeSpan? StaleTime = null, TimeSpan? CacheTime = null, int RetryCount = 0, bool RefetchOnMount = true, string CacheKey = null, bool RefetchOnWindowFocus = false)
@@ -5457,6 +5466,7 @@ ToString() → string
 new(string FilePath, int LineNumber, int ColumnNumber)
 int ColumnNumber { get; init; }
 int LineNumber { get; init; }
+string DeclaredName { get; }
 string FilePath { get; init; }
 Deconstruct(ref string FilePath, ref int LineNumber, ref int ColumnNumber) → void
 Equals(SourceLocation other) → bool

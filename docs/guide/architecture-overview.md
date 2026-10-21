@@ -194,6 +194,8 @@ public UIElement GetElement(ElementFactoryGetArgs args)
                 // location follows the row that is actually live (spec 010).
                 if (reused is FrameworkElement adoptedFe)
                     Reconciler.SetElementTagIfNeeded(adoptedFe, element);
+                if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
+                    Reconciler.AdoptPublishedSource(reused, replacement);
             }
             else
             {

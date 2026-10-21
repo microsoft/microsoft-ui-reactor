@@ -586,7 +586,7 @@ public class DevtoolsHostCliTests
         }
         finally
         {
-            AppContext.SetSwitch(switchName, false);
+            AppContext.SetSwitch(switchName, TestSetup.ConfiguredDevtoolsSupport);
             ReactorDevtoolsBootstrap.RestoreForTests(previous);
         }
     }

@@ -471,7 +471,7 @@ by conditional rendering — elements not returned from render are never created
 | WinUI Feature | Status | Notes |
 |---|---|---|
 | **ResourceDictionary (app-level)** | Passthrough | ReactorApp loads XamlControlsResources; no DSL for authoring app-level dictionaries |
-| **ResourceDictionary (per-element)** | Exposed | `.Resources(r => r.Set(key, value))` writes into that element's own `FrameworkElement.Resources`; `ResourceBuilder.Set` overloads accept a hex/named color string, a `Brush`, a `ThemeRef`, a `double`, or a `CornerRadius` |
+| **ResourceDictionary (per-element)** | Exposed | `.Resources(r => r.Set(key, value))` writes into that element's own `FrameworkElement.Resources`; `Set` accepts color strings, `Brush`, `ThemeRef`, `double`, `CornerRadius`, `Thickness`, `FontWeight`, `FontFamily`, `bool`, and `GridLength`. `SetColor` stores raw `Color` values, not brushes |
 | **Resource lookup chain** | Passthrough | WinUI's chain works on underlying controls; a per-element override participates in it normally |
 | **Merged dictionaries** | Passthrough | Can merge via `.Set()` on Application.Resources |
 | **Theme dictionaries** | Passthrough | WinUI's theme dictionaries work natively; `ThemeRef` resolution reads through them |
