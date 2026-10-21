@@ -28,6 +28,15 @@ Conventions for contributors:
 
 ### Added
 
+- **ReactorGallery catches up with recent framework features.** A new **System →
+  File pickers** page demonstrates `PickFileAsync`, `PickMultipleFilesAsync`
+  (with labelled `FileTypeChoices`), `PickFolderAsync` / `PickMultipleFoldersAsync`
+  and `PickSaveFileAsync`; a **Patterns → ErrorBoundary** page covers catch-and-retry,
+  static fallbacks, and the built-in fallback a `RenderErrorHandler` replaces; the
+  Grid page adds `GridSize.MinSize` / `MaxSize`; and the TitleBar page shows icon
+  inheritance and `.NoIcon()`. The gallery now declares its window icon once via
+  `ReactorApp.Run(icon:)` and its shell title bar inherits it.
+
 - **Component inspection for devtools: `ReactorDiagnostics.DescribeComponent`,
   `TrySetState`, `Rerender`, `GetAppliedProperties`, `GetReferenceEdges`.** An
   inspector can go from a realized control to the component behind it: its name,

@@ -22,6 +22,7 @@ class GalleryShell : Component
         ["Menus and Toolbars"] = "\uE700",
         ["Navigation"] = "\uE8B0",
         ["Status and Info"] = "\uE946",
+        ["System"] = "\uE770",
         ["Text"] = "\uE8D2",
         ["Patterns"] = "\uE943",
         ["Styles"] = "\uE790",
@@ -164,8 +165,7 @@ class GalleryShell : Component
 
             (TitleBar("Reactor WinUI Gallery") with
             {
-                Icon = new ImageIconData(new Uri(global::System.IO.Path.Combine(
-                    global::System.AppContext.BaseDirectory, "Assets", "GalleryIcon.ico"))),
+                // No Icon: the title bar inherits the window icon declared in Program.cs.
                 Content = HStack(8,
                     AutoSuggestBox(searchQuery, setSearchQuery)
                         .Width(320)
