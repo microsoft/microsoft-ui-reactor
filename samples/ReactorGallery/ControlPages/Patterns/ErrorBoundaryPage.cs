@@ -8,36 +8,27 @@ namespace WinUIGalleryReactor.ControlPages.Patterns;
 
 class ErrorBoundaryPage : Component
 {
-    public override Element Render()
-    {
-        // Each card owns its own reset key. Bumping a key gives the child a fresh identity,
-        // so the next render mounts a new subtree instead of retrying the broken one.
-        var (retryKey, setRetryKey) = UseState(0);
-        var (staticKey, setStaticKey) = UseState(0);
-        var (unguardedKey, setUnguardedKey) = UseState(0);
-
-        return ScrollView(VStack(16,
+    // Each demo is its own component, so clicking in one card re-renders only that card.
+    // An ErrorBoundary retries its child on every re-render, so a page-level click would
+    // otherwise recover every crashed card at once.
+    public override Element Render() =>
+        ScrollView(VStack(16,
             PageHeader("ErrorBoundary",
                 "Catches an exception thrown while a subtree renders and shows a fallback in its place, so one broken component cannot take the page down with it."),
 
             SampleCard("Catch, explain, and retry",
-                ErrorBoundary(
-                    Component<CrashingCounter>().WithKey($"retry-{retryKey}"),
-                    ex => VStack(8,
-                        TextBlock("Something went wrong").Bold().Foreground(Theme.SystemCritical),
-                        TextBlock(ex.Message).Foreground(Theme.SecondaryText),
-                        Button("Retry", () => setRetryKey(retryKey + 1))
-                    ).Padding(12).Background(Theme.SystemCriticalBackground).CornerRadius(8)),
+                Component<RetryDemo>(),
                 sourceCode: @"
-var (retryKey, setRetryKey) = UseState(0);
+var (attempt, setAttempt) = UseState(0);
 
 ErrorBoundary(
-    // A new key mounts a fresh subtree, dropping the state that caused the crash.
-    Component<CrashingCounter>().WithKey($""retry-{retryKey}""),
+    // Re-rendering the boundary retries its child. The new key also guarantees
+    // a fresh instance, so no state from the failed attempt survives.
+    Component<CrashingCounter>().WithKey($""attempt-{attempt}""),
     ex => VStack(8,
         TextBlock(""Something went wrong"").Bold().Foreground(Theme.SystemCritical),
         TextBlock(ex.Message).Foreground(Theme.SecondaryText),
-        Button(""Retry"", () => setRetryKey(retryKey + 1))
+        Button(""Retry"", () => setAttempt(attempt + 1))
     ).Padding(12).Background(Theme.SystemCriticalBackground).CornerRadius(8))
 
 class CrashingCounter : Component
@@ -53,29 +44,19 @@ class CrashingCounter : Component
 "),
 
             SampleCard("A static fallback",
-                VStack(8,
-                    ErrorBoundary(
-                        Component<CrashingCounter>().WithKey($"static-{staticKey}"),
-                        TextBlock("This widget is unavailable right now.").Foreground(Theme.SecondaryText)),
-                    Button("Reset", () => setStaticKey(staticKey + 1)),
-                    Caption("Pass an element instead of a function when the fallback does not need the exception.")
-                        .Foreground(Theme.SecondaryText).TextWrapping()),
+                Component<StaticFallbackDemo>(),
                 sourceCode: @"
-var (staticKey, setStaticKey) = UseState(0);
+var (attempt, setAttempt) = UseState(0);
 
 VStack(8,
     ErrorBoundary(
-        Component<CrashingCounter>().WithKey($""static-{staticKey}""),
+        Component<CrashingCounter>().WithKey($""attempt-{attempt}""),
         TextBlock(""This widget is unavailable right now."")),
-    Button(""Reset"", () => setStaticKey(staticKey + 1)))
+    Button(""Reset"", () => setAttempt(attempt + 1)))
 "),
 
             SampleCard("Without a boundary: RenderErrorHandler",
-                VStack(8,
-                    Component<CrashingCounter>().WithKey($"unguarded-{unguardedKey}"),
-                    Button("Reset", () => setUnguardedKey(unguardedKey + 1)),
-                    Caption("With no ErrorBoundary, Reactor still contains the failure to the component's own slot, but its built-in fallback shows the full exception text. Ship a RenderErrorHandler so end users see your message instead. Set it app-wide, per window (WindowSpec.RenderErrorHandler), or per host. The gallery leaves the built-in fallback on so you can see it here.")
-                        .Foreground(Theme.SecondaryText).TextWrapping()),
+                Component<UnguardedDemo>(),
                 sourceCode: @"
 // Program.cs: replace the built-in fallback for every host, before ReactorApp.Run.
 ReactorApp.DefaultRenderErrorHandler = error =>
@@ -90,11 +71,57 @@ ReactorApp.DefaultRenderErrorHandler = error =>
 };
 
 // Exceptions an ErrorBoundary catches stay with that boundary and never reach the handler.
+var (attempt, setAttempt) = UseState(0);
+
 VStack(8,
-    Component<CrashingCounter>().WithKey($""unguarded-{unguardedKey}""),
-    Button(""Reset"", () => setUnguardedKey(unguardedKey + 1)))
+    // No boundary: the counter stays mounted with its crashing state, and every
+    // re-render retries it with that state, so a new key (a fresh instance) recovers it.
+    Component<CrashingCounter>().WithKey($""attempt-{attempt}""),
+    Button(""Reset"", () => setAttempt(attempt + 1)))
 ")
         ).Margin(36, 24, 36, 36));
+}
+
+class RetryDemo : Component
+{
+    public override Element Render()
+    {
+        var (attempt, setAttempt) = UseState(0);
+        return ErrorBoundary(
+            Component<CrashingCounter>().WithKey($"attempt-{attempt}"),
+            ex => VStack(8,
+                TextBlock("Something went wrong").Bold().Foreground(Theme.SystemCritical),
+                TextBlock(ex.Message).Foreground(Theme.SecondaryText),
+                Button("Retry", () => setAttempt(attempt + 1))
+            ).Padding(12).Background(Theme.SystemCriticalBackground).CornerRadius(8));
+    }
+}
+
+class StaticFallbackDemo : Component
+{
+    public override Element Render()
+    {
+        var (attempt, setAttempt) = UseState(0);
+        return VStack(8,
+            ErrorBoundary(
+                Component<CrashingCounter>().WithKey($"attempt-{attempt}"),
+                TextBlock("This widget is unavailable right now.").Foreground(Theme.SecondaryText)),
+            Button("Reset", () => setAttempt(attempt + 1)),
+            Caption("Pass an element instead of a function when the fallback does not need the exception.")
+                .Foreground(Theme.SecondaryText).TextWrapping());
+    }
+}
+
+class UnguardedDemo : Component
+{
+    public override Element Render()
+    {
+        var (attempt, setAttempt) = UseState(0);
+        return VStack(8,
+            Component<CrashingCounter>().WithKey($"attempt-{attempt}"),
+            Button("Reset", () => setAttempt(attempt + 1)),
+            Caption("With no ErrorBoundary, Reactor still contains the failure to the component's own slot, but its built-in fallback shows the full exception text. Ship a RenderErrorHandler so end users see your message instead. Set it app-wide, per window (WindowSpec.RenderErrorHandler), or per host. The gallery leaves the built-in fallback on so you can see it here.")
+                .Foreground(Theme.SecondaryText).TextWrapping());
     }
 }
 

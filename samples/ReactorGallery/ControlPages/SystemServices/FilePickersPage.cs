@@ -135,8 +135,16 @@ Button(""Save as..."", async () =>
     if (target is null) { setSaved(""Cancelled.""); return; }
 
     // Selecting a target is not a save: write the content yourself.
-    await File.WriteAllTextAsync(target.Path, $""Saved from the Reactor gallery at {DateTime.Now:t}."");
-    setSaved($""Wrote {target.Path}"");
+    try
+    {
+        await File.WriteAllTextAsync(target.Path, $""Saved from the Reactor gallery at {DateTime.Now:t}."");
+        setSaved($""Wrote {target.Path}"");
+    }
+    catch (IOException ex)
+    {
+        // An async lambda passed to Button is async void: handle failures here.
+        setSaved($""Failed: {ex.Message}"");
+    }
 })
 ")
         ).Margin(36, 24, 36, 36));

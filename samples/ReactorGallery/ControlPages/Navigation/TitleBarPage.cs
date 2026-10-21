@@ -38,8 +38,9 @@ class TitleBarPage : Component
                         Caption("With no .Icon(...), a TitleBar shows the window's own icon: the one passed to ReactorApp.Run(icon: ...) or WindowSpec.Icon, else Assets\\AppIcon.ico. This gallery declares its icon once in Program.cs.")
                                                     .Foreground(Theme.SecondaryText).TextWrapping()
                     ),
-                    @"// Program.cs: one declaration drives the caption, Alt-Tab, and every TitleBar.
-ReactorApp.Run<Shell>(""My App"", icon: WindowIcon.FromResource(""ms-appx:///Assets/GalleryIcon.ico""));
+                    @"// Program.cs: the main window's icon drives its caption, Alt-Tab, and every TitleBar in that window.
+// A secondary window inherits from its own WindowSpec.Icon instead.
+ReactorApp.Run<Shell>(""My App"", icon: WindowIcon.FromPath(""Assets/AppIcon.ico""));
 
 TitleBar(""Inherits the window icon"")
 TitleBar(""Custom icon"").Icon(new FontIconData(""\uE790""))

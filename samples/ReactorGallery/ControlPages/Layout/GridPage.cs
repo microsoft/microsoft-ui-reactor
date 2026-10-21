@@ -85,14 +85,18 @@ class GridPage : Component
                         Slider(gridWidth, 200, 700, setGridWidth).Width(300)
                     ),
                     """
-                    Grid(
-                        // Clamp a track's computed size with MinSize / MaxSize.
-                        columns: [GridSize.Star().MinSize(120), GridSize.Star(), GridSize.Star().MaxSize(100)],
-                        rows: [GridSize.Auto],
-                        Border(TextBlock("1*, min 120")).Grid(row: 0, column: 0),
-                        Border(TextBlock("1*")).Grid(row: 0, column: 1),
-                        Border(TextBlock("1*, max 100")).Grid(row: 0, column: 2)
-                    ).Width(gridWidth)
+                    var (gridWidth, setGridWidth) = UseState(420.0);
+
+                    VStack(8,
+                        Grid(
+                            // Clamp a track's computed size with MinSize / MaxSize.
+                            columns: [GridSize.Star().MinSize(120), GridSize.Star(), GridSize.Star().MaxSize(100)],
+                            rows: [GridSize.Auto],
+                            Border(TextBlock("1*, min 120")).Grid(row: 0, column: 0),
+                            Border(TextBlock("1*")).Grid(row: 0, column: 1),
+                            Border(TextBlock("1*, max 100")).Grid(row: 0, column: 2)
+                        ).Width(gridWidth),
+                        Slider(gridWidth, 200, 700, setGridWidth))
                     """)
             ).Margin(36, 24, 36, 36)
         );

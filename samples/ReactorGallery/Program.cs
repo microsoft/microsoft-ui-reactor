@@ -23,7 +23,7 @@ GalleryProtocol.EnsureRegistered();
 // The icon is declared once, here: it drives the caption/Alt-Tab icon, and the
 // shell's TitleBar inherits it rather than restating the path.
 ReactorApp.Run<WinUIGalleryReactor.GalleryShell>("WinUI Gallery (Reactor)",
-    icon: WindowIcon.FromResource("ms-appx:///Assets/GalleryIcon.ico"),
+    icon: WindowIcon.FromPath("Assets/GalleryIcon.ico"),
     configure: host =>
     {
         XamlInterop.Register(host.Reconciler);

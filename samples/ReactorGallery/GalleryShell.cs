@@ -95,8 +95,8 @@ class GalleryShell : Component
 
         var nonControlCategories = new HashSet<string>(ControlRegistry.NonControlCategories, StringComparer.Ordinal);
 
-        // Design and Fundamentals are not control categories — they sit above the "Controls"
-        // header as their own top-level entries rather than inside it.
+        // Design, Fundamentals and System are not control categories — they sit above the
+        // "Controls" header as their own top-level entries rather than inside it.
         NavigationViewItemData CategoryNavItem(string category, string glyph) =>
             NavItem(category, tag: GalleryRoutes.CategorySlug(category)) with
             {
@@ -117,6 +117,7 @@ class GalleryShell : Component
             NavItem("Home", tag: GalleryRoutes.HomeTag) with { IconElement = FontIcon("\uE80F") },
             CategoryNavItem("Fundamentals", "\uE8F1"),
             CategoryNavItem("Design", "\uE790"),
+            CategoryNavItem("System", "\uE770"),
             NavItemHeader("Controls"),
         }
         .Concat(controlNavItems)

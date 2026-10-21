@@ -979,17 +979,17 @@
         {
           "header": "Catch, explain, and retry",
           "language": "csharp",
-          "code": "var (retryKey, setRetryKey) = UseState(0);\n\nErrorBoundary(\n    // A new key mounts a fresh subtree, dropping the state that caused the crash.\n    Component<CrashingCounter>().WithKey($\"retry-{retryKey}\"),\n    ex => VStack(8,\n        TextBlock(\"Something went wrong\").Bold().Foreground(Theme.SystemCritical),\n        TextBlock(ex.Message).Foreground(Theme.SecondaryText),\n        Button(\"Retry\", () => setRetryKey(retryKey + 1))\n    ).Padding(12).Background(Theme.SystemCriticalBackground).CornerRadius(8))\n\nclass CrashingCounter : Component\n{\n    public override Element Render()\n    {\n        var (count, setCount) = UseState(0);\n        if (count >= 3)\n            throw new InvalidOperationException($\"The counter refuses to go past {count - 1}.\");\n        return Button($\"Clicked {count} times\", () => setCount(count + 1));\n    }\n}"
+          "code": "var (attempt, setAttempt) = UseState(0);\n\nErrorBoundary(\n    // Re-rendering the boundary retries its child. The new key also guarantees\n    // a fresh instance, so no state from the failed attempt survives.\n    Component<CrashingCounter>().WithKey($\"attempt-{attempt}\"),\n    ex => VStack(8,\n        TextBlock(\"Something went wrong\").Bold().Foreground(Theme.SystemCritical),\n        TextBlock(ex.Message).Foreground(Theme.SecondaryText),\n        Button(\"Retry\", () => setAttempt(attempt + 1))\n    ).Padding(12).Background(Theme.SystemCriticalBackground).CornerRadius(8))\n\nclass CrashingCounter : Component\n{\n    public override Element Render()\n    {\n        var (count, setCount) = UseState(0);\n        if (count >= 3)\n            throw new InvalidOperationException($\"The counter refuses to go past {count - 1}.\");\n        return Button($\"Clicked {count} times\", () => setCount(count + 1));\n    }\n}"
         },
         {
           "header": "A static fallback",
           "language": "csharp",
-          "code": "var (staticKey, setStaticKey) = UseState(0);\n\nVStack(8,\n    ErrorBoundary(\n        Component<CrashingCounter>().WithKey($\"static-{staticKey}\"),\n        TextBlock(\"This widget is unavailable right now.\")),\n    Button(\"Reset\", () => setStaticKey(staticKey + 1)))"
+          "code": "var (attempt, setAttempt) = UseState(0);\n\nVStack(8,\n    ErrorBoundary(\n        Component<CrashingCounter>().WithKey($\"attempt-{attempt}\"),\n        TextBlock(\"This widget is unavailable right now.\")),\n    Button(\"Reset\", () => setAttempt(attempt + 1)))"
         },
         {
           "header": "Without a boundary: RenderErrorHandler",
           "language": "csharp",
-          "code": "// Program.cs: replace the built-in fallback for every host, before ReactorApp.Run.\nReactorApp.DefaultRenderErrorHandler = error =>\n{\n    System.Diagnostics.Debug.WriteLine(error.Exception);\n\n    // IsHostLevel: true replaces the whole window content,\n    // false fills only the failing component's slot.\n    return error.IsHostLevel\n        ? TextBlock(\"Something went wrong. Please restart the app.\")\n        : TextBlock($\"{error.ComponentName} could not be shown.\");\n};\n\n// Exceptions an ErrorBoundary catches stay with that boundary and never reach the handler.\nVStack(8,\n    Component<CrashingCounter>().WithKey($\"unguarded-{unguardedKey}\"),\n    Button(\"Reset\", () => setUnguardedKey(unguardedKey + 1)))"
+          "code": "// Program.cs: replace the built-in fallback for every host, before ReactorApp.Run.\nReactorApp.DefaultRenderErrorHandler = error =>\n{\n    System.Diagnostics.Debug.WriteLine(error.Exception);\n\n    // IsHostLevel: true replaces the whole window content,\n    // false fills only the failing component's slot.\n    return error.IsHostLevel\n        ? TextBlock(\"Something went wrong. Please restart the app.\")\n        : TextBlock($\"{error.ComponentName} could not be shown.\");\n};\n\n// Exceptions an ErrorBoundary catches stay with that boundary and never reach the handler.\nvar (attempt, setAttempt) = UseState(0);\n\nVStack(8,\n    // No boundary: the counter stays mounted with its crashing state, and every\n    // re-render retries it with that state, so a new key (a fresh instance) recovers it.\n    Component<CrashingCounter>().WithKey($\"attempt-{attempt}\"),\n    Button(\"Reset\", () => setAttempt(attempt + 1)))"
         }
       ]
     },
@@ -1072,7 +1072,7 @@
         {
           "header": "Save a file",
           "language": "csharp",
-          "code": "var (saved, setSaved) = UseState(\"Nothing saved yet.\");\n\nButton(\"Save as...\", async () =>\n{\n    // At least one FileTypeChoice is required; the first is the default.\n    var target = await PickSaveFileAsync(new SaveFilePickerOptions(\n        [new(\"Text\", [\".txt\"]), new(\"Markdown\", [\".md\"])],\n        SuggestedFileName: \"reactor-notes\"));\n    if (target is null) { setSaved(\"Cancelled.\"); return; }\n\n    // Selecting a target is not a save: write the content yourself.\n    await File.WriteAllTextAsync(target.Path, $\"Saved from the Reactor gallery at {DateTime.Now:t}.\");\n    setSaved($\"Wrote {target.Path}\");\n})"
+          "code": "var (saved, setSaved) = UseState(\"Nothing saved yet.\");\n\nButton(\"Save as...\", async () =>\n{\n    // At least one FileTypeChoice is required; the first is the default.\n    var target = await PickSaveFileAsync(new SaveFilePickerOptions(\n        [new(\"Text\", [\".txt\"]), new(\"Markdown\", [\".md\"])],\n        SuggestedFileName: \"reactor-notes\"));\n    if (target is null) { setSaved(\"Cancelled.\"); return; }\n\n    // Selecting a target is not a save: write the content yourself.\n    try\n    {\n        await File.WriteAllTextAsync(target.Path, $\"Saved from the Reactor gallery at {DateTime.Now:t}.\");\n        setSaved($\"Wrote {target.Path}\");\n    }\n    catch (IOException ex)\n    {\n        // An async lambda passed to Button is async void: handle failures here.\n        setSaved($\"Failed: {ex.Message}\");\n    }\n})"
         }
       ]
     },
@@ -1278,7 +1278,7 @@
         {
           "header": "Min & Max Track Sizes",
           "language": "csharp",
-          "code": "Grid(\n    // Clamp a track's computed size with MinSize / MaxSize.\n    columns: [GridSize.Star().MinSize(120), GridSize.Star(), GridSize.Star().MaxSize(100)],\n    rows: [GridSize.Auto],\n    Border(TextBlock(\"1*, min 120\")).Grid(row: 0, column: 0),\n    Border(TextBlock(\"1*\")).Grid(row: 0, column: 1),\n    Border(TextBlock(\"1*, max 100\")).Grid(row: 0, column: 2)\n).Width(gridWidth)"
+          "code": "var (gridWidth, setGridWidth) = UseState(420.0);\n\nVStack(8,\n    Grid(\n        // Clamp a track's computed size with MinSize / MaxSize.\n        columns: [GridSize.Star().MinSize(120), GridSize.Star(), GridSize.Star().MaxSize(100)],\n        rows: [GridSize.Auto],\n        Border(TextBlock(\"1*, min 120\")).Grid(row: 0, column: 0),\n        Border(TextBlock(\"1*\")).Grid(row: 0, column: 1),\n        Border(TextBlock(\"1*, max 100\")).Grid(row: 0, column: 2)\n    ).Width(gridWidth),\n    Slider(gridWidth, 200, 700, setGridWidth))"
         }
       ]
     },
@@ -3070,7 +3070,7 @@
         {
           "header": "Icon: inherited, custom, or none",
           "language": "csharp",
-          "code": "// Program.cs: one declaration drives the caption, Alt-Tab, and every TitleBar.\nReactorApp.Run<Shell>(\"My App\", icon: WindowIcon.FromResource(\"ms-appx:///Assets/GalleryIcon.ico\"));\n\nTitleBar(\"Inherits the window icon\")\nTitleBar(\"Custom icon\").Icon(new FontIconData(\"\\uE790\"))\nTitleBar(\"No icon\").NoIcon()"
+          "code": "// Program.cs: the main window's icon drives its caption, Alt-Tab, and every TitleBar in that window.\n// A secondary window inherits from its own WindowSpec.Icon instead.\nReactorApp.Run<Shell>(\"My App\", icon: WindowIcon.FromPath(\"Assets/AppIcon.ico\"));\n\nTitleBar(\"Inherits the window icon\")\nTitleBar(\"Custom icon\").Icon(new FontIconData(\"\\uE790\"))\nTitleBar(\"No icon\").NoIcon()"
         },
         {
           "header": "TitleBar with Subtitle",

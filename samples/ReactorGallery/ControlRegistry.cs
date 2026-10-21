@@ -188,7 +188,7 @@ public static class ControlRegistry
     /// Single source of truth so the shell nav, the category header, and the home page cannot
     /// disagree about whether "9 controls" is an honest label.
     /// </summary>
-    public static string[] NonControlCategories { get; } = new[] { "Fundamentals", "Design" };
+    public static string[] NonControlCategories { get; } = new[] { "Fundamentals", "Design", "System" };
 
     public static bool IsControlCategory(string category) =>
         !NonControlCategories.Contains(category, StringComparer.Ordinal);
