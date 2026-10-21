@@ -529,10 +529,10 @@ internal static class PickersFixtures
     }
 
     /// <summary>
-    /// <see cref="ReactorWindow.Dispose"/> marks the window disposed before its host runs
-    /// component cleanups, so a cleanup can reach a sibling whose context still records that
-    /// window. The call must be refused. (A native close instead disposes the host from its own
-    /// Closed handler first, which releases every owner before the window is marked.)
+    /// Component cleanups run while a window tears down, and a cleanup can reach a sibling whose
+    /// context still records that window. The call must be refused on both teardown paths: a
+    /// native close disposes the host (from its own Closed handler) before the window, and a
+    /// direct <see cref="ReactorWindow.Dispose"/> disposes the window before the host.
     /// </summary>
     internal sealed class ClosedWindowRejectedDuringCleanup(Harness h) : SelfTestFixtureBase(h)
     {
@@ -543,37 +543,51 @@ internal static class PickersFixtures
             var previous = RenderContext.PickerService;
             var stub = new StubPickerService();
             RenderContext.PickerService = stub;
-            var pair = new CleanupPair();
-            ReactorWindow? window = null;
             try
             {
-                window = await Open("Pickers cleanup", new CleanupRoot(pair));
-
-                H.Check("Pickers_CleanupClose_Mounted", pair.Pick[0] is not null && pair.Pick[1] is not null);
-                var disposed = window;
-                window = null;
-                disposed.Dispose();
-                await Harness.Render(100);
-                // Dispose() bypasses Window.Closed -> UnregisterWindow; clean up the registration
-                // and the still-live native window (same hygiene as TitleBar_DisposeNoClose).
-                ReactorApp.UnregisterWindow(disposed);
-                try { disposed.NativeWindow.Close(); }
-                catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or global::System.Runtime.InteropServices.COMException)
+                await RunPath("Close", stub, w => w.Close());
+                await RunPath("Dispose", stub, w =>
                 {
-                    global::System.Diagnostics.Debug.WriteLine($"[Reactor] Pickers_ClosedWindowRejectedDuringCleanup cleanup close threw: {ex}");
-                }
-
-                var messages = pair.Messages.Where(m => m is not null).ToList();
-                // One sibling reaches the disposed-window branch; the other, cleaned up second,
-                // finds its sibling's owner already released. Neither reaches the service.
-                H.Check("Pickers_CleanupClose_ClosedOwnerRejected", messages.Contains(ClosedMessage("PickFileAsync")));
-                H.Check("Pickers_CleanupClose_BothRejected", messages.Count == 2
-                    && messages.All(m => m == ClosedMessage("PickFileAsync") || m == ReleasedMessage("PickFileAsync")));
-                H.Check("Pickers_CleanupClose_NoPicker", stub.Calls == 0);
+                    w.Dispose();
+                    // Dispose() bypasses Window.Closed -> UnregisterWindow; clean up the
+                    // registration and the still-live native window (as TitleBar_DisposeNoClose).
+                    ReactorApp.UnregisterWindow(w);
+                    try { w.NativeWindow.Close(); }
+                    catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or global::System.Runtime.InteropServices.COMException)
+                    {
+                        global::System.Diagnostics.Debug.WriteLine($"[Reactor] Pickers_ClosedWindowRejectedDuringCleanup cleanup close threw: {ex}");
+                    }
+                });
             }
             finally
             {
                 RenderContext.PickerService = previous;
+            }
+        }
+
+        private async Task RunPath(string path, StubPickerService stub, Action<ReactorWindow> tearDown)
+        {
+            var pair = new CleanupPair();
+            var calls = stub.Calls;
+            ReactorWindow? window = await Open($"Pickers cleanup {path}", new CleanupRoot(pair));
+            try
+            {
+                H.Check($"Pickers_Cleanup{path}_Mounted", pair.Pick[0] is not null && pair.Pick[1] is not null);
+                var closing = window;
+                window = null;
+                tearDown(closing);
+                await Harness.Render(100);
+
+                var messages = pair.Messages.Where(m => m is not null).ToList();
+                // The sibling cleaned up first reaches the closing-window branch; the one cleaned
+                // up second finds its sibling's owner already released. Neither reaches the service.
+                H.Check($"Pickers_Cleanup{path}_ClosedOwnerRejected", messages.Contains(ClosedMessage("PickFileAsync")));
+                H.Check($"Pickers_Cleanup{path}_BothRejected", messages.Count == 2
+                    && messages.All(m => m == ClosedMessage("PickFileAsync") || m == ReleasedMessage("PickFileAsync")));
+                H.Check($"Pickers_Cleanup{path}_NoPicker", stub.Calls == calls);
+            }
+            finally
+            {
                 window?.Close();
                 await Harness.Render(100);
             }

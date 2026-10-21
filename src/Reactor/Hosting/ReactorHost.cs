@@ -60,6 +60,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     internal FrameworkElement? ThemeListenerElement => _themeListenerElement;
     private volatile bool _disposed;
 
+    // Set at the start of Dispose(), before component cleanups run.
+    internal bool IsDisposed => _disposed;
+
     // Set when the owning window has raised Closed — i.e. the native window is
     // being torn down. Drives BackdropApplier.Reset so it does NOT write
     // Window.SystemBackdrop on an already-destroyed window, which AVs

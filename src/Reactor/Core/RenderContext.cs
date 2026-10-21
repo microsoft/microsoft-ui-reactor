@@ -2126,9 +2126,10 @@ public sealed class RenderContext
         var win = _owningWindow ?? throw new InvalidOperationException(_owningWindowReleased
             ? $"{operation} was called from a component that is no longer mounted in a ReactorWindow."
             : $"{operation} requires a component rendered in a ReactorWindow. Content hosted by ReactorHostControl, or by a ReactorHost you construct, has no owning window: construct the Microsoft.Windows.Storage.Pickers picker from the hosting window's AppWindow.Id instead.");
-        // Reachable when ReactorWindow.Dispose() runs component cleanups: it marks the window
-        // disposed before disposing the host, and contexts not yet cleaned up still hold it.
-        if (win.IsDisposed)
+        // Reachable while a closing window's host runs component cleanups: a sibling not yet
+        // cleaned up still holds the window. On a native close the host is disposed first, on
+        // a direct ReactorWindow.Dispose() the window is, so check both.
+        if (win.IsClosingOrDisposed)
             throw new InvalidOperationException($"{operation} was called after the component's ReactorWindow closed.");
         if (!win.NativeWindow.DispatcherQueue.HasThreadAccess)
             throw new InvalidOperationException($"{operation} must be called on the owning window's UI thread.");
