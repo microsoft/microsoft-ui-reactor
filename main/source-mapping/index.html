@@ -2974,6 +2974,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#declared-names-and-hook-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Declared names and hook names
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#helper-methods-and-reactorsourcetransparent" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3380,6 +3391,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#declared-names-and-hook-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Declared names and hook names
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#helper-methods-and-reactorsourcetransparent" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3716,11 +3738,31 @@ so this is the cheaper of the two.</p>
 already stores -&gt; <code>Element.CallSite</code>. It returns <code>null</code> when the control
 was not produced by Reactor, when the assembly was built without source
 mapping, or when nothing stamped that element.</p>
+<p>A Native AOT app in diagnostics mode (<code>REACTOR_DIAGNOSTICS=1</code>) does not give an
+element a back-pointer just for its call site: no managed inspector can load into
+the process to read it, and it costs about 1 KB per control. <code>GetSource</code> then reads
+the location from the control's published <code>ReactorSource</code> value and returns the same
+<code>SourceLocation</code>. <code>Reconciler.GetElementTag</code> returns <code>null</code> for those controls, as it
+does for any untagged display leaf.</p>
 <p><code>SourceLocation.ColumnNumber</code> is the 1-based column of the factory's name
 (the <code>B</code> of <code>Button</code> in <code>Row(Button("a"), Button("b"))</code>), which is what tells
 several calls on one line apart; <code>0</code> means the provider did not record one.
 <code>ToString()</code> keeps the <code>file:line</code> shape,
 so read the column from the property.</p>
+<h3 id="declared-names-and-hook-names">Declared names and hook names<a class="headerlink" href="#declared-names-and-hook-names" title="Permanent link">&para;</a></h3>
+<p>The generator also records two static facts that an inspector cannot recover at runtime:</p>
+<ul>
+<li><strong>Declared name.</strong> <code>SourceLocation.DeclaredName</code> gives the identifier an element was assigned to, much like XAML's <code>x:Name</code>. It is the local, field or property for an initializer (<code>var title = TextBlock("x").Bold()</code> → <code>title</code>), the target of a simple assignment, or the member / local-function name of an expression body. Fluent modifier chains, parentheses, casts and both arms of a <code>?:</code> are looked through. Inline elements (arguments, collection items, a <code>return</code>) and a component's <code>Render() =&gt;</code> body have no name.</li>
+<li><strong>Hook names.</strong> For each class component's <code>Render()</code> and each render function (<code>Memo(ctx =&gt; …)</code>, <code>RenderEachTime(ctx =&gt; …)</code>, a root <code>Mount(ctx =&gt; …)</code>), the generator records the hooks in call order. Each entry has the variable the hook's result went into (<code>var (count, setCount) = UseState(0)</code> → <code>count</code>) and its line. An unstored hook such as <code>UseEffect(...)</code> is listed under its method name. Inspectors read this as the <code>hooks=</code> field of <code>ReactorDiagnostics.SourceProperty</code>.</li>
+</ul>
+<p>Hook indices are <code>RenderContext</code> slots, which is what an inspector matches against at runtime. They are exact as long as every hook so far has a statically known slot count:</p>
+<ul>
+<li><code>UseState</code>, <code>UseReducer</code>, <code>UseRef</code>, <code>UseEffect</code>, <code>UseMemo</code>, <code>UseCallback</code> and <code>UseContext</code> take one slot each.</li>
+<li>A custom hook written in the same project takes the slots of the hooks its straight-line body calls.</li>
+<li>After a composite built-in (<code>UseCommand</code>, <code>UseResource</code>, the window hooks, component-extension hooks such as <code>this.UseElementFocus()</code>), a custom hook from another assembly, an abstract or overridable (<code>virtual</code>) custom hook, or a hook inside a branch or loop (a rules-of-hooks violation), the following indices are reported as <code>?</code>.</li>
+<li>A component that inherits <code>Render()</code> reports the hooks of the base class that declares it.</li>
+</ul>
+<p>Both tables describe the compiled build. Registering them costs one delegate per assembly at startup; they are built on first use. After a hot-reload update every name and hook list is reported as unknown rather than wrong, because an edit can move a call onto a location the table gives another element. Each assembly also records a fingerprint of every source file's facts, absent names and hooks included (a root mount site with no hooks, such as <code>host.Mount(...)</code> building its output with constructors, counts too). If two source-mapped assemblies stamp the same path (both mapping their roots to <code>/_/</code>) with different fingerprints, that file's names and render-function hooks are unknown. The same file compiled into both keeps them. When either happens after values were published (a hot-reload update, or a source-mapped assembly loaded later), each host drops the stale <code>name=</code> / <code>hooks=</code> fields from its controls on its next render.</p>
 <h3 id="helper-methods-and-reactorsourcetransparent">Helper methods and <code>[ReactorSourceTransparent]</code><a class="headerlink" href="#helper-methods-and-reactorsourcetransparent" title="Permanent link">&para;</a></h3>
 <p>By default a helper is attributed to <em>itself</em>. In</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">static</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">MyHeader</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;header&quot;</span><span class="p">);</span>

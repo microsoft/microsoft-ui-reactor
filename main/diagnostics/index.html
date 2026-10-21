@@ -2468,6 +2468,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#inspector-diagnostics-on-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inspector diagnostics on controls
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3474,6 +3485,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#inspector-diagnostics-on-controls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inspector diagnostics on controls
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3917,6 +3939,80 @@ child's id (or nothing), never the root's. Ids
 are only issued while the event is enabled, so subscribe with
 <code>ReactorTrace.Subscribe(..., EventLevel.Verbose, (EventKeywords)0x4000)</code> first.
 The payload carries no props, state values, keys or paths.</p>
+<h3 id="inspector-diagnostics-on-controls">Inspector diagnostics on controls<a class="headerlink" href="#inspector-diagnostics-on-controls" title="Permanent link">&para;</a></h3>
+<p>Out-of-process inspectors (WinUI DevTools, VS Live Property Explorer) read the visual tree
+through XamlDiagnostics, which cannot call into managed code. That matters most for Native
+AOT apps, which have no managed agent to load. Reactor therefore publishes what it knows about each control as a string attached
+property, <code>ReactorDiagnostics.SourceProperty</code> (<code>.ReactorSource</code> in XamlDiagnostics):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>v=1|at=Pages/Main.cs:36:13|owner=Counter|element=Button|key=t1|name=incrementButton
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>v=1|at=App.cs:46:9|owner=App|element=Component|mounts=Counter|hooks=0:count@36;1:density@37
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>at</code></td>
+<td>DSL call site <code>path:line[:column]</code>, relative to the project directory</td>
+</tr>
+<tr>
+<td><code>rel</code></td>
+<td><code>root</code> = <code>at</code> is relative to the solution root; <code>0</code> = file name only (file outside both)</td>
+</tr>
+<tr>
+<td><code>owner</code></td>
+<td>Component whose render produced the control (<code>FuncElement</code> / <code>MemoElement</code> for function components)</td>
+</tr>
+<tr>
+<td><code>element</code></td>
+<td>Element kind: <code>Button</code>, <code>TextBlock</code>, <code>Stack</code>, <code>Component</code>, …</td>
+</tr>
+<tr>
+<td><code>mounts</code></td>
+<td>On a component's wrapper: the component it hosts</td>
+</tr>
+<tr>
+<td><code>root</code></td>
+<td>On a host's root content: the host's root component</td>
+</tr>
+<tr>
+<td><code>key</code></td>
+<td>The element's key</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>The identifier the element was assigned to (<code>var title = TextBlock(…)</code> → <code>title</code>)</td>
+</tr>
+<tr>
+<td><code>hooks</code></td>
+<td>On <code>mounts</code> / <code>root</code> controls: <code>slot:variable@line;…</code> (<code>?</code> once slots are not statically known)</td>
+</tr>
+</tbody>
+</table>
+<p>Values escape <code>%</code> as <code>%25</code> and <code>|</code> as <code>%7C</code>. Readers ignore fields they do not know.</p>
+<p><strong>Gating.</strong> Publishing needs both of these:</p>
+<ul>
+<li>the <code>Reactor.DevtoolsSupport</code> build switch: on by default in Debug through <code>$(ReactorDiagnostics)</code>, and <code>-p:ReactorDiagnostics=true</code> for a Release / Native AOT build. An explicit <code>ReactorDiagnostics</code> value wins over the default and over a <code>Reactor.DevtoolsSupport</code> item the project declares itself;</li>
+<li><code>REACTOR_DIAGNOSTICS=1</code> in the environment at launch. It also turns source mapping on from startup, so elements built before the first host (a page's field initializers, say) carry their call sites.</li>
+</ul>
+<p>Otherwise nothing is written, and a trimmed or AOT build without the switch does not contain the publishing code at all. Like XAML's runtime source info, paths are never absolute developer paths. See the <a href="https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/security/threat-model.md">threat model</a> §7.7.</p>
+<p><strong>Cost.</strong> With the switch on but <code>REACTOR_DIAGNOSTICS</code> unset (the Debug default), the cost is a
+cached boolean check per control: mount, re-render, memory and first frame stay within run-to-run
+noise of a build without the feature. With publishing on, every realized control carries one string
+value. Measured on a Native AOT app with 50,000 controls, diagnostics mode costs about 20 B of
+managed memory and 0.7 KB of native memory per control, and about 3 µs per control at mount. Values
+are cached per call site, so controls without a key from the same call site share one string; a
+value that is unique per control (a keyed control) costs about 0.3 KB more. An in-place re-render
+whose call sites and keys did not change writes nothing. Under JIT, where a managed inspector can
+read call sites from the element, each stamped control also keeps its element tag (about 0.2 KB
+managed and 0.8 KB native more); Native AOT skips that tag when the call site is all it would carry,
+because no managed inspector can load, and <code>ReactorSourceMap.GetSource</code> reads the published value
+instead. Controls whose handler tears down child slots itself (NavigationView's pane slots, item
+hosts) keep it, because unmount reaches that handler through the tag.</p>
 <blockquote>
 <p><strong>NativeAOT:</strong> the .NET NativeAOT toolchain defaults the <code>EventSourceSupport</code>
 feature switch to <code>false</code>, which compiles the whole <code>EventSource</code> surface out.
@@ -3933,10 +4029,10 @@ write an EventPipe <code>.nettrace</code> file driven entirely by environment
 variables. This is the right tool when an issue reproduces only in a
 shipped build, on a different machine, or when you want to hand the
 trace off to someone else:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>set DOTNET_EnableEventPipe=1
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>set DOTNET_EventPipeOutputPath=reactor.nettrace
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>set DOTNET_EventPipeConfig=Microsoft-UI-Reactor:0x1FA0:5
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>MyApp.exe
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>set DOTNET_EnableEventPipe=1
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>set DOTNET_EventPipeOutputPath=reactor.nettrace
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>set DOTNET_EventPipeConfig=Microsoft-UI-Reactor:0x1FA0:5
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>MyApp.exe
 </code></pre></div>
 <p>The third variable is <code>&lt;provider&gt;:&lt;keywords&gt;:&lt;level&gt;</code>. <code>0x1FA0</code> is
 the everything-unsurprising mask above; level <code>5</code> is <code>Verbose</code>. Run
@@ -3947,10 +4043,10 @@ Performance Profiler → Events Viewer.</p>
 <p><code>dotnet-trace</code> is the cross-platform CLI for EventPipe capture.
 Useful when the app is already running and you want to scope the
 window:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>dotnet-trace collect ^
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    --process-id &lt;pid&gt; ^
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    --providers Microsoft-UI-Reactor:0x1FA0:5 ^
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    --output reactor.nettrace
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>dotnet-trace collect ^
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    --process-id &lt;pid&gt; ^
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    --providers Microsoft-UI-Reactor:0x1FA0:5 ^
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    --output reactor.nettrace
 </code></pre></div>
 <p><code>Ctrl+C</code> stops the session; the <code>.nettrace</code> lands in the working
 directory. Same file format as the env-var route — same Events
@@ -3959,7 +4055,7 @@ Viewer workflow.</p>
 <p>For a GUI workflow, the Profiler's Events Viewer accepts the same
 provider:keyword:level format. Diagnostics → Performance Profiler
 → Events Viewer → Settings → Custom Provider:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Microsoft-UI-Reactor:0x1FA0:5
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Microsoft-UI-Reactor:0x1FA0:5
 </code></pre></div>
 <p>The timeline ties each Reactor event to the CPU sample, GC, and
 network views, so you can see a <code>NavigationCompleted</code> next to the
@@ -3969,14 +4065,14 @@ allocation spike it caused.</p>
 overlay, an in-app diagnostics page — <code>ReactorTrace.Subscribe</code>
 returns an <code>IDisposable</code> token that fires the callback for each
 event matching the filter:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">IDisposable</span><span class="w"> </span><span class="nf">Subscribe</span><span class="p">(</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="n">Action</span><span class="o">&lt;</span><span class="n">ReactorEvent</span><span class="o">&gt;</span><span class="w"> </span><span class="n">onEvent</span><span class="p">,</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="n">EventLevel</span><span class="w"> </span><span class="n">level</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">EventLevel</span><span class="p">.</span><span class="n">Verbose</span><span class="p">,</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">keywords</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="p">{</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="n">ArgumentNullException</span><span class="p">.</span><span class="n">ThrowIfNull</span><span class="p">(</span><span class="n">onEvent</span><span class="p">);</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="nf">Subscription</span><span class="p">(</span><span class="n">onEvent</span><span class="p">,</span><span class="w"> </span><span class="n">level</span><span class="p">,</span><span class="w"> </span><span class="n">keywords</span><span class="p">);</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">IDisposable</span><span class="w"> </span><span class="nf">Subscribe</span><span class="p">(</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">    </span><span class="n">Action</span><span class="o">&lt;</span><span class="n">ReactorEvent</span><span class="o">&gt;</span><span class="w"> </span><span class="n">onEvent</span><span class="p">,</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="n">EventLevel</span><span class="w"> </span><span class="n">level</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">EventLevel</span><span class="p">.</span><span class="n">Verbose</span><span class="p">,</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">keywords</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="p">{</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">    </span><span class="n">ArgumentNullException</span><span class="p">.</span><span class="n">ThrowIfNull</span><span class="p">(</span><span class="n">onEvent</span><span class="p">);</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="nf">Subscription</span><span class="p">(</span><span class="n">onEvent</span><span class="p">,</span><span class="w"> </span><span class="n">level</span><span class="p">,</span><span class="w"> </span><span class="n">keywords</span><span class="p">);</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="p">}</span>
 </code></pre></div>
 <p>Multiple concurrent subscribers are supported; each filter is
 independently active until the token is disposed. The subscriber
@@ -3997,31 +4093,31 @@ tool that drains the captured <code>Console.Out</code> / <code>Console.Error</co
 <code>Debug.WriteLine</code> ring buffer. Spec 044 extended the tool so the
 buffer also captures <code>Microsoft-UI-Reactor</code> ETW events, surfaced
 under a new <code>source=event</code> filter:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>// Request
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>{
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>  &quot;method&quot;: &quot;tools/call&quot;,
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>  &quot;params&quot;: {
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    &quot;name&quot;: &quot;logs&quot;,
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    &quot;arguments&quot;: { &quot;source&quot;: &quot;event&quot;, &quot;tail&quot;: 20, &quot;level&quot;: &quot;Warning&quot; }
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>  }
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>}
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>// Response — each entry now carries eventName / eventId
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>{
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>  &quot;entries&quot;: [
-<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>    {
-<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>      &quot;seq&quot;: 142,
-<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>      &quot;ts&quot;: &quot;2026-05-19T17:42:11.330Z&quot;,
-<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>      &quot;source&quot;: &quot;event&quot;,
-<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>      &quot;level&quot;: &quot;Warning&quot;,
-<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>      &quot;text&quot;: &quot;SwallowedError category=Hosting operation=ReactorWindow.Close exceptionType=COMException&quot;,
-<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>      &quot;eventName&quot;: &quot;SwallowedError&quot;,
-<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>      &quot;eventId&quot;: 16
-<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>    }
-<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>  ],
-<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>  &quot;nextSeq&quot;: 143,
-<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>  &quot;dropped&quot;: 0
-<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a>}
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>// Request
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>{
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>  &quot;method&quot;: &quot;tools/call&quot;,
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>  &quot;params&quot;: {
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    &quot;name&quot;: &quot;logs&quot;,
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    &quot;arguments&quot;: { &quot;source&quot;: &quot;event&quot;, &quot;tail&quot;: 20, &quot;level&quot;: &quot;Warning&quot; }
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>  }
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>}
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>// Response — each entry now carries eventName / eventId
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>{
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>  &quot;entries&quot;: [
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    {
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>      &quot;seq&quot;: 142,
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>      &quot;ts&quot;: &quot;2026-05-19T17:42:11.330Z&quot;,
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>      &quot;source&quot;: &quot;event&quot;,
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>      &quot;level&quot;: &quot;Warning&quot;,
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>      &quot;text&quot;: &quot;SwallowedError category=Hosting operation=ReactorWindow.Close exceptionType=COMException&quot;,
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>      &quot;eventName&quot;: &quot;SwallowedError&quot;,
+<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>      &quot;eventId&quot;: 16
+<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>    }
+<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>  ],
+<a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>  &quot;nextSeq&quot;: 143,
+<a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a>  &quot;dropped&quot;: 0
+<a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a>}
 </code></pre></div>
 <p>Existing clients that don't pass <code>source=event</code> see zero behavior
 change — the <code>stdout</code> / <code>stderr</code> / <code>debug</code> filters still return their
@@ -4038,8 +4134,8 @@ greps that matched the old shape continue to hit.</p>
 machine. Capture with the env-var route, filter to the <code>Errors</code>
 keyword (<code>0x20</code>) at <code>Warning</code>, and open the trace in Events Viewer.
 The relevant entries will look like:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>SwallowedError  category=Hosting  operation=ReactorWindow.Close  exceptionType=COMException
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>HResultFailed   category=Hosting  operation=ReactorWindow.Close  hr=0x80010108
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>SwallowedError  category=Hosting  operation=ReactorWindow.Close  exceptionType=COMException
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>HResultFailed   category=Hosting  operation=ReactorWindow.Close  hr=0x80010108
 </code></pre></div>
 <p>The operation label is stable and developer-authored — search the
 Reactor source for <code>"ReactorWindow.Close"</code> and you land on the
@@ -4050,35 +4146,35 @@ ever leaking the user-visible window title.</p>
 <h3 id="wiring-reactortracesubscribe-to-a-per-window-debug-overlay">Wiring <code>ReactorTrace.Subscribe</code> to a per-window debug overlay<a class="headerlink" href="#wiring-reactortracesubscribe-to-a-per-window-debug-overlay" title="Permanent link">&para;</a></h3>
 <p>A devtools overlay that wants to surface "navigation event happening
 now" doesn't need a file capture — just an in-process subscription:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">public</span><span class="w"> </span><span class="k">sealed</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">NavigationOverlay</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">IDisposable</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="p">{</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="c1">// ReactorEventSource is internal to Reactor, so an app names the</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="c1">// keyword by its documented bit value rather than by symbol.</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">    </span><span class="k">private</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">NavigationKeyword</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x200</span><span class="p">;</span>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">    </span><span class="k">private</span><span class="w"> </span><span class="k">readonly</span><span class="w"> </span><span class="n">IDisposable</span><span class="w"> </span><span class="n">_subscription</span><span class="p">;</span>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">    </span><span class="k">private</span><span class="w"> </span><span class="k">readonly</span><span class="w"> </span><span class="n">Queue</span><span class="o">&lt;</span><span class="kt">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">_ring</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="p">();</span>
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="nf">NavigationOverlay</span><span class="p">()</span>
-<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">    </span><span class="p">{</span>
-<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">        </span><span class="n">_subscription</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ReactorTrace</span><span class="p">.</span><span class="n">Subscribe</span><span class="p">(</span>
-<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">            </span><span class="n">evt</span><span class="w"> </span><span class="o">=&gt;</span>
-<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="w">            </span><span class="p">{</span>
-<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="w">                </span><span class="kt">var</span><span class="w"> </span><span class="n">line</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">$&quot;{evt.EventName} {string.Join(&#39; &#39;,</span>
-<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="w">                    </span><span class="n">Enumerable</span><span class="p">.</span><span class="n">Range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="n">evt</span><span class="p">.</span><span class="n">Payload</span><span class="p">.</span><span class="n">Count</span><span class="p">)</span>
-<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="w">                        </span><span class="p">.</span><span class="n">Select</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="s">$&quot;{evt.PayloadNames[i]}={evt.Payload[i]}&quot;</span><span class="p">))}</span><span class="s">&quot;;</span>
-<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="w">                </span><span class="k">lock</span><span class="w"> </span><span class="p">(</span><span class="n">_ring</span><span class="p">)</span>
-<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="w">                </span><span class="p">{</span>
-<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a><span class="w">                    </span><span class="n">_ring</span><span class="p">.</span><span class="n">Enqueue</span><span class="p">(</span><span class="n">line</span><span class="p">);</span>
-<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a><span class="w">                    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">_ring</span><span class="p">.</span><span class="n">Count</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">50</span><span class="p">)</span><span class="w"> </span><span class="n">_ring</span><span class="p">.</span><span class="n">Dequeue</span><span class="p">();</span>
-<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a><span class="w">                </span><span class="p">}</span>
-<a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a><span class="w">            </span><span class="p">},</span>
-<a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a><span class="w">            </span><span class="n">level</span><span class="p">:</span><span class="w"> </span><span class="n">EventLevel</span><span class="p">.</span><span class="n">Verbose</span><span class="p">,</span>
-<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a><span class="w">            </span><span class="n">keywords</span><span class="p">:</span><span class="w"> </span><span class="n">NavigationKeyword</span><span class="p">);</span>
-<a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a>
-<a id="__codelineno-6-28" name="__codelineno-6-28" href="#__codelineno-6-28"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">void</span><span class="w"> </span><span class="nf">Dispose</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">_subscription</span><span class="p">.</span><span class="n">Dispose</span><span class="p">();</span>
-<a id="__codelineno-6-29" name="__codelineno-6-29" href="#__codelineno-6-29"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">public</span><span class="w"> </span><span class="k">sealed</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">NavigationOverlay</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">IDisposable</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="p">{</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="c1">// ReactorEventSource is internal to Reactor, so an app names the</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="c1">// keyword by its documented bit value rather than by symbol.</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="k">private</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">NavigationKeyword</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x200</span><span class="p">;</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">    </span><span class="k">private</span><span class="w"> </span><span class="k">readonly</span><span class="w"> </span><span class="n">IDisposable</span><span class="w"> </span><span class="n">_subscription</span><span class="p">;</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">    </span><span class="k">private</span><span class="w"> </span><span class="k">readonly</span><span class="w"> </span><span class="n">Queue</span><span class="o">&lt;</span><span class="kt">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">_ring</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="p">();</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="nf">NavigationOverlay</span><span class="p">()</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="w">        </span><span class="n">_subscription</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ReactorTrace</span><span class="p">.</span><span class="n">Subscribe</span><span class="p">(</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="w">            </span><span class="n">evt</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="w">            </span><span class="p">{</span>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="w">                </span><span class="kt">var</span><span class="w"> </span><span class="n">line</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">$&quot;{evt.EventName} {string.Join(&#39; &#39;,</span>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="w">                    </span><span class="n">Enumerable</span><span class="p">.</span><span class="n">Range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="n">evt</span><span class="p">.</span><span class="n">Payload</span><span class="p">.</span><span class="n">Count</span><span class="p">)</span>
+<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a><span class="w">                        </span><span class="p">.</span><span class="n">Select</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="s">$&quot;{evt.PayloadNames[i]}={evt.Payload[i]}&quot;</span><span class="p">))}</span><span class="s">&quot;;</span>
+<a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a><span class="w">                </span><span class="k">lock</span><span class="w"> </span><span class="p">(</span><span class="n">_ring</span><span class="p">)</span>
+<a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a><span class="w">                </span><span class="p">{</span>
+<a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a><span class="w">                    </span><span class="n">_ring</span><span class="p">.</span><span class="n">Enqueue</span><span class="p">(</span><span class="n">line</span><span class="p">);</span>
+<a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a><span class="w">                    </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">_ring</span><span class="p">.</span><span class="n">Count</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">50</span><span class="p">)</span><span class="w"> </span><span class="n">_ring</span><span class="p">.</span><span class="n">Dequeue</span><span class="p">();</span>
+<a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a><span class="w">                </span><span class="p">}</span>
+<a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a><span class="w">            </span><span class="p">},</span>
+<a id="__codelineno-7-24" name="__codelineno-7-24" href="#__codelineno-7-24"></a><span class="w">            </span><span class="n">level</span><span class="p">:</span><span class="w"> </span><span class="n">EventLevel</span><span class="p">.</span><span class="n">Verbose</span><span class="p">,</span>
+<a id="__codelineno-7-25" name="__codelineno-7-25" href="#__codelineno-7-25"></a><span class="w">            </span><span class="n">keywords</span><span class="p">:</span><span class="w"> </span><span class="n">NavigationKeyword</span><span class="p">);</span>
+<a id="__codelineno-7-26" name="__codelineno-7-26" href="#__codelineno-7-26"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-7-27" name="__codelineno-7-27" href="#__codelineno-7-27"></a>
+<a id="__codelineno-7-28" name="__codelineno-7-28" href="#__codelineno-7-28"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">void</span><span class="w"> </span><span class="nf">Dispose</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">_subscription</span><span class="p">.</span><span class="n">Dispose</span><span class="p">();</span>
+<a id="__codelineno-7-29" name="__codelineno-7-29" href="#__codelineno-7-29"></a><span class="p">}</span>
 </code></pre></div>
 <p><code>Subscribe</code> already applies the keyword mask, so the callback does not
 re-check <code>evt.Keywords</code>.</p>
@@ -4088,21 +4184,21 @@ If the overlay forwards to a background sink instead, marshal off
 the dispatcher before doing the I/O.</p>
 <h2 id="common-mistakes">Common Mistakes<a class="headerlink" href="#common-mistakes" title="Permanent link">&para;</a></h2>
 <h3 id="treating-debugwriteline-as-a-release-diagnostic">Treating <code>Debug.WriteLine</code> as a release diagnostic<a class="headerlink" href="#treating-debugwriteline-as-a-release-diagnostic" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1">// Don&#39;t:</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">window</span><span class="p">.</span><span class="n">AppWindow</span><span class="p">.</span><span class="n">Close</span><span class="p">();</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">ex</span><span class="p">)</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="p">{</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="n">Debug</span><span class="p">.</span><span class="n">WriteLine</span><span class="p">(</span><span class="s">$&quot;Close failed: {ex}&quot;</span><span class="p">);</span><span class="w">  </span><span class="c1">// disappears in Release</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1">// Don&#39;t:</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">window</span><span class="p">.</span><span class="n">AppWindow</span><span class="p">.</span><span class="n">Close</span><span class="p">();</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">ex</span><span class="p">)</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="p">{</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="n">Debug</span><span class="p">.</span><span class="n">WriteLine</span><span class="p">(</span><span class="s">$&quot;Close failed: {ex}&quot;</span><span class="p">);</span><span class="w">  </span><span class="c1">// disappears in Release</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="p">}</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">private</span><span class="w"> </span><span class="k">void</span><span class="w"> </span><span class="nf">CloseNativeWindowOnce</span><span class="p">()</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="p">{</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">_disposed</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">_nativeCloseRequested</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="n">_nativeCloseRequested</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">_window</span><span class="p">.</span><span class="n">Close</span><span class="p">();</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">    </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">COMException</span><span class="w"> </span><span class="n">ex</span><span class="p">)</span><span class="w"> </span><span class="k">when</span><span class="w"> </span><span class="p">(</span><span class="n">HResults</span><span class="p">.</span><span class="n">IsTeardownReentry</span><span class="p">(</span><span class="n">ex</span><span class="p">.</span><span class="n">HResult</span><span class="p">))</span>
-<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="n">DiagnosticLog</span><span class="p">.</span><span class="n">SwallowedError</span><span class="p">(</span><span class="n">LogCategory</span><span class="p">.</span><span class="n">Hosting</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;ReactorWindow.Close&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">ex</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">private</span><span class="w"> </span><span class="k">void</span><span class="w"> </span><span class="nf">CloseNativeWindowOnce</span><span class="p">()</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="p">{</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">_disposed</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">_nativeCloseRequested</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="n">_nativeCloseRequested</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">    </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">_window</span><span class="p">.</span><span class="n">Close</span><span class="p">();</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">    </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">COMException</span><span class="w"> </span><span class="n">ex</span><span class="p">)</span><span class="w"> </span><span class="k">when</span><span class="w"> </span><span class="p">(</span><span class="n">HResults</span><span class="p">.</span><span class="n">IsTeardownReentry</span><span class="p">(</span><span class="n">ex</span><span class="p">.</span><span class="n">HResult</span><span class="p">))</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="n">DiagnosticLog</span><span class="p">.</span><span class="n">SwallowedError</span><span class="p">(</span><span class="n">LogCategory</span><span class="p">.</span><span class="n">Hosting</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;ReactorWindow.Close&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">ex</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="p">}</span>
 </code></pre></div>
 <p>The first form was invisible to every shipped app. The second form
 emits to <code>Microsoft-UI-Reactor</code> under <code>Keywords.Errors</code> at <code>Warning</code>
@@ -4125,33 +4221,33 @@ own logger; what an app consumes from Reactor is the <em>event stream</em>,
 via the four capture routes above.</p>
 </blockquote>
 <h3 id="capturing-without-pinning-the-level">Capturing without pinning the level<a class="headerlink" href="#capturing-without-pinning-the-level" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>DOTNET_EventPipeConfig=Microsoft-UI-Reactor
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>DOTNET_EventPipeConfig=Microsoft-UI-Reactor
 </code></pre></div>
 <p>Defaults to <code>Verbose</code> plus all keywords. A typical 30-second session
 on a busy app writes hundreds of megabytes — and <code>State</code> keyword
 events fire once per <code>UseState</code> write, so a state-heavy screen
 becomes the entire trace. Pin both:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>DOTNET_EventPipeConfig=Microsoft-UI-Reactor:0x1FA0:5
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>DOTNET_EventPipeConfig=Microsoft-UI-Reactor:0x1FA0:5
 </code></pre></div>
 <p><code>0x1FA0</code> is <code>Errors | Hosting | Persistence | Navigation | Intl |
 Theme</code> — the everything-unsurprising mask. <code>:5</code> is <code>Verbose</code>. The
 trace shrinks by an order of magnitude.</p>
 <h3 id="computing-the-diagnostic-payload-outside-the-isenabled-gate">Computing the diagnostic payload outside the IsEnabled gate<a class="headerlink" href="#computing-the-diagnostic-payload-outside-the-isenabled-gate" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">void</span><span class="w"> </span><span class="nf">SwallowedError</span><span class="p">(</span><span class="n">LogCategory</span><span class="w"> </span><span class="n">category</span><span class="p">,</span><span class="w"> </span><span class="kt">string?</span><span class="w"> </span><span class="n">operation</span><span class="p">,</span><span class="w"> </span><span class="n">Exception</span><span class="o">?</span><span class="w"> </span><span class="n">ex</span><span class="p">)</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="p">{</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">    </span><span class="c1">// Cost-of-disabled: when no consumer enables Keywords.Errors at</span>
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">    </span><span class="c1">// Warning the entire branch is skipped — no enum-to-string, no</span>
-<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">    </span><span class="c1">// type-name materialization, no WriteEvent dispatch.</span>
-<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ReactorEventSource</span><span class="p">.</span><span class="n">Log</span><span class="p">.</span><span class="n">IsEnabled</span><span class="p">(</span><span class="n">EventLevel</span><span class="p">.</span><span class="n">Warning</span><span class="p">,</span><span class="w"> </span><span class="n">ReactorEventSource</span><span class="p">.</span><span class="n">Keywords</span><span class="p">.</span><span class="n">Errors</span><span class="p">))</span>
-<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">    </span><span class="p">{</span>
-<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">        </span><span class="n">ReactorEventSource</span><span class="p">.</span><span class="n">Log</span><span class="p">.</span><span class="n">SwallowedError</span><span class="p">(</span>
-<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">            </span><span class="n">category</span><span class="p">.</span><span class="n">ToString</span><span class="p">(),</span>
-<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">            </span><span class="n">operation</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="kt">string</span><span class="p">.</span><span class="n">Empty</span><span class="p">,</span>
-<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="w">            </span><span class="n">ex</span><span class="o">?.</span><span class="n">GetType</span><span class="p">().</span><span class="n">Name</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="kt">string</span><span class="p">.</span><span class="n">Empty</span><span class="p">);</span>
-<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>
-<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="w">    </span><span class="n">DebugSwallowedError</span><span class="p">(</span><span class="n">category</span><span class="p">,</span><span class="w"> </span><span class="n">operation</span><span class="p">,</span><span class="w"> </span><span class="n">ex</span><span class="p">);</span>
-<a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">void</span><span class="w"> </span><span class="nf">SwallowedError</span><span class="p">(</span><span class="n">LogCategory</span><span class="w"> </span><span class="n">category</span><span class="p">,</span><span class="w"> </span><span class="kt">string?</span><span class="w"> </span><span class="n">operation</span><span class="p">,</span><span class="w"> </span><span class="n">Exception</span><span class="o">?</span><span class="w"> </span><span class="n">ex</span><span class="p">)</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="p">{</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">    </span><span class="c1">// Cost-of-disabled: when no consumer enables Keywords.Errors at</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">    </span><span class="c1">// Warning the entire branch is skipped — no enum-to-string, no</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">    </span><span class="c1">// type-name materialization, no WriteEvent dispatch.</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ReactorEventSource</span><span class="p">.</span><span class="n">Log</span><span class="p">.</span><span class="n">IsEnabled</span><span class="p">(</span><span class="n">EventLevel</span><span class="p">.</span><span class="n">Warning</span><span class="p">,</span><span class="w"> </span><span class="n">ReactorEventSource</span><span class="p">.</span><span class="n">Keywords</span><span class="p">.</span><span class="n">Errors</span><span class="p">))</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">        </span><span class="n">ReactorEventSource</span><span class="p">.</span><span class="n">Log</span><span class="p">.</span><span class="n">SwallowedError</span><span class="p">(</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="w">            </span><span class="n">category</span><span class="p">.</span><span class="n">ToString</span><span class="p">(),</span>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">            </span><span class="n">operation</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="kt">string</span><span class="p">.</span><span class="n">Empty</span><span class="p">,</span>
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="w">            </span><span class="n">ex</span><span class="o">?.</span><span class="n">GetType</span><span class="p">().</span><span class="n">Name</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="kt">string</span><span class="p">.</span><span class="n">Empty</span><span class="p">);</span>
+<a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a>
+<a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a><span class="w">    </span><span class="n">DebugSwallowedError</span><span class="p">(</span><span class="n">category</span><span class="p">,</span><span class="w"> </span><span class="n">operation</span><span class="p">,</span><span class="w"> </span><span class="n">ex</span><span class="p">);</span>
+<a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a><span class="p">}</span>
 </code></pre></div>
 <p><code>DiagnosticLog.SwallowedError</code> does its <code>category.ToString()</code> and
 <code>ex.GetType().Name</code> work <em>inside</em> the
@@ -4161,29 +4257,29 @@ consumer is attached" guarantee. If a future helper materializes
 the payload first and gates second, the no-allocation regression
 test (<code>DisabledKeyword_skips_ReactorEventSource_WriteEvent_payload_marshal</code>)
 catches it. The companion <code>HResultFailed</code> event has the same shape:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="na">[Event(17, Level = EventLevel.Warning, Keywords = Keywords.Errors,</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="na">    Message = &quot;HResult failed (category={category}, op={operation}, hr=0x{hr:X8})&quot;)]</span>
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="k">public</span><span class="w"> </span><span class="k">void</span><span class="w"> </span><span class="nf">HResultFailed</span><span class="p">(</span><span class="kt">string</span><span class="w"> </span><span class="n">category</span><span class="p">,</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="n">operation</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">hr</span><span class="p">)</span>
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="p">{</span>
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">IsEnabled</span><span class="p">(</span><span class="n">EventLevel</span><span class="p">.</span><span class="n">Warning</span><span class="p">,</span><span class="w"> </span><span class="n">Keywords</span><span class="p">.</span><span class="n">Errors</span><span class="p">))</span>
-<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">        </span><span class="n">WriteEvent</span><span class="p">(</span><span class="mi">17</span><span class="p">,</span><span class="w"> </span><span class="n">category</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="kt">string</span><span class="p">.</span><span class="n">Empty</span><span class="p">,</span><span class="w"> </span><span class="n">operation</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="kt">string</span><span class="p">.</span><span class="n">Empty</span><span class="p">,</span><span class="w"> </span><span class="n">hr</span><span class="p">);</span>
-<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="na">[Event(17, Level = EventLevel.Warning, Keywords = Keywords.Errors,</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="na">    Message = &quot;HResult failed (category={category}, op={operation}, hr=0x{hr:X8})&quot;)]</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="k">public</span><span class="w"> </span><span class="k">void</span><span class="w"> </span><span class="nf">HResultFailed</span><span class="p">(</span><span class="kt">string</span><span class="w"> </span><span class="n">category</span><span class="p">,</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="n">operation</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">hr</span><span class="p">)</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="p">{</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">IsEnabled</span><span class="p">(</span><span class="n">EventLevel</span><span class="p">.</span><span class="n">Warning</span><span class="p">,</span><span class="w"> </span><span class="n">Keywords</span><span class="p">.</span><span class="n">Errors</span><span class="p">))</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">        </span><span class="n">WriteEvent</span><span class="p">(</span><span class="mi">17</span><span class="p">,</span><span class="w"> </span><span class="n">category</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="kt">string</span><span class="p">.</span><span class="n">Empty</span><span class="p">,</span><span class="w"> </span><span class="n">operation</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="kt">string</span><span class="p">.</span><span class="n">Empty</span><span class="p">,</span><span class="w"> </span><span class="n">hr</span><span class="p">);</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="p">}</span>
 </code></pre></div>
 <h3 id="forwarding-exmessage-through-reactortracesubscribe">Forwarding <code>ex.Message</code> through <code>ReactorTrace.Subscribe</code><a class="headerlink" href="#forwarding-exmessage-through-reactortracesubscribe" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1">// Don&#39;t — capturing the exception and forwarding its message defeats the strip:</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">Exception</span><span class="o">?</span><span class="w"> </span><span class="n">lastEx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">;</span>
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* ... */</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">caught</span><span class="p">)</span>
-<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="p">{</span>
-<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">    </span><span class="n">lastEx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">caught</span><span class="p">;</span>
-<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">    </span><span class="n">DiagnosticLog</span><span class="p">.</span><span class="n">SwallowedError</span><span class="p">(</span><span class="n">LogCategory</span><span class="p">.</span><span class="n">Hosting</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;MyOp&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">caught</span><span class="p">);</span>
-<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="p">}</span>
-<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>
-<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="n">ReactorTrace</span><span class="p">.</span><span class="n">Subscribe</span><span class="p">(</span><span class="n">evt</span><span class="w"> </span><span class="o">=&gt;</span>
-<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="p">{</span>
-<a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a><span class="w">    </span><span class="c1">// BAD: re-injects PII that the ETW payload deliberately excluded.</span>
-<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a><span class="w">    </span><span class="n">_logger</span><span class="p">.</span><span class="n">Warn</span><span class="p">(</span><span class="n">evt</span><span class="p">.</span><span class="n">EventName</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot;: &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="kt">string</span><span class="p">.</span><span class="n">Join</span><span class="p">(</span><span class="s">&quot;,&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">evt</span><span class="p">.</span><span class="n">Payload</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">lastEx</span><span class="o">?.</span><span class="n">Message</span><span class="p">);</span>
-<a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a><span class="p">});</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1">// Don&#39;t — capturing the exception and forwarding its message defeats the strip:</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="n">Exception</span><span class="o">?</span><span class="w"> </span><span class="n">lastEx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">;</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* ... */</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">caught</span><span class="p">)</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="p">{</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">    </span><span class="n">lastEx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">caught</span><span class="p">;</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">    </span><span class="n">DiagnosticLog</span><span class="p">.</span><span class="n">SwallowedError</span><span class="p">(</span><span class="n">LogCategory</span><span class="p">.</span><span class="n">Hosting</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;MyOp&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">caught</span><span class="p">);</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="p">}</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="n">ReactorTrace</span><span class="p">.</span><span class="n">Subscribe</span><span class="p">(</span><span class="n">evt</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="p">{</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="w">    </span><span class="c1">// BAD: re-injects PII that the ETW payload deliberately excluded.</span>
+<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="w">    </span><span class="n">_logger</span><span class="p">.</span><span class="n">Warn</span><span class="p">(</span><span class="n">evt</span><span class="p">.</span><span class="n">EventName</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot;: &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="kt">string</span><span class="p">.</span><span class="n">Join</span><span class="p">(</span><span class="s">&quot;,&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">evt</span><span class="p">.</span><span class="n">Payload</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">lastEx</span><span class="o">?.</span><span class="n">Message</span><span class="p">);</span>
+<a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a><span class="p">});</span>
 </code></pre></div>
 <p>The framework already stripped <code>ex.Message</code> from the payload —
 re-adding it from a captured local is exactly the PII leak the strip
