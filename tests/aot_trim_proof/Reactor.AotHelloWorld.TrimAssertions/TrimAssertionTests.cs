@@ -122,6 +122,17 @@ public sealed class TrimAssertionTests
         "NumberBoxElement",
         "WebView2Element",
 
+        // ── Inspector diagnostics (ReactorDiagnostics.SourceProperty). ──────
+        // Every publishing call site is guarded by the Reactor.DevtoolsSupport
+        // feature switch (Trim="true", default false here), so ILC removes the
+        // guarded branches and with them the publisher, its formatter, the
+        // REACTOR_DIAGNOSTICS environment read and the value prefix literal.
+        // Positive control: publishing the same app with the switch on keeps all
+        // four (verified when this guard was added; see the K PR description).
+        "ReactorSourcePublisher",
+        "ReactorSourceFormat",
+        "REACTOR_DIAGNOSTICS",
+        "|at=",
         // ── NOT included: Microsoft.UI.Xaml.Controls.* names. ────────────
         // Earlier drafts of this list also probed WinUI control type names
         // like Microsoft.UI.Xaml.Controls.{TreeView, GridView, TabView,

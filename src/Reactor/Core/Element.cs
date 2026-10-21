@@ -89,7 +89,8 @@ public abstract record Element
     {
         get => Extensions?.CallSite;
         init => Extensions = value is null && Extensions is null ? null
-            : NormalizeExtras(Extensions is null ? new ElementExtras { CallSite = value } : Extensions with { CallSite = value });
+            : Extensions is null ? ElementExtras.ForCallSiteOnly(value!.Value)
+            : NormalizeExtras(Extensions with { CallSite = value });
     }
 
     /// <summary>
@@ -1979,6 +1980,23 @@ public record ElementExtras
     /// field explicitly set to null stays symmetric (PR #455 CR item #2).
     /// </summary>
     internal bool IsEmpty => IsBehaviorallyEmpty && CallSite is null;
+
+    /// <summary>
+    /// The bucket for an element whose only extra is its call site. Stamping (the source-map
+    /// interceptors, <c>REACTOR_SOURCEMAP=1</c> / diagnostics mode) gives every element one,
+    /// and the records are immutable, so elements from the same call site share one instance
+    /// instead of each retaining a ~150 B bucket. Bounded by the app's call sites. Lives in a
+    /// holder class so an app that never stamps never allocates the cache.
+    /// </summary>
+    internal static ElementExtras ForCallSiteOnly(SourceLocation site) => CallSiteOnly.Get(site);
+
+    private static class CallSiteOnly
+    {
+        private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<SourceLocation, ElementExtras> s_cache = new();
+
+        internal static ElementExtras Get(SourceLocation site)
+            => s_cache.GetOrAdd(site, static s => new ElementExtras { CallSite = s });
+    }
 
     /// <summary>
     /// True when every bucketed field EXCEPT <see cref="CallSite"/> is null —

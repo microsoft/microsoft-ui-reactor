@@ -33,6 +33,22 @@ namespace Microsoft.UI.Reactor.Core;
 public readonly record struct SourceLocation(string FilePath, int LineNumber, int ColumnNumber)
 {
     /// <summary>
+    /// The identifier the element created at this call site was assigned to, as the
+    /// source-map generator saw it — <c>title</c> for <c>var title = TextBlock("x").Bold()</c>,
+    /// a field or property name for an initializer, the member name for an expression-bodied
+    /// member or local function. <c>null</c> for an element written inline (an argument, a
+    /// collection element), for a build without source mapping, or after a hot-reload edit
+    /// moved the call.
+    ///
+    /// <para>Not stored on the location: it is looked up in the generator's static table, so
+    /// it costs nothing per element and does not take part in equality.</para>
+    /// </summary>
+    public string? DeclaredName
+        => string.IsNullOrEmpty(FilePath)
+            ? null
+            : global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetDeclaredName(this);
+
+    /// <summary>
     /// Full form: <c>C:\src\MainPage.cs:34</c>. Deliberately omits
     /// <see cref="ColumnNumber"/>, so consumers that split this string on its last
     /// <c>:</c> keep working; read <see cref="ColumnNumber"/> directly.

@@ -331,14 +331,17 @@ public static class ControlRegistry
         {
             if (s_baseEntries.TryGetValue(t, out var found))
             {
-                s_baseCache.TryAdd(elementType, found);
+                if (!elementType.IsCollectible)
+                    s_baseCache.TryAdd(elementType, found);
                 entry = found;
                 return true;
             }
         }
         // Cache the negative result so subsequent dispatches don't walk
-        // the inheritance chain again.
-        s_baseCache.TryAdd(elementType, null);
+        // the inheritance chain again. Never for a collectible plug-in's type: this cache
+        // lives for the process and would keep its load context from unloading.
+        if (!elementType.IsCollectible)
+            s_baseCache.TryAdd(elementType, null);
         entry = null;
         return false;
     }
@@ -385,7 +388,10 @@ public static class ControlRegistry
                 : null;
 
             cached = (generation, resolver);
-            s_sourceTargetResolvers[elementType] = cached;
+            // This cache lives for the process: a collectible plug-in's element type is
+            // resolved every time instead, so the cache never keeps its load context alive.
+            if (!elementType.IsCollectible)
+                s_sourceTargetResolvers[elementType] = cached;
         }
 
         if (cached.Resolver is null) return false;
