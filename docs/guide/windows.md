@@ -56,7 +56,9 @@ Caveats:
   recently opened or rendered one. The other window hooks (`UseDpi`,
   `UseWindowState`, `UseIsActive`, `UseClosingGuard`, …) resolve the same window
   and return their "outside a window" values when there is none; there is no
-  fallback to another open window.
+  fallback to another open window. `ReactorHostControl` content that needs its
+  hosting window can pass it explicitly (`UseWindowSize(window)`,
+  `UseBreakpoint(window, minWidth)`) or read `XamlRoot.RasterizationScale` for DPI.
 
 ## Sizing & resizing
 

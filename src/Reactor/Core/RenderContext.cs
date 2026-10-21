@@ -2464,7 +2464,8 @@ public sealed class RenderContext
 
     /// <summary>
     /// Window-inferring overload — takes only <paramref name="minWidth"/> and
-    /// resolves the current host's window. Returns false when called outside a
+    /// resolves the window whose host renders this component (see the parameterless
+    /// <see cref="UseWindowSize()"/>). Returns false when the component has no owning
     /// window. (spec 036 §5.2)
     /// </summary>
     public bool UseBreakpoint(double minWidth)

@@ -204,30 +204,54 @@ internal static class WindowHookOwnerFixtures
         }
     }
 
-    // After the opener has constructed C's host (repointing the process-wide host to C), the
-    // probe and a TitleBar mount in the same pass of A.
+    private const string SecondMidRenderWindowKey = "window-hook-owner-mid-render-2";
+
+    private sealed class SecondMidRenderOpener : Component
+    {
+        public override Element Render()
+        {
+            UseOpenWindow(WindowKey.Of(SecondMidRenderWindowKey), new WindowSpec { Title = "Hook owner D", Width = 240, Height = 180 },
+                () => new ProbeOnlyRoot());
+            return TextBlock("second opener");
+        }
+    }
+
+    // Phase 1: after the opener has constructed C's host (repointing the process-wide host to
+    // C), the probe and a tall, dark TitleBar mount in the same pass of A. Phase 2: a second
+    // opener constructs D's host earlier in the pass that unmounts the TitleBar, so the
+    // withdrawal also runs while the process-wide host names another window.
     private sealed class MidRenderRoot : Component
     {
         public HookRecord Sibling { get; } = new();
-        public Action? OpenNow;
+        public Microsoft.UI.Xaml.Controls.TitleBar? Bar;
+        public Action<int>? SetPhase;
 
         public override Element Render()
         {
-            var (open, setOpen) = UseState(false);
-            OpenNow = () => setOpen(true);
+            var (phase, setPhase) = UseState(0);
+            SetPhase = setPhase;
             return VStack(
-                open ? Component<MidRenderOpener>() : TextBlock("closed"),
-                open ? Component<HookProbe, ProbeProps>(new(Sibling, 0)) : TextBlock("no probe"),
-                open ? TitleBar("Hook owner mid-render") : TextBlock("no title bar"));
+                phase >= 1 ? Component<MidRenderOpener>() : TextBlock("closed"),
+                phase >= 2 ? Component<SecondMidRenderOpener>() : TextBlock("no second window"),
+                phase >= 1 ? Component<HookProbe, ProbeProps>(new(Sibling, 0)) : TextBlock("no probe"),
+                phase == 1
+                    ? TitleBar("Hook owner mid-render").Tall().PreferredTheme(WindowTitleBarTheme.Dark).Set(b => Bar = b)
+                    : TextBlock("no title bar"));
         }
     }
+
+    private static string TestIcoPath =>
+        global::System.IO.Path.Join(AppContext.BaseDirectory, "Assets", "SelfTestWindowIcon.ico");
 
     private static string Describe(ReactorWindow? w, ReactorWindow a, ReactorWindow c)
         => w is null ? "null" : ReferenceEquals(w, a) ? "A" : ReferenceEquals(w, c) ? "C" : "other";
 
     /// <summary>
     /// A window opened during A's render repoints the process-wide host for the rest of A's
-    /// pass. A sibling that mounts after it, and a TitleBar that mounts after it, still bind A.
+    /// pass. A sibling that mounts after it, and a TitleBar that mounts after it, still bind A:
+    /// registration, the inherited icon (A declares one, C does not), the tall caption and the
+    /// caption theme all land on A. A TitleBar unmounted after another mid-render open is
+    /// withdrawn from A.
     /// </summary>
     internal sealed class MidRenderOpen(Harness h) : SelfTestFixtureBase(h)
     {
@@ -237,12 +261,23 @@ internal static class WindowHookOwnerFixtures
             ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
             var root = new MidRenderRoot();
             ReactorWindow? a = null;
+            // Empty app root: the convention probe finds no AppIcon.ico, so only A's declared
+            // icon can produce an inherited title-bar icon.
+            var scratch = global::System.IO.Path.Join(
+                global::System.IO.Path.GetTempPath(), "ReactorHookOwner_" + Guid.NewGuid().ToString("N"));
+            global::System.IO.Directory.CreateDirectory(scratch);
+            Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.SetBaseDirectoryForTests(scratch);
             try
             {
-                a = await Open("Hook owner mid-render", root, 320, 220);
+                var window = ReactorApp.OpenWindow(
+                    new WindowSpec { Title = "Hook owner mid-render", Width = 320, Height = 220, Icon = WindowIcon.FromPath(TestIcoPath) },
+                    () => root);
+                await window.Host.WaitForIdleAsync();
+                await Harness.Render(100);
+                a = window;
                 a.PersistedScope.Set(PersistKey, "A");
                 var guardsA = a.ClosingGuardCountForTests;
-                root.OpenNow!();
+                root.SetPhase!(1);
                 await a.Host.WaitForIdleAsync();
                 await Harness.Render(100);
                 var c = ReactorApp.FindWindow(WindowKey.Of(MidRenderWindowKey));
@@ -261,12 +296,35 @@ internal static class WindowHookOwnerFixtures
                 H.Check($"HookOwner_MidRender_TitleBarOnA (a={a.TitleBarIconControlCountForTests}, c={c.TitleBarIconControlCountForTests})",
                     a.TitleBarIconControlCountForTests == 1 && c.TitleBarIconControlCountForTests == 0);
                 H.Check("HookOwner_MidRender_TitleBarExtendsA", a.NativeWindow.ExtendsContentIntoTitleBar && !c.NativeWindow.ExtendsContentIntoTitleBar);
+                var iconUri = ((root.Bar?.IconSource as Microsoft.UI.Xaml.Controls.ImageIconSource)?.ImageSource
+                    as Microsoft.UI.Xaml.Media.Imaging.BitmapImage)?.UriSource;
+                H.Check($"HookOwner_MidRender_TitleBarIconFromA (uri={iconUri})",
+                    iconUri?.OriginalString.EndsWith("SelfTestWindowIcon.ico", StringComparison.OrdinalIgnoreCase) == true);
+                var tallPx = (int)Math.Round(48 * a.DipScale, MidpointRounding.AwayFromZero);
+                H.Check($"HookOwner_MidRender_TitleBarTallCaptionOnA (a={a.AppWindow.TitleBar.Height}, want={tallPx})",
+                    a.AppWindow.TitleBar.Height == tallPx);
+                H.Check($"HookOwner_MidRender_TitleBarThemeOnA (a={a.AppWindow.TitleBar.PreferredTheme}, c={c.AppWindow.TitleBar.PreferredTheme})",
+                    a.AppWindow.TitleBar.PreferredTheme == Microsoft.UI.Windowing.TitleBarTheme.Dark
+                    && c.AppWindow.TitleBar.PreferredTheme != Microsoft.UI.Windowing.TitleBarTheme.Dark);
+
+                // Phase 2: D opens mid-render, then the TitleBar unmounts later in the same pass.
+                root.SetPhase!(2);
+                await a.Host.WaitForIdleAsync();
+                await Harness.Render(100);
+                var d = ReactorApp.FindWindow(WindowKey.Of(SecondMidRenderWindowKey));
+                H.Check("HookOwner_MidRender_SecondWindowOpened", d is not null && !ReferenceEquals(d, a));
+                H.Check($"HookOwner_MidRender_TitleBarWithdrawnFromA (a={a.TitleBarIconControlCountForTests})",
+                    a.TitleBarIconControlCountForTests == 0);
             }
             finally
             {
+                Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.SetBaseDirectoryForTests(null);
+                ReactorApp.FindWindow(WindowKey.Of(SecondMidRenderWindowKey))?.Close();
                 ReactorApp.FindWindow(WindowKey.Of(MidRenderWindowKey))?.Close();
                 a?.Close();
                 await Harness.Render(100);
+                try { global::System.IO.Directory.Delete(scratch, recursive: true); }
+                catch (Exception ex) when (ex is global::System.IO.IOException or UnauthorizedAccessException) { }
             }
         }
     }
@@ -290,6 +348,8 @@ internal static class WindowHookOwnerFixtures
                 b.PersistedScope.Set(PersistKey, "B");
                 ApplicationPersistedScope.Default.Set(PersistKey, "app");
                 b.State = WindowState.Maximized;
+                // Distinct from the fallback (true), so reading B would show up.
+                b.IsActive = false;
                 var guardsB = b.ClosingGuardCountForTests;
                 var record = new HookRecord();
                 hostControl = new ReactorHostControl();
@@ -308,6 +368,9 @@ internal static class WindowHookOwnerFixtures
                 H.Check("HookOwner_HostControl_UsePersistedFallsBackToApplication", record.Persisted == "app");
                 H.Check("HookOwner_HostControl_NoAspectRatioOnB", b.EffectiveAspectRatioForTests is null);
                 H.Check("HookOwner_HostControl_NoClosingGuardOnB", b.ClosingGuardCountForTests == guardsB);
+                // The embed's TitleBar has no window to claim: B is neither handed it nor extended.
+                H.Check($"HookOwner_HostControl_TitleBarNotOnB (b={b.TitleBarIconControlCountForTests})",
+                    b.TitleBarIconControlCountForTests == 0 && !b.NativeWindow.ExtendsContentIntoTitleBar);
             }
             finally
             {
@@ -322,7 +385,9 @@ internal static class WindowHookOwnerFixtures
 
     private sealed class ProbeHost(HookRecord record) : Component
     {
-        public override Element Render() => Component<HookProbe, ProbeProps>(new(record, 0));
+        public override Element Render() => VStack(
+            Component<HookProbe, ProbeProps>(new(record, 0)),
+            TitleBar("Embedded title bar"));
     }
 
     /// <summary>

@@ -669,7 +669,8 @@ behavior that should re-render on changes, use the targeted hooks:
 `RenderContext` it renders, at each `BeginRender`. All window hooks
 (`UseWindow`, parameterless `UseWindowSize`, `UseWindowPosition`,
 `UseIsCovered`, `UseWindowAspectRatio`, `UseWindowDragMove`,
-`UseWindowState`, `UseIsActive`, `UseClosingGuard`, `UseDpi`),
+`UseWindowState`, `UseIsActive`, `UseClosingGuard`, `UseDpi`, and the
+window-inferring `UseBreakpoint(minWidth)`),
 `UsePersisted(PersistedScope.Window)` and the `TitleBar` element read that
 recorded owner. They do **not** read the process-wide
 `ReactorApp.ActiveHostInternal`: a window opened during another window's
