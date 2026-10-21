@@ -248,8 +248,10 @@ return VStack(
 ```
 
 Results are `PickFileResult` / `PickFolderResult` (`Microsoft.Windows.Storage.Pickers`) exposing `.Path`;
-cancellation returns `null` or an empty list. The dialog is owned by the window that last rendered the
-component, works in elevated apps, and throws `InvalidOperationException` if that window has closed.
+cancellation returns `null` or an empty list. The dialog is owned by the window whose host renders the
+component, works in elevated apps, and throws `InvalidOperationException` once the component has unmounted
+or its window has closed. Inside `ReactorHostControl` there is no owning window, so the methods throw; build
+the native picker from the hosting window's `AppWindow.Id` there.
 `FileTypeChoices` is an ordered `IReadOnlyList<FileTypeChoice>`: order sets the default entry, labels must be
 unique. Options also take `Title`, `SuggestedFolder`, `SuggestedStartFolder`, `InitialFileTypeIndex`, and (save)
 `DefaultFileExtension` / `ShowOverwritePrompt`. Do not pass arbitrary HWNDs.

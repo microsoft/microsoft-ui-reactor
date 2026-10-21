@@ -28,7 +28,7 @@ public class PickerTests
         // A context that never rendered inside a ReactorWindow host has no owner.
         var context = new RenderContext();
         var error = Assert.Throws<InvalidOperationException>(() => Invoke(context, operation, validOptions: true));
-        Assert.Equal($"{operation} requires an owning ReactorWindow.", error.Message);
+        Assert.Equal(NoOwnerMessage(operation), error.Message);
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class PickerTests
         foreach (var options in new FilePickerOptions[] { new(), new() { FileTypeChoices = [] } })
         {
             var error = Assert.Throws<InvalidOperationException>(() => { _ = new RenderContext().PickFileAsync(options); });
-            Assert.Equal("PickFileAsync requires an owning ReactorWindow.", error.Message);
+            Assert.Equal(NoOwnerMessage("PickFileAsync"), error.Message);
         }
     }
 
@@ -90,7 +90,7 @@ public class PickerTests
         // "Text" and "text" are distinct native map keys, so they are not duplicates.
         var options = new SaveFilePickerOptions([new("Text", [".txt"]), new("text", [".md"])]);
         var error = Assert.Throws<InvalidOperationException>(() => { _ = new RenderContext().PickSaveFileAsync(options); });
-        Assert.Equal("PickSaveFileAsync requires an owning ReactorWindow.", error.Message);
+        Assert.Equal(NoOwnerMessage("PickSaveFileAsync"), error.Message);
     }
 
     [Fact]
@@ -103,6 +103,10 @@ public class PickerTests
         Assert.Equal("", options.DefaultFileExtension);
     }
 
+    // A context that never rendered in a ReactorWindow (ReactorHostControl content, or no host
+    // at all) gets the message that names the hosting limitation and its workaround.
+    private static string NoOwnerMessage(string operation) =>
+        $"{operation} requires a component rendered in a ReactorWindow. Content hosted by ReactorHostControl, or by a ReactorHost you construct, has no owning window: construct the Microsoft.Windows.Storage.Pickers picker from the hosting window's AppWindow.Id instead.";
     private static void Invoke(RenderContext context, string operation, bool validOptions)
     {
         FilePickerOptions file = validOptions ? new() : null!;

@@ -49,13 +49,19 @@ internal static class PickersFixtures
         public Func<Task<IReadOnlyList<PickFolderResult>>> PickFolders = null!;
         public Func<Task<PickFileResult?>> PickSave = null!;
 
-        // Nested class and function components render through the reconciler's
-        // BeginRender overload, not the root one, so they carry their own owner.
+        // Nested class, function and memo components render through the reconciler's
+        // BeginRender overloads (mount and update), not the root one, so they carry their own
+        // owner. The row probe is realized by a virtualized list, outside the host's render pass.
         public PickerProbe ChildProbe { get; } = new();
         public PickerProbe FuncProbe { get; } = new();
+        public PickerProbe MemoProbe { get; } = new();
+        public PickerProbe RowProbe { get; } = new();
+        public Action Bump = null!;
 
         public override Element Render()
         {
+            var (revision, setRevision) = UseState(0);
+            Bump = () => setRevision(revision + 1);
             // Component forwarding for files, the RenderContext entry point for folders.
             PickSingle = () => PickFileAsync(OpenOptions);
             PickMultiple = () => PickMultipleFilesAsync(OpenOptions);
@@ -64,14 +70,30 @@ internal static class PickersFixtures
             PickSave = () => PickSaveFileAsync(SaveOptions);
             Operations = [() => PickSingle(), () => PickMultiple(), () => PickFolder(), () => PickFolders(), () => PickSave()];
             var funcProbe = FuncProbe;
+            var memoProbe = MemoProbe;
+            var rowProbe = RowProbe;
+            // The second row only exists after a bump, so it is realized by the list's layout
+            // after the window's render pass has restored the process-wide active host.
+            IReadOnlyList<string> rows = revision == 0 ? ["row0"] : ["row0", "row1"];
             return VStack(
                 TextBlock("pickers"),
-                Component<PickerChild, PickerProbe>(ChildProbe),
+                // The revision is part of the props so a bump re-renders the child (update path).
+                Component<PickerChild, ChildProps>(new(ChildProbe, revision)),
                 RenderEachTime(ctx =>
                 {
+                    funcProbe.Renders++;
                     funcProbe.Pick = () => ctx.PickFileAsync(new FilePickerOptions());
                     return TextBlock("function picker");
-                }));
+                }),
+                Memo(ctx =>
+                {
+                    memoProbe.Renders++;
+                    memoProbe.Pick = () => ctx.PickFileAsync(new FilePickerOptions());
+                    return TextBlock("memo picker");
+                }, revision),
+                LazyVStack<string>(rows, x => x, (row, _) => row == "row1"
+                    ? Component<PickerChild, ChildProps>(new(rowProbe, 0))
+                    : TextBlock(row).Height(30)).Height(120));
         }
     }
 
@@ -79,16 +101,28 @@ internal static class PickersFixtures
     {
         public Func<Task>? Pick;
         public ReactorWindow? ActiveAtRender;
+        public int Renders;
     }
 
-    private sealed class PickerChild : Component<PickerProbe>
+    private sealed record ChildProps(PickerProbe Probe, int Revision);
+
+    private sealed class PickerChild : Component<ChildProps>
     {
         public override Element Render()
         {
-            Props.Pick = () => PickFileAsync(new FilePickerOptions());
+            var probe = Props.Probe;
+            probe.Renders++;
+            probe.ActiveAtRender = ReactorApp.ActiveHostInternal?.OwningWindow;
+            probe.Pick = () => PickFileAsync(new FilePickerOptions());
             return TextBlock("child picker");
         }
     }
+
+    internal static string ReleasedMessage(string operation)
+        => $"{operation} was called from a component that is no longer mounted in a ReactorWindow.";
+
+    internal static string ClosedMessage(string operation)
+        => $"{operation} was called after the component's ReactorWindow closed.";
 
     // Opens a window from inside its own render, which constructs another ReactorHost
     // and so repoints ReactorApp.ActiveHostInternal in the middle of the opener's pass.
@@ -312,6 +346,25 @@ internal static class PickersFixtures
                 await CheckNested("BeforeClose", a, ownerA);
                 await CheckNested("BeforeCloseB", b, ownerB);
 
+                // Re-render A while B is the active host: the class, function and memo children
+                // now render through the reconciler's update path, and the list realizes a new
+                // row in layout, outside A's render pass.
+                var renders = (a.ChildProbe.Renders, a.FuncProbe.Renders, a.MemoProbe.Renders);
+                a.Bump();
+                await windowA.Host.WaitForIdleAsync();
+                var rowRealized = await Harness.WaitFor(() => a.RowProbe.Pick is not null, maxPasses: 20, perPassMs: 25);
+                H.Check("Pickers_OwningWindow_Rerendered", a.ChildProbe.Renders > renders.Item1
+                    && a.FuncProbe.Renders > renders.Item2 && a.MemoProbe.Renders > renders.Item3);
+                H.Check("Pickers_OwningWindow_ActiveHostStillB", ReferenceEquals(ReactorApp.ActiveHostInternal?.OwningWindow, windowB));
+                await CheckNested("AfterRerender", a, ownerA);
+                H.Check("Pickers_OwningWindow_RowRealized", rowRealized);
+                if (rowRealized)
+                {
+                    stub.Owner = default;
+                    await a.RowProbe.Pick!();
+                    H.Check("Pickers_OwningWindow_VirtualizedRow", stub.Operation == "single" && stub.Owner == ownerA);
+                }
+
                 windowB.Close();
                 await Harness.Render(100);
                 H.Check("Pickers_OwningWindow_ActiveHostClearedByClose", ReactorApp.ActiveHostInternal is null);
@@ -336,8 +389,9 @@ internal static class PickersFixtures
                     string? message = null;
                     try { await b.Operations[i](); }
                     catch (InvalidOperationException ex) { message = ex.Message; }
+                    // Closing B unmounted its tree, so the owner was released before any call.
                     H.Check($"Pickers_OwningWindow_ClosedOwnerRejected_{OperationNames[i]}",
-                        message is not null && message.Contains("owning ReactorWindow", StringComparison.Ordinal) && stub.Calls == calls);
+                        message == ReleasedMessage(OperationName(i)) && stub.Calls == calls);
                 }
 
                 // Replacing A's root retires the old root's context (DetachFromHost): a retained
@@ -352,19 +406,19 @@ internal static class PickersFixtures
                     try { await a.Operations[i](); }
                     catch (InvalidOperationException ex) { message = ex.Message; }
                     H.Check($"Pickers_OwningWindow_RetiredRootRejected_{OperationNames[i]}",
-                        message == $"{OperationName(i)} requires an owning ReactorWindow." && stub.Calls == calls);
+                        message == ReleasedMessage(OperationName(i)) && stub.Calls == calls);
                 }
                 // The replaced root's nested class and function components unmount through the
                 // reconciler's cleanup path, not DetachFromHost; their retained delegates must
                 // refuse too, even though window A is still open.
-                foreach (var (name, probe) in new[] { ("ChildComponent", a.ChildProbe), ("FunctionComponent", a.FuncProbe) })
+                foreach (var (name, probe) in new[] { ("ChildComponent", a.ChildProbe), ("FunctionComponent", a.FuncProbe), ("MemoComponent", a.MemoProbe) })
                 {
                     var calls = stub.Calls;
                     string? message = null;
                     try { await probe.Pick!(); }
                     catch (InvalidOperationException ex) { message = ex.Message; }
                     H.Check($"Pickers_OwningWindow_RetiredRoot{name}Rejected",
-                        message == "PickFileAsync requires an owning ReactorWindow." && stub.Calls == calls);
+                        message == ReleasedMessage("PickFileAsync") && stub.Calls == calls);
                 }
             }
             finally
@@ -383,10 +437,13 @@ internal static class PickersFixtures
                 stub.Owner = default;
                 await component.FuncProbe.Pick!();
                 H.Check($"Pickers_OwningWindow_{phase}_FunctionComponent", stub.Operation == "single" && stub.Owner == owner);
+                stub.Owner = default;
+                await component.MemoProbe.Pick!();
+                H.Check($"Pickers_OwningWindow_{phase}_MemoComponent", stub.Operation == "single" && stub.Owner == owner);
             }
         }
 
-        private static string OperationName(int i) => i switch
+        internal static string OperationName(int i) => i switch
         {
             0 => "PickFileAsync",
             1 => "PickMultipleFilesAsync",
@@ -433,6 +490,91 @@ internal static class PickersFixtures
                 RenderContext.PickerService = previous;
                 ReactorApp.FindWindow(WindowKey.Of(MidRenderWindowKey))?.Close();
                 windowA?.Close();
+                await Harness.Render(100);
+            }
+        }
+    }
+
+    private sealed class CleanupPair
+    {
+        public readonly Func<Task>?[] Pick = new Func<Task>?[2];
+        public readonly string?[] Messages = new string?[2];
+    }
+
+    private sealed record CleanupProps(CleanupPair Pair, int Index);
+
+    // On unmount, calls its sibling's picker. Whichever sibling cleans up first still sees the
+    // other holding its owner, while the disposing window is already marked disposed.
+    private sealed class CleanupProbe : Component<CleanupProps>
+    {
+        public override Element Render()
+        {
+            var (pair, index) = (Props.Pair, Props.Index);
+            pair.Pick[index] = () => PickFileAsync(new FilePickerOptions());
+            UseEffect(() => () =>
+            {
+
+                try { _ = pair.Pick[1 - index]?.Invoke(); }
+                catch (InvalidOperationException ex) { pair.Messages[index] = ex.Message; }
+            }, pair);
+            return TextBlock($"cleanup {index}");
+        }
+    }
+
+    private sealed class CleanupRoot(CleanupPair pair) : Component
+    {
+        public override Element Render() => VStack(
+            Component<CleanupProbe, CleanupProps>(new(pair, 0)),
+            Component<CleanupProbe, CleanupProps>(new(pair, 1)));
+    }
+
+    /// <summary>
+    /// <see cref="ReactorWindow.Dispose"/> marks the window disposed before its host runs
+    /// component cleanups, so a cleanup can reach a sibling whose context still records that
+    /// window. The call must be refused. (A native close instead disposes the host from its own
+    /// Closed handler first, which releases every owner before the window is marked.)
+    /// </summary>
+    internal sealed class ClosedWindowRejectedDuringCleanup(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            ReactorApp.UIDispatcher ??= DispatcherQueue.GetForCurrentThread();
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            var previous = RenderContext.PickerService;
+            var stub = new StubPickerService();
+            RenderContext.PickerService = stub;
+            var pair = new CleanupPair();
+            ReactorWindow? window = null;
+            try
+            {
+                window = await Open("Pickers cleanup", new CleanupRoot(pair));
+
+                H.Check("Pickers_CleanupClose_Mounted", pair.Pick[0] is not null && pair.Pick[1] is not null);
+                var disposed = window;
+                window = null;
+                disposed.Dispose();
+                await Harness.Render(100);
+                // Dispose() bypasses Window.Closed -> UnregisterWindow; clean up the registration
+                // and the still-live native window (same hygiene as TitleBar_DisposeNoClose).
+                ReactorApp.UnregisterWindow(disposed);
+                try { disposed.NativeWindow.Close(); }
+                catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or global::System.Runtime.InteropServices.COMException)
+                {
+                    global::System.Diagnostics.Debug.WriteLine($"[Reactor] Pickers_ClosedWindowRejectedDuringCleanup cleanup close threw: {ex}");
+                }
+
+                var messages = pair.Messages.Where(m => m is not null).ToList();
+                // One sibling reaches the disposed-window branch; the other, cleaned up second,
+                // finds its sibling's owner already released. Neither reaches the service.
+                H.Check("Pickers_CleanupClose_ClosedOwnerRejected", messages.Contains(ClosedMessage("PickFileAsync")));
+                H.Check("Pickers_CleanupClose_BothRejected", messages.Count == 2
+                    && messages.All(m => m == ClosedMessage("PickFileAsync") || m == ReleasedMessage("PickFileAsync")));
+                H.Check("Pickers_CleanupClose_NoPicker", stub.Calls == 0);
+            }
+            finally
+            {
+                RenderContext.PickerService = previous;
+                window?.Close();
                 await Harness.Render(100);
             }
         }

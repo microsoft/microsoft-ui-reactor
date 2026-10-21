@@ -16,12 +16,15 @@ public sealed class RenderContext
     private ContextScope? _contextScope;
     private int _uiThreadId;
 
-    // The window whose host last rendered this context, supplied by that host's reconciler.
+    // The window whose host renders this context, supplied by that host's reconciler.
     // Picker calls run from event handlers, outside render, so they cannot read the
     // process-wide ReactorApp.ActiveHostInternal: it names whichever host rendered or was
     // constructed most recently (a window opened mid-render overwrites it), is not scoped
     // for virtualized-row renders, and is null after any host is disposed.
     private Microsoft.UI.Reactor.ReactorWindow? _owningWindow;
+    // True once an owner was released by unmount or root retirement, so a picker call from a
+    // retained delegate can say so instead of pointing at hosting without a window.
+    private bool _owningWindowReleased;
 
     /// <summary>
     /// Time source used by time-based hooks (currently <see cref="UseCommand(Command)"/>'s
@@ -39,6 +42,7 @@ public sealed class RenderContext
         _requestRerender = requestRerender;
         _uiThreadId = Environment.CurrentManagedThreadId;
         _owningWindow = owningWindow;
+        _owningWindowReleased = false;
     }
 
     internal void BeginRender(Action requestRerender, ContextScope contextScope)
@@ -51,6 +55,7 @@ public sealed class RenderContext
         _contextScope = contextScope;
         _uiThreadId = Environment.CurrentManagedThreadId;
         _owningWindow = owningWindow;
+        _owningWindowReleased = false;
     }
 
     /// <summary>
@@ -2055,7 +2060,7 @@ public sealed class RenderContext
     /// <summary>Opens a single-file picker owned by this component's window.</summary>
     /// <remarks>
     /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
-    /// that last rendered this component. Cancellation returns null.
+    /// whose host renders this component; once the component unmounts, the call throws. Cancellation returns null.
     /// </remarks>
     public Task<Microsoft.Windows.Storage.Pickers.PickFileResult?> PickFileAsync(FilePickerOptions options)
     {
@@ -2068,7 +2073,7 @@ public sealed class RenderContext
     /// <summary>Opens a multiple-file picker owned by this component's window.</summary>
     /// <remarks>
     /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
-    /// that last rendered this component. Cancellation returns an empty list.
+    /// whose host renders this component; once the component unmounts, the call throws. Cancellation returns an empty list.
     /// </remarks>
     public Task<IReadOnlyList<Microsoft.Windows.Storage.Pickers.PickFileResult>> PickMultipleFilesAsync(FilePickerOptions options)
     {
@@ -2081,7 +2086,7 @@ public sealed class RenderContext
     /// <summary>Opens a single-folder picker owned by this component's window.</summary>
     /// <remarks>
     /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
-    /// that last rendered this component. Cancellation returns null.
+    /// whose host renders this component; once the component unmounts, the call throws. Cancellation returns null.
     /// </remarks>
     public Task<Microsoft.Windows.Storage.Pickers.PickFolderResult?> PickFolderAsync(FolderPickerOptions options)
     {
@@ -2093,7 +2098,7 @@ public sealed class RenderContext
     /// <summary>Opens a multiple-folder picker owned by this component's window.</summary>
     /// <remarks>
     /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
-    /// that last rendered this component. Cancellation returns an empty list.
+    /// whose host renders this component; once the component unmounts, the call throws. Cancellation returns an empty list.
     /// </remarks>
     public Task<IReadOnlyList<Microsoft.Windows.Storage.Pickers.PickFolderResult>> PickMultipleFoldersAsync(FolderPickerOptions options)
     {
@@ -2105,7 +2110,7 @@ public sealed class RenderContext
     /// <summary>Opens a save-file picker owned by this component's window.</summary>
     /// <remarks>
     /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
-    /// that last rendered this component. Cancellation returns null. Selecting a target does not
+    /// whose host renders this component; once the component unmounts, the call throws. Cancellation returns null. Selecting a target does not
     /// create or write the file; that is the caller's responsibility.
     /// </remarks>
     public Task<Microsoft.Windows.Storage.Pickers.PickFileResult?> PickSaveFileAsync(SaveFilePickerOptions options)
@@ -2118,10 +2123,13 @@ public sealed class RenderContext
 
     private Microsoft.UI.WindowId GetPickerOwner(string operation)
     {
-        var win = _owningWindow
-            ?? throw new InvalidOperationException($"{operation} requires an owning ReactorWindow.");
+        var win = _owningWindow ?? throw new InvalidOperationException(_owningWindowReleased
+            ? $"{operation} was called from a component that is no longer mounted in a ReactorWindow."
+            : $"{operation} requires a component rendered in a ReactorWindow. Content hosted by ReactorHostControl, or by a ReactorHost you construct, has no owning window: construct the Microsoft.Windows.Storage.Pickers picker from the hosting window's AppWindow.Id instead.");
+        // Reachable when ReactorWindow.Dispose() runs component cleanups: it marks the window
+        // disposed before disposing the host, and contexts not yet cleaned up still hold it.
         if (win.IsDisposed)
-            throw new InvalidOperationException($"{operation} requires an open owning ReactorWindow.");
+            throw new InvalidOperationException($"{operation} was called after the component's ReactorWindow closed.");
         if (!win.NativeWindow.DispatcherQueue.HasThreadAccess)
             throw new InvalidOperationException($"{operation} must be called on the owning window's UI thread.");
         return win.AppWindow.Id;
@@ -2487,6 +2495,7 @@ public sealed class RenderContext
         // included), so it no longer renders into its window: a retained delegate must not
         // open a picker over it. Cleared first so a throwing cleanup cannot skip it; a
         // context that renders again (hot-reload reset) re-records it in BeginRender.
+        _owningWindowReleased |= _owningWindow is not null;
         _owningWindow = null;
 
         // Phase 1: Run effect cleanups. Drain BOTH the committed cleanup and any
@@ -2583,6 +2592,7 @@ public sealed class RenderContext
         ClearHookState();
         _requestRerender = null;
         _contextScope = null;
+        _owningWindowReleased |= _owningWindow is not null;
         _owningWindow = null;
     }
 

@@ -602,17 +602,20 @@ Caveats:
   `Task.Run`. Their `Pick*` names keep the hook-rules analyzer quiet in handlers.
 - The owner is the window whose host rendered the component (including nested and
   virtualized-row components), not whichever window is active when the handler
-  runs. If that window has closed, or the component's root was replaced, the call
-  throws `InvalidOperationException`.
+  runs. Once the component unmounts (including when its root is replaced) or its
+  window closes, the call throws `InvalidOperationException`.
 - Option validation (missing or duplicate file-type choices) throws `ArgumentException`
   before any dialog opens. Windows validates extension syntax and folder paths.
 - Picker errors propagate to the caller; cancellation is not an error.
 - Framework tests use an internal picker-service seam instead of opening modal dialogs.
 - Content hosted through `ReactorHostControl` (or a `ReactorHost` you construct
   yourself) has no owning `ReactorWindow`, so these methods throw
-  `InvalidOperationException` there. Construct the native picker directly from the
-  hosting window instead, for example
-  `new Microsoft.Windows.Storage.Pickers.FileOpenPicker(xamlRoot.ContentIslandEnvironment.AppWindowId)`.
+  `InvalidOperationException` there. Construct the native picker from the window
+  that hosts the control instead, for example
+  `new Microsoft.Windows.Storage.Pickers.FileOpenPicker(hostWindow.AppWindow.Id)`.
+  Code that only has an element can use its
+  `XamlRoot.ContentIslandEnvironment.AppWindowId` (for example from
+  `UseElementRef<FrameworkElement>().Current?.XamlRoot`).
 
 ## WPF / UWP migration map
 
