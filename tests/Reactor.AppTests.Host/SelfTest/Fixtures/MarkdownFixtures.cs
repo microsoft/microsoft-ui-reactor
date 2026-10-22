@@ -767,6 +767,47 @@ internal static class MarkdownFixtures
         }
     }
 
+    internal class CustomLinkBuilder(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int calls = 0;
+            Uri? clickedUri = null;
+            var host = H.CreateHost();
+            host.Mount(ctx => ScrollView(
+                Microsoft.UI.Reactor.Advanced.Factories.Markdown(
+                    "Before <https://example.com/review> after.", new MarkdownOptions
+                    {
+                        ParserFlags = MarkdownParserFlags.Tables | MarkdownParserFlags.NoHtml,
+                        UnifiedRichText = true,
+                        LinkBuilder = (_, uri) =>
+                        {
+                            calls++;
+                            return Button("Open reviewed link", () => clickedUri = uri)
+                                .AutomationName("Open reviewed link");
+                        },
+                    })));
+
+            await Harness.Render();
+
+            H.Check("Md_CustomLink_CallbackInvoked", calls > 0);
+            var button = H.FindButton("Open reviewed link");
+            H.Check("Md_CustomLink_ButtonMounted", button is not null);
+            var inlines = H.FindAllControls<RichTextBlock>(_ => true)
+                .SelectMany(block => block.Blocks.OfType<Paragraph>())
+                .SelectMany(paragraph => paragraph.Inlines)
+                .ToArray();
+            H.Check("Md_CustomLink_NoFallbackNavigation", !inlines.OfType<Hyperlink>().Any());
+            H.Check("Md_CustomLink_ButtonIsInline",
+                inlines.OfType<InlineUIContainer>().Any(inline => ReferenceEquals(inline.Child, button)));
+
+            if (button is null) return;
+            H.ClickButton("Open reviewed link");
+            H.Check("Md_CustomLink_ClickUsesValidatedTarget",
+                clickedUri == new Uri("https://example.com/review"));
+        }
+    }
+
     // ── Custom list option callbacks ─────────────────────────────────────
 
     internal class CustomListCallbacks(Harness h) : SelfTestFixtureBase(h)

@@ -74,6 +74,10 @@ public record MarkdownOptions
     /// Override link rendering. (displayInlines, navigateUri) → element.
     /// Apps that want to require a confirmation UX or unfurl/origin-preview
     /// for cross-site hyperlinks should provide this. TASK-048.
+    /// The label is one selectable RichTextBlock element preserving inline
+    /// formatting and images, or an empty array for an empty label. The returned
+    /// non-null element is embedded inline as custom UI, with its own selection
+    /// boundary. With no override, links remain native text hyperlinks.
     /// </summary>
     public Func<Element[], Uri, Element>? LinkBuilder { get; init; }
     /// <summary>
@@ -146,6 +150,7 @@ internal sealed class MarkdownBuilder
     // Link tracking.
     private Uri? _linkUri;
     private int _linkInlineStart;
+    private int _customLinkDepth;
 
     // Image tracking.
     private bool _insideImage;
@@ -735,6 +740,12 @@ internal sealed class MarkdownBuilder
                 _isStrikethrough = true;
                 break;
             case MarkdownSpanType.A:
+                if (_options.LinkBuilder is not null)
+                {
+                    // Image alt text and nested autolinks belong to the outer label.
+                    if (_insideImage) break;
+                    if (++_customLinkDepth > 1) break;
+                }
                 if (detail is MarkdownSpanADetail a && a.Href.Text is not null)
                 {
                     Uri.TryCreate(a.Href.Text, UriKind.RelativeOrAbsolute, out var uri);
@@ -772,6 +783,11 @@ internal sealed class MarkdownBuilder
                 _isStrikethrough = false;
                 break;
             case MarkdownSpanType.A:
+                if (_options.LinkBuilder is not null)
+                {
+                    if (_insideImage) break;
+                    if (--_customLinkDepth > 0) break;
+                }
                 LeaveLink();
                 break;
             case MarkdownSpanType.Img:
@@ -798,6 +814,18 @@ internal sealed class MarkdownBuilder
     {
         if (_linkUri is null)
         {
+            _linkUri = null;
+            return;
+        }
+
+        if (_options.LinkBuilder is { } buildLink)
+        {
+            var labelInlines = _inlines.GetRange(_linkInlineStart, _inlines.Count - _linkInlineStart).ToArray();
+            Element[] label = labelInlines.Length == 0 ? [] : [MakeRichText(labelInlines)];
+            var element = buildLink(label, _linkUri)
+                ?? throw new InvalidOperationException("MarkdownOptions.LinkBuilder must return a non-null Element.");
+            _inlines.RemoveRange(_linkInlineStart, _inlines.Count - _linkInlineStart);
+            _inlines.Add(new RichTextInlineUIContainer { Child = element });
             _linkUri = null;
             return;
         }
@@ -833,8 +861,9 @@ internal sealed class MarkdownBuilder
             else
                 img = Image(_imageSrc.ToString());
 
-            // Images are block-level — add to parent frame.
-            if (_blockStack.Count > 0)
+            if (_linkUri is not null && _options.LinkBuilder is not null)
+                _inlines.Add(new RichTextInlineUIContainer { Child = img });
+            else if (_blockStack.Count > 0)
                 _blockStack.Peek().Children.Add(img);
         }
         _imageSrc = null;
