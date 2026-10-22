@@ -5248,13 +5248,16 @@ public partial record TitleBarElement(
                 mount:  static (ctx, c, e) => global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Apply(
                     c, e, ctx.Reconciler.OwningWindow, force: true),
                 update: static (ctx, c, _, e) => global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Apply(
-                    c, e, ctx.Reconciler.OwningWindow, force: false))
+                    c, e, WindowFor(ctx.Reconciler, c), force: false))
             .ImperativeBridged(
                 mount: static (ctx, c, e) => RegisterWindowTitleBar(c, e, ctx.Reconciler),
                 update: static (ctx, c, _, e) =>
                 {
-                    ApplyTitleBarPreferredTheme(c, e, ctx.Reconciler.OwningWindow);
-                    ApplyTitleBarHeightOption(c, e, ctx.Reconciler.OwningWindow);
+                    var window = WindowFor(ctx.Reconciler, c);
+                    if (ctx.Reconciler.HostWindow is null && s_embedded.TryGetValue(c, out var embedded))
+                        embedded.Element = e;
+                    ApplyTitleBarPreferredTheme(c, e, window);
+                    ApplyTitleBarHeightOption(c, e, window);
                 })
             .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarEventPayload,
                 global::Windows.Foundation.TypedEventHandler<WinUI.TitleBar, object>>(
@@ -5278,29 +5281,95 @@ public partial record TitleBarElement(
     private static void RegisterWindowTitleBar(
         WinUI.TitleBar titleBar, TitleBarElement element, global::Microsoft.UI.Reactor.Core.Reconciler reconciler)
     {
-        // The XAML window of the ReactorHost whose reconciler mounts this control. Null for
-        // ReactorHostControl content, which must not claim some other window's title bar.
+        // The XAML window of the ReactorHost whose reconciler mounts this control.
         if (reconciler.HostWindow is { } hostWindow)
         {
-            var owningWindow = reconciler.OwningWindow;
-            // Record that a WinUI TitleBar control is mounted in this window —
-            // including the explicit-false case below where we skip SetTitleBar.
-            // The control corrupts the heap on teardown when the window is NOT in
-            // content-extended mode, so the window flips ExtendsContentIntoTitleBar
-            // back to true just before native close. (issue #537)
-            owningWindow?.MarkTitleBarControlPresent(titleBar);
-            // The caption theme is legal whether or not the window is content-extended,
-            // so it is applied ahead of the explicit-false early return. (issue #1297)
-            ApplyTitleBarPreferredTheme(titleBar, element, owningWindow);
-
-            var explicitValue = owningWindow?.Spec.ExtendsContentIntoTitleBar;
-            if (explicitValue == false) return;
-            if (explicitValue is null)
-                hostWindow.ExtendsContentIntoTitleBar = true;
-            hostWindow.SetTitleBar(titleBar);
+            RegisterWithWindow(titleBar, element, hostWindow, reconciler.OwningWindow);
+            return;
         }
 
-        ApplyTitleBarHeightOption(titleBar, element, reconciler.OwningWindow);
+        // ReactorHostControl content: no host window is known at mount, and the ambient host
+        // may be an unrelated window. Apply the element's own height now and register with
+        // the ReactorWindow that actually contains the control once it is loaded.
+        ApplyTitleBarHeightOption(titleBar, element, window: null);
+        var embedded = s_embedded.GetOrCreateValue(titleBar);
+        embedded.Element = element;
+        titleBar.Loaded -= s_onEmbeddedTitleBarLoaded;
+        titleBar.Loaded += s_onEmbeddedTitleBarLoaded;
+        if (titleBar.IsLoaded) RegisterEmbeddedTitleBar(titleBar);
+    }
+
+    private static void RegisterWithWindow(
+        WinUI.TitleBar titleBar, TitleBarElement element,
+        global::Microsoft.UI.Xaml.Window hostWindow, global::Microsoft.UI.Reactor.ReactorWindow? owningWindow)
+    {
+        // Record that a WinUI TitleBar control is mounted in this window —
+        // including the explicit-false case below where we skip SetTitleBar.
+        // The control corrupts the heap on teardown when the window is NOT in
+        // content-extended mode, so the window flips ExtendsContentIntoTitleBar
+        // back to true just before native close. (issue #537)
+        owningWindow?.MarkTitleBarControlPresent(titleBar);
+        // The caption theme is legal whether or not the window is content-extended,
+        // so it is applied ahead of the explicit-false early return. (issue #1297)
+        ApplyTitleBarPreferredTheme(titleBar, element, owningWindow);
+
+        var explicitValue = owningWindow?.Spec.ExtendsContentIntoTitleBar;
+        if (explicitValue == false) return;
+        if (explicitValue is null)
+            hostWindow.ExtendsContentIntoTitleBar = true;
+        hostWindow.SetTitleBar(titleBar);
+
+        ApplyTitleBarHeightOption(titleBar, element, owningWindow);
+    }
+
+    // A TitleBar inside ReactorHostControl content, waiting for (or registered with) the
+    // ReactorWindow that contains it. Keyed on the control, like TitleBarIconDefault's record.
+    private sealed class EmbeddedTitleBar
+    {
+        public TitleBarElement Element = null!;
+        public global::Microsoft.UI.Reactor.ReactorWindow? Window;
+    }
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<WinUI.TitleBar, EmbeddedTitleBar> s_embedded = new();
+
+    private static readonly global::Microsoft.UI.Xaml.RoutedEventHandler s_onEmbeddedTitleBarLoaded =
+        static (s, _) => { if (s is WinUI.TitleBar bar) RegisterEmbeddedTitleBar(bar); };
+
+    // Issue #1396 / #537: a WinUI TitleBar torn down in a window that is not content-extended
+    // corrupts the heap. A TitleBar in ReactorHostControl content therefore registers with the
+    // ReactorWindow that actually hosts it — found from its XamlRoot, never from the ambient
+    // host — exactly as a TitleBar rendered by that window's own host would. Content hosted by
+    // a plain WinUI Window (no ReactorWindow) has no window to register with.
+    private static void RegisterEmbeddedTitleBar(WinUI.TitleBar titleBar)
+    {
+        if (!s_embedded.TryGetValue(titleBar, out var embedded) || embedded.Window is not null) return;
+        if (global::Microsoft.UI.Reactor.ReactorApp.FindWindowForXamlRoot(titleBar.XamlRoot) is not { } window)
+            return;
+        embedded.Window = window;
+        RegisterWithWindow(titleBar, embedded.Element, window.NativeWindow, window);
+        global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Apply(titleBar, embedded.Element, window, force: false);
+    }
+
+    /// <summary>
+    /// The window a mounted TitleBar is registered with: the reconciler's owning window, or for
+    /// ReactorHostControl content the window found once the control loaded (issue #1396).
+    /// </summary>
+    internal static global::Microsoft.UI.Reactor.ReactorWindow? WindowFor(
+        global::Microsoft.UI.Reactor.Core.Reconciler reconciler, WinUI.TitleBar titleBar)
+    {
+        if (reconciler.HostWindow is not null) return reconciler.OwningWindow;
+        return s_embedded.TryGetValue(titleBar, out var embedded) ? embedded.Window : null;
+    }
+
+    /// <summary>
+    /// Forgets an unmounting embedded TitleBar and returns the window it registered with, if any.
+    /// </summary>
+    internal static global::Microsoft.UI.Reactor.ReactorWindow? ReleaseEmbedded(WinUI.TitleBar titleBar)
+    {
+        if (!s_embedded.TryGetValue(titleBar, out var embedded)) return null;
+        s_embedded.Remove(titleBar);
+        titleBar.Loaded -= s_onEmbeddedTitleBarLoaded;
+        return embedded.Window;
     }
 
     /// <summary>

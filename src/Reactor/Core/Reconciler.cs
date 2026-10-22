@@ -75,7 +75,9 @@ public sealed partial class Reconciler : IDisposable
     // being torn down would undo PrepareTitleBarForClose (issue #537).
     private void WithdrawTitleBar(WinUI.TitleBar unmounting)
     {
-        if (OwningWindow is { IsClosingOrDisposed: false } window)
+        // ReactorHostControl content registered with the window found from its XamlRoot.
+        var registered = HostWindow is null ? TitleBarElement.ReleaseEmbedded(unmounting) : OwningWindow;
+        if (registered is { IsClosingOrDisposed: false } window)
             window.ClearTitleBarControl(unmounting);
     }
     // Ancestor-aware effective theme for the subtree currently being mounted/updated,

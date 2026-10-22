@@ -349,7 +349,7 @@ internal static class WindowHookOwnerFixtures
             ReactorApp.UIDispatcher ??= DispatcherQueue.GetForCurrentThread();
             ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
             ReactorWindow? b = null;
-            // Disposed explicitly in the finally (after removal from the tree); the using is the backstop.
+            // Disposed at scope exit, after the finally has removed it from the tree.
             using var hostControl = new ReactorHostControl();
             try
             {
@@ -376,15 +376,14 @@ internal static class WindowHookOwnerFixtures
                 H.Check("HookOwner_HostControl_UsePersistedFallsBackToApplication", record.Persisted == "app");
                 H.Check("HookOwner_HostControl_NoAspectRatioOnB", b.EffectiveAspectRatioForTests is null);
                 H.Check("HookOwner_HostControl_NoClosingGuardOnB", b.ClosingGuardCountForTests == guardsB);
-                // No TitleBar is mounted in the embed on purpose: a WinUI TitleBar that no window
-                // registers is torn down without the issue #537 close preparation, and mounting
-                // one here crashed the packaged shard a few fixtures later (0xC000027B / 0xC0000005).
+                // No TitleBar is mounted in this embed: it now registers with the window that
+                // contains it, which here is the shared harness window, and would change its
+                // caption for later fixtures. EmbeddedTitleBar covers that path in its own window.
             }
             finally
             {
                 ApplicationPersistedScope.Default.Remove(PersistKey);
                 H.SetContent(null);
-                hostControl.Dispose();
                 b?.Close();
                 await Harness.Render(100);
             }
@@ -394,6 +393,90 @@ internal static class WindowHookOwnerFixtures
     private sealed class ProbeHost(HookRecord record) : Component
     {
         public override Element Render() => Component<HookProbe, ProbeProps>(new(record, 0));
+    }
+
+    // Window W's root: once shown, a Border whose child is a ReactorHostControl (set raw, so the
+    // embed's content renders on the control's own reconciler, outside any ReactorHost pass).
+    private sealed class EmbedRoot(ReactorHostControl hostControl) : Component
+    {
+        public Action? Show;
+
+        public override Element Render()
+        {
+            var (show, setShow) = UseState(false);
+            Show = () => setShow(true);
+            return VStack(
+                TextBlock("embed host"),
+                show
+                    ? Border(null).OnMount(fe => ((Border)fe).Child = hostControl)
+                    : TextBlock("no embed"));
+        }
+    }
+
+    private sealed class EmbeddedBar : Component
+    {
+        public ReactorWindow? ActiveAtRender;
+        public Action<bool>? SetShowBar;
+
+        public override Element Render()
+        {
+            var (showBar, setShowBar) = UseState(true);
+            SetShowBar = setShowBar;
+            ActiveAtRender = ReactorApp.ActiveHostInternal?.OwningWindow;
+            return VStack(
+                showBar ? TitleBar("Embedded title bar") : TextBlock("no title bar"),
+                TextBlock("embedded content"));
+        }
+    }
+
+    /// <summary>
+    /// A TitleBar inside ReactorHostControl content registers with the ReactorWindow that
+    /// actually contains the control (found from its XamlRoot once loaded), not with the ambient
+    /// host, so that window is content-extended and prepared for close like for any other
+    /// TitleBar (issue #537). Unmounting it withdraws it from that window.
+    /// </summary>
+    internal sealed class EmbeddedTitleBar(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            ReactorApp.UIDispatcher ??= DispatcherQueue.GetForCurrentThread();
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            using var hostControl = new ReactorHostControl();
+            var root = new EmbedRoot(hostControl);
+            var bar = new EmbeddedBar();
+            ReactorWindow? w = null, b = null;
+            try
+            {
+                w = await Open("Hook owner embed W", root, 360, 240);
+                b = await Open("Hook owner embed B", new ProbeOnlyRoot(), 320, 220);
+                hostControl.Mount(bar);
+                root.Show!();
+                await w.Host.WaitForIdleAsync();
+                var registered = await Harness.WaitFor(() => w.TitleBarIconControlCountForTests == 1, maxPasses: 20, perPassMs: 25);
+
+                // Oracle guard: the embedded content rendered while the process-wide host was B.
+                H.Check("HookOwner_Embed_ActiveHostWasB", ReferenceEquals(bar.ActiveAtRender, b));
+                H.Check($"HookOwner_Embed_TitleBarOnContainingWindow (w={w.TitleBarIconControlCountForTests}, b={b.TitleBarIconControlCountForTests})",
+                    registered && b.TitleBarIconControlCountForTests == 0);
+                H.Check("HookOwner_Embed_ContainingWindowExtended",
+                    w.NativeWindow.ExtendsContentIntoTitleBar && !b.NativeWindow.ExtendsContentIntoTitleBar);
+
+                bar.SetShowBar!(false);
+                var withdrawn = await Harness.WaitFor(() => w.TitleBarIconControlCountForTests == 0, maxPasses: 20, perPassMs: 25);
+                H.Check($"HookOwner_Embed_TitleBarWithdrawn (w={w.TitleBarIconControlCountForTests})", withdrawn);
+            }
+            finally
+            {
+                // W hosted a WinUI TitleBar: a native failure reported after Close() returns would
+                // otherwise fail-fast the host (issue #1345).
+                await AsyncTeardownGuard.CloseAndSettleAsync("SelfTest.WindowHookOwner.Embed.Close", () =>
+                {
+                    b?.Close();
+                    w?.Close();
+                }, settleMs: 100);
+                await Harness.Render(100);
+            }
+        }
     }
 
     /// <summary>

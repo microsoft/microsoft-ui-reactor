@@ -680,6 +680,12 @@ render repoints that field for the rest of the pass, virtualized rows
 components and virtualized rows therefore resolve the same window as the
 component that contains them. (issue #1396)
 
+A `TitleBar` in `ReactorHostControl` content is the one exception to "no
+owner": the WinUI control corrupts the heap when torn down in a window that
+is not content-extended (issue #537). Once it loads, it registers with the
+`ReactorWindow` that actually contains it, matched through its
+`XamlRoot`'s `AppWindowId`, just as it would with that window's own host.
+
 **Returns `null` for content with no owning window.** A tray icon's
 flyout (§11.4) is reconciled into a hidden internal popup window,
 not a `ReactorWindow`; `ReactorHostControl` embeds and a `ReactorHost`

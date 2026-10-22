@@ -376,8 +376,10 @@ Conventions for contributors:
   aspect lock or `TitleBar` registered on it. Content with no owning `ReactorWindow` (tray
   flyouts, `ReactorHostControl`, a `ReactorHost` over a raw `Window`) gets the documented
   "outside a window" values. Behaviour change: `ReactorHostControl` content previously saw an
-  unrelated host's window and now sees none, and a `TitleBar` inside it no longer claims
-  that window's caption. Embedded content that needs its window can pass it explicitly
+  unrelated host's window and now sees none. A `TitleBar` inside it registers, once loaded,
+  with the `ReactorWindow` that actually contains the control (found from its `XamlRoot`)
+  instead of with whichever host was active, so that window is content-extended and prepared
+  for close as issue #537 requires. Embedded content that needs its window can pass it explicitly
   (`UseWindowSize(window)`, `UseBreakpoint(window, minWidth)`) or read
   `XamlRoot.RasterizationScale` for DPI.
 
