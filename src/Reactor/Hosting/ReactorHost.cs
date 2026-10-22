@@ -315,6 +315,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         _reconciler.DiagnosticsRootResolver = ResolveDiagnosticsRoot;
         _reconciler.RenderErrorHandlerProvider = () => EffectiveRenderErrorHandler;
         _window = window;
+        _reconciler.HostWindow = window;
         _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         _reconciler.OwningDispatcher = _dispatcherQueue;
@@ -997,13 +998,13 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         if (hotReloadRender)
             MigrateHotReloadState();
 
-        // Multi-window: hooks (UseWindow, UseDpi, UseWindowState, UseIsActive,
-        // UseClosingGuard, parameterless UseWindowSize) resolve "the rendering
-        // host" via ReactorApp.ActiveHostInternal. Without a per-render push,
-        // the ctor-time assignment of the most-recently-constructed host wins
-        // permanently and a second window's components observe the wrong
-        // owning window. Restore the previous value in the finally so
-        // re-entrant renders unwind correctly. (spec 036 §3.4 / §7.1)
+        // Multi-window: scope ReactorApp.ActiveHostInternal to this pass for the process-wide
+        // consumers that still read it (hot reload, charting activation, devtools). Window
+        // hooks and TitleBar handling do NOT: they read the owner this host's reconciler
+        // records on each RenderContext, because this static is repointed by a window opened
+        // mid-render and is not scoped at all for virtualized-row renders. Restore the
+        // previous value in the finally so re-entrant renders unwind correctly.
+        // (spec 036 §3.4 / §7.1, issue #1396)
         var prevActiveHost = ReactorApp.ActiveHostInternal;
         ReactorApp.ActiveHostInternal = this;
 

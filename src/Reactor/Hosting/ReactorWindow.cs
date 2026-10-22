@@ -2458,6 +2458,11 @@ public sealed partial class ReactorWindow : IDisposable
         return new GuardToken(this, guard);
     }
 
+    internal int ClosingGuardCountForTests
+    {
+        get { lock (_closingGuardsLock) { return _closingGuards.Count; } }
+    }
+
     private sealed class GuardToken : IDisposable
     {
         private readonly ReactorWindow _owner;

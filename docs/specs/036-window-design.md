@@ -474,7 +474,8 @@ public uint RenderContext.UseDpi();                       // re-renders on chang
 
 `Window.Bounds` from WinUI is already DIPs; the existing
 `UseWindowSize(Window)` hook (`RenderContext.cs:929`) keeps working and
-gets a parameterless overload that resolves the current host's window.
+gets a parameterless overload that resolves the window whose host renders
+the component (see §7.1 for how that owner is resolved).
 
 ## §6 Lifecycle and shutdown
 
@@ -615,7 +616,7 @@ in the shared WinUI backdrop interop:
 ```csharp
 // Returns the ReactorWindow hosting the current component, or null
 // when the component renders outside a window (e.g. tray-icon flyout
-// content — see §7.1).
+// content or a ReactorHostControl embed — see §7.1).
 ReactorWindow? RenderContext.UseWindow();
 
 // DIP size of the host window; re-renders on resize.
@@ -656,17 +657,44 @@ and for consumers that hold a reference to a non-Reactor `Window`.
 ### 7.1 Reaching the host window from a render
 
 `UseWindow()` is the canonical answer to "which window is rendering
-me?". It does an O(1) field read on the current `ReactorHost` — no
-subscription, no re-render trigger. Use it whenever you need the
+me?". It does an O(1) field read — no subscription, no re-render
+trigger. Use it whenever you need the
 window handle (open another window with this one as `Owner`, set
 taskbar progress, dispatch a window-level command, etc.). For
 behavior that should re-render on changes, use the targeted hooks:
 `UseWindowSize`, `UseDpi`, `UseWindowState`, `UseIsActive`.
 
-**Returns `null` for tray-icon flyout content.** A tray icon's
+**How the window is resolved.** Each host's reconciler carries an internal
+owner (`Reconciler.Owner`, the host itself; see spec 054 §8.3) and records it on
+every `RenderContext` it renders, at each `BeginRender`; the window hooks read the
+owner's `ReactorWindow`. All window hooks
+(`UseWindow`, parameterless `UseWindowSize`, `UseWindowPosition`,
+`UseIsCovered`, `UseWindowAspectRatio`, `UseWindowDragMove`,
+`UseWindowState`, `UseIsActive`, `UseClosingGuard`, `UseDpi`, and the
+window-inferring `UseBreakpoint(minWidth)`),
+`UsePersisted(PersistedScope.Window)` and the `TitleBar` element read that
+recorded owner. They do **not** read the process-wide
+`ReactorApp.ActiveHostInternal`: a window opened during another window's
+render repoints that field for the rest of the pass, virtualized rows
+(`LazyVStack`, `ElementFactory`) are realized outside any host pass, and
+`ReactorHostControl` renders never scope it. Nested class, function and memo
+components and virtualized rows therefore resolve the same window as the
+component that contains them. (issue #1396)
+
+A `TitleBar` in `ReactorHostControl` content is the one exception to "no
+owner": the WinUI control corrupts the heap when torn down in a window that
+is not content-extended (issue #537). Once it loads, it registers with the
+`ReactorWindow` that actually contains it, matched through its
+`XamlRoot`'s `AppWindowId`, just as it would with that window's own host.
+
+**Returns `null` for content with no owning window.** A tray icon's
 flyout (§11.4) is reconciled into a hidden internal popup window,
-not a `ReactorWindow`. Components that may render in either context
-should null-check:
+not a `ReactorWindow`; `ReactorHostControl` embeds and a `ReactorHost`
+constructed directly over a `Window` have no `ReactorWindow` either. There
+is deliberately no fallback to another open window: the window hooks return
+their documented "outside a window" values (§7), and
+`PersistedScope.Window` falls back to the application scope. Components that
+may render in either context should null-check:
 
 ```csharp
 class StatusBadge : Component

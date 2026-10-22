@@ -60,6 +60,41 @@ public sealed partial class Reconciler : IDisposable
     /// resolve their owning window through it at call time.
     /// </summary>
     internal IContentOwner? Owner { get; set; }
+    /// <summary>
+    /// The XAML <see cref="Window"/> of the <see cref="Microsoft.UI.Reactor.Hosting.ReactorHost"/> that
+    /// owns this reconciler, with or without a <see cref="Microsoft.UI.Reactor.ReactorWindow"/> (<see cref="Owner"/>); null for
+    /// <see cref="Microsoft.UI.Reactor.Hosting.ReactorHostControl"/>. Lets a mounting
+    /// <c>TitleBar</c> claim its own host's window instead of whichever host is ambient.
+    /// </summary>
+    internal Window? HostWindow { get; set; }
+
+    // Issue #917 — withdraws an unmounting TitleBar from this reconciler's own window (not the
+    // ambient host's). Skipped once the window is closing or disposed: ReactorWindow.Dispose
+    // already drops its title-bar bookkeeping, and resetting the caption state of a window
+    // being torn down would undo PrepareTitleBarForClose (issue #537).
+    private void WithdrawTitleBar(WinUI.TitleBar unmounting)
+    {
+        if (HostWindow is null)
+        {
+            _embeddedTitleBars?.Remove(unmounting);
+            WithdrawEmbeddedTitleBar(unmounting);
+            return;
+        }
+        if (Owner?.ReactorWindow is { IsClosingOrDisposed: false } window)
+            window.ClearTitleBarControl(unmounting);
+    }
+
+    // TitleBars in ReactorHostControl content, registered (once loaded) with the ReactorWindow
+    // that contains them; released on unmount and on reconciler disposal. (issue #1396)
+    private HashSet<WinUI.TitleBar>? _embeddedTitleBars;
+
+    internal void TrackEmbeddedTitleBar(WinUI.TitleBar titleBar) => (_embeddedTitleBars ??= new()).Add(titleBar);
+
+    private static void WithdrawEmbeddedTitleBar(WinUI.TitleBar titleBar)
+    {
+        if (TitleBarElement.ReleaseEmbedded(titleBar) is { IsClosingOrDisposed: false } window)
+            window.ClearTitleBarControl(titleBar);
+    }
     // Ancestor-aware effective theme for the subtree currently being mounted/updated,
     // threaded top-down through Mount/Update (an element's own RequestedTheme wins,
     // otherwise the subtree inherits its ancestor's). ElementTheme.Default means "no
@@ -3523,9 +3558,8 @@ public sealed partial class Reconciler : IDisposable
         // ExtendsContentIntoTitleBar inference and its caption-height
         // contribution from the owning window, so a window that merely used to
         // host one is not left content-extended and tall for its lifetime.
-        if (control is WinUI.TitleBar unmountingBar
-            && global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow is { } titleBarWindow)
-            titleBarWindow.ClearTitleBarControl(unmountingBar);
+        if (control is WinUI.TitleBar unmountingBar)
+            WithdrawTitleBar(unmountingBar);
 
         if (_componentNodes.TryGetValue(control, out var node))
         {
@@ -3946,9 +3980,8 @@ public sealed partial class Reconciler : IDisposable
         // Issue #917 — mirrors UnmountRecursive: a TitleBar reached through the
         // pooling traversal (nested in a poolable container) must also withdraw
         // its inference and caption-height contribution.
-        if (control is WinUI.TitleBar pooledUnmountingBar
-            && global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow is { } pooledTitleBarWindow)
-            pooledTitleBarWindow.ClearTitleBarControl(pooledUnmountingBar);
+        if (control is WinUI.TitleBar pooledUnmountingBar)
+            WithdrawTitleBar(pooledUnmountingBar);
 
         // Run cleanup logic (component teardown, etc.)
         if (_componentNodes.TryGetValue(control, out var node))
@@ -7392,6 +7425,15 @@ public sealed partial class Reconciler : IDisposable
         }
         _navigationHostNodes.Clear();
         _pool.Clear();
+        // The tree is dropped without unmounting, so a TitleBar this (ReactorHostControl)
+        // reconciler registered with its containing window would otherwise stay registered
+        // there for the window's lifetime. (issue #1396)
+        if (_embeddedTitleBars is { } embedded)
+        {
+            _embeddedTitleBars = null;
+            foreach (var bar in embedded)
+                WithdrawEmbeddedTitleBar(bar);
+        }
         return pendingPropagation;
     }
 }

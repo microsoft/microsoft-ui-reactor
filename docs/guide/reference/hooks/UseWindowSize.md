@@ -17,10 +17,11 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseWindowSize`
 
 ### Summary
 
-Parameterless overload — resolves the current host's window via the
-active host's back-pointer and re-renders on resize. Returns
-`(0, 0)` when called outside a window (e.g. tray-flyout content);
-no implicit fallback to `PrimaryWindow`. (spec 036 §5.2 / §7.1)
+Parameterless overload — resolves the window whose host renders this
+component and re-renders on resize. Returns
+`(0, 0)` when the component has no owning window (tray-flyout content,
+`ReactorHostControl` embeds); no implicit fallback to `PrimaryWindow`
+or to another open window. (spec 036 §5.2 / §7.1)
 
 ## `UseWindowSize(Window)`
 

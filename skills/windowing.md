@@ -58,6 +58,11 @@ Border(customControl).Drag(false); // opt out of background drag
 
 Placement values: `Default`, `CenterOnPrimary`, `CenterOnOwner`, `CenterOnCurrent`, `Manual`.
 
+Window hooks (`UseWindow`, `UseWindowPosition`, `UseWindowDragMove`, `UseDpi`, `UseWindowState`,
+`UseIsActive`, `UseClosingGuard`, `UseWindowAspectRatio`, …) bind the window whose host renders the component,
+including nested components and virtualized rows, never "the most recently active window". In tray flyouts and
+`ReactorHostControl` embeds they return `null` / their outside-a-window values.
+
 ## Persistence
 
 ```csharp

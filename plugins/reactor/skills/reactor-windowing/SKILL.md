@@ -72,6 +72,11 @@ Button("Drag", drag);
 Border(customEditor).Drag(false); // opt out of background drag
 ```
 
+Window hooks (`UseWindow`, `UseWindowPosition`, `UseWindowDragMove`, `UseDpi`, `UseWindowState`,
+`UseIsActive`, `UseClosingGuard`, `UseWindowAspectRatio`, …) bind the window whose host renders the
+component, including nested components and virtualized rows, never "the most recently active window".
+In tray flyouts and `ReactorHostControl` embeds they return `null` / their outside-a-window values.
+
 ```csharp
 var spec = new WindowSpec { Title = "Shell" }
     .WithPersistence("shell-main", WindowStartPosition.CenterOnCurrent);

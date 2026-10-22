@@ -1155,6 +1155,14 @@ over the UWP `Windows.Storage.Pickers` + `InitializeWithWindow`, returning
   (Unloaded does not unmount the tree, issue #344). Both check the host's dispatcher
   thread first. The errors stay distinct: never rendered under a host, no longer
   mounted, window closed or host disposed, control not loaded, wrong thread.
+- **Window hooks agree with the pickers (issue #1396).** The window hooks
+  (`UseWindow`, `UseDpi`, `UseWindowPosition`, …), `UsePersisted`'s window scope
+  and the `TitleBar` element read the same recorded owner during render
+  (`RenderContext.OwningReactorWindow` = `IContentOwner.ReactorWindow`; spec 036
+  §7.1). That is null for content with no `ReactorWindow` (tray flyout,
+  `ReactorHostControl`, a `ReactorHost` over a raw `Window`), with no fallback to
+  the process-wide host. The pickers differ only in resolving a window id from the
+  owner itself, so they work there too.
 - **Naming.** `HookRulesAnalyzer` treats any `Use[A-Z]*` method on
   `Component` / `RenderContext` as a hook, so calling the old names from a click
   lambda raised REACTOR_HOOKS_001 and from a named handler REACTOR_HOOKS_005. The
