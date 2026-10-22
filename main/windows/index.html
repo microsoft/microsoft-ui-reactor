@@ -4915,20 +4915,17 @@ method only selects a target path; the caller must create and write the file.</p
   <code>Task.Run</code>. Their <code>Pick*</code> names keep the hook-rules analyzer quiet in handlers.</li>
 <li>The owner is the window whose host rendered the component (including nested and
   virtualized-row components), not whichever window is active when the handler
-  runs. Once the component unmounts (including when its root is replaced) or its
-  window closes, the call throws <code>InvalidOperationException</code>.</li>
+  runs. That is the <code>ReactorWindow</code>, the <code>Window</code> a <code>ReactorHost</code> was constructed
+  over, or for <code>ReactorHostControl</code> the window the control is loaded in when the
+  method is called (a reparented control follows its new window). Once the
+  component unmounts (including when its root is replaced or its
+  <code>ReactorHostControl</code> is disposed) or its window closes, the call throws
+  <code>InvalidOperationException</code>. It also throws while a <code>ReactorHostControl</code> is
+  unloaded (not in any window).</li>
 <li>Option validation (missing or duplicate file-type choices) throws <code>ArgumentException</code>
   before any dialog opens. Windows validates extension syntax and folder paths.</li>
 <li>Picker errors propagate to the caller; cancellation is not an error.</li>
 <li>Framework tests use an internal picker-service seam instead of opening modal dialogs.</li>
-<li>Content hosted through <code>ReactorHostControl</code> (or a <code>ReactorHost</code> you construct
-  yourself) has no owning <code>ReactorWindow</code>, so these methods throw
-  <code>InvalidOperationException</code> there. Construct the native picker from the window
-  that hosts the control instead, for example
-  <code>new Microsoft.Windows.Storage.Pickers.FileOpenPicker(hostWindow.AppWindow.Id)</code>.
-  Code that only has an element can use its
-  <code>XamlRoot.ContentIslandEnvironment.AppWindowId</code> (for example from
-  <code>UseElementRef&lt;FrameworkElement&gt;().Current?.XamlRoot</code>).</li>
 </ul>
 <h2 id="wpf-uwp-migration-map">WPF / UWP migration map<a class="headerlink" href="#wpf-uwp-migration-map" title="Permanent link">&para;</a></h2>
 <p>Coming from a pre-054 Reactor app instead? See
