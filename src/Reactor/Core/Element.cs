@@ -5294,6 +5294,7 @@ public partial record TitleBarElement(
         ApplyTitleBarHeightOption(titleBar, element, window: null);
         var embedded = s_embedded.GetOrCreateValue(titleBar);
         embedded.Element = element;
+        reconciler.TrackEmbeddedTitleBar(titleBar);
         titleBar.Loaded -= s_onEmbeddedTitleBarLoaded;
         titleBar.Loaded += s_onEmbeddedTitleBarLoaded;
         if (titleBar.IsLoaded) RegisterEmbeddedTitleBar(titleBar);

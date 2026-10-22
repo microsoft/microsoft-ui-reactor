@@ -75,10 +75,26 @@ public sealed partial class Reconciler : IDisposable
     // being torn down would undo PrepareTitleBarForClose (issue #537).
     private void WithdrawTitleBar(WinUI.TitleBar unmounting)
     {
-        // ReactorHostControl content registered with the window found from its XamlRoot.
-        var registered = HostWindow is null ? TitleBarElement.ReleaseEmbedded(unmounting) : OwningWindow;
-        if (registered is { IsClosingOrDisposed: false } window)
+        if (HostWindow is null)
+        {
+            _embeddedTitleBars?.Remove(unmounting);
+            WithdrawEmbeddedTitleBar(unmounting);
+            return;
+        }
+        if (OwningWindow is { IsClosingOrDisposed: false } window)
             window.ClearTitleBarControl(unmounting);
+    }
+
+    // TitleBars in ReactorHostControl content, registered (once loaded) with the ReactorWindow
+    // that contains them; released on unmount and on reconciler disposal. (issue #1396)
+    private HashSet<WinUI.TitleBar>? _embeddedTitleBars;
+
+    internal void TrackEmbeddedTitleBar(WinUI.TitleBar titleBar) => (_embeddedTitleBars ??= new()).Add(titleBar);
+
+    private static void WithdrawEmbeddedTitleBar(WinUI.TitleBar titleBar)
+    {
+        if (TitleBarElement.ReleaseEmbedded(titleBar) is { IsClosingOrDisposed: false } window)
+            window.ClearTitleBarControl(titleBar);
     }
     // Ancestor-aware effective theme for the subtree currently being mounted/updated,
     // threaded top-down through Mount/Update (an element's own RequestedTheme wins,
@@ -7410,6 +7426,15 @@ public sealed partial class Reconciler : IDisposable
         }
         _navigationHostNodes.Clear();
         _pool.Clear();
+        // The tree is dropped without unmounting, so a TitleBar this (ReactorHostControl)
+        // reconciler registered with its containing window would otherwise stay registered
+        // there for the window's lifetime. (issue #1396)
+        if (_embeddedTitleBars is { } embedded)
+        {
+            _embeddedTitleBars = null;
+            foreach (var bar in embedded)
+                WithdrawEmbeddedTitleBar(bar);
+        }
         return pendingPropagation;
     }
 }

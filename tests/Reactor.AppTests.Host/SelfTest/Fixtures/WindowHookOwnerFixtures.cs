@@ -464,6 +464,16 @@ internal static class WindowHookOwnerFixtures
                 bar.SetShowBar!(false);
                 var withdrawn = await Harness.WaitFor(() => w.TitleBarIconControlCountForTests == 0, maxPasses: 20, perPassMs: 25);
                 H.Check($"HookOwner_Embed_TitleBarWithdrawn (w={w.TitleBarIconControlCountForTests})", withdrawn);
+
+                // Disposing the embed while W stays open drops its tree without unmounting it;
+                // the registration must still be released.
+                bar.SetShowBar!(true);
+                var reRegistered = await Harness.WaitFor(() => w.TitleBarIconControlCountForTests == 1, maxPasses: 20, perPassMs: 25);
+                H.Check($"HookOwner_Embed_TitleBarReRegistered (w={w.TitleBarIconControlCountForTests})", reRegistered);
+                hostControl.Dispose();
+                await Harness.Render(50);
+                H.Check($"HookOwner_Embed_DisposeReleasesRegistration (w={w.TitleBarIconControlCountForTests})",
+                    reRegistered && w.TitleBarIconControlCountForTests == 0);
             }
             finally
             {
