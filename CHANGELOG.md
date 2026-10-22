@@ -374,6 +374,15 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Source-map generator no longer fails under `dotnet watch`** (issue #1404, spec 010).
+  When Reactor is a project reference, Hot Reload's workspace compilation sees Reactor's
+  symbols with their source, so a component calling a hook that is not on `Component`
+  (`this.UseElementRef<T>()`, `this.UseElementFocus()`) made `SourceMapInterceptorGenerator`
+  read a syntax tree outside the app's compilation and throw `CS8785`, dropping every call
+  site in the edited project until restart. Hooks declared in Reactor are now recognised by
+  assembly, and a custom hook declared in another project's source counts as an unknown
+  number of slots — what a command-line build already reported.
+
 - **Window hooks resolve the window that renders the component, not the most recently
   active host** (issue #1396, spec 036 §7.1). `UseWindow`, the parameterless
   `UseWindowSize`, `UseWindowPosition`, `UseIsCovered`, `UseWindowAspectRatio`,

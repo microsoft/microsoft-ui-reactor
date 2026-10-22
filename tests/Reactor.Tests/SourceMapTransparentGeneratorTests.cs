@@ -105,6 +105,14 @@ public sealed class SourceMapTransparentGeneratorTests
                     this Microsoft.UI.Reactor.Core.Component component)
                     => component.Context.UseElementFocus();
             }
+
+            // A Reactor hook on a type of its own whose name this generator counts as one
+            // slot: only "declared in Reactor" makes it a single slot, not its body.
+            public static class UseMemoExtensions
+            {
+                public static T UseMemo<T>(this Microsoft.UI.Reactor.Core.Component component, global::System.Func<T> factory)
+                    => factory();
+            }
         }
         namespace Microsoft.UI.Reactor.Diagnostics
         {
@@ -130,6 +138,15 @@ public sealed class SourceMapTransparentGeneratorTests
 
     private static readonly ImmutableArray<MetadataReference> s_references = BuildReferences();
 
+    // The real Reactor assemblies are on the test host's TPA. In-source stand-ins win over
+    // them (CS0436, a warning), but a stand-in compiled as its own assembly is ambiguous
+    // with them (CS0433), so the project-reference shape leaves them out.
+    private static readonly ImmutableArray<MetadataReference> s_referencesWithoutReactor = s_references
+        .Where(static r => global::System.IO.Path.GetFileName(r.Display) is not { } name
+            || !(name.StartsWith("Reactor", StringComparison.OrdinalIgnoreCase)
+                || name.StartsWith("Microsoft.UI.Reactor", StringComparison.OrdinalIgnoreCase)))
+        .ToImmutableArray();
+
     private static ImmutableArray<MetadataReference> BuildReferences()
     {
         var tpa = (string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") ?? string.Empty;
@@ -151,26 +168,57 @@ public sealed class SourceMapTransparentGeneratorTests
     /// forms differ, a `params` slot written with the wrong type — shows up as a compile
     /// error in the emitted file rather than as a wrong string in it.</para>
     /// </summary>
+    /// <param name="surfaceAsProjectReference">Compile the stand-in surface as its own
+    /// compilation and reference it as a <see cref="CompilationReference"/> — the shape a
+    /// project-referenced Reactor takes in a workspace (<c>dotnet watch</c>) compilation,
+    /// where its symbols carry syntax from trees that are not part of the app's compilation.</param>
+    /// <param name="librarySource">Optional extra project, compiled against the surface and
+    /// referenced the same way (requires <paramref name="surfaceAsProjectReference"/>).</param>
     internal static (ImmutableArray<Diagnostic> Diagnostics, string GeneratedSource) Run(
-        string userCode, bool enabled = true, IReadOnlyDictionary<string, string>? buildProperties = null)
+        string userCode,
+        bool enabled = true,
+        IReadOnlyDictionary<string, string>? buildProperties = null,
+        bool surfaceAsProjectReference = false,
+        string? librarySource = null)
     {
+        Assert.True(librarySource is null || surfaceAsProjectReference, "a library project needs the surface as a project");
+
         // Interceptors are opt-in per namespace; without this the emitted
         // [InterceptsLocation] attributes are CS9137 and the post-generation check below
         // would fail for a reason that has nothing to do with the code under test.
         var parseOptions = new CSharpParseOptions(LanguageVersion.Preview)
             .WithFeatures([new KeyValuePair<string, string>(
                 "InterceptorsNamespaces", SourceMapInterceptorGenerator.InterceptorNamespace)]);
+        var compilationOptions = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
+            nullableContextOptions: NullableContextOptions.Enable);
 
-        var compilation = CSharpCompilation.Create(
-            "SourceMapDriverProbe",
-            new[]
+        var surfaceTree = CSharpSyntaxTree.ParseText(ReactorSurface, parseOptions, path: "Surface.cs");
+        var userTree = CSharpSyntaxTree.ParseText(userCode, parseOptions, path: "User.cs");
+        var references = s_references;
+        SyntaxTree[] trees;
+        if (surfaceAsProjectReference)
+        {
+            var surface = CSharpCompilation.Create("Microsoft.UI.Reactor", [surfaceTree], s_referencesWithoutReactor, compilationOptions);
+            AssertBinds(surface, "surface project");
+            references = s_referencesWithoutReactor.Add(surface.ToMetadataReference());
+            if (librarySource is not null)
             {
-                CSharpSyntaxTree.ParseText(ReactorSurface, parseOptions, path: "Surface.cs"),
-                CSharpSyntaxTree.ParseText(userCode, parseOptions, path: "User.cs"),
-            },
-            s_references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
-                nullableContextOptions: NullableContextOptions.Enable));
+                var library = CSharpCompilation.Create(
+                    "SourceMapDriverLibrary",
+                    [CSharpSyntaxTree.ParseText(librarySource, parseOptions, path: "Library.cs")],
+                    references,
+                    compilationOptions);
+                AssertBinds(library, "library project");
+                references = references.Add(library.ToMetadataReference());
+            }
+            trees = [userTree];
+        }
+        else
+        {
+            trees = [surfaceTree, userTree];
+        }
+
+        var compilation = CSharpCompilation.Create("SourceMapDriverProbe", trees, references, compilationOptions);
 
         // The snippet must bind, or an "expected diagnostic missing" result would just be
         // measuring a broken probe. Binding errors are a test bug, not a product signal.
@@ -197,6 +245,12 @@ public sealed class SourceMapTransparentGeneratorTests
 
         var generated = string.Concat(result.GeneratedTrees.Select(static t => t.ToString()));
         return (result.Diagnostics, generated);
+    }
+
+    private static void AssertBinds(Compilation compilation, string what)
+    {
+        var errors = compilation.GetDiagnostics().Where(static d => d.Severity == DiagnosticSeverity.Error).ToList();
+        Assert.True(errors.Count == 0, $"{what} failed to compile: " + string.Join("; ", errors));
     }
 
     /// <summary>
