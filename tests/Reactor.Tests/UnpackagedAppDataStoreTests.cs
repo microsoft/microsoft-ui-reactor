@@ -161,95 +161,59 @@ public sealed class UnpackagedAppDataStoreTests : IDisposable
     [Fact]
     public void Does_Not_Route_Window_Placement_Through_The_Roaming_Registry_Hive()
     {
-        // On the Windows App Runtime this repo currently builds against,
-        // GetForUnpackaged().LocalSettings opens HKCU\SOFTWARE\<publisher>\<product> —
-        // a ROAMING hive — instead of the machine-local
+        // Through Foundation 2.1.x (the 2.2.0 pin), GetForUnpackaged().LocalSettings opened
+        // HKCU\SOFTWARE\<publisher>\<product> — a ROAMING hive — instead of the machine-local
         // HKCU\SOFTWARE\Classes\Local Settings\Software\... it is contracted to use
         // (WindowsAppSDK#6559). Window placement is monitor-topology dependent and must
         // not roam, so UnpackagedAppDataStore uses the LocalPath surface instead. This
         // test is what stops someone "simplifying" it onto LocalSettings.
+        //
+        // The 2.5.4-experimental pin (Foundation 2.3.13) carries the fix, which is the
+        // spec 063 §6 D1 follow-up trigger this control used to fire on — recorded in
+        // spec 063 §3.2. D1's durable reason (the retirement test) is unaffected, so the
+        // store keeps LocalPath; the guard now holds on either side of the fix.
         var roamingKey = @"SOFTWARE\" + _publisher;
+        var localKey = @"SOFTWARE\Classes\Local Settings\Software\" + _publisher;
 
         // ── Positive control ──────────────────────────────────────────────────────
         // A "the key isn't there" assertion is worthless unless the same probe can be
-        // shown to find the key when the defect IS exercised. Drive LocalSettings
-        // directly under a sibling product and confirm the roaming key appears.
+        // shown to find a LocalSettings write. Drive LocalSettings directly under a
+        // sibling product and confirm the value lands in ONE of the two hives — which
+        // one depends on whether the loaded Foundation carries the #6559 fix.
         //
-        // This control is ALSO the follow-up trigger for spec 063 §6 D1, which is why
-        // it is phrased as an observable condition rather than a version number: it
-        // fails the moment the loaded runtime starts writing to the machine-local hive,
-        // whichever release that turns out to be. A trigger keyed to a version inferred
-        // from release notes can rot; a trigger keyed to a measurement cannot.
+        // Read the VALUE back, not merely the key: a runtime that created the key but
+        // dropped the value would otherwise mark the control satisfied. Keys are disposed
+        // rather than discarded, so a live handle cannot block Dispose's DeleteSubKeyTree.
         const string ControlProduct = "RoamingControl";
         const string ControlValue = "present";
         global::Microsoft.Windows.Storage.ApplicationData
             .GetForUnpackaged(_publisher, ControlProduct)
             .LocalSettings.Values["control"] = ControlValue;
 
-        // Read the VALUE back, not merely the key: a runtime that created the key but
-        // dropped the value would otherwise mark the control satisfied and let the
-        // roaming observation below stand on nothing. The key is disposed rather than
-        // discarded, so a live handle cannot block Dispose's DeleteSubKeyTree and
-        // undermine the no-residue guarantee.
-        bool controlSeen;
-        using (var controlKey = global::Microsoft.Win32.Registry.CurrentUser
-                   .OpenSubKey(roamingKey + @"\" + ControlProduct))
+        bool ControlIn(string root)
         {
-            controlSeen = controlKey is not null
-                && (controlKey.GetValue("control") as string) == ControlValue;
+            using var key = global::Microsoft.Win32.Registry.CurrentUser.OpenSubKey(root + @"\" + ControlProduct);
+            return key is not null && (key.GetValue("control") as string) == ControlValue;
         }
 
+        var inRoaming = ControlIn(roamingKey);
+        var inLocal = ControlIn(localKey);
         Assert.True(
-            controlSeen,
+            inRoaming || inLocal,
             $"""
-            Positive control failed: writing through GetForUnpackaged().LocalSettings did
-            not create HKCU\{roamingKey}\{ControlProduct}.
-
-            Two possibilities, and they are distinguishable — do not guess:
-
-            (a) The probe is wrong. Check the machine-local path
-                HKCU\SOFTWARE\Classes\Local Settings\Software\{_publisher}\{ControlProduct}.
-                If the value is THERE, the runtime now behaves correctly (case b). If it
-                is in NEITHER hive, the probe is broken and this is not a measurement.
-
-            (b) The loaded Windows App Runtime has picked up the fix for
-                WindowsAppSDK#6559 (RuntimeCompatibilityChange
-                ApplicationData_GetForUnpackaged_LocalSettings).
-
-                ** This is the follow-up trigger for spec 063 §6 D1. **
-
-                Before acting on it, confirm WHICH runtime produced the result. This
-                suite sets WindowsAppSDKSelfContained=true, so it loads the runtime
-                bundled in its own output directory rather than the machine-wide
-                package — verify with:
-
-                    Process.GetCurrentProcess().Modules -> Microsoft.WindowsAppRuntime.dll -> FileName
-
-                A path under the test project's bin\ means the result reflects the
-                PINNED WindowsAppSDKVersion. A path under WindowsApps\ means it reflects
-                whatever 2.x runtime is installed on this machine, which is NOT evidence
-                about the pinned version (2.x services in place, so a newer runtime can
-                satisfy an app built against an older SDK).
-
-                The path only proves the runtime is bundled. To identify WHICH one —
-                the number the fix boundary actually attaches to — hash the loaded
-                Microsoft.WindowsAppRuntime.dll / Microsoft.Windows.Storage.Projection.dll
-                and match them back to a Microsoft.WindowsAppSDK.Foundation package in
-                the NuGet cache. The fix lives in Foundation, and the metapackage ->
-                Foundation pairing is neither stable nor monotonic (2.2.0 -> 2.1.0,
-                2.3.1 -> 2.3.5), so the metapackage version is two steps removed from
-                the behaviour. See spec 063 §3.2.
-
-                Once confirmed, revisit spec 063 §6 D1: LocalSettings becomes a viable
-                surface, and making this store the unpackaged default becomes worth
-                reconsidering — subject to the migration problem in §6 D2 and the
-                deployment-variance problem in §3.2, neither of which this solves.
+            Positive control failed: writing through GetForUnpackaged().LocalSettings
+            created the value in NEITHER HKCU\{roamingKey}\{ControlProduct} (pre-#6559
+            runtimes) NOR HKCU\{localKey}\{ControlProduct} (fixed runtimes). The probe
+            is broken, so the assertions below are not a measurement.
             """);
 
         // ── The actual assertion ──────────────────────────────────────────────────
+        // The store persists through LocalPath (a file), so it must create no settings
+        // key in either hive, whichever one LocalSettings uses on this runtime.
         new UnpackagedAppDataStore(_publisher, Product).Write("main", new byte[] { 1, 2, 3 });
 
         Assert.Null(global::Microsoft.Win32.Registry.CurrentUser.OpenSubKey(roamingKey + @"\" + Product));
+        Assert.Null(global::Microsoft.Win32.Registry.CurrentUser.OpenSubKey(localKey + @"\" + Product));
     }
 
     // ══════════════════════════════════════════════════════════════

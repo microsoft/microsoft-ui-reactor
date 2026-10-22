@@ -1,6 +1,6 @@
 # Microsoft.UI.Reactor.Advanced
 
-**Optional Reactor components with heavier native and graphics dependencies — a Win2D canvas family for immediate-mode drawing, the D3-derived charting subsystem, the docking / dock-layout subsystem, a CommonMark markdown renderer, and a virtualized data grid, all inside a Reactor element tree.**
+**Optional Reactor components with heavier native and graphics dependencies — a Win2D canvas family for immediate-mode drawing, the D3-derived charting subsystem, the docking / dock-layout subsystem, a CommonMark markdown renderer, a virtualized data grid, and the experimental WinUI TableView and Chart controls, all inside a Reactor element tree.**
 
 ## About
 
@@ -58,6 +58,8 @@ When `radius` changes, the new `redrawKey` tells Reactor to invalidate the canva
 - **Docking (`Microsoft.UI.Reactor.Docking`)** — a Visual-Studio-style docking host: dockable tool windows and documents, floating windows, tear-off tabs, splitters, keyboard navigation, and JSON layout persistence. Register the native renderer with `DockingNativeInterop.Register(reconciler)`.
 - **Markdown (`Microsoft.UI.Reactor.Markdown`)** — a CommonMark renderer (C# port of the md4c parser) that turns a markdown string into a Reactor element tree. The `Markdown(...)` factory ships in `Microsoft.UI.Reactor.Advanced.Factories`, so add `using static Microsoft.UI.Reactor.Advanced.Factories;`.
 - **Data grid (`Microsoft.UI.Reactor.Controls` `DataGrid`)** — a virtualized, editable data grid with typed columns, sorting/filtering, paging, and column resize/reorder. The `DataGrid(...)` / `Column(...)` / `AutoColumns(...)` factories ship in `Microsoft.UI.Reactor.Advanced.Factories`, so add `using static Microsoft.UI.Reactor.Advanced.Factories;`; the element/column records keep their `Microsoft.UI.Reactor.Controls` namespace.
+- **WinUI TableView (`Microsoft.UI.Reactor.Advanced.Tabular`)** — maps the platform `Microsoft.UI.Xaml.Controls.Tabular.TableView` MVU-style: pass immutable record snapshots and `TableView(items, TextColumn<T>(...), TemplateColumn<T>(...))` diffs them into the table (`.KeyRows(...)`), with accessible native text columns whose edits arrive as callbacks, Reactor-element template cells, sorting (`.SortBy(...)`), grouping/filtering (`.GroupRows(...)` / `.FilterRows(...)`), frozen columns, density, and selection. `BoundColumn(...)` covers classic `{Binding}` models. **Experimental:** requires the Windows App SDK `-experimental` channel, and unpackaged apps must be self-contained (`WindowsAppSDKSelfContained=true`).
+- **WinUI Chart (`Microsoft.UI.Reactor.Advanced.Charts`)** — maps the platform `Microsoft.UI.Xaml.Controls.Charts.Chart`: `Chart(LineSeries(...), BarSeries(...), AreaSeries(...))` against category, date-time, and linear axes, with legends, markers, and data labels. Shared axes are inferred when a series leaves them unset. **Experimental:** requires the Windows App SDK `-experimental` channel, and unpackaged apps must be self-contained (`WindowsAppSDKSelfContained=true`).
 
 ## Main Types
 
@@ -65,6 +67,8 @@ When `radius` changes, the new `redrawKey` tells Reactor to invalidate the canva
 - **`Win2DAnimatedCanvas(...)`** — factory for an animated game-loop canvas.
 - **`Win2DVirtualCanvas(...)`** — factory for a virtualized canvas.
 - **`Win2DCanvasElement`** — immutable element produced by `Win2DCanvas`.
+- **`TableView(...)` / `TextColumn<T>(...)` / `TemplateColumn<T>(...)` / `BoundColumn(...)`** — factories for the WinUI TableView and its columns (`TableViewElement`, `TableTextColumn`, `TableTemplateColumn`, `TableBoundColumn`).
+- **`Chart(...)` / `LineSeries` / `BarSeries` / `AreaSeries` / `CategoryAxis` / `DateTimeAxis` / `LinearAxis`** — factories for the WinUI Chart, its series, and its axes (`ChartElement`, `ChartLineSeries`, …).
 
 ## Best Practices
 
