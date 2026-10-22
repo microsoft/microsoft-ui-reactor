@@ -164,7 +164,7 @@ underestimating restore/save gating.
 | R9  | `PositionChanged` / `ZOrderChanged` fire eagerly during drag (`AppWindow.Changed` is high-rate). Spec §11 Q4: fire eagerly, don't coalesce; but hooks (`UseWindowPosition`) must short-circuit re-render when the DIP value is unchanged after conversion/rounding to avoid spamming components. | Tasks 1.1, 1.2 |
 | R10 | **Persistence schema migration is not needed for enum removal** (codec doesn't store the enum) — but if any external surface serializes `WindowSpec` (devtools `windows.open` arguments, future config files), the removed numeric enum value would deserialize as garbage. Audit + reject legacy numeric `4` (= old `RestoreFromPersistence`) at deserialization with a clear migration message. | Task 11.2 |
 | R11 | `WM_DISPLAYCHANGE` listener for `ReactorDisplay.DisplayLayoutChanged` is a singleton riding the first opened window's `WindowMessageMonitor`. Must ref-count: closing the registering window without others open must re-host on the next open, not silently lose the event. | Task 1.3 |
-| R12 | `UseFilePickerAsync` / `UseFolderPickerAsync` call `IInitializeWithWindow.Initialize` with `UseWindow().NativeWindow.GetWindowHandle()` on the UI thread. Must not accept arbitrary HWNDs from user code; must throw if called off the UI thread. (Same-process trust model: there is no untrusted code in Reactor today, but this keeps the contract tight.) | Task 7.3 |
+| R12 | The picker methods (`PickFileAsync` etc.; originally `UseFilePickerAsync` / `UseFolderPickerAsync` over `IInitializeWithWindow`) construct `Microsoft.Windows.Storage.Pickers` pickers from the owning window's `AppWindow.Id`, captured on the `RenderContext` during render, on the UI thread. Must not accept arbitrary HWNDs or window ids from user code; must throw if called off the UI thread or after the owner closed. (Same-process trust model: there is no untrusted code in Reactor today, but this keeps the contract tight.) | Task 7.3 |
 | R13 | Trim / AOT: new typed event-args (`WindowDipPositionChangedEventArgs`, `WindowZOrderChangedEventArgs`, `DisplayInfo`) and new enums must have **no reflection paths**. Records + plain enums are fine; verify no `JsonSerializer.Serialize<object>(args)` slips into the new code. | Tasks 1.1, 1.2, 1.3 |
 | R14 | Hot reload: changing element / `WindowSpec` field types (e.g. `ExtendsContentIntoTitleBar` `bool → bool?`) across an HR boundary is not supported by `ReactorHotReloadCopier`. Document the limit; no code change. | Task 7.1 |
 | R15 | Devtools `WindowRegistry.Snapshot()` exposes title / hwnd / bounds / DPI / state today; renamed/removed fields must not break the snapshot JSON shape, and the new live values (Position, Level, Style) should be added when useful so the inspector stays in sync. | Task 11.2 |
@@ -733,28 +733,54 @@ Purely additive.
       `Window.SystemBackdrop is TransparentBackdrop` on supported
       builds.
 
-### 7.3 `UseFilePickerAsync` / `UseFolderPickerAsync` (spec §8.3)
+### 7.3 Picker helpers (spec §8.3) — superseded by 7.3a
 
-- [x] Add `FilePickerOptions` / `FolderPickerOptions` records (filters,
-      suggested-folder, etc. — minimum viable shape; pickers are out
-      of scope for windowing beyond the `InitializeWithWindow` helper).
-- [x] Add `RenderContext.UseFilePickerAsync(FilePickerOptions)` →
-      `Task<StorageFile?>`.
-- [x] Add `RenderContext.UseFolderPickerAsync(FolderPickerOptions)` →
-      `Task<StorageFolder?>`.
-- [x] Implementation: `UseWindow().NativeWindow.GetWindowHandle()` →
-      `WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd)`.
-      **Must run on the UI thread**; throw if called off-thread (R12).
-      **Must use the owning window's HWND**; do not accept arbitrary
-      HWND parameters (R12).
-- [x] Selftest `FilePicker_InitializesWithWindow` — use a mock /
-      `IPickerService` test double; assert `InitializeWithWindow` was
-      called with the owning HWND.
-- [x] Note in the PR description: §8.3 is per spec a candidate to split
-      into its own spec (§11 Q5 in the source spec 053; not this spec —
-      054 doesn't have an explicit Q on it, but the §10 phase wording
-      flags it). If scoping requires, lift this section out into a
-      follow-up spec; otherwise land here.
+The first cut shipped `Use{File,MultipleFiles,Folder,SaveFile}PickerAsync` over the
+UWP `Windows.Storage.Pickers` + `InitializeWithWindow`, returning `StorageFile` /
+`StorageFolder`, with owner resolution through `ReactorApp.ActiveHostInternal`.
+Issue #1374 replaced all of that before 1.0; 7.3a is the current shape. The items
+below record what that first cut delivered and stay checked for history only.
+
+- [x] Option records, the four helpers on `RenderContext` and `Component`, null /
+      empty-list cancellation, UI-thread-only calls, and no arbitrary-HWND parameter (R12).
+- [x] Selftest `FilePicker_InitializesWithWindow` against an `IPickerService` test
+      double (now asserts the owner `WindowId`).
+- [x] PR note that §8.3 could be split into its own spec; it stayed here.
+### 7.3a Picker migration to `Microsoft.Windows.Storage.Pickers` (issue #1374)
+
+- [x] Rebuild the helpers on `Microsoft.Windows.Storage.Pickers` (`WindowId`
+      constructor; no `InitializeWithWindow`). Results become path-based
+      `PickFileResult` / `PickFolderResult`.
+- [x] Rename to non-hook names `PickFileAsync`, `PickMultipleFilesAsync`,
+      `PickFolderAsync`, `PickSaveFileAsync`, and add `PickMultipleFoldersAsync`,
+      so direct calls from handlers no longer raise REACTOR_HOOKS_001/005.
+      Analyzer regression tests cover `Component` and `RenderContext` call
+      shapes, with a `Use*`-named positive control.
+- [x] Options: add `Title`, `SuggestedFolder`, `SuggestedStartFolder`,
+      `InitialFileTypeIndex`, open-picker `FileTypeChoices`, and save-only
+      `DefaultFileExtension` / `ShowOverwritePrompt`. Make `FileTypeChoices` an
+      ordered `IReadOnlyList<FileTypeChoice>`, validated before the owner lookup.
+      Remove `FolderPickerOptions.FileTypeFilter` and
+      `SaveFilePickerOptions.SuggestedSaveFile`.
+- [x] Record the owning window on each `RenderContext` from its host's reconciler
+      (`Reconciler.OwningWindow`, set when a `ReactorWindow` claims its host; since
+      #1395 `Reconciler.Owner`) at every
+      `BeginRender`, instead of reading the process-wide `ReactorApp.ActiveHostInternal`.
+      Clear it on `DetachFromHost`; reject a closed owner.
+- [x] Selftest `Pickers_OwningWindow`: with A then B open, A's helpers (root, nested
+      class component, function component) route to A before and after B closes; B's
+      helpers are rejected after B closes; a retired root is rejected. Mutation-checked.
+- [x] Selftest `Pickers_OwnerSurvivesMidRenderOpen`: a window opened mid-render does
+      not become the owner of components that render after it in the opener's window.
+- [x] Selftest `Pickers_Suite`: native option read-back, including
+      insertion-ordered `FileTypeChoices` on open and save pickers.
+- [x] Issue #1395: replace the recorded `ReactorWindow` with an owner resolver
+      (`IContentOwner`, `Reconciler.Owner`) implemented by `ReactorHost` (its `Window`)
+      and `ReactorHostControl` (`XamlRoot.ContentIslandEnvironment.AppWindowId`, at
+      call time). Selftests `Pickers_HostControl` (routing, nested and virtualized
+      components, unloaded rejection, reparent into a second window, dispose) and
+      `Pickers_RawWindowHost`; unit tests map each resolver state to its error.
+      Mutation-checked.
 
 ### 7.4 Phase 7 exit gate
 
@@ -772,7 +798,7 @@ Purely additive.
       PositionChanged, ZOrderChanged, CenterOnCurrent, WithPersistence
       + SavePlacement, ShowInTaskbar / ShowInSwitcher split, WindowStyle,
       CornerStyle, WindowLevel, SizeToContent, TaskbarItem facade +
-      Description, ReactorDisplay + UseDisplays, UseFilePickerAsync.
+      Description, ReactorDisplay + UseDisplays, pickers (`PickFileAsync` etc.).
 - [x] Each section: short prose + minimal runnable snippet + xmldoc-style
       caveats.
 - [x] Update the existing "Tips" + "Next Steps" sections to reference

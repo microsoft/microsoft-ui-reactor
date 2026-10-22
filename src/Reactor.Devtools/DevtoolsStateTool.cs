@@ -156,26 +156,12 @@ internal static class DevtoolsStateTool
         };
     }
 
-    // Non-enumerating count probe. Checks the non-generic ICollection first
-    // (array, List<T>, ArrayList, most BCL collections), then falls back to
-    // reflecting a generic `Count` property for ICollection<T> /
-    // IReadOnlyCollection<T>. Returns null when the source doesn't advertise
-    // its size — we refuse to force enumeration to find out.
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools state tool uses reflection to read collection Count.")]
-    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Devtools state tool uses reflection to read collection Count.")]
+    // Non-enumerating count probe, shared with ReactorDiagnostics so the two
+    // devtools surfaces report collection sizes the same way: ICollection, then a
+    // public int Count; null when the source doesn't advertise its size — we
+    // refuse to force enumeration to find out.
     private static int? TryReadCollectionCount(object value)
-    {
-        if (value is global::System.Collections.ICollection coll) return coll.Count;
-        var countProp = value.GetType().GetProperty(
-            "Count",
-            global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public);
-        if (countProp is not null && countProp.PropertyType == typeof(int))
-        {
-            try { return (int?)countProp.GetValue(value); }
-            catch { return null; }
-        }
-        return null;
-    }
+        => Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticText.TryCount(value);
 }
 
 /// <summary>Result of the <c>state</c> tool — the root component's hook snapshots.</summary>

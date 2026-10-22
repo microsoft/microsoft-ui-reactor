@@ -112,9 +112,13 @@ public class TitleBarHeightTests
             "SyncControlHeightAfterModifiers",
             BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
         Assert.NotNull(postModifiers);
-        Assert.Equal(2, postModifiers!.GetParameters().Length);
+        // (control, element, owning window) — the window comes from the reconciler doing
+        // the mount/update, not the ambient active host (issue #1396).
+        Assert.Equal(3, postModifiers!.GetParameters().Length);
         Assert.Equal(
             typeof(TitleBarElement), postModifiers.GetParameters()[1].ParameterType);
+        Assert.Equal(
+            typeof(ReactorWindow), postModifiers.GetParameters()[2].ParameterType);
     }
 
     [Fact]

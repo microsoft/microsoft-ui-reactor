@@ -358,9 +358,9 @@ internal static class TemplatedListLifecycle
     internal static UIElement? UpdateFlipView(Reconciler reconciler, TemplatedListElementBase o, TemplatedListElementBase n, WinUI.FlipView fv, Action requestRerender)
     {
         // FlipView items are pre-mounted directly (no ContainerContentChanging). Diff each item
-        // against the element it mounted or was last updated to; rebuilding it from o would
-        // re-resolve an eagerly read theme brush to its current value, so a resource refresh
-        // would see no change. An item whose view is Empty has no control in Items, so walk the
+        // against the element it mounted or was last updated to; a view rebuilt from o reads the
+        // items' current values, so an item changed in place would compare equal to itself and
+        // stay stale (a templated ListView likewise diffs against its container's tag). An item whose view is Empty has no control in Items, so walk the
         // controls with their own index. Without a usable record, rebuild from o and treat the
         // first Items.Count items as the ones holding a control.
         int oldCount = o.ItemCount;

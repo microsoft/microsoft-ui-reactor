@@ -125,9 +125,25 @@
       { "title": "reactor-input skill", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/plugins/reactor/skills/reactor-input/SKILL.md" }
     ]
   },
+  "error-boundary": {
+    "keywords": ["render exception", "crash", "fallback", "retry", "recover", "renderErrorHandler", "error handling"],
+    "curatedKeywords": ["catch render errors", "contain a component crash", "fallback when a component throws", "retry a failed component"],
+    "relatedControls": ["Commands"],
+    "docs": [
+      { "title": "Advanced patterns guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/advanced.md" }
+    ]
+  },
   "expander": {
     "keywords": ["collapsible", "accordion", "show hide", "disclosure", "fold"],
     "relatedControls": ["Card"]
+  },
+  "file-pickers": {
+    "keywords": ["file picker", "open file dialog", "folder picker", "save file dialog", "pickfileasync", "pickfolderasync", "picksavefileasync", "file type filter", "storage pickers"],
+    "curatedKeywords": ["open a file", "choose a folder", "save as dialog", "let the user pick files"],
+    "usings": ["Microsoft.UI.Reactor.Core"],
+    "docs": [
+      { "title": "Windows guide: Pickers", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/windows.md#pickers" }
+    ]
   },
   "flex": {
     "keywords": ["flexbox", "css layout", "flex row column", "justify align", "wrap", "responsive layout"],
@@ -151,7 +167,7 @@
     "relatedControls": ["Spacing", "Color", "Typography"]
   },
   "grid": {
-    "keywords": ["rows and columns", "layout grid", "cells", "table layout", "spanning"],
+    "keywords": ["rows and columns", "layout grid", "cells", "table layout", "spanning", "min max size", "minmax"],
     "relatedControls": ["StackPanel", "RelativePanel", "UniformGrid"]
   },
   "grid-view": {
@@ -389,7 +405,7 @@
     "relatedControls": ["DatePicker"]
   },
   "title-bar": {
-    "keywords": ["window title", "caption bar", "custom titlebar", "window chrome", "draggable region"]
+    "keywords": ["window title", "caption bar", "custom titlebar", "window chrome", "draggable region", "app icon", "no icon"]
   },
   "toggle-button": {
     "keywords": ["press state", "on off button", "sticky button", "toggle", "pressed"],

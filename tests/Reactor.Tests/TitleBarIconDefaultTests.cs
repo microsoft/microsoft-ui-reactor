@@ -141,15 +141,15 @@ public class TitleBarIconDefaultTests : IDisposable
 
     // ── URI projection ──────────────────────────────────────────────────────
     //
-    // ResolveDefault() reads ReactorApp.ActiveHostInternal, which is null in a
-    // headless run — so with no owning window it falls through to the convention
+    // ResolveDefault(window: null) is the no-owning-window case — so it falls through
+    // to the convention
     // probe, which the fixture has pointed at a scratch root. That is exactly the
     // path these assertions want.
 
     [Fact]
     public void Default_Is_Null_When_No_Icon_Is_Resolvable()
     {
-        Assert.Null(TitleBarIconDefault.ResolveDefault());
+        Assert.Null(TitleBarIconDefault.ResolveDefault(window: null));
     }
 
     [Fact]
@@ -158,7 +158,7 @@ public class TitleBarIconDefaultTests : IDisposable
         var expected = WriteFile("Assets", "AppIcon.ico");
         TitleBarIconDefault.ResetForTests();
 
-        var icon = Assert.IsType<ImageIconData>(TitleBarIconDefault.ResolveDefault());
+        var icon = Assert.IsType<ImageIconData>(TitleBarIconDefault.ResolveDefault(window: null));
         Assert.Equal("file", icon.Source.Scheme);
         Assert.Equal(expected, icon.Source.LocalPath.Replace('/', IOPath.DirectorySeparatorChar));
     }
@@ -179,7 +179,7 @@ public class TitleBarIconDefaultTests : IDisposable
         {
             TitleBarIconDefault.SetBaseDirectoryForTests(AppContext.BaseDirectory);
 
-            var icon = Assert.IsType<ImageIconData>(TitleBarIconDefault.ResolveDefault());
+            var icon = Assert.IsType<ImageIconData>(TitleBarIconDefault.ResolveDefault(window: null));
             Assert.Equal("ms-appx", icon.Source.Scheme);
             Assert.Equal("ms-appx:///Assets/AppIcon.ico", icon.Source.ToString());
         }
@@ -456,7 +456,7 @@ public class TitleBarIconDefaultTests : IDisposable
         var explicitIcon = new SymbolIconData("Home");
 
         var projected = TitleBarIconDefault.Project(
-            new TitleBarElement("t") { Icon = explicitIcon });
+            new TitleBarElement("t") { Icon = explicitIcon }, owningWindow: null);
 
         Assert.Same(explicitIcon, projected);
     }
@@ -469,8 +469,8 @@ public class TitleBarIconDefaultTests : IDisposable
 
         // Positive control: the same element without the opt-out does inherit, so a
         // null here is the opt-out working rather than the default being unavailable.
-        Assert.NotNull(TitleBarIconDefault.Project(new TitleBarElement("t")));
-        Assert.Null(TitleBarIconDefault.Project(new TitleBarElement("t") { SuppressIcon = true }));
+        Assert.NotNull(TitleBarIconDefault.Project(new TitleBarElement("t"), owningWindow: null));
+        Assert.Null(TitleBarIconDefault.Project(new TitleBarElement("t") { SuppressIcon = true }, owningWindow: null));
     }
 
     [Fact]
@@ -485,7 +485,7 @@ public class TitleBarIconDefaultTests : IDisposable
             SuppressIcon = true,
         };
 
-        Assert.Null(TitleBarIconDefault.Project(contradictory));
+        Assert.Null(TitleBarIconDefault.Project(contradictory, owningWindow: null));
     }
 
     [Fact]
@@ -495,15 +495,15 @@ public class TitleBarIconDefaultTests : IDisposable
         // revalidates would let the caption show an icon the title bar does not, which is
         // exactly what sharing the resolver exists to prevent.
         TitleBarIconDefault.ResetForTests();
-        Assert.Null(TitleBarIconDefault.ResolveDefault());
+        Assert.Null(TitleBarIconDefault.ResolveDefault(window: null));
 
         WriteFile("Assets", "AppIcon.ico");
 
         // Still the cached miss until something invalidates.
-        Assert.Null(TitleBarIconDefault.ResolveDefault());
+        Assert.Null(TitleBarIconDefault.ResolveDefault(window: null));
 
         TitleBarIconDefault.ResetForTests();
-        Assert.NotNull(TitleBarIconDefault.ResolveDefault());
+        Assert.NotNull(TitleBarIconDefault.ResolveDefault(window: null));
     }
 
     [Fact]
@@ -511,12 +511,12 @@ public class TitleBarIconDefaultTests : IDisposable
     {
         var asset = WriteFile("Assets", "AppIcon.ico");
         TitleBarIconDefault.ResetForTests();
-        Assert.NotNull(TitleBarIconDefault.ResolveDefault());
+        Assert.NotNull(TitleBarIconDefault.ResolveDefault(window: null));
 
         global::System.IO.File.Delete(asset);
         TitleBarIconDefault.ResetForTests();
 
-        Assert.Null(TitleBarIconDefault.ResolveDefault());
+        Assert.Null(TitleBarIconDefault.ResolveDefault(window: null));
     }
 
     [Fact]
@@ -543,9 +543,9 @@ public class TitleBarIconDefaultTests : IDisposable
         WriteFile("Assets", "AppIcon.ico");
         TitleBarIconDefault.ResetForTests();
 
-        var first = TitleBarIconDefault.ResolveDefault();
+        var first = TitleBarIconDefault.ResolveDefault(window: null);
         TitleBarIconDefault.ResetForTests();
-        var second = TitleBarIconDefault.ResolveDefault();
+        var second = TitleBarIconDefault.ResolveDefault(window: null);
 
         // Record value equality is what lets TitleBarIconDefault.Apply compare the new
         // projection against the one it last wrote and skip the write — and with it a

@@ -19,7 +19,11 @@ GalleryProtocol.EnsureRegistered();
 // window proportional to the display, which is what the OS default gives
 // (~3/4 of the work area). This is also the sample that dogfoods the spec 036
 // §4.1 "unset size defers to the OS" path.
+//
+// The icon is declared once, here: it drives the caption/Alt-Tab icon, and the
+// shell's TitleBar inherits it rather than restating the path.
 ReactorApp.Run<WinUIGalleryReactor.GalleryShell>("WinUI Gallery (Reactor)",
+    icon: WindowIcon.FromPath("Assets/GalleryIcon.ico"),
     configure: host =>
     {
         XamlInterop.Register(host.Reconciler);

@@ -3,7 +3,7 @@ name: reactor-windowing
 description: >
   Reactor windowing cookbook: WindowSpec, OpenWindow, placement persistence,
   draggable/borderless windows, taskbar visibility, z-order, aspect ratio,
-  SizeToContent, displays, taskbar integration, and picker HWND wiring.
+  SizeToContent, displays, taskbar integration, and owner-window file/folder pickers.
 ---
 
 # Reactor Windowing
@@ -57,6 +57,11 @@ Border(customControl).Drag(false); // opt out of background drag
 ```
 
 Placement values: `Default`, `CenterOnPrimary`, `CenterOnOwner`, `CenterOnCurrent`, `Manual`.
+
+Window hooks (`UseWindow`, `UseWindowPosition`, `UseWindowDragMove`, `UseDpi`, `UseWindowState`,
+`UseIsActive`, `UseClosingGuard`, `UseWindowAspectRatio`, …) bind the window whose host renders the component,
+including nested components and virtualized rows, never "the most recently active window". In tray flyouts and
+`ReactorHostControl` embeds they return `null` / their outside-a-window values.
 
 ## Persistence
 
@@ -235,13 +240,26 @@ var nearest = ReactorDisplay.NearestTo(window.Position.X, window.Position.Y);
 ## Pickers
 
 ```csharp
-var file = await UseFilePickerAsync(new FilePickerOptions(
-    FileTypeFilter: [".txt", ".md"]));
-var folder = await UseFolderPickerAsync(new FolderPickerOptions());
+// Pickers are not hooks: call them directly from UI-thread event handlers, never during Render.
+// using Microsoft.Windows.Storage.Pickers;  (not Windows.Storage.Pickers: both define PickerLocationId)
+return VStack(
+    Button("Open", async () => { var file = await PickFileAsync(new(FileTypeFilter: [".txt", ".md"])); if (file is null) return; var text = await File.ReadAllTextAsync(file.Path); }),
+    Button("Open multiple", async () => { var files = await PickMultipleFilesAsync(new() { FileTypeChoices = [new("Notes", [".txt", ".md"])] }); }),
+    Button("Folder", async () => { var folder = await PickFolderAsync(new()); }),
+    Button("Folders", async () => { var folders = await PickMultipleFoldersAsync(new()); }),
+    Button("Save", async () => { var target = await PickSaveFileAsync(new(
+        [new("Text", [".txt"]), new("Markdown", [".md"])], SuggestedFileName: "report"));
+        if (target is not null) await File.WriteAllTextAsync(target.Path, "body"); }));
 ```
 
-Picker hooks run on the owning window's UI thread and automatically initialize
-with that window's HWND. Do not pass arbitrary HWNDs.
+Results are `PickFileResult` / `PickFolderResult` (`Microsoft.Windows.Storage.Pickers`) exposing `.Path`;
+cancellation returns `null` or an empty list. The dialog is owned by the window whose host renders the
+component, works in elevated apps, and throws `InvalidOperationException` once the component has unmounted
+or its window has closed. Inside `ReactorHostControl` the owner is the window the control is loaded in when
+the method is called; an unloaded control throws.
+`FileTypeChoices` is an ordered `IReadOnlyList<FileTypeChoice>`: order sets the default entry, labels must be
+unique. Options also take `Title`, `SuggestedFolder`, `SuggestedStartFolder`, `InitialFileTypeIndex`, and (save)
+`DefaultFileExtension` / `ShowOverwritePrompt`. Do not pass arbitrary HWNDs.
 
 ## Recipe: Command Palette
 

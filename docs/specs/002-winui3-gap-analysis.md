@@ -471,7 +471,7 @@ by conditional rendering — elements not returned from render are never created
 | WinUI Feature | Status | Notes |
 |---|---|---|
 | **ResourceDictionary (app-level)** | Passthrough | ReactorApp loads XamlControlsResources; no DSL for authoring app-level dictionaries |
-| **ResourceDictionary (per-element)** | Exposed | `.Resources(r => r.Set(key, value))` writes into that element's own `FrameworkElement.Resources`; `ResourceBuilder.Set` overloads accept a hex/named color string, a `Brush`, a `ThemeRef`, a `double`, or a `CornerRadius` |
+| **ResourceDictionary (per-element)** | Exposed | `.Resources(r => r.Set(key, value))` writes into that element's own `FrameworkElement.Resources`; `Set` accepts color strings, `Brush`, `ThemeRef`, `double`, `CornerRadius`, `Thickness`, `FontWeight`, `FontFamily`, `bool`, and `GridLength`. `SetColor` stores raw `Color` values, not brushes |
 | **Resource lookup chain** | Passthrough | WinUI's chain works on underlying controls; a per-element override participates in it normally |
 | **Merged dictionaries** | Passthrough | Can merge via `.Set()` on Application.Resources |
 | **Theme dictionaries** | Passthrough | WinUI's theme dictionaries work natively; `ThemeRef` resolution reads through them |
@@ -910,7 +910,7 @@ redirection before calling `ReactorApp.Run`.
 |---|---|---|
 | **Printing** | Passthrough | Use PrintManagerInterop directly with the HWND from `ReactorHost.Window` |
 | **Clipboard** | Passthrough | Use Windows.ApplicationModel.DataTransfer.Clipboard |
-| **File Pickers** | Exposed | `UseFilePickerAsync(FilePickerOptions)` → `Task<StorageFile?>` — owner-window initialization is handled for you |
+| **File Pickers** | Exposed | `PickFileAsync(FilePickerOptions)` → `Task<PickFileResult?>` (`Microsoft.Windows.Storage.Pickers`) — owner-window initialization is handled for you |
 
 **Verdict: mostly passthrough, with file pickers wrapped.** File picking was the one OS service
 where the HWND-initialization dance was both mandatory and easy to get wrong, so it has a hook.
@@ -1012,7 +1012,7 @@ is kept as a record so the document's own history stays auditable.
 | P2 | ManipulationMode modifier | **Still open** |
 | P3 | Activation kinds | **Shipped** — `LaunchActivation` / `LaunchKind` / `DeepLinkMap` (§19). **Single-instancing did not** — `AppInstance` redirection is still the app's job |
 | P3 | InkCanvas / InkToolbar | **Still open** |
-| P3 | App service wrappers | **Partly** — `UseFilePickerAsync` shipped; clipboard and printing still raw (§20) |
+| P3 | App service wrappers | **Partly** — `PickFileAsync` and the other picker methods shipped; clipboard and printing still raw (§20) |
 
 ### Top Gaps to Address (Priority Order)
 

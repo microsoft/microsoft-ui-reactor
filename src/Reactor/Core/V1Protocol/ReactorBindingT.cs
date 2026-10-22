@@ -25,7 +25,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// </summary>
 public readonly struct ReactorBinding<TElement> where TElement : Element
 {
-    private const int ReferenceSlotBase = 100_000;
+    private const int ReferenceSlotBase = ReferenceSlots.BindingBase;
 
     [ThreadStatic]
     private static int s_referenceSlotCount;

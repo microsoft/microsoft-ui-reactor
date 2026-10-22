@@ -121,6 +121,7 @@ static class PageRouter
 
         // Patterns
         "commands" => Component<ControlPages.Patterns.CommandsPage>(),
+        "error-boundary" => Component<ControlPages.Patterns.ErrorBoundaryPage>(),
 
         // Fundamentals — framework mechanics (issue #1275)
         "use-state" => Component<ControlPages.Fundamentals.UseStatePage>(),
@@ -132,6 +133,9 @@ static class PageRouter
         "element-refs" => Component<ControlPages.Fundamentals.ElementRefsPage>(),
         "keyboard-input" => Component<ControlPages.Fundamentals.KeyboardInputPage>(),
         "pointer-input" => Component<ControlPages.Fundamentals.PointerInputPage>(),
+
+        // System
+        "file-pickers" => Component<ControlPages.SystemServices.FilePickersPage>(),
 
         // Motion
         "connected-animation" => Component<ControlPages.Motion.ConnectedAnimationPage>(),

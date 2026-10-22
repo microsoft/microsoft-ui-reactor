@@ -37,6 +37,49 @@ lifecycle methods.
 | [UseResource](reference/hooks/UseResource.md) | `AsyncValue<T>` | Cached async read (see [Async Resources](async-resources.md)). |
 | [UsePersisted](reference/hooks/UsePersisted.md) | `(T, Action<T>)` | `UseState` that survives unmount/remount within the process — in-memory, cleared on exit (see [Persistence](persistence.md)). |
 
+### Pattern: pick files from a click handler
+
+The picker methods (`PickFileAsync`, `PickMultipleFilesAsync`, `PickFolderAsync`,
+`PickMultipleFoldersAsync`, `PickSaveFileAsync`) are deliberately **not** hooks: they
+reserve no state slot and must run from UI-thread event handlers, not during
+`Render()`. Call them directly inside the handler. Cancellation returns `null` for
+single-file, folder, and save dialogs, or an empty list for multiple selections. See
+[Pickers](windows.md#pickers) for the full options and the open/folder/save pattern:
+
+```csharp
+// Pickers are not hooks: call them directly from UI-thread event handlers.
+return VStack(
+    Button("Open one...", async () =>
+    {
+        var file = await PickFileAsync(new FilePickerOptions(FileTypeFilter: [".txt", ".md"]));
+        if (file is null) return; // User cancelled.
+        var text = await File.ReadAllTextAsync(file.Path);
+    }),
+    Button("Open files...", async () =>
+    {
+        var files = await PickMultipleFilesAsync(new FilePickerOptions
+        {
+            Title = "Choose notes",
+            FileTypeChoices = [new("Notes", [".txt", ".md"]), new("JSON", [".json"])],
+        });
+        if (files.Count == 0) return; // User cancelled.
+    }),
+    Button("Select folders...", async () =>
+    {
+        var folders = await PickMultipleFoldersAsync(new FolderPickerOptions());
+        if (folders.Count == 0) return;
+    }),
+    Button("Save as...", async () =>
+    {
+        var target = await PickSaveFileAsync(new SaveFilePickerOptions(
+            [new("Text", [".txt"]), new("Markdown", [".md"])],
+            SuggestedFileName: "report"));
+        if (target is null) return;
+        // Selecting a target is not a save: write the content yourself.
+        await File.WriteAllTextAsync(target.Path, "report body");
+    }));
+```
+
 Every hook on this page is summarized again in the auto-generated
 [hooks reference](reference/hooks/index.md); the rest of the page is the
 narrative.

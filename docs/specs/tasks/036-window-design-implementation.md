@@ -416,8 +416,9 @@ Behavior change phase. After this lands, `Run<TRoot>(width, height)` and
 
 ### 3.2 New hooks (spec §7)
 
-- [x] `RenderContext.UseWindow()` — O(1) field read on the active host's
-  `OwningWindow`. Returns null outside a window.
+- [x] `RenderContext.UseWindow()` — O(1) field read of the owning window the
+  host's reconciler recorded on the `RenderContext` (issue #1396; originally the
+  active host's `OwningWindow`). Returns null outside a window.
 - [x] `RenderContext.UseWindowState()` — subscribes to `StateChanged`.
   Returns `WindowState.Normal` outside a window.
 - [x] `RenderContext.UseIsActive()` — subscribes to `Activated` /
@@ -512,9 +513,10 @@ Behavior change phase. After this lands, `Run<TRoot>(width, height)` and
   `WindowPersistedScope`; constructed lazily-initialized at ctor and
   disposed in `Dispose()` so state is bounded by window lifetime.
 - [x] `RenderContext.UsePersisted(string, T, PersistedScope)` resolves
-  `PersistedScope.Window` to the active host's owning window's scope;
-  falls back to the application scope when no window owns the host (test
-  contexts). `PersistedHookStateBase.Scope` carries the resolved
+  `PersistedScope.Window` to the scope of the window whose host renders the
+  component (the reconciler-recorded owner since issue #1396);
+  falls back to the application scope when the content has no owning window (test
+  contexts, tray flyouts, `ReactorHostControl`). `PersistedHookStateBase.Scope` carries the resolved
   reference so save-on-cleanup writes to the right store.
 - [x] Two windows of the same component class hold independent state —
   unit-tested via `WindowPersistedScopeIsolationTests`.

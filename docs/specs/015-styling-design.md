@@ -271,6 +271,15 @@ public class ResourceBuilder
         return this;
     }
 
+    public ResourceBuilder Set(string key, Thickness value) { _resources[key] = value; return this; }
+    public ResourceBuilder Set(string key, FontWeight value) { _resources[key] = value; return this; }
+    public ResourceBuilder Set(string key, FontFamily value) { _resources[key] = value; return this; }
+    public ResourceBuilder Set(string key, bool value) { _resources[key] = value; return this; }
+    public ResourceBuilder Set(string key, GridLength value) { _resources[key] = value; return this; }
+
+    // Literal Color resources only. Brush-typed resources use Set(string/Brush/ThemeRef).
+    public ResourceBuilder SetColor(string key, Color value) { _resources[key] = value; return this; }
+
     internal ResourceOverrides Build() => new(_resources, _themeResources);
 }
 

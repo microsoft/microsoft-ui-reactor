@@ -204,11 +204,34 @@ already stores -> `Element.CallSite`. It returns `null` when the control
 was not produced by Reactor, when the assembly was built without source
 mapping, or when nothing stamped that element.
 
+A Native AOT app in diagnostics mode (`REACTOR_DIAGNOSTICS=1`) does not give an
+element a back-pointer just for its call site: no managed inspector can load into
+the process to read it, and it costs about 1 KB per control. `GetSource` then reads
+the location from the control's published `ReactorSource` value and returns the same
+`SourceLocation`. `Reconciler.GetElementTag` returns `null` for those controls, as it
+does for any untagged display leaf.
+
 `SourceLocation.ColumnNumber` is the 1-based column of the factory's name
 (the `B` of `Button` in `Row(Button("a"), Button("b"))`), which is what tells
 several calls on one line apart; `0` means the provider did not record one.
 `ToString()` keeps the `file:line` shape,
 so read the column from the property.
+
+### Declared names and hook names
+
+The generator also records two static facts that an inspector cannot recover at runtime:
+
+- **Declared name.** `SourceLocation.DeclaredName` gives the identifier an element was assigned to, much like XAML's `x:Name`. It is the local, field or property for an initializer (`var title = TextBlock("x").Bold()` → `title`), the target of a simple assignment, or the member / local-function name of an expression body. Fluent modifier chains, parentheses, casts and both arms of a `?:` are looked through. Inline elements (arguments, collection items, a `return`) and a component's `Render() =>` body have no name.
+- **Hook names.** For each class component's `Render()` and each render function (`Memo(ctx => …)`, `RenderEachTime(ctx => …)`, a root `Mount(ctx => …)`), the generator records the hooks in call order. Each entry has the variable the hook's result went into (`var (count, setCount) = UseState(0)` → `count`) and its line. An unstored hook such as `UseEffect(...)` is listed under its method name. Inspectors read this as the `hooks=` field of `ReactorDiagnostics.SourceProperty`.
+
+Hook indices are `RenderContext` slots, which is what an inspector matches against at runtime. They are exact as long as every hook so far has a statically known slot count:
+
+- `UseState`, `UseReducer`, `UseRef`, `UseEffect`, `UseMemo`, `UseCallback` and `UseContext` take one slot each.
+- A custom hook written in the same project takes the slots of the hooks its straight-line body calls.
+- After a composite built-in (`UseCommand`, `UseResource`, the window hooks, component-extension hooks such as `this.UseElementFocus()`), a custom hook from another assembly, an abstract or overridable (`virtual`) custom hook, or a hook inside a branch or loop (a rules-of-hooks violation), the following indices are reported as `?`.
+- A component that inherits `Render()` reports the hooks of the base class that declares it.
+
+Both tables describe the compiled build. Registering them costs one delegate per assembly at startup; they are built on first use. After a hot-reload update every name and hook list is reported as unknown rather than wrong, because an edit can move a call onto a location the table gives another element. Each assembly also records a fingerprint of every source file's facts, absent names and hooks included (a root mount site with no hooks, such as `host.Mount(...)` building its output with constructors, counts too). If two source-mapped assemblies stamp the same path (both mapping their roots to `/_/`) with different fingerprints, that file's names and render-function hooks are unknown. The same file compiled into both keeps them. When either happens after values were published (a hot-reload update, or a source-mapped assembly loaded later), each host drops the stale `name=` / `hooks=` fields from its controls on its next render.
 
 ### Helper methods and `[ReactorSourceTransparent]`
 
@@ -386,6 +409,84 @@ small allocation per *component*, never per leaf, and nothing while the flag is 
   normally. A static forwarder in this position can opt in with
   `[ReactorSourceTransparent]`, which is what `Pending(fallback, child)` does;
   `intl.RichMessage` cannot, because it is an instance method.
+
+## Inspecting components
+
+`ReactorDiagnostics` (namespace `Microsoft.UI.Reactor.Core.Diagnostics`) lets an
+inspector go from a realized control to the component behind it and make
+development-time edits. It is a provisional surface for devtools. These inspection
+members must be called on the UI thread that owns the element (`GetHosts()` is the
+exception: it is safe from any thread). A `ComponentSnapshot` and the property lists are
+plain text: they hold no reference into the component, so they can be kept or
+sent across a process boundary. The one live object is a resolved reference
+edge's `Target`, the mounted control it points at.
+
+```csharp
+// The Border wrapper every Component<T>() / RenderEachTime / Memo mounts into,
+// or a host's root content (window.Content, a ReactorHostControl).
+if (ReactorDiagnostics.DescribeComponent(wrapper) is { } component)
+{
+    // component.Name: "Counter", "Memo in MainPage.Render", "render in App.Main"
+    foreach (var hook in component.State)
+        Console.WriteLine($"{hook.Index} {hook.Kind} {hook.Type} = {hook.Value}");
+
+    // Parsed to the hook's type; same semantics as calling the UseState setter.
+    if (!ReactorDiagnostics.TrySetState(wrapper, 0, "42", out var error))
+        Console.WriteLine(error);   // "'abc' is not a valid int", "... has kind 'ref'; ..."
+
+    ReactorDiagnostics.Rerender(wrapper);   // bypasses memoization, like a state change
+}
+
+// Which WinUI properties this control's common modifiers set (.Width, .Margin, ...).
+var owned = ReactorDiagnostics.GetAppliedProperties(control);
+```
+
+Values are formatted for display: strings are quoted, collections are summarised
+as `List<T> (n items)` from the count they advertise (a lazy sequence is never
+enumerated and shows `(count unknown)`), and long values are cut at 200 characters.
+Values are not redacted: like other in-process inspectors, Reactor reports what
+the app holds, and an inspector that shows or forwards values where a secret must
+not appear (a log, a recording, an AI agent) decides what to hide.
+`TrySetState` accepts numbers, single characters, `true`/`false`, enum member
+names (a `[Flags]` combination only of declared bits), dates, time spans, GUIDs,
+plain text and their nullables (`null` clears a
+string or nullable); it refuses any other type with a reason rather than guessing.
+Hook names are not recorded, so `State` rows have an empty `Name` and are
+identified by call-order index and kind. Props are read by reflection: under
+NativeAOT or trimming a props type's members can be trimmed away, and `Props` then
+holds a single `<Type> (members unavailable)` row instead.
+
+Component lookup does not depend on source mapping. When a root renders a component
+directly (`Render() => Component<Shell>()`), its rendered control is also `Shell`'s
+wrapper; that element describes `Shell`, and the root is reached through its
+`ContentTarget`, its `ReactorHostControl` or the dev-overlay wrapper instead. A host
+that installs straight into `Window.Content` has no such anchor, so in that shape its
+root is not reachable. `GetAppliedProperties` reads
+the element back-pointer, so it needs the control to be tagged — turn source
+mapping on for full coverage. It covers common modifiers only; a property set by
+the control's own element record (`TextBlock("hi")` → `Text`) is not listed. The
+one exception is the `AutomationProperties.Name` Reactor derives from a captioned
+control (`Button("Save")`) when you set none: it is reported as
+`"DefaultAutomationName"` while the live name still equals it.
+
+An open `ContentDialog` is hosted in its own popup, out of reach of an ancestor
+walk from the dialog's buttons, so with source mapping on the realized dialog is
+tagged with its `ContentDialog(...)` element too: `ReactorSourceMap.GetSource(dialog)`
+names the call site. That tag is for attribution only — the element's modifiers
+apply to the collapsed placeholder — so `GetAppliedProperties` and
+`GetReferenceEdges` report nothing for the dialog itself, and the tag is cleared
+when the dialog closes.
+
+A re-render diffs element against element, not against the live control, so it
+does not undo a property you edited directly on the control unless the element's
+value for that property changed.
+
+`ReactorDiagnostics.GetReferenceEdges(control)` lists the references a control
+declares (`.LabeledBy(ref)`, `.XYFocusRight(ref)`, `.DescribedBy(...)`, a
+descriptor's `.Reference(...)`, …): the property, the AutomationId or expected
+target type you passed, and whether it has resolved. A pending edge is the case
+WinUI cannot show you: until the target mounts, the property itself
+(`XYFocusRight`, `AutomationProperties.LabeledBy`) reads null.
 
 ## Tips
 

@@ -944,6 +944,56 @@
       ]
     },
     {
+      "id": "error-boundary",
+      "name": "ErrorBoundary",
+      "category": "Patterns",
+      "description": "Catch an exception thrown while a subtree renders and show a fallback in its place.",
+      "keywords": [
+        "render exception",
+        "crash",
+        "fallback",
+        "retry",
+        "recover",
+        "rendererrorhandler",
+        "error handling"
+      ],
+      "curatedKeywords": [
+        "catch render errors",
+        "contain a component crash",
+        "fallback when a component throws",
+        "retry a failed component"
+      ],
+      "relatedControls": [
+        "Commands"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "error-boundary",
+      "docs": [
+        {
+          "title": "Advanced patterns guide",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/advanced.md"
+        }
+      ],
+      "samples": [
+        {
+          "header": "Catch, explain, and retry",
+          "language": "csharp",
+          "code": "var (attempt, setAttempt) = UseState(0);\n\nErrorBoundary(\n    // Re-rendering the boundary retries its child. The new key also guarantees\n    // a fresh instance, so no state from the failed attempt survives.\n    Component<CrashingCounter>().WithKey($\"attempt-{attempt}\"),\n    ex => VStack(8,\n        TextBlock(\"Something went wrong\").Bold().Foreground(Theme.SystemCritical),\n        TextBlock(ex.Message).Foreground(Theme.SecondaryText),\n        Button(\"Retry\", () => setAttempt(attempt + 1))\n    ).Padding(12).Background(Theme.SystemCriticalBackground).CornerRadius(8))\n\nclass CrashingCounter : Component\n{\n    public override Element Render()\n    {\n        var (count, setCount) = UseState(0);\n        if (count >= 3)\n            throw new InvalidOperationException($\"The counter refuses to go past {count - 1}.\");\n        return Button($\"Clicked {count} times\", () => setCount(count + 1));\n    }\n}"
+        },
+        {
+          "header": "A static fallback",
+          "language": "csharp",
+          "code": "var (attempt, setAttempt) = UseState(0);\n\nVStack(8,\n    ErrorBoundary(\n        Component<CrashingCounter>().WithKey($\"attempt-{attempt}\"),\n        TextBlock(\"This widget is unavailable right now.\")),\n    Button(\"Reset\", () => setAttempt(attempt + 1)))"
+        },
+        {
+          "header": "Without a boundary: RenderErrorHandler",
+          "language": "csharp",
+          "code": "// Program.cs: replace the built-in fallback for every host, before ReactorApp.Run.\nReactorApp.DefaultRenderErrorHandler = error =>\n{\n    System.Diagnostics.Debug.WriteLine(error.Exception);\n\n    // IsHostLevel: true replaces the whole window content,\n    // false fills only the failing component's slot.\n    return error.IsHostLevel\n        ? TextBlock(\"Something went wrong. Please restart the app.\")\n        : TextBlock($\"{error.ComponentName} could not be shown.\");\n};\n\n// Exceptions an ErrorBoundary catches stay with that boundary and never reach the handler.\nvar (attempt, setAttempt) = UseState(0);\n\nVStack(8,\n    // No boundary: the counter stays mounted with its crashing state, and every\n    // re-render retries it with that state, so a new key (a fresh instance) recovers it.\n    Component<CrashingCounter>().WithKey($\"attempt-{attempt}\"),\n    Button(\"Reset\", () => setAttempt(attempt + 1)))"
+        }
+      ]
+    },
+    {
       "id": "expander",
       "name": "Expander",
       "category": "Layout",
@@ -966,6 +1016,63 @@
           "header": "Direction Control",
           "language": "csharp",
           "code": "Expander(\"Expand Direction\", VStack(4,\n    TextBlock(\"This content appears based on the direction setting.\")\n), true).Direction(ExpandDirection.Up)"
+        }
+      ]
+    },
+    {
+      "id": "file-pickers",
+      "name": "File pickers",
+      "category": "System",
+      "description": "Native open, multi-select, folder, and save dialogs owned by the component's window.",
+      "keywords": [
+        "file picker",
+        "open file dialog",
+        "folder picker",
+        "save file dialog",
+        "pickfileasync",
+        "pickfolderasync",
+        "picksavefileasync",
+        "file type filter",
+        "storage pickers"
+      ],
+      "curatedKeywords": [
+        "open a file",
+        "choose a folder",
+        "save as dialog",
+        "let the user pick files"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "usings": [
+        "Microsoft.UI.Reactor.Core"
+      ],
+      "galleryRoute": "file-pickers",
+      "docs": [
+        {
+          "title": "Windows guide: Pickers",
+          "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/windows.md#pickers"
+        }
+      ],
+      "samples": [
+        {
+          "header": "Pick a file",
+          "language": "csharp",
+          "code": "var (file, setFile) = UseState(\"No file picked yet.\");\n\nButton(\"Open a text file...\", async () =>\n{\n    var picked = await PickFileAsync(new FilePickerOptions(FileTypeFilter: [\".txt\", \".md\", \".json\"]));\n    if (picked is null) { setFile(\"Cancelled.\"); return; }\n    try\n    {\n        var length = new FileInfo(picked.Path).Length;\n        setFile($\"{picked.Path} ({length:N0} bytes)\");\n    }\n    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)\n    {\n        // An async lambda passed to Button is async void: handle file-access failures here.\n        setFile($\"Failed: {ex.Message}\");\n    }\n})"
+        },
+        {
+          "header": "Pick multiple files with labelled file types",
+          "language": "csharp",
+          "code": "var (files, setFiles) = UseState(\"No files picked yet.\");\n\nButton(\"Choose images...\", async () =>\n{\n    var picked = await PickMultipleFilesAsync(new FilePickerOptions\n    {\n        Title = \"Choose images\",\n        // Ordered, labelled groups; they replace FileTypeFilter when present.\n        FileTypeChoices =\n        [\n            new(\"Images\", [\".png\", \".jpg\", \".jpeg\", \".gif\"]),\n            new(\"Icons\", [\".ico\"]),\n        ],\n    });\n    setFiles(picked.Count == 0   // cancel returns an empty list\n        ? \"Cancelled.\"\n        : string.Join(\"\\n\", picked.Select(f => Path.GetFileName(f.Path))));\n})"
+        },
+        {
+          "header": "Pick one or more folders",
+          "language": "csharp",
+          "code": "var (folders, setFolders) = UseState(\"No folder picked yet.\");\n\nHStack(8,\n    Button(\"Select a folder...\", async () =>\n    {\n        var picked = await PickFolderAsync(new FolderPickerOptions(CommitButtonText: \"Use this folder\"));\n        setFolders(picked?.Path ?? \"Cancelled.\");\n    }),\n    Button(\"Select folders...\", async () =>\n    {\n        var picked = await PickMultipleFoldersAsync(new FolderPickerOptions());\n        setFolders(picked.Count == 0 ? \"Cancelled.\" : string.Join(\"\\n\", picked.Select(f => f.Path)));\n    }))"
+        },
+        {
+          "header": "Save a file",
+          "language": "csharp",
+          "code": "var (saved, setSaved) = UseState(\"Nothing saved yet.\");\n\nButton(\"Save as...\", async () =>\n{\n    // At least one FileTypeChoice is required; the first is the default.\n    var target = await PickSaveFileAsync(new SaveFilePickerOptions(\n        [new(\"Text\", [\".txt\"]), new(\"Markdown\", [\".md\"])],\n        SuggestedFileName: \"reactor-notes\"));\n    if (target is null) { setSaved(\"Cancelled.\"); return; }\n\n    // Selecting a target is not a save: write the content yourself.\n    try\n    {\n        await File.WriteAllTextAsync(target.Path, $\"Saved from the Reactor gallery at {DateTime.Now:t}.\");\n        setSaved($\"Wrote {target.Path}\");\n    }\n    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)\n    {\n        // An async lambda passed to Button is async void: handle failures here.\n        setSaved($\"Failed: {ex.Message}\");\n    }\n})"
         }
       ]
     },
@@ -1145,7 +1252,9 @@
         "layout grid",
         "cells",
         "table layout",
-        "spanning"
+        "spanning",
+        "min max size",
+        "minmax"
       ],
       "relatedControls": [
         "StackPanel",
@@ -1165,6 +1274,11 @@
           "header": "Mixed Sizing",
           "language": "csharp",
           "code": "Grid(\n    columns: [GridSize.Px(100), GridSize.Star(), GridSize.Star(2)],\n    rows: [GridSize.Auto]\n    // 100px fixed, 1 star, 2 star proportional\n)"
+        },
+        {
+          "header": "Min & Max Track Sizes",
+          "language": "csharp",
+          "code": "var (gridWidth, setGridWidth) = UseState(420.0);\n\nVStack(8,\n    Grid(\n        // Clamp a track's computed size with MinSize / MaxSize.\n        columns: [GridSize.Star().MinSize(120), GridSize.Star(), GridSize.Star().MaxSize(100)],\n        rows: [GridSize.Auto],\n        Border(TextBlock(\"1*, min 120\")).Grid(row: 0, column: 0),\n        Border(TextBlock(\"1*\")).Grid(row: 0, column: 1),\n        Border(TextBlock(\"1*, max 100\")).Grid(row: 0, column: 2)\n    ).Width(gridWidth),\n    Slider(gridWidth, 200, 700, setGridWidth).AutomationName(\"Grid width\"))"
         }
       ]
     },
@@ -2940,7 +3054,9 @@
         "caption bar",
         "custom titlebar",
         "window chrome",
-        "draggable region"
+        "draggable region",
+        "app icon",
+        "no icon"
       ],
       "apiNamespace": "Microsoft.UI.Reactor",
       "nugetPackage": "Microsoft.UI.Reactor",
@@ -2950,6 +3066,11 @@
           "header": "Basic TitleBar",
           "language": "csharp",
           "code": "TitleBar(\"My Application\")"
+        },
+        {
+          "header": "Icon: inherited, custom, or none",
+          "language": "csharp",
+          "code": "// Program.cs: the main window's icon drives its caption, Alt-Tab, and every TitleBar in that window.\n// A secondary window inherits from its own WindowSpec.Icon instead.\nReactorApp.Run<Shell>(\"My App\", icon: WindowIcon.FromPath(\"Assets/AppIcon.ico\"));\n\nTitleBar(\"Inherits the window icon\")\nTitleBar(\"Custom icon\").Icon(new FontIconData(\"\\uE790\"))\nTitleBar(\"No icon\").NoIcon()"
         },
         {
           "header": "TitleBar with Subtitle",

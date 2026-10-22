@@ -128,11 +128,11 @@ internal static class TitleBarIconDefault
     /// ordering only matters for the directly-constructed contradictory case, where
     /// honouring the suppression is what the property says it does.
     /// </remarks>
-    internal static IconData? Project(TitleBarElement element)
+    internal static IconData? Project(TitleBarElement element, ReactorWindow? owningWindow)
     {
         if (element.SuppressIcon) return null;
         if (element.Icon is not null) return element.Icon;
-        return ResolveDefault();
+        return ResolveDefault(owningWindow);
     }
 
     /// <summary>
@@ -209,6 +209,10 @@ internal static class TitleBarIconDefault
     /// </summary>
     /// <param name="control">The mounted WinUI <c>TitleBar</c> to write to.</param>
     /// <param name="element">The element being mounted or updated.</param>
+    /// <param name="owningWindow">
+    /// The window whose host's reconciler is mounting <paramref name="control"/>, or
+    /// <c>null</c> when the content has no owning <see cref="ReactorWindow"/>.
+    /// </param>
     /// <param name="force">
     /// <c>true</c> on mount. A pooled or recycled control may carry a record left by the
     /// element that previously used it, so mount always writes rather than trusting it.
@@ -233,10 +237,11 @@ internal static class TitleBarIconDefault
     /// exactly what any descriptor prop under a setter already pays: the write lands
     /// first and the setter overwrites it immediately afterwards.</para>
     /// </remarks>
-    internal static void Apply(Microsoft.UI.Xaml.Controls.TitleBar control, TitleBarElement element, bool force)
+    internal static void Apply(
+        Microsoft.UI.Xaml.Controls.TitleBar control, TitleBarElement element, ReactorWindow? owningWindow, bool force)
     {
         var owned = OwnsIconSlot(element);
-        var projected = Project(element);
+        var projected = Project(element, owningWindow);
         if (!force && s_applied.TryGetValue(control, out var last))
         {
             // A one-shot author write — .OnMount(...) rather than .Set(...) — has nothing
@@ -508,9 +513,13 @@ internal static class TitleBarIconDefault
     /// resolvable. See the type-level remarks for precedence and the one divergence
     /// from the window chain.
     /// </summary>
-    internal static IconData? ResolveDefault()
+    /// <param name="window">
+    /// The window whose host's reconciler mounts the title bar (supplied by that reconciler,
+    /// not read from <c>ReactorApp.ActiveHostInternal</c>, which a window opened mid-render
+    /// repoints), or <c>null</c> when the content has no owning <see cref="ReactorWindow"/>.
+    /// </param>
+    internal static IconData? ResolveDefault(ReactorWindow? window)
     {
-        var window = ReactorApp.ActiveHostInternal?.OwningWindow;
         return ResolveForSpec(
             window?.Spec, window?.DeclaredIconApplied, window?.UnloadableConventionIconPath, out _);
     }

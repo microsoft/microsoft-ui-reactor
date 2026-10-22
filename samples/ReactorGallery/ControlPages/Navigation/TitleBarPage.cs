@@ -24,6 +24,28 @@ class TitleBarPage : Component
                     ).Background(Theme.LayerFill).CornerRadius(4).Height(48),
                     @"TitleBar(""My Application"")"),
 
+                SampleCard("Icon: inherited, custom, or none",
+                    VStack(8,
+                        Border(
+                            TitleBar("Inherits the window icon")
+                        ).Background(Theme.LayerFill).CornerRadius(4).Height(48),
+                        Border(
+                            TitleBar("Custom icon").Icon(new FontIconData("\uE790"))
+                        ).Background(Theme.LayerFill).CornerRadius(4).Height(48),
+                        Border(
+                            TitleBar("No icon").NoIcon()
+                        ).Background(Theme.LayerFill).CornerRadius(4).Height(48),
+                        Caption("With no .Icon(...), a TitleBar shows the window's own icon: the one passed to ReactorApp.Run(icon: ...) or WindowSpec.Icon, else Assets\\AppIcon.ico. This gallery declares its icon once in Program.cs.")
+                                                    .Foreground(Theme.SecondaryText).TextWrapping()
+                    ),
+                    @"// Program.cs: the main window's icon drives its caption, Alt-Tab, and every TitleBar in that window.
+// A secondary window inherits from its own WindowSpec.Icon instead.
+ReactorApp.Run<Shell>(""My App"", icon: WindowIcon.FromPath(""Assets/AppIcon.ico""));
+
+TitleBar(""Inherits the window icon"")
+TitleBar(""Custom icon"").Icon(new FontIconData(""\uE790""))
+TitleBar(""No icon"").NoIcon()"),
+
                 SampleCard("TitleBar with Subtitle",
                     VStack(8,
                         Border(
