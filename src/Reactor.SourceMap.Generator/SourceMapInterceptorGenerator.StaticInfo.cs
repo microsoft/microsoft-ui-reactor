@@ -452,10 +452,8 @@ public sealed partial class SourceMapInterceptorGenerator
         // source": under `dotnet watch` a project-referenced Reactor arrives as a compilation
         // reference whose symbols DO carry (foreign) syntax. Only when Reactor is the
         // compilation being generated are its in-source hooks walked like any custom hook.
-        if (!SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, renderContext.ContainingAssembly))
-            return false;
-        return method.DeclaringSyntaxReferences.IsDefaultOrEmpty
-            || !SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, compilation.Assembly);
+        return SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, renderContext.ContainingAssembly)
+            && !SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, compilation.Assembly);
     }
 
     /// <summary>CLR <c>Type.FullName</c> of a type's open definition: <c>Ns.Outer+Inner`1</c>.</summary>

@@ -423,9 +423,13 @@ public sealed class SourceMapStaticInfoGeneratorTests
     private const string InterceptorApplication = "[global::System.Runtime.CompilerServices.InterceptsLocationAttribute(";
 
     // Issue #1404: under `dotnet watch`, a project-referenced Reactor is a compilation
-    // reference whose symbols carry syntax from trees outside the app's compilation.
-    [Fact]
-    public void Hooks_ReactorAsProjectReference_HooksAreReactorOwned_AndTheGeneratorDoesNotFail()
+    // reference whose symbols carry syntax from trees outside the app's compilation. Each
+    // case runs in both shapes with ONE expectation: watch and command-line builds agree.
+    [Theory]
+    [InlineData(SourceMapTransparentGeneratorTests.SurfaceShape.ProjectReference)]
+    [InlineData(SourceMapTransparentGeneratorTests.SurfaceShape.MetadataReference)]
+    public void Hooks_ReactorAsAReference_HooksAreReactorOwned_AndTheGeneratorDoesNotFail(
+        SourceMapTransparentGeneratorTests.SurfaceShape shape)
     {
         const string code = """
             using Microsoft.UI.Reactor.Core;
@@ -446,11 +450,11 @@ public sealed class SourceMapStaticInfoGeneratorTests
             }
             """;
 
-        var (diagnostics, generated) = SourceMapTransparentGeneratorTests.Run(code, surfaceAsProjectReference: true);
+        var (diagnostics, generated) = SourceMapTransparentGeneratorTests.Run(code, surface: shape);
 
         Assert.Empty(diagnostics.Where(static d => d.Severity >= DiagnosticSeverity.Warning));
         Assert.Contains(InterceptorApplication, generated);
-        // UseMemo is Reactor's own (one slot) even though its body is visible; UseElementFocus
+        // UseMemo is Reactor's own (one slot) even when its body is visible; UseElementFocus
         // is Reactor's own too, but not one this generator counts.
         Assert.Equal(
             $"0:count@{LineOf(code, "UseState(0)")};1:latest@{LineOf(code, "UseRef(1)")};"
@@ -459,9 +463,14 @@ public sealed class SourceMapStaticInfoGeneratorTests
             Assert.Single(s_componentHooks.Matches(generated)).Groups["hooks"].Value);
     }
 
-    [Fact]
-    public void Hooks_CustomHookFromAnotherProjectsSource_IsUnknown_AndTheGeneratorDoesNotFail()
+    [Theory]
+    [InlineData(SourceMapTransparentGeneratorTests.SurfaceShape.ProjectReference)]
+    [InlineData(SourceMapTransparentGeneratorTests.SurfaceShape.MetadataReference)]
+    public void Hooks_CustomHookFromAnotherProject_IsUnknown_AndTheGeneratorDoesNotFail(
+        SourceMapTransparentGeneratorTests.SurfaceShape shape)
     {
+        // Named like a built-in single-slot hook on purpose: only a hook declared in Reactor
+        // gets that count, not every `UseMemo`.
         const string library = """
             using Microsoft.UI.Reactor.Core;
 
@@ -469,10 +478,11 @@ public sealed class SourceMapStaticInfoGeneratorTests
 
             public static class SharedHooks
             {
-                public static int UseCounter(RenderContext ctx)
+                public static int UseMemo(RenderContext ctx)
                 {
                     var (value, _) = ctx.UseState(0);
-                    return value;
+                    var (other, _) = ctx.UseState(1);
+                    return value + other;
                 }
             }
             """;
@@ -486,7 +496,7 @@ public sealed class SourceMapStaticInfoGeneratorTests
                 public static Element Build() => Memo(ctx =>
                 {
                     var a = ctx.UseRef(0);
-                    var shared = SharedHooks.UseCounter(ctx);
+                    var shared = SharedHooks.UseMemo(ctx);
                     var b = ctx.UseRef(1);
                     return TextBlock("x");
                 });
@@ -494,14 +504,13 @@ public sealed class SourceMapStaticInfoGeneratorTests
             """;
 
         var (diagnostics, generated) = SourceMapTransparentGeneratorTests.Run(
-            code, surfaceAsProjectReference: true, librarySource: library);
+            code, surface: shape, librarySource: library);
 
         Assert.Empty(diagnostics.Where(static d => d.Severity >= DiagnosticSeverity.Warning));
         Assert.Contains(InterceptorApplication, generated);
-        // Same as a command-line build, where the library has no source: its hook takes a
-        // slot, and how many is unknown.
+        // Another project's hook takes a slot, and how many is unknown.
         Assert.Equal(
-            $"0:a@{LineOf(code, "ctx.UseRef(0)")};1:shared@{LineOf(code, "SharedHooks.UseCounter(ctx)")};"
+            $"0:a@{LineOf(code, "ctx.UseRef(0)")};1:shared@{LineOf(code, "SharedHooks.UseMemo(ctx)")};"
             + $"?:b@{LineOf(code, "ctx.UseRef(1)")}",
             Assert.Single(s_functionHooks.Matches(generated)).Groups["hooks"].Value);
     }

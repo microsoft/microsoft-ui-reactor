@@ -168,20 +168,19 @@ public sealed class SourceMapTransparentGeneratorTests
     /// forms differ, a `params` slot written with the wrong type — shows up as a compile
     /// error in the emitted file rather than as a wrong string in it.</para>
     /// </summary>
-    /// <param name="surfaceAsProjectReference">Compile the stand-in surface as its own
-    /// compilation and reference it as a <see cref="CompilationReference"/> — the shape a
-    /// project-referenced Reactor takes in a workspace (<c>dotnet watch</c>) compilation,
-    /// where its symbols carry syntax from trees that are not part of the app's compilation.</param>
+    /// <param name="surface">Where the stand-in surface lives. With anything but
+    /// <see cref="SurfaceShape.InSource"/> it is its own assembly, referenced from the
+    /// probe — see <see cref="SurfaceShape"/>.</param>
     /// <param name="librarySource">Optional extra project, compiled against the surface and
-    /// referenced the same way (requires <paramref name="surfaceAsProjectReference"/>).</param>
+    /// referenced the same way (requires a referenced <paramref name="surface"/>).</param>
     internal static (ImmutableArray<Diagnostic> Diagnostics, string GeneratedSource) Run(
         string userCode,
         bool enabled = true,
         IReadOnlyDictionary<string, string>? buildProperties = null,
-        bool surfaceAsProjectReference = false,
+        SurfaceShape surface = SurfaceShape.InSource,
         string? librarySource = null)
     {
-        Assert.True(librarySource is null || surfaceAsProjectReference, "a library project needs the surface as a project");
+        Assert.True(librarySource is null || surface != SurfaceShape.InSource, "a library project needs a referenced surface");
 
         // Interceptors are opt-in per namespace; without this the emitted
         // [InterceptsLocation] attributes are CS9137 and the post-generation check below
@@ -196,11 +195,10 @@ public sealed class SourceMapTransparentGeneratorTests
         var userTree = CSharpSyntaxTree.ParseText(userCode, parseOptions, path: "User.cs");
         var references = s_references;
         SyntaxTree[] trees;
-        if (surfaceAsProjectReference)
+        if (surface != SurfaceShape.InSource)
         {
-            var surface = CSharpCompilation.Create("Microsoft.UI.Reactor", [surfaceTree], s_referencesWithoutReactor, compilationOptions);
-            AssertBinds(surface, "surface project");
-            references = s_referencesWithoutReactor.Add(surface.ToMetadataReference());
+            var surfaceProject = CSharpCompilation.Create("Microsoft.UI.Reactor", [surfaceTree], s_referencesWithoutReactor, compilationOptions);
+            references = s_referencesWithoutReactor.Add(Reference(surfaceProject, "surface project", surface));
             if (librarySource is not null)
             {
                 var library = CSharpCompilation.Create(
@@ -208,8 +206,7 @@ public sealed class SourceMapTransparentGeneratorTests
                     [CSharpSyntaxTree.ParseText(librarySource, parseOptions, path: "Library.cs")],
                     references,
                     compilationOptions);
-                AssertBinds(library, "library project");
-                references = references.Add(library.ToMetadataReference());
+                references = references.Add(Reference(library, "library project", surface));
             }
             trees = [userTree];
         }
@@ -247,10 +244,28 @@ public sealed class SourceMapTransparentGeneratorTests
         return (result.Diagnostics, generated);
     }
 
-    private static void AssertBinds(Compilation compilation, string what)
+    private static MetadataReference Reference(CSharpCompilation project, string what, SurfaceShape shape)
     {
-        var errors = compilation.GetDiagnostics().Where(static d => d.Severity == DiagnosticSeverity.Error).ToList();
+        var errors = project.GetDiagnostics().Where(static d => d.Severity == DiagnosticSeverity.Error).ToList();
         Assert.True(errors.Count == 0, $"{what} failed to compile: " + string.Join("; ", errors));
+        if (shape == SurfaceShape.ProjectReference) return project.ToMetadataReference();
+        using var image = new global::System.IO.MemoryStream();
+        var emitted = project.Emit(image);
+        Assert.True(emitted.Success, $"{what} failed to emit: " + string.Join("; ", emitted.Diagnostics));
+        return MetadataReference.CreateFromImage(image.ToArray());
+    }
+
+    /// <summary>How the probe sees the Reactor stand-in surface (and any library project).</summary>
+    public enum SurfaceShape
+    {
+        /// <summary>Compiled into the probe itself (the default for every older test).</summary>
+        InSource,
+        /// <summary>A <see cref="CompilationReference"/>: a project reference in a workspace
+        /// (<c>dotnet watch</c>) compilation, whose symbols carry syntax from trees that are
+        /// not part of the probe's compilation.</summary>
+        ProjectReference,
+        /// <summary>An emitted assembly: what a command-line build sees, with no source.</summary>
+        MetadataReference,
     }
 
     /// <summary>
