@@ -3842,7 +3842,15 @@ surface — icon, min/max size, backdrop, corner style, or placement persistence
   keeps closing a transient floating window from firing
   <code>OnPrimaryWindowClosed</code> and exiting the app.</li>
 <li><code>UseWindow()</code> returns the owning <code>ReactorWindow</code> inside a window component and
-  <code>null</code> outside one (for example tray flyouts).</li>
+  <code>null</code> outside one (for example tray flyouts and <code>ReactorHostControl</code> embeds).
+  The owner is the window whose host renders the component, including nested
+  components and virtualized rows, even while another window is the most
+  recently opened or rendered one. The other window hooks (<code>UseDpi</code>,
+  <code>UseWindowState</code>, <code>UseIsActive</code>, <code>UseClosingGuard</code>, …) resolve the same window
+  and return their "outside a window" values when there is none; there is no
+  fallback to another open window. <code>ReactorHostControl</code> content that needs its
+  hosting window can pass it explicitly (<code>UseWindowSize(window)</code>,
+  <code>UseBreakpoint(window, minWidth)</code>) or read <code>XamlRoot.RasterizationScale</code> for DPI.</li>
 </ul>
 <h2 id="sizing-resizing">Sizing &amp; resizing<a class="headerlink" href="#sizing-resizing" title="Permanent link">&para;</a></h2>
 <p>Initial <code>Width</code> / <code>Height</code> are DIPs, and both are optional — leave them unset

@@ -3307,11 +3307,11 @@ overload to make the intended scope explicit.</p>
 the host's lifetime; <code>PersistedScope.Application</code> for
 process-wide state.</p>
 <h3 id="discussion_1">Discussion<a class="headerlink" href="#discussion_1" title="Permanent link">&para;</a></h3>
-<p><code>PersistedScope.Window</code> resolves to the active host's
-<code>ReactorWindow.PersistedScope</code> when the
-host has an owning window; otherwise it falls back to the process-wide
-scope so unit-test contexts (which never construct a window) keep their
-existing semantics. Two windows of the same component class therefore
+<p><code>PersistedScope.Window</code> resolves to the
+<code>ReactorWindow.PersistedScope</code> of the window whose host
+renders this component; content without an owning window (tray flyouts,
+<code>ReactorHostControl</code>, unit-test contexts) falls back to the process-wide
+scope. Two windows of the same component class therefore
 hold independent state under <code>PersistedScope.Window</code>.
 (spec 036 §3.4 / §4.4 — closes spec 033 §7.5.)</p>
 <h2 id="featured-in">Featured in<a class="headerlink" href="#featured-in" title="Permanent link">&para;</a></h2>

@@ -3256,10 +3256,11 @@
 <p><code>method</code><br />
 <em>cref</em>: <code>M:Microsoft.UI.Reactor.Core.RenderContext.UseWindowSize</code></p>
 <h3 id="summary">Summary<a class="headerlink" href="#summary" title="Permanent link">&para;</a></h3>
-<p>Parameterless overload — resolves the current host's window via the
-active host's back-pointer and re-renders on resize. Returns
-<code>(0, 0)</code> when called outside a window (e.g. tray-flyout content);
-no implicit fallback to <code>PrimaryWindow</code>. (spec 036 §5.2 / §7.1)</p>
+<p>Parameterless overload — resolves the window whose host renders this
+component and re-renders on resize. Returns
+<code>(0, 0)</code> when the component has no owning window (tray-flyout content,
+<code>ReactorHostControl</code> embeds); no implicit fallback to <code>PrimaryWindow</code>
+or to another open window. (spec 036 §5.2 / §7.1)</p>
 <h2 id="usewindowsizewindow"><code>UseWindowSize(Window)</code><a class="headerlink" href="#usewindowsizewindow" title="Permanent link">&para;</a></h2>
 <p><code>method</code><br />
 <em>cref</em>: <code>M:Microsoft.UI.Reactor.Core.RenderContext.UseWindowSize(Microsoft.UI.Xaml.Window)</code></p>

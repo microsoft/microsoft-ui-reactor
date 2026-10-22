@@ -3257,7 +3257,8 @@
 <em>cref</em>: <code>M:Microsoft.UI.Reactor.Core.RenderContext.UseBreakpoint(System.Double)</code></p>
 <h3 id="summary">Summary<a class="headerlink" href="#summary" title="Permanent link">&para;</a></h3>
 <p>Window-inferring overload — takes only <code>minWidth</code> and
-resolves the current host's window. Returns false when called outside a
+resolves the window whose host renders this component (see the parameterless
+<a href="../UseWindowSize/#usewindowsize">UseWindowSize</a> (<a href="../../../hooks/">guide</a>)). Returns false when the component has no owning
 window. (spec 036 §5.2)</p>
 <h2 id="usebreakpointwindow-double"><code>UseBreakpoint(Window, double)</code><a class="headerlink" href="#usebreakpointwindow-double" title="Permanent link">&para;</a></h2>
 <p><code>method</code><br />

@@ -3192,9 +3192,11 @@
 <p><strong>Learn more:</strong> <a href="../../../hooks/">Hooks</a>, <a href="../../../effects/">Effects</a></p>
 </blockquote>
 <h2 id="summary">Summary<a class="headerlink" href="#summary" title="Permanent link">&para;</a></h2>
-<p>Resolves the current host's <code>ReactorWindow</code>
-(or <code>null</code> when called outside a window — e.g. tray-flyout content).
-O(1) field read; no subscription, no re-render trigger. (spec 036 §7 / §7.1)</p>
+<p>Resolves the <code>ReactorWindow</code> whose host renders this
+component — including nested components and virtualized rows realized outside the
+host's render pass — or <code>null</code> when it has no owning window (tray-flyout content,
+<code>ReactorHostControl</code> embeds). O(1) field read; no subscription, no re-render
+trigger. (spec 036 §7 / §7.1)</p>
 
 
 
