@@ -76,6 +76,61 @@ internal sealed class LT_OnMountUnmountBalanced(Harness h) : SelfTestFixtureBase
     }
 }
 
+/// <summary>.OnUnmount still fires when the control's managed wrapper was garbage
+/// collected between mount and unmount. Nothing roots a plain control's CsWinRT wrapper,
+/// so after a GC the same native control comes back under a new wrapper; an action keyed
+/// by the old wrapper was silently lost. That is what made LT_OnMountUnmountBalanced and
+/// SlotReplace_*_ChildUnmountedOnce fail only when a GC happened to land mid-fixture.</summary>
+internal sealed class LT_OnUnmountSurvivesWrapperCollection(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        int unmounts = 0;
+        WeakReference? mountedWrapper = null;
+        Action<bool>? drive = null;
+
+        var host = H.CreateHost();
+        host.Mount(ctx =>
+        {
+            var (show, set) = ctx.UseState(true);
+            drive = set;
+            return show
+                ? VStack(TextBlock("lt-gc-probe").WithKey("probe")
+                    .OnMount(fe => mountedWrapper = new WeakReference(fe))
+                    .OnUnmount(_ => unmounts++))
+                : VStack(TextBlock("lt-gc-gone").WithKey("gone"));
+        });
+        await Harness.Render();
+
+        for (int i = 0; i < 3; i++)
+        {
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+            await Harness.Render();
+        }
+
+        // Precondition, not a verdict: if the wrapper survived, this run never reached
+        // the hazard, and passing would assert nothing.
+        if (mountedWrapper is null || mountedWrapper.IsAlive)
+        {
+            H.Skip("LT_OnUnmountSurvivesWrapperCollection",
+                "the control's managed wrapper survived a forced GC, so the collected-wrapper path was not exercised");
+            return;
+        }
+
+        var live = H.FindTextContaining("lt-gc-probe");
+        Reconciler.ReactorState? liveState = null;
+        bool hadState = live is not null && Reconciler.TryGetReactorState(live, out liveState);
+        bool hadAction = liveState?.OnUnmountAction is not null;
+
+        drive!(false);
+        await Harness.WaitFor(() => H.FindTextContaining("lt-gc-probe") is null);
+        await Harness.WaitFor(() => unmounts == 1);
+        H.Check("LT_OnUnmount_FiresAfterWrapperCollected", unmounts == 1,
+            $"unmounts={unmounts}; before unmount: found={live is not null}, hadState={hadState}, hadAction={hadAction}");
+    }
+}
+
 /// <summary>Component UseEffect setup/cleanup pairs stay balanced as a child
 /// component is mounted and unmounted 40 times.</summary>
 internal sealed class LT_EffectCleanupBalanced(Harness h) : SelfTestFixtureBase(h)
