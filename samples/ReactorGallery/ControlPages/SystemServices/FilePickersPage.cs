@@ -35,8 +35,16 @@ Button(""Open a text file..."", async () =>
 {
     var picked = await PickFileAsync(new FilePickerOptions(FileTypeFilter: ["".txt"", "".md"", "".json""]));
     if (picked is null) { setFile(""Cancelled.""); return; }
-    var length = new FileInfo(picked.Path).Length;
-    setFile($""{picked.Path} ({length:N0} bytes)"");
+    try
+    {
+        var length = new FileInfo(picked.Path).Length;
+        setFile($""{picked.Path} ({length:N0} bytes)"");
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+    {
+        // An async lambda passed to Button is async void: handle file-access failures here.
+        setFile($""Failed: {ex.Message}"");
+    }
 })
 "),
 

@@ -1057,7 +1057,7 @@
         {
           "header": "Pick a file",
           "language": "csharp",
-          "code": "var (file, setFile) = UseState(\"No file picked yet.\");\n\nButton(\"Open a text file...\", async () =>\n{\n    var picked = await PickFileAsync(new FilePickerOptions(FileTypeFilter: [\".txt\", \".md\", \".json\"]));\n    if (picked is null) { setFile(\"Cancelled.\"); return; }\n    var length = new FileInfo(picked.Path).Length;\n    setFile($\"{picked.Path} ({length:N0} bytes)\");\n})"
+          "code": "var (file, setFile) = UseState(\"No file picked yet.\");\n\nButton(\"Open a text file...\", async () =>\n{\n    var picked = await PickFileAsync(new FilePickerOptions(FileTypeFilter: [\".txt\", \".md\", \".json\"]));\n    if (picked is null) { setFile(\"Cancelled.\"); return; }\n    try\n    {\n        var length = new FileInfo(picked.Path).Length;\n        setFile($\"{picked.Path} ({length:N0} bytes)\");\n    }\n    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)\n    {\n        // An async lambda passed to Button is async void: handle file-access failures here.\n        setFile($\"Failed: {ex.Message}\");\n    }\n})"
         },
         {
           "header": "Pick multiple files with labelled file types",
