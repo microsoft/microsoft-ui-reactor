@@ -12,6 +12,8 @@ class GridPage : Component
 {
     public override Element Render()
     {
+        var (gridWidth, setGridWidth) = UseState(420.0);
+
         return ScrollView(
             VStack(16,
                 PageHeader("Grid", "Arranges children in rows and columns with star/pixel/auto sizing."),
@@ -68,6 +70,33 @@ class GridPage : Component
                         rows: [GridSize.Auto]
                         // 100px fixed, 1 star, 2 star proportional
                     )
+                    """),
+
+                SampleCard("Min & Max Track Sizes",
+                    VStack(8,
+                        Grid(
+                            columns: [GridSize.Star().MinSize(120), GridSize.Star(), GridSize.Star().MaxSize(100)],
+                            rows: [GridSize.Auto],
+                            Border(TextBlock("1*, min 120").Center().Foreground("#FFFFFF").Padding(8)).Background("#C0392B").Grid(row: 0, column: 0),
+                            Border(TextBlock("1*").Center().Foreground("#FFFFFF").Padding(8)).Background("#117864").Grid(row: 0, column: 1),
+                            Border(TextBlock("1*, max 100").Center().Foreground("#FFFFFF").Padding(8)).Background("#2471A3").Grid(row: 0, column: 2)
+                        ).Width(gridWidth),
+                        TextBlock($"Grid width: {gridWidth:0}px").Foreground(Theme.SecondaryText),
+                        Slider(gridWidth, 200, 700, setGridWidth).Width(300).AutomationName("Grid width")
+                    ),
+                    """
+                    var (gridWidth, setGridWidth) = UseState(420.0);
+
+                    VStack(8,
+                        Grid(
+                            // Clamp a track's computed size with MinSize / MaxSize.
+                            columns: [GridSize.Star().MinSize(120), GridSize.Star(), GridSize.Star().MaxSize(100)],
+                            rows: [GridSize.Auto],
+                            Border(TextBlock("1*, min 120")).Grid(row: 0, column: 0),
+                            Border(TextBlock("1*")).Grid(row: 0, column: 1),
+                            Border(TextBlock("1*, max 100")).Grid(row: 0, column: 2)
+                        ).Width(gridWidth),
+                        Slider(gridWidth, 200, 700, setGridWidth).AutomationName("Grid width"))
                     """)
             ).Margin(36, 24, 36, 36)
         );

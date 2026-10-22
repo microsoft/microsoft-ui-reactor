@@ -139,6 +139,7 @@ public static class ControlRegistry
         new("PropertyGrid", "A reflection-driven editor for an object's properties.", "Data", "\uE7C3", "property-grid"),
 
         new("Commands", "Declarative Command binding with async IsExecuting tracking and debounce.", "Patterns", "\uE943", "commands"),
+        new("ErrorBoundary", "Catch an exception thrown while a subtree renders and show a fallback in its place.", "Patterns", "\uE943", "error-boundary"),
 
         // Motion
         new("Connected Animation", "Carries an element's visual from one view into another across a state change.", "Motion", "\uE945", "connected-animation"),
@@ -154,6 +155,9 @@ public static class ControlRegistry
         new("Element refs", "Refs to realized WinUI elements \u2014 imperative focus and reference props.", "Fundamentals", "\uE8F1", "element-refs"),
         new("Keyboard input", "Key events and VirtualKey, and where a Command accelerator belongs instead.", "Fundamentals", "\uE8F1", "keyboard-input"),
         new("Pointer and gestures", "Pointer and tap events plus continuous pan, pinch, and rotate gestures.", "Fundamentals", "\uE8F1", "pointer-input"),
+
+        // System
+        new("File pickers", "Native open, multi-select, folder, and save dialogs owned by the component's window.", "System", "\uE770", "file-pickers"),
     }
     .OrderBy(c => c.Title, StringComparer.OrdinalIgnoreCase)
     .ToArray();
@@ -172,6 +176,7 @@ public static class ControlRegistry
         "Motion",
         "Navigation",
         "Status and Info",
+        "System",
         "Text",
         "Patterns",
         "Design",
@@ -183,7 +188,7 @@ public static class ControlRegistry
     /// Single source of truth so the shell nav, the category header, and the home page cannot
     /// disagree about whether "9 controls" is an honest label.
     /// </summary>
-    public static string[] NonControlCategories { get; } = new[] { "Fundamentals", "Design" };
+    public static string[] NonControlCategories { get; } = new[] { "Fundamentals", "Design", "System" };
 
     public static bool IsControlCategory(string category) =>
         !NonControlCategories.Contains(category, StringComparer.Ordinal);

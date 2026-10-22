@@ -32,7 +32,7 @@ This document lists WinUI Gallery controls, features, and XAML concepts that **c
 
 ### FilePicker / FolderPicker
 **WinUI:** System file/folder picker dialogs.
-**Reactor Alternative:** **Picker methods.** Call `PickFileAsync`, `PickMultipleFilesAsync`, `PickFolderAsync`, `PickMultipleFoldersAsync`, or `PickSaveFileAsync` from UI-thread event handlers. Reactor opens the native `Microsoft.Windows.Storage.Pickers` dialog owned by the component's window and returns path-based results. These are imperative helpers, not elements in the UI tree. See [Pickers](../../docs/guide/windows.md#pickers) for options and cancellation behavior.
+**Reactor Alternative:** **Picker methods.** Call `PickFileAsync`, `PickMultipleFilesAsync`, `PickFolderAsync`, `PickMultipleFoldersAsync`, or `PickSaveFileAsync` from UI-thread event handlers. Reactor opens the native `Microsoft.Windows.Storage.Pickers` dialog owned by the component's window and returns path-based results. These are imperative helpers, not elements in the UI tree. See the **System → File pickers** gallery page, and [Pickers](../../docs/guide/windows.md#pickers) for options and cancellation behavior.
 
 ---
 
