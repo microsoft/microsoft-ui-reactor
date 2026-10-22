@@ -50,7 +50,15 @@ Caveats:
   keeps closing a transient floating window from firing
   `OnPrimaryWindowClosed` and exiting the app.
 - `UseWindow()` returns the owning `ReactorWindow` inside a window component and
-  `null` outside one (for example tray flyouts).
+  `null` outside one (for example tray flyouts and `ReactorHostControl` embeds).
+  The owner is the window whose host renders the component, including nested
+  components and virtualized rows, even while another window is the most
+  recently opened or rendered one. The other window hooks (`UseDpi`,
+  `UseWindowState`, `UseIsActive`, `UseClosingGuard`, …) resolve the same window
+  and return their "outside a window" values when there is none; there is no
+  fallback to another open window. `ReactorHostControl` content that needs its
+  hosting window can pass it explicitly (`UseWindowSize(window)`,
+  `UseBreakpoint(window, minWidth)`) or read `XamlRoot.RasterizationScale` for DPI.
 
 ## Sizing & resizing
 
@@ -553,18 +561,66 @@ Caveats:
 
 ## Pickers
 
-Picker hooks create WinUI storage pickers and initialize them with the owning
-window HWND, so the picker is modal to the correct window without app code doing
-HWND interop.
+Picker methods create `Microsoft.Windows.Storage.Pickers` dialogs owned by the
+component's window, so each dialog is modal to the right window without any
+HWND interop. They also work in elevated (administrator) apps, unlike the UWP
+`Windows.Storage.Pickers` dialogs. `Component` and `RenderContext` expose the
+same operations:
+
+| Method | Options | Returns | Cancellation |
+| --- | --- | --- | --- |
+| `PickFileAsync` | `FilePickerOptions` | `PickFileResult?` | `null` |
+| `PickMultipleFilesAsync` | `FilePickerOptions` | `IReadOnlyList<PickFileResult>` | Empty list |
+| `PickFolderAsync` | `FolderPickerOptions` | `PickFolderResult?` | `null` |
+| `PickMultipleFoldersAsync` | `FolderPickerOptions` | `IReadOnlyList<PickFolderResult>` | Empty list |
+| `PickSaveFileAsync` | `SaveFilePickerOptions` | `PickFileResult?` | `null` |
+
+Each result exposes the chosen `Path`. Open the file with `System.IO`, or with
+`StorageFile.GetFileFromPathAsync` when you need a `StorageFile`.
+
+All three option records share a suggested start location, commit-button text,
+a dialog `Title`, a `SettingsIdentifier` that Windows uses to remember dialog state,
+`SuggestedFolder` (always open there), and `SuggestedStartFolder` (open there until
+Windows remembers a location). Both folder properties take absolute paths. Open
+and folder options add an optional `ViewMode`. File options add:
+
+- `FileTypeFilter`: extensions such as `".txt"`. Null or empty shows all files.
+- `FileTypeChoices`: an ordered list of `FileTypeChoice(label, extensions)` groups.
+  When non-empty, it replaces `FileTypeFilter`.
+- `InitialFileTypeIndex`: the entry selected first. Null lets Windows choose.
+
+Save options require at least one `FileTypeChoice`. The list order is the order
+Windows shows, and the first entry is the default unless `InitialFileTypeIndex`
+says otherwise. Labels must be unique and non-blank, and every choice needs at
+least one extension. Save options also take a suggested file name,
+`DefaultFileExtension`, and `ShowOverwritePrompt` (default `true`). The save
+method only selects a target path; the caller must create and write the file.
+
+Both `Windows.Storage.Pickers` and `Microsoft.Windows.Storage.Pickers` define
+`PickerLocationId` and `PickerViewMode`, so import only the
+`Microsoft.Windows.Storage.Pickers` namespace in files that build picker options.
 
 ```csharp snippet="windows/pickers"
 ```
 
 Caveats:
 
-- Picker hooks must be called on the owning window's UI thread.
-- Reactor never accepts arbitrary HWNDs; it always uses `UseWindow().NativeWindow`.
-- Tests should inject the picker service rather than opening native dialogs.
+- These methods are not hooks: they reserve no hook slot and open a dialog when
+  called. Call them from UI-thread event handlers, not during `Render()` or in
+  `Task.Run`. Their `Pick*` names keep the hook-rules analyzer quiet in handlers.
+- The owner is the window whose host rendered the component (including nested and
+  virtualized-row components), not whichever window is active when the handler
+  runs. That is the `ReactorWindow`, the `Window` a `ReactorHost` was constructed
+  over, or for `ReactorHostControl` the window the control is loaded in when the
+  method is called (a reparented control follows its new window). Once the
+  component unmounts (including when its root is replaced or its
+  `ReactorHostControl` is disposed) or its window closes, the call throws
+  `InvalidOperationException`. It also throws while a `ReactorHostControl` is
+  unloaded (not in any window).
+- Option validation (missing or duplicate file-type choices) throws `ArgumentException`
+  before any dialog opens. Windows validates extension syntax and folder paths.
+- Picker errors propagate to the caller; cancellation is not an error.
+- Framework tests use an internal picker-service seam instead of opening modal dialogs.
 
 ## WPF / UWP migration map
 
@@ -584,7 +640,7 @@ fields that were removed and what replaced them.
 | Manual settings persistence | `.WithPersistence(id)` | Opt-in, one line. |
 | `TaskbarItemInfo` | `TaskbarItem` | Facade over progress, overlay, description, thumb buttons. |
 | WPF `JumpTask` / `JumpList` | `JumpListItem` / `JumpList` | Process-wide, not per-window; `UpdateAsync` replaces the whole list. |
-| UWP/WinUI picker HWND setup | `UseFilePickerAsync` / `UseFolderPickerAsync` | Owning HWND is wired automatically. |
+| UWP/WinUI picker HWND setup | `PickFileAsync`, `PickMultipleFilesAsync`, `PickFolderAsync`, `PickMultipleFoldersAsync`, `PickSaveFileAsync` | Owner window is wired automatically; results are paths. |
 
 ## Finding and enumerating windows
 

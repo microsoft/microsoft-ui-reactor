@@ -32,7 +32,7 @@ This document lists WinUI Gallery controls, features, and XAML concepts that **c
 
 ### FilePicker / FolderPicker
 **WinUI:** System file/folder picker dialogs.
-**Reactor Alternative:** None. Pickers are OS dialogs. Call `FileOpenPicker` / `FolderPicker` directly from button click handlers.
+**Reactor Alternative:** **Picker methods.** Call `PickFileAsync`, `PickMultipleFilesAsync`, `PickFolderAsync`, `PickMultipleFoldersAsync`, or `PickSaveFileAsync` from UI-thread event handlers. Reactor opens the native `Microsoft.Windows.Storage.Pickers` dialog owned by the component's window and returns path-based results. These are imperative helpers, not elements in the UI tree. See the **System → File pickers** gallery page, and [Pickers](../../docs/guide/windows.md#pickers) for options and cancellation behavior.
 
 ---
 
@@ -84,7 +84,7 @@ Connected animation also does not compose with an exit `.Transition(...)` on the
 | AppNotification (Toast) | ❌ Not available | Call OS API directly |
 | AppWindow (Multi-Window) | ❌ Not available | Multiple `ReactorHost` instances |
 | Clipboard APIs | ❌ Not available | Call `Clipboard` API directly |
-| FilePicker / FolderPicker | ❌ Not available | Call picker API directly |
+| FilePicker / FolderPicker | ✅ Picker helpers | Single/multiple-file open, folder, and save dialogs with automatic owning HWND |
 | XamlDirect | ❌ Not needed | Reconciler handles perf |
 | DataTemplate | ✅ Replaced | C# functions |
 | x:Bind / {Binding} | ✅ Replaced | Hooks (`UseState`) |

@@ -353,11 +353,33 @@ class LightweightStylingExample : Component
 
 ![Lightweight styling](images/styling/lightweight-styling.png)
 
-`ResourceBuilder` supports `.Set(key, ThemeRef)` for theme-reactive
-overrides, `.Set(key, string)` for hex colors, `.Set(key, double)` for
-numeric values, and `.Set(key, CornerRadius)` for corner radius.
+`ResourceBuilder.Set` has explicit overloads for `ThemeRef`, `Brush`,
+color strings, `double`, `CornerRadius`, `Thickness`, `FontWeight`,
+`FontFamily`, `bool`, and `GridLength`. Use `Thickness` for padding
+or border thickness, and `FontWeight` / `FontFamily` for typography resources.
+Literal values retain their types; `ThemeRef` overrides re-resolve on theme changes.
+
+`ResourceBuilder.SetColor(key, color)` stores a literal `Color`, not a brush.
+Use it only for Color-typed resources; brush-typed keys such as `ButtonBackground`
+need the string or `Brush` overload of `Set`. The string overload
+still parses a hex or named color into a brush; it does not store arbitrary
+text. Integer literals continue to select the `double` overload, so pass the
+value type expected by the WinUI resource key rather than relying on conversion.
 Overrides cascade to child elements through WinUI's resource dictionary
 hierarchy.
+
+Font-family resource keys require a `FontFamily` object, not a string:
+
+```csharp
+class FontFamilyResourceExample : Component
+{
+    public override Element Render() =>
+        Button("Code").Resources(r => r
+            .Set("ContentControlThemeFontFamily", new Microsoft.UI.Xaml.Media.FontFamily("Consolas")));
+}
+```
+
+Calling `Set(key, "Consolas")` would select the color-string overload instead.
 
 ## Custom resource access
 
@@ -427,6 +449,44 @@ For full brand support, set the override in both light and dark theme
 dictionaries — the values may need to be different hues to stay
 legible. Pair with `Theme.AccentText` overrides if the brand contrast
 differs from the system pair.
+
+### Editing app resources at runtime
+
+Switching Light/Dark (`.RequestedTheme(...)`, the system theme, high
+contrast) needs nothing extra. Changing what a resource key *means* at
+runtime does — replacing a brush in an app-level dictionary, merging or
+removing a brand dictionary, or a live edit from an inspector. Reactor
+caches each resolved `(key, theme)` brush and only drops that cache on a
+theme or palette change, so tell it explicitly. Keep app brushes in your
+own dictionary merged into `Application.Current.Resources` (the app
+dictionary itself is `XamlControlsResources` and rejects direct entries):
+
+```csharp
+const string AppKey = "SelfTestBrandBrush"; // the key the UI reads with Theme.Ref(AppKey)
+var resources = new ResourceDictionary { [AppKey] = new SolidColorBrush(Colors.Red) };
+Application.Current.Resources.MergedDictionaries.Add(resources);
+```
+
+Later, at runtime, change the entry and notify Reactor:
+
+```csharp
+resources[AppKey] = new SolidColorBrush(Colors.Green);
+Theme.NotifyResourcesChanged();
+```
+
+`Theme.NotifyResourcesChanged()` clears the resolution cache and
+re-renders every live host past component memoization and the skip of
+unchanged elements, so `ThemeRef` modifiers, `.Resources(...)` theme
+overrides and `ThemeRef.Resolve(...)` calls in `Render` all pick up the
+new value, memoized subtrees included. It is safe to call from any
+thread; await a host's `WaitForIdleAsync()` to observe the result.
+Mutating an existing brush's `Color` in place does not need it.
+
+A brush you resolve *eagerly* and keep is not refreshed: a
+`ThemeRef.Resolve(...)` inside a `UseMemo` or `Memo(key, ...)` factory, or a
+resolved brush stored in state, is a fixed value Reactor can't trace back
+to its key. Bind it instead (`.Foreground(Theme.Ref(key))`), or resolve it
+in `Render` outside the memo.
 
 ### Per-element theme override scope
 

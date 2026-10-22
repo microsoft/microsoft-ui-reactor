@@ -149,57 +149,6 @@ internal static class RealizationIsolationFixtures
         }
     }
 
-    // ── Window host during realization ───────────────────────────────────────
-
-    private static readonly List<ReactorHost?> s_seenHosts = new();
-
-    private sealed class HostProbeRow : Component<IndexProps>
-    {
-        public override Element Render()
-        {
-            s_seenHosts.Add(ReactorApp.ActiveHostInternal);
-            return TextBlock($"hrow{Props.Index}").Height(30);
-        }
-    }
-
-    // ActiveHostInternal is only pushed for a host's own render pass; between passes it
-    // is whichever host was constructed last, or null after any host is disposed. Rows
-    // realized while scrolling must still resolve their own host (window-scoped hooks).
-    internal sealed class RowsRealizedOutsideRender_SeeOwningHost(Harness h) : SelfTestFixtureBase(h)
-    {
-        public override async Task RunAsync()
-        {
-            s_seenHosts.Clear();
-            var host = H.CreateHost();
-            host.Mount(_ => LazyVStack<int>(Enumerable.Range(0, 300).ToList(), i => i.ToString(), (i, _) =>
-                Component<HostProbeRow, IndexProps>(new IndexProps(i))).Height(300));
-            await Harness.Render();
-
-            var previous = ReactorApp.ActiveHostInternal;
-            try
-            {
-                // What ReactorHost.Dispose() of any other window's host leaves behind.
-                ReactorApp.ActiveHostInternal = null;
-                s_seenHosts.Clear();
-                var sv = H.FindControl<ScrollViewer>(s => s.Content is ItemsRepeater)!;
-                sv.ChangeView(null, 150 * 30, null, disableAnimation: true);
-                sv.UpdateLayout();
-                (sv.XamlRoot?.Content as UIElement)?.UpdateLayout();
-
-                int total = s_seenHosts.Count;
-                int own = s_seenHosts.Count(x => ReferenceEquals(x, host));
-                H.Check("Iso_Host_RowsRealized", total > 0, $"realized={total}");
-                H.Check("Iso_Host_RowsSeeOwningHost", total > 0 && own == total, $"own={own}/{total}");
-                H.Check("Iso_Host_RestoredAfterRealization", ReactorApp.ActiveHostInternal is null);
-            }
-            finally
-            {
-                ReactorApp.ActiveHostInternal = previous;
-            }
-            await Harness.Render();
-        }
-    }
-
     // ── Nested host inside a parked row, provider removed meanwhile ──────────
 
     private sealed record NestedProps(int Outer, int Inner);

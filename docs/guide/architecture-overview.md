@@ -196,6 +196,8 @@ public UIElement GetElement(ElementFactoryGetArgs args)
                 // location follows the row that is actually live (spec 010).
                 if (reused is FrameworkElement adoptedFe)
                     Reconciler.SetElementTagIfNeeded(adoptedFe, element);
+                if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
+                    Reconciler.AdoptPublishedSource(reused, replacement);
             }
             else
             {
@@ -303,9 +305,12 @@ public UIElement? Reconcile(
             (_highlightMounted ??= new()).Clear();
             (_highlightModified ??= new()).Clear();
         }
-        // Consume the hot-reload signal exactly once per top-level pass so
-        // every component re-runs Render() even when props/deps are unchanged.
-        _forceFullRenderActive = ForceFullRenderPending;
+        // Consume the hot-reload and resource-refresh signals exactly once per
+        // top-level pass so every component re-runs Render() even when props/deps
+        // are unchanged (and, for a resource refresh, no element is skipped).
+        _resourceRefreshActive = _resourceRefreshArmed;
+        _resourceRefreshArmed = false;
+        _forceFullRenderActive = ForceFullRenderPending || _resourceRefreshActive;
         ForceFullRenderPending = false;
         _hotReloadRetryActive = HotReloadRetryPending;
         HotReloadRetryPending = false;

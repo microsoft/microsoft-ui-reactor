@@ -25,4 +25,17 @@ internal static class ReactorFeatures
     [UnconditionalSuppressMessage("AOT", "IL4000", Justification = "Custom feature switch guard for devtools reachability; see spec 051.")]
     internal static bool IsDevtoolsSupported =>
         AppContext.TryGetSwitch("Reactor.DevtoolsSupport", out var on) && on;
+
+    /// <summary>
+    /// The same <c>Reactor.DevtoolsSupport</c> switch, read once, for per-control hot paths
+    /// (inspector diagnostics publishing in the reconciler). Under JIT the tier-1 compiler
+    /// folds a static readonly value, so a Release app pays nothing per control; under
+    /// ILLink/ILC the <see cref="FeatureSwitchDefinitionAttribute"/> substitutes the getter
+    /// with the configured constant, so every <c>if (DevtoolsSupported &amp;&amp; …)</c> branch is
+    /// removed. Guard call sites with THIS property directly, not a forwarder on another
+    /// type, or that type survives trimming just to host the forwarder.
+    /// </summary>
+    [FeatureSwitchDefinition("Reactor.DevtoolsSupport")]
+    internal static bool DevtoolsSupported { get; } =
+        AppContext.TryGetSwitch("Reactor.DevtoolsSupport", out var on) && on;
 }

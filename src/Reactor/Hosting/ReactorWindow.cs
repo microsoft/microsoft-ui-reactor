@@ -290,6 +290,11 @@ public sealed partial class ReactorWindow : IDisposable
 
     internal nint Hwnd => _hwnd;
 
+    // True once teardown has started. The host is disposed first on a native close (its
+    // Window.Closed handler runs before this window's), and this window first on a direct
+    // Dispose(); component cleanups run during either, so both flags are needed.
+    internal bool IsClosingOrDisposed => _disposed || _host.IsDisposed;
+
     /// <summary>
     /// When <c>true</c>, this window is an auxiliary surface (e.g. a docking
     /// tear-off floating window) that must never be elected the application's
@@ -2451,6 +2456,11 @@ public sealed partial class ReactorWindow : IDisposable
         var guard = new ClosingGuard(canClose);
         lock (_closingGuardsLock) { _closingGuards.Add(guard); }
         return new GuardToken(this, guard);
+    }
+
+    internal int ClosingGuardCountForTests
+    {
+        get { lock (_closingGuardsLock) { return _closingGuards.Count; } }
     }
 
     private sealed class GuardToken : IDisposable

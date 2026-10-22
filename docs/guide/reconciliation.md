@@ -99,9 +99,12 @@ public UIElement? Reconcile(
             (_highlightMounted ??= new()).Clear();
             (_highlightModified ??= new()).Clear();
         }
-        // Consume the hot-reload signal exactly once per top-level pass so
-        // every component re-runs Render() even when props/deps are unchanged.
-        _forceFullRenderActive = ForceFullRenderPending;
+        // Consume the hot-reload and resource-refresh signals exactly once per
+        // top-level pass so every component re-runs Render() even when props/deps
+        // are unchanged (and, for a resource refresh, no element is skipped).
+        _resourceRefreshActive = _resourceRefreshArmed;
+        _resourceRefreshArmed = false;
+        _forceFullRenderActive = ForceFullRenderPending || _resourceRefreshActive;
         ForceFullRenderPending = false;
         _hotReloadRetryActive = HotReloadRetryPending;
         HotReloadRetryPending = false;
@@ -374,12 +377,12 @@ The descriptor adapter refreshes that live tag on both mount and update:
 
 ```csharp
 if (control is FrameworkElement fe)
-    Reconciler.SetElementTagIfNeeded(fe, typedEl);
+    Reconciler.SetElementTagIfNeeded(fe, typedEl, OwnsTeardown(control));
 ```
 
 ```csharp
 if (control is FrameworkElement fe)
-    Reconciler.SetElementTagIfNeeded(fe, typedNew);
+    Reconciler.SetElementTagIfNeeded(fe, typedNew, OwnsTeardown(control));
 ```
 
 Tagging is allocation-gated. `NeedsTag(element)` is true when the

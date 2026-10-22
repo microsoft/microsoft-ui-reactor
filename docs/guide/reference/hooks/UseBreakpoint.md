@@ -18,7 +18,8 @@ _cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseBreakpoint(System.Double)`
 ### Summary
 
 Window-inferring overload — takes only `minWidth` and
-resolves the current host's window. Returns false when called outside a
+resolves the window whose host renders this component (see the parameterless
+[UseWindowSize](UseWindowSize.md#usewindowsize) ([guide](../../hooks.md))). Returns false when the component has no owning
 window. (spec 036 §5.2)
 
 ## `UseBreakpoint(Window, double)`

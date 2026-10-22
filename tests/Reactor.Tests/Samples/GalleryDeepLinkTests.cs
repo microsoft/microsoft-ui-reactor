@@ -249,6 +249,19 @@ public sealed class GalleryDeepLinkTests
         }
     }
 
+    /// <summary>
+    /// The shell builds each nav group from <c>ControlRegistry.Categories</c> and then filters
+    /// <c>All</c> by category, so a control whose category is missing from that list (a typo,
+    /// or a new category never added to it) silently drops out of the navigation tree while
+    /// search and deep links still reach it.
+    /// </summary>
+    [Fact]
+    public void EveryControlCategory_IsListedInCategories()
+    {
+        Assert.NotEmpty(ControlRegistry.All);
+        Assert.All(ControlRegistry.All, c => Assert.Contains(c.Category, ControlRegistry.Categories));
+    }
+
     [Fact]
     public void CategorySlug_IsLowercaseAndHyphenated()
     {

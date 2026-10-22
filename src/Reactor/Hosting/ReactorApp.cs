@@ -878,6 +878,24 @@ public static partial class ReactorApp
     }
 
     /// <summary>
+    /// The open <see cref="ReactorWindow"/> whose content tree <paramref name="root"/> belongs
+    /// to, matched by the hosting <c>AppWindow</c> id; <c>null</c> for content hosted by a plain
+    /// WinUI <c>Window</c>, a closing window, or an unloaded element. (issue #1396)
+    /// </summary>
+    internal static ReactorWindow? FindWindowForXamlRoot(XamlRoot? root)
+    {
+        if (root?.ContentIslandEnvironment is not { } environment) return null;
+        var id = environment.AppWindowId;
+        var snapshot = Windows;
+        for (int i = 0; i < snapshot.Count; i++)
+        {
+            var w = snapshot[i];
+            if (!w.IsClosingOrDisposed && w.AppWindow.Id == id) return w;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Exit the process. UI-thread only. With <paramref name="exitCode"/> set
     /// to its default (<c>0</c>), routes through
     /// <see cref="Application.Exit"/> so WinUI gets a clean unwind. With a

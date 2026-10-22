@@ -22,6 +22,7 @@ class GalleryShell : Component
         ["Menus and Toolbars"] = "\uE700",
         ["Navigation"] = "\uE8B0",
         ["Status and Info"] = "\uE946",
+        ["System"] = "\uE770",
         ["Text"] = "\uE8D2",
         ["Patterns"] = "\uE943",
         ["Styles"] = "\uE790",
@@ -94,8 +95,8 @@ class GalleryShell : Component
 
         var nonControlCategories = new HashSet<string>(ControlRegistry.NonControlCategories, StringComparer.Ordinal);
 
-        // Design and Fundamentals are not control categories — they sit above the "Controls"
-        // header as their own top-level entries rather than inside it.
+        // Design, Fundamentals and System are not control categories — they sit above the
+        // "Controls" header as their own top-level entries rather than inside it.
         NavigationViewItemData CategoryNavItem(string category, string glyph) =>
             NavItem(category, tag: GalleryRoutes.CategorySlug(category)) with
             {
@@ -116,6 +117,7 @@ class GalleryShell : Component
             NavItem("Home", tag: GalleryRoutes.HomeTag) with { IconElement = FontIcon("\uE80F") },
             CategoryNavItem("Fundamentals", "\uE8F1"),
             CategoryNavItem("Design", "\uE790"),
+            CategoryNavItem("System", "\uE770"),
             NavItemHeader("Controls"),
         }
         .Concat(controlNavItems)
@@ -164,8 +166,7 @@ class GalleryShell : Component
 
             (TitleBar("Reactor WinUI Gallery") with
             {
-                Icon = new ImageIconData(new Uri(global::System.IO.Path.Combine(
-                    global::System.AppContext.BaseDirectory, "Assets", "GalleryIcon.ico"))),
+                // No Icon: the title bar inherits the window icon declared in Program.cs.
                 Content = HStack(8,
                     AutoSuggestBox(searchQuery, setSearchQuery)
                         .Width(320)

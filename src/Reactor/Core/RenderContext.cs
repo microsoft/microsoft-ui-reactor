@@ -16,6 +16,27 @@ public sealed class RenderContext
     private ContextScope? _contextScope;
     private int _uiThreadId;
 
+    // The host that renders this context, supplied by that host's reconciler.
+    // Window hooks and picker calls read it instead of the process-wide
+    // ReactorApp.ActiveHostInternal: that names whichever host rendered or was constructed
+    // most recently (a window opened mid-render overwrites it), is not scoped for
+    // virtualized-row renders or ReactorHostControl, and is null after any host is disposed.
+    private IContentOwner? _owner;
+    // True once an owner was released by unmount or root retirement, so a picker call from a
+    // retained delegate can say so instead of reporting a context that never rendered.
+    private bool _ownerReleased;
+
+    /// <summary>
+    /// The <see cref="Microsoft.UI.Reactor.ReactorWindow"/> whose host renders this context, as
+    /// recorded by that host's reconciler at the last <c>BeginRender</c>; <c>null</c> when the
+    /// content has no owning <c>ReactorWindow</c> (tray flyout, <c>ReactorHostControl</c>, a
+    /// <c>ReactorHost</c> constructed over a raw <c>Window</c>) or after unmount. Read by the window
+    /// hooks during render. Deliberately no fallback to <c>ReactorApp.ActiveHostInternal</c>, which
+    /// would name an unrelated host there. The pickers instead resolve a window id from the owner
+    /// itself, so they also work in content without a <c>ReactorWindow</c>.
+    /// </summary>
+    internal Microsoft.UI.Reactor.ReactorWindow? OwningReactorWindow => _owner?.ReactorWindow;
+
     /// <summary>
     /// Time source used by time-based hooks (currently <see cref="UseCommand(Command)"/>'s
     /// <see cref="Command.DebounceMs"/> window). Defaults to <see cref="TimeProvider.System"/>;
@@ -24,18 +45,28 @@ public sealed class RenderContext
     internal global::System.TimeProvider TimeProvider { get; set; } = global::System.TimeProvider.System;
 
     internal void BeginRender(Action requestRerender)
+        => BeginRender(requestRerender, owner: null);
+
+    internal void BeginRender(Action requestRerender, IContentOwner? owner)
     {
         _hookIndex = 0;
         _requestRerender = requestRerender;
         _uiThreadId = Environment.CurrentManagedThreadId;
+        _owner = owner;
+        _ownerReleased = false;
     }
 
     internal void BeginRender(Action requestRerender, ContextScope contextScope)
+        => BeginRender(requestRerender, contextScope, owner: null);
+
+    internal void BeginRender(Action requestRerender, ContextScope contextScope, IContentOwner? owner)
     {
         _hookIndex = 0;
         _requestRerender = requestRerender;
         _contextScope = contextScope;
         _uiThreadId = Environment.CurrentManagedThreadId;
+        _owner = owner;
+        _ownerReleased = false;
     }
 
     /// <summary>
@@ -835,11 +866,11 @@ public sealed class RenderContext
     /// process-wide state.
     /// </summary>
     /// <remarks>
-    /// <see cref="PersistedScope.Window"/> resolves to the active host's
-    /// <see cref="Microsoft.UI.Reactor.ReactorWindow.PersistedScope"/> when the
-    /// host has an owning window; otherwise it falls back to the process-wide
-    /// scope so unit-test contexts (which never construct a window) keep their
-    /// existing semantics. Two windows of the same component class therefore
+    /// <see cref="PersistedScope.Window"/> resolves to the
+    /// <see cref="Microsoft.UI.Reactor.ReactorWindow.PersistedScope"/> of the window whose host
+    /// renders this component; content without an owning window (tray flyouts,
+    /// <c>ReactorHostControl</c>, unit-test contexts) falls back to the process-wide
+    /// scope. Two windows of the same component class therefore
     /// hold independent state under <see cref="PersistedScope.Window"/>.
     /// (spec 036 §3.4 / §4.4 — closes spec 033 §7.5.)
     /// </remarks>
@@ -1199,6 +1230,10 @@ public sealed class RenderContext
                 "Hooks must be called in the same order every render.");
         _hookIndex++;
 
+        // Refreshed every render, like LastValue: a stable slot can be handed a different
+        // Context<T> instance, and readers (memo change detection, diagnostics) must see the
+        // one this render actually read.
+        hook.Context = context;
         var value = _contextScope is not null
             ? _contextScope.Read(context)
             : context.DefaultValue;
@@ -1899,14 +1934,15 @@ public sealed class RenderContext
     }
 
     /// <summary>
-    /// Parameterless overload — resolves the current host's window via the
-    /// active host's back-pointer and re-renders on resize. Returns
-    /// <c>(0, 0)</c> when called outside a window (e.g. tray-flyout content);
-    /// no implicit fallback to <c>PrimaryWindow</c>. (spec 036 §5.2 / §7.1)
+    /// Parameterless overload — resolves the window whose host renders this
+    /// component and re-renders on resize. Returns
+    /// <c>(0, 0)</c> when the component has no owning window (tray-flyout content,
+    /// <c>ReactorHostControl</c> embeds); no implicit fallback to <c>PrimaryWindow</c>
+    /// or to another open window. (spec 036 §5.2 / §7.1)
     /// </summary>
     public (double Width, double Height) UseWindowSize()
     {
-        var hostWindow = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        var hostWindow = OwningReactorWindow;
         if (hostWindow is null)
         {
             // Reserve the same hook slots as the live branch (UseState +
@@ -1921,12 +1957,14 @@ public sealed class RenderContext
     }
 
     /// <summary>
-    /// Resolves the current host's <see cref="Microsoft.UI.Reactor.ReactorWindow"/>
-    /// (or <c>null</c> when called outside a window — e.g. tray-flyout content).
-    /// O(1) field read; no subscription, no re-render trigger. (spec 036 §7 / §7.1)
+    /// Resolves the <see cref="Microsoft.UI.Reactor.ReactorWindow"/> whose host renders this
+    /// component — including nested components and virtualized rows realized outside the
+    /// host's render pass — or <c>null</c> when it has no owning window (tray-flyout content,
+    /// <c>ReactorHostControl</c> embeds). O(1) field read; no subscription, no re-render
+    /// trigger. (spec 036 §7 / §7.1)
     /// </summary>
     public Microsoft.UI.Reactor.ReactorWindow? UseWindow()
-        => Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        => OwningReactorWindow;
 
     /// <summary>
     /// Subscribes to the host window's <c>PositionChanged</c> event and re-renders
@@ -1934,7 +1972,7 @@ public sealed class RenderContext
     /// </summary>
     public (double X, double Y) UseWindowPosition()
     {
-        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        var win = OwningReactorWindow;
         if (win is null)
         {
             _ = UseState((0.0, 0.0));
@@ -1959,7 +1997,7 @@ public sealed class RenderContext
     /// </summary>
     public bool UseIsCovered()
     {
-        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        var win = OwningReactorWindow;
         if (win is null)
         {
             _ = UseState(false);
@@ -2003,7 +2041,7 @@ public sealed class RenderContext
     /// </summary>
     public void UseWindowAspectRatio(double? widthOverHeight)
     {
-        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        var win = OwningReactorWindow;
         UseEffect(() =>
         {
             if (win is null) return () => { };
@@ -2027,42 +2065,90 @@ public sealed class RenderContext
     /// </remarks>
     public Action UseWindowDragMove()
     {
-        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        var win = OwningReactorWindow;
         return UseMemo<Action>(() => win is null ? static () => { } : win.BeginDragMove, win!);
     }
 
     internal static IPickerService PickerService { get; set; } = new DefaultPickerService();
 
-    /// <summary>
-    /// Opens a file picker initialized with the owning window HWND. Must be called on the UI thread.
-    /// </summary>
-    public Task<global::Windows.Storage.StorageFile?> UseFilePickerAsync(FilePickerOptions options)
+    /// <summary>Opens a single-file picker owned by this component's window.</summary>
+    /// <remarks>
+    /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
+    /// whose host renders this component (for ReactorHostControl, the window it is loaded in). Throws <see cref="InvalidOperationException"/> once the component unmounts, its window closes or its host is disposed, or while its ReactorHostControl is not loaded. Cancellation returns null.
+    /// </remarks>
+    public Task<Microsoft.Windows.Storage.Pickers.PickFileResult?> PickFileAsync(FilePickerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow
-            ?? throw new InvalidOperationException("UseFilePickerAsync requires an owning ReactorWindow.");
-        EnsurePickerOnUiThread(win, nameof(UseFilePickerAsync));
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(win.NativeWindow);
-        return PickerService.PickFileAsync(hwnd, options);
+        PickerOptionsValidation.Validate(options);
+        var owner = GetPickerOwner(nameof(PickFileAsync));
+        return PickerService.PickFileAsync(owner, options);
     }
 
-    /// <summary>
-    /// Opens a folder picker initialized with the owning window HWND. Must be called on the UI thread.
-    /// </summary>
-    public Task<global::Windows.Storage.StorageFolder?> UseFolderPickerAsync(FolderPickerOptions options)
+    /// <summary>Opens a multiple-file picker owned by this component's window.</summary>
+    /// <remarks>
+    /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
+    /// whose host renders this component (for ReactorHostControl, the window it is loaded in). Throws <see cref="InvalidOperationException"/> once the component unmounts, its window closes or its host is disposed, or while its ReactorHostControl is not loaded. Cancellation returns an empty list.
+    /// </remarks>
+    public Task<IReadOnlyList<Microsoft.Windows.Storage.Pickers.PickFileResult>> PickMultipleFilesAsync(FilePickerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow
-            ?? throw new InvalidOperationException("UseFolderPickerAsync requires an owning ReactorWindow.");
-        EnsurePickerOnUiThread(win, nameof(UseFolderPickerAsync));
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(win.NativeWindow);
-        return PickerService.PickFolderAsync(hwnd, options);
+        PickerOptionsValidation.Validate(options);
+        var owner = GetPickerOwner(nameof(PickMultipleFilesAsync));
+        return PickerService.PickMultipleFilesAsync(owner, options);
     }
 
-    private static void EnsurePickerOnUiThread(Microsoft.UI.Reactor.ReactorWindow win, string hookName)
+    /// <summary>Opens a single-folder picker owned by this component's window.</summary>
+    /// <remarks>
+    /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
+    /// whose host renders this component (for ReactorHostControl, the window it is loaded in). Throws <see cref="InvalidOperationException"/> once the component unmounts, its window closes or its host is disposed, or while its ReactorHostControl is not loaded. Cancellation returns null.
+    /// </remarks>
+    public Task<Microsoft.Windows.Storage.Pickers.PickFolderResult?> PickFolderAsync(FolderPickerOptions options)
     {
-        if (!win.NativeWindow.DispatcherQueue.HasThreadAccess)
-            throw new InvalidOperationException($"{hookName} must be called on the owning window's UI thread.");
+        ArgumentNullException.ThrowIfNull(options);
+        var owner = GetPickerOwner(nameof(PickFolderAsync));
+        return PickerService.PickFolderAsync(owner, options);
+    }
+
+    /// <summary>Opens a multiple-folder picker owned by this component's window.</summary>
+    /// <remarks>
+    /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
+    /// whose host renders this component (for ReactorHostControl, the window it is loaded in). Throws <see cref="InvalidOperationException"/> once the component unmounts, its window closes or its host is disposed, or while its ReactorHostControl is not loaded. Cancellation returns an empty list.
+    /// </remarks>
+    public Task<IReadOnlyList<Microsoft.Windows.Storage.Pickers.PickFolderResult>> PickMultipleFoldersAsync(FolderPickerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var owner = GetPickerOwner(nameof(PickMultipleFoldersAsync));
+        return PickerService.PickMultipleFoldersAsync(owner, options);
+    }
+
+    /// <summary>Opens a save-file picker owned by this component's window.</summary>
+    /// <remarks>
+    /// Not a hook: call from a UI-thread event handler, not during Render. The owner is the window
+    /// whose host renders this component (for ReactorHostControl, the window it is loaded in). Throws <see cref="InvalidOperationException"/> once the component unmounts, its window closes or its host is disposed, or while its ReactorHostControl is not loaded. Cancellation returns null. Selecting a target does not
+    /// create or write the file; that is the caller's responsibility.
+    /// </remarks>
+    public Task<Microsoft.Windows.Storage.Pickers.PickFileResult?> PickSaveFileAsync(SaveFilePickerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        PickerOptionsValidation.Validate(options);
+        var owner = GetPickerOwner(nameof(PickSaveFileAsync));
+        return PickerService.PickSaveFileAsync(owner, options);
+    }
+
+    private Microsoft.UI.WindowId GetPickerOwner(string operation)
+    {
+        var owner = _owner ?? throw new InvalidOperationException(_ownerReleased
+            ? $"{operation} was called from a component that is no longer mounted."
+            : $"{operation} requires a component rendered by a Reactor host (a ReactorWindow, ReactorHostControl or ReactorHost).");
+        return owner.TryGetWindowId(out var id) switch
+        {
+            ContentOwnerStatus.Available => id,
+            ContentOwnerStatus.Closed => throw new InvalidOperationException(
+                $"{operation} was called after the component's window closed or its host was disposed."),
+            ContentOwnerStatus.Detached => throw new InvalidOperationException(
+                $"{operation} was called while the component's ReactorHostControl is not loaded in a window."),
+            _ => throw new InvalidOperationException($"{operation} must be called on the owning window's UI thread."),
+        };
     }
 
     /// <summary>
@@ -2072,8 +2158,15 @@ public sealed class RenderContext
     /// </summary>
     public Microsoft.UI.Reactor.WindowState UseWindowState()
     {
-        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
-        if (win is null) { _ = UseState(Microsoft.UI.Reactor.WindowState.Normal); return Microsoft.UI.Reactor.WindowState.Normal; }
+        var win = OwningReactorWindow;
+        if (win is null)
+        {
+            // Same slots as the live branch (UseState + UseEffect) so a context can cross the
+            // no-window ↔ window transition without a hook-order mismatch.
+            _ = UseState(Microsoft.UI.Reactor.WindowState.Normal);
+            UseEffect(() => { /* no-op */ }, this);
+            return Microsoft.UI.Reactor.WindowState.Normal;
+        }
         var (state, setState) = UseState(win.State);
         UseEffect(() =>
         {
@@ -2091,8 +2184,13 @@ public sealed class RenderContext
     /// </summary>
     public bool UseIsActive()
     {
-        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
-        if (win is null) { _ = UseState(true); return true; }
+        var win = OwningReactorWindow;
+        if (win is null)
+        {
+            _ = UseState(true);
+            UseEffect(() => { /* no-op */ }, this);
+            return true;
+        }
         var (active, setActive) = UseState(win.IsActive);
         UseEffect(() =>
         {
@@ -2119,7 +2217,7 @@ public sealed class RenderContext
     public void UseClosingGuard(Func<bool> canClose)
     {
         ArgumentNullException.ThrowIfNull(canClose);
-        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        var win = OwningReactorWindow;
         if (win is null) { UseEffect(() => { /* no-op */ }, canClose); return; }
         UseEffect(() =>
         {
@@ -2135,10 +2233,11 @@ public sealed class RenderContext
     /// </summary>
     public uint UseDpi()
     {
-        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        var win = OwningReactorWindow;
         if (win is null)
         {
             _ = UseState((uint)0);
+            UseEffect(() => { /* no-op */ }, this);
             return DpiHelpers.GetSystemDpiSafe();
         }
 
@@ -2368,7 +2467,8 @@ public sealed class RenderContext
 
     /// <summary>
     /// Window-inferring overload — takes only <paramref name="minWidth"/> and
-    /// resolves the current host's window. Returns false when called outside a
+    /// resolves the window whose host renders this component (see the parameterless
+    /// <see cref="UseWindowSize()"/>). Returns false when the component has no owning
     /// window. (spec 036 §5.2)
     /// </summary>
     public bool UseBreakpoint(double minWidth)
@@ -2421,6 +2521,13 @@ public sealed class RenderContext
 
     private void RunCleanupsCore(Action<Exception>? onCleanupError)
     {
+        // Cleanups run when this context unmounts or is rolled back (nested components
+        // included), so it no longer renders into its window: a retained delegate must not
+        // open a picker over it. Cleared first so a throwing cleanup cannot skip it; a
+        // context that renders again (hot-reload reset) re-records it in BeginRender.
+        _ownerReleased |= _owner is not null;
+        _owner = null;
+
         // Phase 1: Run effect cleanups. Drain BOTH the committed cleanup and any
         // staged-but-not-yet-flushed cleanup: when a render changes an effect's
         // deps it moves the old cleanup into PendingCleanup (to run at the next
@@ -2515,6 +2622,8 @@ public sealed class RenderContext
         ClearHookState();
         _requestRerender = null;
         _contextScope = null;
+        _ownerReleased |= _owner is not null;
+        _owner = null;
     }
 
     /// <summary>
@@ -2624,70 +2733,76 @@ public sealed class RenderContext
     /// we have access; devtools code consumes the boxed values and does the
     /// JSON shaping. Must be called on the UI dispatcher.
     /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "SnapshotHooks uses reflection on internal hook state types.")]
-    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "SnapshotHooks uses reflection on internal hook state types.")]
     internal IReadOnlyList<HookSnapshot> SnapshotHooks()
     {
+        // Built on the cells' diagnostic members (no reflection): the raw value keeps the
+        // shape reactor.state has always reported (a ref hook's Ref<T> box, a reducer as useState).
         var list = new List<HookSnapshot>(_hooks.Count);
         for (int i = 0; i < _hooks.Count; i++)
         {
             var h = _hooks[i];
-            var t = h.GetType();
-            string hookName;
-            Type? valueType = null;
-            object? value = null;
-
-            if (t.IsGenericType)
+            var kind = h.DiagnosticKind;
+            string hookName = kind switch
             {
-                var def = t.GetGenericTypeDefinition();
-                if (def == typeof(ValueHookState<>))
-                {
-                    valueType = t.GetGenericArguments()[0];
-                    value = t.GetField("Value")!.GetValue(h);
-                    // UseRef uses the same cell, but its value is a Ref<T>.
-                    hookName = valueType.IsGenericType && valueType.GetGenericTypeDefinition() == typeof(Ref<>)
+                // reactor.state has always named a value cell by its stored type: a Ref<T> is "useRef".
+                HookKind.State or HookKind.Reducer or HookKind.Ref =>
+                    h.DiagnosticRawValueType is { IsGenericType: true } raw && raw.GetGenericTypeDefinition() == typeof(Ref<>)
                         ? "useRef"
-                        : "useState";
-                }
-                else if (def == typeof(MemoHookState<>))
-                {
-                    valueType = t.GetGenericArguments()[0];
-                    value = t.GetField("Value")!.GetValue(h);
-                    hookName = "useMemo";
-                }
-                else if (def == typeof(PersistedHookState<>))
-                {
-                    valueType = t.GetGenericArguments()[0];
-                    value = t.GetField("Value")!.GetValue(h);
-                    hookName = "usePersisted";
-                }
-                else
-                {
-                    hookName = t.Name;
-                }
-            }
-            else if (h is EffectHookState)
-            {
-                hookName = "useEffect";
-            }
-            else if (h is ContextHookState ch)
-            {
-                hookName = "useContext";
-                value = ch.LastValue;
-                valueType = value?.GetType();
-            }
-            else if (h is NavigationLifecycleHookState)
-            {
-                hookName = "useNavigationLifecycle";
-            }
-            else
-            {
-                hookName = t.Name;
-            }
-
+                        : "useState",
+                HookKind.Memo => "useMemo",
+                HookKind.Persisted => "usePersisted",
+                HookKind.Effect => "useEffect",
+                HookKind.Context => "useContext",
+                HookKind.NavigationLifecycle => "useNavigationLifecycle",
+                _ => h.GetType().Name,
+            };
+            var value = h.DiagnosticRawValue;
+            var valueType = kind == HookKind.Context ? value?.GetType() : h.DiagnosticRawValueType;
             list.Add(new HookSnapshot(i, hookName, valueType, value, h.Migrated));
         }
         return list;
+    }
+
+    // ── Diagnostics (ReactorDiagnostics.Components) ──────────────────
+    // Read/write seams for out-of-process inspectors. Pure on-demand: nothing
+    // here runs during a render, so apps that never inspect pay nothing.
+
+    internal int DiagnosticHookCount => _hooks.Count;
+
+    internal HookState DiagnosticHookAt(int index) => _hooks[index];
+
+    /// <summary>
+    /// True when the caller is on the thread that last rendered this context, or
+    /// the context has never rendered (a headless/test context, where there is no
+    /// thread to be affine to yet).
+    /// </summary>
+    internal bool IsOnRenderThread =>
+        _requestRerender is null || Environment.CurrentManagedThreadId == _uiThreadId;
+
+    /// <summary>
+    /// Writes a hook cell by index and, when the value changed, requests a
+    /// re-render through the same callback the hook's own setter uses — so the
+    /// owning component (and its ancestors, via the SelfTriggered chain) re-render
+    /// exactly as if the app had called the setter.
+    /// </summary>
+    internal bool TrySetHookValueForDiagnostics(int index, object? value)
+    {
+        if ((uint)index >= (uint)_hooks.Count) return false;
+        if (!_hooks[index].TrySetDiagnosticValue(value, out bool changed)) return false;
+        if (changed) _requestRerender?.Invoke();
+        return true;
+    }
+
+    /// <summary>
+    /// Requests a re-render of the owning component through its own rerender
+    /// callback. Returns false when the context has never rendered.
+    /// </summary>
+    internal bool RequestRerenderForDiagnostics()
+    {
+        var rerender = _requestRerender;
+        if (rerender is null) return false;
+        rerender();
+        return true;
     }
 
     internal abstract class HookState
@@ -2697,10 +2812,108 @@ public sealed class RenderContext
         // pass; surfaced by SnapshotHooks -> reactor.state. Reset to false at
         // the start of every hot-reload pass so it reflects only that pass.
         public bool Migrated;
+
+        // Diagnostics read/write surface (ReactorDiagnostics.Components). Virtual
+        // dispatch on the cell keeps the generic T in scope, so inspecting or
+        // writing a hook needs no reflection and stays trim/AOT-safe. Never
+        // touched by the render path.
+        internal virtual HookKind DiagnosticKind => HookKind.Unknown;
+        internal virtual Type? DiagnosticValueType => null;
+        internal virtual object? DiagnosticValue => null;
+        // The cell's stored value as-is (a ref cell's Ref<T> box rather than its Current), for SnapshotHooks.
+        internal virtual object? DiagnosticRawValue => DiagnosticValue;
+        internal virtual Type? DiagnosticRawValueType => DiagnosticValueType;
+        internal virtual bool DiagnosticCanSet => false;
+
+        /// <summary>
+        /// Writes <paramref name="value"/> into the cell when it is assignable to the
+        /// cell's value type. <paramref name="changed"/> reports whether the stored
+        /// value differs under <see cref="EqualityComparer{T}.Default"/> — the same
+        /// gate the hook's own setter uses before requesting a re-render.
+        /// </summary>
+        internal virtual bool TrySetDiagnosticValue(object? value, out bool changed)
+        {
+            changed = false;
+            return false;
+        }
+
+        private protected static bool TryUnbox<TValue>(object? value, out TValue result)
+        {
+            if (value is TValue typed)
+            {
+                result = typed;
+                return true;
+            }
+            // `null` is assignable to reference types and Nullable<T>, which the
+            // `is` pattern above rejects.
+            if (value is null && default(TValue) is null)
+            {
+                result = default!;
+                return true;
+            }
+            result = default!;
+            return false;
+        }
     }
 
     private class ValueHookState<T> : HookState
     {
+        private static bool HoldsRef => typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Ref<>);
+
+        // Keyed on origin, not only on T: UseRef never sets SetterKind, while UseState always
+        // does, so a UseState(new Ref<int>()) cell stays an ordinary, settable state hook.
+        internal override HookKind DiagnosticKind =>
+            SetterKind is SetterKindReducer or SetterKindDispatch
+                ? HookKind.Reducer
+                : SetterKind == 0 && HoldsRef
+                    ? HookKind.Ref
+                    : HookKind.State;
+        // A ref cell reports what it points at (Ref<T>.Current, typed T), not the Ref box.
+        internal override Type? DiagnosticValueType => DiagnosticKind == HookKind.Ref && Value is IRefValue r ? r.ValueType : typeof(T);
+        // SnapshotHooks keeps reporting the stored value as-is (the Ref<T> box for a ref).
+        internal override Type? DiagnosticRawValueType => typeof(T);
+        internal override object? DiagnosticRawValue
+        {
+            get
+            {
+                if (!ThreadSafe) return Value;
+                lock (Lock!) return Value;
+            }
+        }
+        internal override object? DiagnosticValue
+        {
+            get
+            {
+                object? v;
+                if (!ThreadSafe) v = Value;
+                else lock (Lock!) v = Value;
+                return DiagnosticKind == HookKind.Ref && v is IRefValue r ? r.CurrentBoxed : v;
+            }
+        }
+        // A Ref is mutated through Ref<T>.Current and never schedules a render,
+        // so replacing the cell's Ref instance would silently detach the author's
+        // captured reference. Only state/reducer cells are writable.
+        internal override bool DiagnosticCanSet => DiagnosticKind != HookKind.Ref;
+        internal override bool TrySetDiagnosticValue(object? value, out bool changed)
+        {
+            changed = false;
+            if (!DiagnosticCanSet || !TryUnbox<T>(value, out var typed)) return false;
+            if (ThreadSafe)
+            {
+                lock (Lock!)
+                {
+                    changed = !EqualityComparer<T>.Default.Equals(Value, typed);
+                    if (changed) Value = typed;
+                }
+            }
+            else
+            {
+                changed = !EqualityComparer<T>.Default.Equals(Value, typed);
+                if (changed) Value = typed;
+            }
+            return true;
+        }
+
         public T Value;
         public readonly bool ThreadSafe;
         // Issue #659 (#42): only allocate the lock when threadSafe was requested.
@@ -2732,6 +2945,7 @@ public sealed class RenderContext
 
     private class EffectHookState : HookState
     {
+        internal override HookKind DiagnosticKind => HookKind.Effect;
         public object[]? Dependencies;
         public Action? Effect;
         public Func<Action>? EffectWithCleanup;
@@ -2742,18 +2956,25 @@ public sealed class RenderContext
 
     private class MemoHookState<T> : HookState
     {
+        internal override HookKind DiagnosticKind => HookKind.Memo;
+        internal override Type? DiagnosticValueType => typeof(T);
+        internal override object? DiagnosticValue => Value;
         public T Value = default!;
         public object[]? Dependencies;
     }
 
     internal class ContextHookState : HookState
     {
+        internal override HookKind DiagnosticKind => HookKind.Context;
+        internal override Type? DiagnosticValueType => Context?.ValueType;
+        internal override object? DiagnosticValue => LastValue;
         public ContextBase Context = default!;
         public object? LastValue;
     }
 
     internal class NavigationLifecycleHookState : HookState
     {
+        internal override HookKind DiagnosticKind => HookKind.NavigationLifecycle;
         public Action<Navigation.NavigatingToContext>? OnNavigatingTo;
         public Action<Navigation.NavigatedToContext>? OnNavigatedTo;
         public Action<Navigation.NavigatingFromContext>? OnNavigatingFrom;
@@ -2773,6 +2994,18 @@ public sealed class RenderContext
 
     private class PersistedHookState<T> : PersistedHookStateBase
     {
+        internal override HookKind DiagnosticKind => HookKind.Persisted;
+        internal override Type? DiagnosticValueType => typeof(T);
+        internal override object? DiagnosticValue => Value;
+        internal override bool DiagnosticCanSet => true;
+        internal override bool TrySetDiagnosticValue(object? value, out bool changed)
+        {
+            changed = false;
+            if (!TryUnbox<T>(value, out var typed)) return false;
+            changed = !EqualityComparer<T>.Default.Equals(Value, typed);
+            if (changed) Value = typed;
+            return true;
+        }
         public T Value;
         // Issue #659 (#53): ref-stable setter cached on first render.
         public Action<T>? CachedSetter;
@@ -2787,15 +3020,15 @@ public sealed class RenderContext
     /// <summary>
     /// Resolve a <see cref="PersistedScope"/> selector to a concrete
     /// <see cref="IPersistedStateScope"/>. <see cref="PersistedScope.Window"/>
-    /// prefers the active host's window scope; falls back to the application
-    /// scope when no window owns the host (test fixtures, headless renders).
+    /// prefers the owning window's scope; falls back to the application
+    /// scope when this content has no owning window (tray flyouts, embeds, headless renders).
     /// </summary>
-    private static IPersistedStateScope? ResolvePersistedScope(PersistedScope scope)
+    private IPersistedStateScope? ResolvePersistedScope(PersistedScope scope)
     {
         switch (scope)
         {
             case PersistedScope.Window:
-                var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+                var win = OwningReactorWindow;
                 if (win is not null)
                     return win.PersistedScope;
                 // Fall back to the process-wide scope so unit tests that
@@ -2822,8 +3055,18 @@ internal readonly record struct HookSnapshot(int Index, string Hook, Type? Value
 /// <summary>
 /// A mutable reference that persists across renders (like React's useRef).
 /// </summary>
-public class Ref<T>
+public class Ref<T> : IRefValue
 {
     public T Current { get; set; }
     public Ref(T initial) => Current = initial;
+
+    object? IRefValue.CurrentBoxed => Current;
+    Type IRefValue.ValueType => typeof(T);
+}
+
+/// <summary>Non-generic read of a <see cref="Ref{T}"/> for diagnostics (no reflection).</summary>
+internal interface IRefValue
+{
+    object? CurrentBoxed { get; }
+    Type ValueType { get; }
 }

@@ -17,6 +17,7 @@ internal static class TestSetup
     internal static void Initialize()
     {
         ApplyRequestedCulture();
+        CaptureDevtoolsSupportSwitch();
 
         // Set base directory so the runtime DLL can be found
         Environment.SetEnvironmentVariable("MICROSOFT_WINDOWSAPPRUNTIME_BASE_DIRECTORY", AppContext.BaseDirectory);
@@ -26,6 +27,37 @@ internal static class TestSetup
 
         // Initialize COM wrappers for WinRT interop
         WinRT.ComWrappersSupport.InitializeComWrappers();
+    }
+
+    /// <summary>
+    /// The <c>Reactor.DevtoolsSupport</c> switch as this process was configured
+    /// (<c>runtimeconfig.json</c>), captured before any test runs. Some tests flip the live
+    /// AppContext switch to exercise <c>ReactorFeatures.IsDevtoolsSupported</c>; the cached
+    /// <c>ReactorFeatures.DevtoolsSupported</c> gate is read once, so it is initialized here,
+    /// under the configured value, rather than by whichever test happens to touch it first.
+    /// </summary>
+    internal static bool ConfiguredDevtoolsSupport { get; private set; }
+
+    private static void CaptureDevtoolsSupportSwitch()
+    {
+        ConfiguredDevtoolsSupport = AppContext.TryGetSwitch("Reactor.DevtoolsSupport", out var on) && on;
+        _ = global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported;
+        // Same for the launch-time gates read from the environment once, which a test that
+        // sets REACTOR_DIAGNOSTICS / REACTOR_SOURCEMAP for a fresh load must not initialize.
+        _ = global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled;
+        _ = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled;
+    }
+
+    /// <summary>
+    /// Runs <paramref name="body"/> with the live <c>Reactor.DevtoolsSupport</c> switch set to
+    /// <paramref name="value"/>, then restores the configured value, so a later test never
+    /// observes a value a previous test left behind.
+    /// </summary>
+    internal static void WithDevtoolsSupportSwitch(bool value, Action body)
+    {
+        AppContext.SetSwitch("Reactor.DevtoolsSupport", value);
+        try { body(); }
+        finally { AppContext.SetSwitch("Reactor.DevtoolsSupport", ConfiguredDevtoolsSupport); }
     }
 
     /// <summary>

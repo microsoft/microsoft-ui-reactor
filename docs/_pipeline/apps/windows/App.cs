@@ -576,19 +576,37 @@ class PickerDemo : Component
     public override Element Render()
     {
         // <snippet:pickers>
-        // Both helpers return null when the user cancels the dialog.
-        var pickFile = UseFilePickerAsync;
-        var pickFolder = UseFolderPickerAsync;
-
-        return Button("Open...", async () =>
-        {
-            var file = await pickFile(new FilePickerOptions(
-                FileTypeFilter: [".txt", ".md"]));
-            if (file is null) return;
-
-            var folder = await pickFolder(new FolderPickerOptions());
-            if (folder is null) return;
-        });
+        // Pickers are not hooks: call them directly from UI-thread event handlers.
+        return VStack(
+            Button("Open one...", async () =>
+            {
+                var file = await PickFileAsync(new FilePickerOptions(FileTypeFilter: [".txt", ".md"]));
+                if (file is null) return; // User cancelled.
+                var text = await File.ReadAllTextAsync(file.Path);
+            }),
+            Button("Open files...", async () =>
+            {
+                var files = await PickMultipleFilesAsync(new FilePickerOptions
+                {
+                    Title = "Choose notes",
+                    FileTypeChoices = [new("Notes", [".txt", ".md"]), new("JSON", [".json"])],
+                });
+                if (files.Count == 0) return; // User cancelled.
+            }),
+            Button("Select folders...", async () =>
+            {
+                var folders = await PickMultipleFoldersAsync(new FolderPickerOptions());
+                if (folders.Count == 0) return;
+            }),
+            Button("Save as...", async () =>
+            {
+                var target = await PickSaveFileAsync(new SaveFilePickerOptions(
+                    [new("Text", [".txt"]), new("Markdown", [".md"])],
+                    SuggestedFileName: "report"));
+                if (target is null) return;
+                // Selecting a target is not a save: write the content yourself.
+                await File.WriteAllTextAsync(target.Path, "report body");
+            }));
         // </snippet:pickers>
     }
 }

@@ -27,10 +27,10 @@ internal static class CompositeLifecycle
         // Update child element
         if (host.Children.Count > 0 && host.Children[0] is UIElement existingChild)
         {
-            var replacement = reconciler.UpdateChild(o.Child, n.Child, existingChild, requestRerender);
+            var replacement = reconciler.UpdateChildTracked(o.Child, n.Child, existingChild, requestRerender, out var unmountedByUpdate);
             if (replacement is not null)
             {
-                reconciler.UnmountChild(existingChild);
+                if (!unmountedByUpdate) reconciler.UnmountChild(existingChild);
                 // Explicit RemoveAt+Insert instead of indexer assignment — WinUI's
                 // Children[i] = x can leave the old element's internal parent state
                 // attached, causing a COMException when it is later reused from the
@@ -323,12 +323,12 @@ internal static class CompositeLifecycle
         var outgoingContent = existingContent;
         if (reconciler.CanUpdate(oldFf.Content, newFf.Content))
         {
-            var replacement = reconciler.Update(oldFf.Content, newFf.Content, existingContent, requestRerender);
+            var replacement = reconciler.UpdateChildTracked(oldFf.Content, newFf.Content, existingContent, requestRerender, out var unmountedByUpdate);
             if (replacement is not null)
             {
                 // WinUI indexer assignment doesn't fully disconnect the old element's
                 // parent state — use RemoveAt+Insert (see ChildCollection.Replace).
-                reconciler.UnmountChild(existingContent);
+                if (!unmountedByUpdate) reconciler.UnmountChild(existingContent);
                 panel.Children.RemoveAt(1);
                 panel.Children.Insert(1, replacement);
                 existingContent = replacement;

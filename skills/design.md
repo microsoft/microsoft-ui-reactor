@@ -290,7 +290,7 @@ Border(hero).Background(Theme.Ref("BrandAccentGradientBrush"))
 
 **Rules:**
 
-- **Register before building the visual tree** — call `AppTheme.Register()` in the App constructor or `OnLaunched`, before any component renders.
+- **Register before building the visual tree** — call `AppTheme.Register()` in the App constructor or `OnLaunched`, before any component renders. If you change resources after the tree is built, call `Theme.NotifyResourcesChanged()` so `Theme.Ref` values re-resolve.
 - **Always provide all three variants** (light, dark, highContrast). Omitting HC causes accessibility regressions.
 - **HC values must reference system color brushes or solid hex colors** — no gradients, no opacity, no custom colors. Use WinUI system brush keys like `"SystemColorHighlightColorBrush"`.
 - **Custom keys must end in `Brush`** for `SolidColorBrush` resources — matches WinUI naming conventions and ensures `Theme.Ref()` resolves them correctly.

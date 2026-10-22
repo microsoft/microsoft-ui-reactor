@@ -41,7 +41,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 /// overrides; unsealing carries no dispatch cost (calls already route through the
 /// <see cref="IElementHandler{TElement,TControl}"/> interface via the adapter).
 /// </remarks>
-public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, TControl>
+public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, TControl>, IDescriptorBackedHandler
     where TElement : Element
     where TControl : FrameworkElement, new()
 {
@@ -192,17 +192,23 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
         var newItems = ih.GetItems(el);
         var collection = ih.GetCollection(ctrl);
         if (collection.Count > 0) collection.Clear();
+        var entries = new int[newItems.Count];
         for (int i = 0; i < newItems.Count; i++)
         {
+            entries[i] = -1;
             var item = newItems[i];
             if (item is Element childEl)
             {
                 var mounted = ctx.MountChild(childEl);
-                if (mounted is not null) collection.Add(mounted);
+                if (mounted is not null) { collection.Add(mounted); entries[i] = collection.Count - 1; }
             }
             else if (item is not null)
+            {
                 collection.Add(item);
+                entries[i] = collection.Count - 1;
+            }
         }
+        ih.RememberEntries(ctrl, entries);
     }
 
     private static void DispatchItemsHostUpdate(
@@ -211,7 +217,11 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
     {
         var oldItems = ih.GetItems(oldEl);
         var newItems = ih.GetItems(newEl);
-        if (ReferenceEquals(oldItems, newItems)) return;
+        if (ReferenceEquals(oldItems, newItems))
+        {
+            ih.RefreshKeptItems(ctx.Reconciler, ctrl, oldItems, newItems, ctx.RequestRerender);
+            return;
+        }
         var equals = ih.ItemEquals ?? object.Equals;
         if (oldItems.Count == newItems.Count)
         {
@@ -220,7 +230,11 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
             {
                 if (!equals(oldItems[i], newItems[i])) { same = false; break; }
             }
-            if (same) return;
+            if (same)
+            {
+                ih.RefreshKeptItems(ctx.Reconciler, ctrl, oldItems, newItems, ctx.RequestRerender);
+                return;
+            }
         }
         // Structural change — unmount Element items via the reconciler so
         // any descendant component state is torn down, then rebuild flat.
@@ -234,16 +248,30 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
         }
         var collection = ih.GetCollection(ctrl);
         if (collection.Count > 0) collection.Clear();
+        var entries = new int[newItems.Count];
         for (int i = 0; i < newItems.Count; i++)
         {
+            entries[i] = -1;
             var item = newItems[i];
             if (item is Element childEl)
             {
                 var mounted = ctx.MountChild(childEl);
-                if (mounted is not null) collection.Add(mounted);
+                if (mounted is not null) { collection.Add(mounted); entries[i] = collection.Count - 1; }
             }
             else if (item is not null)
+            {
                 collection.Add(item);
+                entries[i] = collection.Count - 1;
+            }
         }
+        ih.RememberEntries(ctrl, entries);
     }
+}
+
+/// <summary>
+/// Marks a handler whose unmount behaviour is the descriptor's: no hand-written teardown,
+/// only the declared <c>OnUnmount</c> (which forces its own tag) and the children strategy.
+/// </summary>
+internal interface IDescriptorBackedHandler
+{
 }

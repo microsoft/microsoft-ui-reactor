@@ -28,6 +28,34 @@ Conventions for contributors:
 
 ### Added
 
+- **ReactorGallery catches up with recent framework features.** A new **System →
+  File pickers** page demonstrates `PickFileAsync`, `PickMultipleFilesAsync`
+  (with labelled `FileTypeChoices`), `PickFolderAsync` / `PickMultipleFoldersAsync`
+  and `PickSaveFileAsync`; a **Patterns → ErrorBoundary** page covers catch-and-retry,
+  static fallbacks, and the built-in fallback a `RenderErrorHandler` replaces; the
+  Grid page adds `GridSize.MinSize` / `MaxSize`; and the TitleBar page shows icon
+  inheritance and `.NoIcon()`. The gallery now declares its window icon once via
+  `ReactorApp.Run(icon:)` and its shell title bar inherits it.
+
+- **Component inspection for devtools: `ReactorDiagnostics.DescribeComponent`,
+  `TrySetState`, `Rerender`, `GetAppliedProperties`, `GetReferenceEdges`.** An
+  inspector can go from a realized control to the component behind it: its name,
+  kind, props, hooks and consumed contexts as a text `ComponentSnapshot`; set a
+  `UseState` / `UseReducer` / `UsePersisted` value from text (parsed to the hook's
+  type, refused with a reason otherwise) and re-render it; list the WinUI
+  properties a control's modifiers set (including the caption-derived default
+  `AutomationProperties.Name`); and list the references it declares, including
+  pending ones whose target has not mounted. Component snapshots and property
+  lists are text — no live component, element or hook object; a resolved
+  reference edge carries its mounted target control. Reads
+  are on demand and UI-thread-affine. The render path gains only reference
+  stores: per component, `UseContext` records the context it read and
+  reference-list wiring keeps the authored list; per host render, the host
+  records which root produced the displayed control (and, when it renders into its
+  `ContentTarget`, that it owns it). With source mapping on, an open
+  `ContentDialog` is tagged with its element so its chrome resolves to the
+  `ContentDialog(...)` call site (spec 010, spec 057 §3.1).
+
 - **`REACTOR_DYM_006`: color strings that render gray** (issue #1375, spec 061 §7.3). A new
   default-on **Warning** flags compile-time-constant color strings that `BrushHelper` can't
   parse and therefore silently fall back to gray: `.Background("orange")`, `.Foreground("#888")`,
@@ -68,6 +96,29 @@ Conventions for contributors:
   `Reconciler.GetElementTag` finds each component boundary. Provisional API for
   external inspectors such as `winapp devtools`.
 
+- **Inspect Reactor apps with no managed agent, Native AOT included: `ReactorSource`
+  on every control** (issue #1341, spec 010):
+  - `ReactorDiagnostics.SourceProperty` (`"ReactorSource"` in XamlDiagnostics) is an
+    attached string published on every realized control in diagnostics mode. It is
+    readable out of process with no managed code: call site, owner component,
+    element kind, key, mounted component, host root, declared name and hook names,
+    in a versioned `|`-separated grammar (`v=1`). Paths are relative to the
+    project (XAML parity); never absolute.
+  - `SourceLocation.DeclaredName`: the identifier an element was assigned to, like
+    `x:Name`. The source-map generator also records each component render's hook
+    variables (`hooks=0:count@36;…`).
+  - Gating: new MSBuild property `ReactorDiagnostics` (Debug default, `true` for a
+    Release / Native AOT devtools build; turns on the trimmable
+    `Reactor.DevtoolsSupport` switch and implies `ReactorSourceMap`) plus
+    `REACTOR_DIAGNOSTICS=1` at launch. Without the switch, trimmed and AOT builds
+    contain none of it; with it but without the variable, nothing is published.
+  - Source-mapped builds share one call-site bucket per call site instead of
+    one per element. Under Native AOT diagnostics mode, elements whose only extra
+    is their call site are not tagged (no managed agent can read the tag);
+    `ReactorSourceMap.GetSource` resolves them from the published value.
+  - **Changed:** Debug builds now turn `Reactor.DevtoolsSupport` on by default
+    (through `ReactorDiagnostics`); opt out with `-p:ReactorDiagnostics=false`.
+
 - **`ReactorHostControl` can be declared in XAML.** It gains a public parameterless
   constructor (the XAML compiler rejected the old optional-parameter one with
   `WMC0100`) and a `ComponentType` property, so a hybrid page can write
@@ -79,6 +130,21 @@ Conventions for contributors:
   than escaping the `Loaded` handler and terminating the app. `samples/ReactorHostControlDemo`
   now declares its counter host in markup, and `samples/InteropFirst` declares its host
   with `x:Name` (issue #1324).
+
+- **`ReactorHostControl.IsIdle` / `WaitForIdleAsync(int maxYields = 50)`**, matching
+  `ReactorHost`. Await it after a `setState` or `Mount` to read a XAML island's realized
+  tree back once its render loop settles, instead of waiting on wall-clock time. Both
+  hosts now share one idle-wait loop (issue #1327).
+
+- **`Theme.NotifyResourcesChanged()`** for runtime resource edits (a brand dictionary
+  swap, a replaced brush in an app-level dictionary, an inspector's live
+  resource edit). Reactor caches each resolved `(key, theme)` brush, and until now cleared
+  that cache only on a theme or palette change, so such an edit was invisible to `ThemeRef`
+  modifiers, overrides and `ThemeRef.Resolve`. The call clears the cache and re-renders
+  every live host past memoization and the skip of unchanged elements. Callable from
+  any thread (issue #1327). A brush resolved eagerly and kept (`ThemeRef.Resolve` inside a
+  memo factory, or stored in state) is a fixed value and is not refreshed; bind it with
+  `Theme.Ref` instead.
 
 - **Getting Started documents the single-file path.** A Reactor app does not need
   a `.csproj`: .NET 10 runs a lone `.cs` file whose `#:package` / `#:property`
@@ -185,6 +251,23 @@ Conventions for contributors:
 
 ### Changed
 
+- **Picker helpers moved to `Microsoft.Windows.Storage.Pickers` and renamed as non-hooks**
+  (issue #1374, spec 054 §8.3). Breaking: `UseFilePickerAsync` / `UseMultipleFilesPickerAsync`
+  / `UseFolderPickerAsync` / `UseSaveFilePickerAsync` are now `PickFileAsync` /
+  `PickMultipleFilesAsync` / `PickFolderAsync` / `PickSaveFileAsync` (plus the new
+  `PickMultipleFoldersAsync`) on `RenderContext` and `Component`, and return path-based
+  `PickFileResult` / `PickFolderResult` instead of `StorageFile` / `StorageFolder`. Call them
+  directly from event handlers; the hook-rules analyzer no longer flags them. Option enums
+  come from `Microsoft.Windows.Storage.Pickers`; `SaveFilePickerOptions.FileTypeChoices` is an
+  ordered `IReadOnlyList<FileTypeChoice>` (order sets the default entry); `Title`,
+  `SuggestedFolder`, `SuggestedStartFolder`, `InitialFileTypeIndex`, open-picker
+  `FileTypeChoices`, `DefaultFileExtension` and `ShowOverwritePrompt` are new;
+  `FolderPickerOptions.FileTypeFilter` and `SaveFilePickerOptions.SuggestedSaveFile` are
+  removed. The dialog is owned by the window whose host rendered the component (previously
+  whichever window was most recently active, which with several windows picked the wrong one
+  and threw after any window closed), and the pickers now work in elevated apps. They also
+  work in content hosted by `ReactorHostControl` (owned by the window the control is loaded
+  in; issue #1395) and by a `ReactorHost` constructed over a raw `Window`.
 - **The doc pipeline moved out of `mur`, and doc screenshots are captured with winapp's
   Windows Graphics Capture.** `mur docs` is now `dotnet run --project tools/Reactor.DocPipeline --`
   (`compile`, `check-tier`, `render-diagrams`, `new-diagram`; same options). It is a contributor
@@ -316,12 +399,30 @@ Conventions for contributors:
     up, so they stopped updating.
   - A row that threw was reported to that unrelated boundary, which then showed its
     fallback.
-  - Rows built while scrolling saw no window host (or another window's), so window-scoped
-    hooks such as `UseWindow` could resolve the wrong window in multi-window apps.
 
   Row building now sets the surrounding update's state aside and restores the list's own
-  context, theme and window host, so a failing row shows its own error and a failing
-  boundary only rolls back its own subtree.
+  context and theme, so a failing row shows its own error and a failing boundary only
+  rolls back its own subtree. (Window hooks in such rows are covered by the
+  window-owner fix below.)
+- **Window hooks resolve the window that renders the component, not the most recently
+  active host** (issue #1396, spec 036 §7.1). `UseWindow`, the parameterless
+  `UseWindowSize`, `UseWindowPosition`, `UseIsCovered`, `UseWindowAspectRatio`,
+  `UseWindowDragMove`, `UseWindowState`, `UseIsActive`, `UseClosingGuard`, `UseDpi`, the
+  window-inferring `UseBreakpoint(minWidth)`,
+  `UsePersisted(PersistedScope.Window)` and the `TitleBar` element now read the owner the
+  host's reconciler records on each component, the same owner the picker methods use. Before,
+  they read the process-wide active host, so a sibling rendered after a window opened
+  mid-render (`UseOpenWindow`) and a virtualized row realized by `LazyVStack` /
+  `ElementFactory` got another window: its size, DPI and persisted scope, and a closing guard,
+  aspect lock or `TitleBar` registered on it. Content with no owning `ReactorWindow` (tray
+  flyouts, `ReactorHostControl`, a `ReactorHost` over a raw `Window`) gets the documented
+  "outside a window" values. Behaviour change: `ReactorHostControl` content previously saw an
+  unrelated host's window and now sees none. A `TitleBar` inside it registers, once loaded,
+  with the `ReactorWindow` that actually contains the control (found from its `XamlRoot`)
+  instead of with whichever host was active, so that window is content-extended and prepared
+  for close as issue #537 requires. Embedded content that needs its window can pass it explicitly
+  (`UseWindowSize(window)`, `UseBreakpoint(window, minWidth)`) or read
+  `XamlRoot.RasterizationScale` for DPI.
 - **Replacing a host's root no longer leaves the old root running** (issue #1326).
   `ReactorHost.Mount(...)` and `ReactorHostControl.Mount(...)` now retire the
   outgoing root before installing the new one: its effect cleanups run, and a

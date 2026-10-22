@@ -168,6 +168,15 @@ class LightweightStylingExample : Component
 }
 // </snippet:lightweight-styling>
 
+// <snippet:font-family-resource>
+class FontFamilyResourceExample : Component
+{
+    public override Element Render() =>
+        Button("Code").Resources(r => r
+            .Set("ContentControlThemeFontFamily", new Microsoft.UI.Xaml.Media.FontFamily("Consolas")));
+}
+// </snippet:font-family-resource>
+
 // <snippet:custom-resource>
 class CustomResourceExample : Component
 {

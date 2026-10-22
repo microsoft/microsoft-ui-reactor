@@ -156,6 +156,12 @@ competitive advantage — no other C# declarative framework surfaces this.
   - [x] `Set(string key, ThemeRef themeRef)` — stores for reactive resolution
   - [x] `Set(string key, double value)` — for numeric resource keys
   - [x] `Set(string key, CornerRadius value)` — for corner radius keys
+  - [x] `Set(string key, Thickness value)` — padding and border thickness
+  - [x] `Set(string key, FontWeight value)` — font weight
+  - [x] `Set(string key, FontFamily value)` — font family, compared by Source
+  - [x] `Set(string key, bool value)` — Boolean resources
+  - [x] `Set(string key, GridLength value)` — grid length resources
+  - [x] `SetColor(string key, Color value)` — raw Color only, not a Brush
   - [x] `internal ResourceOverrides Build()` — returns immutable snapshot
 
 ### 4.2 — ResourceOverrides record
