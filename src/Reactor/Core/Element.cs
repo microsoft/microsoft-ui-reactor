@@ -5338,16 +5338,32 @@ public partial record TitleBarElement(
     // Issue #1396 / #537: a WinUI TitleBar torn down in a window that is not content-extended
     // corrupts the heap. A TitleBar in ReactorHostControl content therefore registers with the
     // ReactorWindow that actually hosts it — found from its XamlRoot, never from the ambient
-    // host — exactly as a TitleBar rendered by that window's own host would. Content hosted by
-    // a plain WinUI Window (no ReactorWindow) has no window to register with.
+    // host — exactly as a TitleBar rendered by that window's own host would. Runs on every
+    // Loaded: ReactorHostControl keeps its content across reparenting, so an embed moved to
+    // another window re-registers there. Content hosted by a plain WinUI Window (no
+    // ReactorWindow) has no window to register with.
     private static void RegisterEmbeddedTitleBar(WinUI.TitleBar titleBar)
     {
-        if (!s_embedded.TryGetValue(titleBar, out var embedded) || embedded.Window is not null) return;
-        if (global::Microsoft.UI.Reactor.ReactorApp.FindWindowForXamlRoot(titleBar.XamlRoot) is not { } window)
-            return;
+        if (!s_embedded.TryGetValue(titleBar, out var embedded)) return;
+        var window = global::Microsoft.UI.Reactor.ReactorApp.FindWindowForXamlRoot(titleBar.XamlRoot);
+        if (ReferenceEquals(window, embedded.Window)) return;
+
+        if (embedded.Window is { IsClosingOrDisposed: false } previous)
+            previous.ClearTitleBarControl(titleBar);
         embedded.Window = window;
+        if (window is null) return;
+
+        // The provisional mount-time height (no window known yet) is framework-owned; hand
+        // the control's height to the window, which applies its own spec-over-element
+        // precedence. An author's explicit .Height(...) is left alone.
+        if (embedded.Element.Modifiers?.Height is null
+            && (double.IsNaN(titleBar.Height)
+                || global::System.Math.Abs(titleBar.Height - TallTitleBarControlHeight) < 0.01))
+            titleBar.ClearValue(global::Microsoft.UI.Xaml.FrameworkElement.HeightProperty);
         RegisterWithWindow(titleBar, embedded.Element, window.NativeWindow, window);
-        global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.Apply(titleBar, embedded.Element, window, force: false);
+        // Out of band like ApplyChrome's resync: keeps an icon a setter or the element owns.
+        global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault.ResyncInheritedIcon(
+            titleBar, window.Spec, window.DeclaredIconApplied, window.UnloadableConventionIconPath);
     }
 
     /// <summary>

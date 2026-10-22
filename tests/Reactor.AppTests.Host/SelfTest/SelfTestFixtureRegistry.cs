@@ -1568,6 +1568,7 @@ internal static class SelfTestFixtureRegistry
         "WindowHookOwner_MidRenderOpen",
         "WindowHookOwner_HostControlHasNoOwner",
         "WindowHookOwner_EmbeddedTitleBar",
+        "WindowHookOwner_EmbeddedTitleBarFollowsWindow",
         "WindowHookOwner_SlotShapeAcrossTransition",
         "AspectRatio_Suite_Math",
         "AspectRatio_Suite_Conform",
@@ -3682,6 +3683,7 @@ internal static class SelfTestFixtureRegistry
         "WindowHookOwner_MidRenderOpen" => new WindowHookOwnerFixtures.MidRenderOpen(harness),
         "WindowHookOwner_HostControlHasNoOwner" => new WindowHookOwnerFixtures.HostControlHasNoOwner(harness),
         "WindowHookOwner_EmbeddedTitleBar" => new WindowHookOwnerFixtures.EmbeddedTitleBar(harness),
+        "WindowHookOwner_EmbeddedTitleBarFollowsWindow" => new WindowHookOwnerFixtures.EmbeddedTitleBarFollowsWindow(harness),
         "WindowHookOwner_SlotShapeAcrossTransition" => new WindowHookOwnerFixtures.SlotShapeAcrossTransition(harness),
         "UseSpec054Hooks_Suite" => new Phase7WindowingFixtures.UseSpec054HooksSuite(harness),
         // Spec 036/045 — issue #647 multi-window teardown hardening regression.

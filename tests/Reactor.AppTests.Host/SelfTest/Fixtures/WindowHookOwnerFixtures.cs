@@ -479,6 +479,97 @@ internal static class WindowHookOwnerFixtures
         }
     }
 
+    private sealed class SlotRoot : Component
+    {
+        public Border? Slot;
+
+        public override Element Render() => VStack(
+            TextBlock("slot"),
+            Border(null).OnMount(fe => Slot = (Border)fe));
+    }
+
+    private sealed class FollowingBar(Microsoft.UI.Xaml.Controls.IconSource customIcon) : Component
+    {
+        public Microsoft.UI.Xaml.Controls.TitleBar? Bar;
+
+        public override Element Render() =>
+            TitleBar("Embedded follower").Tall().Set(b => { Bar = b; b.IconSource = customIcon; });
+    }
+
+    /// <summary>
+    /// The embedded registration follows the control: moved from W1 to W2 it withdraws from W1
+    /// and registers with W2. On registration the window's spec-over-element caption precedence
+    /// replaces the provisional tall height applied before a window was known, and an icon a
+    /// setter owns survives the deferred registration.
+    /// </summary>
+    internal sealed class EmbeddedTitleBarFollowsWindow(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            ReactorApp.UIDispatcher ??= DispatcherQueue.GetForCurrentThread();
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            using var hostControl = new ReactorHostControl();
+            var customIcon = new SymbolIconSource { Symbol = Symbol.Home };
+            var bar = new FollowingBar(customIcon);
+            var root1 = new SlotRoot();
+            var root2 = new SlotRoot();
+            ReactorWindow? w1 = null, w2 = null;
+            try
+            {
+                // W1 declares an icon (so an inherited icon would differ from the setter's) and a
+                // Standard caption that overrides the element's Tall().
+                var w1Window = ReactorApp.OpenWindow(new WindowSpec
+                {
+                    Title = "Hook owner follow W1", Width = 360, Height = 240,
+                    Icon = WindowIcon.FromPath(TestIcoPath), TitleBarHeight = WindowTitleBarHeight.Standard,
+                }, () => root1);
+                await w1Window.Host.WaitForIdleAsync();
+                w1 = w1Window;
+                w2 = await Open("Hook owner follow W2", root2, 360, 240);
+                await Harness.Render(100);
+                H.Check("HookOwner_Follow_SlotsMounted", root1.Slot is not null && root2.Slot is not null);
+                if (root1.Slot is null || root2.Slot is null) return;
+
+                hostControl.Mount(bar);
+                root1.Slot.Child = hostControl;
+                var inW1 = await Harness.WaitFor(() => w1.TitleBarIconControlCountForTests == 1, maxPasses: 20, perPassMs: 25);
+                await Harness.Render(50);
+                H.Check($"HookOwner_Follow_RegisteredWithW1 (w1={w1.TitleBarIconControlCountForTests}, w2={w2.TitleBarIconControlCountForTests})",
+                    inW1 && w2.TitleBarIconControlCountForTests == 0);
+                H.Check("HookOwner_Follow_SetterIconSurvives", ReferenceEquals(bar.Bar?.IconSource, customIcon));
+                var followBar = bar.Bar;
+                H.Check($"HookOwner_Follow_SpecStandardWinsOverProvisionalTall (height={followBar?.ActualHeight})",
+                    followBar != null && Math.Abs(followBar.ActualHeight - 32) < 0.5);
+
+                Exception? moveError = null;
+                try
+                {
+                    root1.Slot.Child = null;
+                    root2.Slot.Child = hostControl;
+                }
+                catch (Exception ex) when (ex is global::System.Runtime.InteropServices.COMException or ArgumentException or InvalidOperationException)
+                {
+                    moveError = ex;
+                }
+                H.Check($"HookOwner_Follow_MoveAccepted ({moveError?.GetType().Name}: {moveError?.Message})", moveError is null);
+                if (moveError is not null) return;
+                var inW2 = await Harness.WaitFor(() => w2.TitleBarIconControlCountForTests == 1, maxPasses: 20, perPassMs: 25);
+                H.Check($"HookOwner_Follow_ReRegisteredWithW2 (w1={w1.TitleBarIconControlCountForTests}, w2={w2.TitleBarIconControlCountForTests})",
+                    inW2 && w1.TitleBarIconControlCountForTests == 0);
+                H.Check("HookOwner_Follow_W2Extended", w2.NativeWindow.ExtendsContentIntoTitleBar);
+            }
+            finally
+            {
+                await AsyncTeardownGuard.CloseAndSettleAsync("SelfTest.WindowHookOwner.Follow.Close", () =>
+                {
+                    w2?.Close();
+                    w1?.Close();
+                }, settleMs: 100);
+                await Harness.Render(100);
+            }
+        }
+    }
+
     /// <summary>
     /// One <see cref="RenderContext"/> crossing no-window → window → no-window keeps a stable
     /// hook-slot shape: no <see cref="HookOrderException"/> and no state-type mismatch.
