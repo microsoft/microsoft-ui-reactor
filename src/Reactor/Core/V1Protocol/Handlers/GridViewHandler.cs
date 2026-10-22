@@ -36,6 +36,7 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
         if (gv.ItemContainerStyle is not null) gridView.ItemContainerStyle = gv.ItemContainerStyle;
 
         Reconciler.SetElementTag(gridView, gv);
+        reconciler.CaptureContextForHost(gridView);
 
         gridView.ItemTemplate = Reconciler.SharedContentControlTemplate.Value;
 
@@ -58,6 +59,7 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
             if (items is not null && args.ItemIndex >= 0 && args.ItemIndex < items.Length
                 && args.ItemContainer.ContentTemplateRoot is ContentControl cc)
             {
+                using var realization = reconciler.EnterRealization((UIElement)sender!);
                 var ctrl = reconciler.Mount(items[args.ItemIndex], requestRerender);
                 cc.Content = ctrl;
                 // Issue #951 — keep .AutomationName(...) on an item view working

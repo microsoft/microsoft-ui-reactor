@@ -44,6 +44,7 @@ public sealed partial class Reconciler
             treeView.RootNodes.Add(BuildTemplatedTreeNode(el, root));
 
         SetElementTag(treeView, el);
+        CaptureContextForHost(treeView);
 
         // Trampolines resolve the live element + the data item (node.Content)
         // on dispatch, so they're wired unconditionally and never need
@@ -174,6 +175,9 @@ public sealed partial class Reconciler
         if (cc.Content is not null) return; // already hosted for this realization
         if (item is not WinUI.TreeViewNode node || node.Content is not { } data) return;
 
+        // Runs from ContainerContentChanging / Loaded / LayoutUpdated, outside the
+        // traversal — replay the tree's provider stack for the node view.
+        using var realization = EnterRealization(treeView);
         var view = el.BuildView(data);
         cc.Content = Mount(view, requestRerender);
         SetElementTag(cc, view);

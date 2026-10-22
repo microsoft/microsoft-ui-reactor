@@ -364,9 +364,18 @@ public sealed partial class Reconciler : IDisposable
     private EntryFrame EnterFrame()
     {
         var scope = _entryDepth == 0 ? RenderErrorDispatch.EnterPropagationScope() : default;
+        if (_entryDepth == 0)
+            _passId++;
         _entryDepth++;
         return new EntryFrame(this, scope);
     }
+
+    // Identifies the outermost Reconcile/Mount pass in flight (advanced on entry at depth
+    // 0). A virtualized host records the pass and the subtree theme it was reached with,
+    // so a row realized re-entrantly later in the SAME pass can use that pending theme:
+    // the native RequestedTheme modifier is only applied after children are dispatched,
+    // so the host's ActualTheme still shows the previous theme at that point.
+    private long _passId;
 
     private readonly struct EntryFrame(Reconciler owner, RenderErrorDispatch.PropagationScope scope) : IDisposable
     {
@@ -1299,6 +1308,11 @@ public sealed partial class Reconciler : IDisposable
         // abstract base.
         public Internal.IItemViewSource? ItemViewSource;
 
+        // Provider stack snapshot for a virtualized host whose rows are realized
+        // from WinUI layout callbacks outside the reconciler traversal (see
+        // ContextCapture). Lives here rather than in a wrapper-keyed CWT so the
+        // realization callback finds it through any managed wrapper of the control.
+        public ContextCapture? ContextCapture;
         // Spec 047 §9.2 / §14 Phase 1 (1.7) — per-control event payload box.
         // Holds a strongly-typed payload struct (e.g. ToggleSwitchEventPayload)
         // discriminated by HandlerType. Populated for ported V1 controls and
@@ -1775,6 +1789,11 @@ public sealed partial class Reconciler : IDisposable
             state.EchoSuppressScopeDepth = 0;
             state.PendingEchoMatch = null;
             state.PendingLabeledBy = null;
+            // A pooled host must not hand its provider values (and the objects they
+            // reference) to an unrelated renter. Empty the capture before dropping it:
+            // the host's ElementFactory aliases the same instance.
+            state.ContextCapture?.Clear();
+            state.ContextCapture = null;
         }
     }
 
@@ -1824,6 +1843,11 @@ public sealed partial class Reconciler : IDisposable
         state.ValidationRootBinding = null;
         state.ValidationRuleBinding = null;
         state.ValidationAttachedBinding = null;
+        // A retired host's native subtree (and its ItemTemplate factory, which aliases
+        // this capture) can outlive Reactor ownership — e.g. a nested list inside a
+        // parked repeater row — so release the provider values, not just the reference.
+        state.ContextCapture?.Clear();
+        state.ContextCapture = null;
     }
 
     /// <summary>
@@ -2480,7 +2504,264 @@ public sealed partial class Reconciler : IDisposable
     // without exposing the traversal stack itself.
     internal T ReadContext<T>(Context<T> context) => _contextScope.Read(context);
 
-    internal bool HasActiveContextValues => _contextScope.HasActiveValues;
+    internal bool HasActiveContextValues => _contextScope.HasActiveValues || _providerChangeDepth > 0 || _themeChangeDepth > 0;
+
+    // Depth of non-skip Updates, on the current traversal path, whose element's own
+    // ContextValues differ from the previous render's (a provider added, removed or
+    // changed). Removing the LAST provider leaves the live stack empty, which used to
+    // short-circuit every context skip check (HasActiveContextValues), so a
+    // reference-stable consumer below kept the removed value. Host snapshots use the
+    // longer-lived ContextScope.ProviderGeneration instead (bumped alongside).
+    private int _providerChangeDepth;
+
+    internal void EnterProviderChange()
+    {
+        _providerChangeDepth++;
+        _contextScope.BumpProviderGeneration();
+    }
+
+    internal void ExitProviderChange() => _providerChangeDepth--;
+
+    // Same idea for RequestedTheme: depth of non-skip Updates on the current path whose
+    // own RequestedTheme changed, plus a generation bumped alongside. A virtualized host
+    // records the generation when it is reached; a host skipped below a theme change
+    // would keep the previous pass's subtree theme, so the skip check declines it once
+    // and its Update re-records the pending theme for rows realized later in the pass.
+    private int _themeChangeDepth;
+    private long _themeGeneration;
+
+    internal void EnterThemeChange()
+    {
+        _themeChangeDepth++;
+        _themeGeneration++;
+    }
+
+    internal void ExitThemeChange() => _themeChangeDepth--;
+
+    // ── Context replay for virtualized realization ─────────────────────
+    //
+    // ItemsRepeater (IElementFactory.GetElement), ListViewBase
+    // (ContainerContentChanging) and the typed TreeView build row content from
+    // WinUI layout callbacks. Those run after the traversal that maintains
+    // _contextScope has unwound (first realization, scrolling) or re-entrantly in
+    // the middle of an unrelated subtree's update (a sibling's synchronous
+    // UpdateLayout), so the live stack is either empty or someone else's. Each
+    // such host captures the stack whenever it is reconciled, and the realization
+    // callbacks replay that capture around the row mount (see EnterRealization).
+
+    // Gates the per-control capture lookups so apps without a virtualized host
+    // never pay the attached-state read.
+    private bool _hasContextCaptures;
+
+    // The innermost element currently in Mount/Update dispatch. A capture registered
+    // by a host handler records this element's type as its owner: a decorator
+    // (Flyout, MenuFlyout, …) or a transparent wrapper shares the host's control but
+    // sits at a shallower depth, so only the owner's own Update/skip may re-snapshot.
+    private Element? _reconcilingElement;
+
+    private static bool MayHostContextCapture(UIElement control)
+        => control is WinUI.ScrollViewer or WinUI.ItemsRepeater or WinUI.ItemsView
+            or WinUI.ListViewBase or WinUI.TreeView;
+
+    /// <summary>
+    /// Registers <paramref name="host"/> as a virtualized host and snapshots the live
+    /// provider stack onto it. Call from the host's Mount, while the traversal is at
+    /// the host; the generic Update path refreshes the snapshot from then on.
+    /// </summary>
+    internal ContextCapture CaptureContextForHost(FrameworkElement host)
+    {
+        global::System.Diagnostics.Debug.Assert(MayHostContextCapture(host),
+            $"{host.GetType().Name} is not covered by MayHostContextCapture; its capture would never refresh.");
+        var state = GetOrCreateReactorState(host);
+        var capture = state.ContextCapture ??= new ContextCapture { OwnerType = _reconcilingElement?.GetType() };
+        capture.Refresh(_contextScope);
+        capture.NotePass(_passId, _ambientRequestedTheme, _themeGeneration);
+        _hasContextCaptures = true;
+        return capture;
+    }
+
+    private ContextCapture? TryGetContextCapture(UIElement control)
+        => _hasContextCaptures
+            && MayHostContextCapture(control)
+            && ((FrameworkElement)control).GetValue(ReactorAttached.StateProperty) is ReactorState { ContextCapture: { } capture }
+                ? capture
+                : null;
+
+    /// <summary>
+    /// Re-snapshots a host's provider stack when <paramref name="newEl"/> is the element that
+    /// owns the capture; a no-op for any other control or element.
+    /// </summary>
+    internal void RefreshContextCapture(UIElement control, Element newEl, ElementTheme effectiveTheme)
+    {
+        if (TryGetContextCapture(control) is { } capture && capture.IsOwnedBy(newEl))
+        {
+            capture.Refresh(_contextScope);
+            capture.NotePass(_passId, effectiveTheme, _themeGeneration);
+        }
+    }
+
+    /// <summary>
+    /// Skip-arm counterpart of <see cref="RefreshContextCapture"/>. The skip arm runs
+    /// before the element's own <c>ContextValues</c> are pushed, so they are pushed here
+    /// for the snapshot. A decorator sharing the host's control is not the owner, so a
+    /// skipped decorator leaves the host's snapshot (taken at the host's own depth)
+    /// untouched; if a provider above it changed, the stale check declines that skip and
+    /// the decorator's Update reaches the host element.
+    /// </summary>
+    internal void RefreshContextCaptureOnSkip(UIElement control, Element newEl, ElementTheme effectiveTheme)
+    {
+        if (TryGetContextCapture(control) is not { } capture || !capture.IsOwnedBy(newEl)) return;
+        capture.NotePass(_passId, effectiveTheme, _themeGeneration);
+        var own = newEl.ContextValues;
+        if (own is not { Count: > 0 })
+        {
+            capture.Refresh(_contextScope);
+            return;
+        }
+        _contextScope.Push(own);
+        try { capture.Refresh(_contextScope); }
+        finally { _contextScope.Pop(own.Count); }
+    }
+
+    /// <summary>
+    /// A standalone snapshot of the live provider stack, for an <see cref="ElementFactory{T}"/>
+    /// whose host never registered one (an out-of-tree handler installing the factory).
+    /// </summary>
+    internal ContextCapture CaptureLiveContext()
+    {
+        var capture = new ContextCapture();
+        capture.Refresh(_contextScope);
+        capture.NotePass(_passId, _ambientRequestedTheme, _themeGeneration);
+        return capture;
+    }
+
+    internal void RefreshLiveContext(ContextCapture capture)
+    {
+        capture.Refresh(_contextScope);
+        capture.NotePass(_passId, _ambientRequestedTheme, _themeGeneration);
+    }
+
+    /// <summary>
+    /// Opens a realization frame for building a row outside (or re-entrantly inside) the
+    /// traversal. Until the returned scope is disposed:
+    /// <list type="bullet">
+    ///   <item><description>the live provider stack is replaced with <paramref name="capture"/>,
+    ///     and the ambient theme is read live off <paramref name="host"/> (see
+    ///     <see cref="LiveAmbientTheme"/>);</description></item>
+    ///   <item><description>the in-flight pass's per-subtree bookkeeping is set aside, so the
+    ///     row is not recorded in an ErrorBoundary's rollback lists (a failing boundary child
+    ///     would otherwise tear down a live row in an unrelated list), a row that throws gets
+    ///     its own in-tree fallback instead of escaping into WinUI layout, and stagger,
+    ///     provider/theme-change state and the diagnostic owner of the surrounding subtree
+    ///     do not leak in.</description></item>
+    /// </list>
+    /// Window hooks need nothing here: they read <see cref="Owner"/>, which every component
+    /// render receives regardless of when it runs.
+    /// A null capture still isolates; it just leaves the provider stack as it is.
+    /// </summary>
+    internal RealizationFrame EnterRealization(ContextCapture? capture, UIElement? host)
+        => new(this, capture, RealizationTheme(capture, host));
+
+    /// <inheritdoc cref="EnterRealization(ContextCapture?, UIElement?)"/>
+    internal RealizationFrame EnterRealization(UIElement host) => EnterRealization(TryGetContextCapture(host), host);
+
+    // Inside the pass that last reached the host, the theme that pass is applying to the
+    // host's subtree (its native RequestedTheme modifier lands only after children are
+    // dispatched); otherwise the host's live ActualTheme.
+    private ElementTheme RealizationTheme(ContextCapture? capture, UIElement? host)
+        => capture is not null && _entryDepth > 0 && capture.PassId == _passId
+            ? capture.PassTheme
+            : LiveAmbientTheme(host);
+
+    /// <summary>
+    /// The theme a row realized into <paramref name="host"/> should resolve ThemeRef
+    /// resource overrides against. Read from the host itself rather than captured at
+    /// reconcile time: the host is in the tree, so its <c>ActualTheme</c> already reflects
+    /// every ancestor <c>RequestedTheme</c> — including one that changed while the host was
+    /// skipped. Returns <see cref="ElementTheme.Default"/> when that matches the app theme,
+    /// preserving the reconciler's "no ancestor override" meaning.
+    /// </summary>
+    private static ElementTheme LiveAmbientTheme(UIElement? host)
+    {
+        if (host is not FrameworkElement fe) return ElementTheme.Default;
+        var actual = fe.ActualTheme;
+        var app = Application.Current?.RequestedTheme == ApplicationTheme.Dark ? ElementTheme.Dark : ElementTheme.Light;
+        return actual == app ? ElementTheme.Default : actual;
+    }
+
+    /// <summary>
+    /// Registers <paramref name="host"/> (see <see cref="CaptureContextForHost"/>) and
+    /// hands its capture to <paramref name="factory"/> so <c>GetElement</c> replays it.
+    /// </summary>
+    internal void AttachContextCapture(IElementFactory factory, FrameworkElement host)
+    {
+        if (factory is IContextCapturingFactory capturing)
+            capturing.ContextCapture = CaptureContextForHost(host);
+    }
+
+    internal readonly struct RealizationFrame : IDisposable
+    {
+        private readonly Reconciler _owner;
+        private readonly List<(ContextBase Context, object? Value)>? _previousStack;
+        private readonly ElementTheme _previousTheme;
+        private readonly List<UIElement>? _previousJournal;
+        private readonly List<UIElement>? _previousRoots;
+        private readonly int _previousBoundaryDepth;
+        private readonly int _previousProviderChangeDepth;
+        private readonly int _previousThemeChangeDepth;
+        private readonly Element? _previousReconcilingElement;
+        private readonly StaggerScope? _previousStagger;
+        private readonly string? _previousDiagOwner;
+        private readonly string? _previousDiagRootOwner;
+
+        internal RealizationFrame(Reconciler owner, ContextCapture? capture, ElementTheme ambientTheme)
+        {
+            _owner = owner;
+            _previousTheme = owner._ambientRequestedTheme;
+            _previousJournal = owner._boundaryMountJournal;
+            _previousRoots = owner._boundaryMountRoots;
+            _previousBoundaryDepth = owner._errorBoundaryDepth;
+            _previousProviderChangeDepth = owner._providerChangeDepth;
+            _previousThemeChangeDepth = owner._themeChangeDepth;
+            _previousReconcilingElement = owner._reconcilingElement;
+            _previousStagger = _staggerScope;
+            _previousDiagOwner = owner._diagOwner;
+            _previousDiagRootOwner = owner.DiagnosticRootOwner;
+
+            owner._boundaryMountJournal = null;
+            owner._boundaryMountRoots = null;
+            owner._errorBoundaryDepth = 0;
+            owner._providerChangeDepth = 0;
+            owner._themeChangeDepth = 0;
+            owner._reconcilingElement = null;
+            owner._ambientRequestedTheme = ambientTheme;
+            // A row built re-entrantly is not part of the component being rendered: report
+            // its owner as unknown, as for any row realized during layout.
+            owner._diagOwner = null;
+            owner.DiagnosticRootOwner = null;
+            _staggerScope = null;
+
+            _previousStack = capture is not null ? owner._contextScope.Replace(capture.Entries, capture.Generation) : null;
+        }
+
+        public void Dispose()
+        {
+            var owner = _owner;
+            if (owner is null) return;
+            if (_previousStack is not null)
+                owner._contextScope.Restore(_previousStack);
+            owner._ambientRequestedTheme = _previousTheme;
+            owner._boundaryMountJournal = _previousJournal;
+            owner._boundaryMountRoots = _previousRoots;
+            owner._errorBoundaryDepth = _previousBoundaryDepth;
+            owner._providerChangeDepth = _previousProviderChangeDepth;
+            owner._themeChangeDepth = _previousThemeChangeDepth;
+            owner._reconcilingElement = _previousReconcilingElement;
+            owner._diagOwner = _previousDiagOwner;
+            owner.DiagnosticRootOwner = _previousDiagRootOwner;
+            _staggerScope = _previousStagger;
+        }
+    }
 
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.6) — push a stagger scope for child enter
@@ -3346,6 +3627,13 @@ public sealed partial class Reconciler : IDisposable
     {
         if (_componentNodes.TryGetValue(control, out var node)
             && HasConsumedContextChanged(node))
+            return true;
+
+        // A virtualized host has no realized consumer for rows it has yet to realize,
+        // so its own snapshot stands in for them: if the providers above it changed,
+        // decline the skip so the Update path re-snapshots before the next realization.
+        if (TryGetContextCapture(control) is { } capture
+            && (capture.IsStale(_contextScope) || capture.ThemeGeneration != _themeGeneration))
             return true;
 
         bool found = false;
