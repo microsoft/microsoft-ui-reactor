@@ -3275,8 +3275,9 @@ Write(string id, byte[] data) → void
 bool ShowFrequent { get; set; }
 bool ShowRecent { get; set; }
 string AppUserModelId { get; set; }
-ClearAsync() → Task
-UpdateAsync(IEnumerable<JumpListItem> items) → Task
+ClearAsync() → Task<IReadOnlyList<string>>
+GetRemovedArgumentsAsync() → Task<IReadOnlyList<string>>
+UpdateAsync(IEnumerable<JumpListItem> items) → Task<IReadOnlyList<string>>
 
 ### record JumpListItem
 new(string Title, string Arguments, JumpListItemKind Kind = JumpListItemKind.Task, string Description = null, WindowIcon Icon = null, string GroupCategory = null)

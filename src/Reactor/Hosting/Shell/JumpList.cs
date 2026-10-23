@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor.Hosting;
 
 namespace Microsoft.UI.Reactor;
@@ -272,9 +271,17 @@ public static class JumpList
     /// fire-and-forget is desired. Individual HRESULT failures from shell APIs
     /// (e.g., <c>BeginList</c>, <c>CommitList</c>) are logged via
     /// <see cref="Core.Diagnostics.DiagnosticLog"/> but do not throw.
+    /// Entries currently recorded as removed by Windows are omitted. A successful
+    /// update clears the platform's removal records. Retain the returned arguments
+    /// in the app's destination tracking data to avoid reintroducing them on the
+    /// next update without new user activity.
     /// </remarks>
+    /// <returns>All distinct removed arguments observed in this update transaction,
+    /// including removals not present in <paramref name="items"/>. The result reports
+    /// observations, not commit success; logged shell HRESULT failures retain the
+    /// existing non-throwing behavior.</returns>
     [UIThreadOnly]
-    public static async Task UpdateAsync(IEnumerable<JumpListItem> items)
+    public static async Task<IReadOnlyList<string>> UpdateAsync(IEnumerable<JumpListItem> items)
     {
         ArgumentNullException.ThrowIfNull(items);
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(UpdateAsync));
@@ -294,8 +301,7 @@ public static class JumpList
 
         if (TryUpdatePackaged(snapshot, out var task))
         {
-            await task!.ConfigureAwait(false);
-            return;
+            return await task!.ConfigureAwait(false);
         }
 
         // Unpackaged path — caller-error gates run synchronously (before we
@@ -307,14 +313,65 @@ public static class JumpList
             throw new InvalidOperationException(
                 "JumpList.AppUserModelId must be set before UpdateAsync on unpackaged apps. (spec 036 §11.3)");
 
-        await Task.Run(() => UpdateUnpackaged(snapshot)).ConfigureAwait(false);
+        return await Task.Run(() => UpdateUnpackaged(snapshot)).ConfigureAwait(false);
     }
 
     /// <summary>Clear all user-defined jump-list entries. UI-thread only.</summary>
-    public static Task ClearAsync()
+    /// <remarks>Like <see cref="UpdateAsync"/>, a successful clear consumes Windows'
+    /// removal records. Retain the returned arguments before publishing destinations again.</remarks>
+    /// <returns>The removed arguments observed by the clear transaction.</returns>
+    public static Task<IReadOnlyList<string>> ClearAsync()
         => UpdateAsync(global::System.Array.Empty<JumpListItem>());
 
-    private static bool TryUpdatePackaged(IReadOnlyList<JumpListItem> items, out Task? task)
+    /// <summary>
+    /// Read the argument strings of entries removed by the user. UI-thread only.
+    /// </summary>
+    /// <remarks>
+    /// This does not update the list or acknowledge removals. Call before
+    /// <see cref="UpdateAsync"/> and remove matching entries from the app's
+    /// destination tracking data. A successful update clears its removal records;
+    /// also retain the arguments returned by that update to capture removals that
+    /// occurred after this query. Only reintroduce a destination after new user activity.
+    /// On unpackaged apps, only shell links targeting the current executable
+    /// are returned; shell-item destinations are not created by this wrapper.
+    /// Argument strings are compared ordinally, not as parsed command lines.
+    /// </remarks>
+    [UIThreadOnly]
+    public static async Task<IReadOnlyList<string>> GetRemovedArgumentsAsync()
+    {
+        ThreadAffinity.ThrowIfNotOnUIThread(nameof(GetRemovedArgumentsAsync));
+        if (Hosting.Shell.PackageRuntime.IsPackaged)
+        {
+            var list = await global::Windows.UI.StartScreen.JumpList.LoadCurrentAsync();
+            return list.Items.Where(item => item.RemovedByUser)
+                .Select(item => item.Arguments).Distinct(StringComparer.Ordinal).ToArray();
+        }
+
+        var appUserModelId = AppUserModelId;
+        if (string.IsNullOrEmpty(appUserModelId))
+            throw new InvalidOperationException(
+                "JumpList.AppUserModelId must be set before GetRemovedArgumentsAsync on unpackaged apps.");
+
+        return await Task.Run(() =>
+            Hosting.Shell.JumpListComInterop.GetRemovedArguments(appUserModelId)).ConfigureAwait(false);
+    }
+
+    // Also used by the COM path, before AppendCategory: reinserting a removed
+    // destination would cause Windows to reject the entire category.
+    internal static IReadOnlyList<JumpListItem> ExcludeRemovedItems(
+        IReadOnlyList<JumpListItem> items, IEnumerable<string> removedArguments,
+        bool customCategoriesOnly)
+    {
+        var removed = new HashSet<string>(removedArguments, StringComparer.Ordinal);
+        if (removed.Count == 0) return items;
+        return items.Where(item =>
+            item.Kind == JumpListItemKind.Separator ||
+            (customCategoriesOnly &&
+                (item.Kind != JumpListItemKind.Custom || string.IsNullOrEmpty(item.GroupCategory))) ||
+            !removed.Contains(item.Arguments ?? string.Empty)).ToArray();
+    }
+
+    private static bool TryUpdatePackaged(IReadOnlyList<JumpListItem> items, out Task<IReadOnlyList<string>>? task)
     {
         task = null;
         if (!Hosting.Shell.PackageRuntime.IsPackaged) return false;
@@ -335,7 +392,7 @@ public static class JumpList
         }
     }
 
-    private static async Task UpdatePackagedCore(IReadOnlyList<JumpListItem> items)
+    private static async Task<IReadOnlyList<string>> UpdatePackagedCore(IReadOnlyList<JumpListItem> items)
     {
         // The WinRT JumpList class lives in the Windows.UI.StartScreen namespace.
         // Methods on it are async; await on a UI thread completes via the captured
@@ -343,15 +400,29 @@ public static class JumpList
         global::Windows.UI.StartScreen.JumpList list;
         list = await global::Windows.UI.StartScreen.JumpList.LoadCurrentAsync();
 
-        list.Items.Clear();
+        var removed = ReplacePackagedItems(list.Items, items,
+            list.Items.Where(item => item.RemovedByUser).Select(item => item.Arguments));
         list.SystemGroupKind = ResolveSystemGroupKind();
+        await list.SaveAsync();
+        return removed;
+    }
+
+    internal static IReadOnlyList<string> ReplacePackagedItems(
+        IList<global::Windows.UI.StartScreen.JumpListItem> nativeItems,
+        IReadOnlyList<JumpListItem> items, IEnumerable<string> removedArguments)
+    {
+        // Capture removals before clearing the loaded entries. Newly-created
+        // WinRT items do not inherit RemovedByUser from the old instances.
+        var removed = removedArguments.Distinct(StringComparer.Ordinal).ToArray();
+        items = ExcludeRemovedItems(items, removed, customCategoriesOnly: false);
+        nativeItems.Clear();
 
         for (int i = 0; i < items.Count; i++)
         {
             var item = items[i];
             if (item.Kind == JumpListItemKind.Separator)
             {
-                list.Items.Add(global::Windows.UI.StartScreen.JumpListItem.CreateSeparator());
+                nativeItems.Add(global::Windows.UI.StartScreen.JumpListItem.CreateSeparator());
                 continue;
             }
 
@@ -364,10 +435,9 @@ public static class JumpList
                 native.Logo = new Uri(src);
             if (item.Kind == JumpListItemKind.Custom && !string.IsNullOrEmpty(item.GroupCategory))
                 native.GroupName = item.GroupCategory;
-            list.Items.Add(native);
+            nativeItems.Add(native);
         }
-
-        await list.SaveAsync();
+        return removed;
     }
 
     private static global::Windows.UI.StartScreen.JumpListSystemGroupKind ResolveSystemGroupKind()
@@ -375,12 +445,12 @@ public static class JumpList
         var recent = ShowRecent;
         var freq = ShowFrequent;
         if (recent && freq) return global::Windows.UI.StartScreen.JumpListSystemGroupKind.Frequent; // shell only honours one — pick frequent
-        if (recent)         return global::Windows.UI.StartScreen.JumpListSystemGroupKind.Recent;
-        if (freq)           return global::Windows.UI.StartScreen.JumpListSystemGroupKind.Frequent;
+        if (recent) return global::Windows.UI.StartScreen.JumpListSystemGroupKind.Recent;
+        if (freq) return global::Windows.UI.StartScreen.JumpListSystemGroupKind.Frequent;
         return global::Windows.UI.StartScreen.JumpListSystemGroupKind.None;
     }
 
-    private static void UpdateUnpackaged(IReadOnlyList<JumpListItem> items)
+    private static IReadOnlyList<string> UpdateUnpackaged(IReadOnlyList<JumpListItem> items)
     {
         var aumid = AppUserModelId;
         if (string.IsNullOrEmpty(aumid))
@@ -390,7 +460,7 @@ public static class JumpList
         // Defer to the Win32 ICustomDestinationList implementation. Throws
         // are caught by the caller; here we let them bubble so the awaited
         // Task surfaces them via the ConfigureAwait(false) Continue.
-        Hosting.Shell.JumpListComInterop.UpdateUnpackaged(aumid!, items, ShowRecent, ShowFrequent);
+        return Hosting.Shell.JumpListComInterop.UpdateUnpackaged(aumid!, items, ShowRecent, ShowFrequent).RemovedArguments;
     }
 
     /// <summary>Test hook — clear cached state between fixtures.</summary>

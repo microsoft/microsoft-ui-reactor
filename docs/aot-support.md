@@ -15,6 +15,13 @@ This page enumerates what works, what doesn't, and what's planned. **If you publ
 - **Charting (D3)** — algorithm port is pure C#.
 - **Markdown** — md4c-backed parser and renderer.
 - **Commanding** — command records, focus-scoped accelerators.
+- **Unpackaged jump lists** — source-generated COM, including removal queries
+  and transaction removal results. The backend uses explicit, transaction-scoped
+  interface ownership and a balanced COM apartment scope (thread-pool threads
+  already have implicit MTA membership). `JumpList_NativeInterop` exercises real
+  shell links and the public update/query/clear APIs from the unpackaged Native
+  AOT host. The packaged WinRT path has a packaged JIT fixture, but is not covered
+  by that Native AOT host; packaged AOT support is not established by this fixture.
 - **Animation** — compositor-layer transitions, keyframes.
 - **Theming** — `ThemeRef` tokens, style caching. Brushes resolved through `XamlControlsResources` work under AOT.
 - **Built-in WinUI controls** — `NavigationView`, `TabView`, `Pivot`, `TreeView`, `Expander`, `InfoBar`, `MenuBar`, `BreadcrumbBar`, `RefreshContainer`, `TeachingTip`, `ColorPicker`, `NumberBox`, `RatingControl`, `SplitButton`, etc. all mount and update under AOT. `{TemplateBinding}` against built-in DPs works; private DPs declared in a separate third-party assembly without an `IXamlMetadataProvider` are still broken (Issue #142).
