@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="TableViewSamples.Pages.StickyHeadersPage"
+    NavigationCacheMode="Enabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:controls="using:TableViewSamples.Controls">
+
+    <controls:SamplePresenter
+        Header="Sticky headers"
+        Description="The column headers stay pinned at the top of the table as you scroll down — the rows scroll under them. This sample binds a wide employee roster so the effect is visible without needing a long list to scroll through."
+        SourceCaption="StickyHeadersPage.xaml (excerpt)"
+        SourceSnippet="StickyHeaders.xaml.txt"
+        StretchExample="True">
+
+        <controls:SamplePresenter.Example>
+            <Grid RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <muxc:InfoBar
+                    Grid.Row="0"
+                    IsOpen="True"
+                    IsClosable="False"
+                    Severity="Informational"
+                    Title="Try it"
+                    Message="Scroll horizontally — the header glides with the body. Scroll vertically — it stays pinned. Use the buttons to scroll programmatically."
+                    MinHeight="104"/>
+                <Border
+                    Grid.Row="1"
+                    Style="{StaticResource TableHostBorderStyle}"
+                    Padding="0"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Stretch">
+                    <muxc:TableView
+                        x:Name="WideTable"
+                        ItemsSource="{x:Bind Employees, Mode=OneWay}"
+                        SelectionMode="Single"
+                        VerticalAlignment="Stretch"
+                        MinHeight="320">
+                        <muxc:TableViewTextColumn Header="Employee ID" Width="{StaticResource ColWidthId}" Binding="{Binding EmployeeId}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="First name"  Width="{StaticResource ColWidthShortName}" Binding="{Binding FirstName}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Last name"   Width="{StaticResource ColWidthShortName}" Binding="{Binding LastName}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Email"       Width="{StaticResource ColWidthEmail}" Binding="{Binding Email}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Department"  Width="{StaticResource ColWidthDepartment}" Binding="{Binding Department}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Role"        Width="{StaticResource ColWidthLongName}" Binding="{Binding Role}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Office"      Width="{StaticResource ColWidthLocation}" Binding="{Binding Office}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Phone"       Width="{StaticResource ColWidthLongName}" Binding="{Binding Phone}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Manager"     Width="{StaticResource ColWidthLongName}" Binding="{Binding Manager}" CanUserSort="False" CanUserFilter="False"/>
+                    </muxc:TableView>
+                </Border>
+            </Grid>
+        </controls:SamplePresenter.Example>
+
+        <controls:SamplePresenter.Options>
+            <StackPanel Spacing="12">
+                <TextBlock Text="Programmatic scroll" Style="{StaticResource SectionHeaderTextStyle}"/>
+                <TextBlock
+                    Text="Use these buttons to move the table's scroll position horizontally and vertically without dragging the scrollbars."
+                    Style="{StaticResource SectionDescriptionTextStyle}"
+                    TextWrapping="Wrap"/>
+                <StackPanel Spacing="8">
+                    <Button Content="Scroll H to start" AutomationProperties.AutomationId="ScrollHomeButton" Click="OnScrollHomeClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                    <Button Content="Scroll H to ~400" AutomationProperties.AutomationId="ScrollMidButton" Click="OnScrollMidClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                    <Button Content="Scroll H to end" AutomationProperties.AutomationId="ScrollEndButton" Click="OnScrollEndClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                    <Button Content="Scroll V to ~200" AutomationProperties.AutomationId="ScrollDownButton" Click="OnScrollDownClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                </StackPanel>
+
+                <TextBlock Text="Status" Style="{StaticResource SectionHeaderTextStyle}" Margin="0,8,0,0"/>
+                <Grid ColumnSpacing="12" RowSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Body H-offset" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="BodyHOffsetText" Text="0" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="BodyHOffsetText"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Header H-offset" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="HeaderHOffsetText" Text="0" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="HeaderHOffsetText"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="In sync (within 1px)" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="InSyncText" Text="✓" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="InSyncText"/>
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Body V-offset" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="BodyVOffsetText" Text="0" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="BodyVOffsetText"/>
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Header V-offset (stays pinned)" Style="{StaticResource StatusReadoutLabelStyle}" VerticalAlignment="Top"/>
+                    <TextBlock Grid.Row="4" Grid.Column="1" x:Name="HeaderVOffsetText" Text="0" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="HeaderVOffsetText"/>
+                </Grid>
+            </StackPanel>
+        </controls:SamplePresenter.Options>
+
+    </controls:SamplePresenter>
+</Page>
