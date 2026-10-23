@@ -434,18 +434,12 @@ public sealed class ControlDescriptor<TElement, TControl>
     /// <summary>§14 Phase 3 finish — Engine (2). Bridged variant of
     /// <see cref="Imperative"/> — the lambdas receive the
     /// <see cref="MountContext"/> / <see cref="UpdateContext"/> so they can
-    /// call engine-internal helpers, primarily
-    /// <c>ctx.Reconciler.ReconcileV1Child</c> for an Element slot that
-    /// must preserve descendant component state across re-renders.
+    /// call engine-internal helpers for bindings without owned child lifetime.
     ///
-    /// <para><b>Canonical use:</b> a secondary Element slot on a control
-    /// whose primary <see cref="ChildrenStrategy{TElement,TControl}"/> is
-    /// taken by something else — e.g. <c>Expander.HeaderTemplate</c>
-    /// where the primary <c>Children</c> is the <c>Content</c> slot and
-    /// HeaderTemplate needs structural reconcile but lives on the
-    /// <c>Header</c> property (sometimes a string, sometimes a UIElement).
-    /// Pair with a sibling <see cref="OneWayConditional{TValue}"/> entry
-    /// for the string fallback, gated on the Element slot being null.</para>
+    /// <para>For an owned secondary Element slot, use
+    /// <see cref="ImperativeBridged(Action{MountContext,TControl,TElement},Action{UpdateContext,TControl,TElement,TElement},Action{UnmountContext,TControl})"/>
+    /// so the mounted child also receives terminal teardown. This overload
+    /// is for bindings that do not own child lifetime.</para>
     ///
     /// <para>Same no-fast-path warning as <see cref="Imperative"/> — the
     /// Update lambda runs on every render. Reach for the standard
@@ -455,6 +449,23 @@ public sealed class ControlDescriptor<TElement, TControl>
         Action<UpdateContext, TControl, TElement, TElement> update)
     {
         _properties.Add(new ImperativeBridgedPropEntry<TElement, TControl>(mount, update));
+        return this;
+    }
+
+    /// <summary>Engine-bridged entry with terminal teardown, for owned secondary
+    /// Element slots. Unmount the child while it is still parented, then detach it.
+    /// The callback runs before, and independently of, the descriptor's
+    /// <see cref="OnUnmount"/> hook. Declaring this callback roots a ReactorState
+    /// per control, including keyless controls without element callbacks.
+    /// For example, Expander.HeaderTemplate owns a secondary Element child while
+    /// the primary children strategy owns Content. Pair it with OneWayConditional
+    /// for a string Header fallback when the Element slot is null.</summary>
+    public ControlDescriptor<TElement, TControl> ImperativeBridged(
+        Action<MountContext, TControl, TElement> mount,
+        Action<UpdateContext, TControl, TElement, TElement> update,
+        Action<UnmountContext, TControl> unmount)
+    {
+        _properties.Add(new ImperativeBridgedPropEntry<TElement, TControl>(mount, update, unmount));
         return this;
     }
 

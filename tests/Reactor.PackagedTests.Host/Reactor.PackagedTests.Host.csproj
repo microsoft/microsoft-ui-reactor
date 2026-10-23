@@ -45,6 +45,8 @@
 
   <ItemGroup>
     <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />
+    <!-- ItemsHostReconciliationFixture is linked from the unpackaged host. -->
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" />
   </ItemGroup>
 
   <!-- obj/bin must be excluded, or the glob pulls in the sibling's generated AssemblyInfo

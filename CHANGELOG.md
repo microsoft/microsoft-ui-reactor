@@ -28,6 +28,8 @@ Conventions for contributors:
 
 ### Added
 
+- Optional `ItemsHost.SetCollection` and property-owned teardown via the three-callback `ImperativeBridged` overload ([control reconciler guide](docs/guide/control-reconciler-protocol.md)).
+
 - **ReactorGallery catches up with recent framework features.** A new **System →
   File pickers** page demonstrates `PickFileAsync`, `PickMultipleFilesAsync`
   (with labelled `FileTypeChoices`), `PickFolderAsync` / `PickMultipleFoldersAsync`
@@ -373,6 +375,8 @@ Conventions for contributors:
   `winapp new --template-version`.
 
 ### Fixed
+
+- Flat `ItemsHost` children reconcile incrementally, same-instance Element item sources honor dirty-state/context/theme/forced-render invalidation instead of skipping unconditionally, and generated Element slots receive terminal teardown while still parented ([control reconciler guide](docs/guide/control-reconciler-protocol.md)).
 
 - **Source-map generator no longer fails under `dotnet watch`** (issue #1404, spec 010).
   When Reactor is a project reference, Hot Reload's workspace compilation sees Reactor's

@@ -532,7 +532,7 @@ public sealed class WrapperGenerator : IIncrementalGenerator
             props, contentProp, panelChildren, items, events,
             descriptorOnly, hasManual, contentElementName, registerAssembly,
             panelPerChild, panelAfterAll, lifecycleMount, lifecycleUnmount,
-            contentPropTypeFqn, elementSlots);
+            contentPropTypeFqn, elementSlots, writableItems: CanAssignItems(control));
 
         var hint = descriptorOnly ? $"{elementName}.Descriptor.g.cs" : $"{elementName}.Wrapper.g.cs";
 
@@ -864,6 +864,21 @@ public sealed class WrapperGenerator : IIncrementalGenerator
         return fqn is "global::System.Object"
             or "object"
             or "global::Microsoft.UI.Xaml.RoutedEventArgs";
+    }
+
+    // Only the interface-typed setter can accept the engine's observable list.
+    // Concrete native ItemCollection properties must keep their existing sink.
+    private static bool CanAssignItems(INamedTypeSymbol control)
+    {
+        for (INamedTypeSymbol? t = control; t is not null; t = t.BaseType)
+            foreach (var p in t.GetMembers("Items").OfType<IPropertySymbol>())
+                if (!p.IsStatic && p.DeclaredAccessibility == Accessibility.Public &&
+                    p.SetMethod is { DeclaredAccessibility: Accessibility.Public, IsInitOnly: false } &&
+                    p.Type is INamedTypeSymbol n &&
+                    n.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IList_T &&
+                    n.TypeArguments[0].SpecialType == SpecialType.System_Object)
+                    return true;
+        return false;
     }
 
     private static bool HasItems(INamedTypeSymbol control)
@@ -1369,7 +1384,8 @@ public sealed class WrapperGenerator : IIncrementalGenerator
         string? lifecycleMount = null,
         string? lifecycleUnmount = null,
         string? contentPropTypeFqn = null,
-        IReadOnlyList<ElementSlotInfo>? elementSlots = null)
+        IReadOnlyList<ElementSlotInfo>? elementSlots = null,
+        bool writableItems = false)
     {
         const string Element = "global::Microsoft.UI.Reactor.Core.Element";
         const string Action = "global::System.Action";
@@ -1562,7 +1578,15 @@ public sealed class WrapperGenerator : IIncrementalGenerator
         {
             sb.AppendLine($"            Children = new {itemsHost}(");
             sb.AppendLine("                GetItems:      static e => e.Items,");
-            sb.AppendLine("                GetCollection: static c => c.Items),");
+            if (writableItems)
+            {
+                sb.AppendLine("                GetCollection: static c => c.Items)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                SetCollection = static (c, items) => c.Items = items,");
+                sb.AppendLine("            },");
+            }
+            else
+                sb.AppendLine("                GetCollection: static c => c.Items),");
         }
         sb.AppendLine("            GetSetters = static e => e.Setters,");
         sb.Append("        }");
@@ -1676,8 +1700,8 @@ public sealed class WrapperGenerator : IIncrementalGenerator
                 // ReconcileChild — casting an actual null reference still yields null (no throw).
                 var mountExpr = narrow
                     ? $"({slot.ControlPropTypeFqn})ctx.MountChild(e.{slot.Name})!"
-                    : $"ctx.MountChild(e.{slot.Name})";
-                var nextExpr = narrow ? $"({slot.ControlPropTypeFqn})__next!" : "__next";
+                    : $"ctx.MountChild(e.{slot.Name})!";
+                var nextExpr = narrow ? $"({slot.ControlPropTypeFqn})__next!" : "__next!";
                 sb.AppendLine();
                 sb.AppendLine("        .ImperativeBridged(");
                 sb.AppendLine($"            mount: static (ctx, c, e) => {{ if (e.{slot.Name} is not null) c.{slot.ControlProp} = {mountExpr}; }},");
@@ -1692,7 +1716,15 @@ public sealed class WrapperGenerator : IIncrementalGenerator
                 sb.AppendLine("                }");
                 sb.AppendLine($"                var __existing = c.{slot.ControlProp} as {UIElement};");
                 sb.AppendLine($"                var __next = ctx.ReconcileChild(__o.{slot.Name}, __n.{slot.Name}, __existing);");
-                sb.Append($"                if (!ReferenceEquals(__existing, __next)) c.{slot.ControlProp} = {nextExpr};\n            }})");
+                sb.AppendLine($"                if (!ReferenceEquals(__existing, __next)) c.{slot.ControlProp} = {nextExpr};");
+                sb.AppendLine("            },");
+                sb.AppendLine("            unmount: static (ctx, c) =>");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                if ({Reconciler}.GetElementTag(c) is not {elementName} {{ {slot.Name}: not null }}) return;");
+                sb.AppendLine($"                var __child = c.{slot.ControlProp} as {UIElement};");
+                sb.AppendLine("                if (__child is not null) ctx.Reconciler.UnmountChild(__child);");
+                sb.AppendLine($"                c.{slot.ControlProp} = null!;");
+                sb.Append("            })");
             }
         sb.AppendLine(";");
         sb.AppendLine();

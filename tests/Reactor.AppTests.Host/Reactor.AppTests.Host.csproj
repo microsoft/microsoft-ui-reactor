@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <PackageReference Include="MessageFormat" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" />
   </ItemGroup>
 
   <ItemGroup>

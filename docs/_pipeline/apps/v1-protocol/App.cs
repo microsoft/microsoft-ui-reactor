@@ -124,5 +124,27 @@ public static class Colors
     public static readonly Color Green  = Color.FromArgb(0xFF, 0x22, 0xC5, 0x5E);
 }
 
+// <snippet:flat-items-descriptor>
+public sealed record FlatItemsElement(IReadOnlyList<object> Items) : Element;
+
+public sealed partial class FlatItemsControl : WinUI.Control
+{
+    public IList<object> Items { get; set; } = new List<object>();
+}
+
+public static class FlatItemsDescriptor
+{
+    public static readonly ControlDescriptor<FlatItemsElement, FlatItemsControl> Descriptor = new()
+    {
+        Children = new ItemsHost<FlatItemsElement, FlatItemsControl>(
+            GetItems: static e => e.Items,
+            GetCollection: static c => c.Items)
+        {
+            SetCollection = static (c, items) => c.Items = items,
+        },
+    };
+}
+// </snippet:flat-items-descriptor>
+
 
 
