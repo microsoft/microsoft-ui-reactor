@@ -820,14 +820,20 @@ public sealed partial class Reconciler : IDisposable
     /// placeholder's published <c>owner=</c> is the owner its body was declared under, so it is
     /// restored for the mount. Nested components still scope their own subtrees.
     /// </summary>
-    internal UIElement? MountDialogContent(FrameworkElement placeholder, Element content, Action requestRerender)
+    internal UIElement? MountDialogContent(FrameworkElement placeholder, Element content, Action requestRerender, ElementTheme theme)
     {
-        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
-            && CurrentDiagnosticOwner is null
-            && placeholder.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string published
-            && Diagnostics.ReactorSourcePublisher.Owner(published) is { } owner)
-            return MountUnderOwner(content, requestRerender, owner);
-        return Mount(content, requestRerender);
+        var previousTheme = _ambientRequestedTheme;
+        _ambientRequestedTheme = theme;
+        try
+        {
+            if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+                && CurrentDiagnosticOwner is null
+                && placeholder.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string published
+                && Diagnostics.ReactorSourcePublisher.Owner(published) is { } owner)
+                return MountUnderOwner(content, requestRerender, owner);
+            return Mount(content, requestRerender);
+        }
+        finally { _ambientRequestedTheme = previousTheme; }
     }
 
     private UIElement? MountUnderOwner(Element element, Action requestRerender, string owner)
