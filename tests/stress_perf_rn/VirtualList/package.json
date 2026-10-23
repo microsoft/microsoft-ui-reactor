@@ -12,7 +12,7 @@
     "test:windows": "jest --config jest.config.windows.js"
   },
   "dependencies": {
-    "react": "19.3.0",
+    "react": "19.3.1",
     "react-native": "0.82.1"
   },
   "devDependencies": {
@@ -21,9 +21,9 @@
     "@babel/runtime": "^7.29.10",
     "@react-native-community/cli": "20.2.0",
     "@react-native/babel-preset": "0.82.1",
-    "@react-native/eslint-config": "0.87.1",
+    "@react-native/eslint-config": "0.88.0",
     "@react-native/metro-config": "0.82.1",
-    "@react-native/typescript-config": "0.87.1",
+    "@react-native/typescript-config": "0.88.0",
     "@types/jest": "^30.0.0",
     "@types/react": "^19.3.0",
     "@types/react-test-renderer": "^19.3.0",
@@ -31,7 +31,7 @@
     "jest": "^30.5.2",
     "prettier": "3.9.10",
     "react-native-windows": "^1.0.0",
-    "react-test-renderer": "19.3.0",
+    "react-test-renderer": "19.3.1",
     "typescript": "^5.8.3",
     "@rnx-kit/jest-preset": "^0.1.17"
   },
