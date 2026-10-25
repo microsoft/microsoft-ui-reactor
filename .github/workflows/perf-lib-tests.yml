@@ -13,10 +13,12 @@ on:
   push:
     paths:
       - 'tests/stress_perf/ci/**'
+      - 'tests/perf_bench/PerfBench.ControlModel/**'
       - '.github/workflows/perf-lib-tests.yml'
   pull_request:
     paths:
       - 'tests/stress_perf/ci/**'
+      - 'tests/perf_bench/PerfBench.ControlModel/**'
       - '.github/workflows/perf-lib-tests.yml'
 
 permissions:
