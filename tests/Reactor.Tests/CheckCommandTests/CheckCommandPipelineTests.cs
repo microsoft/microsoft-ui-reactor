@@ -65,6 +65,41 @@ public class CheckCommandPipelineTests
         Assert.Equal(2, lines.Length); // 3 diags - 1 dup
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("--final")]
+    [InlineData("--strict")]
+    [InlineData("--quiet")]
+    public void Emit_preserves_complete_error_messages_in_every_mode(string modeFlag)
+    {
+        const string message = """
+            Task 'WinAppSdkExpandPriContent' failed. Could not find file 'C:\src\SampleApp\obj\Debug\net10.0-windows10.0.26100.0\win-x64\Reactor.Advanced.pri.xml'.
+            """;
+        var diags = CheckCommand.ParseDiagnostics($"App.csproj(1,1): error APPX0002: {message} [App.csproj]");
+        Assert.True(CheckArgs.TryParse(modeFlag.Length == 0 ? [] : [modeFlag], out var args, out var error), error);
+        var context = new RankerContext(args.Mode, args.EmitThreshold);
+        var stdout = new StringWriter();
+
+        CheckCommand.EmitDiagnostics(diags, stdout, trace: null,
+            stdoutFilter: d => Ranker.ShouldEmit(d, context));
+
+        Assert.Equal($"App.csproj:1:1  E  APPX0002  {message}{Environment.NewLine}", stdout.ToString());
+    }
+
+    [Theory]
+    [InlineData("warning", "W")]
+    [InlineData("info", "I")]
+    public void Emit_keeps_non_error_messages_compact(string severity, string abbreviation)
+    {
+        var message = new string('x', 100) + " diagnostic details";
+        var diags = CheckCommand.ParseDiagnostics($"Program.cs(1,1): {severity} CS1234: {message} [App.csproj]");
+        var stdout = new StringWriter();
+
+        CheckCommand.EmitDiagnostics(diags, stdout, trace: null);
+
+        Assert.Equal($"Program.cs:1:1  {abbreviation}  CS1234  {new string('x', 97)}...{Environment.NewLine}", stdout.ToString());
+    }
+
     [Fact]
     public void Emit_with_trace_writes_one_jsonl_row_per_unique_diagnostic()
     {
