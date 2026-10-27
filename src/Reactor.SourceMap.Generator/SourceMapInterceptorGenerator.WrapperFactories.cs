@@ -21,9 +21,16 @@ namespace Microsoft.UI.Reactor.SourceMap.Generator;
 ///   <item>a DSL call that takes one as an argument — <c>VStack(8, SettingsCard(...))</c>,
 ///   <c>HStack(8, gauge)</c> where <c>var gauge = RadialGauge(...).Width(140)</c> — either
 ///   fails overload resolution or resolves against an error type. It is bound again with
-///   every such sub-expression replaced by <c>default(TheElement)</c>, which has exactly
-///   the type the real compilation will see.</item>
+///   every such sub-expression replaced by <c>default(Element)</c> — which the finished
+///   record converts to and overloads like — and the result is accepted only when nothing in
+///   the call could bind differently once the record is complete (OverloadChoiceIsStable,
+///   the accounting invariant); otherwise the call is left unstamped.</item>
 /// </list>
+///
+/// <para>A possible follow-up would bind against a compilation augmented with the wrapper
+/// generator's output (re-running its emit here), which would make every such call bind
+/// exactly. It was not taken because it duplicates the wrapper generator's emit and costs a
+/// second semantic model per affected tree; the placeholder binding is a strict subset of it.</para>
 /// </summary>
 public sealed partial class SourceMapInterceptorGenerator
 {
@@ -35,21 +42,24 @@ public sealed partial class SourceMapInterceptorGenerator
     /// factory in the (unusual) compilation where it is visible — see the comment at the use
     /// site in <c>TryDescribe</c>. <paramref name="isWrapperFactory"/> tells the two apart.
     /// </summary>
-    private static bool IsDslFactory(IMethodSymbol method, out bool isWrapperFactory)
+    private static bool IsDslFactory(IMethodSymbol method, Compilation compilation, out bool isWrapperFactory)
     {
         isWrapperFactory = false;
         if (method.ContainingType is not { } owner) return false;
         if (owner.ToDisplayString() == FactoriesMetadataName) return true;
 
-        // Only the GENERATED factory: one that comes from metadata (a referenced library) or
-        // from a tree that is itself wrapper-generator output fed back in. A hand-written
-        // static of the same name on the author's partial record is not one — in a normal
+        // Only where every overload is known: a factory declared outside this compilation (a
+        // referenced library, as metadata or — under `dotnet watch` — as another project's
+        // source) or in a tree that is wrapper-generator output fed back in. A hand-written
+        // static of the same name on the author's own partial record is not one — in a normal
         // build the generated overloads beside it are still invisible, so which of them the
         // real compilation picks is unknowable here.
         isWrapperFactory = method.IsStatic
             && WrapperFactoryCalls.IsWrapperFactoryOwner(owner, method.Name)
-            && method.Locations.All(static l => l.IsInMetadata
-                || (l.SourceTree?.FilePath.EndsWith(".Wrapper.g.cs", System.StringComparison.OrdinalIgnoreCase) ?? false));
+            && method.Locations.All(l => l.IsInMetadata
+                || l.SourceTree is null
+                || !compilation.ContainsSyntaxTree(l.SourceTree)
+                || l.SourceTree.FilePath.EndsWith(".Wrapper.g.cs", System.StringComparison.OrdinalIgnoreCase));
         return isWrapperFactory;
     }
     /// <summary>
@@ -468,15 +478,13 @@ public sealed partial class SourceMapInterceptorGenerator
             // One type query per node; a symbol query only where a type alone cannot answer —
             // a typeless name (a method group) or a name that might be an implicitly typed local.
             // This runs over every DSL call's arguments in a compilation with wrapper records.
-            var type = expression is OmittedArraySizeExpressionSyntax || SyntaxFacts.IsInTypeOnlyContext(expression)
-                ? null
-                : model.GetTypeInfo(expression, ct).Type;
-            if (type is IErrorTypeSymbol && !(expression.Parent is InvocationExpressionSyntax nameofCall && nameofCall.Expression == expression && IsNameof(nameofCall)))
+            var type = SyntaxFacts.IsInTypeOnlyContext(expression) ? null : model.GetTypeInfo(expression, ct).Type;
+            if (type is IErrorTypeSymbol)
             {
                 memo[node] = true;
                 return (true, false);
             }
-            if ((type is not null && MentionsIncompleteWrapper(type, model.Compilation, 0) && ValueTypeOf(model, expression, ct) is not null)
+            if ((type is not null && MentionsIncompleteWrapper(type, model.Compilation) && ValueTypeOf(model, expression, ct) is not null)
                 || (type is null && IsWrapperDependentMethodGroup(model, expression, ct)))
             {
                 memo[node] = true;
@@ -636,8 +644,8 @@ public sealed partial class SourceMapInterceptorGenerator
         foreach (var symbol in info.Symbol is { } single ? ImmutableArray.Create(single) : info.CandidateSymbols)
         {
             if (symbol is not IMethodSymbol method) continue;
-            if (MentionsIncompleteWrapper(method.ReturnType, compilation, 0)) return true;
-            if (method.Parameters.Any(p => MentionsIncompleteWrapper(p.Type, compilation, 0))) return true;
+            if (MentionsIncompleteWrapper(method.ReturnType, compilation)) return true;
+            if (method.Parameters.Any(p => MentionsIncompleteWrapper(p.Type, compilation))) return true;
         }
         return false;
     }
@@ -682,7 +690,7 @@ public sealed partial class SourceMapInterceptorGenerator
     /// whose base chain or interfaces are (<c>class Screen : Component&lt;FooElement&gt;</c>,
     /// whose inherited <c>Props</c> is a record). Cached per compilation.
     /// </summary>
-    private static bool MentionsIncompleteWrapper(ITypeSymbol type, Compilation compilation, int depth)
+    private static bool MentionsIncompleteWrapper(ITypeSymbol type, Compilation compilation)
     {
         var cache = s_tainted.GetValue(compilation, static _ => new System.Collections.Concurrent.ConcurrentDictionary<ITypeSymbol, bool>(SymbolEqualityComparer.Default));
         return IsTainted(type, compilation, cache, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default));
@@ -697,7 +705,9 @@ public sealed partial class SourceMapInterceptorGenerator
         HashSet<ITypeSymbol> inProgress)
     {
         if (cache.TryGetValue(type, out var known)) return known;
-        // A cycle (`class A : IComparable<A>`) adds nothing; the outer frame decides.
+        // A cycle (`class A : IComparable<A>`) adds nothing; the outer frame decides. A
+        // `false` reached through a cut cycle depends on where the walk started, so only
+        // `true` answers, and answers computed with nothing in progress, are cached.
         if (!inProgress.Add(type)) return false;
         try
         {
@@ -708,7 +718,7 @@ public sealed partial class SourceMapInterceptorGenerator
                 INamedTypeSymbol named => IsTaintedNamed(named, compilation, cache, inProgress),
                 _ => false,
             };
-            cache[type] = tainted;
+            if (tainted || inProgress.Count == 1) cache[type] = tainted;
             return tainted;
         }
         finally
@@ -825,7 +835,8 @@ public sealed partial class SourceMapInterceptorGenerator
     }
 
     /// <summary>
-    /// Replaces wrapper-factory calls with <c>(default(global::Ns.FooElement))</c>. Visits
+    /// Replaces wrapper values (unbound factory calls, record-typed values) with
+    /// <c>(default(global::Microsoft.UI.Reactor.Core.Element))</c> and position-checks each. Visits
     /// ORIGINAL nodes (the rewriter is handed the original tree), so every semantic
     /// question it asks is answered from the real compilation.
     /// </summary>
@@ -958,7 +969,7 @@ public sealed partial class SourceMapInterceptorGenerator
         /// </summary>
         public INamedTypeSymbol? RootRecord { get; private set; }
 
-        private bool MentionsIncompleteWrapper(ITypeSymbol type) => SourceMapInterceptorGenerator.MentionsIncompleteWrapper(type, _model.Compilation, 0);
+        private bool MentionsIncompleteWrapper(ITypeSymbol type) => SourceMapInterceptorGenerator.MentionsIncompleteWrapper(type, _model.Compilation);
 
         private enum NestedResult { Deterministic, PlaceholderLike, Unsafe }
 

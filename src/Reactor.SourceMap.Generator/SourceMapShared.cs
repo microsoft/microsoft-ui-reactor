@@ -51,9 +51,18 @@ internal static class SourceMapPositions
         static bool Lists(IReadOnlyDictionary<string, string> features, string key)
         {
             if (!features.TryGetValue(key, out var value) || string.IsNullOrEmpty(value)) return false;
+            // The compiler accepts an interceptor in a listed namespace or any namespace nested
+            // in one (and everywhere for `global`), so the same rule is applied here.
             foreach (var part in value.Split(';'))
             {
-                if (string.Equals(part.Trim(), InterceptorNamespace, StringComparison.Ordinal)) return true;
+                var entry = part.Trim();
+                if (entry.Length == 0) continue;
+                if (string.Equals(entry, "global", StringComparison.Ordinal)
+                    || string.Equals(entry, InterceptorNamespace, StringComparison.Ordinal)
+                    || InterceptorNamespace.StartsWith(entry + ".", StringComparison.Ordinal))
+                {
+                    return true;
+                }
             }
             return false;
         }

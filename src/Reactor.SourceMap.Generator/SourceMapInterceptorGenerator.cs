@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -351,8 +351,9 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         // A call whose ARGUMENTS include one of those invisible factories — `VStack(8,
         // SettingsCard(...))` — fails overload resolution here, or binds against an error
         // type, even though it is perfectly well-formed in the real compilation. Bind it
-        // again with each such argument replaced by a value of the element type the
-        // factory returns, which is exactly what the real compilation will see.
+        // again as if each wrapper value were already an Element (the record's generated
+        // `: Element` base is invisible here too), and accept the result only where that
+        // cannot differ from the real binding — see BindAroundWrapperFactoryCalls.
         var speculative = false;
         if (method is null)
         {
@@ -396,7 +397,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         // Type arguments naming a wrapper record (`Select<FooElement>(...)`, or inferred from a
         // record-typed argument) are checked against constraints the record does not satisfy
         // yet, so the candidate set here can differ from the real one. Declined, not guessed.
-        if (wrappersInPlay && method.TypeArguments.Any(t => MentionsIncompleteWrapper(t, ctx.SemanticModel.Compilation, 0))) return null;
+        if (wrappersInPlay && method.TypeArguments.Any(t => MentionsIncompleteWrapper(t, ctx.SemanticModel.Compilation))) return null;
         method = method.OriginalDefinition;
 
         // Only the Reactor DSL surface, plus (spec 010 mechanism 1) any static
@@ -426,7 +427,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         // the CALL to it is the attribution they want. Without it there is no way to tell
         // a thin forwarder from a `Render()` body, where the body line is correct.
         var compilation = ctx.SemanticModel.Compilation;
-        var isFactory = IsDslFactory(method, out var isWrapperFactory);
+        var isFactory = IsDslFactory(method, compilation, out var isWrapperFactory);
         var isTransparentTarget = IsTransparent(method);
 
         if (!isFactory && !isTransparentTarget) return null;
@@ -444,7 +445,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
             {
                 if (again.Method is not { IsStatic: true, MethodKind: MethodKind.Ordinary } rebound) return null;
                 method = rebound.OriginalDefinition;
-                isFactory = IsDslFactory(method, out isWrapperFactory);
+                isFactory = IsDslFactory(method, compilation, out isWrapperFactory);
                 isTransparentTarget = IsTransparent(method);
                 if (!isFactory && !isTransparentTarget) return null;
                 speculative = true;

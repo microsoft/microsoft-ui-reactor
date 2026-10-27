@@ -23,7 +23,9 @@ namespace Microsoft.UI.Reactor.SourceMap.Tests;
 ///   <item>the CONTAINING call — <c>VStack(8, FakeGauge())</c> — failed overload resolution
 ///   in the source-map generator's view and was dropped too, so a component whose root
 ///   held a wrapped control lost its own location. The source-map generator now re-binds
-///   such a call with the wrapper sub-expressions replaced by their element type.</item>
+///   such a call as if each wrapper value were already an <c>Element</c>, and leaves it
+///   unstamped where that could change which overload the real compilation picks
+///   (<see cref="WrapperFactoryOverloadTests"/>).</item>
 /// </list>
 ///
 /// <para>Line oracles are <c>[CallerLineNumber]</c> probes on the same physical line; column

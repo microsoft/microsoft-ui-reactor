@@ -96,6 +96,53 @@ public sealed class SourceMapVisibleWrapperFactoryTests
         Assert.Contains("global::Microsoft.UI.Reactor.Factories.VStack(", generated);
     }
 
+    [Theory]
+    [InlineData(SourceMapTransparentGeneratorTests.SurfaceShape.MetadataReference)]
+    [InlineData(SourceMapTransparentGeneratorTests.SurfaceShape.ProjectReference)]
+    public void WrapperFactoryFromAReferencedLibrary_IsIntercepted(SourceMapTransparentGeneratorTests.SurfaceShape shape)
+    {
+        // A wrapper package: the record is complete there, both halves are visible, so the
+        // call binds exactly and this generator stamps it (the wrapper generator in the
+        // consumer only claims calls that bind to nothing). The hand-written Make() beside
+        // the factory is still not a factory.
+        const string library = """
+            namespace Microsoft.UI.Reactor.Wrappers
+            {
+                [global::System.AttributeUsage(global::System.AttributeTargets.Class)]
+                public sealed class GenerateReactorWrapperAttribute(global::System.Type controlType) : global::System.Attribute
+                {
+                    public global::System.Type ControlType { get; } = controlType;
+                }
+            }
+            namespace App
+            {
+                public class Gauge { }
+
+                [Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(Gauge))]
+                public partial record GaugeElement : Microsoft.UI.Reactor.Core.Element
+                {
+                    public static GaugeElement Gauge(double value = 0) => new GaugeElement();
+                    public static GaugeElement Make() => new GaugeElement();
+                }
+            }
+            """;
+        const string user = """
+            namespace User
+            {
+                public static class Screen
+                {
+                    public static Microsoft.UI.Reactor.Core.Element A() => App.GaugeElement.Gauge(3);
+                    public static Microsoft.UI.Reactor.Core.Element B() => App.GaugeElement.Make();
+                }
+            }
+            """;
+
+        var (_, generated) = SourceMapTransparentGeneratorTests.Run(user, surface: shape, librarySource: library);
+
+        Assert.Equal(1, Count(generated, "var __e = global::App.GaugeElement.Gauge(__a0);"));
+        Assert.DoesNotContain("global::App.GaugeElement.Make(", generated);
+    }
+
     private static int Count(string text, string needle)
     {
         int count = 0;

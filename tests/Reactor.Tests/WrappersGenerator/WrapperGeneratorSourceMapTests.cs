@@ -82,7 +82,8 @@ public sealed class WrapperGeneratorSourceMapTests
         bool interceptorsNamespace,
         string source = Source,
         string? extraSource = null,
-        ImmutableArray<KeyValuePair<string, string>> pathMap = default)
+        ImmutableArray<KeyValuePair<string, string>> pathMap = default,
+        string interceptorsNamespaces = "Some.Other;Microsoft.UI.Reactor.Generated")
     {
         var tpa = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
             .Split(Path.PathSeparator)
@@ -92,7 +93,7 @@ public sealed class WrapperGeneratorSourceMapTests
         var parse = new CSharpParseOptions(LanguageVersion.Preview);
         if (interceptorsNamespace)
         {
-            parse = parse.WithFeatures([new KeyValuePair<string, string>("InterceptorsNamespaces", "Some.Other;Microsoft.UI.Reactor.Generated")]);
+            parse = parse.WithFeatures([new KeyValuePair<string, string>("InterceptorsNamespaces", interceptorsNamespaces)]);
         }
 
         var trees = new List<SyntaxTree> { CSharpSyntaxTree.ParseText(source, parse, path: @"C:\proj\Screen.cs") };
@@ -155,6 +156,25 @@ public sealed class WrapperGeneratorSourceMapTests
         // speaking and not the generator failing to run.
         Assert.Contains(result.GeneratedTrees, t => t.FilePath.EndsWith("GaugeElement.Wrapper.g.cs", StringComparison.Ordinal));
         Assert.Null(Interceptors(result));
+    }
+
+    [Theory]
+    [InlineData("Microsoft.UI.Reactor")]
+    [InlineData("global")]
+    public void AParentNamespaceEntry_EnablesInterceptorsAsTheCompilerDoes(string entry)
+    {
+        // The compiler accepts an interceptor in any namespace nested in a listed one.
+        var src = Interceptors(Run(reactorSourceMap: true, interceptorsNamespace: true, interceptorsNamespaces: entry));
+
+        Assert.Equal(3, InterceptorCount(src));
+    }
+
+    [Fact]
+    public void ASiblingNamespaceEntry_DoesNot()
+    {
+        var src = Interceptors(Run(reactorSourceMap: true, interceptorsNamespace: true, interceptorsNamespaces: "Microsoft.UI.Reactor.Gen"));
+
+        Assert.Null(src);
     }
 
     [Fact]
