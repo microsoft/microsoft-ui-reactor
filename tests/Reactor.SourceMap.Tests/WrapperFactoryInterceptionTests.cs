@@ -143,6 +143,33 @@ public sealed class WrapperFactoryInterceptionTests : IDisposable
         Assert.Empty(panel.Children);
     }
 
+    internal static string KidsOf(object value) => "one";
+
+    internal static Element[] KidsOf(Element value) => [];
+
+    [Fact]
+    public void WrapperFactoryArgumentWhoseTypeDependsOnTheRecord_IsNotStamped()
+    {
+        // KidsOf(gauge) is a string here (it would convert to one Element), but KidsOf(Element)
+        // wins once the record is complete and hands over an empty Element[] in normal form.
+        FakeGaugeElement gauge = FakeGauge();
+        var panel = FakePanel(KidsOf(gauge)); var line = Line();
+
+        AssertStampedAt(panel, line, "FakePanel(");
+        Assert.Empty(panel.Children);
+    }
+
+    [Fact]
+    public void WrapperFactoryArgumentConvertingToARecordArray_IsNotStamped()
+    {
+        // GaugeShelf -> FakeGaugeElement[] becomes an Element[] by covariance once the record
+        // is complete, which makes the call normal form with the shelf's (empty) array.
+        var panel = FakePanel(new GaugeShelf()); var line = Line();
+
+        AssertStampedAt(panel, line, "FakePanel(");
+        Assert.Empty(panel.Children);
+    }
+
     [Fact]
     public void WrapperRecordThatSpellsItsOwnBase_IsStampedAndSoIsItsContainer()
     {
@@ -386,6 +413,14 @@ public partial record FakeGaugeElement;
 
 [GenerateReactorWrapper(typeof(FakePanel), AutoDiscover = false, RegisterAssembly = false)]
 public partial record FakePanelElement;
+
+/// <summary>Converts to one Element, and to an array of the record.</summary>
+public sealed class GaugeShelf
+{
+    public static implicit operator Element(GaugeShelf shelf) => Microsoft.UI.Reactor.Factories.TextBlock("shelf");
+
+    public static implicit operator FakeGaugeElement[](GaugeShelf shelf) => [];
+}
 
 /// <summary>A control whose wrapper record spells its <c>: Element</c> base itself.</summary>
 public partial class FakeDial : WinUI.Control

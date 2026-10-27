@@ -307,6 +307,113 @@ internal static class WrapperFactoryCalls
         });
 
     /// <summary>
+    /// True when values of <paramref name="type"/> can carry, produce or convert to a wrapper
+    /// record whose generated half this compilation cannot see (see the forwarding member on
+    /// <c>SourceMapInterceptorGenerator</c> for the full list). Cached per compilation.
+    /// </summary>
+    internal static bool MentionsIncompleteWrapper(ITypeSymbol type, Compilation compilation)
+    {
+        var cache = s_tainted.GetValue(compilation, static _ => new System.Collections.Concurrent.ConcurrentDictionary<ITypeSymbol, bool>(SymbolEqualityComparer.Default));
+        return IsTainted(type, compilation, cache, new TaintWalk());
+    }
+
+    /// <summary>
+    /// The types being followed, and whether the walk ran out of depth. A generic type can
+    /// expand without ever repeating (<c>class Loop&lt;T&gt; : IMarker&lt;Loop&lt;Loop&lt;T&gt;&gt;&gt;</c>), so the
+    /// walk is bounded; running out is answered "tainted", the fail-closed side.
+    /// </summary>
+    private sealed class TaintWalk
+    {
+        public HashSet<ITypeSymbol> InProgress { get; } = new(SymbolEqualityComparer.Default);
+
+        public bool Exhausted { get; set; }
+    }
+
+    private const int MaxTaintDepth = 16;
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Compilation, System.Collections.Concurrent.ConcurrentDictionary<ITypeSymbol, bool>> s_tainted = new();
+
+    private static bool IsTainted(
+        ITypeSymbol type,
+        Compilation compilation,
+        System.Collections.Concurrent.ConcurrentDictionary<ITypeSymbol, bool> cache,
+        TaintWalk walk)
+    {
+        if (cache.TryGetValue(type, out var known)) return known;
+        // A cycle (`class A : IComparable<A>`) adds nothing; the outer frame decides. A
+        // `false` reached through a cut cycle depends on where the walk started.
+        if (walk.InProgress.Count >= MaxTaintDepth)
+        {
+            walk.Exhausted = true;
+            return true;
+        }
+        if (!walk.InProgress.Add(type)) return false;
+        try
+        {
+            var tainted = type switch
+            {
+                IArrayTypeSymbol array => IsTainted(array.ElementType, compilation, cache, walk),
+                IPointerTypeSymbol pointer => IsTainted(pointer.PointedAtType, compilation, cache, walk),
+                // `where T : FooElement`: a T is the record, and binds like one once it is complete.
+                ITypeParameterSymbol typeParameter => typeParameter.ConstraintTypes.Any(c => IsTainted(c, compilation, cache, walk)),
+                INamedTypeSymbol named => IsTaintedNamed(named, compilation, cache, walk),
+                _ => false,
+            };
+            // The outermost answer is always kept, a bound-cut "true" included; an inner one only
+            // when the walk neither cut a cycle against it nor ran out of depth.
+            if (walk.InProgress.Count == 1 || (tainted && !walk.Exhausted)) cache[type] = tainted;
+            return tainted;
+        }
+        finally
+        {
+            walk.InProgress.Remove(type);
+        }
+    }
+
+    private static bool IsTaintedNamed(
+        INamedTypeSymbol named,
+        Compilation compilation,
+        System.Collections.Concurrent.ConcurrentDictionary<ITypeSymbol, bool> cache,
+        TaintWalk walk)
+    {
+        if (WrapperFactoryCalls.IsIncompleteWrapperElement(named, compilation)) return true;
+        foreach (var argument in named.TypeArguments)
+        {
+            if (IsTainted(argument, compilation, cache, walk)) return true;
+        }
+        if (named.DelegateInvokeMethod is { } invoke)
+        {
+            if (IsTainted(invoke.ReturnType, compilation, cache, walk)) return true;
+            foreach (var p in invoke.Parameters)
+            {
+                if (IsTainted(p.Type, compilation, cache, walk)) return true;
+            }
+        }
+        // Only a source type can inherit from a record-closed base: metadata cannot name a
+        // record declared in this compilation.
+        if (SymbolEqualityComparer.Default.Equals(named.ContainingAssembly, compilation.Assembly))
+        {
+            if (named.BaseType is { } baseType && IsTainted(baseType, compilation, cache, walk)) return true;
+            foreach (var implemented in named.Interfaces)
+            {
+                if (IsTainted(implemented, compilation, cache, walk)) return true;
+            }
+            // `implicit operator FooElement(Box)`: a Box converts to the record — and, once the
+            // record is complete, through it to Element.
+            foreach (var member in named.GetMembers())
+            {
+                if (member is IMethodSymbol { MethodKind: MethodKind.Conversion } conversion
+                    && !SymbolEqualityComparer.Default.Equals(conversion.ReturnType, named)
+                    && IsTainted(conversion.ReturnType, compilation, cache, walk))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
     /// True when <paramref name="type"/> is a <c>[GenerateReactorWrapper]</c> element whose
     /// generated factory is named <paramref name="name"/>.
     /// </summary>

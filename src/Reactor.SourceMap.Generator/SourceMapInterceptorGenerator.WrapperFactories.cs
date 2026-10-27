@@ -471,7 +471,7 @@ public sealed partial class SourceMapInterceptorGenerator
         System.Collections.Concurrent.ConcurrentDictionary<SyntaxNode, bool> memo)
     {
         if (memo.TryGetValue(node, out var known)) return (known, false);
-        if (IsNameof(node)) return (false, false);
+        if (IsNameof(node, model)) return (false, false);
         if (depth > MaxDependencyDepth) return (true, true);
         if (HasWrapperTypeArgument(model, node, ct))
         {
@@ -689,10 +689,13 @@ public sealed partial class SourceMapInterceptorGenerator
 
     /// <summary>
     /// <c>nameof(...)</c>: a compile-time string whose operand is never evaluated, and whose
-    /// <c>nameof</c> identifier Roslyn reports as error-typed. Never a dependency.
+    /// <c>nameof</c> identifier Roslyn reports as error-typed. Never a dependency. The
+    /// operator only when written unescaped and nothing named <c>nameof</c> is in scope —
+    /// otherwise (<c>@nameof(x)</c>, a method called <c>nameof</c>) it is an ordinary call.
     /// </summary>
-    private static bool IsNameof(SyntaxNode node)
-        => node is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } };
+    private static bool IsNameof(SyntaxNode node, SemanticModel model)
+        => node is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.Text: "nameof" } }
+           && model.LookupSymbols(node.SpanStart, name: "nameof").IsEmpty;
 
     /// <summary>
     /// True when <paramref name="expression"/> failed to bind. Type syntax is excluded: Roslyn
@@ -702,8 +705,8 @@ public sealed partial class SourceMapInterceptorGenerator
     /// </summary>
     private static bool HasErrorType(SemanticModel model, ExpressionSyntax expression, System.Threading.CancellationToken ct)
         => expression is not OmittedArraySizeExpressionSyntax
-           && !IsNameof(expression)
-           && !(expression.Parent is InvocationExpressionSyntax nameofCall && nameofCall.Expression == expression && IsNameof(nameofCall))
+           && !IsNameof(expression, model)
+           && !(expression.Parent is InvocationExpressionSyntax nameofCall && nameofCall.Expression == expression && IsNameof(nameofCall, model))
            && !SyntaxFacts.IsInTypeOnlyContext(expression)
            && model.GetTypeInfo(expression, ct).Type is IErrorTypeSymbol;
 
@@ -730,86 +733,7 @@ public sealed partial class SourceMapInterceptorGenerator
     /// Cached per compilation.
     /// </summary>
     private static bool MentionsIncompleteWrapper(ITypeSymbol type, Compilation compilation)
-    {
-        var cache = s_tainted.GetValue(compilation, static _ => new System.Collections.Concurrent.ConcurrentDictionary<ITypeSymbol, bool>(SymbolEqualityComparer.Default));
-        return IsTainted(type, compilation, cache, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default));
-    }
-
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Compilation, System.Collections.Concurrent.ConcurrentDictionary<ITypeSymbol, bool>> s_tainted = new();
-
-    private static bool IsTainted(
-        ITypeSymbol type,
-        Compilation compilation,
-        System.Collections.Concurrent.ConcurrentDictionary<ITypeSymbol, bool> cache,
-        HashSet<ITypeSymbol> inProgress)
-    {
-        if (cache.TryGetValue(type, out var known)) return known;
-        // A cycle (`class A : IComparable<A>`) adds nothing; the outer frame decides. A
-        // `false` reached through a cut cycle depends on where the walk started, so only
-        // `true` answers, and answers computed with nothing in progress, are cached.
-        if (!inProgress.Add(type)) return false;
-        try
-        {
-            var tainted = type switch
-            {
-                IArrayTypeSymbol array => IsTainted(array.ElementType, compilation, cache, inProgress),
-                IPointerTypeSymbol pointer => IsTainted(pointer.PointedAtType, compilation, cache, inProgress),
-                // `where T : FooElement`: a T is the record, and binds like one once it is complete.
-                ITypeParameterSymbol typeParameter => typeParameter.ConstraintTypes.Any(c => IsTainted(c, compilation, cache, inProgress)),
-                INamedTypeSymbol named => IsTaintedNamed(named, compilation, cache, inProgress),
-                _ => false,
-            };
-            if (tainted || inProgress.Count == 1) cache[type] = tainted;
-            return tainted;
-        }
-        finally
-        {
-            inProgress.Remove(type);
-        }
-    }
-
-    private static bool IsTaintedNamed(
-        INamedTypeSymbol named,
-        Compilation compilation,
-        System.Collections.Concurrent.ConcurrentDictionary<ITypeSymbol, bool> cache,
-        HashSet<ITypeSymbol> inProgress)
-    {
-        if (WrapperFactoryCalls.IsIncompleteWrapperElement(named, compilation)) return true;
-        foreach (var argument in named.TypeArguments)
-        {
-            if (IsTainted(argument, compilation, cache, inProgress)) return true;
-        }
-        if (named.DelegateInvokeMethod is { } invoke)
-        {
-            if (IsTainted(invoke.ReturnType, compilation, cache, inProgress)) return true;
-            foreach (var p in invoke.Parameters)
-            {
-                if (IsTainted(p.Type, compilation, cache, inProgress)) return true;
-            }
-        }
-        // Only a source type can inherit from a record-closed base: metadata cannot name a
-        // record declared in this compilation.
-        if (SymbolEqualityComparer.Default.Equals(named.ContainingAssembly, compilation.Assembly))
-        {
-            if (named.BaseType is { } baseType && IsTainted(baseType, compilation, cache, inProgress)) return true;
-            foreach (var implemented in named.Interfaces)
-            {
-                if (IsTainted(implemented, compilation, cache, inProgress)) return true;
-            }
-            // `implicit operator FooElement(Box)`: a Box converts to the record — and, once the
-            // record is complete, through it to Element.
-            foreach (var member in named.GetMembers())
-            {
-                if (member is IMethodSymbol { MethodKind: MethodKind.Conversion } conversion
-                    && !SymbolEqualityComparer.Default.Equals(conversion.ReturnType, named)
-                    && IsTainted(conversion.ReturnType, compilation, cache, inProgress))
-                {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
+        => WrapperFactoryCalls.MentionsIncompleteWrapper(type, compilation);
 
     private static bool ContainsTypeParameter(ITypeSymbol type, int depth = 0) => depth > 8 || type switch
     {
@@ -940,7 +864,7 @@ public sealed partial class SourceMapInterceptorGenerator
         /// </summary>
         public bool IsFullyAccountedFor(SyntaxNode root)
         {
-            foreach (var node in root.DescendantNodesAndSelf(n => !_replaced.Contains(n) && !IsNameof(n)))
+            foreach (var node in root.DescendantNodesAndSelf(n => !_replaced.Contains(n) && !IsNameof(n, _model)))
             {
                 if (_replaced.Contains(node) || _accounted.Contains(node) || node is not ExpressionSyntax expression) continue;
                 if (HasWrapperTypeArgument(_model, expression, _ct)) return false;

@@ -138,7 +138,8 @@ public sealed partial class WrapperGenerator
             // written back into an Element-typed slot.
             if (!conversion.Exists || !conversion.IsImplicit || !conversion.IsUserDefined
                 || conversion.MethodSymbol is not { } op
-                || !SymbolEqualityComparer.Default.Equals(op.ReturnType, elementSymbol))
+                || !SymbolEqualityComparer.Default.Equals(op.ReturnType, elementSymbol)
+                || !TypeIsSettled(model, expression, ct))
             {
                 continue;
             }
@@ -151,6 +152,60 @@ public sealed partial class WrapperGenerator
                 span.StartLinePosition.Character + 1));
         }
         return builder?.ToImmutable() ?? ImmutableArray<ConvertedArgument>.Empty;
+    }
+
+    /// <summary>
+    /// True when nothing in <paramref name="argument"/> can bind differently once the wrapper
+    /// records are complete, so its type — and with it the conversion to Element, and whether
+    /// it is a whole params array — is the real compilation's. Fails closed on anything this
+    /// compilation cannot see (an error type, a type tainted by a wrapper record, a method
+    /// group naming one, a failed overload resolution) and on anything whose type is inferred
+    /// from elsewhere (an implicitly typed local or lambda parameter, a query variable):
+    /// <c>FakePanel(Children(gauge))</c> is a string here and may be an <c>Element[]</c> there.
+    /// </summary>
+    private static bool TypeIsSettled(SemanticModel model, ExpressionSyntax argument, CancellationToken ct)
+    {
+        var compilation = model.Compilation;
+        foreach (var node in argument.DescendantNodesAndSelf())
+        {
+            if (node is not ExpressionSyntax expression) continue;
+            var info = model.GetTypeInfo(expression, ct);
+            if (info.Type is IErrorTypeSymbol && expression is not OmittedArraySizeExpressionSyntax) return false;
+            if (info.Type is { } type && WrapperFactoryCalls.MentionsIncompleteWrapper(type, compilation)) return false;
+            if (info.ConvertedType is { } converted && WrapperFactoryCalls.MentionsIncompleteWrapper(converted, compilation)) return false;
+
+            var symbols = model.GetSymbolInfo(expression, ct);
+            if (symbols.Symbol is null && !symbols.CandidateSymbols.IsEmpty) return false;
+            foreach (var symbol in symbols.Symbol is { } single ? ImmutableArray.Create(single) : symbols.CandidateSymbols)
+            {
+                switch (symbol)
+                {
+                    case ILocalSymbol local when !IsExplicitlyTyped(local, ct):
+                    case IParameterSymbol { ContainingSymbol: IMethodSymbol { MethodKind: MethodKind.AnonymousFunction } } parameter
+                        when parameter.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax(ct) is not ParameterSyntax { Type: not null }:
+                    case IRangeVariableSymbol:
+                        return false;
+                    case IMethodSymbol method
+                        when WrapperFactoryCalls.MentionsIncompleteWrapper(method.ReturnType, compilation)
+                             || method.Parameters.Any(p => WrapperFactoryCalls.MentionsIncompleteWrapper(p.Type, compilation))
+                             || method.TypeArguments.Any(a => WrapperFactoryCalls.MentionsIncompleteWrapper(a, compilation)):
+                        return false;
+                }
+            }
+        }
+        return true;
+
+        // Only a declaration that writes the type down; `var`, deconstruction, foreach and
+        // pattern variables take theirs from an expression.
+        static bool IsExplicitlyTyped(ILocalSymbol local, CancellationToken ct)
+            => local.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax(ct) switch
+            {
+                VariableDeclaratorSyntax { Parent: VariableDeclarationSyntax declaration } => !declaration.Type.IsVar,
+                SingleVariableDesignationSyntax { Parent: DeclarationExpressionSyntax declaration } => !declaration.Type.IsVar,
+                SingleVariableDesignationSyntax { Parent: DeclarationPatternSyntax pattern } => !pattern.Type.IsVar,
+                ForEachStatementSyntax forEach => !forEach.Type.IsVar,
+                _ => false,
+            };
     }
 
     /// <summary>

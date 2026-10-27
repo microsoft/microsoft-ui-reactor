@@ -179,6 +179,23 @@ public sealed class SourceMapWrapperFastPathTests
     }
 
     [Fact]
+    public void ExpandingGenericType_DoesNotRecurseForever()
+    {
+        // Loop<int> : IMarker<Loop<Loop<int>>> : … never repeats a constructed type, so only a
+        // depth bound ends the taint walk. Run() compiling the output is the oracle; before the
+        // bound this overflowed the stack.
+        var (_, generated) = SourceMapTransparentGeneratorTests.Run(
+            "using Microsoft.UI.Reactor.Core;\nnamespace App {\n public static class Use { public static Element R(GaugeElement g) => Helpers.Show(new Loop<int>()); }\n}\n",
+            extraFiles: new List<(string, string)>
+            {
+                ("Common.cs", Common.Replace("EXTRA", "public interface IMarker<T> { } public class Loop<T> : IMarker<Loop<Loop<T>>> { }", global::System.StringComparison.Ordinal)),
+            },
+            completeAfterGeneration: Completion);
+
+        Assert.NotNull(generated);
+    }
+
+    [Fact]
     public void WrapperAttributeThroughAnAlias_IsStillAWrapper()
     {
         // The wrapper generator matches the attribute semantically, so an alias of it still
