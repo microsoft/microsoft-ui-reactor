@@ -339,8 +339,10 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         // generator sees another's output). That generator intercepts the call itself; all
         // this one records is the site, so the static facts (declared name, per-file
         // fingerprint) cover it like any other element.
+        var wrappersInPlay = HasIncompleteWrappers(ctx.SemanticModel.Compilation);
         if (method is null
             && symbolInfo.CandidateSymbols.IsEmpty
+            && wrappersInPlay
             && WrapperFactoryCalls.ResolveUnboundCall(ctx.SemanticModel, invocation, ct) is not null)
         {
             return DescribeWrapperFactorySite(ctx, invocation, ct);
@@ -356,7 +358,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         {
             // Only worth the extra binding when the call could be one this generator
             // intercepts; a genuinely broken call stays unrecorded, as before.
-            if (!symbolInfo.CandidateSymbols.Any(static c => c is IMethodSymbol { IsStatic: true } m
+            if (!wrappersInPlay || !symbolInfo.CandidateSymbols.Any(static c => c is IMethodSymbol { IsStatic: true } m
                     && (m.ContainingType?.ToDisplayString() == FactoriesMetadataName || IsTransparent(m))))
             {
                 return null;
@@ -431,7 +433,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         // interceptor for a different overload than the one finally bound is a hard build
         // error, so the guess is re-checked against the arguments' real types. Asked only
         // here, after the cheap filters, so non-DSL calls never pay for it.
-        if (!speculative && HasUnresolvedArgument(ctx.SemanticModel, invocation, ct))
+        if (!speculative && wrappersInPlay && HasUnresolvedArgument(ctx.SemanticModel, invocation, ct))
         {
             var again = BindAroundWrapperFactoryCalls(ctx.SemanticModel, invocation, ct);
             if (again.Changed)

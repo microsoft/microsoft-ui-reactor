@@ -220,6 +220,41 @@ internal static class WrapperFactoryCalls
         return null;
     }
 
+    private static readonly ConditionalWeakTable<Compilation, ImmutableHashSet<string>> s_sourceFactoryNames = new();
+
+    /// <summary>
+    /// The names of the factories <c>[GenerateReactorWrapper]</c> records DECLARED IN THIS
+    /// compilation will get — the only factories that are invisible here. Computed once per
+    /// compilation from declarations alone, so a call whose name is not in it is rejected
+    /// before any binding, and a project with no wrappers pays one namespace walk per edit.
+    /// </summary>
+    internal static ImmutableHashSet<string> SourceFactoryNames(Compilation compilation)
+        => s_sourceFactoryNames.GetValue(compilation, static c =>
+        {
+            var names = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
+            Collect(c.SourceModule.GlobalNamespace, names);
+            return names.ToImmutable();
+        });
+
+    private static void Collect(INamespaceSymbol ns, ImmutableHashSet<string>.Builder names)
+    {
+        foreach (var type in ns.GetTypeMembers())
+        {
+            if (!type.IsRecord || type.IsGenericType) continue;
+            foreach (var attribute in type.GetAttributes())
+            {
+                if (attribute.AttributeClass?.ToDisplayString() == WrapperAttributeMetadataName
+                    && attribute.ConstructorArguments.Length == 1
+                    && attribute.ConstructorArguments[0].Value is INamedTypeSymbol control
+                    && IsWrapperFactoryOwner(type, control.Name))
+                {
+                    names.Add(control.Name);
+                }
+            }
+        }
+        foreach (var child in ns.GetNamespaceMembers()) Collect(child, names);
+    }
+
     /// <summary>
     /// True for a <c>[GenerateReactorWrapper]</c> element record that, in this compilation,
     /// does not derive from <c>Element</c> yet: the wrapper generator emits that base along

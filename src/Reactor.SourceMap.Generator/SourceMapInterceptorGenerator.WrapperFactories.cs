@@ -82,11 +82,39 @@ public sealed partial class SourceMapInterceptorGenerator
             argumentStamps: ImmutableArray<ArgumentStamp>.Empty);
     }
 
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Compilation, System.Runtime.CompilerServices.StrongBox<bool>> s_hasIncompleteWrappers = new();
+
+    /// <summary>
+    /// True when this compilation declares a <c>[GenerateReactorWrapper]</c> record whose
+    /// generated half it cannot see. Everything in this file is skipped otherwise, so a
+    /// project without wrappers pays nothing for it. Computed once per compilation from the
+    /// declaration tables; no method body is bound.
+    /// </summary>
+    private static bool HasIncompleteWrappers(Compilation compilation)
+        => s_hasIncompleteWrappers.GetValue(compilation, static c =>
+            new System.Runtime.CompilerServices.StrongBox<bool>(Declares(c.SourceModule.GlobalNamespace, c))).Value;
+
+    private static bool Declares(INamespaceSymbol ns, Compilation compilation)
+    {
+        foreach (var type in ns.GetTypeMembers())
+        {
+            if (type.IsRecord && WrapperFactoryCalls.IsIncompleteWrapperElement(type, compilation)) return true;
+        }
+        foreach (var child in ns.GetNamespaceMembers())
+        {
+            if (Declares(child, compilation)) return true;
+        }
+        return false;
+    }
+
     /// <summary>
     /// True when an argument of an already-resolved call has a type the real compilation
     /// may disagree with: an error type, or a type parameter that is not in scope (the type
     /// <c>RadialGauge(...).Width(140)</c> reports, since <c>Width&lt;T&gt;</c> could not infer
-    /// <c>T</c> from an error-typed receiver). Reads cached binding results only.
+    /// <c>T</c> from an error-typed receiver) — or when any value anywhere in the arguments
+    /// is typed as a wrapper record, which binds here as something that is not an Element yet
+    /// (<c>Present(card)</c> resolves to <c>Present(object)</c>, the real compilation to
+    /// <c>Present(Element)</c>). Reads cached binding results only.
     /// </summary>
     private static bool HasUnresolvedArgument(
         SemanticModel model,
@@ -103,6 +131,25 @@ public sealed partial class SourceMapInterceptorGenerator
                     when !IsInScope(tp, model, invocation.SpanStart, ct):
                     return true;
             }
+        }
+
+        foreach (var node in invocation.ArgumentList.DescendantNodes())
+        {
+            ITypeSymbol? valueType = node switch
+            {
+                SimpleNameSyntax name => model.GetSymbolInfo(name, ct).Symbol switch
+                {
+                    ILocalSymbol l => l.Type,
+                    IFieldSymbol f => f.Type,
+                    IPropertySymbol p => p.Type,
+                    IParameterSymbol p => p.Type,
+                    IMethodSymbol m => m.ReturnType,
+                    _ => null,
+                },
+                ObjectCreationExpressionSyntax creation => model.GetTypeInfo(creation, ct).Type,
+                _ => null,
+            };
+            if (valueType is not null && MentionsIncompleteWrapper(valueType, model.Compilation, 0)) return true;
         }
         return false;
 
@@ -140,10 +187,11 @@ public sealed partial class SourceMapInterceptorGenerator
         System.Threading.CancellationToken ct)
     {
         var substituted = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-        var rewriter = new WrapperFactoryCallRewriter(model, ct, depth: 0, visiting: new HashSet<ILocalSymbol>(SymbolEqualityComparer.Default), substituted);
+        var rewriter = new WrapperFactoryCallRewriter(model, ct, depth: 0, visiting: new HashSet<ILocalSymbol>(SymbolEqualityComparer.Default), substituted, invocation.ArgumentList);
         var rewritten = invocation.WithArgumentList((ArgumentListSyntax)rewriter.Visit(invocation.ArgumentList)!);
-        if (!rewriter.Changed) return new SpeculativeBinding(false, null);
         if (rewriter.Unreliable) return new SpeculativeBinding(true, null);
+        if (!rewriter.Changed) return new SpeculativeBinding(false, null);
+        if (rewriter.ResidualError) return new SpeculativeBinding(true, null);
 
         var info = model.GetSpeculativeSymbolInfo(invocation.SpanStart, rewritten, SpeculativeBindingOption.BindAsExpression);
         if (info.Symbol is not IMethodSymbol method || !OverloadChoiceIsStable(model, invocation, method, substituted))
@@ -196,6 +244,22 @@ public sealed partial class SourceMapInterceptorGenerator
         }
         return true;
     }
+
+    private static bool MentionsIncompleteWrapper(ITypeSymbol type, Compilation compilation, int depth) => depth <= 8 && type switch
+    {
+        IArrayTypeSymbol array => MentionsIncompleteWrapper(array.ElementType, compilation, depth + 1),
+        INamedTypeSymbol named => WrapperFactoryCalls.IsIncompleteWrapperElement(named, compilation)
+            || named.TypeArguments.Any(a => MentionsIncompleteWrapper(a, compilation, depth + 1)),
+        _ => false,
+    };
+
+    private static bool ContainsTypeParameter(ITypeSymbol type, int depth = 0) => depth > 8 || type switch
+    {
+        ITypeParameterSymbol => true,
+        IArrayTypeSymbol array => ContainsTypeParameter(array.ElementType, depth + 1),
+        INamedTypeSymbol named => named.TypeArguments.Any(a => ContainsTypeParameter(a, depth + 1)),
+        _ => false,
+    };
 
     private static void AddWithBases(List<ISymbol> candidates, INamedTypeSymbol type, string name)
     {
@@ -276,33 +340,181 @@ public sealed partial class SourceMapInterceptorGenerator
         private readonly int _depth;
         private readonly HashSet<ILocalSymbol> _visiting;
         private readonly HashSet<INamedTypeSymbol> _substituted;
+        private readonly SyntaxNode _root;
 
         public WrapperFactoryCallRewriter(
             SemanticModel model,
             System.Threading.CancellationToken ct,
             int depth,
             HashSet<ILocalSymbol> visiting,
-            HashSet<INamedTypeSymbol> substituted)
+            HashSet<INamedTypeSymbol> substituted,
+            SyntaxNode root)
         {
             _model = model;
             _ct = ct;
             _depth = depth;
             _visiting = visiting;
             _substituted = substituted;
+            _root = root;
         }
 
         public bool Changed { get; private set; }
 
-        /// <summary>True when a substitution could not be made faithfully; the binding must not be trusted.</summary>
+        /// <summary>
+        /// True when a substitution could not be made faithfully, so the re-bound result must
+        /// not be trusted. Fail-closed: declining costs a location, a wrong binding costs the
+        /// consumer's build.
+        /// </summary>
         public bool Unreliable { get; private set; }
 
-        private bool MentionsIncompleteWrapper(ITypeSymbol type) => type switch
+        /// <summary>True when an error-typed value was left in place; harmless only if nothing else changed.</summary>
+        public bool ResidualError { get; private set; }
+
+        private bool MentionsIncompleteWrapper(ITypeSymbol type) => SourceMapInterceptorGenerator.MentionsIncompleteWrapper(type, _model.Compilation, 0);
+
+        private enum NestedResult { Deterministic, PlaceholderLike, Unsafe }
+
+        /// <summary>
+        /// Walks from a substituted wrapper value up to the root, checking that every step
+        /// between them gives the same answer for an <c>Element</c> placeholder as for the
+        /// finished record. A step that preserves the value (parentheses, a conditional arm,
+        /// <c>with</c>, a lambda's expression body, a collection element) passes it upward; a
+        /// step whose result type is fixed whichever it is (a cast, an explicitly typed
+        /// creation, a call whose every candidate returns the same type) ends the walk; a
+        /// <c>&lt;T&gt;(this T) =&gt; T</c> modifier passes it upward. Anything else is a step
+        /// whose overload choice or result type could differ, and abandons the binding.
+        /// </summary>
+        private void CheckPosition(ExpressionSyntax original, INamedTypeSymbol record)
         {
-            IArrayTypeSymbol array => MentionsIncompleteWrapper(array.ElementType),
-            INamedTypeSymbol named => WrapperFactoryCalls.IsIncompleteWrapperElement(named, _model.Compilation)
-                || named.TypeArguments.Any(MentionsIncompleteWrapper),
-            _ => false,
-        };
+            if (original == _root) return;
+            SyntaxNode child = original;
+            for (var node = original.Parent; node is not null; child = node, node = node.Parent)
+            {
+                if (node == _root) return;
+                switch (node)
+                {
+                    case ParenthesizedExpressionSyntax:
+                    case PostfixUnaryExpressionSyntax p when p.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    case ConditionalExpressionSyntax c when c.Condition != child:
+                    case WithExpressionSyntax w when w.Expression == child:
+                    case SimpleLambdaExpressionSyntax l when l.ExpressionBody == child:
+                    case ParenthesizedLambdaExpressionSyntax pl when pl.ExpressionBody == child:
+                    case CollectionExpressionSyntax:
+                    case ExpressionElementSyntax:
+                    case InitializerExpressionSyntax:
+                        continue;
+                    case CastExpressionSyntax cast when cast.Expression == child:
+                    case ArrayCreationExpressionSyntax:
+                    case ObjectCreationExpressionSyntax:
+                        return;
+                    case ArgumentSyntax argument when argument.RefKindKeyword.IsKind(SyntaxKind.None):
+                        if (argument.Parent == _root) return;
+                        if (argument.Parent?.Parent is ObjectCreationExpressionSyntax) return;
+                        if (argument.Parent?.Parent is InvocationExpressionSyntax call
+                            && NestedCall(call, receiverPath: false, record) == NestedResult.Deterministic)
+                        {
+                            return;
+                        }
+                        Unreliable = true;
+                        return;
+                    case MemberAccessExpressionSyntax member
+                        when member.Expression == child && member.Parent is InvocationExpressionSyntax modifier && modifier.Expression == member:
+                        switch (NestedCall(modifier, receiverPath: true, record))
+                        {
+                            case NestedResult.Deterministic:
+                                return;
+                            case NestedResult.PlaceholderLike:
+                                node = modifier;
+                                continue;
+                            default:
+                                Unreliable = true;
+                                return;
+                        }
+                    default:
+                        Unreliable = true;
+                        return;
+                }
+            }
+            Unreliable = true;
+        }
+
+        /// <summary>
+        /// What a call does with a substituted value in its receiver or arguments. Judged
+        /// over every candidate visible at the call site, never just the one that binds here.
+        /// </summary>
+        private NestedResult NestedCall(InvocationExpressionSyntax call, bool receiverPath, INamedTypeSymbol record)
+        {
+            var position = call.SpanStart;
+            var symbols = new List<ISymbol>();
+            switch (call.Expression)
+            {
+                case MemberAccessExpressionSyntax member:
+                {
+                    var name = member.Name.Identifier.ValueText;
+                    if (receiverPath)
+                    {
+                        if (_model.Compilation.GetTypeByMetadataName(ElementMetadataName) is { } element)
+                            symbols.AddRange(_model.LookupSymbols(position, element, name, includeReducedExtensionMethods: true));
+                        symbols.AddRange(_model.LookupSymbols(position, record, name, includeReducedExtensionMethods: true));
+                    }
+                    else
+                    {
+                        var qualifier = _model.GetSymbolInfo(member.Expression, _ct).Symbol as INamespaceOrTypeSymbol
+                            ?? _model.GetTypeInfo(member.Expression, _ct).Type;
+                        if (qualifier is null or IErrorTypeSymbol) return NestedResult.Unsafe;
+                        symbols.AddRange(_model.LookupSymbols(position, qualifier, name, includeReducedExtensionMethods: true));
+                    }
+                    break;
+                }
+                case SimpleNameSyntax simple:
+                    symbols.AddRange(_model.LookupSymbols(position, name: simple.Identifier.ValueText));
+                    break;
+                default:
+                    if (_model.GetTypeInfo(call.Expression, _ct).Type is INamedTypeSymbol { DelegateInvokeMethod: { } direct })
+                        symbols.Add(direct);
+                    break;
+            }
+
+            var methods = new List<IMethodSymbol>();
+            foreach (var symbol in symbols)
+            {
+                var invoke = symbol switch
+                {
+                    IMethodSymbol m => m,
+                    ILocalSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
+                    IFieldSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
+                    IPropertySymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
+                    IParameterSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
+                    _ => null,
+                };
+                if (invoke is null) return NestedResult.Unsafe;
+                methods.Add((invoke.ReducedFrom ?? invoke).OriginalDefinition);
+            }
+            if (methods.Count == 0) return NestedResult.Unsafe;
+
+            // Every candidate returns one fixed type: whichever wins, the caller sees that type.
+            var first = methods[0].ReturnType;
+            if (methods.All(m => SymbolEqualityComparer.IncludeNullability.Equals(m.ReturnType, first))
+                && !ContainsTypeParameter(first) && !MentionsIncompleteWrapper(first))
+            {
+                return NestedResult.Deterministic;
+            }
+
+            // A fluent modifier, `T M<T>(this T, ...)`: it returns its receiver's type, so the
+            // placeholder's Element and the record's own type flow through unchanged.
+            if (receiverPath && methods.All(static m => m.IsExtensionMethod
+                    && m.Parameters.Length > 0
+                    && m.Parameters[0].Type is ITypeParameterSymbol receiver
+                    && SymbolEqualityComparer.Default.Equals(m.ReturnType, receiver)
+                    && m.Parameters.Skip(1).All(p => !ContainsTypeParameter(p.Type))))
+            {
+                return methods.Any(m => m.Parameters.Skip(1).Any(p => MentionsIncompleteWrapper(p.Type)))
+                    ? NestedResult.Unsafe
+                    : NestedResult.PlaceholderLike;
+            }
+
+            return NestedResult.Unsafe;
+        }
 
         public override SyntaxNode? Visit(SyntaxNode? node)
         {
@@ -310,24 +522,26 @@ public sealed partial class SourceMapInterceptorGenerator
             // a helper returning `SettingsCardElement` — binds fine here, but to a record that
             // does not yet derive from Element (that base is generator-emitted too), so the
             // containing DSL call still fails. Replace the whole value, not its parts.
-            if (node is ExpressionSyntax expression && IncompleteWrapperValueType(expression) is { } type)
+            if (node is ExpressionSyntax expression && ValueType(expression) is { } valueType)
             {
-                return Placeholder(type, expression);
+                if (valueType is INamedTypeSymbol record && WrapperFactoryCalls.IsIncompleteWrapperElement(record, _model.Compilation))
+                    return Placeholder(record, expression);
+
+                // `new List<SettingsCardElement>()`: its conversions (variance to
+                // IEnumerable<Element>, …) do not exist yet and cannot be stood in for.
+                if (MentionsIncompleteWrapper(valueType)) Unreliable = true;
             }
 
             return base.Visit(node);
         }
 
-        private INamedTypeSymbol? IncompleteWrapperValueType(ExpressionSyntax expression)
+        /// <summary>The type of <paramref name="expression"/> when it is a value (not a type name, not the name half of <c>x.Name</c>).</summary>
+        private ITypeSymbol? ValueType(ExpressionSyntax expression)
         {
             if (SyntaxFacts.IsInTypeOnlyContext(expression)) return null;
             if (expression.Parent is MemberAccessExpressionSyntax member && member.Name == expression) return null;
             if (expression.Parent is ArgumentSyntax argument && !argument.RefKindKeyword.IsKind(SyntaxKind.None)) return null;
-            if (_model.GetTypeInfo(expression, _ct).Type is not INamedTypeSymbol type
-                || !WrapperFactoryCalls.IsIncompleteWrapperElement(type, _model.Compilation))
-            {
-                return null;
-            }
+            if (_model.GetTypeInfo(expression, _ct).Type is not { } type || type is IErrorTypeSymbol) return null;
 
             // `SettingsCardElement.SettingsCard(...)`: the qualifier names the type, it is not a value.
             return _model.GetSymbolInfo(expression, _ct).Symbol is INamespaceOrTypeSymbol ? null : type;
@@ -350,10 +564,10 @@ public sealed partial class SourceMapInterceptorGenerator
             if (node.Parent is MemberAccessExpressionSyntax member && member.Name == node) return node;
             if (node.Parent is ArgumentSyntax argument && !argument.RefKindKeyword.IsKind(SyntaxKind.None)) return node;
 
-            if (_model.GetSymbolInfo(node, _ct).Symbol is ILocalSymbol { Type: IErrorTypeSymbol } local
-                && InferLocalType(local) is { } type)
+            if (_model.GetSymbolInfo(node, _ct).Symbol is ILocalSymbol { Type: IErrorTypeSymbol } local)
             {
-                return Placeholder(type, node);
+                if (InferLocalType(local) is { } type) return Placeholder(type, node);
+                ResidualError = true;
             }
 
             return node;
@@ -365,7 +579,11 @@ public sealed partial class SourceMapInterceptorGenerator
         /// </summary>
         private ITypeSymbol? InferLocalType(ILocalSymbol local)
         {
-            if (_depth >= MaxLocalInferenceDepth || !_visiting.Add(local)) return null;
+            if (_depth >= MaxLocalInferenceDepth || !_visiting.Add(local))
+            {
+                Unreliable = true;
+                return null;
+            }
             try
             {
                 if (local.DeclaringSyntaxReferences.Length != 1
@@ -376,10 +594,10 @@ public sealed partial class SourceMapInterceptorGenerator
                     return null;
                 }
 
-                var inner = new WrapperFactoryCallRewriter(_model, _ct, _depth + 1, _visiting, _substituted);
+                var inner = new WrapperFactoryCallRewriter(_model, _ct, _depth + 1, _visiting, _substituted, initializer);
                 var rewritten = (ExpressionSyntax)inner.Visit(initializer)!;
-                if (inner.Unreliable) Unreliable = true;
-                if (!inner.Changed || inner.Unreliable) return null;
+                if (inner.Unreliable || (inner.Changed && inner.ResidualError)) Unreliable = true;
+                if (!inner.Changed || Unreliable) return null;
 
                 var type = _model.GetSpeculativeTypeInfo(initializer.SpanStart, rewritten, SpeculativeBindingOption.BindAsExpression).Type;
                 return type is null or IErrorTypeSymbol ? null : type;
@@ -407,6 +625,7 @@ public sealed partial class SourceMapInterceptorGenerator
             if (type is INamedTypeSymbol named && WrapperFactoryCalls.IsIncompleteWrapperElement(named, _model.Compilation))
             {
                 _substituted.Add(named);
+                CheckPosition(original, named);
                 type = _model.Compilation.GetTypeByMetadataName(ElementMetadataName) ?? type;
             }
             else if (MentionsIncompleteWrapper(type))

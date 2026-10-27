@@ -29,6 +29,8 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
 
     public void Dispose() => ReactorSourceMap.Enabled = false;
 
+    private static int Line([global::System.Runtime.CompilerServices.CallerLineNumber] int line = 0) => line;
+
     [ReactorSourceTransparent]
     internal static Element Pick(global::System.IEquatable<FakeGaugeElement> gauge) => HStack((FakeGaugeElement)gauge);
 
@@ -99,6 +101,88 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
 
         Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)badge).Orientation);
         Assert.Null(badge.CallSite);
+    }
+
+    [ReactorSourceTransparent]
+    internal static Element Present(object value) => VStack();
+
+    [ReactorSourceTransparent]
+    internal static Element Present(Element child) => HStack(child);
+
+    [Fact]
+    public void ExplicitlyTypedWrapperValue_IsReBoundToTheOverloadTheRecordReaches()
+    {
+        // Here `typed` is a record that is not an Element yet, so Present(object) binds; the
+        // real compilation picks Present(Element). The call is re-bound and stamped correctly.
+        FakeGaugeElement typed = FakeGauge();
+        var presented = Present(typed); var line = Line();
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)presented).Orientation);
+        Assert.NotNull(presented.CallSite);
+        Assert.Equal(line, presented.CallSite!.Value.LineNumber);
+    }
+
+    internal static string Choose(Element value) => "element";
+
+    internal static int Choose(FakeGaugeElement value) => 1;
+
+    [ReactorSourceTransparent]
+    internal static Element Show(string text) => VStack();
+
+    [ReactorSourceTransparent]
+    internal static Element Show(int number) => HStack();
+
+    [Fact]
+    public void NestedCallWhoseResultTypeDependsOnTheRecord_IsNotReBound()
+    {
+        // Choose(placeholder) would return string and pick Show(string); the real Choose
+        // returns int and Show(int) runs.
+        var shown = Show(Choose(FakeGauge()));
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)shown).Orientation);
+        Assert.Null(shown.CallSite);
+    }
+
+    [ReactorSourceTransparent]
+    internal static Element Pair(Element first, string second) => VStack(first);
+
+    [ReactorSourceTransparent]
+    internal static Element Pair(Element first, object second) => HStack(first);
+
+    [Fact]
+    public void LocalBeyondTheInferenceDepth_AbandonsTheReBinding()
+    {
+        // `e` is a record five locals deep, beyond the inference limit, next to a substituted
+        // first argument. Only Pair(Element, object) applies in the real compilation. Today Roslyn
+        // also ranks the error-typed `e` as ambiguous between the two, so this is defence in
+        // depth: the rewrite fails closed on its own (depth exhaustion, residual error) rather
+        // than relying on how an error type happens to be ranked.
+        var a = FakeGauge();
+        var b = a;
+        var c = b;
+        var d = c;
+        var e = d;
+        var pair = Pair(FakeGauge(), e);
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)pair).Orientation);
+        Assert.Null(pair.CallSite);
+    }
+
+    [ReactorSourceTransparent]
+    internal static Element Many(global::System.Collections.Generic.IEnumerable<Element> children) => HStack([.. children]);
+
+    [ReactorSourceTransparent]
+    internal static Element Many(object value) => VStack();
+
+    [Fact]
+    public void ValueWhoseTypeContainsTheRecord_AbandonsTheReBinding()
+    {
+        // List<FakeGaugeElement> reaches IEnumerable<Element> by variance only once the record
+        // is an Element; no placeholder can stand in for that.
+        var many = Many(new global::System.Collections.Generic.List<FakeGaugeElement> { FakeGauge() });
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)many).Orientation);
+        Assert.Null(many.CallSite);
     }
 
     [Fact]

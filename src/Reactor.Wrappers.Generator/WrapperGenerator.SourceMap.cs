@@ -81,8 +81,10 @@ public sealed partial class WrapperGenerator
         var invocation = (InvocationExpressionSyntax)ctx.Node;
         var model = ctx.SemanticModel;
 
-        // Cheap rejection first: almost every invocation binds (or has candidates), and a
-        // call to a generated factory never does in this compilation.
+        // Cheap rejections first, in cost order: a name no wrapper declared here will get
+        // (no binding at all), then a call that binds or has candidates, which a call to a
+        // generated factory never does in this compilation.
+        if (!WrapperFactoryCalls.SourceFactoryNames(model.Compilation).Contains(WrapperFactoryCalls.CandidateName(invocation)!)) return null;
         if (model.GetSymbolInfo(invocation, ct) is not { Symbol: null, CandidateSymbols.IsEmpty: true }) return null;
         if (WrapperFactoryCalls.ResolveUnboundCall(model, invocation, ct) is not { } element) return null;
 
