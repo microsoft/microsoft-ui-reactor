@@ -133,13 +133,16 @@ public sealed partial class SourceMapInterceptorGenerator
             }
         }
 
-        // Any value at all — a name, a call, `default(FooElement)`, a cast — whose type
-        // mentions the record. Asked of expression TYPES rather than of particular syntax
-        // shapes, so no way of producing such a value is missed.
+        // Anything at any depth that is error-typed, or a value — a name, a call,
+        // `default(FooElement)`, a cast — whose type mentions the record. An error deep inside
+        // can still decide which overload an enclosing call resolves to, and so what type
+        // reaches this one. Asked of expression TYPES rather than of particular syntax shapes,
+        // so no way of producing such a value is missed.
         foreach (var node in invocation.ArgumentList.DescendantNodes())
         {
-            if (node is ExpressionSyntax expression
-                && ValueTypeOf(model, expression, ct) is { } valueType
+            if (node is not ExpressionSyntax expression) continue;
+            if (model.GetTypeInfo(expression, ct).Type is IErrorTypeSymbol) return true;
+            if (ValueTypeOf(model, expression, ct) is { } valueType
                 && MentionsIncompleteWrapper(valueType, model.Compilation, 0))
             {
                 return true;
@@ -183,9 +186,12 @@ public sealed partial class SourceMapInterceptorGenerator
         var substituted = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         var rewriter = new WrapperFactoryCallRewriter(model, ct, depth: 0, visiting: new HashSet<ILocalSymbol>(SymbolEqualityComparer.Default), substituted, invocation.ArgumentList);
         var rewritten = invocation.WithArgumentList((ArgumentListSyntax)rewriter.Visit(invocation.ArgumentList)!);
-        if (rewriter.Unreliable) return new SpeculativeBinding(true, null);
+
+        // The closing invariant: every part of the arguments is either replaced, on a
+        // validated path from a replacement, or free of anything this compilation cannot see.
+        // Otherwise the binding — re-bound or original — rests on a guess.
+        if (rewriter.Unreliable || !rewriter.IsFullyAccountedFor(invocation.ArgumentList)) return new SpeculativeBinding(true, null);
         if (!rewriter.Changed) return new SpeculativeBinding(false, null);
-        if (rewriter.ResidualError) return new SpeculativeBinding(true, null);
 
         var info = model.GetSpeculativeSymbolInfo(invocation.SpanStart, rewritten, SpeculativeBindingOption.BindAsExpression);
         if (info.Symbol is not IMethodSymbol method || !OverloadChoiceIsStable(model, invocation, method, substituted))
@@ -373,8 +379,82 @@ public sealed partial class SourceMapInterceptorGenerator
         /// </summary>
         public bool Unreliable { get; private set; }
 
-        /// <summary>True when an error-typed value was left in place; harmless only if nothing else changed.</summary>
-        public bool ResidualError { get; private set; }
+        /// <summary>Original nodes replaced by a placeholder; their subtrees are not consulted.</summary>
+        private readonly HashSet<SyntaxNode> _replaced = new();
+
+        /// <summary>Original nodes on a validated path from a replacement (see CheckPosition).</summary>
+        private readonly HashSet<SyntaxNode> _accounted = new();
+
+        /// <summary>
+        /// True when no expression under <paramref name="root"/> is left that differs between
+        /// this compilation and the real one without being replaced or validated: nothing
+        /// error-typed, no value whose type mentions a wrapper record, no call that failed to
+        /// bind.
+        /// </summary>
+        public bool IsFullyAccountedFor(SyntaxNode root)
+        {
+            foreach (var node in root.DescendantNodesAndSelf(n => !_replaced.Contains(n)))
+            {
+                if (_replaced.Contains(node) || _accounted.Contains(node) || node is not ExpressionSyntax expression) continue;
+                // The name half of `x.Name` is judged together with its member access.
+                if (expression.Parent is MemberAccessExpressionSyntax member && member.Name == expression) continue;
+                if (_model.GetTypeInfo(expression, _ct).Type is IErrorTypeSymbol) return false;
+                if (ValueType(expression) is { } valueType && MentionsIncompleteWrapper(valueType)) return false;
+                if (expression is InvocationExpressionSyntax call
+                    && _model.GetSymbolInfo(call, _ct) is { Symbol: null, CandidateSymbols.IsEmpty: false })
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// True when <paramref name="expression"/> is the record in the real compilation no matter
+        /// how anything inside it binds, so it may be replaced whole: a variable, field, property
+        /// or parameter declared as the record, <c>default</c>/<c>new</c>/a cast of it, or a call
+        /// whose every candidate returns it. Anything else is descended into instead, so the
+        /// parts that DO depend on the record are found and position-checked.
+        /// </summary>
+        private bool CertainlyRecord(ExpressionSyntax expression, INamedTypeSymbol record)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax p:
+                    return CertainlyRecord(p.Expression, record);
+                case PostfixUnaryExpressionSyntax p when p.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    return CertainlyRecord(p.Operand, record);
+                case ConditionalExpressionSyntax c:
+                    return CertainlyRecord(c.WhenTrue, record) && CertainlyRecord(c.WhenFalse, record);
+                case WithExpressionSyntax w:
+                    return CertainlyRecord(w.Expression, record);
+                case CastExpressionSyntax cast:
+                    return SymbolEqualityComparer.Default.Equals(_model.GetTypeInfo(cast.Type, _ct).Type, record);
+                case DefaultExpressionSyntax:
+                case ObjectCreationExpressionSyntax:
+                    return true;
+                case SimpleNameSyntax:
+                case MemberAccessExpressionSyntax:
+                    return _model.GetSymbolInfo(expression, _ct).Symbol switch
+                    {
+                        ILocalSymbol l => SymbolEqualityComparer.Default.Equals(l.Type, record),
+                        IFieldSymbol f => SymbolEqualityComparer.Default.Equals(f.Type, record),
+                        IPropertySymbol p => SymbolEqualityComparer.Default.Equals(p.Type, record),
+                        IParameterSymbol p => SymbolEqualityComparer.Default.Equals(p.Type, record),
+                        _ => false,
+                    };
+                case InvocationExpressionSyntax call:
+                {
+                    var receiverRecord = call.Expression is MemberAccessExpressionSyntax m
+                        && ValueType(m.Expression) is INamedTypeSymbol r
+                        && WrapperFactoryCalls.IsIncompleteWrapperElement(r, _model.Compilation) ? r : null;
+                    return CandidateMethods(call, receiverRecord) is { Count: > 0 } methods
+                        && methods.All(c => !c.IsGenericMethod && SymbolEqualityComparer.Default.Equals(c.ReturnType, record));
+                }
+                default:
+                    return false;
+            }
+        }
 
         /// <summary>
         /// The wrapper record whose value flows unchanged to the root (an inferred local's
@@ -413,6 +493,7 @@ public sealed partial class SourceMapInterceptorGenerator
                     RootRecord = record;
                     return;
                 }
+                _accounted.Add(node);
                 switch (node)
                 {
                     case ParenthesizedExpressionSyntax:
@@ -431,16 +512,24 @@ public sealed partial class SourceMapInterceptorGenerator
                         return;
                     case ArgumentSyntax argument when argument.RefKindKeyword.IsKind(SyntaxKind.None):
                         if (argument.Parent == _root) return;
-                        if (argument.Parent?.Parent is ObjectCreationExpressionSyntax) return;
+                        if (argument.Parent?.Parent is ObjectCreationExpressionSyntax creation)
+                        {
+                            _accounted.Add(creation);
+                            return;
+                        }
                         if (argument.Parent?.Parent is InvocationExpressionSyntax call
                             && NestedCall(call, receiverPath: false, record) == NestedResult.Deterministic)
                         {
+                            // Its result type is fixed whichever candidate wins, even if it does
+                            // not bind cleanly here.
+                            _accounted.Add(call);
                             return;
                         }
                         Unreliable = true;
                         return;
                     case MemberAccessExpressionSyntax member
                         when member.Expression == child && member.Parent is InvocationExpressionSyntax modifier && modifier.Expression == member:
+                        _accounted.Add(modifier);
                         switch (NestedCall(modifier, receiverPath: true, record))
                         {
                             case NestedResult.Deterministic:
@@ -466,53 +555,7 @@ public sealed partial class SourceMapInterceptorGenerator
         /// </summary>
         private NestedResult NestedCall(InvocationExpressionSyntax call, bool receiverPath, INamedTypeSymbol record)
         {
-            var position = call.SpanStart;
-            var symbols = new List<ISymbol>();
-            switch (call.Expression)
-            {
-                case MemberAccessExpressionSyntax member:
-                {
-                    var name = member.Name.Identifier.ValueText;
-                    if (receiverPath)
-                    {
-                        if (_model.Compilation.GetTypeByMetadataName(ElementMetadataName) is { } element)
-                            symbols.AddRange(_model.LookupSymbols(position, element, name, includeReducedExtensionMethods: true));
-                        symbols.AddRange(_model.LookupSymbols(position, record, name, includeReducedExtensionMethods: true));
-                    }
-                    else
-                    {
-                        var qualifier = _model.GetSymbolInfo(member.Expression, _ct).Symbol as INamespaceOrTypeSymbol
-                            ?? _model.GetTypeInfo(member.Expression, _ct).Type;
-                        if (qualifier is null or IErrorTypeSymbol) return NestedResult.Unsafe;
-                        symbols.AddRange(_model.LookupSymbols(position, qualifier, name, includeReducedExtensionMethods: true));
-                    }
-                    break;
-                }
-                case SimpleNameSyntax simple:
-                    symbols.AddRange(_model.LookupSymbols(position, name: simple.Identifier.ValueText));
-                    break;
-                default:
-                    if (_model.GetTypeInfo(call.Expression, _ct).Type is INamedTypeSymbol { DelegateInvokeMethod: { } direct })
-                        symbols.Add(direct);
-                    break;
-            }
-
-            var methods = new List<IMethodSymbol>();
-            foreach (var symbol in symbols)
-            {
-                var invoke = symbol switch
-                {
-                    IMethodSymbol m => m,
-                    ILocalSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
-                    IFieldSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
-                    IPropertySymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
-                    IParameterSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
-                    _ => null,
-                };
-                if (invoke is null) return NestedResult.Unsafe;
-                methods.Add((invoke.ReducedFrom ?? invoke).OriginalDefinition);
-            }
-            if (methods.Count == 0) return NestedResult.Unsafe;
+            if (CandidateMethods(call, receiverPath ? record : null) is not { Count: > 0 } methods) return NestedResult.Unsafe;
 
             // Every candidate returns one fixed type: whichever wins, the caller sees that type.
             var first = methods[0].ReturnType;
@@ -540,6 +583,65 @@ public sealed partial class SourceMapInterceptorGenerator
             return NestedResult.Unsafe;
         }
 
+        /// <summary>
+        /// Every method the call could resolve to, as open definitions, or null when that set
+        /// cannot be determined. With <paramref name="receiverRecord"/>, the receiver is a
+        /// wrapper value, so members reachable from the finished record (and so from Element)
+        /// are included too.
+        /// </summary>
+        private List<IMethodSymbol>? CandidateMethods(InvocationExpressionSyntax call, INamedTypeSymbol? receiverRecord)
+        {
+            var receiverPath = receiverRecord is not null;
+            var record = receiverRecord;
+            var position = call.SpanStart;
+            var symbols = new List<ISymbol>();
+            switch (call.Expression)
+            {
+                case MemberAccessExpressionSyntax member:
+                {
+                    var name = member.Name.Identifier.ValueText;
+                    if (receiverPath)
+                    {
+                        if (_model.Compilation.GetTypeByMetadataName(ElementMetadataName) is { } element)
+                            symbols.AddRange(_model.LookupSymbols(position, element, name, includeReducedExtensionMethods: true));
+                        symbols.AddRange(_model.LookupSymbols(position, record, name, includeReducedExtensionMethods: true));
+                    }
+                    else
+                    {
+                        var qualifier = _model.GetSymbolInfo(member.Expression, _ct).Symbol as INamespaceOrTypeSymbol
+                            ?? _model.GetTypeInfo(member.Expression, _ct).Type;
+                        if (qualifier is null or IErrorTypeSymbol) return null;
+                        symbols.AddRange(_model.LookupSymbols(position, qualifier, name, includeReducedExtensionMethods: true));
+                    }
+                    break;
+                }
+                case SimpleNameSyntax simple:
+                    symbols.AddRange(_model.LookupSymbols(position, name: simple.Identifier.ValueText));
+                    break;
+                default:
+                    if (_model.GetTypeInfo(call.Expression, _ct).Type is INamedTypeSymbol { DelegateInvokeMethod: { } direct })
+                        symbols.Add(direct);
+                    break;
+            }
+
+            var methods = new List<IMethodSymbol>();
+            foreach (var symbol in symbols)
+            {
+                var invoke = symbol switch
+                {
+                    IMethodSymbol m => m,
+                    ILocalSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
+                    IFieldSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
+                    IPropertySymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
+                    IParameterSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
+                    _ => null,
+                };
+                if (invoke is null) return null;
+                methods.Add((invoke.ReducedFrom ?? invoke).OriginalDefinition);
+            }
+            return methods;
+        }
+
         public override SyntaxNode? Visit(SyntaxNode? node)
         {
             // A value already typed as a wrapper record — an explicitly typed local, a field,
@@ -549,7 +651,10 @@ public sealed partial class SourceMapInterceptorGenerator
             if (node is ExpressionSyntax expression && ValueType(expression) is { } valueType)
             {
                 if (valueType is INamedTypeSymbol record && WrapperFactoryCalls.IsIncompleteWrapperElement(record, _model.Compilation))
-                    return Placeholder(record, expression);
+                {
+                    if (CertainlyRecord(expression, record)) return Placeholder(record, expression);
+                    return base.Visit(node);
+                }
 
                 // `new List<SettingsCardElement>()`: its conversions (variance to
                 // IEnumerable<Element>, …) do not exist yet and cannot be stood in for.
@@ -581,7 +686,6 @@ public sealed partial class SourceMapInterceptorGenerator
             if (_model.GetSymbolInfo(node, _ct).Symbol is ILocalSymbol { Type: IErrorTypeSymbol } local)
             {
                 if (InferLocalType(local) is { } type) return Placeholder(type, node);
-                ResidualError = true;
             }
 
             return node;
@@ -610,7 +714,7 @@ public sealed partial class SourceMapInterceptorGenerator
 
                 var inner = new WrapperFactoryCallRewriter(_model, _ct, _depth + 1, _visiting, _substituted, initializer);
                 var rewritten = (ExpressionSyntax)inner.Visit(initializer)!;
-                if (inner.Unreliable || (inner.Changed && inner.ResidualError)) Unreliable = true;
+                if (inner.Unreliable || !inner.IsFullyAccountedFor(initializer)) Unreliable = true;
                 if (!inner.Changed || Unreliable) return null;
 
                 // Still the record itself: hand it back as such, so the caller's Placeholder
@@ -629,6 +733,7 @@ public sealed partial class SourceMapInterceptorGenerator
         private ExpressionSyntax Placeholder(ITypeSymbol type, ExpressionSyntax original)
         {
             Changed = true;
+            _replaced.Add(original);
 
             // The element record's `: Element` base is ALSO emitted by the wrapper generator,
             // so here a bare `partial record SettingsCardElement;` is not an element at all.

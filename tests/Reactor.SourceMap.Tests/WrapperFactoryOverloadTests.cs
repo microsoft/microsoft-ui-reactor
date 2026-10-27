@@ -168,6 +168,65 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         Assert.Null(shown.CallSite);
     }
 
+    internal static string Measure(string text) => text;
+
+    internal static int Measure<T>(T value) => 1;
+
+    [Fact]
+    public void ErrorDeepInsideAnArgument_IsNotTrustedEvenIfTheArgumentLooksTyped()
+    {
+        // The real call is Measure<FakeGaugeElement>, returning int, so Show(int) runs. Whatever
+        // this compilation's error recovery makes of Measure(FakeGauge()), the generator must
+        // decline rather than guess (today Roslyn leaves it ambiguous; the accounting invariant
+        // in BindAroundWrapperFactoryCalls declines even if a future Roslyn picks one).
+        var shown = Show(Measure(FakeGauge()));
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)shown).Orientation);
+        Assert.Null(shown.CallSite);
+    }
+
+    [ReactorSourceTransparent]
+    internal static Element Accept(string text) => VStack();
+
+    [ReactorSourceTransparent]
+    internal static Element Accept<T>(T value) => HStack();
+
+    [Fact]
+    public void UninferableWrapperLocal_DeclinesEvenWhenNothingElseChanged()
+    {
+        // A deconstructed local is not a declarator this generator infers through, so it stays
+        // an error type. The real call is Accept<FakeGaugeElement>; the generator must decline
+        // rather than trust whatever error recovery resolves Accept(...) to.
+        var (deconstructed, _) = (FakeGauge(), 0);
+        var accepted = Accept(deconstructed);
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)accepted).Orientation);
+        Assert.Null(accepted.CallSite);
+    }
+
+    internal static FakeGaugeElement Pick2(object value) => FakeGauge();
+
+    internal static string Pick2(Element value) => "element";
+
+    [ReactorSourceTransparent]
+    internal static Element Display(Element child) => HStack(child);
+
+    [ReactorSourceTransparent]
+    internal static Element Display(string text) => VStack();
+
+    [Fact]
+    public void CallThatOnlyLooksLikeTheRecord_IsNotReplacedWhole()
+    {
+        // Here Pick2(typed) can only bind Pick2(object), which returns the record; in the real
+        // compilation Pick2(Element) wins and returns a string, so Display(string) runs. Replacing
+        // Pick2(typed) whole by its apparent type would bind Display(Element).
+        FakeGaugeElement typed = FakeGauge();
+        var shown = Display(Pick2(typed));
+
+        Assert.Equal(WinUI.Orientation.Vertical, ((StackElement)shown).Orientation);
+        Assert.Null(shown.CallSite);
+    }
+
     [ReactorSourceTransparent]
     internal static Element Pair(Element first, string second) => VStack(first);
 
