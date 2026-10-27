@@ -261,11 +261,37 @@ internal static class WrapperFactoryCalls
     /// with the factory, so neither is visible to any other generator.
     /// </summary>
     internal static bool IsIncompleteWrapperElement(INamedTypeSymbol type, Compilation compilation)
+        => type.IsRecord && IncompleteWrappers(compilation).Contains(type.OriginalDefinition);
+
+    private static readonly ConditionalWeakTable<Compilation, ImmutableHashSet<INamedTypeSymbol>> s_incompleteWrappers = new();
+
+    /// <summary>
+    /// Every such record declared in this compilation. Asked for every type the source-map
+    /// generator inspects in a compilation with wrappers, so it is computed once, from the
+    /// declaration tables, and answered by a set lookup.
+    /// </summary>
+    internal static ImmutableHashSet<INamedTypeSymbol> IncompleteWrappers(Compilation compilation)
+        => s_incompleteWrappers.GetValue(compilation, static c =>
+        {
+            var builder = ImmutableHashSet.CreateBuilder<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+            if (c.GetTypeByMetadataName("Microsoft.UI.Reactor.Core.Element") is { } element)
+                CollectIncomplete(c.SourceModule.GlobalNamespace, element, builder);
+            return builder.ToImmutable();
+        });
+
+    private static void CollectIncomplete(INamespaceSymbol ns, INamedTypeSymbol element, ImmutableHashSet<INamedTypeSymbol>.Builder builder)
     {
-        if (!type.IsRecord || type.TypeKind == TypeKind.Error) return false;
-        if (!type.GetAttributes().Any(static a => a.AttributeClass?.ToDisplayString() == WrapperAttributeMetadataName)) return false;
-        var element = compilation.GetTypeByMetadataName("Microsoft.UI.Reactor.Core.Element");
-        return element is not null && !ReactorSourceTransparency.ReturnsElement(type, element);
+        foreach (var type in ns.GetTypeMembers())
+        {
+            if (type.IsRecord
+                && type.TypeKind != TypeKind.Error
+                && type.GetAttributes().Any(static a => a.AttributeClass?.ToDisplayString() == WrapperAttributeMetadataName)
+                && !ReactorSourceTransparency.ReturnsElement(type, element))
+            {
+                builder.Add(type);
+            }
+        }
+        foreach (var child in ns.GetNamespaceMembers()) CollectIncomplete(child, element, builder);
     }
 
     /// <summary>

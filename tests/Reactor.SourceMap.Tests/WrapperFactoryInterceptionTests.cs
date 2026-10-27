@@ -262,6 +262,47 @@ public sealed class WrapperFactoryInterceptionTests : IDisposable
         Assert.Equal("k", gauge.Key);
     }
 
+    /// <summary>
+    /// Positive controls for the dependency tracking in this file's wrapper-bearing
+    /// compilation: implicitly typed values that do NOT come from a wrapper keep their
+    /// stamps, including ones read inside the statement that declares them.
+    /// </summary>
+    [Fact]
+    public void OrdinaryImplicitlyTypedValues_AreStillStamped()
+    {
+        if (int.TryParse("5", global::System.Globalization.NumberStyles.Integer, global::System.Globalization.CultureInfo.InvariantCulture, out var n))
+        {
+            var fromOut = TextBlock($"{n}"); var outLine = Line();
+            AssertStampedAt(fromOut, outLine, "TextBlock(");
+        }
+
+        object boxed = 3;
+        if (boxed is var unboxed)
+        {
+            var fromPattern = TextBlock($"{unboxed}"); var patternLine = Line();
+            AssertStampedAt(fromPattern, patternLine, "TextBlock(");
+        }
+
+        var (count, label) = (1, "x");
+        var fromTuple = TextBlock($"{count}{label}"); var tupleLine = Line();
+        AssertStampedAt(fromTuple, tupleLine, "TextBlock(");
+
+        var rows = new[] { 1, 2 }.Select(i => TextBlock($"{i}")).ToArray(); var rowsLine = Line();
+        AssertStampedAt(rows[0], rowsLine, "TextBlock(");
+
+        // A state tuple whose initializer spells an array type: Roslyn reports the `[]` of
+        // `string[]` as error-typed, which must not be mistaken for a binding failure.
+        var (items, setItems) = (new string[] { "a" }, (global::System.Action<string[]>)(_ => { }));
+        var list = VStack(4, items.Select(i => TextBlock(i)).ToArray()); var listLine = Line();
+        AssertStampedAt(list, listLine, "VStack(");
+        var add = Button("add", () => setItems([.. items, "b"])); var addLine = Line();
+        AssertStampedAt(add, addLine, "Button(");
+
+        // Alongside a wrapper call in the same container.
+        var mixed = VStack(8, TextBlock($"{count}"), FakeGauge()); var mixedLine = Line();
+        AssertStampedAt(mixed, mixedLine, "VStack(");
+    }
+
     [Fact]
     public void WrapperFactory_StampsNothingWhileMappingIsOff()
     {

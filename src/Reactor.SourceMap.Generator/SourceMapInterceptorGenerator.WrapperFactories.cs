@@ -82,8 +82,6 @@ public sealed partial class SourceMapInterceptorGenerator
             argumentStamps: ImmutableArray<ArgumentStamp>.Empty);
     }
 
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Compilation, System.Runtime.CompilerServices.StrongBox<bool>> s_hasIncompleteWrappers = new();
-
     /// <summary>
     /// True when this compilation declares a <c>[GenerateReactorWrapper]</c> record whose
     /// generated half it cannot see. Everything in this file is skipped otherwise, so a
@@ -91,21 +89,7 @@ public sealed partial class SourceMapInterceptorGenerator
     /// declaration tables; no method body is bound.
     /// </summary>
     private static bool HasIncompleteWrappers(Compilation compilation)
-        => s_hasIncompleteWrappers.GetValue(compilation, static c =>
-            new System.Runtime.CompilerServices.StrongBox<bool>(Declares(c.SourceModule.GlobalNamespace, c))).Value;
-
-    private static bool Declares(INamespaceSymbol ns, Compilation compilation)
-    {
-        foreach (var type in ns.GetTypeMembers())
-        {
-            if (type.IsRecord && WrapperFactoryCalls.IsIncompleteWrapperElement(type, compilation)) return true;
-        }
-        foreach (var child in ns.GetNamespaceMembers())
-        {
-            if (Declares(child, compilation)) return true;
-        }
-        return false;
-    }
+        => !WrapperFactoryCalls.IncompleteWrappers(compilation).IsEmpty;
 
     /// <summary>
     /// True when an argument of an already-resolved call has a type the real compilation
@@ -133,7 +117,7 @@ public sealed partial class SourceMapInterceptorGenerator
             }
         }
 
-        return DependsOnWrappers(model, invocation.ArgumentList, ct, depth: 0);
+        return DependsOnWrappers(model, invocation.ArgumentList, ct, depth: 0, visiting: null);
 
         static bool IsInScope(ITypeParameterSymbol tp, SemanticModel model, int position, System.Threading.CancellationToken ct)
         {
@@ -239,28 +223,116 @@ public sealed partial class SourceMapInterceptorGenerator
     /// expression TYPES rather than of particular syntax shapes, so no way of producing such a
     /// value is missed. Fail-closed past the depth bound.
     /// </summary>
-    private static bool DependsOnWrappers(SemanticModel model, SyntaxNode root, System.Threading.CancellationToken ct, int depth)
+    private static bool DependsOnWrappers(
+        SemanticModel model, SyntaxNode root, System.Threading.CancellationToken ct, int depth, HashSet<SyntaxNode>? visiting)
     {
-        if (depth > MaxLocalInferenceDepth) return true;
-        foreach (var node in root.DescendantNodesAndSelf())
+        var memo = s_dependsMemo.GetValue(model.Compilation, static _ => new System.Collections.Concurrent.ConcurrentDictionary<SyntaxNode, bool>());
+        visiting ??= new HashSet<SyntaxNode>();
+        return Walk(model, root, ct, depth, visiting, memo).Depends;
+    }
+
+    /// <summary>
+    /// The expressions whose type is not simply derived from their children's — where a
+    /// wrapper value, an error, or a binding decision can first appear. Literals, operators,
+    /// interpolations, lambdas and parentheses are skipped (their children are still walked):
+    /// they cannot introduce a record or an error their operands do not already show, and
+    /// skipping them keeps this walk to a fraction of the nodes in a render body.
+    /// </summary>
+    private static bool IsValueSource(ExpressionSyntax expression) => expression is
+        SimpleNameSyntax or MemberAccessExpressionSyntax or MemberBindingExpressionSyntax
+        or InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax
+        or DefaultExpressionSyntax or CastExpressionSyntax or ElementAccessExpressionSyntax
+        or ConditionalExpressionSyntax or ConditionalAccessExpressionSyntax or WithExpressionSyntax
+        or SwitchExpressionSyntax or AwaitExpressionSyntax or CollectionExpressionSyntax;
+
+    /// <summary>
+    /// Per-node answers, so nested containers and render lambdas — scanned once for every
+    /// enclosing DSL call — cost one walk per compilation rather than one per ancestor.
+    /// Keyed on the compilation, so an edit (a new compilation) never sees a stale answer.
+    /// </summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Compilation, System.Collections.Concurrent.ConcurrentDictionary<SyntaxNode, bool>> s_dependsMemo = new();
+
+    /// <summary>
+    /// <see cref="DependsOnWrappers"/> for one node. <c>Incomplete</c> is true when the answer
+    /// was cut short — by a cycle back into a declaration still being followed, or by the depth
+    /// bound — so it holds for this walk but is not memoized.
+    /// </summary>
+    private static (bool Depends, bool Incomplete) Walk(
+        SemanticModel model,
+        SyntaxNode node,
+        System.Threading.CancellationToken ct,
+        int depth,
+        HashSet<SyntaxNode> visiting,
+        System.Collections.Concurrent.ConcurrentDictionary<SyntaxNode, bool> memo)
+    {
+        if (memo.TryGetValue(node, out var known)) return (known, false);
+        if (IsNameof(node)) return (false, false);
+        if (depth > MaxDependencyDepth) return (true, true);
+
+        var incomplete = false;
+        if (node is ExpressionSyntax expression
+            && IsValueSource(expression)
+            && !(expression.Parent is MemberAccessExpressionSyntax access && access.Name == expression))
         {
-            if (node is not ExpressionSyntax expression) continue;
-            if (model.GetTypeInfo(expression, ct).Type is IErrorTypeSymbol) return true;
-            if (IsWrapperDependentMethodGroup(model, expression, ct)) return true;
-            if (ValueTypeOf(model, expression, ct) is { } valueType
-                && MentionsIncompleteWrapper(valueType, model.Compilation, 0))
+            // One type query per node; a symbol query only where a type alone cannot answer —
+            // a typeless name (a method group) or a name that might be an implicitly typed local.
+            // This runs over every DSL call's arguments in a compilation with wrapper records.
+            var type = expression is OmittedArraySizeExpressionSyntax || SyntaxFacts.IsInTypeOnlyContext(expression)
+                ? null
+                : model.GetTypeInfo(expression, ct).Type;
+            if (type is IErrorTypeSymbol && !(expression.Parent is InvocationExpressionSyntax nameofCall && nameofCall.Expression == expression && IsNameof(nameofCall)))
             {
-                return true;
+                memo[node] = true;
+                return (true, false);
             }
-            if (expression is IdentifierNameSyntax name
-                && ImplicitlyTypedDeclaration(model, name, ct) is { } declaration
-                && DependsOnWrappers(model, declaration, ct, depth + 1))
+            if ((type is not null && MentionsIncompleteWrapper(type, model.Compilation, 0) && ValueTypeOf(model, expression, ct) is not null)
+                || (type is null && IsWrapperDependentMethodGroup(model, expression, ct)))
             {
-                return true;
+                memo[node] = true;
+                return (true, false);
+            }
+
+            if (expression is IdentifierNameSyntax name && ImplicitlyTypedDeclaration(model, name, ct) is { } sources)
+            {
+                foreach (var source in sources)
+                {
+                    if (memo.TryGetValue(source, out var sourceKnown))
+                    {
+                        if (sourceKnown) return (true, false);
+                        continue;
+                    }
+                    // A declaration already being followed adds nothing new (`out var n` read
+                    // inside the statement that declares it), but the answer is then partial.
+                    if (!visiting.Add(source))
+                    {
+                        incomplete = true;
+                        continue;
+                    }
+                    var result = Walk(model, source, ct, depth + 1, visiting, memo);
+                    visiting.Remove(source);
+                    if (result.Depends) return (true, result.Incomplete);
+                    incomplete |= result.Incomplete;
+                }
             }
         }
-        return false;
+
+        foreach (var child in node.ChildNodes())
+        {
+            var result = Walk(model, child, ct, depth, visiting, memo);
+            if (result.Depends)
+            {
+                if (!result.Incomplete) memo[node] = true;
+                return (true, result.Incomplete);
+            }
+            incomplete |= result.Incomplete;
+        }
+
+        if (!incomplete) memo[node] = false;
+        return (false, incomplete);
     }
+
+    /// <summary>Bounds how far implicitly typed declarations are followed; fail-closed beyond.</summary>
+    private const int MaxDependencyDepth = 8;
 
     /// <summary>
     /// For a name reading an implicitly typed local (<c>var</c> declarator, <c>foreach (var …)</c>,
@@ -268,31 +340,72 @@ public sealed partial class SourceMapInterceptorGenerator
     /// decides its type: the initializer, or the whole declaring statement. Null otherwise —
     /// an explicitly declared type cannot change.
     /// </summary>
-    private static SyntaxNode? ImplicitlyTypedDeclaration(SemanticModel model, IdentifierNameSyntax name, System.Threading.CancellationToken ct)
+    private static IReadOnlyList<SyntaxNode>? ImplicitlyTypedDeclaration(SemanticModel model, IdentifierNameSyntax name, System.Threading.CancellationToken ct)
     {
-        if (model.GetSymbolInfo(name, ct).Symbol is not ILocalSymbol local
+        var symbol = model.GetSymbolInfo(name, ct).Symbol;
+
+        // An implicitly typed lambda parameter takes its type from the call the lambda is
+        // passed to — its receiver and its other arguments (`items.Select(item => …)`), never
+        // the lambda itself.
+        if (symbol is IParameterSymbol { ContainingSymbol: IMethodSymbol { MethodKind: MethodKind.AnonymousFunction } } parameter)
+        {
+            if (parameter.DeclaringSyntaxReferences.Length != 1) return null;
+            if (parameter.DeclaringSyntaxReferences[0].GetSyntax(ct) is not ParameterSyntax { Type: null } declared) return null;
+            var lambda = declared.FirstAncestorOrSelf<AnonymousFunctionExpressionSyntax>();
+            if (lambda?.Parent is not ArgumentSyntax { Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax receiving } } passed)
+                return new SyntaxNode[] { lambda?.Parent ?? declared };
+            var sources = new List<SyntaxNode> { receiving.Expression };
+            sources.AddRange(receiving.ArgumentList.Arguments.Where(a => a != passed));
+            return sources;
+        }
+
+        if (symbol is not ILocalSymbol local
             || local.DeclaringSyntaxReferences.Length != 1
             || local.DeclaringSyntaxReferences[0].SyntaxTree != name.SyntaxTree)
         {
             return null;
         }
 
+        // The node whose type decides the local's — never the statements that merely use it.
         var declarator = local.DeclaringSyntaxReferences[0].GetSyntax(ct);
         switch (declarator)
         {
             case VariableDeclaratorSyntax { Parent: VariableDeclarationSyntax declaration } v:
-                return declaration.Type.IsVar ? v.Initializer : null;
-            case SingleVariableDesignationSyntax { Parent: DeclarationPatternSyntax pattern }:
-                return pattern.Type.IsVar ? pattern.Parent : null;
-            case SingleVariableDesignationSyntax { Parent: DeclarationExpressionSyntax declarationExpression }:
-                if (!declarationExpression.Type.IsVar) return null;
-                break;
+                return declaration.Type.IsVar && v.Initializer is { } initializer ? new SyntaxNode[] { initializer } : null;
             case ForEachStatementSyntax forEach:
-                return forEach.Type.IsVar ? forEach.Expression : null;
+                return forEach.Type.IsVar ? new SyntaxNode[] { forEach.Expression } : null;
+            case SingleVariableDesignationSyntax { Parent: DeclarationPatternSyntax pattern } when !pattern.Type.IsVar:
+                return null;
+            case SingleVariableDesignationSyntax { Parent: DeclarationExpressionSyntax declarationExpression } when !declarationExpression.Type.IsVar:
+                return null;
         }
 
-        // Deconstructions, nested designations, var patterns: the enclosing statement.
-        return declarator.FirstAncestorOrSelf<StatementSyntax>() ?? declarator;
+        for (SyntaxNode? node = declarator; node is not null; node = node.Parent)
+        {
+            switch (node)
+            {
+                // `out var n`: the call it is passed to.
+                case ArgumentSyntax { Parent: ArgumentListSyntax { Parent: { } call } }:
+                    return new[] { call is InvocationExpressionSyntax invocation ? (SyntaxNode)invocation.Expression : call };
+                // `var (a, b) = expr`: the right-hand side.
+                case AssignmentExpressionSyntax assignment when assignment.Left.Span.Contains(declarator.Span):
+                    return new SyntaxNode[] { assignment.Right };
+                // `foreach (var (a, b) in xs)`.
+                case ForEachVariableStatementSyntax forEachVariable:
+                    return new SyntaxNode[] { forEachVariable.Expression };
+                // `x is var n`, `x is { } n`: the tested value.
+                case IsPatternExpressionSyntax isPattern:
+                    return new SyntaxNode[] { isPattern.Expression };
+                case SwitchExpressionArmSyntax { Parent: SwitchExpressionSyntax switchExpression }:
+                    return new SyntaxNode[] { switchExpression.GoverningExpression };
+                case SwitchSectionSyntax { Parent: SwitchStatementSyntax switchStatement }:
+                    return new SyntaxNode[] { switchStatement.Expression };
+                case StatementSyntax statement:
+                    // Unrecognised: the enclosing statement, with cycles cut by the caller.
+                    return new SyntaxNode[] { statement };
+            }
+        }
+        return null;
     }
 
     /// <summary>
@@ -316,6 +429,26 @@ public sealed partial class SourceMapInterceptorGenerator
         }
         return false;
     }
+
+    /// <summary>
+    /// <c>nameof(...)</c>: a compile-time string whose operand is never evaluated, and whose
+    /// <c>nameof</c> identifier Roslyn reports as error-typed. Never a dependency.
+    /// </summary>
+    private static bool IsNameof(SyntaxNode node)
+        => node is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } };
+
+    /// <summary>
+    /// True when <paramref name="expression"/> failed to bind. Type syntax is excluded: Roslyn
+    /// reports the empty <c>[]</c> of <c>string[]</c> (an <c>OmittedArraySizeExpression</c>) as
+    /// error-typed although nothing failed, and a type name that genuinely does not exist is
+    /// a compile error in its own right.
+    /// </summary>
+    private static bool HasErrorType(SemanticModel model, ExpressionSyntax expression, System.Threading.CancellationToken ct)
+        => expression is not OmittedArraySizeExpressionSyntax
+           && !IsNameof(expression)
+           && !(expression.Parent is InvocationExpressionSyntax nameofCall && nameofCall.Expression == expression && IsNameof(nameofCall))
+           && !SyntaxFacts.IsInTypeOnlyContext(expression)
+           && model.GetTypeInfo(expression, ct).Type is IErrorTypeSymbol;
 
     /// <summary>The type of <paramref name="expression"/> when it is a value (not a type name, not the name half of <c>x.Name</c>, not a by-ref argument).</summary>
     private static ITypeSymbol? ValueTypeOf(SemanticModel model, ExpressionSyntax expression, System.Threading.CancellationToken ct)
@@ -465,17 +598,17 @@ public sealed partial class SourceMapInterceptorGenerator
         /// </summary>
         public bool IsFullyAccountedFor(SyntaxNode root)
         {
-            foreach (var node in root.DescendantNodesAndSelf(n => !_replaced.Contains(n)))
+            foreach (var node in root.DescendantNodesAndSelf(n => !_replaced.Contains(n) && !IsNameof(n)))
             {
                 if (_replaced.Contains(node) || _accounted.Contains(node) || node is not ExpressionSyntax expression) continue;
                 // The name half of `x.Name` is judged together with its member access.
                 if (expression.Parent is MemberAccessExpressionSyntax member && member.Name == expression) continue;
-                if (_model.GetTypeInfo(expression, _ct).Type is IErrorTypeSymbol) return false;
+                if (HasErrorType(_model, expression, _ct)) return false;
                 if (ValueType(expression) is { } valueType && MentionsIncompleteWrapper(valueType)) return false;
                 if (IsWrapperDependentMethodGroup(_model, expression, _ct)) return false;
                 if (expression is IdentifierNameSyntax local
-                    && ImplicitlyTypedDeclaration(_model, local, _ct) is { } declaration
-                    && DependsOnWrappers(_model, declaration, _ct, _depth + 1))
+                    && ImplicitlyTypedDeclaration(_model, local, _ct) is { } sources
+                    && sources.Any(source => DependsOnWrappers(_model, source, _ct, _depth + 1, new HashSet<SyntaxNode> { source })))
                 {
                     return false;
                 }
@@ -772,13 +905,13 @@ public sealed partial class SourceMapInterceptorGenerator
             {
                 if (InferLocalType(local) is { } type) return Placeholder(type, node);
             }
-            else if (ImplicitlyTypedDeclaration(_model, node, _ct) is { } declaration
-                     && DependsOnWrappers(_model, declaration, _ct, _depth + 1))
+            else if (ImplicitlyTypedDeclaration(_model, node, _ct) is { } sources
+                     && sources.Any(source => DependsOnWrappers(_model, source, _ct, _depth + 1, new HashSet<SyntaxNode> { source })))
             {
                 // Typed here, but by a declaration that binds differently once the records are
                 // complete: re-derive the type the same way, or give up.
                 if (_model.GetSymbolInfo(node, _ct).Symbol is ILocalSymbol typed
-                    && declaration is EqualsValueClauseSyntax
+                    && sources.Count == 1 && sources[0] is EqualsValueClauseSyntax
                     && InferLocalType(typed) is { } inferred)
                 {
                     return Placeholder(inferred, node);

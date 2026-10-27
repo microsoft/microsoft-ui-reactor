@@ -292,6 +292,17 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         Assert.Null(button.CallSite);
     }
 
+    [Fact]
+    public void LambdaParameterTypedFromAWrapperDerivedSequence_IsNotTrusted()
+    {
+        // `item` is a string here and an Element in the real compilation.
+        FakeGaugeElement gauge = FakeGauge();
+        var content = Content(gauge);
+        var buttons = new[] { content }.Select(item => Button(item)).ToArray();
+
+        Assert.Null(buttons[0].CallSite);
+    }
+
     [ReactorSourceTransparent]
     internal static Element Pair(Element first, string second) => VStack(first);
 
