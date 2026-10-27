@@ -41,7 +41,15 @@ public sealed partial class SourceMapInterceptorGenerator
         if (method.ContainingType is not { } owner) return false;
         if (owner.ToDisplayString() == FactoriesMetadataName) return true;
 
-        isWrapperFactory = method.IsStatic && WrapperFactoryCalls.IsWrapperFactoryOwner(owner, method.Name);
+        // Only the GENERATED factory: one that comes from metadata (a referenced library) or
+        // from a tree that is itself wrapper-generator output fed back in. A hand-written
+        // static of the same name on the author's partial record is not one — in a normal
+        // build the generated overloads beside it are still invisible, so which of them the
+        // real compilation picks is unknowable here.
+        isWrapperFactory = method.IsStatic
+            && WrapperFactoryCalls.IsWrapperFactoryOwner(owner, method.Name)
+            && method.Locations.All(static l => l.IsInMetadata
+                || (l.SourceTree?.FilePath.EndsWith(".Wrapper.g.cs", System.StringComparison.OrdinalIgnoreCase) ?? false));
         return isWrapperFactory;
     }
     /// <summary>
@@ -113,6 +121,14 @@ public sealed partial class SourceMapInterceptorGenerator
     /// <c>var</c> local initialized from one) in its arguments replaced by a value of the
     /// element type. <see cref="SpeculativeBinding.Changed"/> is false when there was
     /// nothing to replace, so the original binding stands.
+    ///
+    /// <para><see cref="SpeculativeBinding.Method"/> is null (decline) whenever the
+    /// substitution could steer overload resolution somewhere the real compilation will not
+    /// go. The placeholder is typed <c>Element</c>, while the real argument is the wrapper
+    /// record, which derives from <c>Element</c> directly; the only overloads that record can
+    /// reach and <c>Element</c> cannot are ones taking the record itself or a type parameter.
+    /// An interceptor for the wrong overload is a hard CS9144 in the consumer's build, so a
+    /// method group containing either shape is not re-bound.</para>
     /// </summary>
     private static SpeculativeBinding BindAroundWrapperFactoryCalls(
         SemanticModel model,
@@ -120,11 +136,32 @@ public sealed partial class SourceMapInterceptorGenerator
         System.Threading.CancellationToken ct)
     {
         var rewriter = new WrapperFactoryCallRewriter(model, ct, depth: 0, visiting: new HashSet<ILocalSymbol>(SymbolEqualityComparer.Default));
-        var rewritten = invocation.WithArgumentList((ArgumentListSyntax)rewriter.Visit(invocation.ArgumentList));
+        var rewritten = invocation.WithArgumentList((ArgumentListSyntax)rewriter.Visit(invocation.ArgumentList)!);
         if (!rewriter.Changed) return new SpeculativeBinding(false, null);
+        if (rewriter.Unreliable) return new SpeculativeBinding(true, null);
 
         var info = model.GetSpeculativeSymbolInfo(invocation.SpanStart, rewritten, SpeculativeBindingOption.BindAsExpression);
-        return new SpeculativeBinding(true, info.Symbol as IMethodSymbol);
+        if (info.Symbol is not IMethodSymbol method || !OverloadChoiceIsStable(method, model.Compilation))
+            return new SpeculativeBinding(true, null);
+        return new SpeculativeBinding(true, method);
+    }
+
+    /// <summary>See <see cref="BindAroundWrapperFactoryCalls"/>: false when some overload of
+    /// <paramref name="method"/> could be preferred for a wrapper-typed argument.</summary>
+    private static bool OverloadChoiceIsStable(IMethodSymbol method, Compilation compilation)
+    {
+        if (method.ContainingType is not { } owner) return false;
+        foreach (var member in owner.GetMembers(method.Name))
+        {
+            if (member is not IMethodSymbol overload) continue;
+            foreach (var parameter in overload.Parameters)
+            {
+                var type = parameter.Type is IArrayTypeSymbol array ? array.ElementType : parameter.Type;
+                if (type is ITypeParameterSymbol) return false;
+                if (type is INamedTypeSymbol named && WrapperFactoryCalls.IsIncompleteWrapperElement(named, compilation)) return false;
+            }
+        }
+        return true;
     }
 
     private readonly struct SpeculativeBinding
@@ -160,6 +197,46 @@ public sealed partial class SourceMapInterceptorGenerator
         }
 
         public bool Changed { get; private set; }
+
+        /// <summary>True when a substitution could not be made faithfully; the binding must not be trusted.</summary>
+        public bool Unreliable { get; private set; }
+
+        private bool MentionsIncompleteWrapper(ITypeSymbol type) => type switch
+        {
+            IArrayTypeSymbol array => MentionsIncompleteWrapper(array.ElementType),
+            INamedTypeSymbol named => WrapperFactoryCalls.IsIncompleteWrapperElement(named, _model.Compilation)
+                || named.TypeArguments.Any(MentionsIncompleteWrapper),
+            _ => false,
+        };
+
+        public override SyntaxNode? Visit(SyntaxNode? node)
+        {
+            // A value already typed as a wrapper record — an explicitly typed local, a field,
+            // a helper returning `SettingsCardElement` — binds fine here, but to a record that
+            // does not yet derive from Element (that base is generator-emitted too), so the
+            // containing DSL call still fails. Replace the whole value, not its parts.
+            if (node is ExpressionSyntax expression && IncompleteWrapperValueType(expression) is { } type)
+            {
+                return Placeholder(type, expression);
+            }
+
+            return base.Visit(node);
+        }
+
+        private INamedTypeSymbol? IncompleteWrapperValueType(ExpressionSyntax expression)
+        {
+            if (SyntaxFacts.IsInTypeOnlyContext(expression)) return null;
+            if (expression.Parent is MemberAccessExpressionSyntax member && member.Name == expression) return null;
+            if (expression.Parent is ArgumentSyntax argument && !argument.RefKindKeyword.IsKind(SyntaxKind.None)) return null;
+            if (_model.GetTypeInfo(expression, _ct).Type is not INamedTypeSymbol type
+                || !WrapperFactoryCalls.IsIncompleteWrapperElement(type, _model.Compilation))
+            {
+                return null;
+            }
+
+            // `SettingsCardElement.SettingsCard(...)`: the qualifier names the type, it is not a value.
+            return _model.GetSymbolInfo(expression, _ct).Symbol is INamespaceOrTypeSymbol ? null : type;
+        }
 
         public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node)
         {
@@ -205,8 +282,9 @@ public sealed partial class SourceMapInterceptorGenerator
                 }
 
                 var inner = new WrapperFactoryCallRewriter(_model, _ct, _depth + 1, _visiting);
-                var rewritten = (ExpressionSyntax)inner.Visit(initializer);
-                if (!inner.Changed) return null;
+                var rewritten = (ExpressionSyntax)inner.Visit(initializer)!;
+                if (inner.Unreliable) Unreliable = true;
+                if (!inner.Changed || inner.Unreliable) return null;
 
                 var type = _model.GetSpeculativeTypeInfo(initializer.SpanStart, rewritten, SpeculativeBindingOption.BindAsExpression).Type;
                 return type is null or IErrorTypeSymbol ? null : type;
@@ -223,12 +301,21 @@ public sealed partial class SourceMapInterceptorGenerator
 
             // The element record's `: Element` base is ALSO emitted by the wrapper generator,
             // so here a bare `partial record SettingsCardElement;` is not an element at all.
-            // Stand in with Element itself, which converts, infers and overloads the way the
-            // finished record does for every DSL signature (none takes a wrapper type).
-            if (_model.Compilation.GetTypeByMetadataName(ElementMetadataName) is { } element
-                && !ReturnsElement(type, element))
+            // Stand in with Element itself; OverloadChoiceIsStable rejects the method groups
+            // where that could resolve differently from the finished record.
+            //
+            // Only the record ITSELF is replaced. Any other inferred type (`string` from
+            // `card.ToString()`) is kept verbatim, because coercing it would pick a different
+            // overload (`Button(Element, …)` over `Button(string, …)`). A type that merely
+            // CONTAINS the record (`List<SettingsCardElement>`) is not faithfully expressible
+            // here — its variance conversions do not exist yet — so the binding is abandoned.
+            if (type is INamedTypeSymbol named && WrapperFactoryCalls.IsIncompleteWrapperElement(named, _model.Compilation))
             {
-                type = element;
+                type = _model.Compilation.GetTypeByMetadataName(ElementMetadataName) ?? type;
+            }
+            else if (MentionsIncompleteWrapper(type))
+            {
+                Unreliable = true;
             }
 
             var typeSyntax = SyntaxFactory.ParseTypeName(type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));

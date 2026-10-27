@@ -399,9 +399,9 @@ small allocation per *component*, never per leaf, and nothing while the flag is 
   generator cannot see another's output. The wrapper generator, which wrote the
   factory, intercepts calls to it instead (same line and column rules, same
   `ReactorSourceMap.Enabled` switch), and the source-map generator re-binds a DSL call
-  that takes one as an argument — `VStack(8, MyControl(...))`, or a local initialized
-  from one — with the wrapper call replaced by its element type, so the container keeps
-  its location too. The wrapper generator only emits interceptors when `ReactorSourceMap`
+  that takes one as an argument — `VStack(8, MyControl(...))`, or any value of the
+  wrapper's element type such as a local, a field or a helper's result — as if the
+  wrapper element were already an `Element`, so the container keeps its location too. The wrapper generator only emits interceptors when `ReactorSourceMap`
   is true and the build lists `Microsoft.UI.Reactor.Generated` in
   `InterceptorsNamespaces`, which `Microsoft.UI.Reactor.targets` does for you.
 - **Unannotated entry points outside `Factories` are not stamped.** A few

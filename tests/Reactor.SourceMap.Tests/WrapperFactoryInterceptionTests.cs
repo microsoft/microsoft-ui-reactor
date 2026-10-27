@@ -55,11 +55,15 @@ public sealed class WrapperFactoryInterceptionTests : IDisposable
     }
 
     /// <summary>Asserts <paramref name="el"/> was stamped at <paramref name="line"/>, at the column where <paramref name="name"/> starts.</summary>
-    private static void AssertStampedAt(Element el, int line, string name)
+    /// <remarks>
+    /// The path is compared whole against <c>[CallerFilePath]</c>, so a wrapper interceptor
+    /// that skipped the compiler's <c>PathMap</c> (CI builds map to <c>/_/</c>) cannot pass.
+    /// </remarks>
+    private static void AssertStampedAt(Element el, int line, string name, [CallerFilePath] string expectedPath = "")
     {
         Assert.NotNull(el.CallSite);
         Assert.Equal(line, el.CallSite!.Value.LineNumber);
-        Assert.EndsWith("WrapperFactoryInterceptionTests.cs", el.CallSite.Value.FilePath, StringComparison.Ordinal);
+        Assert.Equal(expectedPath, el.CallSite.Value.FilePath);
 
         var text = SourceLine(line);
         var column = text.IndexOf(name, StringComparison.Ordinal) + 1;
@@ -134,6 +138,101 @@ public sealed class WrapperFactoryInterceptionTests : IDisposable
         AssertStampedAt(stack, line, "VStack(");
         Assert.Same(card, stack.Children[0]);
         AssertStampedAt(card, cardLine, "FakeGauge(");
+    }
+
+    /// <summary>A helper typed as the wrapper record, which the source-map generator sees as not-yet-an-Element.</summary>
+    private static FakeGaugeElement TypedGauge() => FakeGauge(value: 7);
+
+    private readonly FakeGaugeElement _fieldGauge = FakeGaugeElement.FakeGauge();
+
+    [Fact]
+    public void ContainerTakingAnExplicitlyTypedWrapperValue_IsStamped()
+    {
+        // Each of these binds in the source-map generator's view, but to a record whose
+        // `: Element` base the wrapper generator has not emitted yet, so the containing
+        // call failed overload resolution and was dropped.
+        FakeGaugeElement typed = FakeGauge();
+        var stack = VStack(8, typed, TypedGauge(), _fieldGauge, TypedGauge().Width(10)); var line = Line();
+
+        AssertStampedAt(stack, line, "VStack(");
+        Assert.Equal(4, stack.Children.Length);
+        Assert.Same(typed, stack.Children[0]);
+    }
+
+    [Fact]
+    public void ContainerTakingAChainOfLocals_IsStamped()
+    {
+        // `sized` is inferred through `g`, one level deeper than a single local.
+        var g = FakeGauge();
+        var sized = g.Width(140);
+        var row = HStack(8, sized); var line = Line();
+
+        AssertStampedAt(row, line, "HStack(");
+    }
+
+    /// <summary>A transparent forwarder: its caller's line is the one that should be reported.</summary>
+    [ReactorSourceTransparent]
+    internal static Element Card() => FakeGauge(value: 1);
+
+    /// <summary>A transparent helper taking an Element, called with a wrapper call.</summary>
+    [ReactorSourceTransparent]
+    internal static Element Wrap(Element child) => VStack(child);
+
+    [Fact]
+    public void WrapperCallInsideATransparentHelper_ReportsTheCaller()
+    {
+        // Neither generator stamps the FakeGauge() inside Card(): the call to Card() is
+        // intercepted instead, so the gauge reports this line, not the helper's.
+        var card = Card(); var line = Line();
+
+        AssertStampedAt(card, line, "Card(");
+        Assert.IsType<FakeGaugeElement>(card);
+    }
+
+    [Fact]
+    public void TransparentHelperTakingAWrapperCall_ReportsTheCaller()
+    {
+        var wrapped = Wrap(FakeGauge()); var line = Line();
+
+        AssertStampedAt(wrapped, line, "Wrap(");
+        AssertStampedAt(((StackElement)wrapped).Children[0]!, line, "FakeGauge(");
+    }
+
+    /// <summary>
+    /// An overload pair where the wrapper record is MORE specific than Element. The real
+    /// compilation picks <c>Frame(FakeGaugeElement)</c>; re-binding with an Element-typed
+    /// placeholder would pick <c>Frame(Element)</c>, and an interceptor for it would be a
+    /// CS9144 build break. That this file compiles is the primary oracle.
+    /// </summary>
+    [ReactorSourceTransparent]
+    internal static Element Frame(Element child) => VStack(child);
+
+    [ReactorSourceTransparent]
+    internal static Element Frame(FakeGaugeElement gauge) => HStack(gauge);
+
+    [Fact]
+    public void OverloadPreferringTheWrapperRecord_IsLeftUnstampedRatherThanMisbound()
+    {
+        var framed = Frame(FakeGauge());
+
+        // The real overload ran...
+        Assert.Equal(global::Microsoft.UI.Xaml.Controls.Orientation.Horizontal, ((StackElement)framed).Orientation);
+        // ...and the call reads as "location unknown", never as the other overload's site.
+        Assert.Null(framed.CallSite);
+    }
+
+    [Fact]
+    public void NonElementLocalDerivedFromAWrapperValue_KeepsItsOwnType()
+    {
+        // `label` is a string. Re-binding must keep it one: coerced to Element it would pick
+        // Button(Element, ...) where the real compilation picks Button(string, ...), and the
+        // interceptor would not compile (CS9144). That this file compiles is the first oracle.
+        var g = FakeGauge(value: 2);
+        var label = g.ToString();
+        var button = Button(label, () => { }); var line = Line();
+
+        AssertStampedAt(button, line, "Button(");
+        Assert.Equal(g.ToString(), button.Label);
     }
 
     [Fact]

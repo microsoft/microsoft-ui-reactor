@@ -19,8 +19,7 @@ namespace Microsoft.UI.Reactor.SourceMap.Tests;
 /// carries no location. Instance members (<c>IntlAccessor.RichMessage(...)</c>) are
 /// excluded a step earlier still, by the generator's <c>IsStatic</c> filter.</para>
 ///
-/// <para>Characterization, not endorsement: as with
-/// <see cref="WrapperFactoryInterceptionTests"/>, the gap costs coverage rather than
+/// <para>Characterization, not endorsement: the gap costs coverage rather than
 /// correctness — these elements read back as "location unknown" instead of naming a
 /// framework line that is not the author's. If interception ever widens to reach
 /// them, the first assertion here fails and forces the documented limitation in

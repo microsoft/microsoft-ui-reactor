@@ -77,7 +77,12 @@ public sealed class WrapperGeneratorSourceMapTests
         }
         """;
 
-    private static GeneratorDriverRunResult Run(bool reactorSourceMap, bool interceptorsNamespace, string source = Source)
+    private static GeneratorDriverRunResult Run(
+        bool reactorSourceMap,
+        bool interceptorsNamespace,
+        string source = Source,
+        string? extraSource = null,
+        ImmutableArray<KeyValuePair<string, string>> pathMap = default)
     {
         var tpa = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
             .Split(Path.PathSeparator)
@@ -90,11 +95,13 @@ public sealed class WrapperGeneratorSourceMapTests
             parse = parse.WithFeatures([new KeyValuePair<string, string>("InterceptorsNamespaces", "Some.Other;Microsoft.UI.Reactor.Generated")]);
         }
 
-        var compilation = CSharpCompilation.Create(
-            "WrapperSourceMapTests",
-            [CSharpSyntaxTree.ParseText(source, parse, path: @"C:\proj\Screen.cs")],
-            refs,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+        var trees = new List<SyntaxTree> { CSharpSyntaxTree.ParseText(source, parse, path: @"C:\proj\Screen.cs") };
+        if (extraSource is not null) trees.Add(CSharpSyntaxTree.ParseText(extraSource, parse, path: @"C:\proj\Extra.cs"));
+
+        var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable);
+        if (!pathMap.IsDefault)
+            options = options.WithSourceReferenceResolver(new SourceFileResolver(ImmutableArray<string>.Empty, null, pathMap));
+        var compilation = CSharpCompilation.Create("WrapperSourceMapTests", trees, refs, options);
 
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             generators: [new WrapperGenerator().AsSourceGenerator()],
@@ -126,7 +133,7 @@ public sealed class WrapperGeneratorSourceMapTests
     public void Interceptor_RestatesTheFactorySignatureExactly()
     {
         var result = Run(reactorSourceMap: true, interceptorsNamespace: true);
-        var wrapper = result.GeneratedTrees.Single(t => t.FilePath.EndsWith("GaugeElement.Wrapper.g.cs", StringComparison.Ordinal)).GetText().ToString();
+        var wrapper = result.GeneratedTrees.Single(t => t.FilePath.EndsWith("GaugeElement.Wrapper.g.cs", StringComparison.Ordinal)).GetText(TestContext.Current.CancellationToken).ToString();
         var src = Interceptors(result)!;
 
         // The factory parameter type, taken from the generated factory itself, must be the
@@ -163,6 +170,79 @@ public sealed class WrapperGeneratorSourceMapTests
         // Only the explicitly qualified call still goes to the factory.
         Assert.NotNull(src);
         Assert.Equal(1, src!.Split("[global::System.Runtime.CompilerServices.InterceptsLocationAttribute(1, ").Length - 1);
+    }
+
+    private static int InterceptorCount(string? src)
+        => src is null ? 0 : src.Split("[global::System.Runtime.CompilerServices.InterceptsLocationAttribute(1, ").Length - 1;
+
+    [Fact]
+    public void UnqualifiedCallInsideTheElementRecord_IsFoundThroughTheEnclosingType()
+    {
+        // No `using static` reaches this call; only the enclosing-type lookup does.
+        var source = Source.Replace(
+            "public partial record GaugeElement;",
+            "public partial record GaugeElement { public static object Self() => Gauge(); }",
+            StringComparison.Ordinal);
+        Assert.NotEqual(Source, source);
+
+        var src = Interceptors(Run(reactorSourceMap: true, interceptorsNamespace: true, source));
+
+        Assert.Equal(4, InterceptorCount(src));
+    }
+
+    [Fact]
+    public void GlobalUsingStatic_IsFound()
+    {
+        var source = Source.Replace("using static App.GaugeElement;", string.Empty, StringComparison.Ordinal);
+        Assert.NotEqual(Source, source);
+
+        // Positive control: without any import only the explicitly qualified call resolves.
+        Assert.Equal(1, InterceptorCount(Interceptors(Run(reactorSourceMap: true, interceptorsNamespace: true, source))));
+
+        var src = Interceptors(Run(reactorSourceMap: true, interceptorsNamespace: true, source,
+            extraSource: "global using static App.GaugeElement;"));
+
+        Assert.Equal(3, InterceptorCount(src));
+    }
+
+    [Fact]
+    public void AmbiguousImportsInOneScope_AreLeftAlone()
+    {
+        // Two wrapped controls named Gauge (so both factories are named Gauge), both imported into one scope: the call
+        // is ambiguous in the real compilation too, so guessing either would be wrong.
+        var source = Source.Replace(
+            "using static App.GaugeElement;",
+            "using static App.GaugeElement;\n    using static Other.OtherGaugeElement;",
+            StringComparison.Ordinal);
+        Assert.NotEqual(Source, source);
+        const string other = """
+            namespace Other
+            {
+                public class Gauge : Microsoft.UI.Xaml.Controls.Control { }
+
+                [Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(Other.Gauge), RegisterAssembly = false)]
+                public partial record OtherGaugeElement;
+            }
+            """;
+
+        var src = Interceptors(Run(reactorSourceMap: true, interceptorsNamespace: true, source, extraSource: other));
+
+        // Only App.GaugeElement.Gauge() — explicitly qualified — remains.
+        Assert.Equal(1, InterceptorCount(src));
+        Assert.Contains("global::App.GaugeElement.Gauge(", src);
+    }
+
+    [Fact]
+    public void StampedPath_HonoursThePathMap()
+    {
+        // What [CallerFilePath] reports under DeterministicSourcePaths (CI): the mapped prefix,
+        // with the remainder's separators rewritten to the replacement's.
+        var src = Interceptors(Run(reactorSourceMap: true, interceptorsNamespace: true,
+            pathMap: [new KeyValuePair<string, string>(@"C:\proj\", "/_/")]));
+
+        Assert.NotNull(src);
+        Assert.Contains("SourceLocation(@\"/_/Screen.cs\", ", src);
+        Assert.DoesNotContain(@"C:\proj", src);
     }
 
     private sealed class Options(bool reactorSourceMap) : AnalyzerConfigOptionsProvider

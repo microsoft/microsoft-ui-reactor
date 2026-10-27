@@ -221,6 +221,19 @@ internal static class WrapperFactoryCalls
     }
 
     /// <summary>
+    /// True for a <c>[GenerateReactorWrapper]</c> element record that, in this compilation,
+    /// does not derive from <c>Element</c> yet: the wrapper generator emits that base along
+    /// with the factory, so neither is visible to any other generator.
+    /// </summary>
+    internal static bool IsIncompleteWrapperElement(INamedTypeSymbol type, Compilation compilation)
+    {
+        if (!type.IsRecord || type.TypeKind == TypeKind.Error) return false;
+        if (!type.GetAttributes().Any(static a => a.AttributeClass?.ToDisplayString() == WrapperAttributeMetadataName)) return false;
+        var element = compilation.GetTypeByMetadataName("Microsoft.UI.Reactor.Core.Element");
+        return element is not null && !ReactorSourceTransparency.ReturnsElement(type, element);
+    }
+
+    /// <summary>
     /// True when <paramref name="type"/> is a <c>[GenerateReactorWrapper]</c> element whose
     /// generated factory is named <paramref name="name"/>.
     /// </summary>

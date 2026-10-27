@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -178,7 +178,8 @@ public sealed class SourceMapTransparentGeneratorTests
         bool enabled = true,
         IReadOnlyDictionary<string, string>? buildProperties = null,
         SurfaceShape surface = SurfaceShape.InSource,
-        string? librarySource = null)
+        string? librarySource = null,
+        IReadOnlyList<(string Path, string Source)>? extraFiles = null)
     {
         Assert.True(librarySource is null || surface != SurfaceShape.InSource, "a library project needs a referenced surface");
 
@@ -214,6 +215,9 @@ public sealed class SourceMapTransparentGeneratorTests
         {
             trees = [surfaceTree, userTree];
         }
+
+        if (extraFiles is not null)
+            trees = [.. trees, .. extraFiles.Select(f => CSharpSyntaxTree.ParseText(f.Source, parseOptions, path: f.Path))];
 
         var compilation = CSharpCompilation.Create("SourceMapDriverProbe", trees, references, compilationOptions);
 
