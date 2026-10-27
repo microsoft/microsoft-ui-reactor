@@ -132,6 +132,12 @@ public sealed class SourceMapWrapperFastPathTests
             OutputKind.DynamicallyLinkedLibrary
         },
         {
+            "primary-constructor parameter used from another partial declaration",
+            "using Microsoft.UI.Reactor.Core;\nnamespace App {\n public partial class Screen { public Element R() => Helpers.Show(child); }\n}\n",
+            "public partial class Screen(GaugeElement child) { }",
+            OutputKind.DynamicallyLinkedLibrary
+        },
+        {
             "positional-record property",
             "using Microsoft.UI.Reactor.Core;\nnamespace App {\n public static class Screen { public static Element R(ViewModel model) => Helpers.Show(model.Child); }\n}\n",
             "public record ViewModel(GaugeElement Child, int Index);",

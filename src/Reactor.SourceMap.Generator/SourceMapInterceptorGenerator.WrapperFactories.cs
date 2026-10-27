@@ -169,14 +169,17 @@ public sealed partial class SourceMapInterceptorGenerator
                 break;
             case TypeDeclarationSyntax type:
                 if (Spells(type.BaseList)) yield return (type.Identifier.ValueText, false);
-                // A positional record synthesizes a property per parameter, and a Deconstruct.
-                if (type is RecordDeclarationSyntax { ParameterList: { } positional } && Spells(positional))
+                // A primary constructor's parameters are in scope in every partial declaration
+                // of the type, which all spell the type's name; a positional record also
+                // synthesizes a property per parameter, and a Deconstruct.
+                if (type.ParameterList is { } primary && Spells(primary))
                 {
-                    foreach (var parameter in positional.Parameters)
+                    yield return (type.Identifier.ValueText, false);
+                    foreach (var parameter in primary.Parameters)
                     {
                         if (Spells(parameter.Type)) yield return (parameter.Identifier.ValueText, false);
                     }
-                    yield return ("Deconstruct", true);
+                    if (type is RecordDeclarationSyntax) yield return ("Deconstruct", true);
                 }
                 foreach (var member in type.Members)
                 {
