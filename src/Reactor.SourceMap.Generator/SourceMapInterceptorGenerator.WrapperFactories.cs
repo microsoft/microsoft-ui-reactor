@@ -142,6 +142,7 @@ public sealed partial class SourceMapInterceptorGenerator
         {
             if (node is not ExpressionSyntax expression) continue;
             if (model.GetTypeInfo(expression, ct).Type is IErrorTypeSymbol) return true;
+            if (IsWrapperDependentMethodGroup(model, expression, ct)) return true;
             if (ValueTypeOf(model, expression, ct) is { } valueType
                 && MentionsIncompleteWrapper(valueType, model.Compilation, 0))
             {
@@ -243,6 +244,28 @@ public sealed partial class SourceMapInterceptorGenerator
             }
         }
         return true;
+    }
+
+    /// <summary>
+    /// A method group (<c>From(MakeGauge)</c>) has no type of its own, so a type check never
+    /// sees it; but its candidates' signatures decide which delegate it converts to, and one
+    /// naming a wrapper record converts differently once the record is an Element.
+    /// </summary>
+    private static bool IsWrapperDependentMethodGroup(SemanticModel model, ExpressionSyntax expression, System.Threading.CancellationToken ct)
+    {
+        if (expression is not (SimpleNameSyntax or MemberAccessExpressionSyntax)) return false;
+        if (expression.Parent is InvocationExpressionSyntax call && call.Expression == expression) return false;
+        if (expression.Parent is MemberAccessExpressionSyntax member && member.Name == expression) return false;
+
+        var info = model.GetSymbolInfo(expression, ct);
+        var compilation = model.Compilation;
+        foreach (var symbol in info.Symbol is { } single ? ImmutableArray.Create(single) : info.CandidateSymbols)
+        {
+            if (symbol is not IMethodSymbol method) continue;
+            if (MentionsIncompleteWrapper(method.ReturnType, compilation, 0)) return true;
+            if (method.Parameters.Any(p => MentionsIncompleteWrapper(p.Type, compilation, 0))) return true;
+        }
+        return false;
     }
 
     /// <summary>The type of <paramref name="expression"/> when it is a value (not a type name, not the name half of <c>x.Name</c>, not a by-ref argument).</summary>
@@ -400,6 +423,7 @@ public sealed partial class SourceMapInterceptorGenerator
                 if (expression.Parent is MemberAccessExpressionSyntax member && member.Name == expression) continue;
                 if (_model.GetTypeInfo(expression, _ct).Type is IErrorTypeSymbol) return false;
                 if (ValueType(expression) is { } valueType && MentionsIncompleteWrapper(valueType)) return false;
+                if (IsWrapperDependentMethodGroup(_model, expression, _ct)) return false;
                 if (expression is InvocationExpressionSyntax call
                     && _model.GetSymbolInfo(call, _ct) is { Symbol: null, CandidateSymbols.IsEmpty: false })
                 {
@@ -437,7 +461,7 @@ public sealed partial class SourceMapInterceptorGenerator
                 case MemberAccessExpressionSyntax:
                     return _model.GetSymbolInfo(expression, _ct).Symbol switch
                     {
-                        ILocalSymbol l => SymbolEqualityComparer.Default.Equals(l.Type, record),
+                        ILocalSymbol l => SymbolEqualityComparer.Default.Equals(l.Type, record) && LocalIsCertainlyRecord(l, record),
                         IFieldSymbol f => SymbolEqualityComparer.Default.Equals(f.Type, record),
                         IPropertySymbol p => SymbolEqualityComparer.Default.Equals(p.Type, record),
                         IParameterSymbol p => SymbolEqualityComparer.Default.Equals(p.Type, record),
@@ -689,6 +713,30 @@ public sealed partial class SourceMapInterceptorGenerator
             }
 
             return node;
+        }
+
+        /// <summary>
+        /// A local typed as the record HERE is the record in the real compilation only if its
+        /// type was written down, or if it is a <c>var</c> whose initializer itself flows to
+        /// the record — <c>var x = Pick(card)</c> is the record here but may be a string once
+        /// a better overload of <c>Pick</c> exists.
+        /// </summary>
+        private bool LocalIsCertainlyRecord(ILocalSymbol local, INamedTypeSymbol record)
+        {
+            if (local.DeclaringSyntaxReferences.Length != 1) return false;
+            switch (local.DeclaringSyntaxReferences[0].GetSyntax(_ct))
+            {
+                case VariableDeclaratorSyntax { Parent: VariableDeclarationSyntax declaration } declarator:
+                    if (!declaration.Type.IsVar) return true;
+                    return declarator.Initializer is not null
+                        && InferLocalType(local) is INamedTypeSymbol inferred
+                        && SymbolEqualityComparer.Default.Equals(inferred, record);
+                case SingleVariableDesignationSyntax { Parent: DeclarationPatternSyntax pattern }:
+                    return !pattern.Type.IsVar;
+                default:
+                    // foreach variables, out vars, deconstructions: not reconstructed here.
+                    return false;
+            }
         }
 
         /// <summary>

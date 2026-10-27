@@ -227,6 +227,55 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         Assert.Null(shown.CallSite);
     }
 
+    [Fact]
+    public void VarLocalThatIsTheRecordOnlyHere_IsNotTrusted()
+    {
+        // `intermediate` is the record here (Pick2(object) is all that binds) and a string in
+        // the real compilation (Pick2(Element) wins), so Display(string) runs.
+        FakeGaugeElement typed = FakeGauge();
+        var intermediate = Pick2(typed);
+        var shown = Display(intermediate);
+
+        Assert.Equal(WinUI.Orientation.Vertical, ((StackElement)shown).Orientation);
+        Assert.Null(shown.CallSite);
+    }
+
+    internal static FakeGaugeElement MakeGauge() => FakeGauge();
+
+    [ReactorSourceTransparent]
+    internal static Element From(global::System.Func<object> make) => VStack();
+
+    [ReactorSourceTransparent]
+    internal static Element From(global::System.Func<Element> make) => HStack();
+
+    [Fact]
+    public void MethodGroupWhoseSignatureNamesTheRecord_IsNotTrusted()
+    {
+        // MakeGauge converts to Func<object> only, here; to the better Func<Element> once the
+        // record is an Element. A method group has no type, so only its signature tells.
+        var made = From(MakeGauge);
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)made).Orientation);
+        Assert.Null(made.CallSite);
+    }
+
+    [ReactorSourceTransparent]
+    internal static Element Select<T>(int value) where T : Element => VStack();
+
+    [ReactorSourceTransparent]
+    internal static Element Select<T>(object value) => HStack();
+
+    [Fact]
+    public void ExplicitTypeArgumentNamingTheRecord_IsNotTrusted()
+    {
+        // `where T : Element` rules Select<T>(int) out here and in once the record is an
+        // Element, where the exact int match wins.
+        var selected = Select<FakeGaugeElement>(0);
+
+        Assert.Equal(WinUI.Orientation.Vertical, ((StackElement)selected).Orientation);
+        Assert.Null(selected.CallSite);
+    }
+
     [ReactorSourceTransparent]
     internal static Element Pair(Element first, string second) => VStack(first);
 

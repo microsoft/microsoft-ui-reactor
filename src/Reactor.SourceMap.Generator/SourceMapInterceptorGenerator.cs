@@ -393,6 +393,10 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         // filter to the constructed method makes the consumer's build fail. Declining
         // to stamp is what keeps the emitted code compiling; the element still gets a
         // location from the interceptor's own return-path stamp.
+        // Type arguments naming a wrapper record (`Select<FooElement>(...)`, or inferred from a
+        // record-typed argument) are checked against constraints the record does not satisfy
+        // yet, so the candidate set here can differ from the real one. Declined, not guessed.
+        if (wrappersInPlay && method.TypeArguments.Any(t => MentionsIncompleteWrapper(t, ctx.SemanticModel.Compilation, 0))) return null;
         method = method.OriginalDefinition;
 
         // Only the Reactor DSL surface, plus (spec 010 mechanism 1) any static
