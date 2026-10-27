@@ -92,6 +92,114 @@ public sealed partial class SourceMapInterceptorGenerator
         => !WrapperFactoryCalls.IncompleteWrappers(compilation).IsEmpty;
 
     /// <summary>
+    /// True when the wrapper analysis can matter for <paramref name="node"/>: the compilation
+    /// declares wrapper records AND the member containing the call could touch one.
+    /// </summary>
+    private static bool WrappersInPlay(SemanticModel model, SyntaxNode node, System.Threading.CancellationToken ct)
+        => HasIncompleteWrappers(model.Compilation) && !MemberIsWrapperFree(model, node, ct);
+
+    private const string AnyWrapperOperator = "#operator";
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Compilation, ImmutableHashSet<string>> s_wrapperNames = new();
+
+    /// <summary>
+    /// Every identifier through which a value typed with a wrapper record can be reached in
+    /// source: the records themselves, their factories, aliases of them, and every member,
+    /// anywhere in the compilation, whose type or signature mentions one. A user-defined
+    /// operator or conversion mentioning one is reachable with no identifier at all, and is
+    /// recorded as <see cref="AnyWrapperOperator"/>.
+    /// </summary>
+    private static ImmutableHashSet<string> WrapperRelatedNames(Compilation compilation)
+        => s_wrapperNames.GetValue(compilation, static c =>
+        {
+            var names = ImmutableHashSet.CreateBuilder<string>(System.StringComparer.Ordinal);
+            foreach (var record in WrapperFactoryCalls.IncompleteWrappers(c)) names.Add(record.Name);
+            names.UnionWith(WrapperFactoryCalls.SourceFactoryNames(c));
+            CollectMembers(c.SourceModule.GlobalNamespace, c, names);
+            foreach (var tree in c.SyntaxTrees)
+            {
+                SemanticModel? model = null;
+                foreach (var directive in tree.GetRoot().DescendantNodes(static n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax).OfType<UsingDirectiveSyntax>())
+                {
+                    if (directive.Alias is not { } alias) continue;
+                    model ??= c.GetSemanticModel(tree);
+                    if (model.GetDeclaredSymbol(directive) is { Target: ITypeSymbol target } && MentionsIncompleteWrapper(target, c, 0))
+                        names.Add(alias.Name.Identifier.ValueText);
+                }
+            }
+            return names.ToImmutable();
+        });
+
+    private static void CollectMembers(INamespaceOrTypeSymbol container, Compilation compilation, ImmutableHashSet<string>.Builder names)
+    {
+        foreach (var member in container.GetMembers())
+        {
+            // A record's synthesized ==, !=, Equals(R), copy constructor and <Clone>$ mention
+            // it, but are only reachable through the record's own name or operators on two
+            // record values — both of which the walk already sees.
+            if (member.IsImplicitlyDeclared) continue;
+            switch (member)
+            {
+                case INamespaceOrTypeSymbol nested:
+                    CollectMembers(nested, compilation, names);
+                    break;
+                case IMethodSymbol method:
+                    if (MentionsIncompleteWrapper(method.ReturnType, compilation, 0)
+                        || method.Parameters.Any(p => MentionsIncompleteWrapper(p.Type, compilation, 0)))
+                    {
+                        names.Add(method.MethodKind is MethodKind.UserDefinedOperator or MethodKind.Conversion
+                            ? AnyWrapperOperator
+                            : method.Name);
+                    }
+                    break;
+                case IPropertySymbol property when MentionsIncompleteWrapper(property.Type, compilation, 0):
+                case IFieldSymbol field when MentionsIncompleteWrapper(field.Type, compilation, 0):
+                case IEventSymbol @event when MentionsIncompleteWrapper(@event.Type, compilation, 0):
+                    names.Add(member.Name);
+                    break;
+            }
+        }
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Compilation, System.Collections.Concurrent.ConcurrentDictionary<SyntaxNode, bool>> s_wrapperFreeMembers = new();
+
+    /// <summary>
+    /// True when nothing in the member (method, property, field, …) containing
+    /// <paramref name="node"/> can produce a wrapper-dependent binding: none of its identifiers
+    /// is in <see cref="WrapperRelatedNames"/>. Every route to a wrapper value — a factory
+    /// call (bound or not), a typed variable or member, a cast, <c>default</c>, <c>new</c>, a
+    /// method group — spells one of those names, so such a member skips the per-expression
+    /// analysis entirely and behaves exactly as it does in a compilation without wrappers.
+    /// A purely syntactic token scan, memoized per member per compilation: asking the
+    /// compiler for the member's diagnostics instead was measured at more than doubling the
+    /// generator's run time.
+    /// </summary>
+    private static bool MemberIsWrapperFree(SemanticModel model, SyntaxNode node, System.Threading.CancellationToken ct)
+    {
+        var names = WrapperRelatedNames(model.Compilation);
+        if (names.Contains(AnyWrapperOperator)) return false;
+
+        SyntaxNode member = node.FirstAncestorOrSelf<MemberDeclarationSyntax>() ?? (SyntaxNode)node.SyntaxTree.GetRoot(ct);
+        if (member is BaseTypeDeclarationSyntax or BaseNamespaceDeclarationSyntax) return false;
+
+        var memo = s_wrapperFreeMembers.GetValue(model.Compilation, static _ => new System.Collections.Concurrent.ConcurrentDictionary<SyntaxNode, bool>());
+        if (memo.TryGetValue(member, out var known)) return known;
+
+        var free = true;
+        foreach (var token in member.DescendantTokens())
+        {
+            if (token.IsKind(SyntaxKind.IdentifierToken) && names.Contains(token.ValueText))
+            {
+                free = false;
+                break;
+            }
+        }
+
+        memo[member] = free;
+        return free;
+    }
+
+    /// <summary>
     /// True when an argument of an already-resolved call has a type the real compilation
     /// may disagree with: an error type, or a type parameter that is not in scope (the type
     /// <c>RadialGauge(...).Width(140)</c> reports, since <c>Width&lt;T&gt;</c> could not infer
@@ -232,18 +340,17 @@ public sealed partial class SourceMapInterceptorGenerator
     }
 
     /// <summary>
-    /// The expressions whose type is not simply derived from their children's — where a
-    /// wrapper value, an error, or a binding decision can first appear. Literals, operators,
-    /// interpolations, lambdas and parentheses are skipped (their children are still walked):
-    /// they cannot introduce a record or an error their operands do not already show, and
-    /// skipping them keeps this walk to a fraction of the nodes in a render body.
+    /// False only for expressions that can never introduce a record, an error or a binding
+    /// decision their children do not already show — literals, interpolated-string shells,
+    /// parentheses, lambdas, <c>this</c>/<c>base</c>, <c>typeof</c>/<c>sizeof</c>. Their
+    /// children are still walked. Everything else (operators included: <c>x as FooElement</c>,
+    /// a user-defined operator returning a record) is asked. Skipping those few kinds removes
+    /// most of the nodes in a typical render body.
     /// </summary>
-    private static bool IsValueSource(ExpressionSyntax expression) => expression is
-        SimpleNameSyntax or MemberAccessExpressionSyntax or MemberBindingExpressionSyntax
-        or InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax
-        or DefaultExpressionSyntax or CastExpressionSyntax or ElementAccessExpressionSyntax
-        or ConditionalExpressionSyntax or ConditionalAccessExpressionSyntax or WithExpressionSyntax
-        or SwitchExpressionSyntax or AwaitExpressionSyntax or CollectionExpressionSyntax;
+    private static bool IsValueSource(ExpressionSyntax expression) => expression is not
+        (LiteralExpressionSyntax or InterpolatedStringExpressionSyntax or ParenthesizedExpressionSyntax
+        or AnonymousFunctionExpressionSyntax or ThisExpressionSyntax or BaseExpressionSyntax
+        or TypeOfExpressionSyntax or SizeOfExpressionSyntax or OmittedArraySizeExpressionSyntax);
 
     /// <summary>
     /// Per-node answers, so nested containers and render lambdas — scanned once for every
@@ -359,6 +466,20 @@ public sealed partial class SourceMapInterceptorGenerator
             return sources;
         }
 
+        // A query range variable takes its type from the clause that introduces it.
+        if (symbol is IRangeVariableSymbol range)
+        {
+            if (range.DeclaringSyntaxReferences.Length != 1) return null;
+            return range.DeclaringSyntaxReferences[0].GetSyntax(ct) switch
+            {
+                FromClauseSyntax from => new SyntaxNode[] { from.Expression },
+                LetClauseSyntax let => new SyntaxNode[] { let.Expression },
+                JoinClauseSyntax join => new SyntaxNode[] { join.InExpression },
+                { } other => new SyntaxNode[] { other.FirstAncestorOrSelf<QueryExpressionSyntax>() ?? other },
+                _ => null,
+            };
+        }
+
         if (symbol is not ILocalSymbol local
             || local.DeclaringSyntaxReferences.Length != 1
             || local.DeclaringSyntaxReferences[0].SyntaxTree != name.SyntaxTree)
@@ -384,9 +505,16 @@ public sealed partial class SourceMapInterceptorGenerator
         {
             switch (node)
             {
-                // `out var n`: the call it is passed to.
-                case ArgumentSyntax { Parent: ArgumentListSyntax { Parent: { } call } }:
-                    return new[] { call is InvocationExpressionSyntax invocation ? (SyntaxNode)invocation.Expression : call };
+                // `out var n`: the call it is passed to — its receiver and its OTHER arguments,
+                // which choose the overload and so the out parameter's type. Not the declaring
+                // argument itself.
+                case ArgumentSyntax { Parent: ArgumentListSyntax { Parent: { } call } list } declaring:
+                {
+                    var sources = new List<SyntaxNode>();
+                    if (call is InvocationExpressionSyntax invocation) sources.Add(invocation.Expression);
+                    sources.AddRange(list.Arguments.Where(a => a != declaring));
+                    return sources;
+                }
                 // `var (a, b) = expr`: the right-hand side.
                 case AssignmentExpressionSyntax assignment when assignment.Left.Span.Contains(declarator.Span):
                     return new SyntaxNode[] { assignment.Right };
@@ -642,6 +770,8 @@ public sealed partial class SourceMapInterceptorGenerator
                     return CertainlyRecord(w.Expression, record);
                 case CastExpressionSyntax cast:
                     return SymbolEqualityComparer.Default.Equals(_model.GetTypeInfo(cast.Type, _ct).Type, record);
+                case BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.AsExpression):
+                    return SymbolEqualityComparer.Default.Equals(_model.GetTypeInfo(binary.Right, _ct).Type, record);
                 case DefaultExpressionSyntax:
                 case ObjectCreationExpressionSyntax:
                     return true;

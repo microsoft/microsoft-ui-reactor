@@ -5,6 +5,7 @@ using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.SourceMap.Tests.FakeGaugeElement;
 using static Microsoft.UI.Reactor.SourceMap.Tests.GaugeStacks;
 using WinUI = Microsoft.UI.Xaml.Controls;
+using GaugeAlias = Microsoft.UI.Reactor.SourceMap.Tests.FakeGaugeElement;
 
 namespace Microsoft.UI.Reactor.SourceMap.Tests;
 
@@ -299,6 +300,62 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         FakeGaugeElement gauge = FakeGauge();
         var content = Content(gauge);
         var buttons = new[] { content }.Select(item => Button(item)).ToArray();
+
+        Assert.Null(buttons[0].CallSite);
+    }
+
+    [ReactorSourceTransparent]
+    internal static Element PresentMaybe(object? value) => VStack();
+
+    [ReactorSourceTransparent]
+    internal static Element PresentMaybe(Element? child) => HStack(child);
+
+    [Fact]
+    public void AsExpressionToTheRecord_IsReBoundAndStamped()
+    {
+        // `boxed as FakeGaugeElement` binds PresentMaybe(object?) here; PresentMaybe(Element?)
+        // for real. A bare `as` (no `!`), so nothing but the operator itself names the record.
+        object boxed = FakeGauge();
+        var presented = PresentMaybe(boxed as FakeGaugeElement); var line = Line();
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)presented).Orientation);
+        Assert.Equal(line, presented.CallSite!.Value.LineNumber);
+    }
+
+    [Fact]
+    public void AliasOfTheRecord_IsEnoughToMarkAMemberAsTouchingWrappers()
+    {
+        // The only token naming the record here is an alias, so the per-member fast path must
+        // know aliases: otherwise PresentMaybe(object?) — all that binds here — is intercepted
+        // while the real call is PresentMaybe(Element?).
+        var presented = PresentMaybe(default(GaugeAlias)); var line = Line();
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)presented).Orientation);
+        Assert.Equal(line, presented.CallSite!.Value.LineNumber);
+    }
+
+    internal static void Read(object source, out string value) => value = "object";
+
+    internal static void Read(Element source, out Element value) => value = source;
+
+    [Fact]
+    public void OutVarTypedByAnOverloadThatDependsOnTheRecord_IsNotTrusted()
+    {
+        // `value` is a string here (Read(object, ...) is all that binds) and an Element in the
+        // real compilation, where Button(Element, ...) is chosen.
+        FakeGaugeElement gauge = FakeGauge();
+        Read(gauge, out var value);
+        var button = Button(value);
+
+        Assert.Null(button.CallSite);
+    }
+
+    [Fact]
+    public void QueryRangeVariableTypedFromAWrapperDerivedSequence_IsNotTrusted()
+    {
+        FakeGaugeElement gauge = FakeGauge();
+        var content = Content(gauge);
+        var buttons = (from item in new[] { content } select Button(item)).ToArray();
 
         Assert.Null(buttons[0].CallSite);
     }

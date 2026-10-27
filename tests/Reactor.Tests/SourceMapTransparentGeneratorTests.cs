@@ -179,7 +179,8 @@ public sealed class SourceMapTransparentGeneratorTests
         IReadOnlyDictionary<string, string>? buildProperties = null,
         SurfaceShape surface = SurfaceShape.InSource,
         string? librarySource = null,
-        IReadOnlyList<(string Path, string Source)>? extraFiles = null)
+        IReadOnlyList<(string Path, string Source)>? extraFiles = null,
+        string? completeAfterGeneration = null)
     {
         Assert.True(librarySource is null || surface != SurfaceShape.InSource, "a library project needs a referenced surface");
 
@@ -236,6 +237,12 @@ public sealed class SourceMapTransparentGeneratorTests
         driver = (CSharpGeneratorDriver)driver.RunGeneratorsAndUpdateCompilation(
             compilation, out var outputCompilation, out _);
         var result = driver.GetRunResult();
+
+        // What another generator adds in the real build (the half of a [GenerateReactorWrapper]
+        // record this generator cannot see), so the emitted interceptors are checked against
+        // the compilation they will actually be part of.
+        if (completeAfterGeneration is not null)
+            outputCompilation = outputCompilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText(completeAfterGeneration, parseOptions, path: "OtherGenerator.g.cs"));
 
         var emitErrors = outputCompilation.GetDiagnostics()
             .Where(static d => d.Severity == DiagnosticSeverity.Error)

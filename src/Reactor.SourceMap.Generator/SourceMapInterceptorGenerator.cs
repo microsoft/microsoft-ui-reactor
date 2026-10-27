@@ -339,7 +339,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         // generator sees another's output). That generator intercepts the call itself; all
         // this one records is the site, so the static facts (declared name, per-file
         // fingerprint) cover it like any other element.
-        var wrappersInPlay = HasIncompleteWrappers(ctx.SemanticModel.Compilation);
+        var wrappersInPlay = WrappersInPlay(ctx.SemanticModel, invocation, ct);
         if (method is null
             && symbolInfo.CandidateSymbols.IsEmpty
             && wrappersInPlay
