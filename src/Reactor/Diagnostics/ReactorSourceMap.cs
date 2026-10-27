@@ -126,6 +126,9 @@ public static partial class ReactorSourceMap
     /// is its call site (no managed inspector can load to read the tag); there the location
     /// is resolved from the control's published <c>ReactorSource</c> value and is the same
     /// <see cref="SourceLocation"/> the tag would give.</para>
+    /// <para>Menu and command-bar items a flyout, menu bar or command bar builds from item
+    /// records (<c>MenuItem(…)</c>, <c>AppBarButton(…)</c>) carry no element tag; in diagnostics
+    /// mode their location is resolved the same way, from their published value.</para>
     /// </summary>
     public static SourceLocation? GetSource(UIElement control)
     {
@@ -143,7 +146,11 @@ public static partial class ReactorSourceMap
                 return global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.ResolvePublishedSource(control);
             return UnwrapDecorators(element)?.CallSite;
         }
-        return Reconciler.SkipsCallSiteOnlyTags
+        // No tag: Native AOT's call-site-only skip (above), or a menu / command-bar item a
+        // flyout built from an item record rather than an element (MenuItem(…), AppBarButton(…)).
+        // Either way the published value names the call site.
+        return global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+            && global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled
             ? global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.ResolvePublishedSource(control)
             : null;
     }

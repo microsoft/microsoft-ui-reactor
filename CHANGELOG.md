@@ -374,6 +374,32 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Diagnostics an inspector relies on (winapp DevTools) are no longer missing or anonymous**
+  (issue #ISSUE, spec 044 / spec 010 / spec 042).
+  - A commit-phase failure that replaces a window's content with the error screen now raises a
+    new `ReactorEventSource.CommitError` event (EventId 41: phase, host root component,
+    exception type). Before, nothing was raised while the window showed the error.
+  - `ReactorEventSource.WindowOpened` / `WindowClosed` were declared but never raised; windows
+    opened through `ReactorApp.OpenWindow` / `Run` now report both (root component type, HWND).
+  - `UseElementRef<T>()` is counted as the single hook slot it is, so the source map's
+    `hooks=` list keeps the ref's name and the indices of every later hook.
+  - Templated `ListView<T>` / `GridView<T>` / `FlipView<T>` rows carry their `KeySelector` key
+    on the realized element, as `LazyVStack` / `VirtualList` rows already did — so a recycled
+    container showing a different item remounts its row instead of carrying row state over.
+  - A list born with a null or duplicated key (including `LazyVStack`, which used to swap a
+    null key for `__null_N` silently) is reported at mount, and duplicate `.WithKey` siblings in
+    a panel (`VStack(… .WithKey("same"), … .WithKey("same"))`) are reported too. Every
+    `KeyedListDiagnostic` now carries `Component` (while an inspector is attached) and
+    `CallSite`, and the logged warning names both.
+  - `MenuItem(…)` / `AppBarButton(…)` and the other menu and command-bar item factories are
+    source-mapped (new `CallSite` on `MenuFlyoutItemBase` / `AppBarItemBase`, excluded from
+    equality), and the items a `MenuFlyout`, `CommandBarFlyout`, `MenuBar` or `CommandBar`
+    builds publish their `ReactorSource` value, so `ReactorSourceMap.GetSource` and inspectors
+    map them back to C# and their owning component.
+  - `TabView`, `Pivot`, `ListView`, `GridView` and `FlipView` accept a plain `int` selected
+    index (it was ambiguous between `int?` and `Optional<int>`, CS0121), and new `XamlHost(…)` /
+    `XamlPage(…)` factories record a call site for `XamlHostElement` / `XamlPageElement`.
+
 - **Source-map generator no longer fails under `dotnet watch`** (issue #1404, spec 010).
   When Reactor is a project reference, Hot Reload's workspace compilation sees Reactor's
   symbols with their source, so a component calling a hook that is not on `Component`

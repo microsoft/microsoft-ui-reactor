@@ -41,6 +41,11 @@ internal static class ChildReconciler
 
         bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
 
+        // Duplicate sibling keys are matched to the wrong controls by the keyed path below;
+        // report them (deduplicated per panel) rather than let that happen silently.
+        if (hasKeys && newFiltered.Length > 1)
+            KeyedListDiff.ReportDuplicateSiblingKeys(newFiltered, reconciler, parentControl);
+
         // Spec 042 §6 — read the active Animations.Animate ambient once
         // per reconcile so insert / move / unmount paths can apply the
         // same kind without re-reading AsyncLocal for every child. Stays

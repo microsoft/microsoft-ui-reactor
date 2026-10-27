@@ -40,7 +40,20 @@ public sealed record KeyedListDiagnostic(
     string? ControlContext,
     KeyedListDiagnosticKind Kind,
     IReadOnlyList<string> SampleKeys,
-    int Count);
+    int Count)
+{
+    /// <summary>
+    /// The component whose render produced the list or panel, when known. Reactor knows it
+    /// while an inspector is attached (<c>REACTOR_DIAGNOSTICS=1</c>); otherwise <c>null</c>.
+    /// </summary>
+    public string? Component { get; init; }
+
+    /// <summary>
+    /// The C# call site of the list factory, or of the first duplicated child for sibling
+    /// keys, when the source map recorded one (Debug builds by default); otherwise <c>null</c>.
+    /// </summary>
+    public SourceLocation? CallSite { get; init; }
+}
 
 /// <summary>
 /// Process-wide diagnostic collector for structural problems the reconciler
@@ -144,6 +157,8 @@ public static partial class ReactorDiagnostics
     /// <param name="kind">Which class of bailout fired.</param>
     /// <param name="sampleKeys">Representative offending keys. Will be
     /// truncated to <see cref="MaxSampleKeys"/>.</param>
+    /// <param name="component">Owning component name, when known.</param>
+    /// <param name="callSite">Source call site to attribute the entry to, when known.</param>
     /// <returns>The recorded entry — useful for tests asserting capture
     /// shape. The same instance is returned on dedup hits with an
     /// incremented <see cref="KeyedListDiagnostic.Count"/>.</returns>
@@ -151,7 +166,9 @@ public static partial class ReactorDiagnostics
         object? controlInstance,
         string? controlContext,
         KeyedListDiagnosticKind kind,
-        IReadOnlyList<string> sampleKeys)
+        IReadOnlyList<string> sampleKeys,
+        string? component = null,
+        SourceLocation? callSite = null)
     {
         var truncated = TruncateSamples(sampleKeys);
         var label = controlContext ?? "<unknown>";
@@ -178,7 +195,13 @@ public static partial class ReactorDiagnostics
                         && string.Equals(v.ControlContext, label, global::System.StringComparison.Ordinal)
                         && SampleKeysEqual(v.SampleKeys, truncated))
                     {
-                        var updated = v with { TimestampUtc = DateTime.UtcNow, Count = existingCount + 1 };
+                        var updated = v with
+                        {
+                            TimestampUtc = DateTime.UtcNow,
+                            Count = existingCount + 1,
+                            Component = v.Component ?? component,
+                            CallSite = v.CallSite ?? callSite,
+                        };
                         node.Value = updated;
                         return updated;
                     }
@@ -186,13 +209,21 @@ public static partial class ReactorDiagnostics
                 // Fell off the back of the buffer — re-add a fresh entry
                 // with the carried-over count so the surface still tells
                 // the user "this has happened N times".
-                var revived = new KeyedListDiagnostic(DateTime.UtcNow, label, kind, truncated, existingCount + 1);
+                var revived = new KeyedListDiagnostic(DateTime.UtcNow, label, kind, truncated, existingCount + 1)
+                {
+                    Component = component,
+                    CallSite = callSite,
+                };
                 AppendBounded(revived);
                 return revived;
             }
 
             ledger[dedupKey] = 1;
-            var fresh = new KeyedListDiagnostic(DateTime.UtcNow, label, kind, truncated, 1);
+            var fresh = new KeyedListDiagnostic(DateTime.UtcNow, label, kind, truncated, 1)
+            {
+                Component = component,
+                CallSite = callSite,
+            };
             AppendBounded(fresh);
             return fresh;
         }

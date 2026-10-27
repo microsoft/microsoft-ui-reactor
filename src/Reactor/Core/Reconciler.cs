@@ -509,6 +509,40 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     private string? CurrentDiagnosticOwner => _diagOwner ?? DiagnosticRootOwner;
 
+    /// <summary>
+    /// The component whose render output is being reconciled, for diagnostics that name it
+    /// (keyed-list warnings, menu / command-bar item identity).
+    /// Known only while sources are published (an inspector is attached); <c>null</c> otherwise.
+    /// </summary>
+    internal string? DiagnosticComponent =>
+        global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+            ? CurrentDiagnosticOwner
+            : null;
+
+    /// <summary>The component and C# call site a keyed-list diagnostic for <paramref name="list"/> names.</summary>
+    internal Internal.KeyedListAttribution KeyedListAttributionFor(Element? list)
+    {
+        var site = list?.CallSite;
+        for (var e = list; site is null && e is ModifiedElement modified; e = modified.Inner)
+            site = modified.Inner.CallSite;
+        return new(DiagnosticComponent, site);
+    }
+
+    /// <summary>
+    /// Builds the row view at <paramref name="index"/> of a templated list (<c>ListView&lt;T&gt;</c>,
+    /// <c>GridView&lt;T&gt;</c>, <c>FlipView&lt;T&gt;</c>) and stamps the item's <c>KeySelector</c>
+    /// key onto it, as <c>VirtualList</c> / <c>LazyVStack</c> rows already are (issue #326): the
+    /// realized row then carries its key for diagnostics, and a container showing a different
+    /// item is remounted rather than diffed in place, so per-row component state does not leak
+    /// between items. An author's own <c>.WithKey(...)</c> on the row wins.
+    /// </summary>
+    internal static Element BuildKeyedItemView(Internal.IItemViewSource source, int index)
+    {
+        var built = source.BuildItemView(index);
+        if (built.Key is not null || source is not Internal.IKeyedItemSource keyed) return built;
+        return keyed.GetKeyAt(index) is { } key ? built with { Key = key } : built;
+    }
+
     private void PublishSource(UIElement control, Element element)
     {
         var kind = element;
@@ -2837,6 +2871,32 @@ public sealed partial class Reconciler : IDisposable
                 Diagnostics.ReactorEventSource.Keywords.Errors))
         {
             Diagnostics.ReactorEventSource.Log.RenderError(componentName, ex.GetType().Name, string.Empty);
+        }
+    }
+
+    /// <summary>
+    /// <c>ReactorEventSource.CommitError</c> for a host-level failure outside any component's
+    /// render or effects (<paramref name="phase"/> is <see cref="RenderErrorSource.Reconcile"/>
+    /// or <see cref="RenderErrorSource.Cleanup"/>) that replaced the host's content with the
+    /// error fallback. Names the host's root (<c>FuncElement</c> for a render-function root)
+    /// and the exception type only — the message is never read, as for
+    /// <see cref="EmitRenderError"/>.
+    /// </summary>
+    internal static void EmitCommitError(RenderErrorSource phase, Component? root, Exception ex)
+    {
+        if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                global::System.Diagnostics.Tracing.EventLevel.Error,
+                Diagnostics.ReactorEventSource.Keywords.Errors))
+        {
+            Diagnostics.ReactorEventSource.Log.CommitError(
+                phase switch
+                {
+                    RenderErrorSource.Reconcile => nameof(RenderErrorSource.Reconcile),
+                    RenderErrorSource.Cleanup => nameof(RenderErrorSource.Cleanup),
+                    _ => phase.ToString(),
+                },
+                root is not null ? Diagnostics.ComponentNames.For(root, element: null) : nameof(FuncElement),
+                ex.GetType().Name);
         }
     }
 
@@ -7008,7 +7068,7 @@ public sealed partial class Reconciler : IDisposable
         if (newEl is MenuFlyoutContentElement newMf && existingFlyout is WinUI.MenuFlyout menuFlyout)
         {
             menuFlyout.Items.Clear();
-            foreach (var item in newMf.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item));
+            foreach (var item in newMf.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item, this));
             FlyoutPlacement.Apply(menuFlyout, newMf.Placement);
             return;
         }
@@ -7119,7 +7179,7 @@ public sealed partial class Reconciler : IDisposable
                 // Placement is routed through FlyoutPlacement so Auto is never written
                 // (WinUI's FlyoutBase validator rejects it — see FlyoutPlacement).
                 FlyoutPlacement.Apply(menuFlyout, mf.Placement);
-                foreach (var item in mf.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item));
+                foreach (var item in mf.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item, this));
                 return menuFlyout;
             }
             default:

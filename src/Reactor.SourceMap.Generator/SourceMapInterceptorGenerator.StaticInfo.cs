@@ -27,7 +27,8 @@ public sealed partial class SourceMapInterceptorGenerator
     /// <summary>
     /// Built-in hooks that occupy exactly ONE slot in a <c>RenderContext</c>, on
     /// <c>RenderContext</c> itself, its <c>Component</c> forwarders, and
-    /// <c>ContextExtensions</c>. Anything else Reactor ships (composite hooks such as
+    /// <c>ContextExtensions</c>, plus <c>UseElementRef&lt;T&gt;</c> (a single <c>UseMemo</c>
+    /// on either its <c>RenderContext</c> or <c>Component</c> overload). Anything else Reactor ships (composite hooks such as
     /// <c>UseCommand</c>, <c>UseResource</c>, the window hooks) has a slot count this
     /// generator does not track, so the slot index of every hook AFTER it is reported as
     /// <c>?</c>. <c>HookSlotTableTests</c> in Reactor.Tests runs each of these against a live
@@ -35,7 +36,8 @@ public sealed partial class SourceMapInterceptorGenerator
     /// </summary>
     internal static readonly ImmutableHashSet<string> SingleSlotHooks = ImmutableHashSet.Create(
         StringComparer.Ordinal,
-        "UseState", "UseReducer", "UseRef", "UseEffect", "UseMemo", "UseCallback", "UseContext");
+        "UseState", "UseReducer", "UseRef", "UseEffect", "UseMemo", "UseCallback", "UseContext",
+        "UseElementRef");
 
     private static void InitializeStaticInfo(
         IncrementalGeneratorInitializationContext context,

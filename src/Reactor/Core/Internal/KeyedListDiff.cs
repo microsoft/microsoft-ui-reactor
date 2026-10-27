@@ -4,6 +4,12 @@ using Microsoft.Extensions.Logging;
 namespace Microsoft.UI.Reactor.Core.Internal;
 
 /// <summary>
+/// Where a keyed-list diagnostic came from: the component whose render produced the list
+/// (known while an inspector is attached) and the list's C# call site (when source-mapped).
+/// </summary>
+internal readonly record struct KeyedListAttribution(string? Component, SourceLocation? CallSite);
+
+/// <summary>
 /// React-style keyed-children diff that maps an immutable
 /// <c>IReadOnlyList&lt;T&gt;</c> of user items onto the internal
 /// <see cref="ReactorListState.Source"/> by emitting the minimal-shape
@@ -46,6 +52,8 @@ internal static class KeyedListDiff
     // Cached sample for the null-key bailout diagnostic so the slow path
     // doesn't allocate a fresh single-element array every time (#41).
     private static readonly string[] NullKeySample = { "<null>" };
+
+    [ThreadStatic] private static HashSet<string>? t_siblingKeys;
 
     // Descending-by-index comparer used to remove doomed rows from the tail
     // first so earlier OC indices stay stable. Singleton — avoids capturing a
@@ -115,6 +123,7 @@ internal static class KeyedListDiff
     /// <see cref="DiffStats.MovedRows"/> so the caller can drive offset
     /// animations on the corresponding realized containers.
     /// (spec 042 §6.)</param>
+    /// <param name="attribution">The component and call site the diagnostic names, when known.</param>
     /// <returns>Op-shape statistics. <see cref="DiffStats.Bailout"/> is
     /// true when the caller must reset its WinUI <c>ItemsSource</c>
     /// binding to <see cref="ReactorListState.Source"/> (because Reset
@@ -126,7 +135,8 @@ internal static class KeyedListDiff
         ILogger? logger = null,
         string? diagnosticContext = null,
         AmbientAnimation? ambient = null,
-        object? controlInstance = null)
+        object? controlInstance = null,
+        KeyedListAttribution attribution = default)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(newItems);
@@ -145,7 +155,7 @@ internal static class KeyedListDiff
         bool rentedKeys = newCount != 0;
         try
         {
-            return ApplyCore(state, newItems, keySelector, logger, diagnosticContext, ambient, controlInstance, newKeys, newCount);
+            return ApplyCore(state, newItems, keySelector, logger, diagnosticContext, ambient, controlInstance, attribution, newKeys, newCount);
         }
         finally
         {
@@ -168,6 +178,7 @@ internal static class KeyedListDiff
         string? diagnosticContext,
         AmbientAnimation? ambient,
         object? controlInstance,
+        KeyedListAttribution attribution,
         string[] newKeys,
         int newCount)
     {
@@ -195,7 +206,8 @@ internal static class KeyedListDiff
                     controlInstance, diagnosticContext, logger,
                     Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.NullKey,
                     NullKeySample,
-                    indexHint: i);
+                    indexHint: i,
+                    attribution);
                 return Bailout(state, newItems, keySelector);
             }
             newKeys[i] = k;
@@ -241,7 +253,8 @@ internal static class KeyedListDiff
                 controlInstance, diagnosticContext, logger,
                 Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.DuplicateKey,
                 CollectDuplicates(newKeys, newCount),
-                indexHint: null);
+                indexHint: null,
+                attribution);
             return Bailout(state, newItems, keySelector);
         }
 
@@ -606,13 +619,14 @@ internal static class KeyedListDiff
         ILogger? logger,
         Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind kind,
         IReadOnlyList<string> sampleKeys,
-        int? indexHint)
+        int? indexHint,
+        KeyedListAttribution attribution)
     {
         bool isFirst = Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
             .IsFirstOccurrence(controlInstance, kind, sampleKeys, diagnosticContext);
 
         Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
-            .Record(controlInstance, diagnosticContext, kind, sampleKeys);
+            .Record(controlInstance, diagnosticContext, kind, sampleKeys, attribution.Component, attribution.CallSite);
 
         // Only emit the structured ILogger warning on the *first* occurrence
         // per triple. Subsequent occurrences still increment the collector's
@@ -625,12 +639,148 @@ internal static class KeyedListDiff
             : $"duplicate keys: {string.Join(", ", sampleKeys)}";
 
         logger.LogWarning(
-            "Reactor: keyed-list diff bailed out — {Reason}. Context: {Context}. " +
+            "Reactor: keyed-list diff bailed out — {Reason}. Context: {Context}. Component: {Component}. At: {CallSite}. " +
             "The list will be re-realized from scratch this render (animations degraded). " +
             "Check the KeySelector / IReactorKeyed.Key for stability and uniqueness. " +
             "See spec 042 §4.3.",
             reason,
-            diagnosticContext ?? "<unknown>");
+            diagnosticContext ?? "<unknown>",
+            attribution.Component ?? "<unknown>",
+            attribution.CallSite is { } site ? $"{site.FilePath}:{site.LineNumber}" : "<unknown>");
+    }
+
+    /// <summary>
+    /// Seeds a fresh list state's keys (at mount, or when a list is rebound) and reports what
+    /// <see cref="Apply{T}"/> would report for them: a <c>null</c> key — replaced by a
+    /// positional sentinel so the state stays coherent — and duplicated keys. Without this a
+    /// list born with a bad key, or one that never changes shape, is never diagnosed, because
+    /// only an update runs the diff.
+    /// </summary>
+    internal static (int Index, string Key)[] SeedKeys<TSource>(
+        TSource source,
+        int count,
+        Func<TSource, int, string?> keyAt,
+        ILogger? logger,
+        string? diagnosticContext,
+        object? controlInstance,
+        KeyedListAttribution attribution)
+    {
+        var seeded = new (int Index, string Key)[count];
+        int firstNull = -1;
+        HashSet<string>? seen = count > 1 ? new HashSet<string>(StringComparer.Ordinal) : null;
+        List<string>? dupes = null;
+        for (int i = 0; i < count; i++)
+        {
+            var key = keyAt(source, i);
+            if (key is null)
+            {
+                if (firstNull < 0) firstNull = i;
+                seeded[i] = (i, $"__null_{i}");
+                continue;
+            }
+            seeded[i] = (i, key);
+            if (seen is not null && !seen.Add(key) && !(dupes ??= new()).Contains(key))
+                dupes.Add(key);
+        }
+        if (firstNull >= 0)
+        {
+            ReportBailout(
+                controlInstance, diagnosticContext, logger,
+                Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.NullKey,
+                NullKeySample,
+                indexHint: firstNull,
+                attribution);
+        }
+        if (dupes is not null)
+        {
+            ReportBailout(
+                controlInstance, diagnosticContext, logger,
+                Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.DuplicateKey,
+                dupes,
+                indexHint: null,
+                attribution);
+        }
+        return seeded;
+    }
+
+    /// <summary>
+    /// Reports duplicated <see cref="Element.Key"/>s among one panel's children (for example
+    /// two <c>.WithKey("same")</c> siblings in a <c>VStack</c>). The keyed child reconcile
+    /// matches by key, so a duplicate silently pairs the wrong controls. Cheap when no child
+    /// is keyed (one scan), and allocation-free for small panels.
+    /// </summary>
+    internal static void ReportDuplicateSiblingKeys(
+        IReadOnlyList<Element?> children,
+        Reconciler? reconciler,
+        object? parentControl)
+    {
+        int count = children.Count;
+        if (count < 2) return;
+        List<string>? dupes = null;
+        Element? firstDuplicate = null;
+        if (count <= 16)
+        {
+            for (int i = 1; i < count; i++)
+            {
+                if (children[i] is not { Key: { } key } child || child is EmptyElement) continue;
+                for (int j = 0; j < i; j++)
+                {
+                    if (children[j] is { Key: { } other } prior && prior is not EmptyElement
+                        && string.Equals(key, other, StringComparison.Ordinal))
+                    {
+                        firstDuplicate ??= child;
+                        if (!(dupes ??= new()).Contains(key)) dupes.Add(key);
+                        break;
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Not re-entrant (nothing below calls back into a reconcile), so one per-thread set
+            // serves every call; it is cleared before it is returned to.
+            var seen = t_siblingKeys ??= new HashSet<string>(StringComparer.Ordinal);
+            try
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    if (children[i] is not { Key: { } key } child || child is EmptyElement) continue;
+                    if (!seen.Add(key))
+                    {
+                        firstDuplicate ??= child;
+                        if (!(dupes ??= new()).Contains(key)) dupes.Add(key);
+                    }
+                }
+            }
+            finally
+            {
+                seen.Clear();
+            }
+        }
+        if (dupes is null) return;
+
+        var site = firstDuplicate?.CallSite;
+        for (var e = firstDuplicate; site is null && e is ModifiedElement modified; e = modified.Inner)
+            site = modified.Inner.CallSite;
+        var component = reconciler?.DiagnosticComponent;
+        var context = parentControl?.GetType().Name ?? "Panel";
+        var kind = Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.DuplicateKey;
+
+        bool isFirst = Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
+            .IsFirstOccurrence(parentControl, kind, dupes, context);
+        Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
+            .Record(parentControl, context, kind, dupes, component, site);
+
+        var logger = reconciler?._logger;
+        if (!isFirst || logger is null || !logger.IsEnabled(LogLevel.Warning)) return;
+        logger.LogWarning(
+            "Reactor: duplicate child keys: {Keys}. Context: {Context}. Component: {Component}. At: {CallSite}. " +
+            "Sibling keys must be unique; children with the same key are matched to the wrong controls " +
+            "when the panel re-renders, so state and focus can move between them.",
+            string.Join(", ", dupes),
+            context,
+            component ?? "<unknown>",
+            site is { } s ? $"{s.FilePath}:{s.LineNumber}" : "<unknown>");
     }
 
     // Walk newKeys once collecting the *distinct* duplicate values

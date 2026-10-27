@@ -716,7 +716,7 @@ public sealed partial class Reconciler
         if (viewSource is not null && args.ItemIndex >= 0 && args.ItemIndex < viewSource.ItemCount
             && args.ItemContainer.ContentTemplateRoot is ContentControl cc)
         {
-            var itemElement = viewSource.BuildItemView(args.ItemIndex);
+            var itemElement = BuildKeyedItemView(viewSource, args.ItemIndex);
             var ctrl = Mount(itemElement, requestRerender);
             cc.Content = ctrl;
             SetElementTag(cc, itemElement); // Store for later reconciliation

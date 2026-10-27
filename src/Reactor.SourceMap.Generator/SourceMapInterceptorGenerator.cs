@@ -40,6 +40,8 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
     private const string FactoriesMetadataName = "Microsoft.UI.Reactor.Factories";
     private const string ElementMetadataName = "Microsoft.UI.Reactor.Core.Element";
     private const string EmptyElementMetadataName = "Microsoft.UI.Reactor.Core.EmptyElement";
+    private const string MenuFlyoutItemBaseMetadataName = "Microsoft.UI.Reactor.Core.MenuFlyoutItemBase";
+    private const string AppBarItemBaseMetadataName = "Microsoft.UI.Reactor.Core.AppBarItemBase";
 
     /// <summary>
     /// The opt-in marker for helper-method attribution (mechanism 1). Matched by
@@ -433,8 +435,12 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         // emit something subtly wrong if that changes.
         if (method.Parameters.Any(p => p.RefKind != RefKind.None)) return null;
 
-        // Must return something we can stamp.
-        if (!ReturnsElement(method.ReturnType, elementSymbol)) return null;
+        // Must return something we can stamp: an Element, or (from Factories only) a menu or
+        // command-bar item record — MenuItem(...), AppBarButton(...) — which carries a CallSite
+        // of its own so the item a flyout realizes can be mapped back to C#.
+        if (!ReturnsElement(method.ReturnType, elementSymbol)
+            && !(isFactory && ReturnsStampableItem(method.ReturnType, compilation)))
+            return null;
 
         // Mechanism 1 rule 1, and the whole of rule 3. A call written INSIDE a
         // transparent method is not stamped at all, because the element it produces
@@ -870,6 +876,26 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         for (var t = type; t is not null; t = t.BaseType)
         {
             if (SymbolEqualityComparer.Default.Equals(t, elementSymbol)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// The menu / command-bar item records (<c>MenuFlyoutItemBase</c>, <c>AppBarItemBase</c>
+    /// and their derived records). They are not elements — a flyout builds their controls
+    /// itself — but carry the same <c>CallSite</c> init property, so the emitted
+    /// <c>with { CallSite = … }</c> stamp applies unchanged.
+    /// </summary>
+    private static bool ReturnsStampableItem(ITypeSymbol type, Compilation compilation)
+    {
+        var menuItem = compilation.GetTypeByMetadataName(MenuFlyoutItemBaseMetadataName);
+        var appBarItem = compilation.GetTypeByMetadataName(AppBarItemBaseMetadataName);
+        if (menuItem is null && appBarItem is null) return false;
+        for (var t = type; t is not null; t = t.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(t, menuItem)
+                || SymbolEqualityComparer.Default.Equals(t, appBarItem))
+                return t.GetMembers("CallSite").Any(static m => m is IPropertySymbol);
         }
         return false;
     }

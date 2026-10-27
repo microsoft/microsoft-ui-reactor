@@ -1282,7 +1282,7 @@ public sealed partial class Reconciler
             if (index < 0 || index >= viewSource.ItemCount) continue;
 
             var oldItemElement = GetElementTag(cc);
-            var newItemElement = viewSource.BuildItemView(index);
+            var newItemElement = BuildKeyedItemView(viewSource, index);
 
             // ReconcileV1Child updates in place when it can and remounts otherwise, and either way
             // unmounts a control it replaced (e.g. a same-key Memo whose output changed shape

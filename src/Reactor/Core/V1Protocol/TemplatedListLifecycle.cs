@@ -104,7 +104,7 @@ internal static class TemplatedListLifecycle
         // ObservableCollection<ReactorRow> so insert/remove/move surface
         // as INotifyCollectionChanged deltas — WinUI animates only the
         // affected containers rather than re-realizing the entire viewport.
-        var listState = BuildListState(el);
+        var listState = BuildListState(reconciler, listView, el);
         Reconciler.SetListState(listView, listState);
         listView.ItemsSource = listState.Source;
 
@@ -170,7 +170,7 @@ internal static class TemplatedListLifecycle
                 (Reconciler.GetElementTag(g) as TemplatedListElementBase)?.InvokeItemClick(v);
         };
 
-        var gridState = BuildListState(el);
+        var gridState = BuildListState(reconciler, gridView, el);
         Reconciler.SetListState(gridView, gridState);
         gridView.ItemsSource = gridState.Source;
 
@@ -199,7 +199,7 @@ internal static class TemplatedListLifecycle
         var mounted = new List<(Element Element, bool HasControl)>(el.ItemCount);
         for (int i = 0; i < el.ItemCount; i++)
         {
-            var itemElement = el.BuildItemView(i);
+            var itemElement = Reconciler.BuildKeyedItemView(el, i);
             var ctrl = reconciler.Mount(itemElement, requestRerender);
             if (ctrl is not null) flipView.Items.Add(ctrl);
             mounted.Add((itemElement, ctrl is not null));
@@ -299,7 +299,7 @@ internal static class TemplatedListLifecycle
         {
             // No state, or another path replaced ItemsSource (bailout from a
             // prior render). Rebuild and rebind in one step.
-            var fresh = BuildListState(n);
+            var fresh = BuildListState(reconciler, lvb, n);
             Reconciler.SetListState(lvb, fresh);
             lvb.ItemsSource = fresh.Source;
             return;
@@ -313,11 +313,12 @@ internal static class TemplatedListLifecycle
         var stats = KeyedListDiff.Apply(
             state,
             new TemplatedKeyAdapter(n),
-            static (item, _) => item.Key,
+            static (item, _) => item.Key!,
             reconciler._logger,
             lvb.GetType().Name,
             ambient,
-            controlInstance: lvb);
+            controlInstance: lvb,
+            attribution: reconciler.KeyedListAttributionFor(n));
 
         // Drive per-container offset animations for survivors that moved.
         // Insert / Remove animations attach through the realize/recycle
@@ -345,14 +346,15 @@ internal static class TemplatedListLifecycle
     {
         private readonly TemplatedListElementBase _el;
         public TemplatedKeyAdapter(TemplatedListElementBase el) => _el = el;
-        public KeyOnly this[int index] => new(_el.GetKeyAt(index) ?? $"__null_{index}");
+        // A null key reaches the diff as null, so it reports NullKey (the diff substitutes a sentinel).
+        public KeyOnly this[int index] => new(_el.GetKeyAt(index));
         public int Count => _el.ItemCount;
         public IEnumerator<KeyOnly> GetEnumerator()
         {
             for (int i = 0; i < _el.ItemCount; i++) yield return this[i];
         }
         global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-        public readonly record struct KeyOnly(string Key);
+        public readonly record struct KeyOnly(string? Key);
     }
 
     internal static UIElement? UpdateFlipView(Reconciler reconciler, TemplatedListElementBase o, TemplatedListElementBase n, WinUI.FlipView fv, Action requestRerender)
@@ -373,8 +375,8 @@ internal static class TemplatedListLifecycle
 
         for (int i = 0; i < shared; i++)
         {
-            var (oldItemElement, oldHasControl) = recorded?[i] ?? (o.BuildItemView(i), i < fv.Items.Count);
-            var newItemElement = n.BuildItemView(i);
+            var (oldItemElement, oldHasControl) = recorded?[i] ?? (Reconciler.BuildKeyedItemView(o, i), i < fv.Items.Count);
+            var newItemElement = Reconciler.BuildKeyedItemView(n, i);
             if (oldHasControl && ci < fv.Items.Count && fv.Items[ci] is UIElement existingCtrl
                 && reconciler.CanUpdate(oldItemElement, newItemElement))
             {
@@ -407,7 +409,7 @@ internal static class TemplatedListLifecycle
         // Add new
         for (int i = shared; i < newCount; i++)
         {
-            var itemElement = n.BuildItemView(i);
+            var itemElement = Reconciler.BuildKeyedItemView(n, i);
             var ctrl = reconciler.Mount(itemElement, requestRerender);
             if (ctrl is not null) fv.Items.Add(ctrl);
             nextMounted.Add((itemElement, ctrl is not null));
@@ -433,18 +435,16 @@ internal static class TemplatedListLifecycle
     /// <summary>
     /// Builds a fresh <see cref="ReactorListState"/> populated with the
     /// element's current keys. Used at mount time and at bulk-replace
-    /// bailout time. Tolerates duplicate keys per <see cref="ReactorListState.Reset"/>;
-    /// the bailout path is where duplicate-key diagnostics surface (see
-    /// <see cref="KeyedListDiff"/>).
+    /// bailout time. Tolerates duplicate keys per <see cref="ReactorListState.Reset"/>,
+    /// and reports null and duplicate keys through <see cref="KeyedListDiff.SeedKeys{TSource}"/>
+    /// so a list born with bad keys is diagnosed without waiting for an update.
     /// </summary>
-    private static ReactorListState BuildListState(TemplatedListElementBase el)
+    private static ReactorListState BuildListState(Reconciler reconciler, WinUI.ListViewBase control, TemplatedListElementBase el)
     {
         var state = new ReactorListState();
-        int n = el.ItemCount;
-        var seeded = new (int Index, string Key)[n];
-        for (int i = 0; i < n; i++)
-            seeded[i] = (i, el.GetKeyAt(i) ?? $"__null_{i}");
-        state.Reset(seeded);
+        state.Reset(KeyedListDiff.SeedKeys(
+            el, el.ItemCount, static (e, i) => e.GetKeyAt(i),
+            reconciler._logger, control.GetType().Name, control, reconciler.KeyedListAttributionFor(el)));
         return state;
     }
 }

@@ -172,7 +172,7 @@ public sealed partial class Reconciler
 
         if (isMount)
         {
-            var state = BuildListStateForKeyedSource(source);
+            var state = BuildListStateForKeyedSource(source, ir);
             SetListState(ir, state);
             ir.ItemsSource = state.Source;
             var factory = factorySource.CreateFactory(this, requestRerender, _pool);
@@ -195,7 +195,7 @@ public sealed partial class Reconciler
         {
             // Factory type mismatch (rare — only when the strategy's
             // erased-TItem changed under us) — full replacement.
-            var fresh = BuildListStateForKeyedSource(source);
+            var fresh = BuildListStateForKeyedSource(source, ir);
             SetListState(ir, fresh);
             ir.ItemsSource = fresh.Source;
             var factory = factorySource.CreateFactory(this, requestRerender, _pool);
@@ -221,7 +221,7 @@ public sealed partial class Reconciler
         var state = GetListState(ir);
         if (state is null || !ReferenceEquals(ir.ItemsSource, state.Source))
         {
-            var fresh = BuildListStateForKeyedSource(source);
+            var fresh = BuildListStateForKeyedSource(source, ir);
             SetListState(ir, fresh);
             ir.ItemsSource = fresh.Source;
             factorySource.AttachListStateToFactory(factory, fresh);
@@ -237,7 +237,8 @@ public sealed partial class Reconciler
             _logger,
             ir.GetType().Name,
             ambient,
-            controlInstance: ir);
+            controlInstance: ir,
+            attribution: KeyedListAttributionFor(source as Element));
 
         if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
             ApplyMoveAnimationsRepeater(ir, movedRows, ambient.Kind);
@@ -258,7 +259,7 @@ public sealed partial class Reconciler
 
         if (isMount)
         {
-            var state = BuildListStateForKeyedSource(source);
+            var state = BuildListStateForKeyedSource(source, iv);
             SetListState(iv, state);
             iv.ItemsSource = state.Source;
             var factory = itemsViewSource.CreateFactory(this, requestRerender, _pool);
@@ -277,7 +278,7 @@ public sealed partial class Reconciler
             return;
         }
 
-        var fresh = BuildListStateForKeyedSource(source);
+        var fresh = BuildListStateForKeyedSource(source, iv);
         SetListState(iv, fresh);
         iv.ItemsSource = fresh.Source;
         var replacementFactory = itemsViewSource.CreateFactory(this, requestRerender, _pool);
@@ -295,7 +296,7 @@ public sealed partial class Reconciler
         var state = GetListState(iv);
         if (state is null || !ReferenceEquals(iv.ItemsSource, state.Source))
         {
-            var fresh = BuildListStateForKeyedSource(source);
+            var fresh = BuildListStateForKeyedSource(source, iv);
             SetListState(iv, fresh);
             iv.ItemsSource = fresh.Source;
             itemsViewSource.AttachListStateToFactory(factory, fresh);
@@ -310,7 +311,8 @@ public sealed partial class Reconciler
             _logger,
             iv.GetType().Name,
             ambient,
-            controlInstance: repeater);
+            controlInstance: repeater,
+            attribution: KeyedListAttributionFor(source as Element));
 
         if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
             ApplyMoveAnimationsRepeater(repeater, movedRows, ambient.Kind);
@@ -386,7 +388,7 @@ public sealed partial class Reconciler
                     break;
             }
 
-            var state = BuildListStateForKeyedSource(source);
+            var state = BuildListStateForKeyedSource(source, lvb);
             SetListState(lvb, state);
             lvb.ItemsSource = state.Source;
             return;
@@ -395,7 +397,7 @@ public sealed partial class Reconciler
         var existing = GetListState(lvb);
         if (existing is null || !ReferenceEquals(lvb.ItemsSource, existing.Source))
         {
-            var fresh = BuildListStateForKeyedSource(source);
+            var fresh = BuildListStateForKeyedSource(source, lvb);
             SetListState(lvb, fresh);
             lvb.ItemsSource = fresh.Source;
         }
@@ -410,7 +412,8 @@ public sealed partial class Reconciler
                 _logger,
                 lvb.GetType().Name,
                 ambient,
-                controlInstance: lvb);
+                controlInstance: lvb,
+                attribution: KeyedListAttributionFor(source as Element));
 
             if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
             {
@@ -426,14 +429,12 @@ public sealed partial class Reconciler
         RefreshRealizedContainers(lvb, source, requestRerender);
     }
 
-    private static ReactorListState BuildListStateForKeyedSource(IKeyedItemSource source)
+    private ReactorListState BuildListStateForKeyedSource(IKeyedItemSource source, object control)
     {
         var state = new ReactorListState();
-        int n = source.ItemCount;
-        var seeded = new (int Index, string Key)[n];
-        for (int i = 0; i < n; i++)
-            seeded[i] = (i, source.GetKeyAt(i) ?? $"__null_{i}");
-        state.Reset(seeded);
+        state.Reset(KeyedListDiff.SeedKeys(
+            source, source.ItemCount, static (s, i) => s.GetKeyAt(i),
+            _logger, control.GetType().Name, control, KeyedListAttributionFor(source as Element)));
         return state;
     }
 
@@ -473,7 +474,7 @@ public sealed partial class Reconciler
             lvb.ContainerContentChanging += (sender, args) =>
                 HandleTemplatedContainerContentChanging(sender, args, requestRerender);
 
-            var state = BuildListStateForItems(items, keySelector);
+            var state = BuildListStateForItems(items, keySelector, lvb, viewSource);
             SetListState(lvb, state);
             lvb.ItemsSource = state.Source;
             return;
@@ -485,7 +486,7 @@ public sealed partial class Reconciler
         var existing = GetListState(lvb);
         if (existing is null || !ReferenceEquals(lvb.ItemsSource, existing.Source))
         {
-            var fresh = BuildListStateForItems(items, keySelector);
+            var fresh = BuildListStateForItems(items, keySelector, lvb, viewSource);
             SetListState(lvb, fresh);
             lvb.ItemsSource = fresh.Source;
             // Refresh realized containers below so already-bound items pick
@@ -502,7 +503,8 @@ public sealed partial class Reconciler
                 _logger,
                 lvb.GetType().Name,
                 ambient,
-                controlInstance: lvb);
+                controlInstance: lvb,
+                attribution: KeyedListAttributionFor(viewSource as Element));
 
             // Per-container offset animations for moved survivors. Insert
             // / Remove paths attach through realize/recycle so they need
@@ -521,16 +523,16 @@ public sealed partial class Reconciler
         RefreshRealizedContainers(lvb, viewSource, requestRerender);
     }
 
-    private static ReactorListState BuildListStateForItems<TItem>(
+    private ReactorListState BuildListStateForItems<TItem>(
         IReadOnlyList<TItem> items,
-        Func<TItem, int, string> keySelector)
+        Func<TItem, int, string> keySelector,
+        object control,
+        IItemViewSource viewSource)
     {
         var state = new ReactorListState();
-        int n = items.Count;
-        var seeded = new (int Index, string Key)[n];
-        for (int i = 0; i < n; i++)
-            seeded[i] = (i, keySelector(items[i], i) ?? $"__null_{i}");
-        state.Reset(seeded);
+        state.Reset(KeyedListDiff.SeedKeys(
+            (items, keySelector), items.Count, static (s, i) => s.keySelector(s.items[i], i),
+            _logger, control.GetType().Name, control, KeyedListAttributionFor(viewSource as Element)));
         return state;
     }
 

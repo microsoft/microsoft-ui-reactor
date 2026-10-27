@@ -852,6 +852,15 @@ public static partial class Factories
     }
 
     /// <summary>
+    /// Creates a tab view with a controlled selected index. Disambiguates a plain <see cref="int"/>
+    /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// </summary>
+    public static TabViewElement TabView(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params TabViewItemData[] tabs)
+    {
+        return new(tabs) { SelectedIndex = Optional<int>.Of(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
     /// Creates a tab view whose selected index is unset when <paramref name="selectedIndex"/> is <c>null</c>.
     /// </summary>
     public static TabViewElement TabView(int? selectedIndex, Action<int>? onSelectedIndexChanged = null, params TabViewItemData[] tabs)
@@ -882,6 +891,15 @@ public static partial class Factories
     }
 
     /// <summary>
+    /// Creates a pivot with a controlled selected index. Disambiguates a plain <see cref="int"/>
+    /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// </summary>
+    public static PivotElement Pivot(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params PivotItemData[] items)
+    {
+        return new(items) { SelectedIndex = Optional<int>.Of(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
     /// Creates a pivot whose selected index is unset when <paramref name="selectedIndex"/> is <c>null</c>.
     /// </summary>
     public static PivotElement Pivot(int? selectedIndex, Action<int>? onSelectedIndexChanged = null, params PivotItemData[] items)
@@ -908,6 +926,16 @@ public static partial class Factories
     }
 
     /// <summary>
+    /// Creates a list view with a controlled selected index. Disambiguates a plain <see cref="int"/>
+    /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// </summary>
+    public static ListViewElement ListView(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
+    {
+        _ = V1.Reg<ListViewElement, WinUI.ListView, V1.Handlers.ListViewHandler>.Done;
+        return new(items) { SelectedIndex = Optional<int>.Of(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
     /// Creates a list view whose selected index is unset when <paramref name="selectedIndex"/> is <c>null</c>.
     /// </summary>
     public static ListViewElement ListView(int? selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
@@ -929,6 +957,16 @@ public static partial class Factories
     {
         _ = V1.Reg<GridViewElement, WinUI.GridView, V1.Handlers.GridViewHandler>.Done;
         return new(items);
+    }
+
+    /// <summary>
+    /// Creates a grid view with a controlled selected index. Disambiguates a plain <see cref="int"/>
+    /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// </summary>
+    public static GridViewElement GridView(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
+    {
+        _ = V1.Reg<GridViewElement, WinUI.GridView, V1.Handlers.GridViewHandler>.Done;
+        return new(items) { SelectedIndex = Optional<int>.Of(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
     }
 
     /// <summary>
@@ -1004,6 +1042,15 @@ public static partial class Factories
     }
 
     /// <summary>
+    /// Creates a flip view with a controlled selected index. Disambiguates a plain <see cref="int"/>
+    /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// </summary>
+    public static FlipViewElement FlipView(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
+    {
+        return new(items) { SelectedIndex = Optional<int>.Of(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
     /// Creates a flip view whose selected index is unset when <paramref name="selectedIndex"/> is <c>null</c>.
     /// </summary>
     public static FlipViewElement FlipView(int? selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
@@ -1018,6 +1065,28 @@ public static partial class Factories
     {
         return new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
     }
+
+    // ── XAML interop ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Embeds an existing XAML <see cref="Page"/> in a <see cref="Frame"/>, navigated to
+    /// <paramref name="pageType"/> with <paramref name="parameter"/>. Re-navigates in place
+    /// when either changes. Equivalent to <c>new XamlPageElement(pageType, parameter)</c>,
+    /// but records the call site for the source map like every other factory.
+    /// </summary>
+    public static Hosting.XamlPageElement XamlPage(Type pageType, object? parameter = null) =>
+        new(pageType, parameter);
+
+    /// <summary>
+    /// Embeds an arbitrary <see cref="FrameworkElement"/> (a UserControl, a custom control)
+    /// created by <paramref name="factory"/> on mount; <paramref name="updater"/> runs after
+    /// creation and on every update. Equivalent to
+    /// <c>new XamlHostElement(factory, updater)</c>, but records the call site for the source
+    /// map like every other factory. Set <see cref="Hosting.XamlHostElement.TypeKey"/> with a
+    /// <c>with</c> expression to keep unrelated hosts from updating in place.
+    /// </summary>
+    public static Hosting.XamlHostElement XamlHost(Func<FrameworkElement> factory, Action<FrameworkElement>? updater = null) =>
+        new(factory, updater);
 
     // ── Dialogs / Overlays ──────────────────────────────────────────
 

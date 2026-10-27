@@ -2836,7 +2836,23 @@ public partial record TreeViewNodeData(string Content, TreeViewNodeData[]? Child
 
 public record MenuBarItemData(string Title, MenuFlyoutItemBase[] Items);
 
-public abstract record MenuFlyoutItemBase;
+public abstract record MenuFlyoutItemBase
+{
+    /// <summary>
+    /// Where this item was created in C#, stamped by the source map on the
+    /// <c>MenuItem(…)</c> / <c>ToggleMenuItem(…)</c> / … factory call (the same mechanism as
+    /// <see cref="Element.CallSite"/>). The realized menu item publishes it for inspectors.
+    /// Not part of equality, like <see cref="Element.CallSite"/>.
+    /// </summary>
+    public SourceLocation? CallSite { get; init; }
+
+    /// <summary>Equality ignores <see cref="CallSite"/> (diagnostic metadata).</summary>
+    public virtual bool Equals(MenuFlyoutItemBase? other)
+        => ReferenceEquals(this, other) || (other is not null && EqualityContract == other.EqualityContract);
+
+    /// <inheritdoc />
+    public override int GetHashCode() => EqualityContract.GetHashCode();
+}
 public record MenuFlyoutItemData(string Text, Action? OnClick = null, string? Icon = null) : MenuFlyoutItemBase
 {
     public bool IsEnabled { get; init; } = true;
@@ -2880,7 +2896,23 @@ public partial record IconElement(IconData Data) : Element
     internal Action<WinUI.IconElement>[] Setters { get; init; } = [];
 }
 
-public abstract record AppBarItemBase;
+public abstract record AppBarItemBase
+{
+    /// <summary>
+    /// Where this command was created in C#, stamped by the source map on the
+    /// <c>AppBarButton(…)</c> / <c>AppBarToggleButton(…)</c> / <c>AppBarSeparator()</c> factory
+    /// call (the same mechanism as <see cref="Element.CallSite"/>). The realized command
+    /// publishes it for inspectors. Not part of equality, like <see cref="Element.CallSite"/>.
+    /// </summary>
+    public SourceLocation? CallSite { get; init; }
+
+    /// <summary>Equality ignores <see cref="CallSite"/> (diagnostic metadata).</summary>
+    public virtual bool Equals(AppBarItemBase? other)
+        => ReferenceEquals(this, other) || (other is not null && EqualityContract == other.EqualityContract);
+
+    /// <inheritdoc />
+    public override int GetHashCode() => EqualityContract.GetHashCode();
+}
 public record AppBarButtonData(string Label, Action? OnClick = null, string? Icon = null) : AppBarItemBase
 {
     public bool IsEnabled { get; init; } = true;

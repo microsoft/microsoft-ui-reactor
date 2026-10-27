@@ -170,6 +170,22 @@ internal static class ReactorSourcePublisher
     }
 
     /// <summary>
+    /// Builds and writes the value for a menu or command-bar item control that a flyout,
+    /// menu bar or command bar created from an item record (<c>MenuItem(…)</c>,
+    /// <c>AppBarButton(…)</c>) rather than from an element. <paramref name="kind"/> is the
+    /// record kind (<c>MenuFlyoutItem</c>, <c>AppBarButton</c>, …).
+    /// </summary>
+    internal static string PublishItem(UIElement control, SourceLocation? site, string? owner, string kind)
+    {
+        var value = Cache.Parts.GetOrAdd(
+            new ValueShape(site, owner, kind, null, null, site?.DeclaredName, null),
+            static shape => ValueParts.Create(shape)).Full;
+        if (!string.Equals(control.GetValue(ReactorDiagnostics.SourceProperty) as string, value, StringComparison.Ordinal))
+            control.SetValue(ReactorDiagnostics.SourceProperty, value);
+        return value;
+    }
+
+    /// <summary>
     /// Adds the host-root fields (<c>root=</c>, and <c>hooks=</c> when the value has none) to a
     /// value already published for a host's root content control. Used when the root element
     /// is a <c>Memo(key, …)</c>: its factory output published itself when it mounted, and the
