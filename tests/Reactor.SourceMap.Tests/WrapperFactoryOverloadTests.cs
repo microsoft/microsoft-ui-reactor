@@ -330,6 +330,42 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
     }
 
     [ReactorSourceTransparent]
+    internal static Element ShowNumber(byte value) => VStack();
+
+    [ReactorSourceTransparent]
+    internal static Element ShowNumber(long value) => HStack();
+
+    [Fact]
+    public void InferredIntegralLocal_IsNotTreatedAsAConstant()
+    {
+        // `n` is a non-constant int, so ShowNumber(long) is chosen; a constant zero standing
+        // in for it would convert to byte and pick ShowNumber(byte) instead.
+        FakeGaugeElement gauge = FakeGauge();
+        var n = gauge.GetHashCode();
+        var line = Line(); var shown = ShowNumber(n);
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)shown).Orientation);
+        Assert.Equal(line, shown.CallSite?.LineNumber);
+    }
+
+    [ReactorSourceTransparent]
+    internal static Element PickBy<T>(int value) where T : global::System.Collections.Generic.IComparer<FakeGaugeElement> => HStack();
+
+    [ReactorSourceTransparent]
+    internal static Element PickBy<T>(object value) => VStack();
+
+    [Fact]
+    public void CandidateConstrainedByTheRecord_IsNotTrusted()
+    {
+        // IComparer<Element> satisfies `where T : IComparer<FakeGaugeElement>` only once the
+        // record is an Element (contravariance), which brings in the exact PickBy<T>(int).
+        var picked = PickBy<global::System.Collections.Generic.IComparer<Element>>(0);
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)picked).Orientation);
+        Assert.Null(picked.CallSite);
+    }
+
+    [ReactorSourceTransparent]
     internal static Element PresentMaybe(object? value) => VStack();
 
     [ReactorSourceTransparent]

@@ -353,7 +353,8 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         // generated one there); an interceptor for either could be the wrong one. Neither
         // generator claims such a call.
         if (HasSourceWrappers(ctx.SemanticModel.Compilation)
-            && WrapperFactoryCalls.InvisibleFactoryOwners(ctx.SemanticModel, invocation, ct) is not null)
+            && (WrapperFactoryCalls.InvisibleFactoryOwners(ctx.SemanticModel, invocation, ct) is not null
+                || IsWrapperConstrainedCall(ctx.SemanticModel, invocation, ct)))
         {
             return null;
         }

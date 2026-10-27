@@ -170,6 +170,21 @@ public sealed class WrapperFactoryInterceptionTests : IDisposable
         Assert.Empty(panel.Children);
     }
 
+    internal static string KidsBy<T>(object value) => "one";
+
+    internal static Element[] KidsBy<T>(int value) where T : global::System.Collections.Generic.IComparer<FakeGaugeElement> => [];
+
+    [Fact]
+    public void WrapperFactoryArgumentFromARecordConstrainedCall_IsNotStamped()
+    {
+        // KidsBy<IComparer<Element>>(0) is the string overload here; once the constraint is
+        // satisfied it is the empty Element[] passed in normal form.
+        var panel = FakePanel(KidsBy<global::System.Collections.Generic.IComparer<Element>>(0)); var line = Line();
+
+        AssertStampedAt(panel, line, "FakePanel(");
+        Assert.Empty(panel.Children);
+    }
+
     [Fact]
     public void WrapperRecordThatSpellsItsOwnBase_IsStampedAndSoIsItsContainer()
     {

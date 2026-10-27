@@ -199,7 +199,7 @@ public sealed partial class SourceMapInterceptorGenerator
                 {
                     switch (member)
                     {
-                        case MethodDeclarationSyntax method when Spells(method.ReturnType) || Spells(method.ParameterList):
+                        case MethodDeclarationSyntax method when Spells(method.ReturnType) || Spells(method.ParameterList) || method.ConstraintClauses.Any(c => Spells(c)):
                             yield return (method.Identifier.ValueText, ImplicitlyCalledNames.Contains(method.Identifier.ValueText));
                             break;
                         case PropertyDeclarationSyntax property when Spells(property.Type):
@@ -483,7 +483,8 @@ public sealed partial class SourceMapInterceptorGenerator
         if (IsNameof(node, model)) return (false, false);
         if (depth > MaxDependencyDepth) return (true, true);
         if (HasWrapperTypeArgument(model, node, ct)
-            || (node is InvocationExpressionSyntax competing && WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(model, competing, ct)))
+            || (node is InvocationExpressionSyntax competing && WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(model, competing, ct))
+            || (node is InvocationExpressionSyntax constrained && IsWrapperConstrainedCall(model, constrained, ct)))
         {
             memo[node] = true;
             return (true, false);
@@ -753,6 +754,53 @@ public sealed partial class SourceMapInterceptorGenerator
     }
 
     /// <summary>
+    /// A call to a method — declared in this compilation, the only place one can name a
+    /// wrapper record — with a type-parameter constraint mentioning one (see
+    /// <see cref="WrapperFactoryCalls.GroupHasWrapperConstraint"/>). Prefiltered by name, so
+    /// only calls to such methods pay for the member-group lookup.
+    /// </summary>
+    private static bool IsWrapperConstrainedCall(SemanticModel model, InvocationExpressionSyntax invocation, System.Threading.CancellationToken ct)
+    {
+        var name = invocation.Expression switch
+        {
+            SimpleNameSyntax simple => simple.Identifier.ValueText,
+            MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+            MemberBindingExpressionSyntax binding => binding.Name.Identifier.ValueText,
+            _ => null,
+        };
+        return name is not null
+            && WrapperConstrainedMethodNames(model.Compilation).Contains(name)
+            && WrapperFactoryCalls.GroupHasWrapperConstraint(model, invocation, ct);
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Compilation, ImmutableHashSet<string>> s_constrainedNames = new();
+
+    /// <summary>Names of source methods and local functions whose constraint clauses spell a wrapper-related name.</summary>
+    private static ImmutableHashSet<string> WrapperConstrainedMethodNames(Compilation compilation)
+        => s_constrainedNames.GetValue(compilation, static c =>
+        {
+            var names = WrapperRelatedNames(c);
+            if (names.IsEmpty) return ImmutableHashSet<string>.Empty;
+            var result = ImmutableHashSet.CreateBuilder<string>(System.StringComparer.Ordinal);
+            foreach (var tree in c.SyntaxTrees)
+            {
+                foreach (var node in tree.GetRoot().DescendantNodes())
+                {
+                    var (identifier, clauses) = node switch
+                    {
+                        MethodDeclarationSyntax m => (m.Identifier, m.ConstraintClauses),
+                        LocalFunctionStatementSyntax l => (l.Identifier, l.ConstraintClauses),
+                        _ => (default, default),
+                    };
+                    if (clauses.Count == 0) continue;
+                    if (clauses.Any(cl => cl.DescendantTokens().Any(tk => tk.IsKind(SyntaxKind.IdentifierToken) && names.Contains(tk.ValueText))))
+                        result.Add(identifier.ValueText);
+                }
+            }
+            return result.ToImmutable();
+        });
+
+    /// <summary>
     /// <c>Choose&lt;FooElement&gt;(0)</c>: an explicit type argument naming a wrapper record
     /// decides which candidates satisfy their constraints (<c>where T : Element</c> fails here
     /// and holds once the record is complete), so the call's result type can change even
@@ -951,6 +999,7 @@ public sealed partial class SourceMapInterceptorGenerator
                 if (_replaced.Contains(node) || _accounted.Contains(node) || node is not ExpressionSyntax expression) continue;
                 if (HasWrapperTypeArgument(_model, expression, _ct)) return false;
                 if (expression is InvocationExpressionSyntax competing && WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(_model, competing, _ct)) return false;
+                if (expression is InvocationExpressionSyntax constrained && IsWrapperConstrainedCall(_model, constrained, _ct)) return false;
                 // The name half of `x.Name` is judged together with its member access.
                 if (expression.Parent is MemberAccessExpressionSyntax member && member.Name == expression) continue;
                 if (HasErrorType(_model, expression, _ct)) return false;
@@ -1288,6 +1337,9 @@ public sealed partial class SourceMapInterceptorGenerator
                     var name = member.Name.Identifier.ValueText;
                     if (receiverPath)
                     {
+                        // A member the wrapper generator adds to the record would beat whatever
+                        // extension binds here, and it is not in view.
+                        if (WrapperFactoryCalls.MayGainInvocableMember(record!, name)) return null;
                         if (_model.Compilation.GetTypeByMetadataName(ElementMetadataName) is { } element)
                             symbols.AddRange(_model.LookupSymbols(position, element, name, includeReducedExtensionMethods: true));
                         symbols.AddRange(_model.LookupSymbols(position, record, name, includeReducedExtensionMethods: true));
@@ -1480,7 +1532,22 @@ public sealed partial class SourceMapInterceptorGenerator
             }
 
             var typeSyntax = SyntaxFactory.ParseTypeName(type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-            return SyntaxFactory.ParenthesizedExpression(SyntaxFactory.DefaultExpression(typeSyntax))
+            if (type.IsReferenceType)
+            {
+                return SyntaxFactory.ParenthesizedExpression(SyntaxFactory.DefaultExpression(typeSyntax))
+                    .WithTriviaFrom(original);
+            }
+
+            // A value type's `default(T)` is a CONSTANT, which binds differently from the
+            // non-constant value it stands for: a constant zero int converts to byte or to any
+            // enum, so `Show(n)` would pick `Show(byte)` over the real `Show(long)`. Invoking a
+            // delegate yields a T that is not a constant. A ref struct cannot be a type argument.
+            if (type.IsRefLikeType || type is IPointerTypeSymbol or IFunctionPointerTypeSymbol)
+            {
+                Unreliable = true;
+                return original;
+            }
+            return SyntaxFactory.ParseExpression($"(((global::System.Func<{typeSyntax}>)null!)())")
                 .WithTriviaFrom(original);
         }
     }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -260,10 +260,7 @@ internal static class WrapperFactoryCalls
         for (var type = enclosing as INamedTypeSymbol ?? enclosing?.ContainingType; type is not null; type = type.ContainingType) Consider(type);
         foreach (var scope in model.GetImportScopes(position, ct))
         {
-            foreach (var import in scope.Imports)
-            {
-                if (import.NamespaceOrType is INamedTypeSymbol imported) Consider(imported);
-            }
+            foreach (var imported in scope.Imports.Select(static i => i.NamespaceOrType).OfType<INamedTypeSymbol>()) Consider(imported);
         }
         return owners;
 
@@ -288,6 +285,77 @@ internal static class WrapperFactoryCalls
         if (InvisibleFactoryOwners(model, invocation, ct) is not { } owners) return false;
         var type = model.GetTypeInfo(invocation, ct).Type;
         return owners.Any(o => !SymbolEqualityComparer.Default.Equals(o, type));
+    }
+
+    /// <summary>
+    /// True when the wrapper generator may give <paramref name="record"/> an INVOCABLE instance
+    /// member named <paramref name="name"/> — <c>Set(Action&lt;TControl&gt;)</c>, or a delegate
+    /// property <c>On{Event}</c> / <c>On{Property}Changed</c> — which, once it exists, wins over
+    /// an extension method that binds here (<c>gauge.Set(...)</c> resolving to some visible
+    /// <c>Set(this object, …)</c>). A superset, from every event and property of the control
+    /// and its bases, so it can only make a caller more conservative.
+    /// </summary>
+    internal static bool MayGainInvocableMember(INamedTypeSymbol record, string name)
+    {
+        if (string.Equals(name, "Set", StringComparison.Ordinal)) return true;
+        foreach (var attribute in record.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString() != WrapperAttributeMetadataName
+                || attribute.ConstructorArguments.Length != 1
+                || attribute.ConstructorArguments[0].Value is not INamedTypeSymbol control)
+            {
+                continue;
+            }
+            for (var type = control; type is not null; type = type.BaseType)
+            {
+                foreach (var member in type.GetMembers())
+                {
+                    switch (member)
+                    {
+                        case IEventSymbol e when string.Equals("On" + e.Name, name, StringComparison.Ordinal):
+                            return true;
+                        case IPropertySymbol p when string.Equals("On" + p.Name + "Changed", name, StringComparison.Ordinal)
+                                                    || (string.Equals(p.Name, name, StringComparison.Ordinal) && p.Type.TypeKind == TypeKind.Delegate):
+                            return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// True when a method <paramref name="invocation"/>'s name can reach has a type-parameter
+    /// constraint that mentions a wrapper record: whether a type argument satisfies it
+    /// (<c>where T : IComparer&lt;FooElement&gt;</c> with <c>T = IComparer&lt;Element&gt;</c>) can change
+    /// once the record is an Element, and with it the candidates and the result.
+    /// </summary>
+    internal static bool GroupHasWrapperConstraint(SemanticModel model, InvocationExpressionSyntax invocation, CancellationToken ct)
+    {
+        // Looked up by name: the member group the compiler reports has already dropped the
+        // candidates whose constraints fail here, which are exactly the ones that matter.
+        var position = invocation.SpanStart;
+        IEnumerable<ISymbol> candidates = model.GetMemberGroup(invocation.Expression, ct);
+        switch (invocation.Expression)
+        {
+            case SimpleNameSyntax simple:
+                candidates = candidates.Concat(model.LookupSymbols(position, name: simple.Identifier.ValueText));
+                break;
+            case MemberAccessExpressionSyntax member
+                when (model.GetSymbolInfo(member.Expression, ct).Symbol as INamespaceOrTypeSymbol ?? model.GetTypeInfo(member.Expression, ct).Type) is { } qualifier:
+                candidates = candidates.Concat(model.LookupSymbols(position, qualifier, member.Name.Identifier.ValueText, includeReducedExtensionMethods: true));
+                break;
+        }
+        foreach (var symbol in candidates)
+        {
+            if (symbol is not IMethodSymbol method) continue;
+            var definition = (method.ReducedFrom ?? method).OriginalDefinition;
+            foreach (var typeParameter in definition.TypeParameters)
+            {
+                if (typeParameter.ConstraintTypes.Any(c => MentionsIncompleteWrapper(c, model.Compilation))) return true;
+            }
+        }
+        return false;
     }
 
     private static readonly ConditionalWeakTable<Compilation, ImmutableHashSet<string>> s_sourceFactoryNames = new();

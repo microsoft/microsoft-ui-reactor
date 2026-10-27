@@ -174,7 +174,11 @@ public sealed partial class WrapperGenerator
             if (info.Type is { } type && WrapperFactoryCalls.MentionsIncompleteWrapper(type, compilation)) return false;
             if (info.ConvertedType is { } converted && WrapperFactoryCalls.MentionsIncompleteWrapper(converted, compilation)) return false;
 
-            if (expression is InvocationExpressionSyntax call && WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(model, call, ct)) return false;
+            if (expression is InvocationExpressionSyntax call
+                && (WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(model, call, ct) || WrapperFactoryCalls.GroupHasWrapperConstraint(model, call, ct)))
+            {
+                return false;
+            }
 
             var symbols = model.GetSymbolInfo(expression, ct);
             if (symbols.Symbol is null && !symbols.CandidateSymbols.IsEmpty) return false;

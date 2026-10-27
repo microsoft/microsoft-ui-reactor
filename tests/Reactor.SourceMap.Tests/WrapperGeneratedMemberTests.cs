@@ -1,0 +1,41 @@
+﻿using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Diagnostics;
+using Microsoft.UI.Reactor.SourceMap.Tests.SetRivals;
+using Xunit;
+using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.SourceMap.Tests.FakeGaugeElement;
+using WinUI = Microsoft.UI.Xaml.Controls;
+
+namespace Microsoft.UI.Reactor.SourceMap.Tests;
+
+/// <summary>
+/// Spec 010 — an extension method that binds on a wrapper value here, where the instance
+/// member the wrapper generator adds to the record (<c>Set(Action&lt;TControl&gt;)</c>) is not in
+/// view, and loses to it in the real compilation. A file of its own: only it imports the
+/// rival extension.
+/// </summary>
+[Collection("SourceMap")]
+public sealed class WrapperGeneratedMemberTests : IDisposable
+{
+    public WrapperGeneratedMemberTests() => ReactorSourceMap.Enabled = true;
+
+    public void Dispose() => ReactorSourceMap.Enabled = false;
+
+    [ReactorSourceTransparent]
+    internal static Element PairUp(Element first, string second) => VStack(first);
+
+    [ReactorSourceTransparent]
+    internal static Element PairUp(Element first, Element second) => HStack(first, second);
+
+    [Fact]
+    public void ExtensionThatTheGeneratedInstanceMemberHides_IsNotTrusted()
+    {
+        // gauge.Set(...) is the rival's string here and the generated Set's record there, so
+        // PairUp(Element, Element) runs.
+        FakeGaugeElement gauge = FakeGauge();
+        var paired = PairUp(gauge, gauge.Set(_ => { }));
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)paired).Orientation);
+        Assert.Null(paired.CallSite);
+    }
+}
