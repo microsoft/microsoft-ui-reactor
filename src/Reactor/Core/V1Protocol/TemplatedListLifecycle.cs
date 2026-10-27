@@ -203,7 +203,9 @@ internal static class TemplatedListLifecycle
         for (int i = 0; i < el.ItemCount; i++)
         {
             var view = el.BuildItemView(i);
-            var ctrl = reconciler.Mount(Reconciler.WithItemKey(view, el, i), requestRerender);
+            var keyed = Reconciler.WithItemKey(view, el, i);
+            var ctrl = reconciler.Mount(keyed, requestRerender);
+            reconciler.EnsureItemIdentity(ctrl, keyed);
             if (ctrl is not null) flipView.Items.Add(ctrl);
             mounted.Add((view, ctrl is not null));
         }
@@ -388,14 +390,14 @@ internal static class TemplatedListLifecycle
             if (oldHasControl && ci < fv.Items.Count && fv.Items[ci] is UIElement existingCtrl
                 && reconciler.CanUpdate(oldItemElement, newView))
             {
+                var priorKey = existingCtrl is FrameworkElement priorFe ? Reconciler.GetElementTag(priorFe)?.Key : null;
                 var replacement = reconciler.UpdateHostedChild(oldItemElement, newItemElement, existingCtrl, requestRerender);
                 if (replacement is not null && replacement != existingCtrl)
                     fv.Items[ci] = replacement;
                 // A different item at this position can render the same content, and the update
-                // then skips — leaving the previous item's key on the page. Refresh it.
-                if ((replacement ?? existingCtrl) is FrameworkElement liveFe
-                    && !string.Equals(Reconciler.GetElementTag(liveFe)?.Key, newItemElement.Key, StringComparison.Ordinal))
-                    reconciler.RefreshItemIdentityOnSkip(liveFe, newItemElement);
+                // then skips — leaving the previous item's key on the page (or refreshing the tag
+                // without republishing). Refresh it whenever the key changed.
+                reconciler.EnsureItemIdentity(replacement ?? existingCtrl, newItemElement, priorKey, updated: true);
                 ci++;
                 nextMounted.Add((newView, true));
                 continue;
@@ -407,6 +409,7 @@ internal static class TemplatedListLifecycle
                 fv.Items.RemoveAt(ci);
             }
             var ctrl = reconciler.Mount(newItemElement, requestRerender);
+            reconciler.EnsureItemIdentity(ctrl, newItemElement);
             if (ctrl is not null) fv.Items.Insert(ci++, ctrl);
             nextMounted.Add((newView, ctrl is not null));
         }
@@ -423,7 +426,9 @@ internal static class TemplatedListLifecycle
         for (int i = shared; i < newCount; i++)
         {
             var view = n.BuildItemView(i);
-            var ctrl = reconciler.Mount(Reconciler.WithItemKey(view, n, i), requestRerender);
+            var keyed = Reconciler.WithItemKey(view, n, i);
+            var ctrl = reconciler.Mount(keyed, requestRerender);
+            reconciler.EnsureItemIdentity(ctrl, keyed);
             if (ctrl is not null) fv.Items.Add(ctrl);
             nextMounted.Add((view, ctrl is not null));
         }

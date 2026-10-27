@@ -716,6 +716,7 @@ public sealed partial class Reconciler
             UnmountItemView(cc, clearContent: false);
             var itemElement = BuildKeyedItemView(viewSource, args.ItemIndex);
             var ctrl = Mount(itemElement, requestRerender);
+            EnsureItemIdentity(ctrl, itemElement);
             cc.Content = ctrl;
             SetElementTag(cc, itemElement); // Store for later reconciliation
 

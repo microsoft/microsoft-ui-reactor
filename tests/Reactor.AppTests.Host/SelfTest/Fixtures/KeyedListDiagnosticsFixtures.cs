@@ -209,6 +209,20 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             if (publish)
                 H.Check("KeyedListDiagnostics_FlipViewSameContentSourceRefreshed",
                     sameValue?.Contains("|key=next", StringComparison.Ordinal) == true);
+            // The same with a callback-bearing Button page: its tag is refreshed by the update
+            // itself, so the published value must still follow the new key; the click still works.
+            var sameButton = H.FindButton("same button page");
+            var sameButtonTag = sameButton is null ? null : Reconciler.GetElementTag(sameButton);
+            var sameButtonValue = sameButton is null ? null : ReactorDiagnostics.GetSource(sameButton);
+            FlipSameContentProbe.Clicks = 0;
+            H.ClickButton("same button page");
+            bool sameButtonClicked = await Harness.WaitFor(() => FlipSameContentProbe.Clicks == 1);
+            Console.WriteLine($"# flip same button: tag={sameButtonTag?.GetType().Name} key={sameButtonTag?.Key} clicks={FlipSameContentProbe.Clicks} value={sameButtonValue}");
+            H.Check("KeyedListDiagnostics_FlipViewSameButtonKeyRefreshed", sameButtonTag is ButtonElement && sameButtonTag.Key == "next");
+            H.Check("KeyedListDiagnostics_FlipViewSameButtonStillClicks", sameButtonClicked);
+            if (publish)
+                H.Check("KeyedListDiagnostics_FlipViewSameButtonSourceRefreshed",
+                    sameButtonValue?.Contains("|key=next", StringComparison.Ordinal) == true, sameButtonValue ?? "<none>");
             H.SetContent(null);
 
             // The same, with a keyed Memo page whose output is a Button: the page's control is
@@ -287,10 +301,22 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             return VStack(4,
                 Button("flip-fwd-rerender", () => setN(n + 1)),
                 TextBlock("flip-fwd renders " + n),
-                FlipView(FlipForwardItems, static s => s, static (_, _) => new FlipForwardElement("fwd page")).Height(60));
+                FlipView(FlipForwardItems, static s => s, static (_, _) => new FlipForwardElement("fwd page")).Height(60),
+                ListView(FlipForwardItems, static s => s, static (_, _) => new FlipForwardElement("fwd row")).Height(60));
         });
         await Harness.Render();
         await Harness.Render(100);
+        // The item key reaches the forwarded child at its first realization, before any re-render.
+        foreach (var (label, check) in new[] { ("fwd page", "_FlipViewKeyedAtMount"), ("fwd row", "_ListViewKeyedAtMount") })
+        {
+            var mounted = H.FindButton(label);
+            var mountedTag = mounted is null ? null : Reconciler.GetElementTag(mounted);
+            var mountedValue = mounted is null ? null : ReactorDiagnostics.GetSource(mounted);
+            Console.WriteLine($"# forwarded {label} at mount (publish={publishPass}): tag={mountedTag?.GetType().Name} key={mountedTag?.Key} value={mountedValue}");
+            H.Check(name + check, mountedTag is ButtonElement && mountedTag.Key == "only", $"{mountedTag?.GetType().Name} key={mountedTag?.Key}");
+            if (publishPass)
+                H.Check(name + check + "_Source", mountedValue?.Contains("|key=only", StringComparison.Ordinal) == true, mountedValue ?? "<none>");
+        }
         H.ClickButton("flip-fwd-rerender");
         await Harness.Render();
         H.ClickButton("flip-fwd-rerender");
@@ -327,6 +353,9 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
                 TextBlock("flip-wrapped renders " + n),
                 FlipView(FlipForwardItems, static s => s,
                     (_, _) => new ModifiedElement(Button("wrapped page", () => clicks++), new ElementModifiers { Margin = new Thickness(2) }))
+                    .Height(60),
+                FlipView(FlipForwardItems, static s => s,
+                    static (_, _) => new ModifiedElement(Button("wrapped own page", static () => { }).WithKey("inner-own"), new ElementModifiers { Margin = new Thickness(2) }))
                     .Height(60));
         });
         await Harness.Render();
@@ -342,6 +371,14 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
         H.ClickButton("wrapped page");
         bool clicked = await Harness.WaitFor(() => clicks == 1);
         Console.WriteLine($"# wrapped flip page (publish={publishPass}): tag={tag?.GetType().Name} key={tag?.Key} clicks={clicks} value={value}");
+        // An author's own key on the wrapped inner element survives the re-renders.
+        var ownPage = H.FindButton("wrapped own page");
+        var ownTag = ownPage is null ? null : Reconciler.GetElementTag(ownPage);
+        var ownValue = ownPage is null ? null : ReactorDiagnostics.GetSource(ownPage);
+        Console.WriteLine($"# wrapped own-key flip page (publish={publishPass}): tag={ownTag?.GetType().Name} key={ownTag?.Key} value={ownValue}");
+        H.Check(name + "_InnerAuthorKeyKept", ownTag is ButtonElement && ownTag.Key == "inner-own", $"{ownTag?.GetType().Name} key={ownTag?.Key}");
+        if (publishPass)
+            H.Check(name + "_InnerAuthorKeyPublished", ownValue?.Contains("|key=inner-own", StringComparison.Ordinal) == true, ownValue ?? "<none>");
         H.Check(name + "_KeepsButtonTag", tag is ButtonElement && tag.Key == "only", tag?.GetType().Name ?? "<none>");
         H.Check(name + "_StillClicks", clicked, $"clicks: {clicks}");
         if (publishPass)
@@ -469,12 +506,15 @@ internal sealed class TypedTemplatedListProbe : Component
 
 internal sealed class FlipSameContentProbe : Component
 {
+    internal static int Clicks;
+
     public override Element Render()
     {
         var (items, setItems) = UseState<string[]>(["first"]);
         return VStack(4,
             Button("flip-replace", () => setItems(["next"])),
-            FlipView(items, static s => s, static (_, _) => TextBlock("same page")).Height(60));
+            FlipView(items, static s => s, static (_, _) => TextBlock("same page")).Height(60),
+            FlipView(items, static s => s, static (_, _) => Button("same button page", static () => Clicks++)).Height(60));
     }
 }
 

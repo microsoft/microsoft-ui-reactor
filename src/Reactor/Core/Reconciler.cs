@@ -614,14 +614,39 @@ public sealed partial class Reconciler : IDisposable
     internal void PublishSourceOnSkip(UIElement control, Element newEl) => PublishSource(control, newEl);
 
     /// <summary>
+    /// The key a templated-list item's realized element carries: the stamped item key, or an
+    /// author's own key on a wrapped (<see cref="ModifiedElement"/>) inner element, which
+    /// <see cref="WithItemKey"/> leaves in place.
+    /// </summary>
+    internal static string? ItemKeyOf(Element itemElement) => itemElement.Key ?? InnermostOf(itemElement).Key;
+
+    /// <summary>
+    /// After a templated-list item view was mounted or updated into <paramref name="control"/>:
+    /// makes the control's identity (tag and, in diagnostics mode, published value) carry the
+    /// item's key when it does not. A forwarding <c>RegisterType</c> row keeps its child's tag,
+    /// which the item key never reached, and an update the reconciler skipped (a different item
+    /// with identical content) may refresh the tag without republishing — so
+    /// <paramref name="priorKey"/>, the key the control showed before the update, forces a
+    /// refresh whenever the item key changed.
+    /// </summary>
+    internal void EnsureItemIdentity(UIElement? control, Element itemElement, string? priorKey = null, bool updated = false)
+    {
+        if (control is not FrameworkElement fe) return;
+        var key = ItemKeyOf(itemElement);
+        if (key is null && !updated) return;
+        if (!string.Equals(GetElementTag(fe)?.Key, key, StringComparison.Ordinal)
+            || (updated && !string.Equals(priorKey, key, StringComparison.Ordinal)))
+            RefreshItemIdentityOnSkip(fe, itemElement);
+    }
+
+    /// <summary>
     /// Refreshes a reused control's identity — element tag and, in diagnostics mode, its
-    /// published value — when only its stamped item key changed and the update itself skipped
-    /// (<see cref="Element.ShallowEquals"/> ignores the key).
+    /// published value — to the item key of <paramref name="newEl"/> (see <see cref="ItemKeyOf"/>).
     /// </summary>
     internal void RefreshItemIdentityOnSkip(FrameworkElement control, Element newEl)
     {
-        var kind = newEl;
-        while (kind is ModifiedElement modified) kind = modified.Inner;
+        var kind = InnermostOf(newEl);
+        var key = ItemKeyOf(newEl);
         bool publish = global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled;
         // The control can realize an element other than the item's: a keyed Memo's factory
         // output, or the child a forwarding RegisterType callback handed back (whose tag
@@ -630,16 +655,16 @@ public sealed partial class Reconciler : IDisposable
         if (TryGetReactorState(control, out var state) && state.Element is { } realized
             && (kind is KeyedMemoElement || realized.GetType() != kind.GetType()))
         {
-            if (!string.Equals(realized.Key, newEl.Key, StringComparison.Ordinal))
-                state.Element = realized = realized with { Key = newEl.Key };
+            if (!string.Equals(realized.Key, key, StringComparison.Ordinal))
+                state.Element = realized = realized with { Key = key };
             if (publish) PublishSource(control, realized);
             return;
         }
         // An untagged keyed Memo output has nothing to re-key, and its wrapper is never the tag.
         if (kind is KeyedMemoElement) return;
         // A legacy ModifiedElement mounts (and tags) its inner element, so that element is
-        // re-tagged, carrying the wrapper's key.
-        var target = ReferenceEquals(kind, newEl) ? newEl : kind with { Key = newEl.Key };
+        // re-tagged with the item key.
+        var target = string.Equals(kind.Key, key, StringComparison.Ordinal) ? kind : kind with { Key = key };
         SetElementTagIfNeeded(control, target);
         if (publish) PublishSource(control, target);
     }

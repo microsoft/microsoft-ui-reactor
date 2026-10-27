@@ -1294,8 +1294,10 @@ public sealed partial class Reconciler
             // during a resource refresh), so the old item's effects and refs are cleaned up.
             // Untagged content was already unmounted by the orphan sweep: replace it, never
             // unmount it again.
+            var priorKey = cc.Content is FrameworkElement priorFe ? GetElementTag(priorFe)?.Key : null;
             var next = ReconcileV1Child(oldItemElement, newItemElement,
                 oldItemElement is null ? null : cc.Content as UIElement, requestRerender);
+            EnsureItemIdentity(next, newItemElement, priorKey, updated: true);
             if (!ReferenceEquals(cc.Content, next))
                 cc.Content = next;
             SetElementTag(cc, newItemElement);
