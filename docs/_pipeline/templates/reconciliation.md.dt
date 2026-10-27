@@ -186,6 +186,25 @@ end, unmount any leftover children. Cost: O(max(old, new)). The catch
 is that an insert at the front re-updates every element rather than
 detecting the shift.
 
+**Conditional children hold their slot.** A position is the child's
+argument slot in the container factory call, not its index in the
+filtered `Children` array. The factories drop `null` and `Empty()`
+arguments and flatten `Group(...)`, but they record which argument
+each kept child came from. When a toggle shifts those slots between
+renders, the unkeyed walk matches children by slot in one merge pass:
+the toggled child mounts or unmounts in place, and every sibling after
+it is updated rather than compared against the child that used to sit
+at its index. So in
+`VStack(Header(), open ? Details() : Empty(), Footer())`, `Footer`
+keeps its state when `Details` closes, as a React sibling of a `null`
+child does. Containers whose children's slots line up by index keep the
+positional walk, unless an exit transition is still playing. Like React,
+a child whose argument slot changes is a different
+child: `a ? X() : Empty(), a ? Empty() : X()` remounts `X`. This
+applies to unkeyed containers only: once any child carries a key, the
+keyed algorithm below matches the unkeyed children positionally, so key
+the siblings of a conditional child there.
+
 **Keyed.** Any child carries a key → run a four-phase algorithm:
 
 1. Strip the common prefix (children at the same index with the same
@@ -210,7 +229,8 @@ property writes in the positional path.
 key at different positions are treated as the same element by the
 keyed child reconciler; two elements with different keys at the same
 position are treated as different elements (force unmount + mount).
-Without a key, identity follows position.
+Without a key, identity follows position — the child's argument slot,
+so a conditional sibling toggling before it does not shift it.
 
 ```csharp snippet="collections/keyed-foreach"
 ```

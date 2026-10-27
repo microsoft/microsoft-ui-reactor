@@ -79,12 +79,7 @@ public class PanelChildReconciliationTests
     //  1. Filter algorithm via reflection (no WinUI controls needed)
     // ════════════════════════════════════════════════════════════════
 
-    private static Element[] InvokeFilter(Element[] elements)
-    {
-        var method = typeof(ChildReconciler).GetMethod("Filter",
-            global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static);
-        return (Element[])method!.Invoke(null, [elements])!;
-    }
+    private static Element[] InvokeFilter(Element[] elements) => ChildReconciler.Filter(elements, out _);
 
     [Fact]
     public void Filter_All_Null_Returns_Empty()

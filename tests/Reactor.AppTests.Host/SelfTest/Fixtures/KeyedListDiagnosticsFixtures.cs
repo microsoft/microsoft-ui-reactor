@@ -44,6 +44,22 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             H.Check("KeyedListDiagnostics_LazyVStackRowCarriesKey", KeyOf("lazy-b") == "key-b");
             // An author's own row key still wins.
             H.Check("KeyedListDiagnostics_AuthorRowKeyWins", KeyOf("lv-own") == "own");
+            // A row built as a legacy ModifiedElement: Mount tags (and publishes) its inner Button,
+            // which must carry the key from the first mount, keep its ButtonElement tag, and leave
+            // an author's own inner key alone.
+            void CheckWrappedRow(string name, string label, string key)
+            {
+                var button = H.FindButton(label);
+                var tag = button is null ? null : Reconciler.GetElementTag(button);
+                var value = button is null ? null : ReactorDiagnostics.GetSource(button);
+                Console.WriteLine($"# wrapped row {label}: tag={tag?.GetType().Name} key={tag?.Key} value={value}");
+                H.Check(name, tag is ButtonElement && tag.Key == key, $"{tag?.GetType().Name} key={tag?.Key}");
+                if (publish)
+                    H.Check(name + "_Published", value?.Contains("|key=" + key, StringComparison.Ordinal) == true, value ?? "<none>");
+            }
+            CheckWrappedRow("KeyedListDiagnostics_WrappedListViewRowCarriesKeyAtMount", "lv-wrapped-b", "key-b");
+            CheckWrappedRow("KeyedListDiagnostics_WrappedFlipViewPageCarriesKeyAtMount", "fv-wrapped-a", "key-a");
+            CheckWrappedRow("KeyedListDiagnostics_WrappedRowInnerAuthorKeyWins", "lv-wrapped-own", "inner-own");
             H.SetContent(null);
 
             // ── LazyVStack null key ──────────────────────────────────────
@@ -377,7 +393,13 @@ internal sealed class KeyedRowsProbe : Component
             static (r, _) => TextBlock("lv-own").WithKey("own")).Height(60),
         GridView(Rows, static r => r.Key, static (r, _) => TextBlock("gv-" + r.Label)).Height(120),
         FlipView(Rows, static r => r.Key, static (r, _) => TextBlock("fv-" + r.Label)).Height(60),
-        LazyVStack(Rows, static r => r.Key, static (r, _) => TextBlock("lazy-" + r.Label)).Height(120));
+        LazyVStack(Rows, static r => r.Key, static (r, _) => TextBlock("lazy-" + r.Label)).Height(120),
+        ListView(Rows, static r => r.Key, static (r, _) => Wrapped(Button("lv-wrapped-" + r.Label, static () => { }))).Height(120),
+        FlipView(Rows, static r => r.Key, static (r, _) => Wrapped(Button("fv-wrapped-" + r.Label, static () => { }))).Height(60),
+        ListView(new[] { new KeyedRow("key-wrapped-own", "own") }, static r => r.Key,
+            static (_, _) => Wrapped(Button("lv-wrapped-own", static () => { }).WithKey("inner-own"))).Height(60));
+
+    private static Element Wrapped(Element inner) => new ModifiedElement(inner, new ElementModifiers { Margin = new Thickness(1) });
 }
 
 internal sealed record MaybeKeyed(string? Key, string Text);
