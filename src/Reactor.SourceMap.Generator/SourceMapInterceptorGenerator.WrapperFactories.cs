@@ -138,7 +138,9 @@ public sealed partial class SourceMapInterceptorGenerator
             // this set: MemberIsWrapperFree checks them separately because they often
             // coincide with Reactor's own factories.
             var names = new HashSet<string>(System.StringComparer.Ordinal);
-            foreach (var record in WrapperFactoryCalls.IncompleteWrappers(c)) names.Add(record.Name);
+            // Every wrapper record, not only the incomplete ones: a complete one still gets
+            // generated members (GeneratedMemberMayWin).
+            foreach (var record in WrapperFactoryCalls.SourceWrapperRecords(c)) names.Add(record.Name);
             if (names.Count == 0) return ImmutableHashSet<string>.Empty;
 
             var declarations = c.SyntaxTrees
@@ -484,7 +486,8 @@ public sealed partial class SourceMapInterceptorGenerator
         if (depth > MaxDependencyDepth) return (true, true);
         if (HasWrapperTypeArgument(model, node, ct)
             || (node is InvocationExpressionSyntax competing && WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(model, competing, ct))
-            || (node is InvocationExpressionSyntax constrained && IsWrapperConstrainedCall(model, constrained, ct)))
+            || (node is InvocationExpressionSyntax constrained && IsWrapperConstrainedCall(model, constrained, ct))
+            || (node is InvocationExpressionSyntax onRecord && WrapperFactoryCalls.GeneratedMemberMayWin(model, onRecord, ct)))
         {
             memo[node] = true;
             return (true, false);
@@ -748,9 +751,20 @@ public sealed partial class SourceMapInterceptorGenerator
 
         // The delegate it converts to: `From(Make)` into `Func<FooElement, object>` asks which
         // `Make` takes a FooElement, and `Make(Element)` starts to once the record is complete.
-        return isMethodGroup
-            && model.GetTypeInfo(expression, ct).ConvertedType is { } converted
-            && MentionsIncompleteWrapper(converted, compilation);
+        if (!isMethodGroup) return false;
+        if (model.GetTypeInfo(expression, ct).ConvertedType is { } converted && MentionsIncompleteWrapper(converted, compilation)) return true;
+
+        // `Use(Make<IComparer<Element>>)`: which of Make's methods the group converts with can
+        // depend on a constraint that mentions a record.
+        var name = expression switch
+        {
+            SimpleNameSyntax simple => simple.Identifier.ValueText,
+            MemberAccessExpressionSyntax access => access.Name.Identifier.ValueText,
+            _ => null,
+        };
+        return name is not null
+            && WrapperConstrainedMethodNames(compilation).Contains(name)
+            && WrapperFactoryCalls.NameReachesWrapperConstraint(model, expression, ct);
     }
 
     /// <summary>
@@ -1000,6 +1014,7 @@ public sealed partial class SourceMapInterceptorGenerator
                 if (HasWrapperTypeArgument(_model, expression, _ct)) return false;
                 if (expression is InvocationExpressionSyntax competing && WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(_model, competing, _ct)) return false;
                 if (expression is InvocationExpressionSyntax constrained && IsWrapperConstrainedCall(_model, constrained, _ct)) return false;
+                if (expression is InvocationExpressionSyntax onRecord && WrapperFactoryCalls.GeneratedMemberMayWin(_model, onRecord, _ct)) return false;
                 // The name half of `x.Name` is judged together with its member access.
                 if (expression.Parent is MemberAccessExpressionSyntax member && member.Name == expression) continue;
                 if (HasErrorType(_model, expression, _ct)) return false;

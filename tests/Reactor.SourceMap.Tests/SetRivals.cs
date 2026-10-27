@@ -4,4 +4,6 @@
 public static class SetRivalExtensions
 {
     public static string Set(this object value, global::System.Action<FakeGauge> configure) => "rival";
+
+    public static string Set(this object value, global::System.Action<FakeDial> configure) => "rival";
 }

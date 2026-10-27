@@ -325,18 +325,54 @@ internal static class WrapperFactoryCalls
     }
 
     /// <summary>
+    /// True when <paramref name="invocation"/> is <c>x.Name(...)</c> (or <c>x?.Name(...)</c>) on
+    /// a value of a source wrapper record — complete or not — where the wrapper generator may
+    /// add an invocable instance member <c>Name</c> (<see cref="MayGainInvocableMember"/>) that
+    /// beats what binds here: <c>dial.Set(...)</c> resolving to a visible extension.
+    /// </summary>
+    internal static bool GeneratedMemberMayWin(SemanticModel model, InvocationExpressionSyntax invocation, CancellationToken ct)
+    {
+        var (receiver, name) = invocation.Expression switch
+        {
+            MemberAccessExpressionSyntax member => (member.Expression, member.Name.Identifier.ValueText),
+            MemberBindingExpressionSyntax binding when invocation.Parent is ConditionalAccessExpressionSyntax conditional
+                => (conditional.Expression, binding.Name.Identifier.ValueText),
+            _ => (null, null),
+        };
+        if (receiver is null || name is null) return false;
+        if (!string.Equals(name, "Set", StringComparison.Ordinal) && !name.StartsWith("On", StringComparison.Ordinal)) return false;
+        if (model.GetTypeInfo(receiver, ct).Type is not INamedTypeSymbol record
+            || !SourceWrapperRecords(model.Compilation).Contains(record.OriginalDefinition)
+            || !MayGainInvocableMember(record, name))
+        {
+            return false;
+        }
+        // Already the record's own member (the generated file fed back in): nothing hidden.
+        return model.GetSymbolInfo(invocation, ct).Symbol is not { } bound
+               || !SymbolEqualityComparer.Default.Equals(bound.ContainingType?.OriginalDefinition, record.OriginalDefinition);
+    }
+
+    /// <summary>
     /// True when a method <paramref name="invocation"/>'s name can reach has a type-parameter
     /// constraint that mentions a wrapper record: whether a type argument satisfies it
     /// (<c>where T : IComparer&lt;FooElement&gt;</c> with <c>T = IComparer&lt;Element&gt;</c>) can change
     /// once the record is an Element, and with it the candidates and the result.
     /// </summary>
     internal static bool GroupHasWrapperConstraint(SemanticModel model, InvocationExpressionSyntax invocation, CancellationToken ct)
+        => NameReachesWrapperConstraint(model, invocation.Expression, ct);
+
+    /// <summary>
+    /// <see cref="GroupHasWrapperConstraint"/> for a method name that may also be a method
+    /// GROUP (<c>Use(Make&lt;IComparer&lt;Element&gt;&gt;)</c>): which of its methods the group
+    /// converts with depends on the same constraints.
+    /// </summary>
+    internal static bool NameReachesWrapperConstraint(SemanticModel model, ExpressionSyntax name, CancellationToken ct)
     {
         // Looked up by name: the member group the compiler reports has already dropped the
         // candidates whose constraints fail here, which are exactly the ones that matter.
-        var position = invocation.SpanStart;
-        IEnumerable<ISymbol> candidates = model.GetMemberGroup(invocation.Expression, ct);
-        switch (invocation.Expression)
+        var position = name.SpanStart;
+        IEnumerable<ISymbol> candidates = model.GetMemberGroup(name, ct);
+        switch (name)
         {
             case SimpleNameSyntax simple:
                 candidates = candidates.Concat(model.LookupSymbols(position, name: simple.Identifier.ValueText));
@@ -346,9 +382,8 @@ internal static class WrapperFactoryCalls
                 candidates = candidates.Concat(model.LookupSymbols(position, qualifier, member.Name.Identifier.ValueText, includeReducedExtensionMethods: true));
                 break;
         }
-        foreach (var symbol in candidates)
+        foreach (var method in candidates.OfType<IMethodSymbol>())
         {
-            if (symbol is not IMethodSymbol method) continue;
             var definition = (method.ReducedFrom ?? method).OriginalDefinition;
             foreach (var typeParameter in definition.TypeParameters)
             {
@@ -411,8 +446,23 @@ internal static class WrapperFactoryCalls
     internal static ImmutableHashSet<INamedTypeSymbol> IncompleteWrappers(Compilation compilation)
         => s_incompleteWrappers.GetValue(compilation, static c =>
         {
+            if (c.GetTypeByMetadataName("Microsoft.UI.Reactor.Core.Element") is not { } element) return ImmutableHashSet<INamedTypeSymbol>.Empty;
+            return SourceWrapperRecords(c)
+                .Where(type => !ReactorSourceTransparency.ReturnsElement(type, element))
+                .ToImmutableHashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        });
+
+    private static readonly ConditionalWeakTable<Compilation, ImmutableHashSet<INamedTypeSymbol>> s_sourceWrappers = new();
+
+    /// <summary>
+    /// Every <c>[GenerateReactorWrapper]</c> record declared in this compilation, whether or
+    /// not it spells its own <c>: Element</c> base: all of them get generated members this
+    /// compilation cannot see.
+    /// </summary>
+    internal static ImmutableHashSet<INamedTypeSymbol> SourceWrapperRecords(Compilation compilation)
+        => s_sourceWrappers.GetValue(compilation, static c =>
+        {
             var builder = ImmutableHashSet.CreateBuilder<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-            if (c.GetTypeByMetadataName("Microsoft.UI.Reactor.Core.Element") is not { } element) return builder.ToImmutable();
 
             // Syntax first: only a namespace-level record declaration carrying attributes can be
             // one, so only those are bound (the attribute itself is matched semantically, so an
@@ -425,8 +475,7 @@ internal static class WrapperFactoryCalls
                     if (record.AttributeLists.Count == 0) continue;
                     if (c.GetSemanticModel(tree).GetDeclaredSymbol(record) is not { } type) continue;
                     if (type.TypeKind != TypeKind.Error
-                        && type.GetAttributes().Any(static a => a.AttributeClass?.ToDisplayString() == WrapperAttributeMetadataName)
-                        && !ReactorSourceTransparency.ReturnsElement(type, element))
+                        && type.GetAttributes().Any(static a => a.AttributeClass?.ToDisplayString() == WrapperAttributeMetadataName))
                     {
                         builder.Add(type);
                     }
@@ -506,6 +555,12 @@ internal static class WrapperFactoryCalls
         TaintWalk walk)
     {
         if (WrapperFactoryCalls.IsIncompleteWrapperElement(named, compilation)) return true;
+        // `Dictionary<int, FooElement>.ValueCollection`: the containing types' arguments are
+        // not in TypeArguments.
+        for (var outer = named.ContainingType; outer is not null; outer = outer.ContainingType)
+        {
+            if (outer.TypeArguments.Any(a => IsTainted(a, compilation, cache, walk))) return true;
+        }
         foreach (var argument in named.TypeArguments)
         {
             if (IsTainted(argument, compilation, cache, walk)) return true;

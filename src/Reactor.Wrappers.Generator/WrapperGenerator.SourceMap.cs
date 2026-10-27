@@ -175,7 +175,9 @@ public sealed partial class WrapperGenerator
             if (info.ConvertedType is { } converted && WrapperFactoryCalls.MentionsIncompleteWrapper(converted, compilation)) return false;
 
             if (expression is InvocationExpressionSyntax call
-                && (WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(model, call, ct) || WrapperFactoryCalls.GroupHasWrapperConstraint(model, call, ct)))
+                && (WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(model, call, ct)
+                    || WrapperFactoryCalls.GroupHasWrapperConstraint(model, call, ct)
+                    || WrapperFactoryCalls.GeneratedMemberMayWin(model, call, ct)))
             {
                 return false;
             }
@@ -191,6 +193,11 @@ public sealed partial class WrapperGenerator
                         when parameter.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax(ct) is not ParameterSyntax { Type: not null }:
                     case IRangeVariableSymbol:
                         return false;
+                    // A method group whose constraints mention a record converts differently once
+                    // the record is complete (`Read(Kids<IComparer<Element>>)`).
+                    case IMethodSymbol when expression is SimpleNameSyntax or MemberAccessExpressionSyntax
+                                            && expression.Parent is not InvocationExpressionSyntax
+                                            && WrapperFactoryCalls.NameReachesWrapperConstraint(model, expression, ct):
                     case IMethodSymbol method
                         when WrapperFactoryCalls.MentionsIncompleteWrapper(method.ReturnType, compilation)
                              || method.Parameters.Any(p => WrapperFactoryCalls.MentionsIncompleteWrapper(p.Type, compilation))

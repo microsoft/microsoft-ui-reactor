@@ -185,6 +185,23 @@ public sealed class WrapperFactoryInterceptionTests : IDisposable
         Assert.Empty(panel.Children);
     }
 
+    internal static Element[] KidsFrom<T>(string value) where T : global::System.Collections.Generic.IComparer<FakeGaugeElement> => [];
+
+    internal static string KidsFrom<T>(object value) => "one";
+
+    internal static TResult ReadKids<TResult>(global::System.Func<string, TResult> read) => read("x");
+
+    [Fact]
+    public void WrapperFactoryArgumentFromARecordConstrainedMethodGroup_IsNotStamped()
+    {
+        // ReadKids infers a string here (KidsFrom<T>(object)) and an Element[] once the
+        // constraint holds (KidsFrom<T>(string)), handing FakePanel an empty array in normal form.
+        var panel = FakePanel(ReadKids(KidsFrom<global::System.Collections.Generic.IComparer<Element>>)); var line = Line();
+
+        AssertStampedAt(panel, line, "FakePanel(");
+        Assert.Empty(panel.Children);
+    }
+
     [Fact]
     public void WrapperRecordThatSpellsItsOwnBase_IsStampedAndSoIsItsContainer()
     {

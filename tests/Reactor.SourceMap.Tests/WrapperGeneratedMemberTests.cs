@@ -4,6 +4,7 @@ using Microsoft.UI.Reactor.SourceMap.Tests.SetRivals;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.SourceMap.Tests.FakeGaugeElement;
+using static Microsoft.UI.Reactor.SourceMap.Tests.FakeDialElement;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.SourceMap.Tests;
@@ -37,5 +38,22 @@ public sealed class WrapperGeneratedMemberTests : IDisposable
 
         Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)paired).Orientation);
         Assert.Null(paired.CallSite);
+    }
+
+    [Fact]
+    public void SameOnAWrapperThatSpellsItsOwnBase_IsNotTrustedEither()
+    {
+        // FakeDialElement is complete here, but its generated Set(Action<FakeDial>) is still
+        // invisible: dial.Set(...) is the rival's string here and the record there — beside
+        // an incomplete gauge (re-bound) and on its own (bound as is).
+        FakeGaugeElement gauge = FakeGauge();
+        FakeDialElement dial = FakeDial();
+        var rebound = PairUp(gauge, dial.Set(_ => { }));
+        var bound = PairUp(dial, dial.Set(_ => { }));
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)rebound).Orientation);
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)bound).Orientation);
+        Assert.Null(rebound.CallSite);
+        Assert.Null(bound.CallSite);
     }
 }

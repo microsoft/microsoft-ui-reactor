@@ -365,6 +365,44 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         Assert.Null(picked.CallSite);
     }
 
+    internal static Element MakeBy<T>(string value) where T : global::System.Collections.Generic.IComparer<FakeGaugeElement> => TextBlock(value);
+
+    internal static string MakeBy<T>(object value) => "object";
+
+    internal static TResult ApplyTo<TResult>(global::System.Func<string, TResult> make) => make("text");
+
+    [Fact]
+    public void MethodGroupConstrainedByTheRecord_IsNotTrusted()
+    {
+        // ApplyTo infers TResult from the group's best method for a string: MakeBy<T>(object),
+        // a string, here, where the constraint fails; MakeBy<T>(string), an Element, once the
+        // record is complete — so Display(Element) runs.
+        var shown = Display(ApplyTo(MakeBy<global::System.Collections.Generic.IComparer<Element>>));
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)shown).Orientation);
+        Assert.Null(shown.CallSite);
+    }
+
+    [ReactorSourceTransparent]
+    internal static Element ShowAll(Element first, object rest) => VStack(first);
+
+    [ReactorSourceTransparent]
+    internal static Element ShowAll(Element first, global::System.Collections.Generic.IEnumerable<Element> rest) => HStack(first);
+
+    [Fact]
+    public void NestedTypeOfARecordClosedGeneric_IsNotTrusted()
+    {
+        // ValueCollection names the record only through its containing type's arguments; it is
+        // an IEnumerable<Element> by covariance once the record is an Element.
+        FakeGaugeElement gauge = FakeGauge();
+        global::System.Collections.Generic.Dictionary<int, FakeGaugeElement>.ValueCollection values =
+            new global::System.Collections.Generic.Dictionary<int, FakeGaugeElement> { [1] = gauge }.Values;
+        var shown = ShowAll(gauge, values);
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)shown).Orientation);
+        Assert.Null(shown.CallSite);
+    }
+
     [ReactorSourceTransparent]
     internal static Element PresentMaybe(object? value) => VStack();
 
