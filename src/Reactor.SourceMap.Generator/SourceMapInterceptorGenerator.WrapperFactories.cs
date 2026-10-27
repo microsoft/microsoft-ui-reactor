@@ -469,6 +469,11 @@ public sealed partial class SourceMapInterceptorGenerator
         if (memo.TryGetValue(node, out var known)) return (known, false);
         if (IsNameof(node)) return (false, false);
         if (depth > MaxDependencyDepth) return (true, true);
+        if (HasWrapperTypeArgument(model, node, ct))
+        {
+            memo[node] = true;
+            return (true, false);
+        }
 
         var incomplete = false;
         if (node is ExpressionSyntax expression
@@ -651,6 +656,23 @@ public sealed partial class SourceMapInterceptorGenerator
     }
 
     /// <summary>
+    /// <c>Choose&lt;FooElement&gt;(0)</c>: an explicit type argument naming a wrapper record
+    /// decides which candidates satisfy their constraints (<c>where T : Element</c> fails here
+    /// and holds once the record is complete), so the call's result type can change even
+    /// though no value in it does. Type syntax (<c>new List&lt;FooElement&gt;()</c>) is left
+    /// to the value's own type.
+    /// </summary>
+    private static bool HasWrapperTypeArgument(SemanticModel model, SyntaxNode node, System.Threading.CancellationToken ct)
+    {
+        if (node is not GenericNameSyntax generic || SyntaxFacts.IsInTypeOnlyContext(generic)) return false;
+        foreach (var argument in generic.TypeArgumentList.Arguments)
+        {
+            if (model.GetTypeInfo(argument, ct).Type is { } type && MentionsIncompleteWrapper(type, model.Compilation)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// <c>nameof(...)</c>: a compile-time string whose operand is never evaluated, and whose
     /// <c>nameof</c> identifier Roslyn reports as error-typed. Never a dependency.
     /// </summary>
@@ -688,7 +710,8 @@ public sealed partial class SourceMapInterceptorGenerator
     /// the record itself; a constructed type with a tainted type argument; an array of one; a
     /// delegate whose signature is tainted (<c>delegate FooElement Make()</c>); or a source type
     /// whose base chain or interfaces are (<c>class Screen : Component&lt;FooElement&gt;</c>,
-    /// whose inherited <c>Props</c> is a record). Cached per compilation.
+    /// whose inherited <c>Props</c> is a record); or a type parameter constrained to one.
+    /// Cached per compilation.
     /// </summary>
     private static bool MentionsIncompleteWrapper(ITypeSymbol type, Compilation compilation)
     {
@@ -715,6 +738,8 @@ public sealed partial class SourceMapInterceptorGenerator
             {
                 IArrayTypeSymbol array => IsTainted(array.ElementType, compilation, cache, inProgress),
                 IPointerTypeSymbol pointer => IsTainted(pointer.PointedAtType, compilation, cache, inProgress),
+                // `where T : FooElement`: a T is the record, and binds like one once it is complete.
+                ITypeParameterSymbol typeParameter => typeParameter.ConstraintTypes.Any(c => IsTainted(c, compilation, cache, inProgress)),
                 INamedTypeSymbol named => IsTaintedNamed(named, compilation, cache, inProgress),
                 _ => false,
             };
@@ -891,6 +916,7 @@ public sealed partial class SourceMapInterceptorGenerator
             foreach (var node in root.DescendantNodesAndSelf(n => !_replaced.Contains(n) && !IsNameof(n)))
             {
                 if (_replaced.Contains(node) || _accounted.Contains(node) || node is not ExpressionSyntax expression) continue;
+                if (HasWrapperTypeArgument(_model, expression, _ct)) return false;
                 // The name half of `x.Name` is judged together with its member access.
                 if (expression.Parent is MemberAccessExpressionSyntax member && member.Name == expression) continue;
                 if (HasErrorType(_model, expression, _ct)) return false;
@@ -940,16 +966,19 @@ public sealed partial class SourceMapInterceptorGenerator
                     return true;
                 case SimpleNameSyntax:
                 case MemberAccessExpressionSyntax:
+                    // `Load(gauge).Child`: which member `Child` is depends on the receiver's type.
+                    if (expression is MemberAccessExpressionSyntax { Expression: var owner } && !ReceiverTypeIsFixed(owner)) return false;
                     return _model.GetSymbolInfo(expression, _ct).Symbol switch
                     {
                         ILocalSymbol l => SymbolEqualityComparer.Default.Equals(l.Type, record) && LocalIsCertainlyRecord(l, record),
                         IFieldSymbol f => SymbolEqualityComparer.Default.Equals(f.Type, record),
                         IPropertySymbol p => SymbolEqualityComparer.Default.Equals(p.Type, record),
-                        IParameterSymbol p => SymbolEqualityComparer.Default.Equals(p.Type, record),
+                        IParameterSymbol p => SymbolEqualityComparer.Default.Equals(p.Type, record) && !IsImplicitlyTypedLambdaParameter(p),
                         _ => false,
                     };
                 case InvocationExpressionSyntax call:
                 {
+                    if (call.Expression is MemberAccessExpressionSyntax { Expression: var callee } && !ReceiverTypeIsFixed(callee)) return false;
                     var receiverRecord = call.Expression is MemberAccessExpressionSyntax m
                         && ValueType(m.Expression) is INamedTypeSymbol r
                         && WrapperFactoryCalls.IsIncompleteWrapperElement(r, _model.Compilation) ? r : null;
@@ -960,6 +989,55 @@ public sealed partial class SourceMapInterceptorGenerator
                     return false;
             }
         }
+
+        /// <summary>
+        /// True when <paramref name="receiver"/> has the same type in the real compilation, so
+        /// the member looked up on it is the same member: a type or namespace name,
+        /// <c>this</c>/<c>base</c>, a field, property, explicitly typed parameter or local
+        /// (through a chain of such), a value that is certainly a record, or anything that
+        /// does not depend on the records at all.
+        /// </summary>
+        private bool ReceiverTypeIsFixed(ExpressionSyntax receiver)
+        {
+            switch (receiver)
+            {
+                case ThisExpressionSyntax:
+                case BaseExpressionSyntax:
+                    return true;
+                case ParenthesizedExpressionSyntax p:
+                    return ReceiverTypeIsFixed(p.Expression);
+                case SimpleNameSyntax:
+                case MemberAccessExpressionSyntax:
+                {
+                    var declared = _model.GetSymbolInfo(receiver, _ct).Symbol switch
+                    {
+                        INamespaceOrTypeSymbol => true,
+                        IFieldSymbol or IPropertySymbol => true,
+                        IParameterSymbol p => !IsImplicitlyTypedLambdaParameter(p),
+                        ILocalSymbol => receiver is not IdentifierNameSyntax name || ImplicitlyTypedDeclaration(_model, name, _ct) is null,
+                        _ => false,
+                    };
+                    if (declared) return receiver is not MemberAccessExpressionSyntax m || ReceiverTypeIsFixed(m.Expression);
+                    break;
+                }
+            }
+            if (ValueType(receiver) is INamedTypeSymbol record
+                && WrapperFactoryCalls.IsIncompleteWrapperElement(record, _model.Compilation)
+                && CertainlyRecord(receiver, record))
+            {
+                return true;
+            }
+            return !DependsOnWrappers(_model, receiver, _ct, _depth + 1, visiting: null);
+        }
+
+        /// <summary>
+        /// <c>item =&gt; …</c>: the parameter's type is inferred from the call the lambda is
+        /// passed to, which can resolve differently once the records are complete.
+        /// </summary>
+        private bool IsImplicitlyTypedLambdaParameter(IParameterSymbol parameter)
+            => parameter.ContainingSymbol is IMethodSymbol { MethodKind: MethodKind.AnonymousFunction }
+               && (parameter.DeclaringSyntaxReferences.Length != 1
+                   || parameter.DeclaringSyntaxReferences[0].GetSyntax(_ct) is ParameterSyntax { Type: null });
 
         /// <summary>
         /// The wrapper record whose value flows unchanged to the root (an inferred local's
@@ -993,23 +1071,34 @@ public sealed partial class SourceMapInterceptorGenerator
             SyntaxNode child = original;
             for (var node = original.Parent; node is not null; child = node, node = node.Parent)
             {
-                if (node == _root)
-                {
-                    RootRecord = record;
-                    return;
-                }
-                _accounted.Add(node);
+                // The root's own step is judged like any other: `var boxed = (object)Gauge()`
+                // is an object, not the record.
+                var atRoot = node == _root;
+                if (!atRoot) _accounted.Add(node);
                 switch (node)
                 {
                     case ParenthesizedExpressionSyntax:
                     case PostfixUnaryExpressionSyntax p when p.IsKind(SyntaxKind.SuppressNullableWarningExpression):
                     case ConditionalExpressionSyntax c when c.Condition != child:
                     case WithExpressionSyntax w when w.Expression == child:
+                        if (atRoot)
+                        {
+                            RootRecord = record;
+                            return;
+                        }
+                        continue;
                     case SimpleLambdaExpressionSyntax l when l.ExpressionBody == child:
                     case ParenthesizedLambdaExpressionSyntax pl when pl.ExpressionBody == child:
                     case CollectionExpressionSyntax:
                     case ExpressionElementSyntax:
                     case InitializerExpressionSyntax:
+                        // Built from the record, not the record: a root of that shape has a
+                        // type this walk does not reconstruct.
+                        if (atRoot)
+                        {
+                            Unreliable = true;
+                            return;
+                        }
                         continue;
                     case CastExpressionSyntax cast when cast.Expression == child:
                     case ArrayCreationExpressionSyntax:
@@ -1033,7 +1122,7 @@ public sealed partial class SourceMapInterceptorGenerator
                         Unreliable = true;
                         return;
                     case MemberAccessExpressionSyntax member
-                        when member.Expression == child && member.Parent is InvocationExpressionSyntax modifier && modifier.Expression == member:
+                        when !atRoot && member.Expression == child && member.Parent is InvocationExpressionSyntax modifier && modifier.Expression == member:
                         _accounted.Add(modifier);
                         switch (NestedCall(modifier, receiverPath: true, record))
                         {

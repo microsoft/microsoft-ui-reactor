@@ -402,6 +402,96 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         Assert.Null(many.CallSite);
     }
 
+    internal static string Choose3<T>(long value) => "plain";
+
+    internal static Element Choose3<T>(int value) where T : Element => TextBlock("element");
+
+    [Fact]
+    public void NestedCallWithAnExplicitWrapperTypeArgument_IsNotTrusted()
+    {
+        // Here `where T : Element` rules Choose3<T>(int) out, so the call is a string and
+        // Display(string) binds; once the record is an Element the exact int match wins and
+        // Display(Element) runs. Nothing in the call is a wrapper VALUE.
+        var shown = Display(Choose3<FakeGaugeElement>(0));
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)shown).Orientation);
+        Assert.Null(shown.CallSite);
+    }
+
+    [ReactorSourceTransparent]
+    internal static Element Pair2(Element first, object second) => VStack(first);
+
+    [ReactorSourceTransparent]
+    internal static Element Pair2(Element first, Element second) => HStack(first, second);
+
+    internal static Element PairWith<T>(T child) where T : FakeGaugeElement => Pair2(FakeGauge(), child);
+
+    [Fact]
+    public void ValueOfATypeParameterConstrainedToTheRecord_IsNotTrusted()
+    {
+        // `child` is a T bounded by the record: an object here, an Element in the real
+        // compilation, which picks Pair2(Element, Element).
+        var paired = PairWith(FakeGauge());
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)paired).Orientation);
+        Assert.Null(paired.CallSite);
+    }
+
+    internal sealed class GaugeHolder
+    {
+        public FakeGaugeElement Child { get; } = FakeGauge();
+    }
+
+    internal sealed class TextHolder
+    {
+        public string Child => "text";
+    }
+
+    internal static GaugeHolder LoadHolder(object value) => new();
+
+    internal static TextHolder LoadHolder(Element value) => new();
+
+    [Fact]
+    public void MemberOfAReceiverThatDependsOnTheRecord_IsNotReplacedWhole()
+    {
+        // Here LoadHolder(gauge) can only bind LoadHolder(object), whose Child is the record;
+        // in the real compilation LoadHolder(Element) wins and Child is a string.
+        FakeGaugeElement gauge = FakeGauge();
+        var shown = Display(LoadHolder(gauge).Child);
+
+        Assert.Equal(WinUI.Orientation.Vertical, ((StackElement)shown).Orientation);
+        Assert.Null(shown.CallSite);
+    }
+
+    internal static FakeGaugeElement[] Children(object value) => [FakeGauge()];
+
+    internal static string[] Children(Element value) => ["text"];
+
+    [Fact]
+    public void ImplicitLambdaParameterThatIsTheRecordOnlyHere_IsNotTrusted()
+    {
+        // `item` is the record here (Children(object) is all that binds) and a string in the
+        // real compilation, where Children(Element) wins.
+        FakeGaugeElement gauge = FakeGauge();
+        var shown = Children(gauge).Select(item => Display(item)).ToArray();
+
+        Assert.Equal(WinUI.Orientation.Vertical, ((StackElement)shown[0]).Orientation);
+        Assert.Null(shown[0].CallSite);
+    }
+
+    [Fact]
+    public void VarLocalOfAWrapperCastToObject_IsAnObject()
+    {
+        // The cast fixes the local's type: Present(object) in both compilations, so the call
+        // is re-bound to it and stamped.
+        var boxed = (object)FakeGauge();
+        var line = Line(); var shown = Present(boxed);
+
+        Assert.Equal(WinUI.Orientation.Vertical, ((StackElement)shown).Orientation);
+        Assert.NotNull(shown.CallSite);
+        Assert.Equal(line, shown.CallSite!.Value.LineNumber);
+    }
+
     [Fact]
     public void CompetingUsingStaticOverload_WinsOverFactories()
     {
