@@ -132,6 +132,12 @@ public sealed class SourceMapWrapperFastPathTests
             OutputKind.DynamicallyLinkedLibrary
         },
         {
+            "positional-record property",
+            "using Microsoft.UI.Reactor.Core;\nnamespace App {\n public static class Screen { public static Element R(ViewModel model) => Helpers.Show(model.Child); }\n}\n",
+            "public record ViewModel(GaugeElement Child, int Index);",
+            OutputKind.DynamicallyLinkedLibrary
+        },
+        {
             "delegate returning the record",
             "using Microsoft.UI.Reactor.Core;\nnamespace App {\n public static class Use { public static Element R() => Helpers.Show(Cache.Make()); }\n}\n",
             "public delegate GaugeElement ChildFactory(); public static class Cache { public static ChildFactory Make = () => null!; }",
