@@ -56,7 +56,10 @@ internal static class ChildReconciler
 
         if (hasKeys)
             ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
-        else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length))
+        // The slot walk also steps past controls an earlier pass left playing an exit
+        // transition; the index walk would pair every later child with the wrong control.
+        else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length)
+            || reconciler.HasExitingControls)
             ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
         else
             ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
@@ -87,8 +90,20 @@ internal static class ChildReconciler
         // collection holds for a child just handled — including an old control an exit
         // transition left in place (removal) or re-inserted after its replacement.
         int live = 0;
+        // The old child's index in the collection as it was when `dirty` was resolved: the
+        // old children plus any control an earlier pass left exiting.
+        int resolved = 0;
+        bool skipExiting = reconciler.HasExitingControls;
         while (oi < oldChildren.Length || ni < newChildren.Length)
         {
+            if (skipExiting && oi < oldChildren.Length)
+            {
+                while (live < children.Count && reconciler.IsExiting(children.Get(live)))
+                {
+                    live++;
+                    resolved++;
+                }
+            }
             int oldSlot = oi < oldChildren.Length ? ChildSlots.At(oldSlots, oi) : int.MaxValue;
             int newSlot = ni < newChildren.Length ? ChildSlots.At(newSlots, ni) : int.MaxValue;
             int before = children.Count;
@@ -101,21 +116,25 @@ internal static class ChildReconciler
                     live += 1 + (children.Count - before);
                 }
                 oi++;
+                resolved++;
             }
             else if (oldSlot == newSlot && live < before)
             {
-                // `dirty` was resolved against the collection before this pass changed it,
-                // when the old child's index was oi.
-                UpdateChildAt(oldChildren[oi], newChildren[ni], oi, live, children, reconciler, requestRerender, dirty);
+                UpdateChildAt(oldChildren[oi], newChildren[ni], resolved, live, children, reconciler, requestRerender, dirty);
                 live += 1 + (children.Count - before);
                 oi++;
+                resolved++;
                 ni++;
             }
             else
             {
                 // New slot — or a kept slot whose control the collection no longer holds
                 // (the positional walk stops there too), which mounts afresh.
-                if (oldSlot == newSlot) oi++;
+                if (oldSlot == newSlot)
+                {
+                    oi++;
+                    resolved++;
+                }
                 var newEl = newChildren[ni];
                 var ctrl = reconciler.Mount(newEl, requestRerender);
                 if (ctrl is not null)

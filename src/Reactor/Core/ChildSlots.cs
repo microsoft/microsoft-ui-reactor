@@ -16,9 +16,10 @@ namespace Microsoft.UI.Reactor.Core;
 /// <c>(argumentIndex &lt;&lt; 16) | (indexInGroup + 1)</c> for a child flattened out of
 /// a <see cref="GroupElement"/>; ids increase with position. An array with no slot
 /// map registered uses <c>index &lt;&lt; 16</c>. Only the factories' slow path (an
-/// argument was null, empty or a group, so it already allocates) registers a map,
-/// keyed weakly by the array it returns; the lookup is skipped entirely until a map
-/// has ever been registered.
+/// argument was null, empty or a group, so it already allocates) registers a map, and
+/// only when it differs from those implicit ids (a dropped trailing argument does not);
+/// it is keyed weakly by the array it returns, and the lookup is skipped entirely until
+/// a map has ever been registered.
 /// </remarks>
 internal static class ChildSlots
 {
@@ -45,6 +46,16 @@ internal static class ChildSlots
         s_any && s_slots.TryGetValue(children, out var slots) ? slots : null;
 
     internal static int At(int[]? slots, int index) => slots is null ? index << 16 : slots[index];
+
+    /// <summary>Whether every id names a direct argument (none came out of a group).</summary>
+    internal static bool AllArguments(int[] slots)
+    {
+        for (int i = 0; i < slots.Length; i++)
+        {
+            if ((slots[i] & 0xFFFF) != 0) return false;
+        }
+        return true;
+    }
 
     /// <summary>
     /// Whether matching two child arrays by index pairs the same children as matching

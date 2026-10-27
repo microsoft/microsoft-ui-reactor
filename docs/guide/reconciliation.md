@@ -278,7 +278,10 @@ internal static void Reconcile(
 
     if (hasKeys)
         ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
-    else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length))
+    // The slot walk also steps past controls an earlier pass left playing an exit
+    // transition; the index walk would pair every later child with the wrong control.
+    else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length)
+        || reconciler.HasExitingControls)
         ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
     else
         ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
@@ -309,7 +312,10 @@ at its index. So in
 keeps its state when `Details` closes, as a React sibling of a `null`
 child does. Containers with no conditional arguments never take this
 path. Like React, a child whose argument slot changes is a different
-child: `a ? X() : Empty(), a ? Empty() : X()` remounts `X`.
+child: `a ? X() : Empty(), a ? Empty() : X()` remounts `X`. This
+applies to unkeyed containers only: once any child carries a key, the
+keyed algorithm below matches the unkeyed children positionally, so key
+the siblings of a conditional child there.
 
 **Keyed.** Any child carries a key → run a four-phase algorithm:
 
@@ -535,7 +541,10 @@ internal static void Reconcile(
 
     if (hasKeys)
         ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
-    else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length))
+    // The slot walk also steps past controls an earlier pass left playing an exit
+    // transition; the index walk would pair every later child with the wrong control.
+    else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length)
+        || reconciler.HasExitingControls)
         ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
     else
         ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);

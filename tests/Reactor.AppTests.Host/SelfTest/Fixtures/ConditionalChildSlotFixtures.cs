@@ -271,6 +271,87 @@ internal static class ConditionalChildSlotFixtures
         }
     }
 
+    internal class RetoggleDuringExit(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (show, setShow) = ctx.UseState(true);
+                return VStack(
+                    Button("slot-toggle", () => setShow(!show)),
+                    show ? Border(TextBlock("r1:fade")).Transition(Animation.Transition.Fade) : Empty(),
+                    C("a"),
+                    show ? Border(TextBlock("r2:fade")).Transition(Animation.Transition.Fade) : Empty(),
+                    T("b"));
+            });
+            await Harness.Render();
+            await Bump(H, "a", 1);
+            await Bump(H, "b", 2);
+            var aLabel = Label(H, "a");
+            var bLabel = Label(H, "b");
+
+            // Hide, then show again while both hidden rows are still fading out: the
+            // collection then holds controls that belong to no old child, which the walk
+            // must step over to find each sibling's control.
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.Check("SlotRetoggle_KeepsSiblings", Text(H, "a") == "a:1" && Text(H, "b") == "b:2",
+                $"a={Text(H, "a")} b={Text(H, "b")}");
+            H.Check("SlotRetoggle_KeepsControls",
+                aLabel is not null && ReferenceEquals(aLabel, Label(H, "a"))
+                && bLabel is not null && ReferenceEquals(bLabel, Label(H, "b")));
+
+            await Harness.WaitFor(() => Order(H, "r1", "a", "r2", "b") == "r1,a,r2,b", maxPasses: 40, perPassMs: 50);
+            H.Check("SlotRetoggle_OrderAfterExits", Order(H, "r1", "a", "r2", "b") == "r1,a,r2,b",
+                Order(H, "r1", "a", "r2", "b"));
+            H.Check("SlotRetoggle_StillResponds", await BumpAndRead(H, "a") == "a:2");
+            host.Dispose();
+        }
+
+        private static async Task<string?> BumpAndRead(Harness h, string name)
+        {
+            await Bump(h, name, 1);
+            return Text(h, name);
+        }
+    }
+
+    internal class CallbackSkipArm(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (show, setShow) = ctx.UseState(true);
+                var (n, setN) = ctx.UseState(0);
+                // Every click toggles the conditional child before this Button, so each pass
+                // takes the slot walk with the Button at a live index other than its old one,
+                // and the Button's element differs only by its closure — the skip arm, which
+                // must refresh the closure on the Button's own control.
+                return VStack(
+                    show ? C("t") : Empty(),
+                    Button("slot-inc", () =>
+                    {
+                        setN(n + 1);
+                        setShow(!show);
+                    }),
+                    TextBlock($"n:{n}"));
+            });
+            await Harness.Render();
+            for (int i = 0; i < 3; i++)
+            {
+                H.ClickButton("slot-inc");
+                await Harness.Render();
+            }
+            H.Check("SlotSkipArm_ClosureRefreshed", Text(H, "n") == "n:3", $"n={Text(H, "n")}");
+            host.Dispose();
+        }
+    }
+
     internal class AnimateAmbient(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()

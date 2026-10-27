@@ -1309,23 +1309,26 @@ public sealed partial class Reconciler
 
     /// <summary>
     /// Unmounts the item view of a container WinUI has unlinked from its item
-    /// (<c>IndexFromContainer</c> is -1) when the container no longer shows a row the
-    /// list still holds. WinUI normally raises a recycle <c>ContainerContentChanging</c>
-    /// for such a container, but under rapid insert / remove churn it can park one
-    /// offscreen in the items panel without ever doing so, which left the row's
-    /// components mounted: effects never cleaned up and diagnostics writes were accepted
-    /// but never rendered. Only the components are torn down — the visuals stay, so a
-    /// delete transition still fades the row out — and the tag is cleared to record
-    /// that the content is dead.
+    /// (<c>IndexFromContainer</c> is -1) once that view's row is gone: removed from the list,
+    /// or shown by another container. WinUI normally raises a recycle
+    /// <c>ContainerContentChanging</c> for such a container, but under rapid insert / remove
+    /// churn it can park one offscreen in the items panel without ever doing so, which left the
+    /// row's components mounted: effects never cleaned up and diagnostics writes were accepted
+    /// but never rendered. Only the components are torn down — the visuals stay, so a delete
+    /// transition still fades the row out. A container unlinked for a row still in the list and
+    /// owned by no other container (a move WinUI relinks on its next layout pass) keeps its view.
     /// </summary>
     private void UnmountOrphanedContainer(WinUI.ListViewBase listViewBase, WinPrim.SelectorItem container, ContentControl cc)
     {
-        if (cc.Content is not UIElement view || GetElementTag(cc) is null) return;
-        // A row still in the list that WinUI is about to relink to this same container
-        // keeps its view.
-        if (container.Content is { } item && ReferenceEquals(listViewBase.ContainerFromItem(item), container)) return;
-        UnmountChild(view);
-        ClearElementTag(cc);
+        if (GetElementTag(cc) is null || container.Content is not ReactorRow row) return;
+        bool inList = GetListState(listViewBase) is { } state
+            && state.ByKey.TryGetValue(row.Key, out var current) && ReferenceEquals(current, row);
+        if (inList)
+        {
+            var owner = listViewBase.ContainerFromItem(row);
+            if (owner is null || ReferenceEquals(owner, container)) return;
+        }
+        UnmountItemView(cc, clearContent: false);
     }
 
     private readonly struct ItemsRepeaterKeyAdapter : IReadOnlyList<ItemsRepeaterKeyAdapter.KeyOnly>

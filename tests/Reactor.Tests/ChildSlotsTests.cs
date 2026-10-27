@@ -93,6 +93,36 @@ public class ChildSlotsTests
     }
 
     [Fact]
+    public void Factory_TrailingDrop_RegistersNoMap()
+    {
+        // The kept children keep their indices, which is what an array with no map means.
+        var stack = VStack(TextBlock("a"), TextBlock("b"), null);
+
+        Assert.Equal(2, stack.Children.Length);
+        Assert.Null(ChildSlots.Get(stack.Children));
+    }
+
+    [Fact]
+    public void Factory_NestedGroup_FallsBackToGroupPositions()
+    {
+        // The outer group's own map mixes an argument id (A) with ids flattened out of the
+        // inner group (B, C); reading only some of them as arguments would give A and B the
+        // same slot.
+        var stack = VStack(Group(null, TextBlock("A"), Group(TextBlock("B"), TextBlock("C"))));
+
+        Assert.Equal([G(0, 0), G(0, 1), G(0, 2)], ChildSlots.Get(stack.Children));
+    }
+
+    [Fact]
+    public void UniformGrid_CarriesSlotsToItsPositionedCells()
+    {
+        var grid = UniformGrid(Microsoft.UI.Xaml.Controls.Orientation.Horizontal, TextBlock("a"), Empty(), TextBlock("c"));
+
+        Assert.Equal(2, grid.Children.Length);
+        Assert.Equal([S(0), S(2)], ChildSlots.Get(grid.Children));
+    }
+
+    [Fact]
     public void Filter_HandBuiltArray_UsesRawIndices()
     {
         var a = TextBlock("a");

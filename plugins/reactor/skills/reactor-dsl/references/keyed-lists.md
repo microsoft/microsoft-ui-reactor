@@ -169,7 +169,10 @@ the prior render — your state can stay immutable.
 Don't. Either every child of a panel has `.WithKey`, or none do. Mixing
 defeats LIS matching for the unkeyed subset and degrades to positional
 reconciliation — surviving keyed children still hold their identity, but
-unkeyed siblings re-mount on any sibling insert.
+unkeyed siblings re-mount on any sibling insert, including a conditional
+`cond ? X : Empty()` sibling appearing. (In a panel with no keys at all, a
+conditional child holds its argument slot instead, so the siblings after it
+keep their state.)
 
 ## See also
 

@@ -3783,6 +3783,18 @@ public sealed partial class Reconciler : IDisposable
     /// Collects all controls first, then pools bottom-up so DetachFromParent
     /// removes children before parents clear their collections.
     /// </summary>
+    // Controls still in a child collection only while their exit transition plays (removal is
+    // deferred to its completion). ChildReconciler steps past them: they belong to no element of
+    // the old child list, so they would otherwise misalign it with the collection.
+    private HashSet<UIElement>? _exitingControls;
+
+    internal bool HasExitingControls => _exitingControls is { Count: > 0 };
+
+    internal bool IsExiting(UIElement control) => _exitingControls?.Contains(control) == true;
+
+    private void BeginExit(UIElement control) => (_exitingControls ??= new()).Add(control);
+
+    private void EndExit(UIElement control) => _exitingControls?.Remove(control);
     /// <summary>
     /// Removes a child from its collection with exit transition support.
     /// If the child has an ElementTransition with an exit side, the removal is deferred
@@ -3797,8 +3809,10 @@ public sealed partial class Reconciler : IDisposable
         if (transition?.GetExitTransition() is not null)
         {
             // Defer removal: play exit animation, then remove + pool on completion.
+            BeginExit(control);
             ApplyExitTransition(control, transition, () =>
             {
+                EndExit(control);
                 // Find current index — it may have shifted if earlier items were removed.
                 for (int i = 0; i < children.Count; i++)
                 {
@@ -3822,6 +3836,7 @@ public sealed partial class Reconciler : IDisposable
         if (ambient is { HasEffect: true }
             && TryApplyAmbientExit(control, ambient.Kind, onComplete: () =>
             {
+                EndExit(control);
                 for (int i = 0; i < children.Count; i++)
                 {
                     if (ReferenceEquals(children.Get(i), control))
@@ -3833,6 +3848,7 @@ public sealed partial class Reconciler : IDisposable
                 UnmountAndPool(control);
             }))
         {
+            BeginExit(control);
             return;
         }
 
@@ -3909,8 +3925,10 @@ public sealed partial class Reconciler : IDisposable
             // It will be positioned by layout but the animation (fade/slide) makes
             // it visually leave. We insert it right after the replacement.
             children.Insert(index + 1, oldControl);
+            BeginExit(oldControl);
             ApplyExitTransition(oldControl, transition, () =>
             {
+                EndExit(oldControl);
                 for (int i = 0; i < children.Count; i++)
                 {
                     if (ReferenceEquals(children.Get(i), oldControl))

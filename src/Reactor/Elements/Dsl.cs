@@ -808,6 +808,11 @@ public static partial class Factories
                 : filtered[i].Grid(row: i, column: 0);
         }
 
+        // Carry the cells' argument slots over to the positioned copy, so a conditional
+        // cell holds its slot like a child of any other container.
+        if (ChildSlots.Get(filtered) is { } slots)
+            ChildSlots.Set(positioned, slots);
+
         return isHorizontal
             ? Grid(sizes, oneStar, positioned)
             : Grid(oneStar, sizes, positioned);
@@ -2066,12 +2071,18 @@ public static partial class Factories
         // Slot ids for ChildSlots: the argument each kept child came from, so the
         // reconciler can match a conditional child's siblings across a toggle.
         int[]? slots = count > 0 && children.Length <= ChildSlots.MaxIndex ? new int[count] : null;
+        // A map equal to the implicit index ids (only a trailing argument was dropped) is not
+        // registered: it says nothing the reconciler doesn't assume.
+        bool identity = true;
         int idx = 0;
         for (int i = 0; i < children.Length; i++)
         {
             if (children[i] is GroupElement group)
             {
+                // The group's own map names the group argument each child came from — unless it
+                // flattened a nested group, whose ids mix in positions; then use positions.
                 var groupSlots = slots is null ? null : ChildSlots.Get(group.Children);
+                if (groupSlots is not null && !ChildSlots.AllArguments(groupSlots)) groupSlots = null;
                 for (int j = 0; j < group.Children.Length; j++)
                 {
                     var gc = group.Children[j];
@@ -2079,11 +2090,13 @@ public static partial class Factories
                     {
                         if (slots is not null)
                         {
-                            // The group's own map (its own dropped arguments) when it has
-                            // one at this depth; a deeper group falls back to position.
-                            int inner = groupSlots is { } gs && (gs[j] & 0xFFFF) == 0 ? gs[j] >> 16 : j;
+                            int inner = groupSlots is null ? j : groupSlots[j] >> 16;
                             if (inner > ChildSlots.MaxGroupIndex) slots = null;
-                            else slots[idx] = ChildSlots.ForGroupChild(i, inner);
+                            else
+                            {
+                                slots[idx] = ChildSlots.ForGroupChild(i, inner);
+                                identity = false;
+                            }
                         }
                         result[idx++] = gc;
                     }
@@ -2091,11 +2104,15 @@ public static partial class Factories
             }
             else if (children[i] is not null and not EmptyElement)
             {
-                if (slots is not null) slots[idx] = ChildSlots.ForIndex(i);
+                if (slots is not null)
+                {
+                    slots[idx] = ChildSlots.ForIndex(i);
+                    identity &= i == idx;
+                }
                 result[idx++] = children[i]!;
             }
         }
-        if (slots is not null) ChildSlots.Set(result, slots);
+        if (slots is not null && !identity) ChildSlots.Set(result, slots);
         return result;
     }
 }
