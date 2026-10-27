@@ -1,0 +1,357 @@
+using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Internal;
+using Microsoft.UI.Xaml.Controls;
+using static Microsoft.UI.Reactor.Factories;
+
+namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
+
+/// <summary>
+/// An unkeyed conditional child (<c>cond ? X : Empty()</c>, <c>cond ? X : null</c>, a
+/// <c>Group</c> that changes size) holds its slot among its siblings, as React's
+/// <c>null</c> does. The container factories drop the empty arguments, so before
+/// <see cref="ChildSlots"/> every later sibling shifted one index on a toggle and was
+/// compared with the child that used to sit there: a sibling of another type remounted
+/// (its state reset to the initial value) and a sibling of the same type inherited its
+/// neighbour's state.
+/// </summary>
+internal static class ConditionalChildSlotFixtures
+{
+    private sealed record CounterProps(string Name, int Start);
+
+    private sealed class Counter : Component<CounterProps>
+    {
+        public override Element Render()
+        {
+            var (n, set) = UseState(Props.Start);
+            return HStack(TextBlock($"{Props.Name}:{n}"), Button($"{Props.Name}+", () => set(n + 1)));
+        }
+    }
+
+    // A different component type, so the pre-fix shift paired it with a Counter and remounted.
+    private sealed class Tally : Component<CounterProps>
+    {
+        public override Element Render()
+        {
+            var (n, set) = UseState(Props.Start);
+            return HStack(TextBlock($"{Props.Name}:{n}"), Button($"{Props.Name}+", () => set(n + 1)));
+        }
+    }
+
+    private static Element C(string name, int start = 0) => Component<Counter, CounterProps>(new(name, start));
+    private static Element T(string name, int start = 0) => Component<Tally, CounterProps>(new(name, start));
+
+    private static string? Text(Harness h, string name) =>
+        h.FindControl<TextBlock>(t => t.Text.StartsWith(name + ":", StringComparison.Ordinal))?.Text;
+
+    private static TextBlock? Label(Harness h, string name) =>
+        h.FindControl<TextBlock>(t => t.Text.StartsWith(name + ":", StringComparison.Ordinal));
+
+    /// <summary>The counters' names in visual (panel) order.</summary>
+    private static string Order(Harness h, params string[] names) =>
+        string.Join(",", h.FindAllControls<TextBlock>(t => names.Any(n => t.Text.StartsWith(n + ":", StringComparison.Ordinal)))
+            .Select(t => t.Text[..t.Text.IndexOf(':')]));
+
+    private static async Task Bump(Harness h, string name, int times)
+    {
+        for (int i = 0; i < times; i++)
+        {
+            h.ClickButton(name + "+");
+            await Harness.Render();
+        }
+    }
+
+    internal class HideShowMiddle(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (show, setShow) = ctx.UseState(true);
+                return VStack(
+                    Button("slot-toggle", () => setShow(!show)),
+                    show ? C("t") : Empty(),
+                    T("a", 5),
+                    C("b", 100));
+            });
+            await Harness.Render();
+            await Bump(H, "a", 2);
+            await Bump(H, "b", 1);
+            var aLabel = Label(H, "a");
+            H.Check("SlotHideShow_Setup", Text(H, "a") == "a:7" && Text(H, "b") == "b:101");
+
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.Check("SlotHideShow_HideKeepsTypedSibling", Text(H, "a") == "a:7", $"a={Text(H, "a")}");
+            H.Check("SlotHideShow_HideKeepsLaterSibling", Text(H, "b") == "b:101", $"b={Text(H, "b")}");
+            H.Check("SlotHideShow_HideKeepsControl", aLabel is not null && ReferenceEquals(aLabel, Label(H, "a")));
+            H.Check("SlotHideShow_HideRemovesChild", Text(H, "t") is null && Order(H, "t", "a", "b") == "a,b",
+                Order(H, "t", "a", "b"));
+
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.Check("SlotHideShow_ShowKeepsSiblings", Text(H, "a") == "a:7" && Text(H, "b") == "b:101",
+                $"a={Text(H, "a")} b={Text(H, "b")}");
+            H.Check("SlotHideShow_ShowKeepsControl", aLabel is not null && ReferenceEquals(aLabel, Label(H, "a")));
+            H.Check("SlotHideShow_ShowInsertsInPlace", Order(H, "t", "a", "b") == "t,a,b", Order(H, "t", "a", "b"));
+            H.Check("SlotHideShow_ShownChildIsFresh", Text(H, "t") == "t:0");
+            host.Dispose();
+        }
+    }
+
+    internal class SameTypeSiblingKeepsOwnState(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (show, setShow) = ctx.UseState(true);
+                return VStack(
+                    Button("slot-toggle", () => setShow(!show)),
+                    show ? C("x") : Empty(),
+                    C("y"));
+            });
+            await Harness.Render();
+            await Bump(H, "y", 3);
+            await Bump(H, "x", 1);
+            H.Check("SlotSameType_Setup", Text(H, "x") == "x:1" && Text(H, "y") == "y:3");
+
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            // Pre-fix: y's props landed on x's instance, so y showed x's count (1).
+            H.Check("SlotSameType_HideKeepsOwnState", Text(H, "y") == "y:3", $"y={Text(H, "y")}");
+            H.Check("SlotSameType_HiddenGone", Text(H, "x") is null);
+
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.Check("SlotSameType_ShowKeepsOwnState", Text(H, "y") == "y:3" && Text(H, "x") == "x:0",
+                $"x={Text(H, "x")} y={Text(H, "y")}");
+            H.Check("SlotSameType_Order", Order(H, "x", "y") == "x,y", Order(H, "x", "y"));
+            host.Dispose();
+        }
+    }
+
+    internal class NullConditional(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (show, setShow) = ctx.UseState(true);
+                return HStack(
+                    Button("slot-toggle", () => setShow(!show)),
+                    show ? T("t") : null,
+                    C("a"));
+            });
+            await Harness.Render();
+            await Bump(H, "a", 4);
+
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.Check("SlotNull_HideKeepsSibling", Text(H, "a") == "a:4", $"a={Text(H, "a")}");
+
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.Check("SlotNull_ShowKeepsSibling", Text(H, "a") == "a:4" && Order(H, "t", "a") == "t,a",
+                $"a={Text(H, "a")} order={Order(H, "t", "a")}");
+            host.Dispose();
+        }
+    }
+
+    internal class EmptyElementEmpty(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (show, setShow) = ctx.UseState(false);
+                return VStack(
+                    Button("slot-toggle", () => setShow(!show)),
+                    C("h"),
+                    show ? T("t") : Empty(),
+                    C("a"),
+                    show ? T("u") : Empty(),
+                    C("b"));
+            });
+            await Harness.Render();
+            await Bump(H, "h", 1);
+            await Bump(H, "a", 2);
+            await Bump(H, "b", 3);
+            var bLabel = Label(H, "b");
+            const string names = "h,t,a,u,b";
+            string Ord() => Order(H, names.Split(','));
+
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.Check("SlotEEE_ShowKeepsAll", Text(H, "h") == "h:1" && Text(H, "a") == "a:2" && Text(H, "b") == "b:3",
+                $"h={Text(H, "h")} a={Text(H, "a")} b={Text(H, "b")}");
+            H.Check("SlotEEE_ShowOrder", Ord() == "h,t,a,u,b", Ord());
+
+            await Bump(H, "t", 1);
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.Check("SlotEEE_HideKeepsAll", Text(H, "h") == "h:1" && Text(H, "a") == "a:2" && Text(H, "b") == "b:3",
+                $"h={Text(H, "h")} a={Text(H, "a")} b={Text(H, "b")}");
+            H.Check("SlotEEE_HideOrder", Ord() == "h,a,b", Ord());
+            H.Check("SlotEEE_KeepsControl", bLabel is not null && ReferenceEquals(bLabel, Label(H, "b")));
+            host.Dispose();
+        }
+    }
+
+    internal class GroupResize(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (two, setTwo) = ctx.UseState(true);
+                return VStack(
+                    Button("slot-toggle", () => setTwo(!two)),
+                    two ? Group(C("g1"), T("g2")) : Group(C("g1")),
+                    T("z"));
+            });
+            await Harness.Render();
+            await Bump(H, "g1", 1);
+            await Bump(H, "z", 2);
+
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.Check("SlotGroup_ShrinkKeepsLaterSibling", Text(H, "z") == "z:2", $"z={Text(H, "z")}");
+            H.Check("SlotGroup_ShrinkKeepsGroupChild", Text(H, "g1") == "g1:1" && Text(H, "g2") is null);
+
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.Check("SlotGroup_GrowKeepsAll", Text(H, "z") == "z:2" && Text(H, "g1") == "g1:1" && Text(H, "g2") == "g2:0",
+                $"g1={Text(H, "g1")} z={Text(H, "z")}");
+            H.Check("SlotGroup_GrowOrder", Order(H, "g1", "g2", "z") == "g1,g2,z", Order(H, "g1", "g2", "z"));
+            host.Dispose();
+        }
+    }
+
+    internal class ExitTransition(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (show, setShow) = ctx.UseState(true);
+                return VStack(
+                    Button("slot-toggle", () => setShow(!show)),
+                    show ? Border(TextBlock("e1:fade")).Transition(Animation.Transition.Fade) : Empty(),
+                    C("a"),
+                    show ? Border(TextBlock("e2:fade")).Transition(Animation.Transition.Fade) : Empty(),
+                    T("b"));
+            });
+            await Harness.Render();
+            await Bump(H, "a", 1);
+            await Bump(H, "b", 2);
+            var aLabel = Label(H, "a");
+
+            // Both conditionals leave in one pass and linger for their exit fade; the walk
+            // must step over each lingering control to reach the sibling after it.
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.Check("SlotExit_SiblingsKeptDuringExit", Text(H, "a") == "a:1" && Text(H, "b") == "b:2",
+                $"a={Text(H, "a")} b={Text(H, "b")}");
+            H.Check("SlotExit_KeepsControl", aLabel is not null && ReferenceEquals(aLabel, Label(H, "a")));
+            var gone = await Harness.WaitFor(() => Text(H, "e1") is null && Text(H, "e2") is null, maxPasses: 40, perPassMs: 50);
+            H.Check("SlotExit_ExitsComplete", gone);
+            H.Check("SlotExit_OrderAfterExit", Order(H, "e1", "a", "e2", "b") == "a,b", Order(H, "e1", "a", "e2", "b"));
+
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.Check("SlotExit_ShowOrder", Order(H, "e1", "a", "e2", "b") == "e1,a,e2,b", Order(H, "e1", "a", "e2", "b"));
+            H.Check("SlotExit_ShowKeepsSiblings", Text(H, "a") == "a:1" && Text(H, "b") == "b:2");
+            host.Dispose();
+        }
+    }
+
+    internal class AnimateAmbient(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (show, setShow) = ctx.UseState(false);
+                return VStack(
+                    Button("slot-animate", () => Animations.Animate(AnimationKind.Spring, () => setShow(!show))),
+                    C("a"),
+                    show ? T("t") : Empty(),
+                    C("b"));
+            });
+            await Harness.Render();
+            await Bump(H, "a", 1);
+            await Bump(H, "b", 2);
+
+            H.ClickButton("slot-animate");
+            await Harness.Render();
+            H.Check("SlotAnimate_InsertInPlace", Order(H, "a", "t", "b") == "a,t,b", Order(H, "a", "t", "b"));
+            H.Check("SlotAnimate_InsertKeepsSiblings", Text(H, "a") == "a:1" && Text(H, "b") == "b:2",
+                $"a={Text(H, "a")} b={Text(H, "b")}");
+
+            H.ClickButton("slot-animate");
+            await Harness.Render();
+            H.Check("SlotAnimate_RemoveKeepsSiblings", Text(H, "a") == "a:1" && Text(H, "b") == "b:2",
+                $"a={Text(H, "a")} b={Text(H, "b")}");
+            var gone = await Harness.WaitFor(() => Text(H, "t") is null, maxPasses: 40, perPassMs: 50);
+            H.Check("SlotAnimate_RemoveCompletes", gone && Order(H, "a", "t", "b") == "a,b", Order(H, "a", "t", "b"));
+            host.Dispose();
+        }
+    }
+
+    // ── A sibling that updated its own state in the same pass as the toggle ──
+
+    private static Action? s_bumpStable;
+
+    private sealed class Stable : Component
+    {
+        public override Element Render()
+        {
+            var (n, set) = UseState(0);
+            s_bumpStable = () => set(n + 1);
+            return TextBlock($"s:{n}");
+        }
+    }
+
+    internal class SelfTriggeredSiblingDuringToggle(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (show, setShow) = ctx.UseState(true);
+                // Reference-equal across renders, so the reconciler skips it unless the
+                // dirty-ancestor path names it — by its index before this pass shifted it.
+                var stable = ctx.UseMemo(() => Component<Stable>(), Array.Empty<object>());
+                return VStack(
+                    Button("slot-toggle-and-bump", () =>
+                    {
+                        setShow(!show);
+                        s_bumpStable?.Invoke();
+                    }),
+                    show ? C("t") : Empty(),
+                    C("a"),
+                    stable);
+            });
+            await Harness.Render();
+            H.Check("SlotDirty_Setup", Text(H, "s") == "s:0");
+
+            H.ClickButton("slot-toggle-and-bump");
+            await Harness.Render();
+            H.Check("SlotDirty_HideRendersSelfTriggered", Text(H, "s") == "s:1", $"s={Text(H, "s")}");
+
+            H.ClickButton("slot-toggle-and-bump");
+            await Harness.Render();
+            H.Check("SlotDirty_ShowRendersSelfTriggered", Text(H, "s") == "s:2", $"s={Text(H, "s")}");
+            H.Check("SlotDirty_Order", Order(H, "t", "a", "s") == "t,a,s", Order(H, "t", "a", "s"));
+            host.Dispose();
+        }
+    }
+}

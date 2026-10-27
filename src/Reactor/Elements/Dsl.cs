@@ -1994,7 +1994,10 @@ public static partial class Factories
     /// <summary>
     /// Flattens one level of <see cref="GroupElement"/> and drops
     /// <see langword="null"/> / <see cref="EmptyElement"/> entries, returning the
-    /// children array stored on a container element.
+    /// children array stored on a container element. When it drops or flattens
+    /// anything it also records, in <see cref="ChildSlots"/>, which argument each
+    /// kept child came from, so a conditional child holds its slot among its
+    /// unkeyed siblings across renders.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -2060,22 +2063,39 @@ public static partial class Factories
         }
 
         var result = new Element[count];
+        // Slot ids for ChildSlots: the argument each kept child came from, so the
+        // reconciler can match a conditional child's siblings across a toggle.
+        int[]? slots = count > 0 && children.Length <= ChildSlots.MaxIndex ? new int[count] : null;
         int idx = 0;
         for (int i = 0; i < children.Length; i++)
         {
             if (children[i] is GroupElement group)
             {
-                foreach (var gc in group.Children)
+                var groupSlots = slots is null ? null : ChildSlots.Get(group.Children);
+                for (int j = 0; j < group.Children.Length; j++)
                 {
+                    var gc = group.Children[j];
                     if (gc is not null and not EmptyElement)
+                    {
+                        if (slots is not null)
+                        {
+                            // The group's own map (its own dropped arguments) when it has
+                            // one at this depth; a deeper group falls back to position.
+                            int inner = groupSlots is { } gs && (gs[j] & 0xFFFF) == 0 ? gs[j] >> 16 : j;
+                            if (inner > ChildSlots.MaxGroupIndex) slots = null;
+                            else slots[idx] = ChildSlots.ForGroupChild(i, inner);
+                        }
                         result[idx++] = gc;
+                    }
                 }
             }
             else if (children[i] is not null and not EmptyElement)
             {
+                if (slots is not null) slots[idx] = ChildSlots.ForIndex(i);
                 result[idx++] = children[i]!;
             }
         }
+        if (slots is not null) ChildSlots.Set(result, slots);
         return result;
     }
 }

@@ -1279,7 +1279,12 @@ public sealed partial class Reconciler
             if (container.ContentTemplateRoot is not ContentControl cc) continue;
 
             var index = listViewBase.IndexFromContainer(container);
-            if (index < 0 || index >= viewSource.ItemCount) continue;
+            if (index < 0)
+            {
+                UnmountOrphanedContainer(listViewBase, container, cc);
+                continue;
+            }
+            if (index >= viewSource.ItemCount) continue;
 
             var oldItemElement = GetElementTag(cc);
             var newItemElement = viewSource.BuildItemView(index);
@@ -1287,7 +1292,10 @@ public sealed partial class Reconciler
             // ReconcileV1Child updates in place when it can and remounts otherwise, and either way
             // unmounts a control it replaced (e.g. a same-key Memo whose output changed shape
             // during a resource refresh), so the old item's effects and refs are cleaned up.
-            var next = ReconcileV1Child(oldItemElement, newItemElement, cc.Content as UIElement, requestRerender);
+            // Untagged content was already unmounted by the orphan sweep: replace it, never
+            // unmount it again.
+            var next = ReconcileV1Child(oldItemElement, newItemElement,
+                oldItemElement is null ? null : cc.Content as UIElement, requestRerender);
             if (!ReferenceEquals(cc.Content, next))
                 cc.Content = next;
             SetElementTag(cc, newItemElement);
@@ -1297,6 +1305,27 @@ public sealed partial class Reconciler
             // a renamed item would keep announcing the previous row's name.
             PropagateItemAutomationName(container, cc.Content as UIElement);
         }
+    }
+
+    /// <summary>
+    /// Unmounts the item view of a container WinUI has unlinked from its item
+    /// (<c>IndexFromContainer</c> is -1) when the container no longer shows a row the
+    /// list still holds. WinUI normally raises a recycle <c>ContainerContentChanging</c>
+    /// for such a container, but under rapid insert / remove churn it can park one
+    /// offscreen in the items panel without ever doing so, which left the row's
+    /// components mounted: effects never cleaned up and diagnostics writes were accepted
+    /// but never rendered. Only the components are torn down — the visuals stay, so a
+    /// delete transition still fades the row out — and the tag is cleared to record
+    /// that the content is dead.
+    /// </summary>
+    private void UnmountOrphanedContainer(WinUI.ListViewBase listViewBase, WinPrim.SelectorItem container, ContentControl cc)
+    {
+        if (cc.Content is not UIElement view || GetElementTag(cc) is null) return;
+        // A row still in the list that WinUI is about to relink to this same container
+        // keeps its view.
+        if (container.Content is { } item && ReferenceEquals(listViewBase.ContainerFromItem(item), container)) return;
+        UnmountChild(view);
+        ClearElementTag(cc);
     }
 
     private readonly struct ItemsRepeaterKeyAdapter : IReadOnlyList<ItemsRepeaterKeyAdapter.KeyOnly>

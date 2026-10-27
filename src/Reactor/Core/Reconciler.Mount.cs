@@ -698,7 +698,9 @@ public sealed partial class Reconciler
             PropagateItemAutomationName(args.ItemContainer, null);
             if (args.ItemContainer.ContentTemplateRoot is ContentControl oldCc)
             {
-                if (oldCc.Content is UIElement oldCtrl)
+                // The tag marks live content; an orphan sweep (RefreshRealizedContainers)
+                // may already have unmounted it and left only its visuals behind.
+                if (oldCc.Content is UIElement oldCtrl && GetElementTag(oldCc) is not null)
                     UnmountChild(oldCtrl);
                 oldCc.Content = null;
                 ClearElementTag(oldCc);
@@ -716,6 +718,10 @@ public sealed partial class Reconciler
         if (viewSource is not null && args.ItemIndex >= 0 && args.ItemIndex < viewSource.ItemCount
             && args.ItemContainer.ContentTemplateRoot is ContentControl cc)
         {
+            // WinUI can re-realize a container without first raising the recycle event
+            // for its previous row; unmount that row's view or its components leak.
+            if (cc.Content is UIElement stale && GetElementTag(cc) is not null)
+                UnmountChild(stale);
             var itemElement = viewSource.BuildItemView(args.ItemIndex);
             var ctrl = Mount(itemElement, requestRerender);
             cc.Content = ctrl;

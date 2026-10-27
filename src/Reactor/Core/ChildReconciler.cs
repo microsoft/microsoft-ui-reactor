@@ -35,9 +35,9 @@ internal static class ChildReconciler
         Action requestRerender,
         UIElement? parentControl = null)
     {
-        // Filter out nulls and EmptyElements
-        var oldFiltered = Filter(oldChildren);
-        var newFiltered = Filter(newChildren);
+        // Filter out nulls and EmptyElements, keeping each kept child's slot (ChildSlots)
+        var oldFiltered = Filter(oldChildren, out var oldSlots);
+        var newFiltered = Filter(newChildren, out var newSlots);
 
         bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
 
@@ -56,10 +56,78 @@ internal static class ChildReconciler
 
         if (hasKeys)
             ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
+        else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length))
+            ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
         else
             ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
     }
     // </snippet:child-diff>
+
+    /// <summary>
+    /// Unkeyed reconciliation when a conditional child (null / <see cref="EmptyElement"/> /
+    /// a resized <see cref="GroupElement"/>) shifted indices between renders: children are
+    /// matched by <see cref="ChildSlots">slot</see>, so the siblings after a toggled child
+    /// are updated in place instead of each being compared with the child that used to sit
+    /// at its index. Both arrays' slots increase, so this is one merge pass:
+    /// O(old + new), with no reorder.
+    /// </summary>
+    private static void ReconcileSlotted(
+        Element[] oldChildren,
+        int[]? oldSlots,
+        Element[] newChildren,
+        int[]? newSlots,
+        IChildCollection children,
+        Reconciler reconciler,
+        Action requestRerender,
+        AnimationKind? ambientKind,
+        in DirtyChildIndices dirty)
+    {
+        int oi = 0, ni = 0;
+        // The live index the next old child sits at. It advances past every control the
+        // collection holds for a child just handled — including an old control an exit
+        // transition left in place (removal) or re-inserted after its replacement.
+        int live = 0;
+        while (oi < oldChildren.Length || ni < newChildren.Length)
+        {
+            int oldSlot = oi < oldChildren.Length ? ChildSlots.At(oldSlots, oi) : int.MaxValue;
+            int newSlot = ni < newChildren.Length ? ChildSlots.At(newSlots, ni) : int.MaxValue;
+            int before = children.Count;
+            if (oldSlot < newSlot)
+            {
+                // Old child whose slot is gone.
+                if (live < before)
+                {
+                    reconciler.RemoveChildWithExitTransition(children, live);
+                    live += 1 + (children.Count - before);
+                }
+                oi++;
+            }
+            else if (oldSlot == newSlot && live < before)
+            {
+                // `dirty` was resolved against the collection before this pass changed it,
+                // when the old child's index was oi.
+                UpdateChildAt(oldChildren[oi], newChildren[ni], oi, live, children, reconciler, requestRerender, dirty);
+                live += 1 + (children.Count - before);
+                oi++;
+                ni++;
+            }
+            else
+            {
+                // New slot — or a kept slot whose control the collection no longer holds
+                // (the positional walk stops there too), which mounts afresh.
+                if (oldSlot == newSlot) oi++;
+                var newEl = newChildren[ni];
+                var ctrl = reconciler.Mount(newEl, requestRerender);
+                if (ctrl is not null)
+                {
+                    children.Insert(live, ctrl);
+                    ApplyAmbientEnterIfActive(ctrl, newEl, ambientKind);
+                    live++;
+                }
+                ni++;
+            }
+        }
+    }
 
     /// <summary>
     /// Positional reconciliation: match children by index.
@@ -188,6 +256,24 @@ internal static class ChildReconciler
         Reconciler reconciler,
         Action requestRerender,
         in DirtyChildIndices dirty)
+        => UpdateChildAt(oldChildren[i], newChildren[i], i, i, children, reconciler, requestRerender, dirty);
+
+    /// <summary>
+    /// Reconciles one matched old/new child pair whose control sits at
+    /// <paramref name="i"/> in <paramref name="children"/>. <paramref name="dirtyIndex"/>
+    /// is the old child's index when <paramref name="dirty"/> was resolved — the same as
+    /// <paramref name="i"/> except in the slot-matched walk, which inserts and removes
+    /// around it.
+    /// </summary>
+    private static void UpdateChildAt(
+        Element oldEl,
+        Element newEl,
+        int dirtyIndex,
+        int i,
+        IChildCollection children,
+        Reconciler reconciler,
+        Action requestRerender,
+        in DirtyChildIndices dirty)
     {
         // Early skip: if the element is structurally identical (and carries no
         // theme-reactive resources that need re-evaluation), we can avoid the
@@ -215,12 +301,10 @@ internal static class ChildReconciler
         // a per-child COM read: membership is an integer compare, and when nothing in the
         // pass self-triggered `dirty` is empty. A declined child goes through Update, whose
         // own skip gate (IsOnDirtyAncestorPath) lets it descend the rest of the way.
-        var oldEl = oldChildren[i];
-        var newEl = newChildren[i];
         UIElement? existingControl = null;
         if (Element.CanSkipUpdate(oldEl, newEl)
             && !reconciler.ForceRenderThroughWrapper(newEl)
-            && !dirty.Contains(i, children, reconciler, ref existingControl))
+            && !dirty.Contains(dirtyIndex, i, children, reconciler, ref existingControl))
         {
             if (!reconciler.HasActiveContextValues
                 || !reconciler.ShouldDeclineSkip(existingControl ??= children.Get(i)))
@@ -899,8 +983,13 @@ internal static class ChildReconciler
         return result;
     }
 
-    private static Element[] Filter(Element[] elements)
+    internal static Element[] Filter(Element[] elements, out int[]? slots)
     {
+        // The DSL container factories already dropped null / EmptyElement and
+        // registered the slots they came from; a hand-built children array that
+        // still holds them gets its slots from the raw indices here.
+        var registered = ChildSlots.Get(elements);
+
         // Single count pass; the result array is then sized exactly and filled
         // in one more pass — no intermediate List + ToArray double-allocation
         // (#36). The common no-null case still returns the input untouched.
@@ -909,14 +998,22 @@ internal static class ChildReconciler
         {
             if (elements[i] is not null and not EmptyElement) keep++;
         }
-        if (keep == elements.Length) return elements;
+        if (keep == elements.Length)
+        {
+            slots = registered;
+            return elements;
+        }
 
         var result = new Element[keep];
+        slots = registered is not null || elements.Length <= ChildSlots.MaxIndex ? new int[keep] : null;
         int j = 0;
         for (int i = 0; i < elements.Length; i++)
         {
             if (elements[i] is not null and not EmptyElement)
+            {
+                if (slots is not null) slots[j] = registered?[i] ?? ChildSlots.ForIndex(i);
                 result[j++] = elements[i];
+            }
         }
         return result;
     }
@@ -1050,7 +1147,7 @@ internal readonly struct DirtyChildIndices
     internal static DirtyChildIndices At(int index) => new(index + 1, null, probeEachChild: false);
 
     /// <summary>Several dirty children. Sorts <paramref name="indices"/> in place so
-    /// <see cref="Contains"/> can binary-search them.</summary>
+    /// <see cref="Contains(int, int, IChildCollection, Reconciler, ref UIElement?)"/> can binary-search them.</summary>
     internal static DirtyChildIndices AtAll(int[] indices)
     {
         Array.Sort(indices);
@@ -1066,14 +1163,22 @@ internal readonly struct DirtyChildIndices
     /// <paramref name="control"/> so the caller does not read it twice.
     /// </summary>
     internal bool Contains(int panelIndex, IChildCollection children, Reconciler reconciler, ref UIElement? control)
+        => Contains(panelIndex, panelIndex, children, reconciler, ref control);
+
+    /// <summary>
+    /// As <see cref="Contains(int, IChildCollection, Reconciler, ref UIElement?)"/>, for a
+    /// child whose index when this was resolved (<paramref name="resolvedIndex"/>) differs
+    /// from where its control sits now (<paramref name="liveIndex"/>).
+    /// </summary>
+    internal bool Contains(int resolvedIndex, int liveIndex, IChildCollection children, Reconciler reconciler, ref UIElement? control)
     {
         if (_indexPlusOne != 0)
-            return panelIndex == _indexPlusOne - 1;
+            return resolvedIndex == _indexPlusOne - 1;
         if (_indices is not null)
-            return Array.BinarySearch(_indices, panelIndex) >= 0;
-        if (!_probeEachChild || (uint)panelIndex >= (uint)children.Count)
+            return Array.BinarySearch(_indices, resolvedIndex) >= 0;
+        if (!_probeEachChild || (uint)liveIndex >= (uint)children.Count)
             return false;
-        return reconciler.IsOnDirtyAncestorPath(control ??= children.Get(panelIndex));
+        return reconciler.IsOnDirtyAncestorPath(control ??= children.Get(liveIndex));
     }
 
     public override string ToString() =>
