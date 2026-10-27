@@ -401,9 +401,14 @@ small allocation per *component*, never per leaf, and nothing while the flag is 
   `ReactorSourceMap.Enabled` switch), and the source-map generator re-binds a DSL call
   that takes one as an argument — `VStack(8, MyControl(...))`, or any value of the
   wrapper's element type such as a local, a field or a helper's result — as if the
-  wrapper element were already an `Element`, so the container keeps its location too. The wrapper generator only emits interceptors when `ReactorSourceMap`
-  is true and the build lists `Microsoft.UI.Reactor.Generated` in
-  `InterceptorsNamespaces`, which `Microsoft.UI.Reactor.targets` does for you.
+  wrapper element were already an `Element`, so the container keeps its location too.
+  Where a call's overload could change once the wrapper records are complete (for
+  example `Show(card)` with both `Show(object)` and `Show(Element)` overloads), the call
+  is left unstamped rather than guessed, because an interceptor for the wrong overload
+  would fail the build. Code that never touches a wrapper record is unaffected. The
+  wrapper generator only emits interceptors when `ReactorSourceMap` is true and the
+  build lists `Microsoft.UI.Reactor.Generated` in `InterceptorsNamespaces`, which
+  `Microsoft.UI.Reactor.targets` does for you.
 - **Unannotated entry points outside `Factories` are not stamped.** A few
   element-producing APIs live elsewhere — `PropertyGridDefaults`'s templates and
   `intl.RichMessage(...)` (`IntlAccessor`) are built-in examples. They build their
