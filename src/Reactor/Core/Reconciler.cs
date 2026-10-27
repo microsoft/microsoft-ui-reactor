@@ -542,9 +542,24 @@ public sealed partial class Reconciler : IDisposable
     internal static Element WithItemKey(Element built, Internal.IItemViewSource source, int index)
     {
         if (built.Key is not null || source is not Internal.IKeyedItemSource keyed) return built;
+        // A legacy ModifiedElement mounts (and tags) its inner element: an author's key there wins.
+        if (built is ModifiedElement && InnermostOf(built).Key is not null) return built;
         var key = source is TemplatedListElementBase templated ? templated.GetItemIdentityKey(index) : keyed.GetKeyAt(index);
-        return key is not null ? built with { Key = key } : built;
+        return key is not null ? WithKeyThrough(built, key) : built;
     }
+
+    private static Element InnermostOf(Element element)
+    {
+        while (element is ModifiedElement modified) element = modified.Inner;
+        return element;
+    }
+
+    // The key on the element the parent diffs (the outermost) and on the one Mount tags and
+    // publishes (the innermost of a ModifiedElement chain).
+    private static Element WithKeyThrough(Element element, string key)
+        => element is ModifiedElement modified
+            ? modified with { Key = key, Inner = WithKeyThrough(modified.Inner, key) }
+            : element with { Key = key };
 
     private void PublishSource(UIElement control, Element element)
     {
@@ -830,6 +845,15 @@ public sealed partial class Reconciler : IDisposable
                         break;
                     case WinUI.MenuBarItem menuBarItem:
                         foreach (var item in menuBarItem.Items) Push(item);
+                        break;
+                    // A bar whose template is not applied yet (collapsed, never shown) has its
+                    // items in no visual child walk.
+                    case WinUI.MenuBar menuBar:
+                        foreach (var item in menuBar.Items) Push(item);
+                        break;
+                    case WinUI.CommandBar commandBar:
+                        foreach (var command in commandBar.PrimaryCommands) Push(command as DependencyObject);
+                        foreach (var command in commandBar.SecondaryCommands) Push(command as DependencyObject);
                         break;
                 }
             }
