@@ -125,43 +125,100 @@ public sealed partial class SourceMapInterceptorGenerator
     /// <para><see cref="SpeculativeBinding.Method"/> is null (decline) whenever the
     /// substitution could steer overload resolution somewhere the real compilation will not
     /// go. The placeholder is typed <c>Element</c>, while the real argument is the wrapper
-    /// record, which derives from <c>Element</c> directly; the only overloads that record can
-    /// reach and <c>Element</c> cannot are ones taking the record itself or a type parameter.
-    /// An interceptor for the wrong overload is a hard CS9144 in the consumer's build, so a
-    /// method group containing either shape is not re-bound.</para>
+    /// record, which derives from <c>Element</c> directly. Everything <c>Element</c> converts to,
+    /// the record converts to as well; what only the record reaches is a parameter type that
+    /// mentions the record (<c>FooElement</c>, <c>IEquatable&lt;FooElement&gt;</c>,
+    /// <c>Func&lt;FooElement&gt;</c>), an interface the record implements, or a type parameter
+    /// inferred from it. An interceptor for the wrong overload is a hard CS9144 in the
+    /// consumer's build, so a call whose method group — every candidate visible at the call
+    /// site, not just the speculative winner's type — contains such a parameter anywhere in
+    /// its type is not re-bound.</para>
     /// </summary>
     private static SpeculativeBinding BindAroundWrapperFactoryCalls(
         SemanticModel model,
         InvocationExpressionSyntax invocation,
         System.Threading.CancellationToken ct)
     {
-        var rewriter = new WrapperFactoryCallRewriter(model, ct, depth: 0, visiting: new HashSet<ILocalSymbol>(SymbolEqualityComparer.Default));
+        var substituted = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        var rewriter = new WrapperFactoryCallRewriter(model, ct, depth: 0, visiting: new HashSet<ILocalSymbol>(SymbolEqualityComparer.Default), substituted);
         var rewritten = invocation.WithArgumentList((ArgumentListSyntax)rewriter.Visit(invocation.ArgumentList)!);
         if (!rewriter.Changed) return new SpeculativeBinding(false, null);
         if (rewriter.Unreliable) return new SpeculativeBinding(true, null);
 
         var info = model.GetSpeculativeSymbolInfo(invocation.SpanStart, rewritten, SpeculativeBindingOption.BindAsExpression);
-        if (info.Symbol is not IMethodSymbol method || !OverloadChoiceIsStable(method, model.Compilation))
+        if (info.Symbol is not IMethodSymbol method || !OverloadChoiceIsStable(model, invocation, method, substituted))
             return new SpeculativeBinding(true, null);
         return new SpeculativeBinding(true, method);
     }
 
-    /// <summary>See <see cref="BindAroundWrapperFactoryCalls"/>: false when some overload of
-    /// <paramref name="method"/> could be preferred for a wrapper-typed argument.</summary>
-    private static bool OverloadChoiceIsStable(IMethodSymbol method, Compilation compilation)
+    /// <summary>See <see cref="BindAroundWrapperFactoryCalls"/>: false when some candidate at
+    /// this call site could be preferred for a wrapper-typed argument.</summary>
+    private static bool OverloadChoiceIsStable(
+        SemanticModel model,
+        InvocationExpressionSyntax invocation,
+        IMethodSymbol method,
+        HashSet<INamedTypeSymbol> substituted)
     {
         if (method.ContainingType is not { } owner) return false;
-        foreach (var member in owner.GetMembers(method.Name))
+
+        var candidates = new List<ISymbol>(owner.GetMembers(method.Name));
+        // An unqualified name also sees same-named methods from enclosing types and every
+        // `using static` import; one of those can be the overload the real call resolves to.
+        if (invocation.Expression is SimpleNameSyntax)
+            candidates.AddRange(model.LookupSymbols(invocation.SpanStart, name: method.Name));
+
+        var interfaces = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        foreach (var wrapper in substituted)
         {
-            if (member is not IMethodSymbol overload) continue;
+            foreach (var implemented in wrapper.AllInterfaces) interfaces.Add(implemented.OriginalDefinition);
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (candidate is not IMethodSymbol overload) continue;
             foreach (var parameter in overload.Parameters)
             {
-                var type = parameter.Type is IArrayTypeSymbol array ? array.ElementType : parameter.Type;
-                if (type is ITypeParameterSymbol) return false;
-                if (type is INamedTypeSymbol named && WrapperFactoryCalls.IsIncompleteWrapperElement(named, compilation)) return false;
+                if (ReachableOnlyByTheRecord(parameter.Type, model.Compilation, interfaces, depth: 0)) return false;
             }
         }
         return true;
+    }
+
+    /// <summary>
+    /// True when <paramref name="type"/>, at any depth (array element, type argument, delegate
+    /// signature), is a type parameter, an incomplete wrapper record, or an interface such a
+    /// record implements — anything that could accept the record more specifically than it
+    /// accepts <c>Element</c>.
+    /// </summary>
+    private static bool ReachableOnlyByTheRecord(
+        ITypeSymbol type, Compilation compilation, HashSet<INamedTypeSymbol> interfaces, int depth)
+    {
+        if (depth > 8) return true;
+        switch (type)
+        {
+            case ITypeParameterSymbol:
+                return true;
+            case IArrayTypeSymbol array:
+                return ReachableOnlyByTheRecord(array.ElementType, compilation, interfaces, depth + 1);
+            case INamedTypeSymbol named:
+                if (WrapperFactoryCalls.IsIncompleteWrapperElement(named, compilation)) return true;
+                if (named.TypeKind == TypeKind.Interface && interfaces.Contains(named.OriginalDefinition)) return true;
+                foreach (var argument in named.TypeArguments)
+                {
+                    if (ReachableOnlyByTheRecord(argument, compilation, interfaces, depth + 1)) return true;
+                }
+                if (named.DelegateInvokeMethod is { } invoke && !named.IsGenericType)
+                {
+                    if (ReachableOnlyByTheRecord(invoke.ReturnType, compilation, interfaces, depth + 1)) return true;
+                    foreach (var p in invoke.Parameters)
+                    {
+                        if (ReachableOnlyByTheRecord(p.Type, compilation, interfaces, depth + 1)) return true;
+                    }
+                }
+                return false;
+            default:
+                return false;
+        }
     }
 
     private readonly struct SpeculativeBinding
@@ -187,13 +244,20 @@ public sealed partial class SourceMapInterceptorGenerator
         private readonly System.Threading.CancellationToken _ct;
         private readonly int _depth;
         private readonly HashSet<ILocalSymbol> _visiting;
+        private readonly HashSet<INamedTypeSymbol> _substituted;
 
-        public WrapperFactoryCallRewriter(SemanticModel model, System.Threading.CancellationToken ct, int depth, HashSet<ILocalSymbol> visiting)
+        public WrapperFactoryCallRewriter(
+            SemanticModel model,
+            System.Threading.CancellationToken ct,
+            int depth,
+            HashSet<ILocalSymbol> visiting,
+            HashSet<INamedTypeSymbol> substituted)
         {
             _model = model;
             _ct = ct;
             _depth = depth;
             _visiting = visiting;
+            _substituted = substituted;
         }
 
         public bool Changed { get; private set; }
@@ -281,7 +345,7 @@ public sealed partial class SourceMapInterceptorGenerator
                     return null;
                 }
 
-                var inner = new WrapperFactoryCallRewriter(_model, _ct, _depth + 1, _visiting);
+                var inner = new WrapperFactoryCallRewriter(_model, _ct, _depth + 1, _visiting, _substituted);
                 var rewritten = (ExpressionSyntax)inner.Visit(initializer)!;
                 if (inner.Unreliable) Unreliable = true;
                 if (!inner.Changed || inner.Unreliable) return null;
@@ -311,6 +375,7 @@ public sealed partial class SourceMapInterceptorGenerator
             // here — its variance conversions do not exist yet — so the binding is abandoned.
             if (type is INamedTypeSymbol named && WrapperFactoryCalls.IsIncompleteWrapperElement(named, _model.Compilation))
             {
+                _substituted.Add(named);
                 type = _model.Compilation.GetTypeByMetadataName(ElementMetadataName) ?? type;
             }
             else if (MentionsIncompleteWrapper(type))
