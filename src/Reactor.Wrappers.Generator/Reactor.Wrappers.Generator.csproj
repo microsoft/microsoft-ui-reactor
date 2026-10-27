@@ -24,6 +24,13 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
   </ItemGroup>
 
+  <!-- Spec 010: this generator intercepts calls to the factories it emits (the source-map
+       generator cannot see them). The position rules and the wrapper-call recognition are
+       shared with Reactor.SourceMap.Generator so the two cannot drift. -->
+  <ItemGroup>
+    <Compile Include="..\Reactor.SourceMap.Generator\SourceMapShared.cs" Link="SourceMapShared.cs" />
+  </ItemGroup>
+
   <PropertyGroup>
     <!-- RS2008: analyzer release tracking is not relevant for this experimental
          in-repo generator (it doesn't ship as its own analyzer package). -->

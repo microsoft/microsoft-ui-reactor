@@ -374,6 +374,17 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Wrapped third-party controls now get source-map call sites** (spec 010). A factory
+  emitted by `[GenerateReactorWrapper]` (`SettingsCard(...)`, `RadialGauge(...)`) is
+  invisible to the source-map generator, because no source generator sees another's
+  output. Its calls were never stamped, and every DSL call taking one as an argument —
+  `VStack(8, SettingsCard(...))`, `HStack(8, gauge.Width(140))` — failed to bind there
+  and was dropped too, so devtools saw a bare `StackPanel` with no Reactor element.
+  `Reactor.Wrappers.Generator` now intercepts calls to the factories it emits (same line,
+  column and `ReactorSourceMap.Enabled` rules; only when `ReactorSourceMap` is true and
+  the build lists `Microsoft.UI.Reactor.Generated` in `InterceptorsNamespaces`), and the
+  source-map generator re-binds such containing calls with each wrapper call replaced by
+  its element type, so they keep their location and declared name.
 - **Source-map generator no longer fails under `dotnet watch`** (issue #1404, spec 010).
   When Reactor is a project reference, Hot Reload's workspace compilation sees Reactor's
   symbols with their source, so a component calling a hook that is not on `Component`
