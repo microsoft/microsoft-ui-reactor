@@ -449,9 +449,19 @@ The other direction — an existing XAML `Page` or control inside a Reactor tree
 `XamlPage(...)` and `XamlHost(...)`:
 
 ```csharp
-XamlPage(typeof(LegacySettingsPage), parameter: "general")   // a Frame navigated to the page
-XamlHost(() => new MyUserControl(), c => ((MyUserControl)c).Value = count,
-         typeKey: "MyUserControl")                            // any FrameworkElement
+class XamlInteropExample : Component
+{
+    public override Element Render()
+    {
+        var (count, _) = UseState(0);
+
+        return VStack(8,
+            XamlPage(typeof(LegacySettingsPage), parameter: "general"),   // a Frame navigated to the page
+            XamlHost(() => new MyUserControl(), c => ((MyUserControl)c).Value = count,
+                     typeKey: "MyUserControl")                            // any FrameworkElement
+        );
+    }
+}
 ```
 
 `XamlPage` re-navigates in place when the page type or parameter changes. `XamlHost`'s

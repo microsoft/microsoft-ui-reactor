@@ -192,6 +192,31 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
                 H.Check("KeyedListDiagnostics_FlipViewSameContentSourceRefreshed",
                     sameValue?.Contains("|key=next", StringComparison.Ordinal) == true);
             H.SetContent(null);
+
+            // The same, with a keyed Memo page whose output is a Button: the page's control is
+            // the memo output's, so the refresh must keep that Button's element (and its click
+            // callback) as the tag, only re-keyed, and publish the new key.
+            FlipMemoButtonProbe.Clicks = 0;
+            H.CreateHost().Mount(new FlipMemoButtonProbe());
+            await Harness.Render();
+            await Harness.Render(100);
+            H.ClickButton("flip-memo-replace");
+            await Harness.Render();
+            await Harness.Render(100);
+            var memoPage = H.FindControl<WinUI.Button>(b => b.Content as string == "memo page");
+            var memoTag = memoPage is null ? null : Reconciler.GetElementTag(memoPage);
+            var memoValue = memoPage is null ? null : ReactorDiagnostics.GetSource(memoPage);
+            H.ClickButton("memo page");
+            await Harness.Render();
+            Console.WriteLine($"# flip memo page: tag={memoTag?.GetType().Name} key={memoTag?.Key} clicks={FlipMemoButtonProbe.Clicks} value={memoValue}");
+            H.Check("KeyedListDiagnostics_FlipViewMemoPageKeepsButtonTag",
+                memoTag is ButtonElement && memoTag.Key == "next");
+            H.Check("KeyedListDiagnostics_FlipViewMemoPageStillClicks", FlipMemoButtonProbe.Clicks == 1);
+            if (publish)
+                H.Check("KeyedListDiagnostics_FlipViewMemoPageSourceRefreshed",
+                    memoValue?.Contains("|key=next", StringComparison.Ordinal) == true
+                    && memoValue.Contains("|element=Button", StringComparison.Ordinal));
+            H.SetContent(null);
         }
         finally
         {
@@ -281,6 +306,19 @@ internal sealed class FlipSameContentProbe : Component
         return VStack(4,
             Button("flip-replace", () => setItems(["next"])),
             FlipView(items, static s => s, static (_, _) => TextBlock("same page")).Height(60));
+    }
+}
+
+internal sealed class FlipMemoButtonProbe : Component
+{
+    internal static int Clicks;
+
+    public override Element Render()
+    {
+        var (items, setItems) = UseState<string[]>(["first"]);
+        return VStack(4,
+            Button("flip-memo-replace", () => setItems(["next"])),
+            FlipView(items, static s => s, static (_, _) => Memo("stable", static () => Button("memo page", static () => Clicks++))).Height(60));
     }
 }
 

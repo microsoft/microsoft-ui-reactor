@@ -353,10 +353,7 @@ authoring language deliberately.
 The other direction — an existing XAML `Page` or control inside a Reactor tree — uses
 `XamlPage(...)` and `XamlHost(...)`:
 
-```csharp
-XamlPage(typeof(LegacySettingsPage), parameter: "general")   // a Frame navigated to the page
-XamlHost(() => new MyUserControl(), c => ((MyUserControl)c).Value = count,
-         typeKey: "MyUserControl")                            // any FrameworkElement
+```csharp snippet="xaml-developers/xaml-interop"
 ```
 
 `XamlPage` re-navigates in place when the page type or parameter changes. `XamlHost`'s

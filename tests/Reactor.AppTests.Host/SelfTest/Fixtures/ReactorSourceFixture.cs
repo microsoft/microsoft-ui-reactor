@@ -493,10 +493,22 @@ internal class ReactorSource_KeyedMemoRootNamed(Harness h) : SelfTestFixtureBase
 
 internal static class RemountView
 {
+    // The same element every render, so the root swap skips it: its menu and command items
+    // (created by their flyout, menu bar or command bar) keep the owner they were published
+    // with unless the root rename reaches them.
+    private static readonly Element RetainedMenus = VStack(
+        MenuFlyout(Button("remount-menu-target"),
+            MenuItem("remount-menu-item"),
+            MenuSubItem("remount-submenu", MenuItem("remount-submenu-item"))),
+        CommandBarFlyout(Button("remount-commands-target"), primaryCommands: [AppBarButton("remount-command")]),
+        MenuBar(Menu("remount-bar", MenuItem("remount-bar-item"))),
+        CommandBar([AppBarButton("remount-primary")], [AppBarButton("remount-secondary")]));
+
     // Both roots render this, so swapping the root updates the kept content in place and
     // every call site, key and kind below is unchanged.
     public static Element Body() => VStack(
         TextBlock("remount-leaf"),
+        RetainedMenus,
         Flyout(Button("remount-flyout-target"), TextBlock("remount-flyout-body")),
         // The target is a component (its control publishes mounts=), the body is not its.
         Flyout(Component<RemountFlyoutTarget>(), TextBlock("remount-cflyout-body")),
@@ -630,9 +642,39 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
         return null;
     }
 
+    private static readonly string[] RetainedMenuItems =
+        ["remount-menu-item", "remount-submenu-item", "remount-command", "remount-bar-item", "remount-primary", "remount-secondary"];
+
+    // The published value of an item in RemountView's retained menus, by its text or label.
+    private string? RetainedItemSource(string name)
+    {
+        IEnumerable<DependencyObject> items = [];
+        if (H.FindControl<WinUI.Button>(b => b.Content as string == "remount-menu-target")?.Flyout is WinUI.MenuFlyout menu)
+        {
+            items = items.Concat(menu.Items);
+            items = items.Concat(menu.Items.OfType<WinUI.MenuFlyoutSubItem>().SelectMany(s => s.Items));
+        }
+        if (H.FindControl<WinUI.Button>(b => b.Content as string == "remount-commands-target")?.Flyout is WinUI.CommandBarFlyout commands)
+            items = items.Concat(commands.PrimaryCommands.OfType<DependencyObject>());
+        if (H.FindControl<WinUI.MenuBar>(_ => true) is { } bar)
+            items = items.Concat(bar.Items.SelectMany(i => i.Items));
+        if (H.FindControl<WinUI.CommandBar>(_ => true) is { } commandBar)
+            items = items.Concat(commandBar.PrimaryCommands.OfType<DependencyObject>())
+                .Concat(commandBar.SecondaryCommands.OfType<DependencyObject>());
+        var item = items.FirstOrDefault(i => i switch
+        {
+            WinUI.MenuFlyoutItem m => m.Text == name,
+            WinUI.AppBarButton b => b.Label == name,
+            _ => false,
+        });
+        return item is UIElement ui ? ReactorDiagnostics.GetSource(ui) : null;
+    }
+
     private async Task<bool> Owned(string text, string owner)
         => await Harness.WaitFor(
-            () => (text switch
+            () => (text.StartsWith("remount-item:", StringComparison.Ordinal)
+                ? RetainedItemSource(text.Substring("remount-item:".Length))
+                : text switch
             {
                 "remount-flyout-body" => FlyoutBodySource(),
                 "remount-cflyout-body" => ComponentFlyoutBodySource(),
@@ -691,6 +733,8 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             host.Mount(new RemountRootA());
             await Harness.Render();
             H.Check("ReactorSource_RootRemount_Host_FirstRoot", await Owned("remount-leaf", nameof(RemountRootA)));
+            foreach (var item in RetainedMenuItems)
+                H.Check($"ReactorSource_RootRemount_Host_RetainedMenuItemFirstRoot_{item}", await Owned("remount-item:" + item, nameof(RemountRootA)));
             host.Mount(new RemountRootB());
             await Harness.Render();
             Console.WriteLine($"# remount (ReactorHost): {Source("remount-leaf")} / {Source("remount-nested")}");
@@ -702,6 +746,8 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.Check("ReactorSource_RootRemount_Host_UnopenedInlineUIRenamed", await Owned("remount-inline-ui", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_CollapsedTreeNodeContentRenamed", await Owned("remount-tree-content", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_DecoratedSlotContentRenamed", await Owned("remount-navslot-header", nameof(RemountRootB)));
+            foreach (var item in RetainedMenuItems)
+                H.Check($"ReactorSource_RootRemount_Host_RetainedMenuItemRenamed_{item}", await Owned("remount-item:" + item, nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             host.Dispose();
             H.SetContent(null);
@@ -768,6 +814,8 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.Check("ReactorSource_RootRemount_HostControl_CollapsedTreeNodeContentRenamed", await Owned("remount-tree-content", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_HostControl_DecoratedSlotContentRenamed", await Owned("remount-navslot-header", nameof(RemountRootB)));
             Console.WriteLine($"# remount (ReactorHostControl): {Source("remount-leaf")} / {Source("remount-nested")}");
+            foreach (var item in RetainedMenuItems)
+                H.Check($"ReactorSource_RootRemount_HostControl_RetainedMenuItemRenamed_{item}", await Owned("remount-item:" + item, nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_HostControl_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             hostControl.Dispose();
             H.SetContent(null);

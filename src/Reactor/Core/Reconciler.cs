@@ -605,9 +605,22 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal void RefreshItemIdentityOnSkip(FrameworkElement control, Element newEl)
     {
+        var kind = newEl;
+        while (kind is ModifiedElement modified) kind = modified.Inner;
+        bool publish = global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled;
+        // A keyed Memo is transparent: the control is its factory output's, tagged with that
+        // element (whose callbacks the control's trampolines dispatch to). Re-key the realized
+        // element and describe it; the wrapper never becomes the tag.
+        if (kind is KeyedMemoElement)
+        {
+            if (!TryGetReactorState(control, out var state) || state.Element is not { } realized) return;
+            if (!string.Equals(realized.Key, newEl.Key, StringComparison.Ordinal))
+                state.Element = realized = realized with { Key = newEl.Key };
+            if (publish) PublishSource(control, realized);
+            return;
+        }
         SetElementTagIfNeeded(control, newEl);
-        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
-            PublishSource(control, newEl);
+        if (publish) PublishSource(control, newEl);
     }
 
     /// <summary>
@@ -728,8 +741,8 @@ public sealed partial class Reconciler : IDisposable
     /// Root-owned controls whose call site, key and kind did not change were not re-published,
     /// so they still name the previous root. Rewrites <c>owner=</c> on the content's root-owned
     /// controls: the visual tree plus the Reactor subtrees hung off it outside the visual tree
-    /// (flyout content and pass-through element, popup child, a showing dialog's content,
-    /// cached navigation pages). A component wrapper (<c>mounts=</c>) is renamed if the root
+    /// (flyout content and pass-through element, menu and command items, popup child, a
+    /// showing dialog's content, cached navigation pages). A component wrapper (<c>mounts=</c>) is renamed if the root
     /// owns it, but not entered: its subtree is owned by that component. Rare (only on a root
     /// swap), so a walk.
     /// </summary>
@@ -753,6 +766,19 @@ public sealed partial class Reconciler : IDisposable
         {
             if (d is not null && seen.Add(d)) pending.Push(d);
         }
+        void PushCommandItems(WinPrim.FlyoutBase? flyoutBase)
+        {
+            switch (flyoutBase)
+            {
+                case WinUI.MenuFlyout menu:
+                    foreach (var item in menu.Items) Push(item);
+                    break;
+                case WinUI.CommandBarFlyout commandFlyout:
+                    foreach (var command in commandFlyout.PrimaryCommands) Push(command as DependencyObject);
+                    foreach (var command in commandFlyout.SecondaryCommands) Push(command as DependencyObject);
+                    break;
+            }
+        }
 
         Push(root);
         while (pending.Count > 0)
@@ -772,7 +798,8 @@ public sealed partial class Reconciler : IDisposable
             // owner's.
             if (node is FrameworkElement fe)
             {
-                if (GetFlyoutOnControl(fe) is WinUI.Flyout flyout)
+                var onControl = GetFlyoutOnControl(fe);
+                if (onControl is WinUI.Flyout flyout)
                 {
                     Push(flyout.Content);
                     Push(flyout.OverlayInputPassThroughElement);
@@ -780,9 +807,25 @@ public sealed partial class Reconciler : IDisposable
                 // .WithContextFlyout / .AttachedFlyout / .ToolTip modifiers hang Reactor content
                 // off the control too, outside every child walk until opened.
                 if (fe.ContextFlyout is WinUI.Flyout contextFlyout) Push(contextFlyout.Content);
-                if (WinPrim.FlyoutBase.GetAttachedFlyout(fe) is WinUI.Flyout attachedFlyout) Push(attachedFlyout.Content);
+                var attached = WinPrim.FlyoutBase.GetAttachedFlyout(fe);
+                if (attached is WinUI.Flyout attachedFlyout) Push(attachedFlyout.Content);
                 Push(WinUI.ToolTipService.GetToolTip(fe) as UIElement);
                 Push(V1Protocol.OverlayLifecycle.PeekLiveContentDialog(fe));
+                // Menu and command items carry their own published values, and a closed menu's
+                // items (a flyout's, a submenu's, a menu-bar menu's) are in no visual or logical
+                // child walk.
+                PushCommandItems(onControl);
+                PushCommandItems(fe.ContextFlyout);
+                PushCommandItems(attached);
+                switch (fe)
+                {
+                    case WinUI.MenuFlyoutSubItem subItem:
+                        foreach (var item in subItem.Items) Push(item);
+                        break;
+                    case WinUI.MenuBarItem menuBarItem:
+                        foreach (var item in menuBarItem.Items) Push(item);
+                        break;
+                }
             }
             // A component wrapper's subtree is that component's. An embedded ReactorHostControl
             // is another host, even when it is this root's own content (XamlHost(() => island)):
