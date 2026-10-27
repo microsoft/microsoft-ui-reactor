@@ -3668,10 +3668,24 @@ deduplicate it across analyzer instances.</p>
 <a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">HasModifierInChain</span><span class="p">(</span><span class="n">invocation</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;AutomationName&quot;</span><span class="p">))</span>
 <a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="w">        </span><span class="k">return</span><span class="p">;</span>
 <a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>
-<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">    </span><span class="n">context</span><span class="p">.</span><span class="n">ReportDiagnostic</span><span class="p">(</span><span class="n">Diagnostic</span><span class="p">.</span><span class="n">Create</span><span class="p">(</span>
-<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="w">        </span><span class="n">Rule</span><span class="p">,</span>
-<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="w">        </span><span class="n">invocation</span><span class="p">.</span><span class="n">GetLocation</span><span class="p">()));</span>
-<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="p">}</span>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">    </span><span class="c1">// Button(string label, action) is a text button even when the label is not a</span>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="w">    </span><span class="c1">// literal (for example a localized resource lookup); its content names it.</span>
+<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">IsStringTyped</span><span class="p">(</span><span class="n">firstArg</span><span class="p">,</span><span class="w"> </span><span class="n">context</span><span class="p">))</span>
+<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="w">        </span><span class="k">return</span><span class="p">;</span>
+<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>
+<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a><span class="w">    </span><span class="n">context</span><span class="p">.</span><span class="n">ReportDiagnostic</span><span class="p">(</span><span class="n">Diagnostic</span><span class="p">.</span><span class="n">Create</span><span class="p">(</span>
+<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a><span class="w">        </span><span class="n">Rule</span><span class="p">,</span>
+<a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a><span class="w">        </span><span class="n">invocation</span><span class="p">.</span><span class="n">GetLocation</span><span class="p">()));</span>
+<a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a><span class="p">}</span>
+<a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a>
+<a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a><span class="k">private</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="nf">IsStringTyped</span><span class="p">(</span><span class="n">ExpressionSyntax</span><span class="w"> </span><span class="n">expression</span><span class="p">,</span><span class="w"> </span><span class="n">SyntaxNodeAnalysisContext</span><span class="w"> </span><span class="n">context</span><span class="p">)</span>
+<a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a><span class="p">{</span>
+<a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a><span class="w">    </span><span class="c1">// ConvertedType covers a label type with an implicit conversion to string that</span>
+<a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a><span class="w">    </span><span class="c1">// binds to the Button(string, ...) overload.</span>
+<a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a><span class="w">    </span><span class="kt">var</span><span class="w"> </span><span class="n">info</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">context</span><span class="p">.</span><span class="n">SemanticModel</span><span class="p">.</span><span class="n">GetTypeInfo</span><span class="p">(</span><span class="n">expression</span><span class="p">,</span><span class="w"> </span><span class="n">context</span><span class="p">.</span><span class="n">CancellationToken</span><span class="p">);</span>
+<a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">info</span><span class="p">.</span><span class="n">Type</span><span class="o">?.</span><span class="n">SpecialType</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">SpecialType</span><span class="p">.</span><span class="n">System_String</span>
+<a id="__codelineno-1-41" name="__codelineno-1-41" href="#__codelineno-1-41"></a><span class="w">        </span><span class="o">||</span><span class="w"> </span><span class="n">info</span><span class="p">.</span><span class="n">ConvertedType</span><span class="o">?.</span><span class="n">SpecialType</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">SpecialType</span><span class="p">.</span><span class="n">System_String</span><span class="p">;</span>
+<a id="__codelineno-1-42" name="__codelineno-1-42" href="#__codelineno-1-42"></a><span class="p">}</span>
 </code></pre></div>
 <p><code>AnalyzeInvocation</code> here is the rule body for <a href="../rules-of-reactor/"><code>REACTOR_A11Y_001</code></a>:
 it matches <code>Button(expr, action)</code> as an <code>IdentifierNameSyntax</code>-rooted
@@ -3680,7 +3694,10 @@ in a typical codebase), then walks back up the fluent chain looking for
 a <code>.AutomationName(...)</code> modifier. The walk caps at the enclosing
 statement so a chain that wanders into another statement doesn't
 falsely satisfy the rule. The <code>HasModifierInChain</code> helper is the same
-shape every analyzer that needs to look at trailing modifiers uses.</p>
+shape every analyzer that needs to look at trailing modifiers uses.
+Only after those cheap syntactic filters does it ask the semantic model
+for the first argument's type: a <code>string</code>-typed label (a localized
+resource lookup, a variable) is a text button and needs no extra name.</p>
 <h2 id="the-current-diagnostic-set">The current diagnostic set<a class="headerlink" href="#the-current-diagnostic-set" title="Permanent link">&para;</a></h2>
 <p>These are the rules shipping out of
 <a href="https://github.com/microsoft/reactor"><code>src/Reactor.Analyzers/</code></a> today.
