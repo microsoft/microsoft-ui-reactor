@@ -389,7 +389,7 @@ Conventions for contributors:
   - A list born with a null or duplicated key (including `LazyVStack`, which used to swap a
     null key for `__null_N` silently) is reported at mount, and duplicate `.WithKey` siblings in
     a panel (`VStack(… .WithKey("same"), … .WithKey("same"))`) are reported too. Every
-    `KeyedListDiagnostic` now carries `Component` (while an inspector is attached) and
+    `KeyedListDiagnostic` now carries `ComponentName` (while an inspector is attached) and
     `CallSite`, and the logged warning names both.
   - `MenuItem(…)` / `AppBarButton(…)` and the other menu and command-bar item factories are
     source-mapped (new `CallSite` on `MenuFlyoutItemBase` / `AppBarItemBase`, excluded from

@@ -95,9 +95,10 @@ public partial record XamlHostElement(
 /// Usage:
 ///   XamlInterop.Register(reconciler);
 ///
-/// Then in a Reactor component:
-///   new XamlPageElement(typeof(ExistingXamlPage), "param")
-///   new XamlHostElement(() => new MyUserControl(), ctrl => ((MyUserControl)ctrl).Value = 42)
+/// Then in a Reactor component (the factories record a call site for the source map; the
+/// record constructors work too, without one):
+///   XamlPage(typeof(ExistingXamlPage), "param")
+///   XamlHost(() => new MyUserControl(), ctrl => ((MyUserControl)ctrl).Value = 42)
 /// </summary>
 public static class XamlInterop
 {

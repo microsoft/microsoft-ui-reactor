@@ -2844,14 +2844,13 @@ public abstract record MenuFlyoutItemBase
     /// <see cref="Element.CallSite"/>). The realized menu item publishes it for inspectors.
     /// Not part of equality, like <see cref="Element.CallSite"/>.
     /// </summary>
-    public SourceLocation? CallSite { get; init; }
+    public SourceLocation? CallSite
+    {
+        get => _callSite.Value;
+        init => _callSite = new(value);
+    }
 
-    /// <summary>Equality ignores <see cref="CallSite"/> (diagnostic metadata).</summary>
-    public virtual bool Equals(MenuFlyoutItemBase? other)
-        => ReferenceEquals(this, other) || (other is not null && EqualityContract == other.EqualityContract);
-
-    /// <inheritdoc />
-    public override int GetHashCode() => EqualityContract.GetHashCode();
+    private readonly EqualityIgnored<SourceLocation> _callSite;
 }
 public record MenuFlyoutItemData(string Text, Action? OnClick = null, string? Icon = null) : MenuFlyoutItemBase
 {
@@ -2904,14 +2903,13 @@ public abstract record AppBarItemBase
     /// call (the same mechanism as <see cref="Element.CallSite"/>). The realized command
     /// publishes it for inspectors. Not part of equality, like <see cref="Element.CallSite"/>.
     /// </summary>
-    public SourceLocation? CallSite { get; init; }
+    public SourceLocation? CallSite
+    {
+        get => _callSite.Value;
+        init => _callSite = new(value);
+    }
 
-    /// <summary>Equality ignores <see cref="CallSite"/> (diagnostic metadata).</summary>
-    public virtual bool Equals(AppBarItemBase? other)
-        => ReferenceEquals(this, other) || (other is not null && EqualityContract == other.EqualityContract);
-
-    /// <inheritdoc />
-    public override int GetHashCode() => EqualityContract.GetHashCode();
+    private readonly EqualityIgnored<SourceLocation> _callSite;
 }
 public record AppBarButtonData(string Label, Action? OnClick = null, string? Icon = null) : AppBarItemBase
 {

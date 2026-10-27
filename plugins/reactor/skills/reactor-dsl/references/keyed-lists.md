@@ -124,7 +124,7 @@ regardless of which list factory you used.
 
 ## Edge cases — bailout, diagnostics, gotchas
 
-### Duplicate or null keys → bulk-replace bailout
+### Duplicate or null keys → diagnostic and bulk-replace bailout
 
 Returning a duplicate key from any keyed factory triggers a one-shot
 diagnostic and the diff falls through to a full `Reset` of the underlying
@@ -136,7 +136,14 @@ for that render. Common causes:
 - A `keySelector` that returns a derived value that collides for
   semantically distinct items (`o => o.CustomerId` when the same
   customer appears in multiple orders).
-- A `null` key, which is always treated as a developer bug and bails out.
+- A `null` key, which is always treated as a developer bug and is reported.
+
+Bad keys are reported when the list mounts too, not only when it changes,
+and duplicate `.WithKey(...)` siblings in a panel (`VStack`, `Grid`, …) are
+reported the same way. Each entry in
+`ReactorDiagnostics.RecentKeyedListWarnings` names the list's C# call site
+(`CallSite`, when source-mapped) and, while an inspector is attached
+(`REACTOR_DIAGNOSTICS=1`), the component that rendered it (`ComponentName`).
 
 ### Bulk-replace heuristic
 

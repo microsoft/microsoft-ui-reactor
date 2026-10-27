@@ -135,6 +135,8 @@ public class DslFactoryOptionalTests
         Assert.Same(factory, host.Factory);
         Assert.Same(updater, host.Updater);
         Assert.Null(XamlHost(factory).Updater);
+        Assert.Null(XamlHost(factory).TypeKey);
+        Assert.Equal("chart", XamlHost(factory, typeKey: "chart").TypeKey);
 
         var page = XamlPage(typeof(string), "param");
         Assert.Equal(typeof(string), page.PageType);

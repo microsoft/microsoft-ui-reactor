@@ -220,7 +220,7 @@ WebView2(Uri source = null) → WebView2Element
 When(bool condition, Func<Element> then) → Element
 WrapGrid(Element[] children) → WrapGridElement
 WrapGrid(int maxRowsOrColumns, Element[] children) → WrapGridElement
-XamlHost(Func<FrameworkElement> factory, Action<FrameworkElement> updater = null) → XamlHostElement
+XamlHost(Func<FrameworkElement> factory, Action<FrameworkElement> updater = null, string typeKey = null) → XamlHostElement
 XamlPage(Type pageType, object parameter = null) → XamlPageElement
 
 ## Modifiers (extension methods on Element)
@@ -3321,7 +3321,7 @@ IReadOnlyList<string> SampleKeys { get; init; }
 KeyedListDiagnosticKind Kind { get; init; }
 SourceLocation? CallSite { get; init; }
 int Count { get; init; }
-string Component { get; init; }
+string ComponentName { get; init; }
 string ControlContext { get; init; }
 Deconstruct(ref DateTime TimestampUtc, ref string ControlContext, ref KeyedListDiagnosticKind Kind, ref IReadOnlyList<string> SampleKeys, ref int Count) → void
 Equals(KeyedListDiagnostic other) → bool

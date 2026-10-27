@@ -177,6 +177,39 @@ internal static class DiagnosticEventsFixtures
 
             control.Dispose();
             H.SetContent(null);
+
+            // ── Cleanup phase: a replaced root whose cleanup throws ─────────
+            // With no handler, the release completes and the failure leaves it like any
+            // render-time failure, putting up the built-in panel. Logged so the payload is
+            // visible; the checks pin that it is reported once, as what it is.
+            var priorDefault = ReactorApp.DefaultRenderErrorHandler;
+            ReactorApp.DefaultRenderErrorHandler = null;
+            try
+            {
+                var cleanupHost = H.CreateHost();
+                cleanupHost.Mount(new RenderedThrowingCleanupTreeRoot());
+                await Harness.Render();
+                capture.Take();
+                cleanupHost.Mount(new RenderedNullRoot());
+                await Harness.Render();
+                await Harness.Render(50);
+                var cleanupEvents = capture.Take();
+                Console.WriteLine("# cleanup failure: " + string.Join(", ",
+                    cleanupEvents.Select(e => e.Name + "(" + string.Join("/", e.Payload) + ")")));
+                var reported = cleanupEvents.Where(e =>
+                    e.Name is nameof(ReactorEventSource.CommitError) or nameof(ReactorEventSource.RenderError)).ToList();
+                H.Check("DiagnosticEvents_CleanupFailure_ReportedOnce", reported.Count == 1,
+                    string.Join(", ", reported.Select(e => e.Name)));
+                H.Check("DiagnosticEvents_CleanupFailure_NamesPhaseOrComponent",
+                    reported.Count == 1
+                    && (reported[0].Name == nameof(ReactorEventSource.RenderError)
+                        || reported[0].Payload[0] as string is nameof(RenderErrorSource.Cleanup) or nameof(RenderErrorSource.Reconcile)));
+            }
+            finally
+            {
+                ReactorApp.DefaultRenderErrorHandler = priorDefault;
+                H.SetContent(null);
+            }
         }
     }
 
@@ -226,6 +259,31 @@ internal static class DiagnosticEventsFixtures
                 H.Check("DiagnosticEvents_WindowClosed_Reported",
                     closed.Count(e => e.Payload[0] as string == nameof(DiagEventsWindowRoot)
                         && e.Payload[1] is long hw && hw == hwnd) == 1);
+
+                // A failed open (the first render propagates its error out of OpenWindow) never
+                // opened, so it reports neither event — WindowClosed stays paired with WindowOpened.
+                Exception? openFailure = null;
+                try
+                {
+                    ReactorApp.OpenWindow(
+                        new WindowSpec
+                        {
+                            Title = "Diagnostic events failed open", Width = 240, Height = 160,
+                            RenderErrorHandler = e => { e.Propagate(); return null; },
+                        },
+                        static () => new DiagEventsFailingWindowRoot());
+                }
+                catch (RenderErrorProbeException ex)
+                {
+                    openFailure = ex;
+                }
+                await Harness.Render(50);
+                var failed = capture.Take().Where(e => e.Payload.Length > 0
+                    && e.Payload[0] as string == nameof(DiagEventsFailingWindowRoot)).ToList();
+                Console.WriteLine("# failed open: " + (openFailure?.GetType().Name ?? "no exception") + "; "
+                    + string.Join(", ", failed.Select(e => e.Name)));
+                H.Check("DiagnosticEvents_FailedOpen_Precondition", openFailure is not null);
+                H.Check("DiagnosticEvents_FailedOpen_ReportsNeither", failed.Count == 0);
             }
             finally
             {
@@ -289,4 +347,9 @@ internal sealed class CommitFailureRoot : Component
 internal sealed class DiagEventsWindowRoot : Component
 {
     public override Element Render() => TextBlock("diagnostic events window");
+}
+
+internal sealed class DiagEventsFailingWindowRoot : Component
+{
+    public override Element Render() => throw new RenderErrorProbeException("window failed to open");
 }

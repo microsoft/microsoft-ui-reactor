@@ -854,6 +854,8 @@ public static partial class Factories
     /// <summary>
     /// Creates a tab view with a controlled selected index. Disambiguates a plain <see cref="int"/>
     /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// Any <see cref="int"/> — including <c>default</c>, which is <c>0</c> — selects that index; pass
+    /// <c>(int?)null</c> or <see cref="Optional{T}.Unset"/> to leave the selection uncontrolled.
     /// </summary>
     public static TabViewElement TabView(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params TabViewItemData[] tabs)
     {
@@ -893,6 +895,8 @@ public static partial class Factories
     /// <summary>
     /// Creates a pivot with a controlled selected index. Disambiguates a plain <see cref="int"/>
     /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// Any <see cref="int"/> — including <c>default</c>, which is <c>0</c> — selects that index; pass
+    /// <c>(int?)null</c> or <see cref="Optional{T}.Unset"/> to leave the selection uncontrolled.
     /// </summary>
     public static PivotElement Pivot(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params PivotItemData[] items)
     {
@@ -928,6 +932,8 @@ public static partial class Factories
     /// <summary>
     /// Creates a list view with a controlled selected index. Disambiguates a plain <see cref="int"/>
     /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// Any <see cref="int"/> — including <c>default</c>, which is <c>0</c> — selects that index; pass
+    /// <c>(int?)null</c> or <see cref="Optional{T}.Unset"/> to leave the selection uncontrolled.
     /// </summary>
     public static ListViewElement ListView(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
     {
@@ -962,6 +968,8 @@ public static partial class Factories
     /// <summary>
     /// Creates a grid view with a controlled selected index. Disambiguates a plain <see cref="int"/>
     /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// Any <see cref="int"/> — including <c>default</c>, which is <c>0</c> — selects that index; pass
+    /// <c>(int?)null</c> or <see cref="Optional{T}.Unset"/> to leave the selection uncontrolled.
     /// </summary>
     public static GridViewElement GridView(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
     {
@@ -1044,6 +1052,8 @@ public static partial class Factories
     /// <summary>
     /// Creates a flip view with a controlled selected index. Disambiguates a plain <see cref="int"/>
     /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// Any <see cref="int"/> — including <c>default</c>, which is <c>0</c> — selects that index; pass
+    /// <c>(int?)null</c> or <see cref="Optional{T}.Unset"/> to leave the selection uncontrolled.
     /// </summary>
     public static FlipViewElement FlipView(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
     {
@@ -1081,12 +1091,16 @@ public static partial class Factories
     /// Embeds an arbitrary <see cref="FrameworkElement"/> (a UserControl, a custom control)
     /// created by <paramref name="factory"/> on mount; <paramref name="updater"/> runs after
     /// creation and on every update. Equivalent to
-    /// <c>new XamlHostElement(factory, updater)</c>, but records the call site for the source
-    /// map like every other factory. Set <see cref="Hosting.XamlHostElement.TypeKey"/> with a
-    /// <c>with</c> expression to keep unrelated hosts from updating in place.
+    /// <c>new XamlHostElement(factory, updater) { TypeKey = typeKey }</c>, but records the call
+    /// site for the source map like every other factory.
     /// </summary>
-    public static Hosting.XamlHostElement XamlHost(Func<FrameworkElement> factory, Action<FrameworkElement>? updater = null) =>
-        new(factory, updater);
+    /// <param name="factory">Creates the hosted control on mount.</param>
+    /// <param name="updater">Patches the hosted control after creation and on every update.</param>
+    /// <param name="typeKey">Discriminator for in-place updates: two hosts update in place only
+    /// when their keys match, so unrelated hosted controls are not reconciled against each other.</param>
+    public static Hosting.XamlHostElement XamlHost(
+        Func<FrameworkElement> factory, Action<FrameworkElement>? updater = null, string? typeKey = null) =>
+        new(factory, updater) { TypeKey = typeKey };
 
     // ── Dialogs / Overlays ──────────────────────────────────────────
 

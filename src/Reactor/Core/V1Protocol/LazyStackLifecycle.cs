@@ -112,15 +112,16 @@ internal static class LazyStackLifecycle
         }
 
         var ambient = AnimationAmbient.Current;
+        var attribution = reconciler.KeyedListAttributionFor(n);
         var stats = KeyedListDiff.Apply(
             state,
-            new LazyKeyAdapter(n),
-            static (item, _) => item.Key!,
+            new LazyKeyAdapter(n, reconciler._logger, repeater, attribution),
+            static (item, _) => item.Key,
             reconciler._logger,
             repeater.GetType().Name,
             ambient,
             controlInstance: repeater,
-            attribution: reconciler.KeyedListAttributionFor(n));
+            attribution: attribution);
 
         // ItemsRepeater realizes containers through ElementFactory, so the
         // enter animation runs from there. Moves on already-realized
@@ -135,16 +136,31 @@ internal static class LazyStackLifecycle
     private readonly struct LazyKeyAdapter : IReadOnlyList<LazyKeyAdapter.KeyOnly>
     {
         private readonly LazyStackElementBase _el;
-        public LazyKeyAdapter(LazyStackElementBase el) => _el = el;
-        // A null key reaches the diff as null, so it reports NullKey (the diff substitutes a sentinel).
-        public KeyOnly this[int index] => new(_el.GetKeyAt(index));
+        private readonly Microsoft.Extensions.Logging.ILogger? _logger;
+        private readonly object _control;
+        private readonly KeyedListAttribution _attribution;
+        public LazyKeyAdapter(LazyStackElementBase el, Microsoft.Extensions.Logging.ILogger? logger, object control, KeyedListAttribution attribution)
+        {
+            _el = el;
+            _logger = logger;
+            _control = control;
+            _attribution = attribution;
+        }
+        // A null key is reported and replaced by a positional sentinel, so the diff stays
+        // incremental (a null reaching the diff would reset the whole list every render).
+        public KeyOnly this[int index] => new(_el.GetKeyAt(index) ?? NullKey(index));
+        private string NullKey(int index)
+        {
+            KeyedListDiff.ReportNullKey(_control, _control.GetType().Name, _logger, index, _attribution);
+            return $"__null_{index}";
+        }
         public int Count => _el.ItemCount;
         public IEnumerator<KeyOnly> GetEnumerator()
         {
             for (int i = 0; i < _el.ItemCount; i++) yield return this[i];
         }
         global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-        public readonly record struct KeyOnly(string? Key);
+        public readonly record struct KeyOnly(string Key);
     }
 
     private static ReactorListState BuildListState(Reconciler reconciler, WinUI.ItemsRepeater repeater, LazyStackElementBase lazy)

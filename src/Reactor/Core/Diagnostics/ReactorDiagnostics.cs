@@ -46,7 +46,7 @@ public sealed record KeyedListDiagnostic(
     /// The component whose render produced the list or panel, when known. Reactor knows it
     /// while an inspector is attached (<c>REACTOR_DIAGNOSTICS=1</c>); otherwise <c>null</c>.
     /// </summary>
-    public string? Component { get; init; }
+    public string? ComponentName { get; init; }
 
     /// <summary>
     /// The C# call site of the list factory, or of the first duplicated child for sibling
@@ -157,7 +157,7 @@ public static partial class ReactorDiagnostics
     /// <param name="kind">Which class of bailout fired.</param>
     /// <param name="sampleKeys">Representative offending keys. Will be
     /// truncated to <see cref="MaxSampleKeys"/>.</param>
-    /// <param name="component">Owning component name, when known.</param>
+    /// <param name="componentName">Owning component name, when known.</param>
     /// <param name="callSite">Source call site to attribute the entry to, when known.</param>
     /// <returns>The recorded entry — useful for tests asserting capture
     /// shape. The same instance is returned on dedup hits with an
@@ -167,7 +167,7 @@ public static partial class ReactorDiagnostics
         string? controlContext,
         KeyedListDiagnosticKind kind,
         IReadOnlyList<string> sampleKeys,
-        string? component = null,
+        string? componentName = null,
         SourceLocation? callSite = null)
     {
         var truncated = TruncateSamples(sampleKeys);
@@ -199,7 +199,7 @@ public static partial class ReactorDiagnostics
                         {
                             TimestampUtc = DateTime.UtcNow,
                             Count = existingCount + 1,
-                            Component = v.Component ?? component,
+                            ComponentName = v.ComponentName ?? componentName,
                             CallSite = v.CallSite ?? callSite,
                         };
                         node.Value = updated;
@@ -211,7 +211,7 @@ public static partial class ReactorDiagnostics
                 // the user "this has happened N times".
                 var revived = new KeyedListDiagnostic(DateTime.UtcNow, label, kind, truncated, existingCount + 1)
                 {
-                    Component = component,
+                    ComponentName = componentName,
                     CallSite = callSite,
                 };
                 AppendBounded(revived);
@@ -221,7 +221,7 @@ public static partial class ReactorDiagnostics
             ledger[dedupKey] = 1;
             var fresh = new KeyedListDiagnostic(DateTime.UtcNow, label, kind, truncated, 1)
             {
-                Component = component,
+                ComponentName = componentName,
                 CallSite = callSite,
             };
             AppendBounded(fresh);

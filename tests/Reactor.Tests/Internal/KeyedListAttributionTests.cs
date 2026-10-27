@@ -37,7 +37,7 @@ public class KeyedListAttributionTests
         Assert.Equal(["a", "__null_1", "c"], seeded.Select(s => s.Key));
         var warning = WarningFor(ctx, KeyedListDiagnosticKind.NullKey);
         Assert.NotNull(warning);
-        Assert.Equal("Owner", warning!.Component);
+        Assert.Equal("Owner", warning!.ComponentName);
         Assert.Equal(Site, warning.CallSite);
         Assert.Null(WarningFor(ctx, KeyedListDiagnosticKind.DuplicateKey));
     }
@@ -54,7 +54,7 @@ public class KeyedListAttributionTests
         var warning = WarningFor(ctx, KeyedListDiagnosticKind.DuplicateKey);
         Assert.NotNull(warning);
         Assert.Equal(["a"], warning!.SampleKeys);
-        Assert.Null(warning.Component);
+        Assert.Null(warning.ComponentName);
         Assert.Null(warning.CallSite);
     }
 
@@ -84,8 +84,22 @@ public class KeyedListAttributionTests
 
         Assert.True(stats.Bailout);
         var warning = WarningFor(ctx, KeyedListDiagnosticKind.NullKey);
-        Assert.Equal("ListOwner", warning?.Component);
+        Assert.Equal("ListOwner", warning?.ComponentName);
         Assert.Equal(Site, warning?.CallSite);
+    }
+
+    [Fact]
+    public void ReportNullKey_RecordsWithoutBailingOut_AndCountsRepeats()
+    {
+        var ctx = $"NullReport_{NewId()}";
+        var control = new object();
+
+        KeyedListDiff.ReportNullKey(control, ctx, logger: null, index: 2, new KeyedListAttribution("Owner", Site));
+        KeyedListDiff.ReportNullKey(control, ctx, logger: null, index: 2, new KeyedListAttribution("Owner", Site));
+
+        var warning = WarningFor(ctx, KeyedListDiagnosticKind.NullKey);
+        Assert.Equal(2, warning?.Count);
+        Assert.Equal("Owner", warning?.ComponentName);
     }
 
     [Fact]

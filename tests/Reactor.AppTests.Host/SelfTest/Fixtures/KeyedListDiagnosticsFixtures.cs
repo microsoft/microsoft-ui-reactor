@@ -52,8 +52,29 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             var nullKey = ReactorDiagnostics.RecentKeyedListWarnings
                 .Where(w => w.Kind == KeyedListDiagnosticKind.NullKey).ToList();
             Console.WriteLine("# null key: " + string.Join("; ", nullKey.Select(Describe)));
-            H.Check("KeyedListDiagnostics_LazyVStackNullKeyReported", nullKey.Count == 1);
-            CheckAttribution("KeyedListDiagnostics_LazyVStackNullKey", nullKey.FirstOrDefault(), nameof(NullKeyLazyProbe), publish);
+            H.Check("KeyedListDiagnostics_LazyVStackNullKeyReported",
+                nullKey.Count(w => w.ControlContext == "ItemsRepeater") == 1);
+            H.Check("KeyedListDiagnostics_ListViewNullKeyReported",
+                nullKey.Count(w => w.ControlContext == "ListView") == 1);
+            CheckAttribution("KeyedListDiagnostics_LazyVStackNullKey",
+                nullKey.FirstOrDefault(w => w.ControlContext == "ItemsRepeater"), nameof(NullKeyLazyProbe), publish);
+
+            // Re-rendering a list that keeps its null key reports it again (deduplicated) but
+            // still diffs incrementally: the rows are not reset and re-realized every render.
+            var lazyRowBefore = H.FindControl<WinUI.TextBlock>(t => t.Text == "null-key row one");
+            var listRowBefore = H.FindControl<WinUI.TextBlock>(t => t.Text == "null-key lv one");
+            H.ClickButton("null-key-bump");
+            await Harness.Render();
+            await Harness.Render(100);
+            var lazyRowAfter = H.FindControl<WinUI.TextBlock>(t => t.Text == "null-key row one");
+            var listRowAfter = H.FindControl<WinUI.TextBlock>(t => t.Text == "null-key lv one");
+            H.Check("KeyedListDiagnostics_NullKeyUpdate_RowsRendered", H.FindText("null-key tick 1") is not null);
+            H.Check("KeyedListDiagnostics_NullKeyUpdate_LazyVStackNotReset",
+                lazyRowBefore is not null && ReferenceEquals(lazyRowBefore, lazyRowAfter));
+            H.Check("KeyedListDiagnostics_NullKeyUpdate_ListViewNotReset",
+                listRowBefore is not null && ReferenceEquals(listRowBefore, listRowAfter));
+            H.Check("KeyedListDiagnostics_NullKeyUpdate_StillReported",
+                ReactorDiagnostics.RecentKeyedListWarnings.Any(w => w.Kind == KeyedListDiagnosticKind.NullKey && w.Count > 1));
             H.SetContent(null);
 
             // ── Duplicate sibling keys in a VStack ───────────────────────
@@ -67,11 +88,12 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             H.Check("KeyedListDiagnostics_DuplicateSiblingKeysReportedOnMount", mountDup.Count == 1);
             CheckAttribution("KeyedListDiagnostics_DuplicateSiblingKeys", mountDup.FirstOrDefault(), nameof(DuplicateSiblingsProbe), publish);
 
+            // An update that changes the sibling keys is checked again.
             ReactorDiagnostics.ClearRecentKeyedListWarnings();
             H.ClickButton("dup-bump");
             await Harness.Render();
             var updateDup = ReactorDiagnostics.RecentKeyedListWarnings
-                .Where(w => w.Kind == KeyedListDiagnosticKind.DuplicateKey && w.SampleKeys.Contains("same")).ToList();
+                .Where(w => w.Kind == KeyedListDiagnosticKind.DuplicateKey && w.SampleKeys.Contains("again")).ToList();
             Console.WriteLine("# duplicate siblings (update): " + string.Join("; ", updateDup.Select(Describe)));
             H.Check("KeyedListDiagnostics_DuplicateSiblingKeysReportedOnUpdate", updateDup.Count == 1);
             // Negative control: unique sibling keys are not reported.
@@ -90,6 +112,28 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             H.Check("KeyedListDiagnostics_ListViewDuplicateKeysReported", listDup.Count == 1);
             CheckAttribution("KeyedListDiagnostics_ListViewDuplicateKeys", listDup.FirstOrDefault(), nameof(DuplicateListProbe), publish);
             H.SetContent(null);
+
+            // ── FlipView pages stay positional ───────────────────────────
+            // The stamped key is for diagnostics only: prepending an item updates the existing
+            // pages in place (as before) instead of remounting them, so a controlled FlipView
+            // does not report transient selection changes.
+            FlipPrependProbe.SelectionChanges = 0;
+            H.CreateHost().Mount(new FlipPrependProbe());
+            await Harness.Render();
+            await Harness.Render(100);
+            var firstPage = H.FindControl<WinUI.TextBlock>(t => t.Text == "flip page a");
+            FlipPrependProbe.SelectionChanges = 0;
+            H.ClickButton("flip-prepend");
+            await Harness.Render();
+            await Harness.Render(100);
+            var samePage = H.FindControl<WinUI.TextBlock>(t => t.Text == "flip page z");
+            Console.WriteLine($"# flip prepend: selection changes={FlipPrependProbe.SelectionChanges}");
+            H.Check("KeyedListDiagnostics_FlipViewPrependUpdatesInPlace",
+                firstPage is not null && ReferenceEquals(firstPage, samePage));
+            H.Check("KeyedListDiagnostics_FlipViewPrependNoSelectionCallback", FlipPrependProbe.SelectionChanges == 0);
+            H.Check("KeyedListDiagnostics_FlipViewPrependRowKeyFollowsItem",
+                samePage is not null && Reconciler.GetElementTag(samePage)?.Key == "z");
+            H.SetContent(null);
         }
         finally
         {
@@ -99,7 +143,7 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
     }
 
     private static string Describe(KeyedListDiagnostic w)
-        => $"{w.Kind} [{string.Join(",", w.SampleKeys)}] ctx={w.ControlContext} component={w.Component} at={w.CallSite?.LineNumber}";
+        => $"{w.Kind} [{string.Join(",", w.SampleKeys)}] ctx={w.ControlContext} component={w.ComponentName} at={w.CallSite?.LineNumber}";
 
     private void CheckAttribution(string name, KeyedListDiagnostic? warning, string component, bool publish)
     {
@@ -109,7 +153,7 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             return;
         }
         if (publish)
-            H.Check(name + "_NamesComponent", warning.Component == component, warning.Component ?? "<null>");
+            H.Check(name + "_NamesComponent", warning.ComponentName == component, warning.ComponentName ?? "<null>");
         else
             H.Skip(name + "_NamesComponent", "Reactor.DevtoolsSupport is off in this host");
         if (warning.CallSite is null && !Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled)
@@ -143,7 +187,33 @@ internal sealed class NullKeyLazyProbe : Component
     private static readonly MaybeKeyed[] Items = [new("k1", "one"), new(null, "nokey"), new("k3", "three")];
 
     public override Element Render()
-        => LazyVStack(Items, static m => m.Key!, static (m, _) => TextBlock("null-key row " + m.Text)).Height(120);
+    {
+        var (tick, setTick) = UseState(0);
+        // A fresh list each render, so the update runs the keyed diff.
+        var items = Items.ToArray();
+        return VStack(4,
+            TextBlock($"null-key tick {tick}"),
+            Button("null-key-bump", () => setTick(tick + 1)),
+            LazyVStack(items, static m => m.Key!, static (m, _) => TextBlock("null-key row " + m.Text)).Height(120),
+            ListView(items, static m => m.Key!, static (m, _) => TextBlock("null-key lv " + m.Text)).Height(120));
+    }
+}
+
+internal sealed class FlipPrependProbe : Component
+{
+    internal static int SelectionChanges;
+
+    public override Element Render()
+    {
+        var (items, setItems) = UseState<string[]>(["a", "b"]);
+        return VStack(4,
+            Button("flip-prepend", () => setItems(["z", .. items])),
+            FlipView(items, static s => s, static (s, i) => TextBlock(i == 0 ? "flip page " + s : "flip other " + s)) with
+            {
+                SelectedIndex = 0,
+                OnSelectedIndexChanged = _ => SelectionChanges++,
+            });
+    }
 }
 
 internal sealed class DuplicateSiblingsProbe : Component
@@ -151,9 +221,10 @@ internal sealed class DuplicateSiblingsProbe : Component
     public override Element Render()
     {
         var (tick, setTick) = UseState(0);
+        var dupKey = tick == 0 ? "same" : "again";
         return VStack(2,
-            TextBlock("dupA").WithKey("same"),
-            TextBlock($"dupB {tick}").WithKey("same"),
+            TextBlock("dupA").WithKey(dupKey),
+            TextBlock($"dupB {tick}").WithKey(dupKey),
             TextBlock("unique sibling a").WithKey("unique-a"),
             TextBlock("unkeyed sibling"),
             Button("dup-bump", () => setTick(tick + 1)));
@@ -225,6 +296,45 @@ internal class FlyoutItemIdentity_Published(Harness h) : SelfTestFixtureBase(h)
                 H.Check("FlyoutItemIdentity_AppBarButtonCallSite", cutSite?.LineNumber == FlyoutItemsProbe.CutLine,
                     $"{cutSite?.LineNumber} vs {FlyoutItemsProbe.CutLine}");
             }
+
+            // MenuBar and CommandBar items (and a submenu's children) are built the same way.
+            var menuBar = H.FindControl<WinUI.MenuBar>(_ => true);
+            var fileMenu = menuBar?.Items.FirstOrDefault();
+            var open = fileMenu?.Items.OfType<WinUI.MenuFlyoutItem>().FirstOrDefault(i => i.Text == "Open");
+            var nested = fileMenu?.Items.OfType<WinUI.MenuFlyoutSubItem>().FirstOrDefault()?.Items
+                .OfType<WinUI.MenuFlyoutItem>().FirstOrDefault(i => i.Text == "Nested");
+            var commandBar = H.FindControl<WinUI.CommandBar>(_ => true);
+            var save = commandBar?.PrimaryCommands.OfType<WinUI.AppBarButton>().FirstOrDefault(b => b.Label == "Save");
+            var help = commandBar?.SecondaryCommands.OfType<WinUI.AppBarButton>().FirstOrDefault(b => b.Label == "Help");
+            bool Owned(UIElement? item, string kind)
+                => item is not null && ReactorDiagnostics.GetSource(item) is { } v
+                    && v.Contains("|element=" + kind, StringComparison.Ordinal)
+                    && v.Contains("|owner=" + nameof(FlyoutItemsProbe), StringComparison.Ordinal);
+            H.Check("FlyoutItemIdentity_MenuBarItemPublished", Owned(open, "MenuFlyoutItem"));
+            H.Check("FlyoutItemIdentity_SubMenuChildPublished", Owned(nested, "MenuFlyoutItem"));
+            H.Check("FlyoutItemIdentity_CommandBarPrimaryPublished", Owned(save, "AppBarButton"));
+            H.Check("FlyoutItemIdentity_CommandBarSecondaryPublished", Owned(help, "AppBarButton"));
+
+            // An item patched in place by an update republishes: after the swap, the first
+            // menu-bar slot holds the "Close" item from another call site (same type, so the
+            // control is reused), and the second the toggle item (a different type, replaced).
+            var firstSlot = fileMenu?.Items.FirstOrDefault();
+            var beforeSwap = firstSlot is null ? null : ReactorDiagnostics.GetSource(firstSlot);
+            H.ClickButton("menu-swap");
+            await Harness.Render();
+            var swapped = fileMenu?.Items.FirstOrDefault();
+            var afterSwap = swapped is null ? null : ReactorDiagnostics.GetSource(swapped);
+            var replaced = fileMenu?.Items.Skip(1).FirstOrDefault();
+            Console.WriteLine($"# swap: {beforeSwap} -> {afterSwap}; replaced: {(replaced is null ? null : ReactorDiagnostics.GetSource(replaced))}");
+            H.Check("FlyoutItemIdentity_InPlacePatch_SameControl",
+                swapped is WinUI.MenuFlyoutItem { Text: "Close" } && ReferenceEquals(firstSlot, swapped));
+            if (beforeSwap?.Contains("|at=", StringComparison.Ordinal) == true)
+            {
+                H.Check("FlyoutItemIdentity_InPlacePatch_Republished",
+                    afterSwap is not null && afterSwap != beforeSwap
+                    && Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(swapped!)?.LineNumber == FlyoutItemsProbe.CloseLine);
+            }
+            H.Check("FlyoutItemIdentity_ReplacedItemPublished", Owned(replaced, "ToggleMenuFlyoutItem"));
         }
         finally
         {
@@ -238,16 +348,25 @@ internal sealed class FlyoutItemsProbe : Component
 {
     internal static int AlphaLine;
     internal static int CutLine;
+    internal static int CloseLine;
 
     private static int Line([global::System.Runtime.CompilerServices.CallerLineNumber] int line = 0) => line;
 
     public override Element Render()
     {
         var (last, setLast) = UseState("(none)");
+        var (swapped, setSwapped) = UseState(false);
         var alpha = MenuItem("Alpha", () => setLast("Alpha")); AlphaLine = Line();
         var cut = AppBarButton("Cut", () => setLast("Cut"), icon: "Cut"); CutLine = Line();
+        var close = MenuItem("Close", () => setLast("Close")); CloseLine = Line();
+        MenuFlyoutItemBase[] fileItems = swapped
+            ? [close, ToggleMenuItem("Wrap"), MenuSubItem("More", MenuItem("Nested"))]
+            : [MenuItem("Open", () => setLast("Open")), MenuItem("Recent"), MenuSubItem("More", MenuItem("Nested"))];
         return VStack(4,
             TextBlock("last: " + last),
+            Button("menu-swap", () => setSwapped(true)),
+            MenuBar(Menu("File", fileItems)),
+            CommandBar([AppBarButton("Save", () => setLast("Save"))], [AppBarButton("Help", () => setLast("Help"))]),
             MenuFlyout(Button("Menu target"), alpha, MenuItem("Beta", () => setLast("Beta"))),
             CommandBarFlyout(Button("Commands"), primaryCommands: [cut, AppBarButton("Copy", () => setLast("Copy"))]));
     }

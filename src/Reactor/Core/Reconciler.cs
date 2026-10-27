@@ -521,24 +521,26 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>The component and C# call site a keyed-list diagnostic for <paramref name="list"/> names.</summary>
     internal Internal.KeyedListAttribution KeyedListAttributionFor(Element? list)
-    {
-        var site = list?.CallSite;
-        for (var e = list; site is null && e is ModifiedElement modified; e = modified.Inner)
-            site = modified.Inner.CallSite;
-        return new(DiagnosticComponent, site);
-    }
+        => new(DiagnosticComponent, Internal.KeyedListAttribution.CallSiteOf(list));
 
     /// <summary>
     /// Builds the row view at <paramref name="index"/> of a templated list (<c>ListView&lt;T&gt;</c>,
     /// <c>GridView&lt;T&gt;</c>, <c>FlipView&lt;T&gt;</c>) and stamps the item's <c>KeySelector</c>
-    /// key onto it, as <c>VirtualList</c> / <c>LazyVStack</c> rows already are (issue #326): the
-    /// realized row then carries its key for diagnostics, and a container showing a different
-    /// item is remounted rather than diffed in place, so per-row component state does not leak
-    /// between items. An author's own <c>.WithKey(...)</c> on the row wins.
+    /// key onto it, as <c>VirtualList</c> / <c>LazyVStack</c> rows already are (issue #326), so
+    /// the realized row carries its key for diagnostics (<c>key=</c> in its published
+    /// <c>ReactorSource</c>, <see cref="Element.Key"/> on its element tag). A ListView / GridView
+    /// container follows its item through the keyed collection diff, so the stamped key matches
+    /// across updates. An author's own <c>.WithKey(...)</c> on the row wins.
     /// </summary>
     internal static Element BuildKeyedItemView(Internal.IItemViewSource source, int index)
+        => WithItemKey(source.BuildItemView(index), source, index);
+
+    /// <summary>
+    /// <paramref name="built"/> (the row view at <paramref name="index"/>) with the item's
+    /// <c>KeySelector</c> key, unless the author keyed it already. See <see cref="BuildKeyedItemView"/>.
+    /// </summary>
+    internal static Element WithItemKey(Element built, Internal.IItemViewSource source, int index)
     {
-        var built = source.BuildItemView(index);
         if (built.Key is not null || source is not Internal.IKeyedItemSource keyed) return built;
         return keyed.GetKeyAt(index) is { } key ? built with { Key = key } : built;
     }

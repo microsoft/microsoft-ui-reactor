@@ -7,7 +7,17 @@ namespace Microsoft.UI.Reactor.Core.Internal;
 /// Where a keyed-list diagnostic came from: the component whose render produced the list
 /// (known while an inspector is attached) and the list's C# call site (when source-mapped).
 /// </summary>
-internal readonly record struct KeyedListAttribution(string? Component, SourceLocation? CallSite);
+internal readonly record struct KeyedListAttribution(string? ComponentName, SourceLocation? CallSite)
+{
+    /// <summary>An element's call site, looking through modifier wrappers.</summary>
+    internal static SourceLocation? CallSiteOf(Element? element)
+    {
+        var site = element?.CallSite;
+        for (var e = element; site is null && e is ModifiedElement modified; e = modified.Inner)
+            site = modified.Inner.CallSite;
+        return site;
+    }
+}
 
 /// <summary>
 /// React-style keyed-children diff that maps an immutable
@@ -54,6 +64,7 @@ internal static class KeyedListDiff
     private static readonly string[] NullKeySample = { "<null>" };
 
     [ThreadStatic] private static HashSet<string>? t_siblingKeys;
+    [ThreadStatic] private static HashSet<string>? t_seedKeys;
 
     // Descending-by-index comparer used to remove doomed rows from the tail
     // first so earlier OC indices stay stable. Singleton — avoids capturing a
@@ -620,13 +631,14 @@ internal static class KeyedListDiff
         Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind kind,
         IReadOnlyList<string> sampleKeys,
         int? indexHint,
-        KeyedListAttribution attribution)
+        KeyedListAttribution attribution,
+        bool bailedOut = true)
     {
         bool isFirst = Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
             .IsFirstOccurrence(controlInstance, kind, sampleKeys, diagnosticContext);
 
         Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
-            .Record(controlInstance, diagnosticContext, kind, sampleKeys, attribution.Component, attribution.CallSite);
+            .Record(controlInstance, diagnosticContext, kind, sampleKeys, attribution.ComponentName, attribution.CallSite);
 
         // Only emit the structured ILogger warning on the *first* occurrence
         // per triple. Subsequent occurrences still increment the collector's
@@ -636,7 +648,20 @@ internal static class KeyedListDiff
 
         string reason = kind == Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.NullKey
             ? (indexHint is { } i ? $"null key at index {i}" : "null key")
-            : $"duplicate keys: {string.Join(", ", sampleKeys)}";
+            : $"duplicate keys: {LogKeys(sampleKeys)}";
+
+        if (!bailedOut)
+        {
+            logger.LogWarning(
+                "Reactor: invalid list key — {Reason}. Context: {Context}. Component: {Component}. At: {CallSite}. " +
+                "Keys must be non-null and unique: an affected item is matched by position instead, so its " +
+                "row state can move to another item. Check the KeySelector / IReactorKeyed.Key. See spec 042 §4.3.",
+                reason,
+                diagnosticContext ?? "<unknown>",
+                attribution.ComponentName ?? "<unknown>",
+                LogSite(attribution.CallSite));
+            return;
+        }
 
         logger.LogWarning(
             "Reactor: keyed-list diff bailed out — {Reason}. Context: {Context}. Component: {Component}. At: {CallSite}. " +
@@ -645,9 +670,42 @@ internal static class KeyedListDiff
             "See spec 042 §4.3.",
             reason,
             diagnosticContext ?? "<unknown>",
-            attribution.Component ?? "<unknown>",
-            attribution.CallSite is { } site ? $"{site.FilePath}:{site.LineNumber}" : "<unknown>");
+            attribution.ComponentName ?? "<unknown>",
+            LogSite(attribution.CallSite));
     }
+
+    /// <summary>
+    /// A call site for a log line: file name and line only. Never the absolute compile-time
+    /// path, which on a developer machine names local directories (the published
+    /// <c>ReactorSource</c> value is relativized for the same reason).
+    /// </summary>
+    private static string LogSite(SourceLocation? site) => site is { } s ? s.ToShortString() : "<unknown>";
+
+    /// <summary>At most <see cref="Diagnostics.ReactorDiagnostics.MaxSampleKeys"/> keys, for a log line.</summary>
+    private static string LogKeys(IReadOnlyList<string> keys)
+    {
+        int max = Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics.MaxSampleKeys;
+        return keys.Count <= max
+            ? string.Join(", ", keys)
+            : string.Join(", ", keys.Take(max)) + $", … ({keys.Count - max} more)";
+    }
+
+    /// <summary>
+    /// Reports a <c>null</c> key met while projecting a list's keys for <see cref="Apply{T}"/>,
+    /// where the projection substitutes a positional sentinel and diffs on. Reporting here
+    /// rather than letting <see cref="Apply{T}"/> bail out keeps the incremental diff for a
+    /// list that permanently has a null key: a bailout would reset — and re-realize — the whole
+    /// list on every render. Deduplicated per control like every keyed-list diagnostic.
+    /// </summary>
+    internal static void ReportNullKey(
+        object? controlInstance, string? diagnosticContext, ILogger? logger, int index, KeyedListAttribution attribution)
+        => ReportBailout(
+            controlInstance, diagnosticContext, logger,
+            Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.NullKey,
+            NullKeySample,
+            indexHint: index,
+            attribution,
+            bailedOut: false);
 
     /// <summary>
     /// Seeds a fresh list state's keys (at mount, or when a list is rebound) and reports what
@@ -667,20 +725,34 @@ internal static class KeyedListDiff
     {
         var seeded = new (int Index, string Key)[count];
         int firstNull = -1;
-        HashSet<string>? seen = count > 1 ? new HashSet<string>(StringComparer.Ordinal) : null;
         List<string>? dupes = null;
-        for (int i = 0; i < count; i++)
+        // Per-thread and cleared after use: a mount seeds once per list, so a pooled set keeps
+        // a large list's mount from allocating a set as large as the list.
+        var seen = count > 1 ? (t_seedKeys ??= new HashSet<string>(StringComparer.Ordinal)) : null;
+        if (seen is not null) t_seedKeys = null; // taken: a re-entrant seed allocates its own
+        try
         {
-            var key = keyAt(source, i);
-            if (key is null)
+            for (int i = 0; i < count; i++)
             {
-                if (firstNull < 0) firstNull = i;
-                seeded[i] = (i, $"__null_{i}");
-                continue;
+                var key = keyAt(source, i);
+                if (key is null)
+                {
+                    if (firstNull < 0) firstNull = i;
+                    seeded[i] = (i, $"__null_{i}");
+                    continue;
+                }
+                seeded[i] = (i, key);
+                if (seen is not null && !seen.Add(key) && !(dupes ??= new()).Contains(key))
+                    dupes.Add(key);
             }
-            seeded[i] = (i, key);
-            if (seen is not null && !seen.Add(key) && !(dupes ??= new()).Contains(key))
-                dupes.Add(key);
+        }
+        finally
+        {
+            if (seen is not null)
+            {
+                seen.Clear();
+                t_seedKeys = seen;
+            }
         }
         if (firstNull >= 0)
         {
@@ -689,7 +761,8 @@ internal static class KeyedListDiff
                 Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.NullKey,
                 NullKeySample,
                 indexHint: firstNull,
-                attribution);
+                attribution,
+                bailedOut: false);
         }
         if (dupes is not null)
         {
@@ -698,7 +771,8 @@ internal static class KeyedListDiff
                 Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.DuplicateKey,
                 dupes,
                 indexHint: null,
-                attribution);
+                attribution,
+                bailedOut: false);
         }
         return seeded;
     }
@@ -706,8 +780,8 @@ internal static class KeyedListDiff
     /// <summary>
     /// Reports duplicated <see cref="Element.Key"/>s among one panel's children (for example
     /// two <c>.WithKey("same")</c> siblings in a <c>VStack</c>). The keyed child reconcile
-    /// matches by key, so a duplicate silently pairs the wrong controls. Cheap when no child
-    /// is keyed (one scan), and allocation-free for small panels.
+    /// matches by key, so a duplicate silently pairs the wrong controls. Allocation-free for
+    /// small panels; callers skip it when the sibling keys did not change.
     /// </summary>
     internal static void ReportDuplicateSiblingKeys(
         IReadOnlyList<Element?> children,
@@ -759,17 +833,14 @@ internal static class KeyedListDiff
         }
         if (dupes is null) return;
 
-        var site = firstDuplicate?.CallSite;
-        for (var e = firstDuplicate; site is null && e is ModifiedElement modified; e = modified.Inner)
-            site = modified.Inner.CallSite;
-        var component = reconciler?.DiagnosticComponent;
+        var attribution = new KeyedListAttribution(reconciler?.DiagnosticComponent, KeyedListAttribution.CallSiteOf(firstDuplicate));
         var context = parentControl?.GetType().Name ?? "Panel";
         var kind = Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.DuplicateKey;
 
         bool isFirst = Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
             .IsFirstOccurrence(parentControl, kind, dupes, context);
         Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
-            .Record(parentControl, context, kind, dupes, component, site);
+            .Record(parentControl, context, kind, dupes, attribution.ComponentName, attribution.CallSite);
 
         var logger = reconciler?._logger;
         if (!isFirst || logger is null || !logger.IsEnabled(LogLevel.Warning)) return;
@@ -777,12 +848,11 @@ internal static class KeyedListDiff
             "Reactor: duplicate child keys: {Keys}. Context: {Context}. Component: {Component}. At: {CallSite}. " +
             "Sibling keys must be unique; children with the same key are matched to the wrong controls " +
             "when the panel re-renders, so state and focus can move between them.",
-            string.Join(", ", dupes),
+            LogKeys(dupes),
             context,
-            component ?? "<unknown>",
-            site is { } s ? $"{s.FilePath}:{s.LineNumber}" : "<unknown>");
+            attribution.ComponentName ?? "<unknown>",
+            LogSite(attribution.CallSite));
     }
-
     // Walk newKeys once collecting the *distinct* duplicate values
     // (not every occurrence). For a list with [a, b, a, c, b] returns
     // [a, b] — the dev overlay reader cares about which keys collided,
