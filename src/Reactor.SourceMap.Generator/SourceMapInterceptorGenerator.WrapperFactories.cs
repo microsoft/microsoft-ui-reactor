@@ -100,6 +100,13 @@ public sealed partial class SourceMapInterceptorGenerator
 
     private const string AnyWrapperOperator = "#operator";
 
+    /// <summary>Members the language calls without their name appearing at the use site.</summary>
+    private static readonly ImmutableHashSet<string> ImplicitlyCalledNames = ImmutableHashSet.Create(
+        System.StringComparer.Ordinal,
+        "Deconstruct", "GetEnumerator", "GetAsyncEnumerator", "Current", "MoveNext", "MoveNextAsync",
+        "GetAwaiter", "GetResult", "Add", "Invoke", "Dispose", "DisposeAsync", "GetPinnableReference",
+        "Slice", "Length", "Count");
+
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Compilation, ImmutableHashSet<string>> s_wrapperNames = new();
 
     /// <summary>
@@ -112,66 +119,109 @@ public sealed partial class SourceMapInterceptorGenerator
     private static ImmutableHashSet<string> WrapperRelatedNames(Compilation compilation)
         => s_wrapperNames.GetValue(compilation, static c =>
         {
-            var names = ImmutableHashSet.CreateBuilder<string>(System.StringComparer.Ordinal);
+            // Purely syntactic, to a fixed point: a declaration can only mention a record by
+            // spelling its name, an alias of it, or the name of a type that is itself tainted
+            // (a record-closed base, a delegate returning one). Binding every member signature
+            // instead was measured at seconds on a large project. Factory names are NOT in
+            // this set: MemberIsWrapperFree checks them separately because they often
+            // coincide with Reactor's own factories.
+            var names = new HashSet<string>(System.StringComparer.Ordinal);
             foreach (var record in WrapperFactoryCalls.IncompleteWrappers(c)) names.Add(record.Name);
-            names.UnionWith(WrapperFactoryCalls.SourceFactoryNames(c));
-            CollectMembers(c.SourceModule.GlobalNamespace, c, names);
-            foreach (var tree in c.SyntaxTrees)
+            if (names.Count == 0) return ImmutableHashSet<string>.Empty;
+
+            var declarations = c.SyntaxTrees
+                .SelectMany(static t => t.GetRoot().DescendantNodesAndSelf(static n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax or TypeDeclarationSyntax))
+                .Where(static n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax or TypeDeclarationSyntax or DelegateDeclarationSyntax)
+                .ToList();
+            bool changed;
+            do
             {
-                SemanticModel? model = null;
-                foreach (var directive in tree.GetRoot().DescendantNodes(static n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax).OfType<UsingDirectiveSyntax>())
+                changed = false;
+                foreach (var node in declarations)
                 {
-                    if (directive.Alias is not { } alias) continue;
-                    model ??= c.GetSemanticModel(tree);
-                    if (model.GetDeclaredSymbol(directive) is { Target: ITypeSymbol target } && MentionsIncompleteWrapper(target, c, 0))
-                        names.Add(alias.Name.Identifier.ValueText);
+                    foreach (var (name, implicitlyCalled) in Mentions(node, names))
+                    {
+                        changed |= names.Add(implicitlyCalled ? AnyWrapperOperator : name);
+                    }
                 }
             }
-            return names.ToImmutable();
+            while (changed && !names.Contains(AnyWrapperOperator));
+
+            return names.ToImmutableHashSet(System.StringComparer.Ordinal);
         });
 
-    private static void CollectMembers(INamespaceOrTypeSymbol container, Compilation compilation, ImmutableHashSet<string>.Builder names)
+    /// <summary>
+    /// The names a declaration makes reachable when its signature spells one of
+    /// <paramref name="names"/>. <c>ImplicitlyCalled</c> marks a member C# can call without
+    /// its name being written (operators, conversions, indexers, deconstruction, foreach,
+    /// await, collection initializers, delegate invocation).
+    /// </summary>
+    private static IEnumerable<(string Name, bool ImplicitlyCalled)> Mentions(SyntaxNode node, HashSet<string> names)
     {
-        foreach (var member in container.GetMembers())
+        bool Spells(SyntaxNode? syntax) => syntax is not null
+            && syntax.DescendantTokens().Any(t => t.IsKind(SyntaxKind.IdentifierToken) && names.Contains(t.ValueText));
+
+        switch (node)
         {
-            // A record's synthesized ==, !=, Equals(R), copy constructor and <Clone>$ mention
-            // it, but are only reachable through the record's own name or operators on two
-            // record values — both of which the walk already sees.
-            if (member.IsImplicitlyDeclared) continue;
-            switch (member)
-            {
-                case INamespaceOrTypeSymbol nested:
-                    CollectMembers(nested, compilation, names);
-                    break;
-                case IMethodSymbol method:
-                    if (MentionsIncompleteWrapper(method.ReturnType, compilation, 0)
-                        || method.Parameters.Any(p => MentionsIncompleteWrapper(p.Type, compilation, 0)))
+            case DelegateDeclarationSyntax @delegate when Spells(@delegate.ReturnType) || Spells(@delegate.ParameterList):
+                yield return (@delegate.Identifier.ValueText, false);
+                yield return ("Invoke", true);
+                break;
+            case TypeDeclarationSyntax type:
+                if (Spells(type.BaseList)) yield return (type.Identifier.ValueText, false);
+                foreach (var member in type.Members)
+                {
+                    switch (member)
                     {
-                        names.Add(method.MethodKind is MethodKind.UserDefinedOperator or MethodKind.Conversion
-                            ? AnyWrapperOperator
-                            : method.Name);
+                        case MethodDeclarationSyntax method when Spells(method.ReturnType) || Spells(method.ParameterList):
+                            yield return (method.Identifier.ValueText, ImplicitlyCalledNames.Contains(method.Identifier.ValueText));
+                            break;
+                        case PropertyDeclarationSyntax property when Spells(property.Type):
+                            yield return (property.Identifier.ValueText, ImplicitlyCalledNames.Contains(property.Identifier.ValueText));
+                            break;
+                        case IndexerDeclarationSyntax indexer when Spells(indexer.Type) || Spells(indexer.ParameterList):
+                        case OperatorDeclarationSyntax op when Spells(op.ReturnType) || Spells(op.ParameterList):
+                        case ConversionOperatorDeclarationSyntax conversion when Spells(conversion.Type) || Spells(conversion.ParameterList):
+                            yield return (string.Empty, true);
+                            break;
+                        case BaseFieldDeclarationSyntax field when Spells(field.Declaration.Type):
+                            foreach (var variable in field.Declaration.Variables) yield return (variable.Identifier.ValueText, false);
+                            break;
+                        case EventDeclarationSyntax @event when Spells(@event.Type):
+                            yield return (@event.Identifier.ValueText, false);
+                            break;
                     }
-                    break;
-                case IPropertySymbol property when MentionsIncompleteWrapper(property.Type, compilation, 0):
-                case IFieldSymbol field when MentionsIncompleteWrapper(field.Type, compilation, 0):
-                case IEventSymbol @event when MentionsIncompleteWrapper(@event.Type, compilation, 0):
-                    names.Add(member.Name);
-                    break;
-            }
+                }
+                break;
+            case CompilationUnitSyntax unit:
+                foreach (var directive in unit.Usings) foreach (var m in AliasMention(directive)) yield return m;
+                break;
+            case BaseNamespaceDeclarationSyntax ns:
+                foreach (var directive in ns.Usings) foreach (var m in AliasMention(directive)) yield return m;
+                break;
+        }
+
+        IEnumerable<(string, bool)> AliasMention(UsingDirectiveSyntax directive)
+        {
+            if (directive.Alias is { } alias && Spells(directive.NamespaceOrType))
+                yield return (alias.Name.Identifier.ValueText, false);
         }
     }
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Compilation, System.Collections.Concurrent.ConcurrentDictionary<SyntaxNode, bool>> s_wrapperFreeMembers = new();
 
     /// <summary>
-    /// True when nothing in the member (method, property, field, …) containing
-    /// <paramref name="node"/> can produce a wrapper-dependent binding: none of its identifiers
-    /// is in <see cref="WrapperRelatedNames"/>. Every route to a wrapper value — a factory
-    /// call (bound or not), a typed variable or member, a cast, <c>default</c>, <c>new</c>, a
-    /// method group — spells one of those names, so such a member skips the per-expression
-    /// analysis entirely and behaves exactly as it does in a compilation without wrappers.
-    /// A purely syntactic token scan, memoized per member per compilation: asking the
-    /// compiler for the member's diagnostics instead was measured at more than doubling the
+    /// True when nothing in the type declaration containing <paramref name="node"/> (the
+    /// outermost one, so base lists, primary constructors and sibling members count; the
+    /// whole file for top-level statements) can produce a wrapper-dependent binding: none of
+    /// its identifiers is in <see cref="WrapperRelatedNames"/>, and the compilation declares
+    /// no operator, conversion, indexer or implicitly called member (deconstruction, foreach,
+    /// await, …) involving a record. Every other route to a wrapper value — a factory call
+    /// (bound or not), a typed variable or member, a tainted type, a cast, <c>default</c>,
+    /// <c>new</c>, a method group — spells one of those names, so such code skips the
+    /// per-expression analysis entirely and behaves exactly as in a compilation without
+    /// wrappers. A purely syntactic token scan, memoized per scope per compilation: asking
+    /// the compiler for diagnostics instead was measured at more than doubling the
     /// generator's run time.
     /// </summary>
     private static bool MemberIsWrapperFree(SemanticModel model, SyntaxNode node, System.Threading.CancellationToken ct)
@@ -179,16 +229,29 @@ public sealed partial class SourceMapInterceptorGenerator
         var names = WrapperRelatedNames(model.Compilation);
         if (names.Contains(AnyWrapperOperator)) return false;
 
-        SyntaxNode member = node.FirstAncestorOrSelf<MemberDeclarationSyntax>() ?? (SyntaxNode)node.SyntaxTree.GetRoot(ct);
-        if (member is BaseTypeDeclarationSyntax or BaseNamespaceDeclarationSyntax) return false;
+        // The outermost type declaration, so its base list, primary-constructor parameters and
+        // other members are in view (`class Screen(FooElement child) : Component<FooElement>`
+        // spells the record only there). Top-level statements share one scope: the file.
+        SyntaxNode member = node.SyntaxTree.GetRoot(ct);
+        for (var ancestor = node.Parent; ancestor is not null; ancestor = ancestor.Parent)
+        {
+            if (ancestor is BaseTypeDeclarationSyntax or DelegateDeclarationSyntax) member = ancestor;
+        }
 
         var memo = s_wrapperFreeMembers.GetValue(model.Compilation, static _ => new System.Collections.Concurrent.ConcurrentDictionary<SyntaxNode, bool>());
         if (memo.TryGetValue(member, out var known)) return known;
 
+        // A wrapper factory's name (`ToggleSwitch`) can also be a Reactor factory's: only an
+        // occurrence that binds to nothing is a call to the invisible generated one.
+        var factoryNames = WrapperFactoryCalls.SourceFactoryNames(model.Compilation);
         var free = true;
         foreach (var token in member.DescendantTokens())
         {
-            if (token.IsKind(SyntaxKind.IdentifierToken) && names.Contains(token.ValueText))
+            if (!token.IsKind(SyntaxKind.IdentifierToken)) continue;
+            if (names.Contains(token.ValueText)
+                || (factoryNames.Contains(token.ValueText)
+                    && token.Parent is IdentifierNameSyntax name
+                    && model.GetSymbolInfo(name, ct) is { Symbol: null, CandidateSymbols.IsEmpty: true }))
             {
                 free = false;
                 break;
@@ -342,14 +405,14 @@ public sealed partial class SourceMapInterceptorGenerator
     /// <summary>
     /// False only for expressions that can never introduce a record, an error or a binding
     /// decision their children do not already show — literals, interpolated-string shells,
-    /// parentheses, lambdas, <c>this</c>/<c>base</c>, <c>typeof</c>/<c>sizeof</c>. Their
+    /// parentheses, lambdas, <c>typeof</c>/<c>sizeof</c>. Their
     /// children are still walked. Everything else (operators included: <c>x as FooElement</c>,
     /// a user-defined operator returning a record) is asked. Skipping those few kinds removes
     /// most of the nodes in a typical render body.
     /// </summary>
     private static bool IsValueSource(ExpressionSyntax expression) => expression is not
         (LiteralExpressionSyntax or InterpolatedStringExpressionSyntax or ParenthesizedExpressionSyntax
-        or AnonymousFunctionExpressionSyntax or ThisExpressionSyntax or BaseExpressionSyntax
+        or AnonymousFunctionExpressionSyntax
         or TypeOfExpressionSyntax or SizeOfExpressionSyntax or OmittedArraySizeExpressionSyntax);
 
     /// <summary>
@@ -590,13 +653,80 @@ public sealed partial class SourceMapInterceptorGenerator
         return model.GetSymbolInfo(expression, ct).Symbol is INamespaceOrTypeSymbol ? null : type;
     }
 
-    private static bool MentionsIncompleteWrapper(ITypeSymbol type, Compilation compilation, int depth) => depth <= 8 && type switch
+    /// <summary>
+    /// True when <paramref name="type"/> is "tainted" by a wrapper record — values of it can
+    /// carry, produce or convert to a record whose generated half this compilation cannot see:
+    /// the record itself; a constructed type with a tainted type argument; an array of one; a
+    /// delegate whose signature is tainted (<c>delegate FooElement Make()</c>); or a source type
+    /// whose base chain or interfaces are (<c>class Screen : Component&lt;FooElement&gt;</c>,
+    /// whose inherited <c>Props</c> is a record). Cached per compilation.
+    /// </summary>
+    private static bool MentionsIncompleteWrapper(ITypeSymbol type, Compilation compilation, int depth)
     {
-        IArrayTypeSymbol array => MentionsIncompleteWrapper(array.ElementType, compilation, depth + 1),
-        INamedTypeSymbol named => WrapperFactoryCalls.IsIncompleteWrapperElement(named, compilation)
-            || named.TypeArguments.Any(a => MentionsIncompleteWrapper(a, compilation, depth + 1)),
-        _ => false,
-    };
+        var cache = s_tainted.GetValue(compilation, static _ => new System.Collections.Concurrent.ConcurrentDictionary<ITypeSymbol, bool>(SymbolEqualityComparer.Default));
+        return IsTainted(type, compilation, cache, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default));
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Compilation, System.Collections.Concurrent.ConcurrentDictionary<ITypeSymbol, bool>> s_tainted = new();
+
+    private static bool IsTainted(
+        ITypeSymbol type,
+        Compilation compilation,
+        System.Collections.Concurrent.ConcurrentDictionary<ITypeSymbol, bool> cache,
+        HashSet<ITypeSymbol> inProgress)
+    {
+        if (cache.TryGetValue(type, out var known)) return known;
+        // A cycle (`class A : IComparable<A>`) adds nothing; the outer frame decides.
+        if (!inProgress.Add(type)) return false;
+        try
+        {
+            var tainted = type switch
+            {
+                IArrayTypeSymbol array => IsTainted(array.ElementType, compilation, cache, inProgress),
+                IPointerTypeSymbol pointer => IsTainted(pointer.PointedAtType, compilation, cache, inProgress),
+                INamedTypeSymbol named => IsTaintedNamed(named, compilation, cache, inProgress),
+                _ => false,
+            };
+            cache[type] = tainted;
+            return tainted;
+        }
+        finally
+        {
+            inProgress.Remove(type);
+        }
+    }
+
+    private static bool IsTaintedNamed(
+        INamedTypeSymbol named,
+        Compilation compilation,
+        System.Collections.Concurrent.ConcurrentDictionary<ITypeSymbol, bool> cache,
+        HashSet<ITypeSymbol> inProgress)
+    {
+        if (WrapperFactoryCalls.IsIncompleteWrapperElement(named, compilation)) return true;
+        foreach (var argument in named.TypeArguments)
+        {
+            if (IsTainted(argument, compilation, cache, inProgress)) return true;
+        }
+        if (named.DelegateInvokeMethod is { } invoke)
+        {
+            if (IsTainted(invoke.ReturnType, compilation, cache, inProgress)) return true;
+            foreach (var p in invoke.Parameters)
+            {
+                if (IsTainted(p.Type, compilation, cache, inProgress)) return true;
+            }
+        }
+        // Only a source type can inherit from a record-closed base: metadata cannot name a
+        // record declared in this compilation.
+        if (SymbolEqualityComparer.Default.Equals(named.ContainingAssembly, compilation.Assembly))
+        {
+            if (named.BaseType is { } baseType && IsTainted(baseType, compilation, cache, inProgress)) return true;
+            foreach (var implemented in named.Interfaces)
+            {
+                if (IsTainted(implemented, compilation, cache, inProgress)) return true;
+            }
+        }
+        return false;
+    }
 
     private static bool ContainsTypeParameter(ITypeSymbol type, int depth = 0) => depth > 8 || type switch
     {
@@ -774,6 +904,7 @@ public sealed partial class SourceMapInterceptorGenerator
                     return SymbolEqualityComparer.Default.Equals(_model.GetTypeInfo(binary.Right, _ct).Type, record);
                 case DefaultExpressionSyntax:
                 case ObjectCreationExpressionSyntax:
+                case ThisExpressionSyntax:
                     return true;
                 case SimpleNameSyntax:
                 case MemberAccessExpressionSyntax:

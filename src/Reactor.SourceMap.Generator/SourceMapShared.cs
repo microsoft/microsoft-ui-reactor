@@ -274,24 +274,38 @@ internal static class WrapperFactoryCalls
         => s_incompleteWrappers.GetValue(compilation, static c =>
         {
             var builder = ImmutableHashSet.CreateBuilder<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-            if (c.GetTypeByMetadataName("Microsoft.UI.Reactor.Core.Element") is { } element)
-                CollectIncomplete(c.SourceModule.GlobalNamespace, element, builder);
+            if (c.GetTypeByMetadataName("Microsoft.UI.Reactor.Core.Element") is not { } element) return builder.ToImmutable();
+
+            // Syntax first: only a record declaration carrying an attribute spelled like
+            // GenerateReactorWrapper can be one, so only those few are bound. Walking every
+            // type symbol instead was measured at most of a second on a large project.
+            foreach (var tree in c.SyntaxTrees)
+            {
+                foreach (var record in tree.GetRoot().DescendantNodes(static n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax).OfType<RecordDeclarationSyntax>())
+                {
+                    if (!record.AttributeLists.SelectMany(static l => l.Attributes).Any(static a => IsWrapperAttributeName(a.Name))) continue;
+                    if (c.GetSemanticModel(tree).GetDeclaredSymbol(record) is not { } type) continue;
+                    if (type.TypeKind != TypeKind.Error
+                        && type.GetAttributes().Any(static a => a.AttributeClass?.ToDisplayString() == WrapperAttributeMetadataName)
+                        && !ReactorSourceTransparency.ReturnsElement(type, element))
+                    {
+                        builder.Add(type);
+                    }
+                }
+            }
             return builder.ToImmutable();
         });
 
-    private static void CollectIncomplete(INamespaceSymbol ns, INamedTypeSymbol element, ImmutableHashSet<INamedTypeSymbol>.Builder builder)
+    private static bool IsWrapperAttributeName(NameSyntax name)
     {
-        foreach (var type in ns.GetTypeMembers())
+        var simple = name switch
         {
-            if (type.IsRecord
-                && type.TypeKind != TypeKind.Error
-                && type.GetAttributes().Any(static a => a.AttributeClass?.ToDisplayString() == WrapperAttributeMetadataName)
-                && !ReactorSourceTransparency.ReturnsElement(type, element))
-            {
-                builder.Add(type);
-            }
-        }
-        foreach (var child in ns.GetNamespaceMembers()) CollectIncomplete(child, element, builder);
+            QualifiedNameSyntax q => q.Right.Identifier.ValueText,
+            AliasQualifiedNameSyntax a => a.Name.Identifier.ValueText,
+            SimpleNameSyntax s => s.Identifier.ValueText,
+            _ => string.Empty,
+        };
+        return simple is "GenerateReactorWrapper" or "GenerateReactorWrapperAttribute";
     }
 
     /// <summary>

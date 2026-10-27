@@ -180,7 +180,8 @@ public sealed class SourceMapTransparentGeneratorTests
         SurfaceShape surface = SurfaceShape.InSource,
         string? librarySource = null,
         IReadOnlyList<(string Path, string Source)>? extraFiles = null,
-        string? completeAfterGeneration = null)
+        string? completeAfterGeneration = null,
+        OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary)
     {
         Assert.True(librarySource is null || surface != SurfaceShape.InSource, "a library project needs a referenced surface");
 
@@ -190,7 +191,7 @@ public sealed class SourceMapTransparentGeneratorTests
         var parseOptions = new CSharpParseOptions(LanguageVersion.Preview)
             .WithFeatures([new KeyValuePair<string, string>(
                 "InterceptorsNamespaces", SourceMapInterceptorGenerator.InterceptorNamespace)]);
-        var compilationOptions = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
+        var compilationOptions = new CSharpCompilationOptions(outputKind,
             nullableContextOptions: NullableContextOptions.Enable);
 
         var surfaceTree = CSharpSyntaxTree.ParseText(ReactorSurface, parseOptions, path: "Surface.cs");

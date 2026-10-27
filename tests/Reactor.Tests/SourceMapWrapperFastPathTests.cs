@@ -1,4 +1,6 @@
-﻿using Xunit;
+﻿using System.Collections.Generic;
+using Microsoft.CodeAnalysis;
+using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests;
 
@@ -57,6 +59,99 @@ public sealed class SourceMapWrapperFastPathTests
         var (_, generated) = SourceMapTransparentGeneratorTests.Run(Snippet(usings, body), completeAfterGeneration: Completion);
 
         Assert.DoesNotMatch(ObjectOverloadInterceptor, generated);
+    }
+
+    /// <summary>Declarations shared by <see cref="EachRouteToTheRecord_IsAnalysed"/>, in their own file.</summary>
+    private const string Common = """
+        using Microsoft.UI.Reactor.Core;
+
+        namespace App
+        {
+            public class Gauge { }
+
+            [Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(Gauge))]
+            public partial record GaugeElement;
+
+            public static class Helpers
+            {
+                [Microsoft.UI.Reactor.Diagnostics.ReactorSourceTransparent]
+                public static Element Show(object? value) => new EmptyElement();
+
+                [Microsoft.UI.Reactor.Diagnostics.ReactorSourceTransparent]
+                public static Element Show(Element? child) => child ?? new EmptyElement();
+            }
+
+            public abstract class Base<T> { public T Value = default!; }
+
+            EXTRA
+        }
+        """;
+
+    public static TheoryData<string, string, string, OutputKind> Routes => new()
+    {
+        {
+            "top-level statements share one scope",
+            "using App;\nGaugeElement child = new();\nvar view = Helpers.Show(child);\n",
+            "",
+            OutputKind.ConsoleApplication
+        },
+        {
+            "inherited member of a record-closed base",
+            "using Microsoft.UI.Reactor.Core;\nnamespace App {\n public class Screen : Base<GaugeElement> { public Element R() => Helpers.Show(Value); }\n}\n",
+            "",
+            OutputKind.DynamicallyLinkedLibrary
+        },
+        {
+            "a type with a record-closed base, used elsewhere",
+            "using Microsoft.UI.Reactor.Core;\nnamespace App {\n public static class Other { public static Element R() => Helpers.Show(new Screen().Value); }\n}\n",
+            "public class Screen : Base<GaugeElement> { }",
+            OutputKind.DynamicallyLinkedLibrary
+        },
+        {
+            "primary-constructor parameter",
+            "using Microsoft.UI.Reactor.Core;\nnamespace App {\n public class Screen(GaugeElement child) { public Element R() => Helpers.Show(child); }\n}\n",
+            "",
+            OutputKind.DynamicallyLinkedLibrary
+        },
+        {
+            "deconstruction",
+            "using Microsoft.UI.Reactor.Core;\nnamespace App {\n public static class Use { public static Element R() { var (c, _) = new Provider(); return Helpers.Show(c); } }\n}\n",
+            "public class Provider { public void Deconstruct(out GaugeElement c, out int i) { c = null!; i = 0; } }",
+            OutputKind.DynamicallyLinkedLibrary
+        },
+        {
+            "foreach over a record-producing enumerator",
+            "using Microsoft.UI.Reactor.Core;\nnamespace App {\n public static class Use { public static Element? R() { foreach (var x in new Bag()) return Helpers.Show(x); return null; } }\n}\n",
+            "public class Bag { public System.Collections.Generic.IEnumerator<GaugeElement> GetEnumerator() { yield break; } }",
+            OutputKind.DynamicallyLinkedLibrary
+        },
+        {
+            "this inside the record's own body",
+            "using Microsoft.UI.Reactor.Core;\nnamespace App {\n public partial record GaugeElement { public Element AsView() => Helpers.Show(this); }\n}\n",
+            "",
+            OutputKind.DynamicallyLinkedLibrary
+        },
+        {
+            "delegate returning the record",
+            "using Microsoft.UI.Reactor.Core;\nnamespace App {\n public static class Use { public static Element R() => Helpers.Show(Cache.Make()); }\n}\n",
+            "public delegate GaugeElement ChildFactory(); public static class Cache { public static ChildFactory Make = () => null!; }",
+            OutputKind.DynamicallyLinkedLibrary
+        },
+    };
+
+    [Theory]
+    [MemberData(nameof(Routes))]
+    public void EachRouteToTheRecord_IsAnalysed(string route, string user, string extra, OutputKind outputKind)
+    {
+        // Show(object?) is all that binds before the record is completed; Show(Element?) after.
+        // Run() fails if an emitted interceptor does not compile against the completed record.
+        var (_, generated) = SourceMapTransparentGeneratorTests.Run(
+            user,
+            extraFiles: new List<(string, string)> { ("Common.cs", Common.Replace("EXTRA", extra, global::System.StringComparison.Ordinal)) },
+            completeAfterGeneration: Completion,
+            outputKind: outputKind);
+
+        Assert.True(!global::System.Text.RegularExpressions.Regex.IsMatch(generated, ObjectOverloadInterceptor), route);
     }
 
     [Fact]
