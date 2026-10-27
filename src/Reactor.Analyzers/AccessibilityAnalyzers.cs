@@ -10,7 +10,8 @@ namespace Microsoft.UI.Reactor.Analyzers;
 
 /// <summary>
 /// REACTOR_A11Y_001: Icon-only buttons need <c>.AutomationName()</c> for screen readers.
-/// Detects <c>Button(icon, action)</c> where the first argument is not a string literal
+/// Detects <c>Button(icon, action)</c> where the first argument is not a string
+/// (literal or <c>string</c>-typed expression, e.g. a localized resource lookup)
 /// and no <c>.AutomationName()</c> is present in the fluent chain.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
@@ -70,9 +71,23 @@ public sealed class IconButtonAccessibilityAnalyzer : DiagnosticAnalyzer
         if (HasModifierInChain(invocation, "AutomationName"))
             return;
 
+        // Button(string label, action) is a text button even when the label is not a
+        // literal (for example a localized resource lookup); its content names it.
+        if (IsStringTyped(firstArg, context))
+            return;
+
         context.ReportDiagnostic(Diagnostic.Create(
             Rule,
             invocation.GetLocation()));
+    }
+
+    private static bool IsStringTyped(ExpressionSyntax expression, SyntaxNodeAnalysisContext context)
+    {
+        // ConvertedType covers a label type with an implicit conversion to string that
+        // binds to the Button(string, ...) overload.
+        var info = context.SemanticModel.GetTypeInfo(expression, context.CancellationToken);
+        return info.Type?.SpecialType == SpecialType.System_String
+            || info.ConvertedType?.SpecialType == SpecialType.System_String;
     }
     // </snippet:a11y-rule>
 
