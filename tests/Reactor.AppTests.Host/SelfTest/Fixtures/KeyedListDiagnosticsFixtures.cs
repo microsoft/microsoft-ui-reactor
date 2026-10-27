@@ -149,7 +149,8 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             H.Check("KeyedListDiagnostics_ItemsViewDuplicateKeys_OneEntryAcrossMountAndUpdate",
                 ivDup.Count == 1 && ivDup[0].Count == 2 && ivDup[0].SampleKeys.SequenceEqual(["dup"]));
             H.Check("KeyedListDiagnostics_ItemsViewNullKeyReported",
-                ivWarnings.Count(w => w.Kind == KeyedListDiagnosticKind.NullKey) == 1);
+                ivWarnings.Count(w => w.Kind == KeyedListDiagnosticKind.NullKey) == 1
+                && ivWarnings.First(w => w.Kind == KeyedListDiagnosticKind.NullKey).Count == 2);
             H.SetContent(null);
 
             // ── FlipView pages stay positional ───────────────────────────

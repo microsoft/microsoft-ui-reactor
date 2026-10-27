@@ -138,6 +138,9 @@ internal static class KeyedListDiff
     /// animations on the corresponding realized containers.
     /// (spec 042 §6.)</param>
     /// <param name="attribution">The component and call site the diagnostic names, when known.</param>
+    /// <param name="substituteNullKeys">When true, a null key is replaced by its positional
+    /// <see cref="NullKeySentinel"/> and reported once for the diff, which then stays incremental
+    /// (what the list bindings use). When false, a null key bails out to a full reset.</param>
     /// <returns>Op-shape statistics. <see cref="DiffStats.Bailout"/> is
     /// true when the caller must reset its WinUI <c>ItemsSource</c>
     /// binding to <see cref="ReactorListState.Source"/> (because Reset
@@ -150,7 +153,8 @@ internal static class KeyedListDiff
         string? diagnosticContext = null,
         AmbientAnimation? ambient = null,
         object? controlInstance = null,
-        KeyedListAttribution attribution = default)
+        KeyedListAttribution attribution = default,
+        bool substituteNullKeys = false)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(newItems);
@@ -169,7 +173,7 @@ internal static class KeyedListDiff
         bool rentedKeys = newCount != 0;
         try
         {
-            return ApplyCore(state, newItems, keySelector, logger, diagnosticContext, ambient, controlInstance, attribution, newKeys, newCount);
+            return ApplyCore(state, newItems, keySelector, logger, diagnosticContext, ambient, controlInstance, attribution, substituteNullKeys, newKeys, newCount);
         }
         finally
         {
@@ -193,6 +197,7 @@ internal static class KeyedListDiff
         AmbientAnimation? ambient,
         object? controlInstance,
         KeyedListAttribution attribution,
+        bool substituteNullKeys,
         string[] newKeys,
         int newCount)
     {
@@ -206,9 +211,17 @@ internal static class KeyedListDiff
         // Materialize new keys into the rented buffer. We read them twice
         // (lockstep walk + survivor pass), so projecting once up front avoids
         // the user callback observing each item more than once per diff.
+        int firstNull = -1;
         for (int i = 0; i < newCount; i++)
         {
             var k = keySelector(newItems[i], i);
+            if (k is null && substituteNullKeys)
+            {
+                // Matched by position; reported once per diff below, not once per null item.
+                if (firstNull < 0) firstNull = i;
+                newKeys[i] = NullKeySentinel(i);
+                continue;
+            }
             if (k is null)
             {
                 // Null key → bailout. The user's KeySelector is expected to
@@ -226,6 +239,8 @@ internal static class KeyedListDiff
             }
             newKeys[i] = k;
         }
+        if (firstNull >= 0)
+            ReportNullKey(controlInstance, diagnosticContext, logger, firstNull, attribution);
 
         // ── Fast path 1: no change (FLAGSHIP #1) ───────────────────────
         // Most renders don't touch the list shape — Reactor's reducer model
@@ -695,11 +710,11 @@ internal static class KeyedListDiff
     }
 
     /// <summary>
-    /// Reports a <c>null</c> key met while projecting a list's keys for <see cref="Apply{T}"/>,
-    /// where the projection substitutes a positional sentinel and diffs on. Reporting here
-    /// rather than letting <see cref="Apply{T}"/> bail out keeps the incremental diff for a
-    /// list that permanently has a null key: a bailout would reset — and re-realize — the whole
-    /// list on every render. Deduplicated per control like every keyed-list diagnostic.
+    /// Reports a <c>null</c> key that is matched by position instead of bailing out (the
+    /// <c>substituteNullKeys</c> mode of <see cref="Apply{T}"/>, and the mount-time seed). Not
+    /// bailing out keeps the incremental diff for a list that permanently has a null key: a
+    /// bailout would reset — and re-realize — the whole list on every render. Deduplicated per
+    /// control like every keyed-list diagnostic.
     /// </summary>
     internal static void ReportNullKey(
         object? controlInstance, string? diagnosticContext, ILogger? logger, int index, KeyedListAttribution attribution)
@@ -713,21 +728,10 @@ internal static class KeyedListDiff
 
     /// <summary>
     /// The positional placeholder key a null key is replaced by. Shared by the mount-time seed,
-    /// the bailout rebuild and every key adapter: if two of them disagreed, the first update
+    /// the bailout rebuild and the substituting diff: if two of them disagreed, the first update
     /// would remove and re-add every null-keyed row.
     /// </summary>
     internal static string NullKeySentinel(int index) => $"__null_{index}";
-
-    /// <summary>
-    /// <see cref="ReportNullKey"/>, then <see cref="NullKeySentinel"/> — what a key adapter
-    /// returns for a null key so the diff stays incremental.
-    /// </summary>
-    internal static string ReportNullKeyAndSubstitute(
-        object control, ILogger? logger, int index, KeyedListAttribution attribution)
-    {
-        ReportNullKey(control, control.GetType().Name, logger, index, attribution);
-        return NullKeySentinel(index);
-    }
 
     /// <summary>
     /// Seeds a fresh list state's keys (at mount, or when a list is rebound) and reports what

@@ -178,6 +178,28 @@ public class KeyedListAttributionTests
     }
 
     [Fact]
+    public void Apply_SubstituteNullKeys_ReportsOncePerDiff_AndStaysIncremental()
+    {
+        var ctx = $"ApplySub_{NewId()}";
+        var control = new object();
+        var state = new ReactorListState();
+        state.Reset([(0, "a"), (1, KeyedListDiff.NullKeySentinel(1)), (2, KeyedListDiff.NullKeySentinel(2))]);
+        // Two null keys, plus an append: a real (incremental) change.
+        string?[] next = ["a", null, null, "d"];
+
+        var stats = KeyedListDiff.Apply(
+            state, next, static (k, _) => k!, logger: null, ctx, ambient: null, controlInstance: control,
+            attribution: new KeyedListAttribution("ListOwner", Site), substituteNullKeys: true);
+
+        Assert.False(stats.Bailout);
+        Assert.Equal(1, stats.Inserts);
+        Assert.Equal(["a", "__null_1", "__null_2", "d"], state.LastKeys);
+        var warning = WarningFor(ctx, KeyedListDiagnosticKind.NullKey);
+        Assert.Equal(1, warning?.Count); // once for the diff, not once per null item
+        Assert.Equal("ListOwner", warning?.ComponentName);
+    }
+
+    [Fact]
     public void DuplicateSiblingKeys_AreReported_WithTheFirstDuplicatesCallSite()
     {
         var parent = new object();

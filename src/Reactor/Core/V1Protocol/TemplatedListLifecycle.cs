@@ -316,13 +316,14 @@ internal static class TemplatedListLifecycle
         var attribution = reconciler.KeyedListAttributionFor(n);
         var stats = KeyedListDiff.Apply(
             state,
-            new TemplatedKeyAdapter(n, reconciler._logger, lvb, attribution),
-            static (item, _) => item.Key,
+            new TemplatedKeyAdapter(n),
+            static (item, _) => item.Key!,
             reconciler._logger,
             lvb.GetType().Name,
             ambient,
             controlInstance: lvb,
-            attribution: attribution);
+            attribution: attribution,
+            substituteNullKeys: true);
 
         // Drive per-container offset animations for survivors that moved.
         // Insert / Remove animations attach through the realize/recycle
@@ -349,27 +350,17 @@ internal static class TemplatedListLifecycle
     private readonly struct TemplatedKeyAdapter : IReadOnlyList<TemplatedKeyAdapter.KeyOnly>
     {
         private readonly TemplatedListElementBase _el;
-        private readonly Microsoft.Extensions.Logging.ILogger? _logger;
-        private readonly object _control;
-        private readonly KeyedListAttribution _attribution;
-        public TemplatedKeyAdapter(TemplatedListElementBase el, Microsoft.Extensions.Logging.ILogger? logger, object control, KeyedListAttribution attribution)
-        {
-            _el = el;
-            _logger = logger;
-            _control = control;
-            _attribution = attribution;
-        }
-        // A null key is reported and replaced by a positional sentinel, so the diff stays
-        // incremental (a null reaching the diff would reset the whole list every render).
-        public KeyOnly this[int index] => new(_el.GetKeyAt(index)
-            ?? KeyedListDiff.ReportNullKeyAndSubstitute(_control, _logger, index, _attribution));
+        public TemplatedKeyAdapter(TemplatedListElementBase el) => _el = el;
+        // A null key passes through: the diff (substituteNullKeys) reports it once and matches
+        // the item by position, so the list stays incremental.
+        public KeyOnly this[int index] => new(_el.GetKeyAt(index));
         public int Count => _el.ItemCount;
         public IEnumerator<KeyOnly> GetEnumerator()
         {
             for (int i = 0; i < _el.ItemCount; i++) yield return this[i];
         }
         global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-        public readonly record struct KeyOnly(string Key);
+        public readonly record struct KeyOnly(string? Key);
     }
 
     internal static UIElement? UpdateFlipView(Reconciler reconciler, TemplatedListElementBase o, TemplatedListElementBase n, WinUI.FlipView fv, Action requestRerender)

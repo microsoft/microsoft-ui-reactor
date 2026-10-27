@@ -229,7 +229,7 @@ public sealed partial class Reconciler
         }
 
         var ambient = AnimationAmbient.Current;
-        var keyAdapter = new KeyedSourceKeyAdapter(source, _logger, ir, KeyedListAttributionFor(source as Element));
+        var keyAdapter = new KeyedSourceKeyAdapter(source);
         var stats = KeyedListDiff.Apply(
             state,
             keyAdapter,
@@ -238,7 +238,8 @@ public sealed partial class Reconciler
             ir.GetType().Name,
             ambient,
             controlInstance: ir,
-            attribution: KeyedListAttributionFor(source as Element));
+            attribution: KeyedListAttributionFor(source as Element),
+            substituteNullKeys: true);
 
         if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
             ApplyMoveAnimationsRepeater(ir, movedRows, ambient.Kind);
@@ -308,13 +309,14 @@ public sealed partial class Reconciler
         var ambient = AnimationAmbient.Current;
         var stats = KeyedListDiff.Apply(
             state,
-            new KeyedSourceKeyAdapter(source, _logger, iv, KeyedListAttributionFor(source as Element)),
+            new KeyedSourceKeyAdapter(source),
             static (item, _) => item,
             _logger,
             iv.GetType().Name,
             ambient,
             controlInstance: iv,
-            attribution: KeyedListAttributionFor(source as Element));
+            attribution: KeyedListAttributionFor(source as Element),
+            substituteNullKeys: true);
 
         if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
             ApplyMoveAnimationsRepeater(repeater, movedRows, ambient.Kind);
@@ -406,7 +408,7 @@ public sealed partial class Reconciler
         else
         {
             var ambient = AnimationAmbient.Current;
-            var keyAdapter = new KeyedSourceKeyAdapter(source, _logger, lvb, KeyedListAttributionFor(source as Element));
+            var keyAdapter = new KeyedSourceKeyAdapter(source);
             var stats = KeyedListDiff.Apply(
                 existing,
                 keyAdapter,
@@ -415,7 +417,8 @@ public sealed partial class Reconciler
                 lvb.GetType().Name,
                 ambient,
                 controlInstance: lvb,
-                attribution: KeyedListAttributionFor(source as Element));
+                attribution: KeyedListAttributionFor(source as Element),
+            substituteNullKeys: true);
 
             if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
             {
@@ -448,19 +451,10 @@ public sealed partial class Reconciler
     private readonly struct KeyedSourceKeyAdapter : IReadOnlyList<string>
     {
         private readonly IKeyedItemSource _source;
-        private readonly Microsoft.Extensions.Logging.ILogger? _logger;
-        private readonly object _control;
-        private readonly KeyedListAttribution _attribution;
-        public KeyedSourceKeyAdapter(IKeyedItemSource source, Microsoft.Extensions.Logging.ILogger? logger, object control, KeyedListAttribution attribution)
-        {
-            _source = source;
-            _logger = logger;
-            _control = control;
-            _attribution = attribution;
-        }
-        // A null key is reported and replaced by a positional sentinel, so the diff stays
-        // incremental (a null reaching the diff would reset the whole list every render).
-        public string this[int index] => _source.GetKeyAt(index) ?? KeyedListDiff.ReportNullKeyAndSubstitute(_control, _logger, index, _attribution);
+        public KeyedSourceKeyAdapter(IKeyedItemSource source) => _source = source;
+        // A null key passes through: the diff (substituteNullKeys) reports it once and matches
+        // the item by position, so the list stays incremental.
+        public string this[int index] => _source.GetKeyAt(index);
         public int Count => _source.ItemCount;
         public IEnumerator<string> GetEnumerator()
         {
@@ -508,7 +502,7 @@ public sealed partial class Reconciler
         else
         {
             var ambient = AnimationAmbient.Current;
-            var keyAdapter = new ItemsKeyAdapter<TItem>(items, keySelector, _logger, lvb, KeyedListAttributionFor(viewSource as Element));
+            var keyAdapter = new ItemsKeyAdapter<TItem>(items, keySelector);
             var stats = KeyedListDiff.Apply(
                 existing,
                 keyAdapter,
@@ -517,7 +511,8 @@ public sealed partial class Reconciler
                 lvb.GetType().Name,
                 ambient,
                 controlInstance: lvb,
-                attribution: KeyedListAttributionFor(viewSource as Element));
+                attribution: KeyedListAttributionFor(viewSource as Element),
+            substituteNullKeys: true);
 
             // Per-container offset animations for moved survivors. Insert
             // / Remove paths attach through realize/recycle so they need
@@ -562,22 +557,14 @@ public sealed partial class Reconciler
         private readonly IReadOnlyList<TItem> _items;
         private readonly Func<TItem, int, string> _keySelector;
 
-        private readonly Microsoft.Extensions.Logging.ILogger? _logger;
-        private readonly object _control;
-        private readonly KeyedListAttribution _attribution;
 
-        public ItemsKeyAdapter(IReadOnlyList<TItem> items, Func<TItem, int, string> keySelector,
-            Microsoft.Extensions.Logging.ILogger? logger, object control, KeyedListAttribution attribution)
+        public ItemsKeyAdapter(IReadOnlyList<TItem> items, Func<TItem, int, string> keySelector)
         {
             _items = items;
             _keySelector = keySelector;
-            _logger = logger;
-            _control = control;
-            _attribution = attribution;
         }
 
-        // See KeyedSourceKeyAdapter: report a null key and diff on with a positional sentinel.
-        public string this[int index] => _keySelector(_items[index], index) ?? KeyedListDiff.ReportNullKeyAndSubstitute(_control, _logger, index, _attribution);
+        public string this[int index] => _keySelector(_items[index], index);
         public int Count => _items.Count;
         public IEnumerator<string> GetEnumerator()
         {
