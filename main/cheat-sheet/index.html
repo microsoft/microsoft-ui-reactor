@@ -3841,7 +3841,9 @@ Doc apps inherit <code>Reactor.DevtoolsSupport=true</code> from <code>docs/_pipe
 <p><strong>Effect with cleanup.</strong> Return a cleanup lambda from the effect lambda;
 Reactor calls it before the next run (when deps change) and on unmount.</p>
 <p><strong>Conditional render.</strong> <code>cond ? Element1 : Empty()</code> keeps the element
-out of the tree when <code>cond</code> is false — see the
+out of the tree when <code>cond</code> is false; in a container with no keyed
+children it still holds its slot, so the siblings after it keep their
+state — see the
 <a href="../recipes/modal-dialog/">modal-dialog recipe</a>.</p>
 <p><strong>List with stable keys.</strong> <code>ForEach(items, x =&gt; Card(x).WithKey(x.Id))</code>
 so the reconciler can move rows rather than rebuild them.</p>
