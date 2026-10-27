@@ -22,6 +22,8 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// </summary>
 internal static class FlyoutIsOpenStateFixtures
 {
+    // Null-guarded identity: two missing controls must not count as "the same control".
+    private static bool SameInstance(object? a, object? b) => a is not null && ReferenceEquals(a, b);
     private static async Task<bool> WaitOpen(WinPrim.FlyoutBase? flyout)
     {
         for (int i = 0; i < 40 && flyout?.IsOpen != true; i++)
@@ -88,7 +90,7 @@ internal static class FlyoutIsOpenStateFixtures
             H.ClickButton("FlyState_Go");
             await Harness.Render();
             H.Check($"FlyState_NoRenderError[{Describe(errors)}]", errors.Count == 0);
-            H.Check("FlyState_TargetSurvives", ReferenceEquals(H.FindButton("flystate-target"), target));
+            H.Check("FlyState_TargetSurvives", SameInstance(H.FindButton("flystate-target"), target));
             H.Check("FlyState_OpenedOnRisingEdge", await WaitOpen(flyout));
 
             // Dismiss → OnClosed resets the state → a second rising edge re-opens it.
