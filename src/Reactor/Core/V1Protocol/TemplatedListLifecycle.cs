@@ -322,8 +322,7 @@ internal static class TemplatedListLifecycle
             lvb.GetType().Name,
             ambient,
             controlInstance: lvb,
-            attribution: attribution,
-            substituteNullKeys: true);
+            attribution: attribution);
 
         // Drive per-container offset animations for survivors that moved.
         // Insert / Remove animations attach through the realize/recycle
@@ -351,7 +350,7 @@ internal static class TemplatedListLifecycle
     {
         private readonly TemplatedListElementBase _el;
         public TemplatedKeyAdapter(TemplatedListElementBase el) => _el = el;
-        // A null key passes through: the diff (substituteNullKeys) reports it once and matches
+        // A null key passes through: the diff reports it once and matches
         // the item by position, so the list stays incremental.
         public KeyOnly this[int index] => new(_el.GetKeyAt(index));
         public int Count => _el.ItemCount;

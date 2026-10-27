@@ -121,8 +121,7 @@ internal static class LazyStackLifecycle
             repeater.GetType().Name,
             ambient,
             controlInstance: repeater,
-            attribution: attribution,
-            substituteNullKeys: true);
+            attribution: attribution);
 
         // ItemsRepeater realizes containers through ElementFactory, so the
         // enter animation runs from there. Moves on already-realized
@@ -138,7 +137,7 @@ internal static class LazyStackLifecycle
     {
         private readonly LazyStackElementBase _el;
         public LazyKeyAdapter(LazyStackElementBase el) => _el = el;
-        // A null key passes through: the diff (substituteNullKeys) reports it once and matches
+        // A null key passes through: the diff reports it once and matches
         // the item by position, so the list stays incremental.
         public KeyOnly this[int index] => new(_el.GetKeyAt(index));
         public int Count => _el.ItemCount;

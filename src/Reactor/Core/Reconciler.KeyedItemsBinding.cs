@@ -238,8 +238,7 @@ public sealed partial class Reconciler
             ir.GetType().Name,
             ambient,
             controlInstance: ir,
-            attribution: KeyedListAttributionFor(source as Element),
-            substituteNullKeys: true);
+            attribution: KeyedListAttributionFor(source as Element));
 
         if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
             ApplyMoveAnimationsRepeater(ir, movedRows, ambient.Kind);
@@ -315,8 +314,7 @@ public sealed partial class Reconciler
             iv.GetType().Name,
             ambient,
             controlInstance: iv,
-            attribution: KeyedListAttributionFor(source as Element),
-            substituteNullKeys: true);
+            attribution: KeyedListAttributionFor(source as Element));
 
         if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
             ApplyMoveAnimationsRepeater(repeater, movedRows, ambient.Kind);
@@ -417,8 +415,7 @@ public sealed partial class Reconciler
                 lvb.GetType().Name,
                 ambient,
                 controlInstance: lvb,
-                attribution: KeyedListAttributionFor(source as Element),
-            substituteNullKeys: true);
+                attribution: KeyedListAttributionFor(source as Element));
 
             if (ambient is { HasEffect: true } && stats.MovedRows is { Count: > 0 } movedRows)
             {
@@ -452,7 +449,7 @@ public sealed partial class Reconciler
     {
         private readonly IKeyedItemSource _source;
         public KeyedSourceKeyAdapter(IKeyedItemSource source) => _source = source;
-        // A null key passes through: the diff (substituteNullKeys) reports it once and matches
+        // A null key passes through: the diff reports it once and matches
         // the item by position, so the list stays incremental.
         public string this[int index] => _source.GetKeyAt(index);
         public int Count => _source.ItemCount;
@@ -511,8 +508,7 @@ public sealed partial class Reconciler
                 lvb.GetType().Name,
                 ambient,
                 controlInstance: lvb,
-                attribution: KeyedListAttributionFor(viewSource as Element),
-            substituteNullKeys: true);
+                attribution: KeyedListAttributionFor(viewSource as Element));
 
             // Per-container offset animations for moved survivors. Insert
             // / Remove paths attach through realize/recycle so they need

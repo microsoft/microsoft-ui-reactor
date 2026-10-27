@@ -113,8 +113,9 @@ internal static class KeyedListDiff
     /// <see cref="ReactorListState.Source"/>.</param>
     /// <param name="newItems">New immutable user-visible list.</param>
     /// <param name="keySelector">Maps each item to a stable identity string.
-    /// Must produce non-null keys; a null result triggers the bailout
-    /// path and a one-shot diagnostic.</param>
+    /// Should produce non-null keys: a null result is replaced by its positional
+    /// <see cref="NullKeySentinel"/> (the item is matched by position) and reported once
+    /// per diff, which stays incremental.</param>
     /// <param name="logger">Optional logger used to surface the
     /// duplicate-key / null-key bailout diagnostic.</param>
     /// <param name="diagnosticContext">Human-readable label used in the
@@ -138,9 +139,6 @@ internal static class KeyedListDiff
     /// animations on the corresponding realized containers.
     /// (spec 042 §6.)</param>
     /// <param name="attribution">The component and call site the diagnostic names, when known.</param>
-    /// <param name="substituteNullKeys">When true, a null key is replaced by its positional
-    /// <see cref="NullKeySentinel"/> and reported once for the diff, which then stays incremental
-    /// (what the list bindings use). When false, a null key bails out to a full reset.</param>
     /// <returns>Op-shape statistics. <see cref="DiffStats.Bailout"/> is
     /// true when the caller must reset its WinUI <c>ItemsSource</c>
     /// binding to <see cref="ReactorListState.Source"/> (because Reset
@@ -153,8 +151,7 @@ internal static class KeyedListDiff
         string? diagnosticContext = null,
         AmbientAnimation? ambient = null,
         object? controlInstance = null,
-        KeyedListAttribution attribution = default,
-        bool substituteNullKeys = false)
+        KeyedListAttribution attribution = default)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(newItems);
@@ -173,7 +170,7 @@ internal static class KeyedListDiff
         bool rentedKeys = newCount != 0;
         try
         {
-            return ApplyCore(state, newItems, keySelector, logger, diagnosticContext, ambient, controlInstance, attribution, substituteNullKeys, newKeys, newCount);
+            return ApplyCore(state, newItems, keySelector, logger, diagnosticContext, ambient, controlInstance, attribution, newKeys, newCount);
         }
         finally
         {
@@ -197,7 +194,6 @@ internal static class KeyedListDiff
         AmbientAnimation? ambient,
         object? controlInstance,
         KeyedListAttribution attribution,
-        bool substituteNullKeys,
         string[] newKeys,
         int newCount)
     {
@@ -215,27 +211,15 @@ internal static class KeyedListDiff
         for (int i = 0; i < newCount; i++)
         {
             var k = keySelector(newItems[i], i);
-            if (k is null && substituteNullKeys)
+            if (k is null)
             {
-                // Matched by position; reported once per diff below, not once per null item.
+                // A KeySelector bug (e.g. `t => t.Id` on a nullable property). The item is
+                // matched by position and the diff stays incremental — a bailout would reset and
+                // re-realize the whole list on every render while the key stays null. Reported
+                // once per diff below, not once per null item.
                 if (firstNull < 0) firstNull = i;
                 newKeys[i] = NullKeySentinel(i);
                 continue;
-            }
-            if (k is null)
-            {
-                // Null key → bailout. The user's KeySelector is expected to
-                // produce non-null strings; this case is almost always a bug
-                // in the projection (e.g., `t => t.Id` on a nullable string
-                // property). Reset is correctness-preserving; the diagnostic
-                // is one-shot per (control, kind) to avoid log spam.
-                ReportBailout(
-                    controlInstance, diagnosticContext, logger,
-                    Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.NullKey,
-                    NullKeySample,
-                    indexHint: i,
-                    attribution);
-                return Bailout(state, newItems, keySelector);
             }
             newKeys[i] = k;
         }
@@ -710,8 +694,8 @@ internal static class KeyedListDiff
     }
 
     /// <summary>
-    /// Reports a <c>null</c> key that is matched by position instead of bailing out (the
-    /// <c>substituteNullKeys</c> mode of <see cref="Apply{T}"/>, and the mount-time seed). Not
+    /// Reports a <c>null</c> key that is matched by position instead of bailing out (by
+    /// <see cref="Apply{T}"/> and the mount-time seed). Not
     /// bailing out keeps the incremental diff for a list that permanently has a null key: a
     /// bailout would reset — and re-realize — the whole list on every render. Deduplicated per
     /// control like every keyed-list diagnostic.

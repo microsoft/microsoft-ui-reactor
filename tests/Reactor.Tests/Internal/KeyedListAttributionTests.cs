@@ -71,7 +71,7 @@ public class KeyedListAttributionTests
     }
 
     [Fact]
-    public void Apply_NullKeyBailout_CarriesAttribution()
+    public void Apply_NullKey_CarriesAttribution()
     {
         var ctx = $"Apply_{NewId()}";
         var state = new ReactorListState();
@@ -82,7 +82,7 @@ public class KeyedListAttributionTests
             state, next, static (k, _) => k!, logger: null, ctx, ambient: null, controlInstance: new object(),
             attribution: new KeyedListAttribution("ListOwner", Site));
 
-        Assert.True(stats.Bailout);
+        Assert.False(stats.Bailout);
         var warning = WarningFor(ctx, KeyedListDiagnosticKind.NullKey);
         Assert.Equal("ListOwner", warning?.ComponentName);
         Assert.Equal(Site, warning?.CallSite);
@@ -178,7 +178,7 @@ public class KeyedListAttributionTests
     }
 
     [Fact]
-    public void Apply_SubstituteNullKeys_ReportsOncePerDiff_AndStaysIncremental()
+    public void Apply_NullKeys_ReportedOncePerDiff_AndStayIncremental()
     {
         var ctx = $"ApplySub_{NewId()}";
         var control = new object();
@@ -189,7 +189,7 @@ public class KeyedListAttributionTests
 
         var stats = KeyedListDiff.Apply(
             state, next, static (k, _) => k!, logger: null, ctx, ambient: null, controlInstance: control,
-            attribution: new KeyedListAttribution("ListOwner", Site), substituteNullKeys: true);
+            attribution: new KeyedListAttribution("ListOwner", Site));
 
         Assert.False(stats.Bailout);
         Assert.Equal(1, stats.Inserts);
