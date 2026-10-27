@@ -124,7 +124,7 @@ regardless of which list factory you used.
 
 ## Edge cases — bailout, diagnostics, gotchas
 
-### Duplicate or null keys → diagnostic and bulk-replace bailout
+### Duplicate or null keys → diagnostic
 
 Returning a duplicate key from any keyed factory triggers a one-shot
 diagnostic and the diff falls through to a full `Reset` of the underlying
@@ -136,7 +136,11 @@ for that render. Common causes:
 - A `keySelector` that returns a derived value that collides for
   semantically distinct items (`o => o.CustomerId` when the same
   customer appears in multiple orders).
-- A `null` key, which is always treated as a developer bug and is reported.
+
+A `null` key is always a developer bug too. It is reported the same way, and
+the item is matched by its position (a `__null_<index>` placeholder key), so
+the rest of the list still diffs incrementally — but that item's row state
+follows its position, not the item.
 
 Bad keys are reported when the list mounts too, not only when it changes,
 and duplicate `.WithKey(...)` siblings in a panel (`VStack`, `Grid`, …) are

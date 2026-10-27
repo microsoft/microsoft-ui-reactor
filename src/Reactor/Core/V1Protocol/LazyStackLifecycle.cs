@@ -148,12 +148,8 @@ internal static class LazyStackLifecycle
         }
         // A null key is reported and replaced by a positional sentinel, so the diff stays
         // incremental (a null reaching the diff would reset the whole list every render).
-        public KeyOnly this[int index] => new(_el.GetKeyAt(index) ?? NullKey(index));
-        private string NullKey(int index)
-        {
-            KeyedListDiff.ReportNullKey(_control, _control.GetType().Name, _logger, index, _attribution);
-            return $"__null_{index}";
-        }
+        public KeyOnly this[int index] => new(_el.GetKeyAt(index)
+            ?? KeyedListDiff.ReportNullKeyAndSubstitute(_control, _logger, index, _attribution));
         public int Count => _el.ItemCount;
         public IEnumerator<KeyOnly> GetEnumerator()
         {

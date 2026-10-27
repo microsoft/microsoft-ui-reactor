@@ -384,13 +384,15 @@ Conventions for contributors:
   - `UseElementRef<T>()` is counted as the single hook slot it is, so the source map's
     `hooks=` list keeps the ref's name and the indices of every later hook.
   - Templated `ListView<T>` / `GridView<T>` / `FlipView<T>` rows carry their `KeySelector` key
-    on the realized element, as `LazyVStack` / `VirtualList` rows already did — so a recycled
-    container showing a different item remounts its row instead of carrying row state over.
+    on the realized element (its element tag and published `key=`), as `LazyVStack` /
+    `VirtualList` rows already did. FlipView pages are still matched by position.
   - A list born with a null or duplicated key (including `LazyVStack`, which used to swap a
-    null key for `__null_N` silently) is reported at mount, and duplicate `.WithKey` siblings in
-    a panel (`VStack(… .WithKey("same"), … .WithKey("same"))`) are reported too. Every
-    `KeyedListDiagnostic` now carries `ComponentName` (while an inspector is attached) and
-    `CallSite`, and the logged warning names both.
+    null key for `__null_N` silently) is reported at mount, and a null key met during an update
+    is reported on every keyed list (the item is still matched by position, and the rest of the
+    list now always diffs incrementally instead of resetting on some paths). Duplicate
+    `.WithKey` siblings in a panel (`VStack(… .WithKey("same"), … .WithKey("same"))`) are
+    reported too. Every `KeyedListDiagnostic` now carries `ComponentName` (while an inspector is
+    attached) and `CallSite`, and the logged warning names both.
   - `MenuItem(…)` / `AppBarButton(…)` and the other menu and command-bar item factories are
     source-mapped (new `CallSite` on `MenuFlyoutItemBase` / `AppBarItemBase`, excluded from
     equality), and the items a `MenuFlyout`, `CommandBarFlyout`, `MenuBar` or `CommandBar`

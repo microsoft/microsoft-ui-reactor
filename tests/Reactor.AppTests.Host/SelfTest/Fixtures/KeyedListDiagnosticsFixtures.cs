@@ -133,6 +133,25 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             CheckAttribution("KeyedListDiagnostics_ListViewDuplicateKeys", listDup.FirstOrDefault(), nameof(DuplicateListProbe), publish);
             H.SetContent(null);
 
+            // ── ItemsView: mount and update report one entry ─────────────
+            // Its seed (at mount) and its diff (on update) must name the same control, or one bad
+            // list shows up as two diagnostic entries. A null key is reported too.
+            ReactorDiagnostics.ClearRecentKeyedListWarnings();
+            H.CreateHost().Mount(new ItemsViewKeysProbe());
+            await Harness.Render();
+            await Harness.Render(100);
+            H.ClickButton("iv-bump");
+            await Harness.Render();
+            await Harness.Render(100);
+            var ivWarnings = ReactorDiagnostics.RecentKeyedListWarnings.Where(w => w.ControlContext == "ItemsView").ToList();
+            Console.WriteLine("# items view: " + string.Join("; ", ivWarnings.Select(w => Describe(w) + $" x{w.Count}")));
+            var ivDup = ivWarnings.Where(w => w.Kind == KeyedListDiagnosticKind.DuplicateKey).ToList();
+            H.Check("KeyedListDiagnostics_ItemsViewDuplicateKeys_OneEntryAcrossMountAndUpdate",
+                ivDup.Count == 1 && ivDup[0].Count == 2 && ivDup[0].SampleKeys.SequenceEqual(["dup"]));
+            H.Check("KeyedListDiagnostics_ItemsViewNullKeyReported",
+                ivWarnings.Count(w => w.Kind == KeyedListDiagnosticKind.NullKey) == 1);
+            H.SetContent(null);
+
             // ── FlipView pages stay positional ───────────────────────────
             // The stamped key is for diagnostics only: prepending an item updates the existing
             // pages in place (as before) instead of remounting them, so a controlled FlipView
@@ -216,6 +235,22 @@ internal sealed class NullKeyLazyProbe : Component
             Button("null-key-bump", () => setTick(tick + 1)),
             LazyVStack(items, static m => m.Key!, static (m, _) => TextBlock("null-key row " + m.Text)).Height(120),
             ListView(items, static m => m.Key!, static (m, _) => TextBlock("null-key lv " + m.Text)).Height(120));
+    }
+}
+
+internal sealed class ItemsViewKeysProbe : Component
+{
+    public override Element Render()
+    {
+        var (tick, setTick) = UseState(0);
+        // A duplicated key and a null key; the update changes the list so its diff runs.
+        MaybeKeyed[] items = tick == 0
+            ? [new("dup", "one"), new("dup", "two"), new(null, "three")]
+            : [new("dup", "one"), new("dup", "two"), new(null, "three"), new("four", "four")];
+        return VStack(4,
+            Button("iv-bump", () => setTick(tick + 1)),
+            ItemsView(items, keySelector: static m => m.Key!, viewBuilder: static (m, _) => ItemContainer(TextBlock("iv " + m.Text)))
+                .Height(160));
     }
 }
 

@@ -19,14 +19,17 @@ public enum KeyedListDiagnosticKind
 }
 
 /// <summary>
-/// One captured keyed-list bailout. Immutable record so the dev tools
+/// One captured keyed-list key diagnostic: a null key, or duplicate keys in a keyed list or
+/// among a panel's <c>.WithKey</c> siblings. A list with duplicate keys is rebuilt in full when
+/// it changes (a bailout); a null-keyed item is matched by position and the list keeps diffing
+/// incrementally. Reported at mount as well as on update. Immutable record so the dev tools
 /// overlay can display an arbitrary subset without locking the producer.
 /// </summary>
 /// <param name="TimestampUtc">When the diagnostic was first observed.</param>
 /// <param name="ControlContext">Human-readable label — the host control's
 /// type name. May be <c>null</c> when the diff ran outside a control
 /// context (e.g. direct unit-test invocation of <c>KeyedListDiff.Apply</c>).</param>
-/// <param name="Kind">Which class of bailout fired (null key vs. duplicate
+/// <param name="Kind">Which class of key problem was found (null key vs. duplicate
 /// keys).</param>
 /// <param name="SampleKeys">A small, bounded set of representative offending
 /// keys (duplicates that collided, or the literal token <c>"&lt;null&gt;"</c>
@@ -104,9 +107,9 @@ public static partial class ReactorDiagnostics
     private static readonly ConcurrentDictionary<long, int> _seenContextual = new();
 
     /// <summary>
-    /// Recent keyed-list bailout diagnostics, newest first. Returns an
-    /// independent snapshot — safe to enumerate while producers continue
-    /// running. Empty when no bailout has ever fired (the common case).
+    /// Recent keyed-list key diagnostics (see <see cref="KeyedListDiagnostic"/>), newest first.
+    /// Returns an independent snapshot — safe to enumerate while producers continue
+    /// running. Empty when no key problem has ever been found (the common case).
     /// </summary>
     public static IReadOnlyList<KeyedListDiagnostic> RecentKeyedListWarnings
     {

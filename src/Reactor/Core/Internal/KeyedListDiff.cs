@@ -550,7 +550,7 @@ internal static class KeyedListDiff
             var k = keySelector(newItems[i], i);
             // Synthesize a sentinel for null / duplicate to keep Reset
             // producing a coherent collection (Reset tolerates duplicates).
-            rebuilt.Add((i, k ?? $"__null_{i}"));
+            rebuilt.Add((i, k ?? NullKeySentinel(i)));
         }
         state.Reset(rebuilt);
         return new DiffStats(
@@ -712,6 +712,24 @@ internal static class KeyedListDiff
             bailedOut: false);
 
     /// <summary>
+    /// The positional placeholder key a null key is replaced by. Shared by the mount-time seed,
+    /// the bailout rebuild and every key adapter: if two of them disagreed, the first update
+    /// would remove and re-add every null-keyed row.
+    /// </summary>
+    internal static string NullKeySentinel(int index) => $"__null_{index}";
+
+    /// <summary>
+    /// <see cref="ReportNullKey"/>, then <see cref="NullKeySentinel"/> — what a key adapter
+    /// returns for a null key so the diff stays incremental.
+    /// </summary>
+    internal static string ReportNullKeyAndSubstitute(
+        object control, ILogger? logger, int index, KeyedListAttribution attribution)
+    {
+        ReportNullKey(control, control.GetType().Name, logger, index, attribution);
+        return NullKeySentinel(index);
+    }
+
+    /// <summary>
     /// Seeds a fresh list state's keys (at mount, or when a list is rebound) and reports what
     /// <see cref="Apply{T}"/> would report for them: a <c>null</c> key — replaced by a
     /// positional sentinel so the state stays coherent — and duplicated keys. Without this a
@@ -742,7 +760,7 @@ internal static class KeyedListDiff
                 if (key is null)
                 {
                     if (firstNull < 0) firstNull = i;
-                    seeded[i] = (i, $"__null_{i}");
+                    seeded[i] = (i, NullKeySentinel(i));
                     continue;
                 }
                 seeded[i] = (i, key);

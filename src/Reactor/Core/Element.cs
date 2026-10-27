@@ -7871,9 +7871,11 @@ public record ItemsViewElement<T>(
 
     public override int ItemCount => Items.Count;
 
+    // A null key passes through (as for the other keyed lists), so the keyed-list binding
+    // reports it and substitutes its positional placeholder.
     internal override string GetKeyAt(int index) =>
         (uint)index < (uint)Items.Count
-            ? (KeySelector(Items[index]) ?? $"__iv_{index}")
+            ? KeySelector(Items[index])!
             : $"__iv_{index}";
 
     /// <summary>
