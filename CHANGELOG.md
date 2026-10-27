@@ -374,7 +374,7 @@ Conventions for contributors:
 
 ### Fixed
 
-- **A conditional child no longer shifts its unkeyed siblings** (issue #ISSUE). The
+- **A conditional child no longer shifts its unkeyed siblings** (issue #1423). The
   container factories drop `null` / `Empty()` arguments and flatten `Group(...)`, so
   toggling `cond ? X : Empty()` moved every later sibling down one index and the
   positional reconcile compared it with the child that used to sit there: a sibling of
@@ -386,7 +386,7 @@ Conventions for contributors:
   exit transition is still playing also no longer pairs its siblings with the wrong control.
 
 - **`ListView<T>` / `GridView<T>` rows are unmounted when WinUI drops their container
-  without recycling it** (issue #ISSUE). Under fast insert / remove churn WinUI could park
+  without recycling it** (issue #1423). Under fast insert / remove churn WinUI could park
   a container offscreen, unlinked from any item, without raising the recycle
   `ContainerContentChanging`, so the row's components stayed mounted: their effects never
   cleaned up, and a `ReactorDiagnostics.TrySetState` on one was accepted but never rendered.
