@@ -229,6 +229,67 @@ internal static class WrapperFactoryCalls
         return null;
     }
 
+    /// <summary>
+    /// The <c>[GenerateReactorWrapper]</c> records whose generated factory — invisible here —
+    /// is also a candidate for <paramref name="invocation"/> in the real compilation, beside
+    /// whatever it binds to here (a hand-written <c>Card(Element, params object[])</c> imported
+    /// next to a generated <c>Card(Element? content = null)</c>, which wins once it exists).
+    /// Null when there is none, which is every call whose name no source wrapper's factory
+    /// has. Over-approximates C#'s name lookup (every enclosing type and every import scope),
+    /// so it can only make a caller more conservative.
+    /// </summary>
+    internal static List<INamedTypeSymbol>? InvisibleFactoryOwners(
+        SemanticModel model,
+        InvocationExpressionSyntax invocation,
+        CancellationToken ct)
+    {
+        if (CandidateName(invocation) is not { Length: > 0 } name || !SourceFactoryNames(model.Compilation).Contains(name)) return null;
+
+        List<INamedTypeSymbol>? owners = null;
+        if (invocation.Expression is MemberAccessExpressionSyntax member)
+        {
+            if (model.GetSymbolInfo(member.Expression, ct).Symbol is INamedTypeSymbol qualifier)
+            {
+                for (var type = qualifier; type is not null; type = type.BaseType) Consider(type);
+            }
+            return owners;
+        }
+
+        var position = invocation.SpanStart;
+        var enclosing = model.GetEnclosingSymbol(position, ct);
+        for (var type = enclosing as INamedTypeSymbol ?? enclosing?.ContainingType; type is not null; type = type.ContainingType) Consider(type);
+        foreach (var scope in model.GetImportScopes(position, ct))
+        {
+            foreach (var import in scope.Imports)
+            {
+                if (import.NamespaceOrType is INamedTypeSymbol imported) Consider(imported);
+            }
+        }
+        return owners;
+
+        void Consider(INamedTypeSymbol type)
+        {
+            if (!IsWrapperFactoryOwner(type, name)) return;
+            // Already visible (the generated file fed back in): an ordinary candidate, not a hidden one.
+            if (type.GetMembers(name).Any(static m => m.Locations.Any(static l => l.SourceTree?.FilePath.EndsWith(".Wrapper.g.cs", StringComparison.OrdinalIgnoreCase) == true)))
+                return;
+            if (owners?.Contains(type, SymbolEqualityComparer.Default) == true) return;
+            (owners ??= new List<INamedTypeSymbol>()).Add(type);
+        }
+    }
+
+    /// <summary>
+    /// True when a hidden factory candidate (<see cref="InvisibleFactoryOwners"/>) could give
+    /// <paramref name="invocation"/> a different type in the real compilation: the generated
+    /// factory returns its own record, so a call already typed as that record is unaffected.
+    /// </summary>
+    internal static bool ResultCanChangeByInvisibleFactory(SemanticModel model, InvocationExpressionSyntax invocation, CancellationToken ct)
+    {
+        if (InvisibleFactoryOwners(model, invocation, ct) is not { } owners) return false;
+        var type = model.GetTypeInfo(invocation, ct).Type;
+        return owners.Any(o => !SymbolEqualityComparer.Default.Equals(o, type));
+    }
+
     private static readonly ConditionalWeakTable<Compilation, ImmutableHashSet<string>> s_sourceFactoryNames = new();
 
     /// <summary>

@@ -306,6 +306,29 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         Assert.Null(parenthesized[0].CallSite);
     }
 
+    internal static int UseEither(global::System.Func<string, global::System.DateTime> f) { f("text"); return 1; }
+
+    internal static int UseEither(global::System.Func<Element, int> f) { f(TextBlock("text")); return 2; }
+
+    internal static global::System.DateTime Produce(object value) => default;
+
+    internal static int Produce(Element value) => 0;
+
+    [Fact]
+    public void LambdaParameterTypedByTheLambdasOwnBody_IsNotTrusted()
+    {
+        // Here Produce(gauge) is a DateTime, so UseEither(Func<string, DateTime>) is chosen and
+        // `item` is a string; once the record is an Element, Produce(gauge) is an int, only
+        // UseEither(Func<Element, int>) fits, and Display(Element) runs.
+        FakeGaugeElement gauge = FakeGauge();
+        Element? shown = null;
+        var which = UseEither(item => { shown = Display(item); return Produce(gauge); });
+
+        Assert.Equal(2, which);
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)shown!).Orientation);
+        Assert.Null(shown!.CallSite);
+    }
+
     [ReactorSourceTransparent]
     internal static Element PresentMaybe(object? value) => VStack();
 

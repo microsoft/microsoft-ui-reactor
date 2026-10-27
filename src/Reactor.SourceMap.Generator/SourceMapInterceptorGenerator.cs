@@ -348,6 +348,16 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
             return DescribeWrapperFactorySite(ctx, invocation, ct);
         }
 
+        // A generated factory that is invisible here may be the better overload in the real
+        // compilation (`Card(x)` binds to an imported hand-written `Card` here, to the
+        // generated one there); an interceptor for either could be the wrong one. Neither
+        // generator claims such a call.
+        if (HasSourceWrappers(ctx.SemanticModel.Compilation)
+            && WrapperFactoryCalls.InvisibleFactoryOwners(ctx.SemanticModel, invocation, ct) is not null)
+        {
+            return null;
+        }
+
         // A call whose ARGUMENTS include one of those invisible factories — `VStack(8,
         // SettingsCard(...))` — fails overload resolution here, or binds against an error
         // type, even though it is perfectly well-formed in the real compilation. Bind it

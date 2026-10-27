@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
@@ -286,7 +286,8 @@ public sealed partial class SourceMapInterceptorGenerator
             if (names.Contains(token.ValueText)
                 || (factoryNames.Contains(token.ValueText)
                     && token.Parent is IdentifierNameSyntax name
-                    && model.GetSymbolInfo(name, ct) is { Symbol: null, CandidateSymbols.IsEmpty: true }))
+                    && (model.GetSymbolInfo(name, ct) is { Symbol: null, CandidateSymbols.IsEmpty: true }
+                        || (InvocationNamedBy(name) is { } call && WrapperFactoryCalls.InvisibleFactoryOwners(model, call, ct) is not null))))
             {
                 free = false;
                 break;
@@ -295,6 +296,14 @@ public sealed partial class SourceMapInterceptorGenerator
 
         memo[member] = free;
         return free;
+
+        // `Name(...)` or `Q.Name(...)` whose name this is.
+        static InvocationExpressionSyntax? InvocationNamedBy(IdentifierNameSyntax name) => name.Parent switch
+        {
+            InvocationExpressionSyntax call when call.Expression == name => call,
+            MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax call } access when access.Name == name && call.Expression == access => call,
+            _ => null,
+        };
     }
 
     /// <summary>
@@ -473,7 +482,8 @@ public sealed partial class SourceMapInterceptorGenerator
         if (memo.TryGetValue(node, out var known)) return (known, false);
         if (IsNameof(node, model)) return (false, false);
         if (depth > MaxDependencyDepth) return (true, true);
-        if (HasWrapperTypeArgument(model, node, ct))
+        if (HasWrapperTypeArgument(model, node, ct)
+            || (node is InvocationExpressionSyntax competing && WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(model, competing, ct)))
         {
             memo[node] = true;
             return (true, false);
@@ -567,6 +577,11 @@ public sealed partial class SourceMapInterceptorGenerator
                 return new SyntaxNode[] { passedValue?.Parent ?? declared };
             var sources = new List<SyntaxNode> { receiving.Expression };
             sources.AddRange(receiving.ArgumentList.Arguments.Where(a => a != passed));
+            // And the lambda itself when more than one candidate could take it: its body then
+            // takes part in choosing the overload (one whose body fails to bind, or returns a
+            // worse type, loses), and so the parameter's type. Walking it reaches this very
+            // parameter again, which the walk's cycle guard cuts.
+            if (LambdaCanChooseOverload(model, receiving, passed, lambda!, ct)) sources.Add(lambda!);
             return sources;
         }
 
@@ -638,6 +653,73 @@ public sealed partial class SourceMapInterceptorGenerator
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// True when the lambda's body can decide its parameters' types: when the candidates in
+    /// <paramref name="receiving"/>'s group that could take it at that position disagree on
+    /// them (<c>Use(Func&lt;string, DateTime&gt;)</c> beside <c>Use(Func&lt;Element, int&gt;)</c>, where
+    /// the body's return type picks one). Candidates that agree — <c>Mount(Component)</c>
+    /// beside <c>Mount(Func&lt;RenderContext, Element&gt;)</c>, or <c>Select</c>'s two overloads of
+    /// different arity — leave the parameters' types fixed whatever the body does. A target a
+    /// lambda converts to by its natural type (<c>object</c>, <c>Delegate</c>, a type
+    /// parameter) is unknown, and so is a group that cannot be read.
+    /// </summary>
+    private static bool LambdaCanChooseOverload(
+        SemanticModel model,
+        InvocationExpressionSyntax receiving,
+        ArgumentSyntax passed,
+        AnonymousFunctionExpressionSyntax lambda,
+        System.Threading.CancellationToken ct)
+    {
+        var group = model.GetMemberGroup(receiving.Expression, ct);
+        if (group.IsEmpty || passed.NameColon is not null) return true;
+        var index = receiving.ArgumentList.Arguments.IndexOf(passed);
+        int? arity = lambda switch
+        {
+            SimpleLambdaExpressionSyntax => 1,
+            ParenthesizedLambdaExpressionSyntax parenthesized => parenthesized.ParameterList.Parameters.Count,
+            AnonymousMethodExpressionSyntax { ParameterList: { } list } => list.Parameters.Count,
+            _ => null,
+        };
+
+        // One entry per possible target: its parameter types, or null when unknown.
+        var targets = new List<ImmutableArray<ITypeSymbol>?>();
+        foreach (var symbol in group)
+        {
+            if (symbol is not IMethodSymbol method) return true;
+            var parameters = method.Parameters;
+            var last = parameters.Length - 1;
+            if (index < parameters.Length) Classify(parameters[index].Type);
+            if (last >= 0 && parameters[last].IsParams && index >= last && parameters[last].Type is IArrayTypeSymbol array) Classify(array.ElementType);
+        }
+        if (targets.Count <= 1) return false;
+        if (targets.Any(static t => t is null)) return true;
+        var first = targets[0]!.Value;
+        return targets.Any(t => !System.Linq.Enumerable.SequenceEqual(t!.Value, first, SymbolEqualityComparer.Default));
+
+        void Classify(ITypeSymbol type)
+        {
+            if (DelegateOf(type) is { } invoke)
+            {
+                if (arity is null) targets.Add(null);
+                else if (invoke.Parameters.Length == arity) targets.Add(invoke.Parameters.Select(static p => p.Type).ToImmutableArray());
+                return;
+            }
+            // Targets of a lambda's natural type; anything else (a class such as Component)
+            // cannot take a lambda at all.
+            if (type is ITypeParameterSymbol or IDynamicTypeSymbol
+                || type.SpecialType is SpecialType.System_Object or SpecialType.System_Delegate or SpecialType.System_MulticastDelegate
+                || type.ToDisplayString() is "System.Linq.Expressions.Expression" or "System.Linq.Expressions.LambdaExpression")
+            {
+                targets.Add(null);
+            }
+        }
+
+        static IMethodSymbol? DelegateOf(ITypeSymbol type) => type is INamedTypeSymbol named
+            ? named.DelegateInvokeMethod
+              ?? (named.Name == "Expression" && named.TypeArguments.Length == 1 && named.TypeArguments[0] is INamedTypeSymbol inner ? inner.DelegateInvokeMethod : null)
+            : null;
     }
 
     /// <summary>
@@ -868,6 +950,7 @@ public sealed partial class SourceMapInterceptorGenerator
             {
                 if (_replaced.Contains(node) || _accounted.Contains(node) || node is not ExpressionSyntax expression) continue;
                 if (HasWrapperTypeArgument(_model, expression, _ct)) return false;
+                if (expression is InvocationExpressionSyntax competing && WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(_model, competing, _ct)) return false;
                 // The name half of `x.Name` is judged together with its member access.
                 if (expression.Parent is MemberAccessExpressionSyntax member && member.Name == expression) continue;
                 if (HasErrorType(_model, expression, _ct)) return false;
@@ -930,6 +1013,7 @@ public sealed partial class SourceMapInterceptorGenerator
                 case InvocationExpressionSyntax call:
                 {
                     if (call.Expression is MemberAccessExpressionSyntax { Expression: var callee } && !ReceiverTypeIsFixed(callee)) return false;
+                    if (WrapperFactoryCalls.InvisibleFactoryOwners(_model, call, _ct) is { } owners && owners.Any(o => !SymbolEqualityComparer.Default.Equals(o, record))) return false;
                     var receiverRecord = call.Expression is MemberAccessExpressionSyntax m
                         && ValueType(m.Expression) is INamedTypeSymbol r
                         && WrapperFactoryCalls.IsIncompleteWrapperElement(r, _model.Compilation) ? r : null;
