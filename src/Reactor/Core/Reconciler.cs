@@ -608,17 +608,20 @@ public sealed partial class Reconciler : IDisposable
         var kind = newEl;
         while (kind is ModifiedElement modified) kind = modified.Inner;
         bool publish = global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled;
-        // A keyed Memo is transparent: the control is its factory output's, tagged with that
-        // element (whose callbacks the control's trampolines dispatch to). Re-key the realized
-        // element and describe it; the wrapper never becomes the tag.
-        if (kind is KeyedMemoElement)
+        // The control can realize an element other than the item's: a keyed Memo's factory
+        // output, or the child a forwarding RegisterType callback handed back (whose tag
+        // TypeRegistration.TagControl keeps). The control's trampolines and unmount read that
+        // element, so re-key it and describe it; the item element never replaces it.
+        if (TryGetReactorState(control, out var state) && state.Element is { } realized
+            && (kind is KeyedMemoElement || realized.GetType() != kind.GetType()))
         {
-            if (!TryGetReactorState(control, out var state) || state.Element is not { } realized) return;
             if (!string.Equals(realized.Key, newEl.Key, StringComparison.Ordinal))
                 state.Element = realized = realized with { Key = newEl.Key };
             if (publish) PublishSource(control, realized);
             return;
         }
+        // An untagged keyed Memo output has nothing to re-key, and its wrapper is never the tag.
+        if (kind is KeyedMemoElement) return;
         SetElementTagIfNeeded(control, newEl);
         if (publish) PublishSource(control, newEl);
     }

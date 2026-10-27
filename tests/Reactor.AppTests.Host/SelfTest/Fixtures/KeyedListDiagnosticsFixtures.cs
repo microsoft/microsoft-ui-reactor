@@ -220,6 +220,17 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
                     && memoValue.Contains("|element=Button", StringComparison.Ordinal));
             H.SetContent(null);
 
+            // A page whose RegisterType callback forwards to a reconciler-mounted Button: the
+            // control keeps the Button's tag (TypeRegistration.TagControl), so a parent re-render
+            // must re-key that element, not replace it with the page element, or the click stops
+            // dispatching. With source publishing off and on.
+            foreach (var publishPass in publish ? new[] { false, true } : [false])
+            {
+                ReactorSourcePublisher.IsEnabled = publishPass;
+                await CheckForwardedFlipPage(publishPass);
+            }
+            ReactorSourcePublisher.IsEnabled = publish;
+
             // A descriptor list on the typed TemplatedItems strategy: its warnings name the list
             // element's call site, at mount (the seed) and on update (the diff).
             ReactorDiagnostics.ClearRecentKeyedListWarnings();
@@ -243,6 +254,48 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             ReactorDiagnostics.ClearRecentKeyedListWarnings();
         }
     }
+
+    private async Task CheckForwardedFlipPage(bool publishPass)
+    {
+        var name = "KeyedListDiagnostics_FlipViewForwardedPage" + (publishPass ? "_Published" : "");
+        int clicks = 0;
+        static Element Inner(FlipForwardElement el, Action click) => Button(el.Label, click);
+        var host = H.CreateHost();
+        host.Reconciler.RegisterType<FlipForwardElement, UIElement>(
+            mount: (r, el, rerender) => r.Mount(Inner(el, () => clicks++), rerender)!,
+            update: (r, oldEl, newEl, control, rerender) => r.UpdateChild(Inner(oldEl, () => clicks++), Inner(newEl, () => clicks++), control, rerender));
+        host.Mount(ctx =>
+        {
+            var (n, setN) = ctx.UseState(0);
+            return VStack(4,
+                Button("flip-fwd-rerender", () => setN(n + 1)),
+                TextBlock("flip-fwd renders " + n),
+                FlipView(FlipForwardItems, static s => s, static (_, _) => new FlipForwardElement("fwd page")).Height(60));
+        });
+        await Harness.Render();
+        await Harness.Render(100);
+        H.ClickButton("flip-fwd-rerender");
+        await Harness.Render();
+        H.ClickButton("flip-fwd-rerender");
+        await Harness.Render();
+        await Harness.Render(100);
+        var page = H.FindButton("fwd page");
+        var tag = page is null ? null : Reconciler.GetElementTag(page);
+        var value = page is null ? null : ReactorDiagnostics.GetSource(page);
+        H.ClickButton("fwd page");
+        bool clicked = await Harness.WaitFor(() => clicks == 1);
+        Console.WriteLine($"# forwarded flip page (publish={publishPass}): tag={tag?.GetType().Name} key={tag?.Key} clicks={clicks} value={value}");
+        H.Check(name + "_KeepsButtonTag", tag is ButtonElement && tag.Key == "only", tag?.GetType().Name ?? "<none>");
+        H.Check(name + "_StillClicks", clicked, $"clicks: {clicks}");
+        if (publishPass)
+            H.Check(name + "_SourceDescribesButton",
+                value?.Contains("|element=Button", StringComparison.Ordinal) == true
+                && value.Contains("|key=only", StringComparison.Ordinal), value ?? "<none>");
+        host.Dispose();
+        H.SetContent(null);
+    }
+
+    private static readonly string[] FlipForwardItems = ["only"];
 
     private static KeyedListDiagnostic? DuplicateNaming(string key)
         => ReactorDiagnostics.RecentKeyedListWarnings.LastOrDefault(
@@ -320,6 +373,8 @@ internal sealed class ItemsViewKeysProbe : Component
                 .Height(160));
     }
 }
+
+internal sealed record FlipForwardElement(string Label) : Element;
 
 internal sealed record TypedKeyedListElement(string[] Items) : Element;
 
