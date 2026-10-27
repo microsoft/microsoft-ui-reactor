@@ -17,8 +17,12 @@ namespace Microsoft.UI.Reactor.Core;
 /// group's argument, and so on. Each level takes 16 bits of a <see langword="long"/>,
 /// most significant first; levels below the first store the index plus one, so a
 /// shorter path sorts before the paths that extend it and ids increase with position.
-/// Four levels fit; a group nested deeper falls back to its children's positions. An
-/// array with no slot map registered uses <c>index &lt;&lt; 48</c>. Only the factories'
+/// Four levels fit: nesting a path that already uses all four drops its deepest level,
+/// and an index past a level's range is clamped to its largest value. Either way ids
+/// stay non-decreasing and only the children that share the shortened id match each
+/// other by position (the merge walk pairs equal ids in order); their shallower siblings
+/// keep their exact identity. An array with no slot map registered uses
+/// <c>index &lt;&lt; 48</c>. Only the factories'
 /// slow path (an argument was null, empty or a group, so it already allocates)
 /// registers a map, and only when it differs from those implicit ids (a dropped
 /// trailing argument does not); it is keyed weakly by the array it returns, and the
@@ -38,30 +42,19 @@ internal static class ChildSlots
     private static readonly ConditionalWeakTable<Element[], long[]> s_slots = new();
     private static volatile bool s_any;
 
-    internal static long ForIndex(int index) => (long)index << FirstLevelShift;
+    internal static long ForIndex(int index) => (long)Math.Min(index, MaxIndex) << FirstLevelShift;
 
     /// <summary>The id of the child at <paramref name="indexInGroup"/> of a group with no map
     /// of its own, the group being argument <paramref name="index"/>.</summary>
     internal static long ForGroupChild(int index, int indexInGroup) =>
-        Nest(index, ForIndex(indexInGroup));
-
-    /// <summary>Whether <paramref name="groupSlot"/> (an id relative to a group) still has a free
-    /// level to nest it one level deeper.</summary>
-    internal static bool CanNest(long groupSlot) => (groupSlot & 0xFFFF) == 0;
-
-    internal static bool CanNestAll(long[] groupSlots)
-    {
-        for (int i = 0; i < groupSlots.Length; i++)
-        {
-            if (!CanNest(groupSlots[i])) return false;
-        }
-        return true;
-    }
+        ((long)Math.Min(index, MaxIndex) << FirstLevelShift)
+        | ((long)(Math.Min(indexInGroup, MaxGroupIndex) + 1) << (FirstLevelShift - LevelBits));
 
     /// <summary>The id of a group's child whose id relative to the group is
     /// <paramref name="groupSlot"/>, the group being argument <paramref name="index"/>.</summary>
     internal static long Nest(int index, long groupSlot) =>
-        ((long)index << FirstLevelShift) | ((groupSlot >> LevelBits) + (1L << (FirstLevelShift - LevelBits)));
+        ((long)Math.Min(index, MaxIndex) << FirstLevelShift)
+        | ((groupSlot >>> LevelBits) + (1L << (FirstLevelShift - LevelBits)));
 
     internal static void Set(Element[] children, long[] slots)
     {

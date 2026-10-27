@@ -141,6 +141,45 @@ public class ChildSlotsTests
     }
 
     [Fact]
+    public void GroupChild_PastTheSignBit_StaysDistinctAndOrdered()
+    {
+        // Indices from 32768 set the top bit of a first-level id; nesting must not
+        // sign-extend it into the argument above.
+        Assert.NotEqual(G(0, 32768), G(1, 32768));
+        Assert.True(S(0) < G(0, 32768) && G(0, 32768) < G(0, 40000) && G(0, 40000) < S(1));
+        Assert.True(N(0, S(40000)) < S(1));
+    }
+
+    [Fact]
+    public void Factory_DeepNestedGroup_ToggleKeepsShallowSiblingsSlots()
+    {
+        // Past four levels only the deepest child's path is shortened; y and z keep their
+        // own slots when x toggles.
+        StackElement Tree(bool show) =>
+            VStack(Group(show ? TextBlock("x") : Empty(), TextBlock("y"),
+                Group(Group(Group(Group(TextBlock("z")))))));
+
+        var shown = SlotsOf(Tree(true).Children);
+        var hidden = SlotsOf(Tree(false).Children);
+
+        Assert.Equal(shown[1], hidden[0]);
+        Assert.Equal(shown[2], hidden[1]);
+        Assert.True(shown[0] < shown[1] && shown[1] < shown[2]);
+    }
+
+    [Fact]
+    public void Slots_NeverDecreaseThroughDeepAndWideGroups()
+    {
+        var wide = new Element?[70000];
+        wide[0] = TextBlock("first");
+        wide[69999] = TextBlock("last");
+        var stack = VStack(TextBlock("a"), Group(wide), Group(Group(Group(Group(Group(TextBlock("deep")))))), TextBlock("b"));
+        var slots = SlotsOf(stack.Children);
+
+        for (int i = 1; i < slots.Length; i++)
+            Assert.True(slots[i - 1] <= slots[i], $"slot {i} = {slots[i]} is below {slots[i - 1]}");
+    }
+    [Fact]
     public void UniformGrid_CarriesSlotsToItsPositionedCells()
     {
         var grid = UniformGrid(Microsoft.UI.Xaml.Controls.Orientation.Horizontal, TextBlock("a"), Empty(), TextBlock("c"));

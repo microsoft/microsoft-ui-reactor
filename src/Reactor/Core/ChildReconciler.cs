@@ -1044,13 +1044,13 @@ internal static class ChildReconciler
         }
 
         var result = new Element[keep];
-        slots = registered is not null || elements.Length <= ChildSlots.MaxIndex ? new long[keep] : null;
+        slots = new long[keep];
         int j = 0;
         for (int i = 0; i < elements.Length; i++)
         {
             if (elements[i] is not null and not EmptyElement)
             {
-                if (slots is not null) slots[j] = registered?[i] ?? ChildSlots.ForIndex(i);
+                slots[j] = registered?[i] ?? ChildSlots.ForIndex(i);
                 result[j++] = elements[i];
             }
         }
