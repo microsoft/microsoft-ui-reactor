@@ -276,14 +276,15 @@ internal static class WrapperFactoryCalls
             var builder = ImmutableHashSet.CreateBuilder<INamedTypeSymbol>(SymbolEqualityComparer.Default);
             if (c.GetTypeByMetadataName("Microsoft.UI.Reactor.Core.Element") is not { } element) return builder.ToImmutable();
 
-            // Syntax first: only a record declaration carrying an attribute spelled like
-            // GenerateReactorWrapper can be one, so only those few are bound. Walking every
-            // type symbol instead was measured at most of a second on a large project.
+            // Syntax first: only a namespace-level record declaration carrying attributes can be
+            // one, so only those are bound (the attribute itself is matched semantically, so an
+            // alias of it counts). Walking every type symbol instead was measured at most of a
+            // second on a large project.
             foreach (var tree in c.SyntaxTrees)
             {
                 foreach (var record in tree.GetRoot().DescendantNodes(static n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax).OfType<RecordDeclarationSyntax>())
                 {
-                    if (!record.AttributeLists.SelectMany(static l => l.Attributes).Any(static a => IsWrapperAttributeName(a.Name))) continue;
+                    if (record.AttributeLists.Count == 0) continue;
                     if (c.GetSemanticModel(tree).GetDeclaredSymbol(record) is not { } type) continue;
                     if (type.TypeKind != TypeKind.Error
                         && type.GetAttributes().Any(static a => a.AttributeClass?.ToDisplayString() == WrapperAttributeMetadataName)
@@ -295,18 +296,6 @@ internal static class WrapperFactoryCalls
             }
             return builder.ToImmutable();
         });
-
-    private static bool IsWrapperAttributeName(NameSyntax name)
-    {
-        var simple = name switch
-        {
-            QualifiedNameSyntax q => q.Right.Identifier.ValueText,
-            AliasQualifiedNameSyntax a => a.Name.Identifier.ValueText,
-            SimpleNameSyntax s => s.Identifier.ValueText,
-            _ => string.Empty,
-        };
-        return simple is "GenerateReactorWrapper" or "GenerateReactorWrapperAttribute";
-    }
 
     /// <summary>
     /// True when <paramref name="type"/> is a <c>[GenerateReactorWrapper]</c> element whose

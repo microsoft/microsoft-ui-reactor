@@ -173,6 +173,43 @@ public sealed class SourceMapWrapperFastPathTests
     }
 
     [Fact]
+    public void WrapperAttributeThroughAnAlias_IsStillAWrapper()
+    {
+        // The wrapper generator matches the attribute semantically, so an alias of it still
+        // produces the `: Element` half; this generator has to recognise the record the same way.
+        const string code = """
+            using Wrap = Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapperAttribute;
+            using Microsoft.UI.Reactor.Core;
+
+            namespace App
+            {
+                public class Gauge { }
+
+                [Wrap(typeof(Gauge))]
+                public partial record GaugeElement;
+
+                public static class Helpers
+                {
+                    [Microsoft.UI.Reactor.Diagnostics.ReactorSourceTransparent]
+                    public static Element Show(object? value) => new EmptyElement();
+
+                    [Microsoft.UI.Reactor.Diagnostics.ReactorSourceTransparent]
+                    public static Element Show(Element? child) => child ?? new EmptyElement();
+                }
+
+                public static class Screen
+                {
+                    public static Element R(GaugeElement child) => Helpers.Show(child);
+                }
+            }
+            """;
+
+        var (_, generated) = SourceMapTransparentGeneratorTests.Run(code, completeAfterGeneration: Completion);
+
+        Assert.DoesNotMatch(ObjectOverloadInterceptor, generated);
+    }
+
+    [Fact]
     public void MemberThatCannotReachTheRecord_IsInterceptedAsUsual()
     {
         // Positive control: the same overload pair, no record anywhere in the member. An int,
