@@ -1046,6 +1046,7 @@ internal static class SelfTestFixtureRegistry
         "ConditionalChildSlot_CallbackSkipArm",
         "ConditionalChildSlot_ReplaceWithExitThenRerender",
         "ConditionalChildSlot_ReplaceWithExitPositional",
+        "ConditionalChildSlot_NestedGroupToggle",
         "TemplatedList_ChurnLeavesNoOrphanedRows",
         "TemplatedList_MoveKeepsRowComponent",
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
@@ -3163,6 +3164,7 @@ internal static class SelfTestFixtureRegistry
         "ConditionalChildSlot_CallbackSkipArm" => new ConditionalChildSlotFixtures.CallbackSkipArm(harness),
         "ConditionalChildSlot_ReplaceWithExitThenRerender" => new ConditionalChildSlotFixtures.ReplaceWithExitThenRerender(harness),
         "ConditionalChildSlot_ReplaceWithExitPositional" => new ConditionalChildSlotFixtures.ReplaceWithExitPositional(harness),
+        "ConditionalChildSlot_NestedGroupToggle" => new ConditionalChildSlotFixtures.NestedGroupToggle(harness),
         "TemplatedList_ChurnLeavesNoOrphanedRows" => new TemplatedListOrphanContainerFixtures.ChurnLeavesNoOrphanedRows(harness),
         "TemplatedList_MoveKeepsRowComponent" => new TemplatedListOrphanContainerFixtures.MoveKeepsRowComponent(harness),
         // Issue 343 — CommandBar/TeachingTip Content reconciliation

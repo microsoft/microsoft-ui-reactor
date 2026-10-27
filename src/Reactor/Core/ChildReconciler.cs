@@ -81,9 +81,9 @@ internal static class ChildReconciler
     /// </summary>
     private static void ReconcileSlotted(
         Element[] oldChildren,
-        int[]? oldSlots,
+        long[]? oldSlots,
         Element[] newChildren,
-        int[]? newSlots,
+        long[]? newSlots,
         IChildCollection children,
         Reconciler reconciler,
         Action requestRerender,
@@ -113,8 +113,8 @@ internal static class ChildReconciler
                     resolved++;
                 }
             }
-            int oldSlot = oi < oldChildren.Length ? ChildSlots.At(oldSlots, oi) : int.MaxValue;
-            int newSlot = ni < newChildren.Length ? ChildSlots.At(newSlots, ni) : int.MaxValue;
+            long oldSlot = oi < oldChildren.Length ? ChildSlots.At(oldSlots, oi) : long.MaxValue;
+            long newSlot = ni < newChildren.Length ? ChildSlots.At(newSlots, ni) : long.MaxValue;
             int before = children.Count;
             if (oldSlot < newSlot)
             {
@@ -1022,7 +1022,7 @@ internal static class ChildReconciler
         return result;
     }
 
-    internal static Element[] Filter(Element[] elements, out int[]? slots)
+    internal static Element[] Filter(Element[] elements, out long[]? slots)
     {
         // The DSL container factories already dropped null / EmptyElement and
         // registered the slots they came from; a hand-built children array that
@@ -1044,7 +1044,7 @@ internal static class ChildReconciler
         }
 
         var result = new Element[keep];
-        slots = registered is not null || elements.Length <= ChildSlots.MaxIndex ? new int[keep] : null;
+        slots = registered is not null || elements.Length <= ChildSlots.MaxIndex ? new long[keep] : null;
         int j = 0;
         for (int i = 0; i < elements.Length; i++)
         {

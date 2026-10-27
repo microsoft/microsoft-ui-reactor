@@ -132,9 +132,8 @@ internal static class TemplatedListOrphanContainerFixtures
                 $"live={s_live.Count} items={lv.Items.Count}");
 
             int unlinked = 0, accepted = 0;
-            foreach (var info in s_live.Values.ToList())
+            foreach (var info in s_live.Values.Where(info => Unlinked(lv, info.Root.Current)).ToList())
             {
-                if (!Unlinked(lv, info.Root.Current)) continue;
                 unlinked++;
                 if (FindWrapper(info.Root.Current) is { } wrapper && ReactorDiagnostics.TrySetState(wrapper, 1, "41", out _))
                     accepted++;
@@ -144,11 +143,11 @@ internal static class TemplatedListOrphanContainerFixtures
 
             int wrong = 0;
             string? wrongAt = null;
-            foreach (var text in H.FindAllControls<TextBlock>(t => t.Text.StartsWith("orphan-row ", StringComparison.Ordinal)))
+            var realized = H.FindAllControls<TextBlock>(t => t.Text.StartsWith("orphan-row ", StringComparison.Ordinal))
+                .Select(text => (text, index: ContainerOf(text) is { } container ? lv.IndexFromContainer(container) : -1))
+                .Where(row => row.index >= 0);
+            foreach (var (text, index) in realized)
             {
-                if (ContainerOf(text) is not { } container) continue;
-                int index = lv.IndexFromContainer(container);
-                if (index < 0) continue;
                 var key = (lv.Items[index] as ReactorRow)?.Key;
                 if (!text.Text.StartsWith($"orphan-row {key} ", StringComparison.Ordinal))
                 {

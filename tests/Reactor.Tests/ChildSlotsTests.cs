@@ -13,10 +13,12 @@ namespace Microsoft.UI.Reactor.Tests;
 /// </summary>
 public class ChildSlotsTests
 {
-    private static int S(int index) => ChildSlots.ForIndex(index);
-    private static int G(int index, int inGroup) => ChildSlots.ForGroupChild(index, inGroup);
+    private static long S(int index) => ChildSlots.ForIndex(index);
+    private static long G(int index, int inGroup) => ChildSlots.ForGroupChild(index, inGroup);
 
-    private static int[] SlotsOf(Element[] children)
+    private static long N(int index, long inGroup) => ChildSlots.Nest(index, inGroup);
+
+    private static long[] SlotsOf(Element[] children)
     {
         var slots = ChildSlots.Get(children);
         Assert.NotNull(slots);
@@ -110,14 +112,32 @@ public class ChildSlotsTests
     }
 
     [Fact]
-    public void Factory_NestedGroup_FallsBackToGroupPositions()
+    public void Factory_NestedGroup_NestsTheGroupsOwnPaths()
     {
-        // The outer group's own map mixes an argument id (A) with ids flattened out of the
-        // inner group (B, C); reading only some of them as arguments would give A and B the
-        // same slot.
+        // The outer group's map holds A's argument (1) and B / C's paths through the inner
+        // group (2, 0) / (2, 1); the stack nests all three under its own argument 0.
         var stack = VStack(Group(null, TextBlock("A"), Group(TextBlock("B"), TextBlock("C"))));
 
-        Assert.Equal([G(0, 0), G(0, 1), G(0, 2)], SlotsOf(stack.Children));
+        Assert.Equal([N(0, S(1)), N(0, G(2, 0)), N(0, G(2, 1))], SlotsOf(stack.Children));
+        var slots = SlotsOf(stack.Children);
+        Assert.True(slots[0] < slots[1] && slots[1] < slots[2]);
+    }
+
+    [Fact]
+    public void Factory_NestedGroup_ToggleKeepsLaterSiblingsSlots()
+    {
+        // VStack(Group(show ? x : Empty(), y, Group(z))): hiding x must not hand y x's slot,
+        // nor z y's.
+        StackElement Tree(bool show) =>
+            VStack(Group(show ? TextBlock("x") : Empty(), TextBlock("y"), Group(TextBlock("z"))));
+
+        var shown = SlotsOf(Tree(true).Children);
+        var hidden = SlotsOf(Tree(false).Children);
+
+        Assert.Equal(3, shown.Length);
+        Assert.Equal(2, hidden.Length);
+        Assert.Equal(shown[1], hidden[0]);
+        Assert.Equal(shown[2], hidden[1]);
     }
 
     [Fact]

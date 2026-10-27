@@ -2070,7 +2070,7 @@ public static partial class Factories
         var result = new Element[count];
         // Slot ids for ChildSlots: the argument each kept child came from, so the
         // reconciler can match a conditional child's siblings across a toggle.
-        int[]? slots = count > 0 && children.Length <= ChildSlots.MaxIndex ? new int[count] : null;
+        long[]? slots = count > 0 && children.Length <= ChildSlots.MaxIndex ? new long[count] : null;
         // A map equal to the implicit index ids (only a trailing argument was dropped) is not
         // registered: it says nothing the reconciler doesn't assume.
         bool identity = true;
@@ -2079,10 +2079,11 @@ public static partial class Factories
         {
             if (children[i] is GroupElement group)
             {
-                // The group's own map names the group argument each child came from — unless it
-                // flattened a nested group, whose ids mix in positions; then use positions.
+                // The group's own map holds each child's path inside the group (its own dropped
+                // arguments, and nested groups), which nests under this argument. A group with no
+                // map, or one nested past the deepest level, uses its children's positions.
                 var groupSlots = slots is null ? null : ChildSlots.Get(group.Children);
-                if (groupSlots is not null && !ChildSlots.AllArguments(groupSlots)) groupSlots = null;
+                if (groupSlots is not null && !ChildSlots.CanNestAll(groupSlots)) groupSlots = null;
                 for (int j = 0; j < group.Children.Length; j++)
                 {
                     var gc = group.Children[j];
@@ -2090,11 +2091,10 @@ public static partial class Factories
                     {
                         if (slots is not null)
                         {
-                            int inner = groupSlots is null ? j : groupSlots[j] >> 16;
-                            if (inner > ChildSlots.MaxGroupIndex) slots = null;
+                            if (groupSlots is null && j > ChildSlots.MaxGroupIndex) slots = null;
                             else
                             {
-                                slots[idx] = ChildSlots.ForGroupChild(i, inner);
+                                slots[idx] = groupSlots is null ? ChildSlots.ForGroupChild(i, j) : ChildSlots.Nest(i, groupSlots[j]);
                                 identity = false;
                             }
                         }

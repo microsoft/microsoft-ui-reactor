@@ -438,6 +438,41 @@ internal static class ConditionalChildSlotFixtures
         }
     }
 
+    internal class NestedGroupToggle(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (show, setShow) = ctx.UseState(true);
+                // Same-type counters, so a shifted slot would hand one counter another's state.
+                return VStack(
+                    Button("slot-toggle", () => setShow(!show)),
+                    Group(show ? C("x") : Empty(), C("y"), Group(C("z"))));
+            });
+            await Harness.Render();
+            await Bump(H, "x", 1);
+            await Bump(H, "y", 2);
+            await Bump(H, "z", 3);
+            var zLabel = Label(H, "z");
+
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.Check("SlotNestedGroup_HideKeepsSiblings", Text(H, "y") == "y:2" && Text(H, "z") == "z:3",
+                $"y={Text(H, "y")} z={Text(H, "z")}");
+            H.Check("SlotNestedGroup_HideKeepsControl", zLabel is not null && ReferenceEquals(zLabel, Label(H, "z")));
+
+            H.ClickButton("slot-toggle");
+            await Harness.Render();
+            H.Check("SlotNestedGroup_ShowKeepsSiblings",
+                Text(H, "x") == "x:0" && Text(H, "y") == "y:2" && Text(H, "z") == "z:3",
+                $"x={Text(H, "x")} y={Text(H, "y")} z={Text(H, "z")}");
+            H.Check("SlotNestedGroup_Order", Order(H, "x", "y", "z") == "x,y,z", Order(H, "x", "y", "z"));
+            host.Dispose();
+        }
+    }
+
     internal class AnimateAmbient(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
