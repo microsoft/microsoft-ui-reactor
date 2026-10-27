@@ -2003,6 +2003,11 @@ internal static class SelfTestFixtureRegistry
         "CmdBarFlyout_KeyedReorderKeepsSiblingFlyouts",
         "CmdBarFlyout_TargetKeepsItsOwnCallbacks",
 
+        // Flyout IsOpen driven by state (FlyoutIsOpenStateFixtures).
+        "FlyoutIsOpen_ButtonTargetFromState",
+        "FlyoutIsOpen_ButtonTargetOnMount",
+        "FlyoutIsOpen_NonButtonTargetFromState",
+
         // The harness's own click stimulus must fail loudly (HarnessGuardFixtures, #1063).
         "HarnessGuard_ClickButtonFailsLoudly",
 
@@ -4072,6 +4077,10 @@ internal static class SelfTestFixtureRegistry
         "CmdBarFlyout_UnmountDetachesFlyout" => new CommandBarFlyoutWiringFixtures.UnmountDetachesFlyout(harness),
         "CmdBarFlyout_KeyedReorderKeepsSiblingFlyouts" => new CommandBarFlyoutWiringFixtures.KeyedReorderKeepsSiblingFlyouts(harness),
         "CmdBarFlyout_TargetKeepsItsOwnCallbacks" => new CommandBarFlyoutWiringFixtures.TargetKeepsItsOwnCallbacks(harness),
+
+        "FlyoutIsOpen_ButtonTargetFromState" => new FlyoutIsOpenStateFixtures.ButtonTargetOpensFromState(harness),
+        "FlyoutIsOpen_ButtonTargetOnMount" => new FlyoutIsOpenStateFixtures.ButtonTargetOpensOnMount(harness),
+        "FlyoutIsOpen_NonButtonTargetFromState" => new FlyoutIsOpenStateFixtures.NonButtonTargetOpensFromState(harness),
 
         SkipVerdictPositiveControl.FixtureName => new SkipVerdictPositiveControl(harness),
         TierDeclarationConsistencyFixture.FixtureName => new TierDeclarationConsistencyFixture(harness),

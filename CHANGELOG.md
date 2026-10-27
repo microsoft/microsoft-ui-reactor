@@ -374,6 +374,15 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Opening a `Flyout` from state no longer replaces the window with a render error**
+  (issue #1419). `Flyout(Button(...), ...) with { IsOpen = open }` opened through
+  `FlyoutBase.ShowAttachedFlyout`, but a Button/SplitButton target holds its flyout in the
+  control's own `Flyout` property, so WinUI threw `ArgumentException` ("ShowAttached was
+  called on an element without an attached FlyoutBase") on mount with `IsOpen = true` and on
+  every `false` → `true` edge. It now opens through the installed flyout's `ShowAt` (deferred
+  to the target's `Loaded` at mount), the path `CommandBarFlyout` already used, so both slots
+  work. `IsOpen` stays a one-shot open trigger; the user dismisses the flyout.
+
 - **Source-map generator no longer fails under `dotnet watch`** (issue #1404, spec 010).
   When Reactor is a project reference, Hot Reload's workspace compilation sees Reactor's
   symbols with their source, so a component calling a hook that is not on `Component`
