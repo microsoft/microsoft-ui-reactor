@@ -133,23 +133,7 @@ public sealed partial class SourceMapInterceptorGenerator
             }
         }
 
-        // Anything at any depth that is error-typed, or a value — a name, a call,
-        // `default(FooElement)`, a cast — whose type mentions the record. An error deep inside
-        // can still decide which overload an enclosing call resolves to, and so what type
-        // reaches this one. Asked of expression TYPES rather than of particular syntax shapes,
-        // so no way of producing such a value is missed.
-        foreach (var node in invocation.ArgumentList.DescendantNodes())
-        {
-            if (node is not ExpressionSyntax expression) continue;
-            if (model.GetTypeInfo(expression, ct).Type is IErrorTypeSymbol) return true;
-            if (IsWrapperDependentMethodGroup(model, expression, ct)) return true;
-            if (ValueTypeOf(model, expression, ct) is { } valueType
-                && MentionsIncompleteWrapper(valueType, model.Compilation, 0))
-            {
-                return true;
-            }
-        }
-        return false;
+        return DependsOnWrappers(model, invocation.ArgumentList, ct, depth: 0);
 
         static bool IsInScope(ITypeParameterSymbol tp, SemanticModel model, int position, System.Threading.CancellationToken ct)
         {
@@ -244,6 +228,71 @@ public sealed partial class SourceMapInterceptorGenerator
             }
         }
         return true;
+    }
+
+    /// <summary>
+    /// True when anything under <paramref name="root"/> can bind differently once the wrapper
+    /// records are complete: an error-typed expression at any depth (it can still decide which
+    /// overload an enclosing call picks), a value whose type mentions a record, a method group
+    /// whose signature does, or an implicitly typed local whose declaring statement does — a
+    /// <c>var content = Content(card)</c> is a string here and an Element there. Asked of
+    /// expression TYPES rather than of particular syntax shapes, so no way of producing such a
+    /// value is missed. Fail-closed past the depth bound.
+    /// </summary>
+    private static bool DependsOnWrappers(SemanticModel model, SyntaxNode root, System.Threading.CancellationToken ct, int depth)
+    {
+        if (depth > MaxLocalInferenceDepth) return true;
+        foreach (var node in root.DescendantNodesAndSelf())
+        {
+            if (node is not ExpressionSyntax expression) continue;
+            if (model.GetTypeInfo(expression, ct).Type is IErrorTypeSymbol) return true;
+            if (IsWrapperDependentMethodGroup(model, expression, ct)) return true;
+            if (ValueTypeOf(model, expression, ct) is { } valueType
+                && MentionsIncompleteWrapper(valueType, model.Compilation, 0))
+            {
+                return true;
+            }
+            if (expression is IdentifierNameSyntax name
+                && ImplicitlyTypedDeclaration(model, name, ct) is { } declaration
+                && DependsOnWrappers(model, declaration, ct, depth + 1))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// For a name reading an implicitly typed local (<c>var</c> declarator, <c>foreach (var …)</c>,
+    /// deconstruction, <c>out var</c>, <c>var</c> pattern) declared in this tree, the node that
+    /// decides its type: the initializer, or the whole declaring statement. Null otherwise —
+    /// an explicitly declared type cannot change.
+    /// </summary>
+    private static SyntaxNode? ImplicitlyTypedDeclaration(SemanticModel model, IdentifierNameSyntax name, System.Threading.CancellationToken ct)
+    {
+        if (model.GetSymbolInfo(name, ct).Symbol is not ILocalSymbol local
+            || local.DeclaringSyntaxReferences.Length != 1
+            || local.DeclaringSyntaxReferences[0].SyntaxTree != name.SyntaxTree)
+        {
+            return null;
+        }
+
+        var declarator = local.DeclaringSyntaxReferences[0].GetSyntax(ct);
+        switch (declarator)
+        {
+            case VariableDeclaratorSyntax { Parent: VariableDeclarationSyntax declaration } v:
+                return declaration.Type.IsVar ? v.Initializer : null;
+            case SingleVariableDesignationSyntax { Parent: DeclarationPatternSyntax pattern }:
+                return pattern.Type.IsVar ? pattern.Parent : null;
+            case SingleVariableDesignationSyntax { Parent: DeclarationExpressionSyntax declarationExpression }:
+                if (!declarationExpression.Type.IsVar) return null;
+                break;
+            case ForEachStatementSyntax forEach:
+                return forEach.Type.IsVar ? forEach.Expression : null;
+        }
+
+        // Deconstructions, nested designations, var patterns: the enclosing statement.
+        return declarator.FirstAncestorOrSelf<StatementSyntax>() ?? declarator;
     }
 
     /// <summary>
@@ -424,6 +473,12 @@ public sealed partial class SourceMapInterceptorGenerator
                 if (_model.GetTypeInfo(expression, _ct).Type is IErrorTypeSymbol) return false;
                 if (ValueType(expression) is { } valueType && MentionsIncompleteWrapper(valueType)) return false;
                 if (IsWrapperDependentMethodGroup(_model, expression, _ct)) return false;
+                if (expression is IdentifierNameSyntax local
+                    && ImplicitlyTypedDeclaration(_model, local, _ct) is { } declaration
+                    && DependsOnWrappers(_model, declaration, _ct, _depth + 1))
+                {
+                    return false;
+                }
                 if (expression is InvocationExpressionSyntax call
                     && _model.GetSymbolInfo(call, _ct) is { Symbol: null, CandidateSymbols.IsEmpty: false })
                 {
@@ -559,6 +614,12 @@ public sealed partial class SourceMapInterceptorGenerator
                             case NestedResult.Deterministic:
                                 return;
                             case NestedResult.PlaceholderLike:
+                                // The modifier call can itself be the root (`var sized = g.Width(140)`).
+                                if (modifier == _root)
+                                {
+                                    RootRecord = record;
+                                    return;
+                                }
                                 node = modifier;
                                 continue;
                             default:
@@ -710,6 +771,19 @@ public sealed partial class SourceMapInterceptorGenerator
             if (_model.GetSymbolInfo(node, _ct).Symbol is ILocalSymbol { Type: IErrorTypeSymbol } local)
             {
                 if (InferLocalType(local) is { } type) return Placeholder(type, node);
+            }
+            else if (ImplicitlyTypedDeclaration(_model, node, _ct) is { } declaration
+                     && DependsOnWrappers(_model, declaration, _ct, _depth + 1))
+            {
+                // Typed here, but by a declaration that binds differently once the records are
+                // complete: re-derive the type the same way, or give up.
+                if (_model.GetSymbolInfo(node, _ct).Symbol is ILocalSymbol typed
+                    && declaration is EqualsValueClauseSyntax
+                    && InferLocalType(typed) is { } inferred)
+                {
+                    return Placeholder(inferred, node);
+                }
+                Unreliable = true;
             }
 
             return node;

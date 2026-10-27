@@ -276,6 +276,22 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         Assert.Null(selected.CallSite);
     }
 
+    internal static string Content(object value) => value.ToString()!;
+
+    internal static Element Content(Element value) => value;
+
+    [Fact]
+    public void VarLocalOfAnOrdinaryTypeDerivedFromTheRecord_IsNotTrusted()
+    {
+        // `content` is a string here (Content(object) is all that binds) and an Element in the
+        // real compilation, where Button(Element, ...) is chosen over Button(string, ...).
+        FakeGaugeElement gauge = FakeGauge();
+        var content = Content(gauge);
+        var button = Button(content);
+
+        Assert.Null(button.CallSite);
+    }
+
     [ReactorSourceTransparent]
     internal static Element Pair(Element first, string second) => VStack(first);
 
