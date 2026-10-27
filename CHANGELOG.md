@@ -383,6 +383,23 @@ Conventions for contributors:
   to the target's `Loaded` at mount), the path `CommandBarFlyout` already used, so both slots
   work. `IsOpen` stays a one-shot open trigger; the user dismisses the flyout.
 
+- **A conditional child no longer shifts its unkeyed siblings** (issue #1423). The
+  container factories drop `null` / `Empty()` arguments and flatten `Group(...)`, so
+  toggling `cond ? X : Empty()` moved every later sibling down one index and the
+  positional reconcile compared it with the child that used to sit there: a sibling of
+  another type remounted (its state reset) and one of the same type took over its
+  neighbour's state. The factories now record each child's argument slot and unkeyed
+  children are matched by slot, as React treats `null`. A child whose argument slot
+  changes is now a different child (`a ? X() : Empty(), a ? Empty() : X()` remounts
+  `X`). Containers with a keyed child keep keyed matching. Re-rendering while a child's
+  exit transition is still playing also no longer pairs its siblings with the wrong control.
+
+- **`ListView<T>` / `GridView<T>` rows are unmounted when WinUI drops their container
+  without recycling it** (issue #1423). Under fast insert / remove churn WinUI could park
+  a container offscreen, unlinked from any item, without raising the recycle
+  `ContainerContentChanging`, so the row's components stayed mounted: their effects never
+  cleaned up, and a `ReactorDiagnostics.TrySetState` on one was accepted but never rendered.
+
 - **`REACTOR_A11Y_001` no longer flags text buttons with a non-literal string label**
   (spec 006 §6.3). `Button(S("Usage_Refresh"), onClick)` — a localized resource lookup,
   a `string` variable, or an interpolated string — was reported as an icon-only button

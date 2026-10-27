@@ -808,6 +808,11 @@ public static partial class Factories
                 : filtered[i].Grid(row: i, column: 0);
         }
 
+        // Carry the cells' argument slots over to the positioned copy, so a conditional
+        // cell holds its slot like a child of any other container.
+        if (ChildSlots.Get(filtered) is { } slots)
+            ChildSlots.Set(positioned, slots);
+
         return isHorizontal
             ? Grid(sizes, oneStar, positioned)
             : Grid(oneStar, sizes, positioned);
@@ -1994,7 +1999,10 @@ public static partial class Factories
     /// <summary>
     /// Flattens one level of <see cref="GroupElement"/> and drops
     /// <see langword="null"/> / <see cref="EmptyElement"/> entries, returning the
-    /// children array stored on a container element.
+    /// children array stored on a container element. When it drops or flattens
+    /// anything it also records, in <see cref="ChildSlots"/>, which argument each
+    /// kept child came from, so a conditional child holds its slot among its
+    /// unkeyed siblings across renders.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -2060,22 +2068,46 @@ public static partial class Factories
         }
 
         var result = new Element[count];
+        // Slot ids for ChildSlots: the argument each kept child came from, so the
+        // reconciler can match a conditional child's siblings across a toggle.
+        long[]? slots = count > 0 ? new long[count] : null;
+        // A map equal to the implicit index ids (only a trailing argument was dropped) is not
+        // registered: it says nothing the reconciler doesn't assume.
+        bool identity = true;
         int idx = 0;
         for (int i = 0; i < children.Length; i++)
         {
             if (children[i] is GroupElement group)
             {
-                foreach (var gc in group.Children)
+                // The group's own map holds each child's path inside the group (its own dropped
+                // arguments, and nested groups), which nests under this argument. A group with no
+                // map uses its children's positions.
+                var groupSlots = slots is null ? null : ChildSlots.Get(group.Children);
+                for (int j = 0; j < group.Children.Length; j++)
                 {
+                    var gc = group.Children[j];
                     if (gc is not null and not EmptyElement)
+                    {
+                        if (slots is not null)
+                        {
+                            slots[idx] = groupSlots is null ? ChildSlots.ForGroupChild(i, j) : ChildSlots.Nest(i, groupSlots[j]);
+                            identity = false;
+                        }
                         result[idx++] = gc;
+                    }
                 }
             }
             else if (children[i] is not null and not EmptyElement)
             {
+                if (slots is not null)
+                {
+                    slots[idx] = ChildSlots.ForIndex(i);
+                    identity &= i == idx;
+                }
                 result[idx++] = children[i]!;
             }
         }
+        if (slots is not null && !identity) ChildSlots.Set(result, slots);
         return result;
     }
 }

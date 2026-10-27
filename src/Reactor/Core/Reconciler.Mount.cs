@@ -697,12 +697,7 @@ public sealed partial class Reconciler
             // previous row before WinUI hands the container to a new one.
             PropagateItemAutomationName(args.ItemContainer, null);
             if (args.ItemContainer.ContentTemplateRoot is ContentControl oldCc)
-            {
-                if (oldCc.Content is UIElement oldCtrl)
-                    UnmountChild(oldCtrl);
-                oldCc.Content = null;
-                ClearElementTag(oldCc);
-            }
+                UnmountItemView(oldCc, clearContent: true);
             return;
         }
 
@@ -716,6 +711,9 @@ public sealed partial class Reconciler
         if (viewSource is not null && args.ItemIndex >= 0 && args.ItemIndex < viewSource.ItemCount
             && args.ItemContainer.ContentTemplateRoot is ContentControl cc)
         {
+            // WinUI can re-realize a container without first raising the recycle event
+            // for its previous row; unmount that row's view or its components leak.
+            UnmountItemView(cc, clearContent: false);
             var itemElement = viewSource.BuildItemView(args.ItemIndex);
             var ctrl = Mount(itemElement, requestRerender);
             cc.Content = ctrl;
@@ -736,6 +734,23 @@ public sealed partial class Reconciler
         }
     }
 
+    /// <summary>
+    /// Unmounts the item view a templated items control's container hosts. The container's
+    /// element tag marks the view as live: an orphan sweep
+    /// (<see cref="RefreshRealizedContainers"/>) unmounts a view but leaves its visuals in
+    /// place for a delete transition, and clears the tag so no path unmounts it twice.
+    /// </summary>
+    internal void UnmountItemView(ContentControl cc, bool clearContent)
+    {
+        if (GetElementTag(cc) is not null)
+        {
+            if (cc.Content is UIElement view)
+                UnmountChild(view);
+            ClearElementTag(cc);
+        }
+        if (clearContent)
+            cc.Content = null;
+    }
     /// <summary>
     /// Issue #951 — forwards an author-declared automation name from the item
     /// view's root onto its generated <c>ListViewItem</c> / <c>GridViewItem</c>.

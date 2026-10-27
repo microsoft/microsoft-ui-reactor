@@ -387,12 +387,19 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
                     var pairs = afterAll is null
                         ? null
                         : new List<(UIElement, Element)>(newChildren.Length);
+                    // A control still in the collection only to play its exit transition belongs
+                    // to no new child; step past it, or every later child gets its neighbour's
+                    // attached props (a Grid cell's column) and keeps them after the fade.
+                    bool skipExiting = reconciler.HasExitingControls;
                     int panelIdx = 0;
                     for (int i = 0; i < newChildren.Length && panelIdx < collection.Count; i++)
                     {
                         var childEl = newChildren[i];
                         if (childEl is null or EmptyElement) continue;
                         var live = collection[panelIdx];
+                        while (skipExiting && reconciler.IsExiting(live) && ++panelIdx < collection.Count)
+                            live = collection[panelIdx];
+                        if (panelIdx >= collection.Count) break;
                         attached?.Invoke(control, live, childEl);
                         pairs?.Add((live, childEl));
                         panelIdx++;
