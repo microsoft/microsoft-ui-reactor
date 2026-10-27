@@ -300,8 +300,10 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         FakeGaugeElement gauge = FakeGauge();
         var content = Content(gauge);
         var buttons = new[] { content }.Select(item => Button(item)).ToArray();
+        var parenthesized = new[] { content }.Select((item => Button(item))).ToArray();
 
         Assert.Null(buttons[0].CallSite);
+        Assert.Null(parenthesized[0].CallSite);
     }
 
     [ReactorSourceTransparent]
@@ -544,6 +546,25 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
     }
 
     [ReactorSourceTransparent]
+    internal static Element ShowCrate(ICrate crate) => HStack();
+
+    [ReactorSourceTransparent]
+    internal static Element ShowCrate(object value) => VStack();
+
+    [Fact]
+    public void ConditionalWhoseOtherArmTheRecordConvertsTo_IsNotTrusted()
+    {
+        // The record converts to GaugeCrate (user-defined), so the conditional is a
+        // GaugeCrate and ShowCrate(ICrate) runs; with an Element in the record's place,
+        // GaugeCrate -> Element makes it an Element, which only ShowCrate(object) takes.
+        FakeGaugeElement gauge = FakeGauge();
+        var shown = ShowCrate(s_flag ? gauge : new GaugeCrate());
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)shown).Orientation);
+        Assert.Null(shown.CallSite);
+    }
+
+    [ReactorSourceTransparent]
     internal static Element Wrap(Element first, params Element[] rest) => HStack([first, .. rest]);
 
     [Fact]
@@ -589,6 +610,18 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
 public sealed class GaugeBox
 {
     public static implicit operator FakeGaugeElement(GaugeBox box) => FakeGauge();
+}
+
+public interface ICrate
+{
+}
+
+/// <summary>The record converts to it, and it converts to Element.</summary>
+public sealed class GaugeCrate : ICrate
+{
+    public static implicit operator GaugeCrate(FakeGaugeElement gauge) => new();
+
+    public static implicit operator Element(GaugeCrate crate) => Microsoft.UI.Reactor.Factories.TextBlock("crate");
 }
 
 /// <summary>Converts to a single Element and to a whole (empty) Element[].</summary>

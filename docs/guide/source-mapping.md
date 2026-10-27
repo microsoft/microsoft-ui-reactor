@@ -397,7 +397,8 @@ small allocation per *component*, never per leaf, and nothing while the flag is 
   (`MyControlElement.MyControl(...)`) and is invisible to the source-map generator:
   Roslyn runs every source generator against the same input compilation, so one
   generator cannot see another's output. The wrapper generator, which wrote the
-  factory, intercepts calls to it instead (same line and column rules, same
+  factory, intercepts calls to it instead (same line and column rules, the same own-position
+  stamp for an argument implicitly converted to an `Element` such as a string label, same
   `ReactorSourceMap.Enabled` switch), and the source-map generator re-binds a DSL call
   that takes one as an argument — `VStack(8, MyControl(...))`, or any value of the
   wrapper's element type such as a local, a field or a helper's result — as if the

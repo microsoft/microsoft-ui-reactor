@@ -138,6 +138,12 @@ public sealed class SourceMapWrapperFastPathTests
             OutputKind.DynamicallyLinkedLibrary
         },
         {
+            "type-parameter constraint declared in another partial declaration",
+            "using Microsoft.UI.Reactor.Core;\nnamespace App {\n public partial class Screen<T> { public Element R(T child) => Helpers.Show(child); }\n}\n",
+            "public partial class Screen<T> where T : GaugeElement { }",
+            OutputKind.DynamicallyLinkedLibrary
+        },
+        {
             "using static of a record-closed generic type",
             "using Microsoft.UI.Reactor.Core;\nusing static App.Cache<App.GaugeElement>;\nnamespace App {\n public static class Use { public static Element R() => Helpers.Show(Cached); }\n}\n",
             "public static class Cache<T> { public static T Cached = default!; }",

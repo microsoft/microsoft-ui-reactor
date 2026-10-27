@@ -143,6 +143,48 @@ public sealed class SourceMapVisibleWrapperFactoryTests
         Assert.DoesNotContain("global::App.GaugeElement.Make(", generated);
     }
 
+    [Fact]
+    public void WrapperThatSpellsItsOwnBase_IsStillAnalysed()
+    {
+        // The only wrapper here declares `: Element` itself: complete, but its factory is
+        // still generated and invisible, so the containing calls and the declared name
+        // depend on the wrapper analysis running at all.
+        const string record = """
+            namespace Controls
+            {
+                public class Gauge { }
+            }
+
+            namespace App
+            {
+                [Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(Controls.Gauge))]
+                public partial record GaugeElement : Microsoft.UI.Reactor.Core.Element;
+            }
+            """;
+        const string screen = """
+            using Microsoft.UI.Reactor.Core;
+            using static Microsoft.UI.Reactor.Factories;
+            using static App.GaugeElement;
+
+            namespace App
+            {
+                public static class Screen
+                {
+                    public static Element A() { var dial = Gauge(3); return VStack(dial); }
+                    public static Element B() => VStack(Gauge());
+                }
+            }
+            """;
+
+        var (_, generated) = SourceMapTransparentGeneratorTests.Run(
+            screen,
+            extraFiles: new List<(string, string)> { ("Record.cs", record) },
+            completeAfterGeneration: "namespace App { partial record GaugeElement { public static GaugeElement Gauge(double value = 0) => new GaugeElement(); } }");
+
+        Assert.Equal(2, Count(generated, "var __e = global::Microsoft.UI.Reactor.Factories.VStack(__a0);"));
+        Assert.Contains("@\"dial\");", generated);
+    }
+
     private static int Count(string text, string needle)
     {
         int count = 0;

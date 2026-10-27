@@ -100,6 +100,25 @@ public sealed partial class SourceMapInterceptorGenerator
     // ── Declared names ────────────────────────────────────────────────────
 
     /// <summary>
+    /// True when <paramref name="chained"/> is the uninferred <c>T</c> of a fluent modifier
+    /// shaped <c>T M&lt;T&gt;(this T, …) where T : Element</c> — what <c>SettingsCard(...).Width(140)</c>
+    /// reports when the receiver is a wrapper factory this compilation cannot see. Whatever
+    /// <c>T</c> becomes, the call returns its receiver's element.
+    /// </summary>
+    private static bool IsElementPreservingModifier(ITypeSymbol chained, INamedTypeSymbol elementSymbol)
+    {
+        if (chained is not ITypeParameterSymbol { TypeParameterKind: TypeParameterKind.Method, DeclaringMethod: { } declaring } tp)
+            return false;
+        var definition = (declaring.ReducedFrom ?? declaring).OriginalDefinition;
+        if (!definition.IsExtensionMethod || definition.Parameters.Length == 0) return false;
+        var receiver = definition.TypeParameters.FirstOrDefault(p => p.Name == tp.Name);
+        return receiver is not null
+            && SymbolEqualityComparer.Default.Equals(definition.Parameters[0].Type, receiver)
+            && SymbolEqualityComparer.Default.Equals(definition.ReturnType, receiver)
+            && receiver.ConstraintTypes.Any(c => ReturnsElement(c, elementSymbol));
+    }
+
+    /// <summary>
     /// The identifier the value of <paramref name="invocation"/> is assigned to, looking
     /// through fluent modifier chains (<c>TextBlock("x").Bold().Margin(4)</c>), parentheses,
     /// <c>!</c>, casts and the arms of a conditional:
@@ -141,8 +160,11 @@ public sealed partial class SourceMapInterceptorGenerator
                          && outer.Expression == member:
                     // A fluent modifier keeps describing the same element only while it
                     // returns one; `.ToString()` at the end of a chain is not the element.
-                    if (model.GetTypeInfo(outer, ct).Type is not { } chained || !ReturnsElement(chained, elementSymbol))
+                    if (model.GetTypeInfo(outer, ct).Type is not { } chained
+                        || !(ReturnsElement(chained, elementSymbol) || IsElementPreservingModifier(chained, elementSymbol)))
+                    {
                         return null;
+                    }
                     node = outer;
                     continue;
                 case EqualsValueClauseSyntax equals:

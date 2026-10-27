@@ -93,20 +93,22 @@ public sealed partial class SourceMapInterceptorGenerator
     }
 
     /// <summary>
-    /// True when this compilation declares a <c>[GenerateReactorWrapper]</c> record whose
-    /// generated half it cannot see. Everything in this file is skipped otherwise, so a
+    /// True when this compilation declares a <c>[GenerateReactorWrapper]</c> record, whose
+    /// generated factory it cannot see — whether or not the record also waits for its
+    /// generated <c>: Element</c> base (one that spells the base itself is complete, but its
+    /// factory is still invisible). Everything in this file is skipped otherwise, so a
     /// project without wrappers pays nothing for it. Computed once per compilation from the
-    /// declaration tables; no method body is bound.
+    /// declarations; no method body is bound.
     /// </summary>
-    private static bool HasIncompleteWrappers(Compilation compilation)
-        => !WrapperFactoryCalls.IncompleteWrappers(compilation).IsEmpty;
+    private static bool HasSourceWrappers(Compilation compilation)
+        => !WrapperFactoryCalls.SourceFactoryNames(compilation).IsEmpty;
 
     /// <summary>
     /// True when the wrapper analysis can matter for <paramref name="node"/>: the compilation
     /// declares wrapper records AND the member containing the call could touch one.
     /// </summary>
     private static bool WrappersInPlay(SemanticModel model, SyntaxNode node, System.Threading.CancellationToken ct)
-        => HasIncompleteWrappers(model.Compilation) && !MemberIsWrapperFree(model, node, ct);
+        => HasSourceWrappers(model.Compilation) && !MemberIsWrapperFree(model, node, ct);
 
     private const string AnyWrapperOperator = "#operator";
 
@@ -178,7 +180,9 @@ public sealed partial class SourceMapInterceptorGenerator
                 yield return ("Invoke", true);
                 break;
             case TypeDeclarationSyntax type:
-                if (Spells(type.BaseList)) yield return (type.Identifier.ValueText, false);
+                // A constraint (`partial class Screen<T> where T : FooElement`) applies in every
+                // partial declaration, like the base list.
+                if (Spells(type.BaseList) || type.ConstraintClauses.Any(c => Spells(c))) yield return (type.Identifier.ValueText, false);
                 // A primary constructor's parameters are in scope in every partial declaration
                 // of the type, which all spell the type's name; a positional record also
                 // synthesizes a property per parameter, and a Deconstruct.
@@ -556,8 +560,11 @@ public sealed partial class SourceMapInterceptorGenerator
             if (parameter.DeclaringSyntaxReferences.Length != 1) return null;
             if (parameter.DeclaringSyntaxReferences[0].GetSyntax(ct) is not ParameterSyntax { Type: null } declared) return null;
             var lambda = declared.FirstAncestorOrSelf<AnonymousFunctionExpressionSyntax>();
-            if (lambda?.Parent is not ArgumentSyntax { Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax receiving } } passed)
-                return new SyntaxNode[] { lambda?.Parent ?? declared };
+            // `Select((item => …))`: parentheses do not change which call the lambda is passed to.
+            SyntaxNode? passedValue = lambda;
+            while (passedValue?.Parent is ParenthesizedExpressionSyntax) passedValue = passedValue.Parent;
+            if (passedValue?.Parent is not ArgumentSyntax { Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax receiving } } passed)
+                return new SyntaxNode[] { passedValue?.Parent ?? declared };
             var sources = new List<SyntaxNode> { receiving.Expression };
             sources.AddRange(receiving.ArgumentList.Arguments.Where(a => a != passed));
             return sources;
@@ -1101,13 +1108,30 @@ public sealed partial class SourceMapInterceptorGenerator
                 switch (node)
                 {
                     case ConditionalExpressionSyntax c when c.Condition != child:
-                        if (!ArmIsRecord(c.WhenTrue == child ? c.WhenFalse : c.WhenTrue, record)) exact = false;
+                    {
+                        var other = c.WhenTrue == child ? c.WhenFalse : c.WhenTrue;
+                        if (!ArmIsRecord(other, record))
+                        {
+                            exact = false;
+                            // The arms' types decide the conditional's. One the record converts to
+                            // and Element does not (a conversion from the record, an interface it
+                            // implements, the record itself inside it) types the conditional
+                            // differently once the placeholder stands in.
+                            if (ValueType(other) is not { } otherType
+                                || MentionsIncompleteWrapper(otherType)
+                                || ReachableOnlyByTheRecord(otherType, _model.Compilation, InterfacesOf(record), depth: 0))
+                            {
+                                Unreliable = true;
+                                return;
+                            }
+                        }
                         if (atRoot)
                         {
                             if (exact) RootRecord = record;
                             return;
                         }
                         continue;
+                    }
                     case ParenthesizedExpressionSyntax:
                     case PostfixUnaryExpressionSyntax p when p.IsKind(SyntaxKind.SuppressNullableWarningExpression):
                     case WithExpressionSyntax w when w.Expression == child:
@@ -1186,12 +1210,21 @@ public sealed partial class SourceMapInterceptorGenerator
         private bool ArmIsRecord(ExpressionSyntax arm, INamedTypeSymbol record)
         {
             while (arm is ParenthesizedExpressionSyntax p) arm = p.Expression;
+            // `flag ? gauge : null`: a typeless null or default takes the record's type.
+            if (arm.IsKind(SyntaxKind.NullLiteralExpression) || arm.IsKind(SyntaxKind.DefaultLiteralExpression)) return true;
             if (arm is InvocationExpressionSyntax call
                 && _model.GetSymbolInfo(call, _ct) is { Symbol: null, CandidateSymbols.IsEmpty: true })
             {
                 return SymbolEqualityComparer.Default.Equals(WrapperFactoryCalls.ResolveUnboundCall(_model, call, _ct), record);
             }
             return SymbolEqualityComparer.Default.Equals(ValueType(arm), record) && CertainlyRecord(arm, record);
+        }
+
+        private static HashSet<INamedTypeSymbol> InterfacesOf(INamedTypeSymbol record)
+        {
+            var interfaces = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+            foreach (var implemented in record.AllInterfaces) interfaces.Add(implemented.OriginalDefinition);
+            return interfaces;
         }
 
         /// <summary>

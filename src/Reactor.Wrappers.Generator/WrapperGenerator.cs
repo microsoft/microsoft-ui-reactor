@@ -526,7 +526,7 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
             contentPropTypeFqn = cps.Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated)
                                         .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-        var factoryParameterTypes = descriptorOnly ? null : new List<string>();
+        var factoryParameters = descriptorOnly ? null : new List<string>();
         var source = Emit(
             ns,
             elementName,
@@ -535,13 +535,13 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
             props, contentProp, panelChildren, items, events,
             descriptorOnly, hasManual, contentElementName, registerAssembly,
             panelPerChild, panelAfterAll, lifecycleMount, lifecycleUnmount,
-            contentPropTypeFqn, elementSlots, factoryParameterTypes);
-        var factory = factoryParameterTypes is null
+            contentPropTypeFqn, elementSlots, factoryParameters);
+        var factory = factoryParameters is null
             ? null
             : new WrapperFactory(
                 element.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                 control.Name,
-                factoryParameterTypes.ToImmutableArray());
+                factoryParameters.ToImmutableArray());
 
         var hint = descriptorOnly ? $"{elementName}.Descriptor.g.cs" : $"{elementName}.Wrapper.g.cs";
 
@@ -1379,7 +1379,7 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
         string? lifecycleUnmount = null,
         string? contentPropTypeFqn = null,
         IReadOnlyList<ElementSlotInfo>? elementSlots = null,
-        List<string>? factoryParameterTypes = null)
+        List<string>? factoryParameters = null)
     {
         const string Element = "global::Microsoft.UI.Reactor.Core.Element";
         const string Action = "global::System.Action";
@@ -1792,9 +1792,9 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
             assigns.Add("Items = items");
         }
 
-        // The source-map interceptor for this factory restates its parameter types
+        // The source-map interceptor for this factory restates its parameters
         // (WrapperGenerator.SourceMap.cs), taken from the very strings declared here.
-        factoryParameterTypes?.AddRange(factoryParams.Select(FactoryParameterType));
+        factoryParameters?.AddRange(factoryParams);
 
         sb.AppendLine($"    /// <summary>Creates a <see cref=\"{elementName}\"/> (and guarantees the handler is registered).</summary>");
         // [WrapLifecycle] — wrap the freshly-built element with the imperative

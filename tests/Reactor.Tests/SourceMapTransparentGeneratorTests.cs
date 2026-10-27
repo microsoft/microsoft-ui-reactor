@@ -225,7 +225,12 @@ public sealed class SourceMapTransparentGeneratorTests
 
         // The snippet must bind, or an "expected diagnostic missing" result would just be
         // measuring a broken probe. Binding errors are a test bug, not a product signal.
-        var bindErrors = compilation.GetDiagnostics()
+        // "Bind" as in the real build: with the other generator's half added when there is
+        // one, since a call to a factory only that generator emits binds to nothing here.
+        var probe = completeAfterGeneration is null
+            ? compilation
+            : compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText(completeAfterGeneration, parseOptions, path: "OtherGenerator.g.cs"));
+        var bindErrors = probe.GetDiagnostics()
             .Where(static d => d.Severity == DiagnosticSeverity.Error)
             .ToList();
         Assert.True(bindErrors.Count == 0, "probe snippet failed to compile: " + string.Join("; ", bindErrors));

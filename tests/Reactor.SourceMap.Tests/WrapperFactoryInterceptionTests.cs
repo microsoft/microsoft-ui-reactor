@@ -6,6 +6,7 @@ using Xunit;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.SourceMap.Tests.FakeGaugeElement;
 using static Microsoft.UI.Reactor.SourceMap.Tests.FakePanelElement;
+using static Microsoft.UI.Reactor.SourceMap.Tests.FakeDialElement;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.SourceMap.Tests;
@@ -108,6 +109,52 @@ public sealed class WrapperFactoryInterceptionTests : IDisposable
         var wifiCard = FakeGauge(value: 1);
 
         Assert.Equal("wifiCard", wifiCard.CallSite!.Value.DeclaredName);
+    }
+
+    [Fact]
+    public void WrapperElementDeclaredName_ThroughAFluentChain_IsRecorded()
+    {
+        // `.Width(140)` cannot infer its T from the invisible factory's result, but it is a
+        // T M<T>(this T) where T : Element modifier, so the element keeps its name.
+        var sizedGauge = FakeGauge(value: 1).Width(140);
+
+        Assert.Equal("sizedGauge", sizedGauge.CallSite!.Value.DeclaredName);
+    }
+
+    [Fact]
+    public void WrapperFactoryArgumentConvertedToAnElement_IsStampedWithItsOwnPosition()
+    {
+        // "label" becomes a TextBlock through Element's implicit conversion; like any other
+        // factory's converted argument it gets the argument's position, not the call's.
+        var panel = FakePanel("label", TextBlock("b")); var line = Line();
+
+        AssertStampedAt(panel, line, "FakePanel(");
+        AssertStampedAt(panel.Children[0], line, "\"label\"");
+    }
+
+    [Fact]
+    public void WrapperFactoryParamsArrayInNormalForm_IsNeverWrittenInto()
+    {
+        // Duo converts to Element AND to Element[]: C# passes Duo's (empty) array as the
+        // params array itself, which must not be stamped as if it held one converted Duo.
+        var panel = FakePanel(new Duo()); var line = Line();
+
+        AssertStampedAt(panel, line, "FakePanel(");
+        Assert.Empty(panel.Children);
+    }
+
+    [Fact]
+    public void WrapperRecordThatSpellsItsOwnBase_IsStampedAndSoIsItsContainer()
+    {
+        // FakeDialElement declares `: Element` itself, so it is complete here — but its
+        // factory is still generated, and still invisible to the source-map generator.
+        var dial = FakeDial(); var dialLine = Line();
+        AssertStampedAt(dial, dialLine, "FakeDial(");
+        Assert.Equal("dial", dial.CallSite!.Value.DeclaredName);
+
+        var stack = VStack(8, FakeDial()); var line = Line();
+        AssertStampedAt(stack, line, "VStack(");
+        AssertStampedAt(stack.Children[0]!, line, "FakeDial(");
     }
 
     [Fact]
@@ -339,6 +386,14 @@ public partial record FakeGaugeElement;
 
 [GenerateReactorWrapper(typeof(FakePanel), AutoDiscover = false, RegisterAssembly = false)]
 public partial record FakePanelElement;
+
+/// <summary>A control whose wrapper record spells its <c>: Element</c> base itself.</summary>
+public partial class FakeDial : WinUI.Control
+{
+}
+
+[GenerateReactorWrapper(typeof(FakeDial), AutoDiscover = false, RegisterAssembly = false)]
+public partial record FakeDialElement : Element;
 
 /// <summary>A built-in control wrapped as if it were third-party, reached by a qualified call.</summary>
 [GenerateReactorWrapper(typeof(WinUI.Border))]

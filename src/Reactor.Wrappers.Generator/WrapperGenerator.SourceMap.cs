@@ -99,13 +99,96 @@ public sealed partial class WrapperGenerator
         // Position rules shared with the source-map generator: the line follows the argument
         // list's opening paren ([CallerLineNumber] parity) and the column is the name's.
         var lineSpan = invocation.SyntaxTree.GetMappedLineSpan(invocation.ArgumentList.OpenParenToken.Span, ct);
+        var arguments = invocation.ArgumentList.Arguments;
         return new WrapperCallSite(
             element.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             WrapperFactoryCalls.CandidateName(invocation)!,
             location.GetInterceptsLocationAttributeSyntax(),
             SourceMapPositions.ResolveMappedPath(lineSpan, invocation.SyntaxTree.FilePath),
             lineSpan.StartLinePosition.Line + 1,
-            SourceMapPositions.CallSiteColumn(invocation, lineSpan, ct));
+            SourceMapPositions.CallSiteColumn(invocation, lineSpan, ct),
+            arguments.Count,
+            arguments.Count > 0
+                && model.ClassifyConversion(arguments[arguments.Count - 1].Expression, model.Compilation.CreateArrayTypeSymbol(elementSymbol)) is { Exists: true, IsImplicit: true },
+            ConvertedArguments(model, arguments, elementSymbol, ct));
+    }
+
+    /// <summary>
+    /// The arguments that reach an <c>Element</c> through an implicit user-defined conversion
+    /// (<c>FakePanel("label")</c>: the string becomes a TextBlock), which the interceptor
+    /// stamps with the argument's own position — the same mechanism the source-map generator
+    /// applies to every other factory. Which parameter each lands on is only known once the
+    /// factory's shape is (<see cref="StampsFor"/>); an argument passed by reference is
+    /// never written back, so a call with one gets none.
+    /// </summary>
+    private static ImmutableArray<ConvertedArgument> ConvertedArguments(
+        SemanticModel model,
+        SeparatedSyntaxList<ArgumentSyntax> arguments,
+        INamedTypeSymbol elementSymbol,
+        CancellationToken ct)
+    {
+        if (arguments.Any(static a => !a.RefKindKeyword.IsKind(SyntaxKind.None))) return ImmutableArray<ConvertedArgument>.Empty;
+
+        ImmutableArray<ConvertedArgument>.Builder? builder = null;
+        for (var i = 0; i < arguments.Count; i++)
+        {
+            var expression = arguments[i].Expression;
+            var conversion = model.ClassifyConversion(expression, elementSymbol);
+            // Exactly Element out, as the source-map generator requires: the stamped value is
+            // written back into an Element-typed slot.
+            if (!conversion.Exists || !conversion.IsImplicit || !conversion.IsUserDefined
+                || conversion.MethodSymbol is not { } op
+                || !SymbolEqualityComparer.Default.Equals(op.ReturnType, elementSymbol))
+            {
+                continue;
+            }
+            var span = expression.SyntaxTree.GetMappedLineSpan(expression.Span, ct);
+            (builder ??= ImmutableArray.CreateBuilder<ConvertedArgument>()).Add(new ConvertedArgument(
+                i,
+                arguments[i].NameColon?.Name.Identifier.ValueText,
+                SourceMapPositions.ResolveMappedPath(span, expression.SyntaxTree.FilePath),
+                span.StartLinePosition.Line + 1,
+                span.StartLinePosition.Character + 1));
+        }
+        return builder?.ToImmutable() ?? ImmutableArray<ConvertedArgument>.Empty;
+    }
+
+    /// <summary>
+    /// Where each converted argument of <paramref name="site"/> lands in
+    /// <paramref name="factory"/>'s parameters: <c>(ordinal, -1)</c> for an <c>Element</c>
+    /// parameter, <c>(ordinal, slot)</c> for an element of a <c>params Element[]</c> passed in
+    /// expanded form. Normal form — one argument on the params slot that converts to the
+    /// array itself — is the caller's own array, and is never written into.
+    /// </summary>
+    private static List<(int Ordinal, int Slot, ConvertedArgument Argument)> StampsFor(WrapperCallSite site, WrapperFactory factory)
+    {
+        var stamps = new List<(int, int, ConvertedArgument)>();
+        var types = factory.Parameters.Select(FactoryParameterType).ToList();
+        var names = factory.Parameters.Select(FactoryParameterName).ToList();
+        var count = types.Count;
+        var paramsOrdinal = count > 0 && types[count - 1].StartsWith("params ", System.StringComparison.Ordinal) ? count - 1 : -1;
+        var expanded = paramsOrdinal >= 0 && !(site.ArgumentCount == count && site.LastArgumentIsAnElementArray);
+
+        foreach (var argument in site.ConvertedArguments)
+        {
+            if (argument.Name is { } name)
+            {
+                var ordinal = names.IndexOf(name);
+                if (ordinal >= 0 && ordinal != paramsOrdinal && IsElement(types[ordinal])) stamps.Add((ordinal, -1, argument));
+            }
+            else if (paramsOrdinal >= 0 && argument.Index >= paramsOrdinal && expanded)
+            {
+                if (IsElement(types[paramsOrdinal].Substring("params ".Length).TrimEnd('[', ']')))
+                    stamps.Add((paramsOrdinal, argument.Index - paramsOrdinal, argument));
+            }
+            else if (argument.Index < count && argument.Index != paramsOrdinal && IsElement(types[argument.Index]))
+            {
+                stamps.Add((argument.Index, -1, argument));
+            }
+        }
+        return stamps;
+
+        static bool IsElement(string type) => type is "global::Microsoft.UI.Reactor.Core.Element" or "global::Microsoft.UI.Reactor.Core.Element?";
     }
 
     private static string? EmitSourceMapInterceptors(
@@ -123,21 +206,44 @@ public sealed partial class WrapperGenerator
 
         var body = new StringBuilder();
         var index = 0;
+        var needsArgumentHelper = false;
         foreach (var site in sites)
         {
             // A site whose element produced no factory (an invalid wrapper target) is a
             // compile error in the user's code already; emitting nothing keeps it the only one.
             if (!byElement.TryGetValue((site!.ElementType, site.MethodName), out var factory)) continue;
 
-            var parameters = string.Join(", ", factory.ParameterTypes.Select(static (t, i) => $"{t} __a{i}"));
-            var arguments = string.Join(", ", factory.ParameterTypes.Select(static (_, i) => $"__a{i}"));
+            var parameters = string.Join(", ", factory.Parameters.Select(static (p, i) => $"{FactoryParameterType(p)} __a{i}"));
+            var arguments = string.Join(", ", factory.Parameters.Select(static (_, i) => $"__a{i}"));
             var mapped = SourceMapPositions.ApplyPathMap(site.FilePath, pathMap);
+            var stamps = StampsFor(site, factory);
 
             body.AppendLine($"        {site.Attribute}");
             body.AppendLine($"        public static {factory.ElementType} __ReactorWrapper_{factory.MethodName}_{index}({parameters})");
             body.AppendLine("        {");
-            body.AppendLine($"            var __e = {factory.ElementType}.{factory.MethodName}({arguments});");
-            body.AppendLine("            if (!global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled) return __e;");
+            if (stamps.Count == 0)
+            {
+                body.AppendLine($"            var __e = {factory.ElementType}.{factory.MethodName}({arguments});");
+                body.AppendLine("            if (!global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled) return __e;");
+            }
+            else
+            {
+                // As in the source-map generator: arguments are stamped before the factory
+                // copies them, under one read of the process-global flag.
+                needsArgumentHelper = true;
+                body.AppendLine("            var __on = global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled;");
+                body.AppendLine("            if (__on)");
+                body.AppendLine("            {");
+                foreach (var (ordinal, slot, argument) in stamps)
+                {
+                    var target = slot < 0 ? $"__a{ordinal}" : $"__a{ordinal}[{slot}]";
+                    var path = SourceMapPositions.Literal(SourceMapPositions.ApplyPathMap(argument.FilePath, pathMap));
+                    body.AppendLine($"                {target} = __ReactorStampArgument({target}, {path}, {argument.Line}, {argument.Column})!;");
+                }
+                body.AppendLine("            }");
+                body.AppendLine($"            var __e = {factory.ElementType}.{factory.MethodName}({arguments});");
+                body.AppendLine("            if (!__on) return __e;");
+            }
             // First stamp wins, as in every Reactor interceptor.
             body.AppendLine("            if (__e.CallSite is not null) return __e;");
             body.AppendLine("            return __e with");
@@ -150,6 +256,24 @@ public sealed partial class WrapperGenerator
         }
 
         if (index == 0) return null;
+
+        if (needsArgumentHelper)
+        {
+            // Same helper the source-map generator emits: first stamp wins, and the shared
+            // EmptyElement singleton is never cloned.
+            body.AppendLine("        private static global::Microsoft.UI.Reactor.Core.Element? __ReactorStampArgument(");
+            body.AppendLine("            global::Microsoft.UI.Reactor.Core.Element? __value, string __file, int __line, int __column)");
+            body.AppendLine("        {");
+            body.AppendLine("            if (__value is null) return __value;");
+            body.AppendLine("            if (__value.CallSite is not null) return __value;");
+            body.AppendLine("            if (__value is global::Microsoft.UI.Reactor.Core.EmptyElement) return __value;");
+            body.AppendLine("            return __value with");
+            body.AppendLine("            {");
+            body.AppendLine("                CallSite = new global::Microsoft.UI.Reactor.Core.SourceLocation(__file, __line, __column)");
+            body.AppendLine("            };");
+            body.AppendLine("        }");
+            body.AppendLine();
+        }
 
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -186,10 +310,26 @@ public sealed partial class WrapperGenerator
     /// </summary>
     private static string FactoryParameterType(string declaration)
     {
-        var equals = declaration.IndexOf(" = ", System.StringComparison.Ordinal);
-        var head = equals >= 0 ? declaration.Substring(0, equals) : declaration;
+        var head = DeclarationHead(declaration);
         return head.Substring(0, head.LastIndexOf(' '));
     }
+
+    /// <summary>The parameter's name, from the same declaration string: <c>"global::A.B? x = default"</c> → <c>"x"</c>.</summary>
+    private static string FactoryParameterName(string declaration)
+    {
+        var head = DeclarationHead(declaration);
+        var name = head.Substring(head.LastIndexOf(' ') + 1);
+        return name.StartsWith("@", System.StringComparison.Ordinal) ? name.Substring(1) : name;
+    }
+
+    private static string DeclarationHead(string declaration)
+    {
+        var equals = declaration.IndexOf(" = ", System.StringComparison.Ordinal);
+        return equals >= 0 ? declaration.Substring(0, equals) : declaration;
+    }
+
+    /// <summary>One argument that reaches an Element through a user-defined conversion.</summary>
+    private sealed record ConvertedArgument(int Index, string? Name, string FilePath, int Line, int Column);
 
     /// <summary>One call to a wrapper-generated factory.</summary>
     private sealed record WrapperCallSite(
@@ -198,26 +338,52 @@ public sealed partial class WrapperGenerator
         string Attribute,
         string FilePath,
         int Line,
-        int Column);
+        int Column,
+        int ArgumentCount,
+        bool LastArgumentIsAnElementArray,
+        ImmutableArray<ConvertedArgument> ConvertedArguments)
+    {
+        public bool Equals(WrapperCallSite? other)
+            => other is not null
+               && ElementType == other.ElementType
+               && MethodName == other.MethodName
+               && Attribute == other.Attribute
+               && FilePath == other.FilePath
+               && Line == other.Line
+               && Column == other.Column
+               && ArgumentCount == other.ArgumentCount
+               && LastArgumentIsAnElementArray == other.LastArgumentIsAnElementArray
+               && ConvertedArguments.SequenceEqual(other.ConvertedArguments);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var h = Attribute.GetHashCode() * 397 ^ Line;
+                foreach (var a in ConvertedArguments) h = h * 397 ^ a.GetHashCode();
+                return h;
+            }
+        }
+    }
 
     /// <summary>
     /// The shape of one generated factory: the element type it is declared on (fully
-    /// qualified), its name, and its parameter types exactly as declared.
+    /// qualified), its name, and its parameter declarations exactly as emitted.
     /// </summary>
-    private sealed record WrapperFactory(string ElementType, string MethodName, ImmutableArray<string> ParameterTypes)
+    private sealed record WrapperFactory(string ElementType, string MethodName, ImmutableArray<string> Parameters)
     {
         public bool Equals(WrapperFactory? other)
             => other is not null
                && ElementType == other.ElementType
                && MethodName == other.MethodName
-               && ParameterTypes.SequenceEqual(other.ParameterTypes);
+               && Parameters.SequenceEqual(other.Parameters);
 
         public override int GetHashCode()
         {
             unchecked
             {
                 var h = ElementType.GetHashCode() * 397 ^ MethodName.GetHashCode();
-                foreach (var t in ParameterTypes) h = h * 397 ^ t.GetHashCode();
+                foreach (var t in Parameters) h = h * 397 ^ t.GetHashCode();
                 return h;
             }
         }
