@@ -122,6 +122,19 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         Assert.Equal(line, presented.CallSite!.Value.LineNumber);
     }
 
+    [Fact]
+    public void TypedDefaultAndCastOfTheRecord_AreReBoundToo()
+    {
+        // No NAME in these arguments has the record's type — only the expressions do.
+        var fromDefault = Present(default(FakeGaugeElement)!); var defaultLine = Line();
+        var fromCast = Present((FakeGaugeElement)FakeGauge()); var castLine = Line();
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)fromDefault).Orientation);
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)fromCast).Orientation);
+        Assert.Equal(defaultLine, fromDefault.CallSite!.Value.LineNumber);
+        Assert.Equal(castLine, fromCast.CallSite!.Value.LineNumber);
+    }
+
     internal static string Choose(Element value) => "element";
 
     internal static int Choose(FakeGaugeElement value) => 1;
@@ -138,6 +151,18 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         // Choose(placeholder) would return string and pick Show(string); the real Choose
         // returns int and Show(int) runs.
         var shown = Show(Choose(FakeGauge()));
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)shown).Orientation);
+        Assert.Null(shown.CallSite);
+    }
+
+    [Fact]
+    public void InferredWrapperLocalInsideANestedCall_IsPositionCheckedToo()
+    {
+        // `g` is inferred as the record, not a plain Element, so its use inside Choose(...) is
+        // checked like a direct wrapper call would be: Choose's result type depends on it.
+        var g = FakeGauge();
+        var shown = Show(Choose(g));
 
         Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)shown).Orientation);
         Assert.Null(shown.CallSite);

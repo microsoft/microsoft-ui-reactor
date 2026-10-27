@@ -133,23 +133,17 @@ public sealed partial class SourceMapInterceptorGenerator
             }
         }
 
+        // Any value at all — a name, a call, `default(FooElement)`, a cast — whose type
+        // mentions the record. Asked of expression TYPES rather than of particular syntax
+        // shapes, so no way of producing such a value is missed.
         foreach (var node in invocation.ArgumentList.DescendantNodes())
         {
-            ITypeSymbol? valueType = node switch
+            if (node is ExpressionSyntax expression
+                && ValueTypeOf(model, expression, ct) is { } valueType
+                && MentionsIncompleteWrapper(valueType, model.Compilation, 0))
             {
-                SimpleNameSyntax name => model.GetSymbolInfo(name, ct).Symbol switch
-                {
-                    ILocalSymbol l => l.Type,
-                    IFieldSymbol f => f.Type,
-                    IPropertySymbol p => p.Type,
-                    IParameterSymbol p => p.Type,
-                    IMethodSymbol m => m.ReturnType,
-                    _ => null,
-                },
-                ObjectCreationExpressionSyntax creation => model.GetTypeInfo(creation, ct).Type,
-                _ => null,
-            };
-            if (valueType is not null && MentionsIncompleteWrapper(valueType, model.Compilation, 0)) return true;
+                return true;
+            }
         }
         return false;
 
@@ -243,6 +237,18 @@ public sealed partial class SourceMapInterceptorGenerator
             }
         }
         return true;
+    }
+
+    /// <summary>The type of <paramref name="expression"/> when it is a value (not a type name, not the name half of <c>x.Name</c>, not a by-ref argument).</summary>
+    private static ITypeSymbol? ValueTypeOf(SemanticModel model, ExpressionSyntax expression, System.Threading.CancellationToken ct)
+    {
+        if (SyntaxFacts.IsInTypeOnlyContext(expression)) return null;
+        if (expression.Parent is MemberAccessExpressionSyntax member && member.Name == expression) return null;
+        if (expression.Parent is ArgumentSyntax argument && !argument.RefKindKeyword.IsKind(SyntaxKind.None)) return null;
+        if (model.GetTypeInfo(expression, ct).Type is not { } type || type is IErrorTypeSymbol) return null;
+
+        // `SettingsCardElement.SettingsCard(...)`: the qualifier names the type, it is not a value.
+        return model.GetSymbolInfo(expression, ct).Symbol is INamespaceOrTypeSymbol ? null : type;
     }
 
     private static bool MentionsIncompleteWrapper(ITypeSymbol type, Compilation compilation, int depth) => depth <= 8 && type switch
@@ -370,6 +376,14 @@ public sealed partial class SourceMapInterceptorGenerator
         /// <summary>True when an error-typed value was left in place; harmless only if nothing else changed.</summary>
         public bool ResidualError { get; private set; }
 
+        /// <summary>
+        /// The wrapper record whose value flows unchanged to the root (an inferred local's
+        /// whole initializer), or null. Lets a <c>var</c> local initialized from a wrapper
+        /// call stay a record, not decay into a plain <c>Element</c>, so its own uses are
+        /// position-checked like any other wrapper value.
+        /// </summary>
+        public INamedTypeSymbol? RootRecord { get; private set; }
+
         private bool MentionsIncompleteWrapper(ITypeSymbol type) => SourceMapInterceptorGenerator.MentionsIncompleteWrapper(type, _model.Compilation, 0);
 
         private enum NestedResult { Deterministic, PlaceholderLike, Unsafe }
@@ -386,11 +400,19 @@ public sealed partial class SourceMapInterceptorGenerator
         /// </summary>
         private void CheckPosition(ExpressionSyntax original, INamedTypeSymbol record)
         {
-            if (original == _root) return;
+            if (original == _root)
+            {
+                RootRecord = record;
+                return;
+            }
             SyntaxNode child = original;
             for (var node = original.Parent; node is not null; child = node, node = node.Parent)
             {
-                if (node == _root) return;
+                if (node == _root)
+                {
+                    RootRecord = record;
+                    return;
+                }
                 switch (node)
                 {
                     case ParenthesizedExpressionSyntax:
@@ -494,7 +516,9 @@ public sealed partial class SourceMapInterceptorGenerator
 
             // Every candidate returns one fixed type: whichever wins, the caller sees that type.
             var first = methods[0].ReturnType;
-            if (methods.All(m => SymbolEqualityComparer.IncludeNullability.Equals(m.ReturnType, first))
+            // Nullability is irrelevant here: it never changes which overload binds (object.ToString()
+            // is `string?`, a record's override is `string`).
+            if (methods.All(m => SymbolEqualityComparer.Default.Equals(m.ReturnType, first))
                 && !ContainsTypeParameter(first) && !MentionsIncompleteWrapper(first))
             {
                 return NestedResult.Deterministic;
@@ -535,17 +559,7 @@ public sealed partial class SourceMapInterceptorGenerator
             return base.Visit(node);
         }
 
-        /// <summary>The type of <paramref name="expression"/> when it is a value (not a type name, not the name half of <c>x.Name</c>).</summary>
-        private ITypeSymbol? ValueType(ExpressionSyntax expression)
-        {
-            if (SyntaxFacts.IsInTypeOnlyContext(expression)) return null;
-            if (expression.Parent is MemberAccessExpressionSyntax member && member.Name == expression) return null;
-            if (expression.Parent is ArgumentSyntax argument && !argument.RefKindKeyword.IsKind(SyntaxKind.None)) return null;
-            if (_model.GetTypeInfo(expression, _ct).Type is not { } type || type is IErrorTypeSymbol) return null;
-
-            // `SettingsCardElement.SettingsCard(...)`: the qualifier names the type, it is not a value.
-            return _model.GetSymbolInfo(expression, _ct).Symbol is INamespaceOrTypeSymbol ? null : type;
-        }
+        private ITypeSymbol? ValueType(ExpressionSyntax expression) => ValueTypeOf(_model, expression, _ct);
 
         public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node)
         {
@@ -598,6 +612,10 @@ public sealed partial class SourceMapInterceptorGenerator
                 var rewritten = (ExpressionSyntax)inner.Visit(initializer)!;
                 if (inner.Unreliable || (inner.Changed && inner.ResidualError)) Unreliable = true;
                 if (!inner.Changed || Unreliable) return null;
+
+                // Still the record itself: hand it back as such, so the caller's Placeholder
+                // treats this local exactly like a direct wrapper value.
+                if (inner.RootRecord is { } record) return record;
 
                 var type = _model.GetSpeculativeTypeInfo(initializer.SpanStart, rewritten, SpeculativeBindingOption.BindAsExpression).Type;
                 return type is null or IErrorTypeSymbol ? null : type;
