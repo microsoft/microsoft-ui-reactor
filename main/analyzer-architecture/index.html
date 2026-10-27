@@ -3629,15 +3629,15 @@ every invocation.</p>
 <p><strong>Caveat:</strong> <code>SemanticModel.GetSymbolInfo</code> is allocation-heavy and not free even on a
 single call. Don't reach for it inside the syntax callback unless a
 cheaper syntactic check has already filtered the node down to plausible
-candidates. The <code>MissingWithKeyAnalyzer</code> is the extreme: it never calls
-<code>GetSymbolInfo</code> at all. Its <code>REACTOR_DSL_001</code> arm decides with a substring
-check for <code>.WithKey(</code> in the lambda body — false positives only fire when
-the layout container also turns out to be a Reactor factory, which the
-analyzer then confirms by name list. Its <code>REACTOR_DSL_002</code> arm (non-stable
-keys) goes a step further but stays just as syntactic: it walks the key
+candidates. The <code>MissingWithKeyAnalyzer</code> is the extreme: every syntactic
+gate runs before any semantic call. Its <code>REACTOR_DSL_001</code> arm decides with
+a substring check for <code>.WithKey(</code> in the lambda body and a by-name walk to
+a layout factory, and only the few candidates that survive pay for
+<code>GetTypeInfo</code> on the projection and, for <code>ForEach</code>, <code>GetSymbolInfo</code> on the
+callee. Its <code>REACTOR_DSL_002</code> arm (non-stable
+keys) stays syntactic for the key itself: it walks the key
 expression and matches lambda parameter names and well-known per-render
-calls (<code>Guid.NewGuid()</code>, <code>DateTime.Now</code>, …) by name, still without resolving
-a single symbol.</p>
+calls (<code>Guid.NewGuid()</code>, <code>DateTime.Now</code>, …) by name.</p>
 </blockquote>
 <h2 id="diagnostic-descriptors">Diagnostic descriptors<a class="headerlink" href="#diagnostic-descriptors" title="Permanent link">&para;</a></h2>
 <p>Every diagnostic is described by a <code>DiagnosticDescriptor</code> — the id, the
@@ -4125,11 +4125,17 @@ cheap matching done right. It fires on a projection — either
 <code>items.Select(x =&gt; Row(x))</code> or Reactor's own
 <code>ForEach(items, x =&gt; Row(x))</code> — where <code>Row(...)</code> doesn't end in
 <code>.WithKey(...)</code>, and the keyed/unkeyed decision itself is nothing but a
-substring check on <code>body.ToString()</code>. The trade-off is conservative: a
-projection to a non-Reactor element type also gets the substring check,
-but the follow-on <code>IsConsumedAsLayoutChildren</code> walk filters to
+substring check on <code>body.ToString()</code>. The follow-on
+<code>IsConsumedAsLayoutChildren</code> walk filters to
 <a href="../layout/"><code>VStack</code></a> / <code>HStack</code> / <code>FlexRow</code> / <code>Grid</code> / <code>WrapGrid</code>
-parents by name.</p>
+parents by name. A name match is not enough on its own, because a layout
+factory also takes values built with <code>Select</code>, such as
+<code>Grid(days.Select(_ =&gt; GridSize.Star()).ToArray(), rows, …)</code>. So the rule
+then resolves the projection's type and skips anything that is not a
+Reactor <code>Element</code>. It accepts the type the body converts to as well as its
+own type, so a string or chart builder that <code>ForEach</code> converts to an
+element still reports. It also follows <code>where T : Element</code> constraints.
+An unresolved type keeps the syntactic verdict.</p>
 <p>The two shapes need different amounts of evidence, and that is the
 lesson. <code>Select</code> is safe on syntax alone: it is always a member access
 on a collection, so a same-named method would have to be an extension
