@@ -622,8 +622,11 @@ public sealed partial class Reconciler : IDisposable
         }
         // An untagged keyed Memo output has nothing to re-key, and its wrapper is never the tag.
         if (kind is KeyedMemoElement) return;
-        SetElementTagIfNeeded(control, newEl);
-        if (publish) PublishSource(control, newEl);
+        // A legacy ModifiedElement mounts (and tags) its inner element, so that element is
+        // re-tagged, carrying the wrapper's key.
+        var target = ReferenceEquals(kind, newEl) ? newEl : kind with { Key = newEl.Key };
+        SetElementTagIfNeeded(control, target);
+        if (publish) PublishSource(control, target);
     }
 
     /// <summary>

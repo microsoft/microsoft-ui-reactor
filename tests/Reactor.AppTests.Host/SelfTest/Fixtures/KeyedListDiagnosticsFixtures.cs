@@ -228,6 +228,7 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             {
                 ReactorSourcePublisher.IsEnabled = publishPass;
                 await CheckForwardedFlipPage(publishPass);
+                await CheckWrappedFlipPage(publishPass);
             }
             ReactorSourcePublisher.IsEnabled = publish;
 
@@ -285,6 +286,46 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
         H.ClickButton("fwd page");
         bool clicked = await Harness.WaitFor(() => clicks == 1);
         Console.WriteLine($"# forwarded flip page (publish={publishPass}): tag={tag?.GetType().Name} key={tag?.Key} clicks={clicks} value={value}");
+        H.Check(name + "_KeepsButtonTag", tag is ButtonElement && tag.Key == "only", tag?.GetType().Name ?? "<none>");
+        H.Check(name + "_StillClicks", clicked, $"clicks: {clicks}");
+        if (publishPass)
+            H.Check(name + "_SourceDescribesButton",
+                value?.Contains("|element=Button", StringComparison.Ordinal) == true
+                && value.Contains("|key=only", StringComparison.Ordinal), value ?? "<none>");
+        host.Dispose();
+        H.SetContent(null);
+    }
+
+    // A page built as a legacy ModifiedElement around a Button: the control is tagged with the
+    // inner ButtonElement (whose click trampoline requires one), never with the wrapper.
+    private async Task CheckWrappedFlipPage(bool publishPass)
+    {
+        var name = "KeyedListDiagnostics_FlipViewWrappedPage" + (publishPass ? "_Published" : "");
+        int clicks = 0;
+        var host = H.CreateHost();
+        host.Mount(ctx =>
+        {
+            var (n, setN) = ctx.UseState(0);
+            return VStack(4,
+                Button("flip-wrapped-rerender", () => setN(n + 1)),
+                TextBlock("flip-wrapped renders " + n),
+                FlipView(FlipForwardItems, static s => s,
+                    (_, _) => new ModifiedElement(Button("wrapped page", () => clicks++), new ElementModifiers { Margin = new Thickness(2) }))
+                    .Height(60));
+        });
+        await Harness.Render();
+        await Harness.Render(100);
+        H.ClickButton("flip-wrapped-rerender");
+        await Harness.Render();
+        H.ClickButton("flip-wrapped-rerender");
+        await Harness.Render();
+        await Harness.Render(100);
+        var page = H.FindButton("wrapped page");
+        var tag = page is null ? null : Reconciler.GetElementTag(page);
+        var value = page is null ? null : ReactorDiagnostics.GetSource(page);
+        H.ClickButton("wrapped page");
+        bool clicked = await Harness.WaitFor(() => clicks == 1);
+        Console.WriteLine($"# wrapped flip page (publish={publishPass}): tag={tag?.GetType().Name} key={tag?.Key} clicks={clicks} value={value}");
         H.Check(name + "_KeepsButtonTag", tag is ButtonElement && tag.Key == "only", tag?.GetType().Name ?? "<none>");
         H.Check(name + "_StillClicks", clicked, $"clicks: {clicks}");
         if (publishPass)

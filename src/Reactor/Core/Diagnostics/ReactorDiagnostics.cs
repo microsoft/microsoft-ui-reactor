@@ -215,8 +215,10 @@ public static partial class ReactorDiagnostics
                             // Only the first MaxSampleKeys keys feed the dedup key, so the
                             // overflow summary ("…and N more") can differ between repeats.
                             SampleKeys = truncated,
-                            ComponentName = v.ComponentName ?? componentName,
-                            CallSite = v.CallSite ?? callSite,
+                            // The latest attribution wins: a reused control can be bound by
+                            // another call site or under another root since the first report.
+                            ComponentName = componentName ?? v.ComponentName,
+                            CallSite = callSite ?? v.CallSite,
                         };
                         slot.Entry = updated;
                         return updated;

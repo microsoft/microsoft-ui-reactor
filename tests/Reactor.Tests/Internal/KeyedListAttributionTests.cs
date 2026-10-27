@@ -113,6 +113,27 @@ public class KeyedListAttributionTests
     }
 
     [Fact]
+    public void Record_Repeat_TakesTheLatestAttribution()
+    {
+        // One reused control, bound first from one call site and then from another (a
+        // conditional branch): the entry names the latest; a report with no attribution keeps it.
+        var ctx = $"Rebind_{NewId()}";
+        var control = new object();
+        var first = new SourceLocation("Views/First.cs", 4, 2);
+        var second = new SourceLocation("Views/Second.cs", 8, 6);
+        string[] samples = ["k"];
+
+        ReactorDiagnostics.Record(control, ctx, KeyedListDiagnosticKind.DuplicateKey, samples, "RootA", first);
+        ReactorDiagnostics.Record(control, ctx, KeyedListDiagnosticKind.DuplicateKey, samples, "RootB", second);
+        ReactorDiagnostics.Record(control, ctx, KeyedListDiagnosticKind.DuplicateKey, samples);
+
+        var entry = Assert.Single(ReactorDiagnostics.RecentKeyedListWarnings, w => w.ControlContext == ctx);
+        Assert.Equal(3, entry.Count);
+        Assert.Equal("RootB", entry.ComponentName);
+        Assert.Equal(second, entry.CallSite);
+    }
+
+    [Fact]
     public void Record_Repeat_RefreshesTheOverflowSummary()
     {
         // Only the first eight keys feed the dedup key, so nine and then ten keys with the same
