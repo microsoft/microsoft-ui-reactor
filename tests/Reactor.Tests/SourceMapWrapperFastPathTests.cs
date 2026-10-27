@@ -138,6 +138,12 @@ public sealed class SourceMapWrapperFastPathTests
             OutputKind.DynamicallyLinkedLibrary
         },
         {
+            "using static of a record-closed generic type",
+            "using Microsoft.UI.Reactor.Core;\nusing static App.Cache<App.GaugeElement>;\nnamespace App {\n public static class Use { public static Element R() => Helpers.Show(Cached); }\n}\n",
+            "public static class Cache<T> { public static T Cached = default!; }",
+            OutputKind.DynamicallyLinkedLibrary
+        },
+        {
             "positional-record property",
             "using Microsoft.UI.Reactor.Core;\nnamespace App {\n public static class Screen { public static Element R(ViewModel model) => Helpers.Show(model.Child); }\n}\n",
             "public record ViewModel(GaugeElement Child, int Index);",

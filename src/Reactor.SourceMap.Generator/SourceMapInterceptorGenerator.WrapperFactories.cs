@@ -215,8 +215,17 @@ public sealed partial class SourceMapInterceptorGenerator
 
         IEnumerable<(string, bool)> AliasMention(UsingDirectiveSyntax directive)
         {
-            if (directive.Alias is { } alias && Spells(directive.NamespaceOrType))
+            if (!Spells(directive.NamespaceOrType)) yield break;
+            if (directive.Alias is { } alias)
+            {
                 yield return (alias.Name.Identifier.ValueText, false);
+            }
+            else if (!directive.StaticKeyword.IsKind(SyntaxKind.None))
+            {
+                // `using static Cache<FooElement>;` brings in members whose declarations only
+                // spell `T`, under names no list here can know in advance.
+                yield return (string.Empty, true);
+            }
         }
     }
 
