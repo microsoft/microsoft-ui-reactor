@@ -1048,6 +1048,7 @@ internal static class SelfTestFixtureRegistry
         "ConditionalChildSlot_ReplaceWithExitPositional",
         "ConditionalChildSlot_NestedGroupToggle",
         "ConditionalChildSlot_DeepNestedGroupToggle",
+        "ConditionalChildSlot_UniformGridExitKeepsColumns",
         "TemplatedList_ChurnLeavesNoOrphanedRows",
         "TemplatedList_MoveKeepsRowComponent",
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
@@ -3167,6 +3168,7 @@ internal static class SelfTestFixtureRegistry
         "ConditionalChildSlot_ReplaceWithExitPositional" => new ConditionalChildSlotFixtures.ReplaceWithExitPositional(harness),
         "ConditionalChildSlot_NestedGroupToggle" => new ConditionalChildSlotFixtures.NestedGroupToggle(harness),
         "ConditionalChildSlot_DeepNestedGroupToggle" => new ConditionalChildSlotFixtures.NestedGroupToggle(harness, depth: 5),
+        "ConditionalChildSlot_UniformGridExitKeepsColumns" => new ConditionalChildSlotFixtures.UniformGridExitKeepsColumns(harness),
         "TemplatedList_ChurnLeavesNoOrphanedRows" => new TemplatedListOrphanContainerFixtures.ChurnLeavesNoOrphanedRows(harness),
         "TemplatedList_MoveKeepsRowComponent" => new TemplatedListOrphanContainerFixtures.MoveKeepsRowComponent(harness),
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
