@@ -16,6 +16,13 @@ public class ChildSlotsTests
     private static int S(int index) => ChildSlots.ForIndex(index);
     private static int G(int index, int inGroup) => ChildSlots.ForGroupChild(index, inGroup);
 
+    private static int[] SlotsOf(Element[] children)
+    {
+        var slots = ChildSlots.Get(children);
+        Assert.NotNull(slots);
+        return slots;
+    }
+
     [Fact]
     public void Factory_DroppedEmpty_RecordsArgumentSlots()
     {
@@ -24,7 +31,7 @@ public class ChildSlotsTests
         var stack = VStack(a, Empty(), b);
 
         Assert.Equal([a, b], stack.Children);
-        Assert.Equal([S(0), S(2)], ChildSlots.Get(stack.Children));
+        Assert.Equal([S(0), S(2)], SlotsOf(stack.Children));
     }
 
     [Fact]
@@ -35,7 +42,7 @@ public class ChildSlotsTests
         var stack = HStack(null, a, null, b);
 
         Assert.Equal([a, b], stack.Children);
-        Assert.Equal([S(1), S(3)], ChildSlots.Get(stack.Children));
+        Assert.Equal([S(1), S(3)], SlotsOf(stack.Children));
     }
 
     [Fact]
@@ -59,7 +66,7 @@ public class ChildSlotsTests
         var stack = VStack(a, Group(b, Empty(), d), e);
 
         Assert.Equal([a, b, d, e], stack.Children);
-        Assert.Equal([S(0), G(1, 0), G(1, 2), S(2)], ChildSlots.Get(stack.Children));
+        Assert.Equal([S(0), G(1, 0), G(1, 2), S(2)], SlotsOf(stack.Children));
     }
 
     [Fact]
@@ -69,15 +76,15 @@ public class ChildSlotsTests
         var two = VStack(Group(TextBlock("x"), TextBlock("y")), e);
         var one = VStack(Group(TextBlock("x")), e);
 
-        Assert.Equal(S(1), ChildSlots.Get(two.Children)![^1]);
-        Assert.Equal(S(1), ChildSlots.Get(one.Children)![^1]);
+        Assert.Equal(S(1), SlotsOf(two.Children)[^1]);
+        Assert.Equal(S(1), SlotsOf(one.Children)[^1]);
     }
 
     [Fact]
     public void Slots_IncreaseWithPosition()
     {
         var stack = VStack(Empty(), TextBlock("a"), Group(TextBlock("b"), null, TextBlock("c")), null, TextBlock("d"));
-        var slots = ChildSlots.Get(stack.Children)!;
+        var slots = SlotsOf(stack.Children);
 
         for (int i = 1; i < slots.Length; i++)
             Assert.True(slots[i - 1] < slots[i], $"slot {i} = {slots[i]} does not follow {slots[i - 1]}");
@@ -110,7 +117,7 @@ public class ChildSlotsTests
         // same slot.
         var stack = VStack(Group(null, TextBlock("A"), Group(TextBlock("B"), TextBlock("C"))));
 
-        Assert.Equal([G(0, 0), G(0, 1), G(0, 2)], ChildSlots.Get(stack.Children));
+        Assert.Equal([G(0, 0), G(0, 1), G(0, 2)], SlotsOf(stack.Children));
     }
 
     [Fact]
@@ -119,7 +126,7 @@ public class ChildSlotsTests
         var grid = UniformGrid(Microsoft.UI.Xaml.Controls.Orientation.Horizontal, TextBlock("a"), Empty(), TextBlock("c"));
 
         Assert.Equal(2, grid.Children.Length);
-        Assert.Equal([S(0), S(2)], ChildSlots.Get(grid.Children));
+        Assert.Equal([S(0), S(2)], SlotsOf(grid.Children));
     }
 
     [Fact]
@@ -130,6 +137,7 @@ public class ChildSlotsTests
         var filtered = ChildReconciler.Filter([a, EmptyElement.Instance, null!, b], out var slots);
 
         Assert.Equal([a, b], filtered);
+        Assert.NotNull(slots);
         Assert.Equal([S(0), S(3)], slots);
     }
 
@@ -140,6 +148,7 @@ public class ChildSlotsTests
         var filtered = ChildReconciler.Filter(stack.Children, out var slots);
 
         Assert.Same(stack.Children, filtered);
+        Assert.NotNull(slots);
         Assert.Equal([S(1)], slots);
     }
 
