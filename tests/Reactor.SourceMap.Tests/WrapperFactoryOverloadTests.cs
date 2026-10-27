@@ -59,6 +59,48 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         Assert.Null(later.CallSite);
     }
 
+    [ReactorSourceTransparent]
+    internal static Element Soon(GaugeMaker<int> make) => HStack(make());
+
+    [ReactorSourceTransparent]
+    internal static Element Soon(global::System.Func<Element> make) => VStack(make());
+
+    [Fact]
+    public void GenericDelegateWhoseSignatureReturnsTheRecord_WinsOverFuncOfElement()
+    {
+        // `GaugeMaker<int>` mentions the record only in its invoke signature.
+        var soon = Soon(() => FakeGauge());
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)soon).Orientation);
+        Assert.Null(soon.CallSite);
+    }
+
+    [Fact]
+    public void MoreDerivedOverloadOnAQualifier_WinsOverTheInheritedOne()
+    {
+        // DerivedFrames.Frame(FakeGaugeElement) beats the inherited BaseFrames.Frame(Element),
+        // which is all an Element placeholder can reach.
+        var framed = DerivedFrames.Frame(FakeGauge());
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)framed).Orientation);
+        Assert.Null(framed.CallSite);
+    }
+
+    [ReactorSourceTransparent]
+    internal static Element Badge(GaugeBadge badge) => HStack(badge.Gauge);
+
+    [ReactorSourceTransparent]
+    internal static Element Badge(object value) => VStack();
+
+    [Fact]
+    public void UserDefinedConversionFromTheRecord_WinsOverObject()
+    {
+        var badge = Badge(FakeGauge());
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)badge).Orientation);
+        Assert.Null(badge.CallSite);
+    }
+
     [Fact]
     public void CompetingUsingStaticOverload_WinsOverFactories()
     {
@@ -85,6 +127,33 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         Assert.NotNull(plain.CallSite);
         Assert.EndsWith("WrapperFactoryOverloadTests.cs", plain.CallSite!.Value.FilePath, StringComparison.Ordinal);
     }
+}
+
+/// <summary>A generic delegate whose signature, not its type arguments, names the record.</summary>
+public delegate FakeGaugeElement GaugeMaker<T>();
+
+/// <summary>Converts FROM the record, which an Element placeholder cannot.</summary>
+public sealed class GaugeBadge
+{
+    public GaugeBadge(FakeGaugeElement gauge) => Gauge = gauge;
+
+    public FakeGaugeElement Gauge { get; }
+
+    public static implicit operator GaugeBadge(FakeGaugeElement gauge) => new(gauge);
+}
+
+/// <summary>Holds the overload a placeholder can reach.</summary>
+public class BaseFrames
+{
+    [ReactorSourceTransparent]
+    public static Element Frame(Element child) => Microsoft.UI.Reactor.Factories.VStack(child);
+}
+
+/// <summary>Adds the more specific overload the real compilation picks.</summary>
+public class DerivedFrames : BaseFrames
+{
+    [ReactorSourceTransparent]
+    public static Element Frame(FakeGaugeElement gauge) => Microsoft.UI.Reactor.Factories.HStack(gauge);
 }
 
 /// <summary>A user-defined stack factory competing with <c>Factories.VStack</c>.</summary>

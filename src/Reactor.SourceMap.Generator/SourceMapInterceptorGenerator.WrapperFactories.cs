@@ -161,16 +161,29 @@ public sealed partial class SourceMapInterceptorGenerator
     {
         if (method.ContainingType is not { } owner) return false;
 
-        var candidates = new List<ISymbol>(owner.GetMembers(method.Name));
-        // An unqualified name also sees same-named methods from enclosing types and every
-        // `using static` import; one of those can be the overload the real call resolves to.
-        if (invocation.Expression is SimpleNameSyntax)
-            candidates.AddRange(model.LookupSymbols(invocation.SpanStart, name: method.Name));
+        // Every same-named method the real call could resolve to: the winner's type and its
+        // bases; for `Q.M(...)`, Q and ITS bases (a more-derived overload hides nothing from
+        // overload resolution); for an unqualified `M(...)`, enclosing types and every
+        // `using static` import.
+        var candidates = new List<ISymbol>();
+        AddWithBases(candidates, owner, method.Name);
+        switch (invocation.Expression)
+        {
+            case SimpleNameSyntax:
+                candidates.AddRange(model.LookupSymbols(invocation.SpanStart, name: method.Name));
+                break;
+            case MemberAccessExpressionSyntax member:
+                if ((model.GetSymbolInfo(member.Expression).Symbol as ITypeSymbol ?? model.GetTypeInfo(member.Expression).Type) is INamedTypeSymbol qualifier)
+                    AddWithBases(candidates, qualifier, method.Name);
+                break;
+        }
 
         var interfaces = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         foreach (var wrapper in substituted)
         {
             foreach (var implemented in wrapper.AllInterfaces) interfaces.Add(implemented.OriginalDefinition);
+            // A conversion operator declared on the record reaches types Element cannot.
+            if (wrapper.GetMembers().Any(static m => m is IMethodSymbol { MethodKind: MethodKind.Conversion })) return false;
         }
 
         foreach (var candidate in candidates)
@@ -184,6 +197,11 @@ public sealed partial class SourceMapInterceptorGenerator
         return true;
     }
 
+    private static void AddWithBases(List<ISymbol> candidates, INamedTypeSymbol type, string name)
+    {
+        for (var t = type; t is not null; t = t.BaseType) candidates.AddRange(t.GetMembers(name));
+    }
+
     /// <summary>
     /// True when <paramref name="type"/>, at any depth (array element, type argument, delegate
     /// signature), is a type parameter, an incomplete wrapper record, or an interface such a
@@ -191,7 +209,7 @@ public sealed partial class SourceMapInterceptorGenerator
     /// accepts <c>Element</c>.
     /// </summary>
     private static bool ReachableOnlyByTheRecord(
-        ITypeSymbol type, Compilation compilation, HashSet<INamedTypeSymbol> interfaces, int depth)
+        ITypeSymbol type, Compilation compilation, HashSet<INamedTypeSymbol> interfaces, int depth, bool insideConversion = false)
     {
         if (depth > 8) return true;
         switch (type)
@@ -199,20 +217,33 @@ public sealed partial class SourceMapInterceptorGenerator
             case ITypeParameterSymbol:
                 return true;
             case IArrayTypeSymbol array:
-                return ReachableOnlyByTheRecord(array.ElementType, compilation, interfaces, depth + 1);
+                return ReachableOnlyByTheRecord(array.ElementType, compilation, interfaces, depth + 1, insideConversion);
             case INamedTypeSymbol named:
                 if (WrapperFactoryCalls.IsIncompleteWrapperElement(named, compilation)) return true;
                 if (named.TypeKind == TypeKind.Interface && interfaces.Contains(named.OriginalDefinition)) return true;
+                // `implicit operator P(FooElement)` declared on P: the record converts, Element does not.
+                // Not followed further: C# applies at most one user-defined conversion.
+                foreach (var member in insideConversion ? ImmutableArray<ISymbol>.Empty : named.GetMembers())
+                {
+                    if (member is IMethodSymbol { MethodKind: MethodKind.Conversion } conversion
+                        && conversion.Parameters.Length == 1
+                        && ReachableOnlyByTheRecord(conversion.Parameters[0].Type, compilation, interfaces, depth + 1, insideConversion: true))
+                    {
+                        return true;
+                    }
+                }
                 foreach (var argument in named.TypeArguments)
                 {
-                    if (ReachableOnlyByTheRecord(argument, compilation, interfaces, depth + 1)) return true;
+                    if (ReachableOnlyByTheRecord(argument, compilation, interfaces, depth + 1, insideConversion)) return true;
                 }
-                if (named.DelegateInvokeMethod is { } invoke && !named.IsGenericType)
+                // The CONSTRUCTED signature: `delegate FooElement Maker<T>()` mentions the record
+                // only there, never in `Maker<int>`'s type arguments.
+                if (named.DelegateInvokeMethod is { } invoke)
                 {
-                    if (ReachableOnlyByTheRecord(invoke.ReturnType, compilation, interfaces, depth + 1)) return true;
+                    if (ReachableOnlyByTheRecord(invoke.ReturnType, compilation, interfaces, depth + 1, insideConversion)) return true;
                     foreach (var p in invoke.Parameters)
                     {
-                        if (ReachableOnlyByTheRecord(p.Type, compilation, interfaces, depth + 1)) return true;
+                        if (ReachableOnlyByTheRecord(p.Type, compilation, interfaces, depth + 1, insideConversion)) return true;
                     }
                 }
                 return false;
