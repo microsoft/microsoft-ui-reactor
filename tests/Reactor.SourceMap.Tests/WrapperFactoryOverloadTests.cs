@@ -492,6 +492,71 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         Assert.Equal(line, shown.CallSite!.Value.LineNumber);
     }
 
+    internal static object MakeAny(object value) => value;
+
+    internal static Element MakeAny(Element value) => value;
+
+    [ReactorSourceTransparent]
+    internal static Element From2(global::System.Func<FakeGaugeElement, object> make) => VStack();
+
+    [ReactorSourceTransparent]
+    internal static Element From2(global::System.Func<FakeGaugeElement, Element> make) => HStack();
+
+    [Fact]
+    public void MethodGroupConvertedToADelegateOverTheRecord_IsNotTrusted()
+    {
+        // Here only MakeAny(object) takes a FakeGaugeElement, so MakeAny converts to
+        // Func<FakeGaugeElement, object> alone; once the record is an Element, MakeAny(Element)
+        // converts to the better Func<FakeGaugeElement, Element>. Neither MakeAny names the record.
+        var made = From2(MakeAny);
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)made).Orientation);
+        Assert.Null(made.CallSite);
+    }
+
+    [Fact]
+    public void ValueWithAConversionToTheRecord_IsNotTrusted()
+    {
+        // GaugeBox -> FakeGaugeElement is user-defined; once the record is an Element that
+        // conversion reaches Element too, and Pair2(Element, Element) wins over (Element, object).
+        FakeGaugeElement gauge = FakeGauge();
+        var paired = Pair2(gauge, new GaugeBox());
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)paired).Orientation);
+        Assert.Null(paired.CallSite);
+    }
+
+    private static readonly bool s_flag = true;
+
+    [Fact]
+    public void VarLocalOfAConditionalWideningTheRecord_IsItsWiderType()
+    {
+        // Both locals are objects, so Present(object) runs and the calls are stamped with it.
+        FakeGaugeElement gauge = FakeGauge();
+        var mixed = s_flag ? gauge : new object();
+        var parenthesized = (s_flag ? gauge : new object());
+        var line = Line(); var first = Present(mixed); var second = Present(parenthesized);
+
+        Assert.Equal(WinUI.Orientation.Vertical, ((StackElement)first).Orientation);
+        Assert.Equal(WinUI.Orientation.Vertical, ((StackElement)second).Orientation);
+        Assert.Equal(line, first.CallSite?.LineNumber);
+        Assert.Equal(line, second.CallSite?.LineNumber);
+    }
+
+    [ReactorSourceTransparent]
+    internal static Element Wrap(Element first, params Element[] rest) => HStack([first, .. rest]);
+
+    [Fact]
+    public void ArgumentThatConvertsToTheParamsArray_IsNotStampedAsOneOfItsElements()
+    {
+        // Duo converts to Element AND to Element[]; C# then passes it in normal form, so
+        // `rest` is Duo's own (empty) array and must not be written into as rest[0].
+        FakeGaugeElement gauge = FakeGauge();
+        var line = Line(); var wrapped = Wrap(gauge, new Duo());
+
+        Assert.Equal(line, wrapped.CallSite?.LineNumber);
+    }
+
     [Fact]
     public void CompetingUsingStaticOverload_WinsOverFactories()
     {
@@ -518,6 +583,20 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         Assert.NotNull(plain.CallSite);
         Assert.EndsWith("WrapperFactoryOverloadTests.cs", plain.CallSite!.Value.FilePath, StringComparison.Ordinal);
     }
+}
+
+/// <summary>Converts TO the record, so through it to Element once the record is complete.</summary>
+public sealed class GaugeBox
+{
+    public static implicit operator FakeGaugeElement(GaugeBox box) => FakeGauge();
+}
+
+/// <summary>Converts to a single Element and to a whole (empty) Element[].</summary>
+public sealed class Duo
+{
+    public static implicit operator Element(Duo duo) => Microsoft.UI.Reactor.Factories.TextBlock("single");
+
+    public static implicit operator Element[](Duo duo) => [];
 }
 
 /// <summary>A generic delegate whose signature, not its type arguments, names the record.</summary>

@@ -636,7 +636,8 @@ public sealed partial class SourceMapInterceptorGenerator
     /// <summary>
     /// A method group (<c>From(MakeGauge)</c>) has no type of its own, so a type check never
     /// sees it; but its candidates' signatures decide which delegate it converts to, and one
-    /// naming a wrapper record converts differently once the record is an Element.
+    /// naming a wrapper record converts differently once the record is an Element — as does
+    /// any method group converted to a delegate type that names one.
     /// </summary>
     private static bool IsWrapperDependentMethodGroup(SemanticModel model, ExpressionSyntax expression, System.Threading.CancellationToken ct)
     {
@@ -646,13 +647,20 @@ public sealed partial class SourceMapInterceptorGenerator
 
         var info = model.GetSymbolInfo(expression, ct);
         var compilation = model.Compilation;
+        var isMethodGroup = false;
         foreach (var symbol in info.Symbol is { } single ? ImmutableArray.Create(single) : info.CandidateSymbols)
         {
             if (symbol is not IMethodSymbol method) continue;
+            isMethodGroup = true;
             if (MentionsIncompleteWrapper(method.ReturnType, compilation)) return true;
             if (method.Parameters.Any(p => MentionsIncompleteWrapper(p.Type, compilation))) return true;
         }
-        return false;
+
+        // The delegate it converts to: `From(Make)` into `Func<FooElement, object>` asks which
+        // `Make` takes a FooElement, and `Make(Element)` starts to once the record is complete.
+        return isMethodGroup
+            && model.GetTypeInfo(expression, ct).ConvertedType is { } converted
+            && MentionsIncompleteWrapper(converted, compilation);
     }
 
     /// <summary>
@@ -710,7 +718,8 @@ public sealed partial class SourceMapInterceptorGenerator
     /// the record itself; a constructed type with a tainted type argument; an array of one; a
     /// delegate whose signature is tainted (<c>delegate FooElement Make()</c>); or a source type
     /// whose base chain or interfaces are (<c>class Screen : Component&lt;FooElement&gt;</c>,
-    /// whose inherited <c>Props</c> is a record); or a type parameter constrained to one.
+    /// whose inherited <c>Props</c> is a record) or which declares a conversion to one; or a
+    /// type parameter constrained to one.
     /// Cached per compilation.
     /// </summary>
     private static bool MentionsIncompleteWrapper(ITypeSymbol type, Compilation compilation)
@@ -779,6 +788,17 @@ public sealed partial class SourceMapInterceptorGenerator
             foreach (var implemented in named.Interfaces)
             {
                 if (IsTainted(implemented, compilation, cache, inProgress)) return true;
+            }
+            // `implicit operator FooElement(Box)`: a Box converts to the record — and, once the
+            // record is complete, through it to Element.
+            foreach (var member in named.GetMembers())
+            {
+                if (member is IMethodSymbol { MethodKind: MethodKind.Conversion } conversion
+                    && !SymbolEqualityComparer.Default.Equals(conversion.ReturnType, named)
+                    && IsTainted(conversion.ReturnType, compilation, cache, inProgress))
+                {
+                    return true;
+                }
             }
         }
         return false;
@@ -1069,6 +1089,9 @@ public sealed partial class SourceMapInterceptorGenerator
                 return;
             }
             SyntaxNode child = original;
+            // False once the value has passed a step that keeps it but may widen its type
+            // (`flag ? gauge : new object()`): from there on the root is not the record.
+            var exact = true;
             for (var node = original.Parent; node is not null; child = node, node = node.Parent)
             {
                 // The root's own step is judged like any other: `var boxed = (object)Gauge()`
@@ -1077,13 +1100,20 @@ public sealed partial class SourceMapInterceptorGenerator
                 if (!atRoot) _accounted.Add(node);
                 switch (node)
                 {
+                    case ConditionalExpressionSyntax c when c.Condition != child:
+                        if (!ArmIsRecord(c.WhenTrue == child ? c.WhenFalse : c.WhenTrue, record)) exact = false;
+                        if (atRoot)
+                        {
+                            if (exact) RootRecord = record;
+                            return;
+                        }
+                        continue;
                     case ParenthesizedExpressionSyntax:
                     case PostfixUnaryExpressionSyntax p when p.IsKind(SyntaxKind.SuppressNullableWarningExpression):
-                    case ConditionalExpressionSyntax c when c.Condition != child:
                     case WithExpressionSyntax w when w.Expression == child:
                         if (atRoot)
                         {
-                            RootRecord = record;
+                            if (exact) RootRecord = record;
                             return;
                         }
                         continue;
@@ -1132,7 +1162,7 @@ public sealed partial class SourceMapInterceptorGenerator
                                 // The modifier call can itself be the root (`var sized = g.Width(140)`).
                                 if (modifier == _root)
                                 {
-                                    RootRecord = record;
+                                    if (exact) RootRecord = record;
                                     return;
                                 }
                                 node = modifier;
@@ -1147,6 +1177,21 @@ public sealed partial class SourceMapInterceptorGenerator
                 }
             }
             Unreliable = true;
+        }
+
+        /// <summary>
+        /// True when the other arm of a conditional is the same record in the real
+        /// compilation: a call to its wrapper factory, or a value certainly typed as it.
+        /// </summary>
+        private bool ArmIsRecord(ExpressionSyntax arm, INamedTypeSymbol record)
+        {
+            while (arm is ParenthesizedExpressionSyntax p) arm = p.Expression;
+            if (arm is InvocationExpressionSyntax call
+                && _model.GetSymbolInfo(call, _ct) is { Symbol: null, CandidateSymbols.IsEmpty: true })
+            {
+                return SymbolEqualityComparer.Default.Equals(WrapperFactoryCalls.ResolveUnboundCall(_model, call, _ct), record);
+            }
+            return SymbolEqualityComparer.Default.Equals(ValueType(arm), record) && CertainlyRecord(arm, record);
         }
 
         /// <summary>
@@ -1423,11 +1468,13 @@ public sealed partial class SourceMapInterceptorGenerator
         var parameters = method.Parameters;
         var paramsOrdinal = parameters.Length > 0 && parameters[parameters.Length - 1].IsParams ? parameters.Length - 1 : -1;
 
-        // Expanded form unless exactly one argument lands on the params slot and it is
-        // already an array — the caller's own array, which is never written into.
+        // Expanded form unless exactly one argument lands on the params slot and converts to
+        // the array type itself — C# then uses the normal form, so the array is the caller's
+        // own (an `Element[]`, `null`, a user-defined conversion to one) and is never written
+        // into, even when the argument ALSO converts to a single Element.
         var expanded = paramsOrdinal >= 0
             && !(arguments.Count == parameters.Length
-                 && model.GetTypeInfo(arguments[paramsOrdinal].Expression, ct).Type is IArrayTypeSymbol);
+                 && model.ClassifyConversion(arguments[paramsOrdinal].Expression, parameters[paramsOrdinal].Type) is { Exists: true, IsImplicit: true });
 
         ImmutableArray<ArgumentStamp>.Builder? builder = null;
         for (int i = 0; i < arguments.Count; i++)
