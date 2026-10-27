@@ -113,6 +113,52 @@ public class KeyedListAttributionTests
     }
 
     [Fact]
+    public void Record_Repeat_RefreshesTheOverflowSummary()
+    {
+        // Only the first eight keys feed the dedup key, so nine and then ten keys with the same
+        // first eight are one entry; its summary must follow the latest report.
+        var ctx = $"Overflow_{NewId()}";
+        var control = new object();
+        var nine = Enumerable.Range(0, 9).Select(i => "k" + i).ToArray();
+        var ten = Enumerable.Range(0, 10).Select(i => "k" + i).ToArray();
+
+        ReactorDiagnostics.Record(control, ctx, KeyedListDiagnosticKind.DuplicateKey, nine);
+        ReactorDiagnostics.Record(control, ctx, KeyedListDiagnosticKind.DuplicateKey, ten);
+
+        var entry = Assert.Single(ReactorDiagnostics.RecentKeyedListWarnings, w => w.ControlContext == ctx);
+        Assert.Equal(2, entry.Count);
+        Assert.Equal("…and 2 more", entry.SampleKeys[^1]);
+    }
+
+    [Theory]
+    [InlineData(6)]  // the small-panel pairwise scan
+    [InlineData(40)] // the pooled-set scan
+    public void DuplicateSiblingKeys_SampleIsDistinctAndSorted(int count)
+    {
+        var parent = new object();
+        var site = new SourceLocation($"Views/{NewId()}.cs", 3, 1);
+        // "z" three times and "m" twice, "z" first: each named once, in ordinal order.
+        var keys = new[] { "z", "m", "z", "m", "z" }.Concat(Enumerable.Range(0, count - 5).Select(i => "u" + i));
+        var children = keys.Select(k => (Element?)(TextBlock("x") with { Key = k, CallSite = site })).ToArray();
+
+        KeyedListDiff.ReportDuplicateSiblingKeys(children, reconciler: null, parent);
+
+        var warning = ReactorDiagnostics.RecentKeyedListWarnings.FirstOrDefault(w => w.CallSite == site);
+        Assert.Equal(["m", "z"], warning?.SampleKeys);
+    }
+
+    [Fact]
+    public void SeedKeys_RepeatedDuplicates_AreNamedOnceSorted()
+    {
+        var ctx = $"SeedMany_{NewId()}";
+        string?[] keys = ["b", "a", "b", "a", "b", "c"];
+
+        KeyedListDiff.SeedKeys(keys, keys.Length, static (k, i) => k[i], logger: null, ctx, new object(), default);
+
+        Assert.Equal(["a", "b"], WarningFor(ctx, KeyedListDiagnosticKind.DuplicateKey)?.SampleKeys);
+    }
+
+    [Fact]
     public void SeedThenApply_SameDuplicates_ShareOneEntry()
     {
         var ctx = $"SeedApply_{NewId()}";

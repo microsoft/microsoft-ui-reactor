@@ -212,6 +212,9 @@ public static partial class ReactorDiagnostics
                         {
                             TimestampUtc = DateTime.UtcNow,
                             Count = existingCount + 1,
+                            // Only the first MaxSampleKeys keys feed the dedup key, so the
+                            // overflow summary ("…and N more") can differ between repeats.
+                            SampleKeys = truncated,
                             ComponentName = v.ComponentName ?? componentName,
                             CallSite = v.CallSite ?? callSite,
                         };

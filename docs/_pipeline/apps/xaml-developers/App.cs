@@ -130,9 +130,9 @@ class EventsFluentExample : Component
 }
 // </snippet:events-fluent>
 
-class LegacySettingsPage : Microsoft.UI.Xaml.Controls.Page { }
+partial class LegacySettingsPage : Microsoft.UI.Xaml.Controls.Page { }
 
-class MyUserControl : Microsoft.UI.Xaml.Controls.UserControl
+partial class MyUserControl : Microsoft.UI.Xaml.Controls.UserControl
 {
     public int Value { get; set; }
 }

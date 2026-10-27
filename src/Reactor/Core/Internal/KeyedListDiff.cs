@@ -735,7 +735,7 @@ internal static class KeyedListDiff
     {
         var seeded = new (int Index, string Key)[count];
         int firstNull = -1;
-        List<string>? dupes = null;
+        HashSet<string>? dupes = null;
         // Per-thread and cleared after use: a mount seeds once per list, so a pooled set keeps
         // a large list's mount from allocating a set as large as the list.
         var seen = count > 1 ? (t_seedKeys ??= new HashSet<string>(StringComparer.Ordinal)) : null;
@@ -752,8 +752,8 @@ internal static class KeyedListDiff
                     continue;
                 }
                 seeded[i] = (i, key);
-                if (seen is not null && !seen.Add(key) && !(dupes ??= new()).Contains(key))
-                    dupes.Add(key);
+                if (seen is not null && !seen.Add(key))
+                    (dupes ??= new(StringComparer.Ordinal)).Add(key);
             }
         }
         finally
@@ -766,9 +766,6 @@ internal static class KeyedListDiff
                 t_seedKeys = seen;
             }
         }
-        // Sorted, as CollectDuplicates sorts the diff's samples: the dedup ledger is order
-        // sensitive, so the mount report and later update reports must name the same sample.
-        dupes?.Sort(StringComparer.Ordinal);
         if (firstNull >= 0)
         {
             ReportBailout(
@@ -784,7 +781,7 @@ internal static class KeyedListDiff
             ReportBailout(
                 controlInstance, diagnosticContext, logger,
                 Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.DuplicateKey,
-                dupes,
+                SortedSample(dupes),
                 indexHint: null,
                 attribution,
                 bailedOut: false);
@@ -805,7 +802,7 @@ internal static class KeyedListDiff
     {
         int count = children.Count;
         if (count < 2) return;
-        List<string>? dupes = null;
+        HashSet<string>? dupes = null;
         Element? firstDuplicate = null;
         if (count <= 16)
         {
@@ -818,7 +815,7 @@ internal static class KeyedListDiff
                         && string.Equals(key, other, StringComparison.Ordinal))
                     {
                         firstDuplicate ??= child;
-                        if (!(dupes ??= new()).Contains(key)) dupes.Add(key);
+                        (dupes ??= new(StringComparer.Ordinal)).Add(key);
                         break;
                     }
                 }
@@ -837,7 +834,7 @@ internal static class KeyedListDiff
                     if (!seen.Add(key))
                     {
                         firstDuplicate ??= child;
-                        if (!(dupes ??= new()).Contains(key)) dupes.Add(key);
+                        (dupes ??= new(StringComparer.Ordinal)).Add(key);
                     }
                 }
             }
@@ -848,15 +845,16 @@ internal static class KeyedListDiff
             }
         }
         if (dupes is null) return;
+        var sample = SortedSample(dupes);
 
         var attribution = new KeyedListAttribution(reconciler?.DiagnosticComponent, KeyedListAttribution.CallSiteOf(firstDuplicate));
         var context = parentControl?.GetType().Name ?? "Panel";
         var kind = Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.DuplicateKey;
 
         bool isFirst = Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
-            .IsFirstOccurrence(parentControl, kind, dupes, context);
+            .IsFirstOccurrence(parentControl, kind, sample, context);
         Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
-            .Record(parentControl, context, kind, dupes, attribution.ComponentName, attribution.CallSite);
+            .Record(parentControl, context, kind, sample, attribution.ComponentName, attribution.CallSite);
 
         var logger = reconciler?._logger;
         if (!isFirst || logger is null || !logger.IsEnabled(LogLevel.Warning)) return;
@@ -864,11 +862,23 @@ internal static class KeyedListDiff
             "Reactor: duplicate child keys: {Keys}. Context: {Context}. Component: {Component}. At: {CallSite}. " +
             "Sibling keys must be unique; children with the same key are matched to the wrong controls " +
             "when the panel re-renders, so state and focus can move between them.",
-            LogKeys(dupes),
+            LogKeys(sample),
             context,
             attribution.ComponentName ?? "<unknown>",
             LogSite(attribution.CallSite));
     }
+    /// <summary>
+    /// The distinct duplicated keys as a report sample, sorted as <see cref="CollectDuplicates"/>
+    /// sorts the diff's: the dedup ledger is order sensitive, so every report of the same
+    /// duplicates (mount seed, update diff, sibling scan) must name the same sample.
+    /// </summary>
+    private static List<string> SortedSample(HashSet<string> dupes)
+    {
+        var sample = new List<string>(dupes);
+        sample.Sort(StringComparer.Ordinal);
+        return sample;
+    }
+
     // Walk newKeys once collecting the *distinct* duplicate values
     // (not every occurrence). For a list with [a, b, a, c, b] returns
     // [a, b] — the dev overlay reader cares about which keys collided,

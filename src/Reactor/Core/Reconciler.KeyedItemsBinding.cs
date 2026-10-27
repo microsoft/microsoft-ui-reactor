@@ -59,13 +59,16 @@ public sealed partial class Reconciler
     /// way they do under the legacy path.</param>
     /// <param name="isMount">True on first bind; false on every
     /// subsequent update for the same control.</param>
+    /// <param name="owner">The list element being bound, so key diagnostics name its
+    /// call site.</param>
     internal void BindKeyedItemsSource<TItem>(
         FrameworkElement control,
         IReadOnlyList<TItem> items,
         Func<TItem, int, string> keySelector,
         Func<TItem, int, Element> buildItemView,
         Action requestRerender,
-        bool isMount)
+        bool isMount,
+        Element? owner = null)
     {
         ArgumentNullException.ThrowIfNull(control);
         ArgumentNullException.ThrowIfNull(items);
@@ -83,7 +86,7 @@ public sealed partial class Reconciler
         switch (control)
         {
             case WinUI.ListViewBase lvb:
-                BindListViewBaseKeyedItems(lvb, items, keySelector, requestRerender, isMount, viewSource);
+                BindListViewBaseKeyedItems(lvb, items, keySelector, requestRerender, isMount, viewSource, KeyedListAttributionFor(owner));
                 return;
             default:
                 throw new InvalidOperationException(
@@ -466,7 +469,8 @@ public sealed partial class Reconciler
         Func<TItem, int, string> keySelector,
         Action requestRerender,
         bool isMount,
-        IItemViewSource viewSource)
+        IItemViewSource viewSource,
+        KeyedListAttribution attribution)
     {
         if (isMount)
         {
@@ -478,7 +482,7 @@ public sealed partial class Reconciler
             lvb.ContainerContentChanging += (sender, args) =>
                 HandleTemplatedContainerContentChanging(sender, args, requestRerender);
 
-            var state = BuildListStateForItems(items, keySelector, lvb, viewSource);
+            var state = BuildListStateForItems(items, keySelector, lvb, attribution);
             SetListState(lvb, state);
             lvb.ItemsSource = state.Source;
             return;
@@ -490,7 +494,7 @@ public sealed partial class Reconciler
         var existing = GetListState(lvb);
         if (existing is null || !ReferenceEquals(lvb.ItemsSource, existing.Source))
         {
-            var fresh = BuildListStateForItems(items, keySelector, lvb, viewSource);
+            var fresh = BuildListStateForItems(items, keySelector, lvb, attribution);
             SetListState(lvb, fresh);
             lvb.ItemsSource = fresh.Source;
             // Refresh realized containers below so already-bound items pick
@@ -508,7 +512,7 @@ public sealed partial class Reconciler
                 lvb.GetType().Name,
                 ambient,
                 controlInstance: lvb,
-                attribution: KeyedListAttributionFor(viewSource as Element));
+                attribution: attribution);
 
             // Per-container offset animations for moved survivors. Insert
             // / Remove paths attach through realize/recycle so they need
@@ -531,12 +535,12 @@ public sealed partial class Reconciler
         IReadOnlyList<TItem> items,
         Func<TItem, int, string> keySelector,
         object control,
-        IItemViewSource viewSource)
+        KeyedListAttribution attribution)
     {
         var state = new ReactorListState();
         state.Reset(KeyedListDiff.SeedKeys(
             (items, keySelector), items.Count, static (s, i) => s.keySelector(s.items[i], i),
-            _logger, control.GetType().Name, control, KeyedListAttributionFor(viewSource as Element)));
+            _logger, control.GetType().Name, control, attribution));
         return state;
     }
 

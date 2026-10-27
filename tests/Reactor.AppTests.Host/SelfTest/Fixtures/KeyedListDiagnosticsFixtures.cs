@@ -1,5 +1,7 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.Diagnostics;
+using Microsoft.UI.Reactor.Core.V1Protocol;
+using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using static Microsoft.UI.Reactor.Factories;
@@ -217,6 +219,23 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
                     memoValue?.Contains("|key=next", StringComparison.Ordinal) == true
                     && memoValue.Contains("|element=Button", StringComparison.Ordinal));
             H.SetContent(null);
+
+            // A descriptor list on the typed TemplatedItems strategy: its warnings name the list
+            // element's call site, at mount (the seed) and on update (the diff).
+            ReactorDiagnostics.ClearRecentKeyedListWarnings();
+            TypedTemplatedListProbe.EnsureRegistered();
+            H.CreateHost().Mount(new TypedTemplatedListProbe());
+            await Harness.Render();
+            await Harness.Render(100);
+            var typedSeed = DuplicateNaming("seed-dup");
+            H.ClickButton("typed-bump");
+            await Harness.Render();
+            await Harness.Render(100);
+            var typedUpdate = DuplicateNaming("update-dup");
+            Console.WriteLine($"# typed templated items: seed={(typedSeed is null ? null : Describe(typedSeed))} update={(typedUpdate is null ? null : Describe(typedUpdate))}");
+            H.Check("KeyedListDiagnostics_TypedTemplatedItems_SeedNamesCallSite", typedSeed?.CallSite == TypedTemplatedListProbe.Site);
+            H.Check("KeyedListDiagnostics_TypedTemplatedItems_UpdateNamesCallSite", typedUpdate?.CallSite == TypedTemplatedListProbe.Site);
+            H.SetContent(null);
         }
         finally
         {
@@ -224,6 +243,10 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             ReactorDiagnostics.ClearRecentKeyedListWarnings();
         }
     }
+
+    private static KeyedListDiagnostic? DuplicateNaming(string key)
+        => ReactorDiagnostics.RecentKeyedListWarnings.LastOrDefault(
+            w => w.Kind == KeyedListDiagnosticKind.DuplicateKey && w.SampleKeys.Contains(key));
 
     private static string Describe(KeyedListDiagnostic w)
         => $"{w.Kind} [{string.Join(",", w.SampleKeys)}] ctx={w.ControlContext} component={w.ComponentName} at={w.CallSite?.LineNumber}";
@@ -295,6 +318,34 @@ internal sealed class ItemsViewKeysProbe : Component
             Button("iv-bump", () => setTick(tick + 1)),
             ItemsView(items, keySelector: static m => m.Key!, viewBuilder: static (m, _) => ItemContainer(TextBlock("iv " + m.Text)))
                 .Height(160));
+    }
+}
+
+internal sealed record TypedKeyedListElement(string[] Items) : Element;
+
+internal sealed class TypedTemplatedListProbe : Component
+{
+    internal static readonly SourceLocation Site = new(@"Z:\reactor-selftest\TypedList.cs", 7, 3);
+    private static int _registered;
+
+    internal static void EnsureRegistered()
+    {
+        if (Interlocked.Exchange(ref _registered, 1) == 1) return;
+        ControlRegistry.Register<TypedKeyedListElement, WinUI.ListView>(static () =>
+            new DescriptorHandler<TypedKeyedListElement, WinUI.ListView>(new ControlDescriptor<TypedKeyedListElement, WinUI.ListView>
+            {
+                Children = new TemplatedItems<string, TypedKeyedListElement, WinUI.ListView>(
+                    static e => e.Items, static (s, _) => s, static (s, _) => TextBlock("typed " + s)),
+            }));
+    }
+
+    public override Element Render()
+    {
+        var (bumped, setBumped) = UseState(false);
+        string[] items = bumped ? ["update-dup", "update-dup", "x"] : ["seed-dup", "seed-dup"];
+        return VStack(4,
+            Button("typed-bump", () => setBumped(true)),
+            (new TypedKeyedListElement(items) { CallSite = Site }).Height(120));
     }
 }
 
