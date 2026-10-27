@@ -375,7 +375,7 @@ Conventions for contributors:
 ### Fixed
 
 - **Diagnostics an inspector relies on (winapp DevTools) are no longer missing or anonymous**
-  (issue #ISSUE, spec 044 / spec 010 / spec 042).
+  (issue #1421, spec 044 / spec 010 / spec 042).
   - A commit-phase failure that replaces a window's content with the error screen now raises a
     new `ReactorEventSource.CommitError` event (EventId 41: phase, host root component,
     exception type). Before, nothing was raised while the window showed the error.
