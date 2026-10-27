@@ -93,7 +93,18 @@ public static partial class ReactorDiagnostics
     public const int MaxSampleKeys = 8;
 
     private static readonly Lock _gate = new();
-    private static readonly LinkedList<KeyedListDiagnostic> _recent = new();
+    private static readonly LinkedList<Slot> _recent = new();
+
+    // A buffered entry plus what it was recorded for: the ledger it belongs to (per control,
+    // or the contextual one) and its dedup key. A repeat updates only its own entry, never
+    // another control's entry that happens to share the label, kind and samples. Holding the
+    // ledger does not keep the control alive: the weak table's value never references its key.
+    private sealed class Slot(KeyedListDiagnostic entry, ConcurrentDictionary<long, int> ledger, long dedupKey)
+    {
+        public KeyedListDiagnostic Entry = entry;
+        public readonly ConcurrentDictionary<long, int> Ledger = ledger;
+        public readonly long DedupKey = dedupKey;
+    }
 
     // (control instance) → set of (kind | sample-set hash) keys already
     // logged. ConditionalWeakTable so a control that's torn down doesn't
@@ -122,7 +133,7 @@ public static partial class ReactorDiagnostics
                 int i = 0;
                 // LinkedList is ordered oldest → newest; reverse for callers.
                 for (var node = _recent.Last; node is not null; node = node.Previous)
-                    arr[i++] = node.Value;
+                    arr[i++] = node.Value.Entry;
                 return arr;
             }
         }
@@ -189,15 +200,14 @@ public static partial class ReactorDiagnostics
             {
                 ledger[dedupKey] = existingCount + 1;
 
-                // Update the in-place entry to reflect the new count + ts.
-                // Walk newest → oldest; same (label, kind, samples) wins.
+                // Update the in-place entry to reflect the new count + ts: the entry recorded
+                // for this same ledger and dedup key, newest first.
                 for (var node = _recent.Last; node is not null; node = node.Previous)
                 {
-                    var v = node.Value;
-                    if (v.Kind == kind
-                        && string.Equals(v.ControlContext, label, global::System.StringComparison.Ordinal)
-                        && SampleKeysEqual(v.SampleKeys, truncated))
+                    var slot = node.Value;
+                    if (ReferenceEquals(slot.Ledger, ledger) && slot.DedupKey == dedupKey)
                     {
+                        var v = slot.Entry;
                         var updated = v with
                         {
                             TimestampUtc = DateTime.UtcNow,
@@ -205,7 +215,7 @@ public static partial class ReactorDiagnostics
                             ComponentName = v.ComponentName ?? componentName,
                             CallSite = v.CallSite ?? callSite,
                         };
-                        node.Value = updated;
+                        slot.Entry = updated;
                         return updated;
                     }
                 }
@@ -217,7 +227,7 @@ public static partial class ReactorDiagnostics
                     ComponentName = componentName,
                     CallSite = callSite,
                 };
-                AppendBounded(revived);
+                AppendBounded(new Slot(revived, ledger, dedupKey));
                 return revived;
             }
 
@@ -227,7 +237,7 @@ public static partial class ReactorDiagnostics
                 ComponentName = componentName,
                 CallSite = callSite,
             };
-            AppendBounded(fresh);
+            AppendBounded(new Slot(fresh, ledger, dedupKey));
             return fresh;
         }
     }
@@ -269,7 +279,7 @@ public static partial class ReactorDiagnostics
         return unchecked(((long)(int)kind * 397) ^ samplesHash ^ (labelHash * 31));
     }
 
-    private static void AppendBounded(KeyedListDiagnostic entry)
+    private static void AppendBounded(Slot entry)
     {
         _recent.AddLast(entry);
         while (_recent.Count > MaxRecentEntries) _recent.RemoveFirst();
@@ -302,15 +312,5 @@ public static partial class ReactorDiagnostics
             }
             return (long)hash;
         }
-    }
-
-    private static bool SampleKeysEqual(IReadOnlyList<string> a, IReadOnlyList<string> b)
-    {
-        if (a.Count != b.Count) return false;
-        for (int i = 0; i < a.Count; i++)
-        {
-            if (!string.Equals(a[i], b[i], global::System.StringComparison.Ordinal)) return false;
-        }
-        return true;
     }
 }

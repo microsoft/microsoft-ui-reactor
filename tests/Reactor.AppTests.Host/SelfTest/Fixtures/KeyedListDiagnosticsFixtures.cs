@@ -174,6 +174,24 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             H.Check("KeyedListDiagnostics_FlipViewPrependRowKeyFollowsItem",
                 samePage is not null && Reconciler.GetElementTag(samePage)?.Key == "z");
             H.SetContent(null);
+
+            // A different item at the same position that renders identical content: the update
+            // skips, and the page must still take the new item's key (tag and published value).
+            H.CreateHost().Mount(new FlipSameContentProbe());
+            await Harness.Render();
+            await Harness.Render(100);
+            H.ClickButton("flip-replace");
+            await Harness.Render();
+            await Harness.Render(100);
+            var sameContent = H.FindControl<WinUI.TextBlock>(t => t.Text == "same page");
+            var sameValue = sameContent is null ? null : ReactorDiagnostics.GetSource(sameContent);
+            Console.WriteLine($"# flip same content: key={(sameContent is null ? null : Reconciler.GetElementTag(sameContent)?.Key)} value={sameValue}");
+            H.Check("KeyedListDiagnostics_FlipViewSameContentKeyRefreshed",
+                sameContent is not null && Reconciler.GetElementTag(sameContent)?.Key == "next");
+            if (publish)
+                H.Check("KeyedListDiagnostics_FlipViewSameContentSourceRefreshed",
+                    sameValue?.Contains("|key=next", StringComparison.Ordinal) == true);
+            H.SetContent(null);
         }
         finally
         {
@@ -196,7 +214,7 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             H.Check(name + "_NamesComponent", warning.ComponentName == component, warning.ComponentName ?? "<null>");
         else
             H.Skip(name + "_NamesComponent", "Reactor.DevtoolsSupport is off in this host");
-        if (warning.CallSite is null && !Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled)
+        if (TextBlock("call-site probe").CallSite is null)
             H.Skip(name + "_NamesCallSite", "call sites are not stamped in this host");
         else
             H.Check(name + "_NamesCallSite",
@@ -252,6 +270,17 @@ internal sealed class ItemsViewKeysProbe : Component
             Button("iv-bump", () => setTick(tick + 1)),
             ItemsView(items, keySelector: static m => m.Key!, viewBuilder: static (m, _) => ItemContainer(TextBlock("iv " + m.Text)))
                 .Height(160));
+    }
+}
+
+internal sealed class FlipSameContentProbe : Component
+{
+    public override Element Render()
+    {
+        var (items, setItems) = UseState<string[]>(["first"]);
+        return VStack(4,
+            Button("flip-replace", () => setItems(["next"])),
+            FlipView(items, static s => s, static (_, _) => TextBlock("same page")).Height(60));
     }
 }
 
@@ -391,6 +420,21 @@ internal class FlyoutItemIdentity_Published(Harness h) : SelfTestFixtureBase(h)
                     && Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(swapped!)?.LineNumber == FlyoutItemsProbe.CloseLine);
             }
             H.Check("FlyoutItemIdentity_ReplacedItemPublished", Owned(replaced, "ToggleMenuFlyoutItem"));
+
+            // Two item call sites whose published at= text is identical (the same file name, line
+            // and column outside the project, so both publish just the file name): GetSource must
+            // still name each item's own file, not the first one published with that text.
+            H.SetContent(null);
+            H.CreateHost().Mount(new AmbiguousItemSitesProbe());
+            await Harness.Render();
+            var ambiguousTarget = H.FindControl<WinUI.Button>(b => b.Content as string == "Ambiguous items");
+            var ambiguousItems = (ambiguousTarget?.Flyout as WinUI.MenuFlyout)?.Items.OfType<WinUI.MenuFlyoutItem>().ToList();
+            var firstSite = ambiguousItems is { Count: 2 } ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(ambiguousItems[0]) : null;
+            var secondSite = ambiguousItems is { Count: 2 } ? Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(ambiguousItems[1]) : null;
+            Console.WriteLine($"# ambiguous item sites: {firstSite?.FilePath} | {secondSite?.FilePath}");
+            H.Check("FlyoutItemIdentity_AmbiguousPublishedText_ExactSites",
+                firstSite?.FilePath == AmbiguousItemSitesProbe.First.FilePath
+                && secondSite?.FilePath == AmbiguousItemSitesProbe.Second.FilePath);
         }
         finally
         {
@@ -398,6 +442,17 @@ internal class FlyoutItemIdentity_Published(Harness h) : SelfTestFixtureBase(h)
             H.SetContent(null);
         }
     }
+}
+
+internal sealed class AmbiguousItemSitesProbe : Component
+{
+    internal static readonly SourceLocation First = new(@"Z:\reactor-selftest-a\Ambiguous.cs", 10, 5);
+    internal static readonly SourceLocation Second = new(@"Z:\reactor-selftest-b\Ambiguous.cs", 10, 5);
+
+    public override Element Render()
+        => MenuFlyout(Button("Ambiguous items"),
+            MenuItem("First") with { CallSite = First },
+            MenuItem("Second") with { CallSite = Second });
 }
 
 internal sealed class FlyoutItemsProbe : Component

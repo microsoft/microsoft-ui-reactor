@@ -599,6 +599,18 @@ public sealed partial class Reconciler : IDisposable
     internal void PublishSourceOnSkip(UIElement control, Element newEl) => PublishSource(control, newEl);
 
     /// <summary>
+    /// Refreshes a reused control's identity — element tag and, in diagnostics mode, its
+    /// published value — when only its stamped item key changed and the update itself skipped
+    /// (<see cref="Element.ShallowEquals"/> ignores the key).
+    /// </summary>
+    internal void RefreshItemIdentityOnSkip(FrameworkElement control, Element newEl)
+    {
+        SetElementTagIfNeeded(control, newEl);
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
+            PublishSource(control, newEl);
+    }
+
+    /// <summary>
     /// ItemsRepeater adoption (<c>TryAdoptRealizedReplacement</c>) moves a fresh component
     /// subtree into the still-realized wrapper, but not the wrapper's own attached values.
     /// The replacement wrapper was published when it mounted; carry that value over so the
@@ -1378,6 +1390,14 @@ public sealed partial class Reconciler : IDisposable
         /// <c>Items</c> entries through it: an item whose view is Empty has no entry.
         /// </summary>
         public List<(Element Element, bool HasControl)>? MountedItemElements;
+
+        /// <summary>
+        /// For a menu or command-bar item control built from an item record (no element tag):
+        /// the record's exact call site, recorded in diagnostics mode when its <c>ReactorSource</c>
+        /// is published. <c>ReactorSourceMap.GetSource</c> prefers it to the published value,
+        /// whose shortened <c>at=</c> text two call sites can share.
+        /// </summary>
+        public SourceLocation? ItemCallSite;
 
         /// <summary>
         /// For an <c>ItemsHost</c> control: the collection entry each logical item realized

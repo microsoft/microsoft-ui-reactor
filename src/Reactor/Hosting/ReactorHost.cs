@@ -1429,7 +1429,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             }
             else
             {
-                Reconciler.EmitCommitError(failurePhase, _renderingRoot ?? _rootComponent, ex);
+                Reconciler.EmitCommitError(failurePhase, DiagnosticRoot, ex);
             }
             ShowErrorFallback(ex, failurePhase,
                 failurePhase == RenderErrorSource.Effects ? effectsRoot?.GetType().Name : null);

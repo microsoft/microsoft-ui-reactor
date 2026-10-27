@@ -148,11 +148,13 @@ public static partial class ReactorSourceMap
         }
         // No tag: Native AOT's call-site-only skip (above), or a menu / command-bar item a
         // flyout built from an item record rather than an element (MenuItem(…), AppBarButton(…)).
-        // Either way the published value names the call site.
-        return global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
-            && global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled
-            ? global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.ResolvePublishedSource(control)
-            : null;
+        // An item records its exact call site; otherwise the published value names it.
+        if (!global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+            || !global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
+            return null;
+        if (control is FrameworkElement fe && Reconciler.TryGetReactorState(fe, out var state) && state.ItemCallSite is { } itemSite)
+            return itemSite;
+        return global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.ResolvePublishedSource(control);
     }
 
     /// <summary>

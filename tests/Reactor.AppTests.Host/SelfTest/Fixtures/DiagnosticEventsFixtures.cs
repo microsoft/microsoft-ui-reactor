@@ -225,6 +225,31 @@ internal static class DiagnosticEventsFixtures
                     string.Join(", ", deferredCommit.Select(e => string.Join("/", e.Payload))));
                 H.Check("DiagnosticEvents_CommitError_CleanupPhase_NoRenderError",
                     !deferredEvents.Any(e => e.Name == nameof(ReactorEventSource.RenderError)));
+
+                // A render-function root whose post-render callback mounts a component
+                // replacement and then throws: the failure is the function root's, not the
+                // replacement's (the pass's root snapshot is null for a function root).
+                var funcHost = H.CreateHost();
+                funcHost.Mount(_ => TextBlock("func root before replacement"));
+                await Harness.Render();
+                bool armed = true;
+                funcHost.OnRenderComplete = (_, _, _) =>
+                {
+                    if (!armed) return;
+                    armed = false;
+                    funcHost.Mount(new DeferredReplacementRoot());
+                    throw new CommitFailureProbeException("render complete failed after remount");
+                };
+                capture.Take();
+                funcHost.RequestRender();
+                await Harness.Render();
+                await Harness.Render(50);
+                funcHost.OnRenderComplete = null;
+                var funcEvents = capture.Take().Where(e => e.Name == nameof(ReactorEventSource.CommitError)).ToList();
+                Console.WriteLine("# func root commit failure: " + string.Join(", ", funcEvents.Select(e => string.Join("/", e.Payload))));
+                H.Check("DiagnosticEvents_CommitError_FuncRootAfterRemount_NamesFuncElement",
+                    funcEvents.Count == 1 && funcEvents[0].Payload[1] as string == nameof(FuncElement),
+                    string.Join(", ", funcEvents.Select(e => string.Join("/", e.Payload))));
             }
             finally
             {

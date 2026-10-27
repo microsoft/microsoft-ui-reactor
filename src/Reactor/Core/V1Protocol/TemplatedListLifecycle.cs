@@ -391,6 +391,11 @@ internal static class TemplatedListLifecycle
                 var replacement = reconciler.UpdateHostedChild(oldItemElement, newItemElement, existingCtrl, requestRerender);
                 if (replacement is not null && replacement != existingCtrl)
                     fv.Items[ci] = replacement;
+                // A different item at this position can render the same content, and the update
+                // then skips — leaving the previous item's key on the page. Refresh it.
+                if ((replacement ?? existingCtrl) is FrameworkElement liveFe
+                    && !string.Equals(Reconciler.GetElementTag(liveFe)?.Key, newItemElement.Key, StringComparison.Ordinal))
+                    reconciler.RefreshItemIdentityOnSkip(liveFe, newItemElement);
                 ci++;
                 nextMounted.Add((newView, true));
                 continue;

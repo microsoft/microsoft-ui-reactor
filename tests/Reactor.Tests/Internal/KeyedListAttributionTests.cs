@@ -89,6 +89,30 @@ public class KeyedListAttributionTests
     }
 
     [Fact]
+    public void Record_InterleavedControls_UpdateTheirOwnEntries()
+    {
+        // Two lists with the same offending keys and context, reported A, B, A: A's repeat must
+        // bump A's entry, not the newer B entry that shares its label, kind and samples.
+        var ctx = $"ABA_{NewId()}";
+        var a = new object();
+        var b = new object();
+        var siteA = new SourceLocation("Views/A.cs", 1, 1);
+        var siteB = new SourceLocation("Views/B.cs", 2, 2);
+        string[] samples = ["k"];
+
+        ReactorDiagnostics.Record(a, ctx, KeyedListDiagnosticKind.DuplicateKey, samples, "ListA", siteA);
+        ReactorDiagnostics.Record(b, ctx, KeyedListDiagnosticKind.DuplicateKey, samples, "ListB", siteB);
+        ReactorDiagnostics.Record(a, ctx, KeyedListDiagnosticKind.DuplicateKey, samples, "ListA", siteA);
+
+        var entries = ReactorDiagnostics.RecentKeyedListWarnings.Where(w => w.ControlContext == ctx).ToList();
+        Assert.Equal(2, entries.Count);
+        var entryA = Assert.Single(entries, w => w.ComponentName == "ListA");
+        var entryB = Assert.Single(entries, w => w.ComponentName == "ListB");
+        Assert.Equal((2, siteA), (entryA.Count, entryA.CallSite!.Value));
+        Assert.Equal((1, siteB), (entryB.Count, entryB.CallSite!.Value));
+    }
+
+    [Fact]
     public void SeedThenApply_SameDuplicates_ShareOneEntry()
     {
         var ctx = $"SeedApply_{NewId()}";
