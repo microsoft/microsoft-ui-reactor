@@ -279,9 +279,10 @@ internal static void Reconcile(
     if (hasKeys)
         ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
     // The slot walk also steps past controls an earlier pass left playing an exit
-    // transition; the index walk would pair every later child with the wrong control.
+    // transition in this collection (they inflate its count); the index walk would pair
+    // every later child with the wrong control.
     else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length)
-        || reconciler.HasExitingControls)
+        || HoldsExitingControls(oldFiltered, children, reconciler))
         ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
     else
         ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
@@ -310,8 +311,9 @@ it is updated rather than compared against the child that used to sit
 at its index. So in
 `VStack(Header(), open ? Details() : Empty(), Footer())`, `Footer`
 keeps its state when `Details` closes, as a React sibling of a `null`
-child does. Containers with no conditional arguments never take this
-path. Like React, a child whose argument slot changes is a different
+child does. Containers whose children's slots line up by index keep the
+positional walk, unless an exit transition is still playing. Like React,
+a child whose argument slot changes is a different
 child: `a ? X() : Empty(), a ? Empty() : X()` remounts `X`. This
 applies to unkeyed containers only: once any child carries a key, the
 keyed algorithm below matches the unkeyed children positionally, so key
@@ -542,9 +544,10 @@ internal static void Reconcile(
     if (hasKeys)
         ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
     // The slot walk also steps past controls an earlier pass left playing an exit
-    // transition; the index walk would pair every later child with the wrong control.
+    // transition in this collection (they inflate its count); the index walk would pair
+    // every later child with the wrong control.
     else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length)
-        || reconciler.HasExitingControls)
+        || HoldsExitingControls(oldFiltered, children, reconciler))
         ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
     else
         ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);

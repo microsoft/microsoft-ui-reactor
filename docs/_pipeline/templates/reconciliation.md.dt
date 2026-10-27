@@ -197,8 +197,9 @@ it is updated rather than compared against the child that used to sit
 at its index. So in
 `VStack(Header(), open ? Details() : Empty(), Footer())`, `Footer`
 keeps its state when `Details` closes, as a React sibling of a `null`
-child does. Containers with no conditional arguments never take this
-path. Like React, a child whose argument slot changes is a different
+child does. Containers whose children's slots line up by index keep the
+positional walk, unless an exit transition is still playing. Like React,
+a child whose argument slot changes is a different
 child: `a ? X() : Empty(), a ? Empty() : X()` remounts `X`. This
 applies to unkeyed containers only: once any child carries a key, the
 keyed algorithm below matches the unkeyed children positionally, so key

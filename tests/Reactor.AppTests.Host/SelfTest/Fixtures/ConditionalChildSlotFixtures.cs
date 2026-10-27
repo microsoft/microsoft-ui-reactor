@@ -352,6 +352,92 @@ internal static class ConditionalChildSlotFixtures
         }
     }
 
+    internal class ReplaceWithExitThenRerender(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (swapped, setSwapped) = ctx.UseState(false);
+                var (n, setN) = ctx.UseState(0);
+                return VStack(
+                    // One click shifts slots (the conditional) and changes the next child's
+                    // type, so the slot walk replaces it while the old one fades out after it.
+                    Button("slot-swap", () => setSwapped(!swapped)),
+                    Button("slot-tick", () => setN(n + 1)),
+                    swapped ? Empty() : C("t"),
+                    swapped
+                        ? Border(TextBlock("x2:fade")).Transition(Animation.Transition.Fade)
+                        : TextBlock("x1:fade").Transition(Animation.Transition.Fade),
+                    C("a"),
+                    HStack(TextBlock($"sib:{n}"), T("s")));
+            });
+            await Harness.Render();
+            await Bump(H, "a", 1);
+            await Bump(H, "s", 2);
+            var aLabel = Label(H, "a");
+            var sLabel = Label(H, "s");
+
+            H.ClickButton("slot-swap");
+            await Harness.Render();
+            H.Check("SlotReplaceExit_KeepsSiblings", Text(H, "a") == "a:1" && Text(H, "s") == "s:2",
+                $"a={Text(H, "a")} s={Text(H, "s")}");
+            H.Check("SlotReplaceExit_KeepsControls",
+                aLabel is not null && ReferenceEquals(aLabel, Label(H, "a"))
+                && sLabel is not null && ReferenceEquals(sLabel, Label(H, "s")));
+
+            // Re-render while x1 still fades: nothing shifts slots, but the walk must still
+            // step past the fading control to pair each child with its own control.
+            H.ClickButton("slot-tick");
+            await Harness.Render();
+            H.Check("SlotReplaceExit_RerenderDuringExit",
+                Text(H, "a") == "a:1" && Text(H, "s") == "s:2" && Text(H, "sib") == "sib:1"
+                && aLabel is not null && ReferenceEquals(aLabel, Label(H, "a")),
+                $"a={Text(H, "a")} s={Text(H, "s")} sib={Text(H, "sib")}");
+
+            await Harness.WaitFor(() => Text(H, "x1") is null, maxPasses: 40, perPassMs: 50);
+            H.Check("SlotReplaceExit_Order", Order(H, "t", "x1", "x2", "a", "sib") == "x2,a,sib",
+                Order(H, "t", "x1", "x2", "a", "sib"));
+            host.Dispose();
+        }
+    }
+
+    internal class ReplaceWithExitPositional(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (swapped, setSwapped) = ctx.UseState(false);
+                // No conditional and no shift: the index walk replaces the first child, whose
+                // exit transition re-inserts its old control right after the new one.
+                return VStack(
+                    swapped
+                        ? Border(TextBlock("y:fade")).Transition(Animation.Transition.Fade)
+                        : TextBlock("x:fade").Transition(Animation.Transition.Fade),
+                    C("a"),
+                    T("b"),
+                    Button("slot-swap", () => setSwapped(!swapped)));
+            });
+            await Harness.Render();
+            await Bump(H, "a", 1);
+            await Bump(H, "b", 2);
+            var aLabel = Label(H, "a");
+
+            H.ClickButton("slot-swap");
+            await Harness.Render();
+            H.Check("SlotReplacePositional_KeepsSiblings", Text(H, "a") == "a:1" && Text(H, "b") == "b:2",
+                $"a={Text(H, "a")} b={Text(H, "b")}");
+            H.Check("SlotReplacePositional_KeepsControl", aLabel is not null && ReferenceEquals(aLabel, Label(H, "a")));
+            await Harness.WaitFor(() => Text(H, "x") is null, maxPasses: 40, perPassMs: 50);
+            H.Check("SlotReplacePositional_Order", Order(H, "x", "y", "a", "b") == "y,a,b", Order(H, "x", "y", "a", "b"));
+            H.Check("SlotReplacePositional_ButtonKept", H.FindButton("slot-swap") is not null);
+            host.Dispose();
+        }
+    }
+
     internal class AnimateAmbient(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()

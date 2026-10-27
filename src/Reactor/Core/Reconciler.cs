@@ -3510,6 +3510,7 @@ public sealed partial class Reconciler : IDisposable
     private void UnmountRecursive(UIElement control)
     {
         NoteUnmountDuringSlotUpdate(control);
+        EndExit(control);
         // Before any early exit: an unmounted control an app still holds must not keep a
         // FlipView's mounted item elements alive.
         if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);
@@ -3794,7 +3795,11 @@ public sealed partial class Reconciler : IDisposable
 
     private void BeginExit(UIElement control) => (_exitingControls ??= new()).Add(control);
 
-    private void EndExit(UIElement control) => _exitingControls?.Remove(control);
+    private void EndExit(UIElement control)
+    {
+        if (_exitingControls is { Count: > 0 } exiting)
+            exiting.Remove(control);
+    }
     /// <summary>
     /// Removes a child from its collection with exit transition support.
     /// If the child has an ElementTransition with an exit side, the removal is deferred
@@ -3873,6 +3878,9 @@ public sealed partial class Reconciler : IDisposable
         try
         {
             var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(control);
+            // As ApplyExitTransition: a control whose visual was handed out must not be pooled
+            // (and so cannot be re-rented while its fade, and the removal after it, is pending).
+            ElementPool.MarkCompositorTainted(control);
             var compositor = visual.Compositor;
             var batch = compositor.CreateScopedBatch(global::Microsoft.UI.Composition.CompositionBatchTypes.Animation);
             var anim = Microsoft.UI.Reactor.Animation.AnimationHelper.CreateScalarTargetAnimation(compositor, 0f, curve);
@@ -3897,8 +3905,9 @@ public sealed partial class Reconciler : IDisposable
     /// Replaces a child at an index with exit transition support on the old child.
     /// If the old child has an exit transition, the new child is inserted immediately
     /// and the old child animates out then gets removed. Otherwise, immediate replace.
+    /// Returns true when the old child was re-inserted after the new one to play its exit.
     /// </summary>
-    internal void ReplaceChildWithExitTransition(IChildCollection children, int index, UIElement newControl)
+    internal bool ReplaceChildWithExitTransition(IChildCollection children, int index, UIElement newControl)
     {
         var oldControl = children.Get(index);
         var transition = (oldControl is FrameworkElement fe && GetElementTag(fe) is Element el)
@@ -3939,12 +3948,12 @@ public sealed partial class Reconciler : IDisposable
                 }
                 UnmountAndPool(oldControl);
             });
+            return true;
         }
-        else
-        {
-            Unmount(oldControl);
-            children.Replace(index, newControl);
-        }
+
+        Unmount(oldControl);
+        children.Replace(index, newControl);
+        return false;
     }
 
     internal void UnmountAndPool(UIElement control)
@@ -3961,6 +3970,8 @@ public sealed partial class Reconciler : IDisposable
     private void UnmountAndCollect(UIElement control, List<FrameworkElement> toPool)
     {
         NoteUnmountDuringSlotUpdate(control);
+        // A control torn down with an ancestor while still fading out is no longer exiting.
+        EndExit(control);
         // Before any early exit: an unmounted control an app still holds must not keep a
         // FlipView's mounted item elements alive.
         if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);

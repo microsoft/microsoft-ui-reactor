@@ -57,14 +57,18 @@ internal static class ChildReconciler
         if (hasKeys)
             ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
         // The slot walk also steps past controls an earlier pass left playing an exit
-        // transition; the index walk would pair every later child with the wrong control.
+        // transition in this collection (they inflate its count); the index walk would pair
+        // every later child with the wrong control.
         else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length)
-            || reconciler.HasExitingControls)
+            || HoldsExitingControls(oldFiltered, children, reconciler))
             ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
         else
             ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
     }
     // </snippet:child-diff>
+
+    private static bool HoldsExitingControls(Element[] oldChildren, IChildCollection children, Reconciler reconciler) =>
+        reconciler.HasExitingControls && children.Count != oldChildren.Length;
 
     /// <summary>
     /// Unkeyed reconciliation when a conditional child (null / <see cref="EmptyElement"/> /
@@ -72,7 +76,8 @@ internal static class ChildReconciler
     /// matched by <see cref="ChildSlots">slot</see>, so the siblings after a toggled child
     /// are updated in place instead of each being compared with the child that used to sit
     /// at its index. Both arrays' slots increase, so this is one merge pass:
-    /// O(old + new), with no reorder.
+    /// O(old + new), with no reorder. It also steps past controls still in the collection only
+    /// to play an exit transition, which belong to no old child.
     /// </summary>
     private static void ReconcileSlotted(
         Element[] oldChildren,
@@ -83,17 +88,21 @@ internal static class ChildReconciler
         Reconciler reconciler,
         Action requestRerender,
         AnimationKind? ambientKind,
-        in DirtyChildIndices dirty)
+        in DirtyChildIndices dirty,
+        int start = 0,
+        int startLive = 0)
     {
-        int oi = 0, ni = 0;
+        // `start`/`startLive`: where the positional walk hands over after an exit transition
+        // re-inserted a replaced control (the children before it are already reconciled).
+        int oi = start, ni = start;
         // The live index the next old child sits at. It advances past every control the
         // collection holds for a child just handled — including an old control an exit
         // transition left in place (removal) or re-inserted after its replacement.
-        int live = 0;
+        int live = startLive;
         // The old child's index in the collection as it was when `dirty` was resolved: the
         // old children plus any control an earlier pass left exiting.
-        int resolved = 0;
-        bool skipExiting = reconciler.HasExitingControls;
+        int resolved = start;
+        bool skipExiting = HoldsExitingControls(oldChildren, children, reconciler);
         while (oi < oldChildren.Length || ni < newChildren.Length)
         {
             if (skipExiting && oi < oldChildren.Length)
@@ -216,7 +225,12 @@ internal static class ChildReconciler
             {
                 int idx = changed[k];
                 if ((uint)idx >= (uint)common) continue; // defensive against a bad hint
-                UpdateCommonChild(idx, oldChildren, newChildren, children, reconciler, requestRerender, dirty);
+                if (UpdateCommonChild(idx, oldChildren, newChildren, children, reconciler, requestRerender, dirty))
+                {
+                    ReconcileSlotted(oldChildren, null, newChildren, null, children, reconciler, requestRerender,
+                        ambientKind, dirty, start: idx + 1, startLive: idx + 2);
+                    return;
+                }
                 visited++;
             }
             // Untouched indices are reference-equal and skipped wholesale. Base the
@@ -238,7 +252,15 @@ internal static class ChildReconciler
         for (int i = 0; i < common; i++)
         {
             if (i >= childCount) break;
-            UpdateCommonChild(i, oldChildren, newChildren, children, reconciler, requestRerender, dirty);
+            if (UpdateCommonChild(i, oldChildren, newChildren, children, reconciler, requestRerender, dirty))
+            {
+                // An exit transition re-inserted the replaced control right after its
+                // replacement, so every later child's control moved one index: finish with the
+                // slot walk, which steps past it.
+                ReconcileSlotted(oldChildren, null, newChildren, null, children, reconciler, requestRerender,
+                    ambientKind, dirty, start: i + 1, startLive: i + 2);
+                return;
+            }
         }
 
         // Remove excess old children (from end to start to keep indices stable).
@@ -267,7 +289,7 @@ internal static class ChildReconciler
     /// the full positional walk and the PR-C structural-skip fast path so both
     /// honour identical skip / update / type-mismatch semantics.
     /// </summary>
-    private static void UpdateCommonChild(
+    private static bool UpdateCommonChild(
         int i,
         Element[] oldChildren,
         Element[] newChildren,
@@ -282,9 +304,10 @@ internal static class ChildReconciler
     /// <paramref name="i"/> in <paramref name="children"/>. <paramref name="dirtyIndex"/>
     /// is the old child's index when <paramref name="dirty"/> was resolved — the same as
     /// <paramref name="i"/> except in the slot-matched walk, which inserts and removes
-    /// around it.
+    /// around it. Returns true when an exit transition re-inserted the replaced control right
+    /// after its replacement, so the collection grew by one.
     /// </summary>
-    private static void UpdateChildAt(
+    private static bool UpdateChildAt(
         Element oldEl,
         Element newEl,
         int dirtyIndex,
@@ -353,7 +376,7 @@ internal static class ChildReconciler
                         reconciler.PublishSourceOnSkip(fe, newEl);
                     Reconciler.RefreshGestureDragStateOnSkip(fe, oldEl.Modifiers, newEl.Modifiers);
                 }
-                return;
+                return false;
             }
         }
 
@@ -367,18 +390,15 @@ internal static class ChildReconciler
                 if (!unmountedByUpdate) reconciler.UnmountChild(existingControl);
                 children.Replace(i, replacement);
             }
+            return false;
         }
-        else
-        {
-            // Type mismatch — mount new, replace old with exit transition support
-            var newControl = reconciler.Mount(newEl, requestRerender);
-            if (newControl is not null)
-                reconciler.ReplaceChildWithExitTransition(children, i, newControl);
-            else
-            {
-                reconciler.UnmountChild(children.Get(i));
-            }
-        }
+
+        // Type mismatch — mount new, replace old with exit transition support
+        var newControl = reconciler.Mount(newEl, requestRerender);
+        if (newControl is not null)
+            return reconciler.ReplaceChildWithExitTransition(children, i, newControl);
+        reconciler.UnmountChild(children.Get(i));
+        return false;
     }
 
     /// <summary>

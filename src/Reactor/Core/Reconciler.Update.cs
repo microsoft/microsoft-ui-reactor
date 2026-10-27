@@ -1316,7 +1316,9 @@ public sealed partial class Reconciler
     /// row's components mounted: effects never cleaned up and diagnostics writes were accepted
     /// but never rendered. Only the components are torn down — the visuals stay, so a delete
     /// transition still fades the row out. A container unlinked for a row still in the list and
-    /// owned by no other container (a move WinUI relinks on its next layout pass) keeps its view.
+    /// owned by no other container keeps its view: defensively, in case WinUI relinks it on a
+    /// later layout pass without realizing it again (it defers container realignment for a
+    /// move to the next layout pass; in practice it has re-realized moved rows).
     /// </summary>
     private void UnmountOrphanedContainer(WinUI.ListViewBase listViewBase, WinPrim.SelectorItem container, ContentControl cc)
     {
