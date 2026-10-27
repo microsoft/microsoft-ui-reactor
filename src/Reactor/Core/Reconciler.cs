@@ -542,7 +542,8 @@ public sealed partial class Reconciler : IDisposable
     internal static Element WithItemKey(Element built, Internal.IItemViewSource source, int index)
     {
         if (built.Key is not null || source is not Internal.IKeyedItemSource keyed) return built;
-        return keyed.GetKeyAt(index) is { } key ? built with { Key = key } : built;
+        var key = source is TemplatedListElementBase templated ? templated.GetItemIdentityKey(index) : keyed.GetKeyAt(index);
+        return key is not null ? built with { Key = key } : built;
     }
 
     private void PublishSource(UIElement control, Element element)

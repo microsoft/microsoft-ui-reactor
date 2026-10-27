@@ -60,19 +60,39 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
                 nullKey.FirstOrDefault(w => w.ControlContext == "ItemsRepeater"), nameof(NullKeyLazyProbe), publish);
 
             // Re-rendering a list that keeps its null key reports it again (deduplicated) but
-            // still diffs incrementally: the rows are not reset and re-realized every render.
+            // still diffs incrementally: no Reset of the bound collection, so rows are not torn
+            // down and re-realized every render (a null reaching the diff would bail out).
             var lazyRowBefore = H.FindControl<WinUI.TextBlock>(t => t.Text == "null-key row one");
             var listRowBefore = H.FindControl<WinUI.TextBlock>(t => t.Text == "null-key lv one");
+            var repeaterSource = H.FindControl<WinUI.ItemsRepeater>(_ => true)?.ItemsSource
+                as global::System.Collections.Specialized.INotifyCollectionChanged;
+            var listSource = H.FindControl<WinUI.ListView>(_ => true)?.ItemsSource
+                as global::System.Collections.Specialized.INotifyCollectionChanged;
+            int repeaterResets = 0, listResets = 0;
+            global::System.Collections.Specialized.NotifyCollectionChangedEventHandler onRepeater = (_, e) =>
+            {
+                if (e.Action == global::System.Collections.Specialized.NotifyCollectionChangedAction.Reset) repeaterResets++;
+            };
+            global::System.Collections.Specialized.NotifyCollectionChangedEventHandler onList = (_, e) =>
+            {
+                if (e.Action == global::System.Collections.Specialized.NotifyCollectionChangedAction.Reset) listResets++;
+            };
+            H.Check("KeyedListDiagnostics_NullKeyUpdate_SourcesFound", repeaterSource is not null && listSource is not null);
+            if (repeaterSource is not null) repeaterSource.CollectionChanged += onRepeater;
+            if (listSource is not null) listSource.CollectionChanged += onList;
             H.ClickButton("null-key-bump");
             await Harness.Render();
             await Harness.Render(100);
+            if (repeaterSource is not null) repeaterSource.CollectionChanged -= onRepeater;
+            if (listSource is not null) listSource.CollectionChanged -= onList;
+            Console.WriteLine($"# null-key update resets: repeater={repeaterResets} list={listResets}");
             var lazyRowAfter = H.FindControl<WinUI.TextBlock>(t => t.Text == "null-key row one");
             var listRowAfter = H.FindControl<WinUI.TextBlock>(t => t.Text == "null-key lv one");
             H.Check("KeyedListDiagnostics_NullKeyUpdate_RowsRendered", H.FindText("null-key tick 1") is not null);
             H.Check("KeyedListDiagnostics_NullKeyUpdate_LazyVStackNotReset",
-                lazyRowBefore is not null && ReferenceEquals(lazyRowBefore, lazyRowAfter));
+                repeaterResets == 0 && lazyRowBefore is not null && ReferenceEquals(lazyRowBefore, lazyRowAfter));
             H.Check("KeyedListDiagnostics_NullKeyUpdate_ListViewNotReset",
-                listRowBefore is not null && ReferenceEquals(listRowBefore, listRowAfter));
+                listResets == 0 && listRowBefore is not null && ReferenceEquals(listRowBefore, listRowAfter));
             H.Check("KeyedListDiagnostics_NullKeyUpdate_StillReported",
                 ReactorDiagnostics.RecentKeyedListWarnings.Any(w => w.Kind == KeyedListDiagnosticKind.NullKey && w.Count > 1));
             H.SetContent(null);

@@ -200,10 +200,31 @@ internal static class DiagnosticEventsFixtures
                     e.Name is nameof(ReactorEventSource.CommitError) or nameof(ReactorEventSource.RenderError)).ToList();
                 H.Check("DiagnosticEvents_CleanupFailure_ReportedOnce", reported.Count == 1,
                     string.Join(", ", reported.Select(e => e.Name)));
-                H.Check("DiagnosticEvents_CleanupFailure_NamesPhaseOrComponent",
-                    reported.Count == 1
-                    && (reported[0].Name == nameof(ReactorEventSource.RenderError)
-                        || reported[0].Payload[0] as string is nameof(RenderErrorSource.Cleanup) or nameof(RenderErrorSource.Reconcile)));
+                H.Check("DiagnosticEvents_CleanupFailure_ReportedAsCommitError",
+                    reported.Count == 1 && reported[0].Name == nameof(ReactorEventSource.CommitError)
+                    && reported[0].Payload[1] as string == nameof(RenderedNullRoot));
+
+                // ── Deferred retirement: the Cleanup phase ───────────────────
+                // A root whose effect mounts its replacement is retired on the NEXT pass
+                // (RetireDeferredRoots); its cleanup throwing there is a Cleanup-phase failure.
+                var deferredHost = H.CreateHost();
+                var deferredRoot = new DeferredThrowingCleanupRoot();
+                deferredRoot.Replace = () => deferredHost.Mount(new DeferredReplacementRoot());
+                capture.Take();
+                deferredHost.Mount(deferredRoot);
+                await Harness.Render();
+                await Harness.Render(50);
+                var deferredEvents = capture.Take();
+                Console.WriteLine("# deferred cleanup failure: " + string.Join(", ",
+                    deferredEvents.Select(e => e.Name + "(" + string.Join("/", e.Payload) + ")")));
+                var deferredCommit = deferredEvents.Where(e => e.Name == nameof(ReactorEventSource.CommitError)).ToList();
+                H.Check("DiagnosticEvents_CommitError_CleanupPhase",
+                    deferredCommit.Count == 1
+                    && deferredCommit[0].Payload[0] as string == nameof(RenderErrorSource.Cleanup)
+                    && deferredCommit[0].Payload[2] as string == nameof(InvalidOperationException),
+                    string.Join(", ", deferredCommit.Select(e => string.Join("/", e.Payload))));
+                H.Check("DiagnosticEvents_CommitError_CleanupPhase_NoRenderError",
+                    !deferredEvents.Any(e => e.Name == nameof(ReactorEventSource.RenderError)));
             }
             finally
             {
@@ -352,4 +373,28 @@ internal sealed class DiagEventsWindowRoot : Component
 internal sealed class DiagEventsFailingWindowRoot : Component
 {
     public override Element Render() => throw new RenderErrorProbeException("window failed to open");
+}
+
+// Its mount-only effect mounts a replacement root (so its retirement is deferred to the next
+// pass), and its cleanup — run during that deferred retirement — throws.
+internal sealed class DeferredThrowingCleanupRoot : Component
+{
+    public Action? Replace;
+
+    public override Element Render()
+    {
+        UseEffect(() =>
+        {
+            var replace = Replace;
+            Replace = null;
+            replace?.Invoke();
+            return static () => throw new InvalidOperationException("deferred retirement cleanup failed");
+        }, Array.Empty<object>());
+        return TextBlock("deferred cleanup root");
+    }
+}
+
+internal sealed class DeferredReplacementRoot : Component
+{
+    public override Element Render() => TextBlock("deferred replacement root");
 }

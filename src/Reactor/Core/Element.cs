@@ -6286,6 +6286,11 @@ public abstract record TemplatedListElementBase : Element, global::Microsoft.UI.
     /// pre-mounts so it does not participate.
     /// </summary>
     internal abstract string GetKeyAt(int index);
+    /// <summary>
+    /// The author's <c>KeySelector</c> key for the item at <paramref name="index"/>, stamped on
+    /// its realized row for diagnostics; <c>null</c> when there is none (no synthetic key).
+    /// </summary>
+    internal virtual string? GetItemIdentityKey(int index) => GetKeyAt(index);
     // §14 Phase 3 close-out — bridge the internal abstract to the public
     // IKeyedItemSource contract via explicit interface implementation so
     // the abstract stays internal (spec 042 decision) while descriptor
@@ -6467,6 +6472,8 @@ public record TemplatedFlipViewElement<T>(
         KeySelector is not null && (uint)index < (uint)Items.Count
             ? KeySelector(Items[index])
             : $"__flip_{index}";
+    internal override string? GetItemIdentityKey(int index) =>
+        KeySelector is not null && (uint)index < (uint)Items.Count ? KeySelector(Items[index]) : null;
     public override void InvokeSelectionChanged(int index) => OnSelectedIndexChanged?.Invoke(index);
     public override void InvokeItemClick(int index) { }
     public override void ApplyControlSetters(object control) =>

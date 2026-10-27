@@ -229,7 +229,7 @@ public sealed partial class Reconciler
         }
 
         var ambient = AnimationAmbient.Current;
-        var keyAdapter = new KeyedSourceKeyAdapter(source);
+        var keyAdapter = new KeyedSourceKeyAdapter(source, _logger, ir, KeyedListAttributionFor(source as Element));
         var stats = KeyedListDiff.Apply(
             state,
             keyAdapter,
@@ -306,7 +306,7 @@ public sealed partial class Reconciler
         var ambient = AnimationAmbient.Current;
         var stats = KeyedListDiff.Apply(
             state,
-            new KeyedSourceKeyAdapter(source),
+            new KeyedSourceKeyAdapter(source, _logger, repeater, KeyedListAttributionFor(source as Element)),
             static (item, _) => item,
             _logger,
             iv.GetType().Name,
@@ -404,7 +404,7 @@ public sealed partial class Reconciler
         else
         {
             var ambient = AnimationAmbient.Current;
-            var keyAdapter = new KeyedSourceKeyAdapter(source);
+            var keyAdapter = new KeyedSourceKeyAdapter(source, _logger, lvb, KeyedListAttributionFor(source as Element));
             var stats = KeyedListDiff.Apply(
                 existing,
                 keyAdapter,
@@ -429,6 +429,12 @@ public sealed partial class Reconciler
         RefreshRealizedContainers(lvb, source, requestRerender);
     }
 
+    private static string NullKey(object control, Microsoft.Extensions.Logging.ILogger? logger, int index, KeyedListAttribution attribution)
+    {
+        KeyedListDiff.ReportNullKey(control, control.GetType().Name, logger, index, attribution);
+        return $"__null_{index}";
+    }
+
     private ReactorListState BuildListStateForKeyedSource(IKeyedItemSource source, object control)
     {
         var state = new ReactorListState();
@@ -446,8 +452,19 @@ public sealed partial class Reconciler
     private readonly struct KeyedSourceKeyAdapter : IReadOnlyList<string>
     {
         private readonly IKeyedItemSource _source;
-        public KeyedSourceKeyAdapter(IKeyedItemSource source) => _source = source;
-        public string this[int index] => _source.GetKeyAt(index);
+        private readonly Microsoft.Extensions.Logging.ILogger? _logger;
+        private readonly object _control;
+        private readonly KeyedListAttribution _attribution;
+        public KeyedSourceKeyAdapter(IKeyedItemSource source, Microsoft.Extensions.Logging.ILogger? logger, object control, KeyedListAttribution attribution)
+        {
+            _source = source;
+            _logger = logger;
+            _control = control;
+            _attribution = attribution;
+        }
+        // A null key is reported and replaced by a positional sentinel, so the diff stays
+        // incremental (a null reaching the diff would reset the whole list every render).
+        public string this[int index] => _source.GetKeyAt(index) ?? NullKey(_control, _logger, index, _attribution);
         public int Count => _source.ItemCount;
         public IEnumerator<string> GetEnumerator()
         {
@@ -495,7 +512,7 @@ public sealed partial class Reconciler
         else
         {
             var ambient = AnimationAmbient.Current;
-            var keyAdapter = new ItemsKeyAdapter<TItem>(items, keySelector);
+            var keyAdapter = new ItemsKeyAdapter<TItem>(items, keySelector, _logger, lvb, KeyedListAttributionFor(viewSource as Element));
             var stats = KeyedListDiff.Apply(
                 existing,
                 keyAdapter,
@@ -549,13 +566,22 @@ public sealed partial class Reconciler
         private readonly IReadOnlyList<TItem> _items;
         private readonly Func<TItem, int, string> _keySelector;
 
-        public ItemsKeyAdapter(IReadOnlyList<TItem> items, Func<TItem, int, string> keySelector)
+        private readonly Microsoft.Extensions.Logging.ILogger? _logger;
+        private readonly object _control;
+        private readonly KeyedListAttribution _attribution;
+
+        public ItemsKeyAdapter(IReadOnlyList<TItem> items, Func<TItem, int, string> keySelector,
+            Microsoft.Extensions.Logging.ILogger? logger, object control, KeyedListAttribution attribution)
         {
             _items = items;
             _keySelector = keySelector;
+            _logger = logger;
+            _control = control;
+            _attribution = attribution;
         }
 
-        public string this[int index] => _keySelector(_items[index], index);
+        // See KeyedSourceKeyAdapter: report a null key and diff on with a positional sentinel.
+        public string this[int index] => _keySelector(_items[index], index) ?? NullKey(_control, _logger, index, _attribution);
         public int Count => _items.Count;
         public IEnumerator<string> GetEnumerator()
         {

@@ -89,6 +89,81 @@ public class KeyedListAttributionTests
     }
 
     [Fact]
+    public void SeedThenApply_SameDuplicates_ShareOneEntry()
+    {
+        var ctx = $"SeedApply_{NewId()}";
+        var control = new object();
+        string[] keys = ["b", "a", "b", "a"];
+
+        var state = new ReactorListState();
+        state.Reset(KeyedListDiff.SeedKeys(keys, keys.Length, static (k, i) => k[i], logger: null, ctx, control, default));
+        string[] next = ["b", "a", "b", "a", "c"];
+        KeyedListDiff.Apply(state, next, static (k, _) => k, logger: null, ctx, ambient: null, controlInstance: control);
+
+        var entries = ReactorDiagnostics.RecentKeyedListWarnings
+            .Where(w => w.ControlContext == ctx && w.Kind == KeyedListDiagnosticKind.DuplicateKey).ToList();
+        var entry = Assert.Single(entries);
+        Assert.Equal(["a", "b"], entry.SampleKeys);
+        Assert.Equal(2, entry.Count);
+    }
+
+    [Fact]
+    public void SeedKeys_PooledSet_IsClearedBetweenSeeds()
+    {
+        string?[] keys = ["a", "b"];
+        var first = $"SeedReuseA_{NewId()}";
+        var second = $"SeedReuseB_{NewId()}";
+
+        KeyedListDiff.SeedKeys(keys, keys.Length, static (k, i) => k[i], logger: null, first, new object(), default);
+        KeyedListDiff.SeedKeys(keys, keys.Length, static (k, i) => k[i], logger: null, second, new object(), default);
+
+        // A set carried over from the first seed would report "a" and "b" as duplicates here.
+        Assert.Null(WarningFor(second, KeyedListDiagnosticKind.DuplicateKey));
+    }
+
+    [Fact]
+    public void LoggedWarnings_NameComponentAndShortCallSite_AndBoundTheKeys()
+    {
+        var logger = new CapturingLogger();
+        var site = new SourceLocation(@"C:\Users\someone\src\App\Views\List.cs", 42, 5);
+        var attribution = new KeyedListAttribution("ListOwner", site);
+
+        // A null key met during an update: reported, not a bailout.
+        KeyedListDiff.ReportNullKey(new object(), $"Log_{NewId()}", logger, index: 3, attribution);
+        var nullMessage = Assert.Single(logger.Messages);
+        Assert.Contains("invalid list key", nullMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("bailed out", nullMessage, StringComparison.Ordinal);
+        Assert.Contains("null key at index 3", nullMessage, StringComparison.Ordinal);
+        Assert.Contains("ListOwner", nullMessage, StringComparison.Ordinal);
+        Assert.Contains("List.cs:42", nullMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("someone", nullMessage, StringComparison.Ordinal);
+
+        // A duplicate bailout from Apply: many duplicated keys are bounded in the message.
+        logger.Messages.Clear();
+        var state = new ReactorListState();
+        state.Reset([(0, "seed")]);
+        var many = Enumerable.Range(0, 12).SelectMany(i => new[] { "d" + i, "d" + i }).ToArray();
+        KeyedListDiff.Apply(state, many, static (k, _) => k, logger, $"LogDup_{NewId()}", ambient: null,
+            controlInstance: new object(), attribution: attribution);
+        var dupMessage = Assert.Single(logger.Messages);
+        Assert.Contains("bailed out", dupMessage, StringComparison.Ordinal);
+        Assert.Contains("(4 more)", dupMessage, StringComparison.Ordinal);
+        Assert.Contains("List.cs:42", dupMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("someone", dupMessage, StringComparison.Ordinal);
+    }
+
+    private sealed class CapturingLogger : Microsoft.Extensions.Logging.ILogger
+    {
+        public List<string> Messages { get; } = new();
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => new NullScope();
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId,
+            TState state, global::System.Exception? exception, Func<TState, global::System.Exception?, string> formatter)
+            => Messages.Add(formatter(state, exception));
+        private sealed class NullScope : IDisposable { public void Dispose() { } }
+    }
+
+    [Fact]
     public void ReportNullKey_RecordsWithoutBailingOut_AndCountsRepeats()
     {
         var ctx = $"NullReport_{NewId()}";

@@ -66,6 +66,9 @@ internal static class KeyedListDiff
     [ThreadStatic] private static HashSet<string>? t_siblingKeys;
     [ThreadStatic] private static HashSet<string>? t_seedKeys;
 
+    // Largest pooled key set kept for reuse (see SeedKeys / ReportDuplicateSiblingKeys).
+    private const int PooledKeySetLimit = 1024;
+
     // Descending-by-index comparer used to remove doomed rows from the tail
     // first so earlier OC indices stay stable. Singleton — avoids capturing a
     // fresh comparison delegate on every diff that has deletions.
@@ -654,8 +657,9 @@ internal static class KeyedListDiff
         {
             logger.LogWarning(
                 "Reactor: invalid list key — {Reason}. Context: {Context}. Component: {Component}. At: {CallSite}. " +
-                "Keys must be non-null and unique: an affected item is matched by position instead, so its " +
-                "row state can move to another item. Check the KeySelector / IReactorKeyed.Key. See spec 042 §4.3.",
+                "Keys must be non-null and unique: a null-keyed item is matched by position, and a list with " +
+                "duplicate keys is rebuilt in full whenever it changes, so row state can move between items. " +
+                "Check the KeySelector / IReactorKeyed.Key. See spec 042 §4.3.",
                 reason,
                 diagnosticContext ?? "<unknown>",
                 attribution.ComponentName ?? "<unknown>",
@@ -748,12 +752,17 @@ internal static class KeyedListDiff
         }
         finally
         {
-            if (seen is not null)
+            // Keep only a modest set for reuse: Clear() does not shrink, so a set grown by one
+            // very large list would otherwise stay that large for the thread's lifetime.
+            if (seen is not null && seen.Count <= PooledKeySetLimit)
             {
                 seen.Clear();
                 t_seedKeys = seen;
             }
         }
+        // Sorted, as CollectDuplicates sorts the diff's samples: the dedup ledger is order
+        // sensitive, so the mount report and later update reports must name the same sample.
+        dupes?.Sort(StringComparer.Ordinal);
         if (firstNull >= 0)
         {
             ReportBailout(
@@ -828,7 +837,8 @@ internal static class KeyedListDiff
             }
             finally
             {
-                seen.Clear();
+                if (seen.Count > PooledKeySetLimit) t_siblingKeys = null;
+                else seen.Clear();
             }
         }
         if (dupes is null) return;
