@@ -453,11 +453,11 @@ public class MarkdownBuilderTests
         var result = Md("Before [link](https://example.com/path) after.", new MarkdownOptions
         {
             UnifiedRichText = unified,
-            LinkBuilder = (label, uri) =>
+            LinkBuilder = link =>
             {
                 calls++;
-                capturedUri = uri;
-                var labelBlock = Assert.IsType<RichTextBlockElement>(Assert.Single(label));
+                capturedUri = link.Uri;
+                var labelBlock = Assert.IsType<RichTextBlockElement>(link.Label);
                 Assert.Equal("link", Inline<RichTextRun>(labelBlock, 0).Text);
                 return replacement;
             },
@@ -504,9 +504,9 @@ public class MarkdownBuilderTests
         RichTextBlockElement? labelBlock = null;
         Md("[**bold and *italic*** `code` &amp;](https://example.com)", new MarkdownOptions
         {
-            LinkBuilder = (label, _) =>
+            LinkBuilder = link =>
             {
-                labelBlock = Assert.IsType<RichTextBlockElement>(Assert.Single(label));
+                labelBlock = Assert.IsType<RichTextBlockElement>(link.Label);
                 return labelBlock;
             },
         });
@@ -527,10 +527,10 @@ public class MarkdownBuilderTests
         var replacement = TextBlock("empty link");
         var result = Md("[](https://example.com)", new MarkdownOptions
         {
-            LinkBuilder = (label, _) =>
+            LinkBuilder = link =>
             {
                 calls++;
-                Assert.Empty(label);
+                Assert.Null(link.Label);
                 return replacement;
             },
         });
@@ -554,9 +554,9 @@ public class MarkdownBuilderTests
                 Assert.Equal(new Uri("https://example.com/image.png"), uri);
                 return image;
             },
-            LinkBuilder = (label, _) =>
+            LinkBuilder = link =>
             {
-                labelBlock = Assert.IsType<RichTextBlockElement>(Assert.Single(label));
+                labelBlock = Assert.IsType<RichTextBlockElement>(link.Label);
                 return replacement;
             },
         });
@@ -582,7 +582,7 @@ public class MarkdownBuilderTests
                 capturedAlt = alt;
                 return TextBlock(alt);
             },
-            LinkBuilder = (_, _) =>
+            LinkBuilder = _ =>
             {
                 calls++;
                 return TextBlock("unexpected link");
@@ -599,7 +599,7 @@ public class MarkdownBuilderTests
     public void LinkBuilder_ImageAltLink_DoesNotLeakIntoAdjacentAutolink(MarkdownParserFlags flags, int expectedLinks)
     {
         var image = TextBlock("a b");
-        var links = new List<(Element[] Label, Uri Target)>();
+        var links = new List<MarkdownLink>();
         Md("[![a [b](https://b.example)](https://img.example/i.png)](https://outer.example)", new MarkdownOptions
         {
             ParserFlags = flags,
@@ -608,9 +608,9 @@ public class MarkdownBuilderTests
                 Assert.Equal("a b", alt);
                 return image;
             },
-            LinkBuilder = (label, target) =>
+            LinkBuilder = link =>
             {
-                links.Add((label, target));
+                links.Add(link);
                 return TextBlock("custom link");
             },
         });
@@ -618,8 +618,8 @@ public class MarkdownBuilderTests
         Assert.Equal(expectedLinks, links.Count);
         Assert.All(links, link =>
         {
-            Assert.Equal(new Uri("https://outer.example"), link.Target);
-            var block = Assert.IsType<RichTextBlockElement>(Assert.Single(link.Label));
+            Assert.Equal(new Uri("https://outer.example"), link.Uri);
+            var block = Assert.IsType<RichTextBlockElement>(link.Label);
             Assert.Equal("https://outer.example",
                 string.Concat(FirstParagraph(block).Inlines.OfType<RichTextRun>().Select(run => run.Text)));
         });
@@ -628,21 +628,21 @@ public class MarkdownBuilderTests
     [Fact]
     public void LinkBuilder_NestedImageAlt_DoesNotCorruptSubsequentLinkDepth()
     {
-        var links = new List<(Element[] Label, Uri Target)>();
+        var links = new List<MarkdownLink>();
         Md("![[x ![i](https://s.example/i.png)](https://u.example)](https://o.example/o.png) "
             + "[see https://a.example now](https://b.example)", new MarkdownOptions
         {
             Image = (alt, _) => TextBlock(alt),
-            LinkBuilder = (label, target) =>
+            LinkBuilder = link =>
             {
-                links.Add((label, target));
+                links.Add(link);
                 return TextBlock("custom link");
             },
         });
 
         var link = Assert.Single(links);
-        Assert.Equal(new Uri("https://b.example"), link.Target);
-        var block = Assert.IsType<RichTextBlockElement>(Assert.Single(link.Label));
+        Assert.Equal(new Uri("https://b.example"), link.Uri);
+        var block = Assert.IsType<RichTextBlockElement>(link.Label);
         Assert.Equal("see https://a.example now",
             string.Concat(FirstParagraph(block).Inlines.OfType<RichTextRun>().Select(run => run.Text)));
     }
@@ -654,7 +654,7 @@ public class MarkdownBuilderTests
     {
         var image = TextBlock("outer image");
         var images = new List<(string Alt, Uri Source)>();
-        var links = new List<(Element[] Label, Uri Target)>();
+        var links = new List<MarkdownLink>();
         Md("[![outer ![inner](https://img.example/inner.png) tail](https://img.example/outer.png)](https://target.example)"
             + " and [next](https://next.example)", new MarkdownOptions
         {
@@ -664,9 +664,9 @@ public class MarkdownBuilderTests
                 images.Add((alt, source));
                 return image;
             },
-            LinkBuilder = (label, target) =>
+            LinkBuilder = link =>
             {
-                links.Add((label, target));
+                links.Add(link);
                 return TextBlock("custom link");
             },
         });
@@ -675,12 +675,12 @@ public class MarkdownBuilderTests
         Assert.Equal("outer inner tail", renderedImage.Alt);
         Assert.Equal(new Uri("https://img.example/outer.png"), renderedImage.Source);
         Assert.Equal(2, links.Count);
-        Assert.Equal(new Uri("https://target.example"), links[0].Target);
-        var labelBlock = Assert.IsType<RichTextBlockElement>(Assert.Single(links[0].Label));
+        Assert.Equal(new Uri("https://target.example"), links[0].Uri);
+        var labelBlock = Assert.IsType<RichTextBlockElement>(links[0].Label);
         var labelInline = Assert.IsType<RichTextInlineUIContainer>(Assert.Single(FirstParagraph(labelBlock).Inlines));
         Assert.Same(image, labelInline.Child);
-        Assert.Equal(new Uri("https://next.example"), links[1].Target);
-        var nextLabel = Assert.IsType<RichTextBlockElement>(Assert.Single(links[1].Label));
+        Assert.Equal(new Uri("https://next.example"), links[1].Uri);
+        var nextLabel = Assert.IsType<RichTextBlockElement>(links[1].Label);
         Assert.Equal("next", Inline<RichTextRun>(nextLabel, 0).Text);
     }
 
@@ -692,7 +692,7 @@ public class MarkdownBuilderTests
         var calls = 0;
         var result = Md($"[see https://a.example now]({target})", new MarkdownOptions
         {
-            LinkBuilder = (_, _) =>
+            LinkBuilder = _ =>
             {
                 calls++;
                 return TextBlock("unexpected link");
@@ -723,7 +723,7 @@ public class MarkdownBuilderTests
                 Assert.Equal(new Uri("https://img.example/i.png"), source);
                 return image;
             },
-            LinkBuilder = custom ? (_, _) =>
+            LinkBuilder = custom ? _ =>
             {
                 calls++;
                 return TextBlock("custom link");
@@ -752,9 +752,9 @@ public class MarkdownBuilderTests
         Md("# See [**docs** and *examples*](https://example.com)", new MarkdownOptions
         {
             UnifiedRichText = unified,
-            LinkBuilder = (label, _) =>
+            LinkBuilder = link =>
             {
-                labelBlock = Assert.IsType<RichTextBlockElement>(Assert.Single(label));
+                labelBlock = Assert.IsType<RichTextBlockElement>(link.Label);
                 return labelBlock;
             },
         });
@@ -777,9 +777,9 @@ public class MarkdownBuilderTests
         {
             UnifiedRichText = unified,
             TableHeaderBackground = null,
-            LinkBuilder = (label, _) =>
+            LinkBuilder = link =>
             {
-                var block = Assert.IsType<RichTextBlockElement>(Assert.Single(label));
+                var block = Assert.IsType<RichTextBlockElement>(link.Label);
                 labels.Add(block);
                 return block;
             },
@@ -798,9 +798,9 @@ public class MarkdownBuilderTests
         RichTextBlockElement? labelBlock = null;
         var result = Md("- before [*docs*](https://example.com) after", new MarkdownOptions
         {
-            LinkBuilder = (label, _) =>
+            LinkBuilder = link =>
             {
-                labelBlock = Assert.IsType<RichTextBlockElement>(Assert.Single(label));
+                labelBlock = Assert.IsType<RichTextBlockElement>(link.Label);
                 return labelBlock;
             },
         });
@@ -819,24 +819,24 @@ public class MarkdownBuilderTests
     [Fact]
     public void LinkBuilder_PermissiveAutolinkInsideExplicitLink_KeepsOuterTargetAndLabel()
     {
-        var links = new List<(Element[] Label, Uri Target)>();
+        var links = new List<MarkdownLink>();
         Md("[see https://a.example now](https://b.example) and [next](https://c.example)", new MarkdownOptions
         {
-            LinkBuilder = (label, target) =>
+            LinkBuilder = link =>
             {
-                links.Add((label, target));
+                links.Add(link);
                 return TextBlock("custom link");
             },
         });
 
         Assert.Equal(2, links.Count);
         var link = links[0];
-        Assert.Equal(new Uri("https://b.example"), link.Target);
-        var block = Assert.IsType<RichTextBlockElement>(Assert.Single(link.Label));
+        Assert.Equal(new Uri("https://b.example"), link.Uri);
+        var block = Assert.IsType<RichTextBlockElement>(link.Label);
         Assert.Equal("see https://a.example now",
             string.Concat(FirstParagraph(block).Inlines.OfType<RichTextRun>().Select(run => run.Text)));
-        Assert.Equal(new Uri("https://c.example"), links[1].Target);
-        var nextBlock = Assert.IsType<RichTextBlockElement>(Assert.Single(links[1].Label));
+        Assert.Equal(new Uri("https://c.example"), links[1].Uri);
+        var nextBlock = Assert.IsType<RichTextBlockElement>(links[1].Label);
         Assert.Equal("next", Inline<RichTextRun>(nextBlock, 0).Text);
     }
 
@@ -852,7 +852,7 @@ public class MarkdownBuilderTests
         var result = Md(markdown, new MarkdownOptions
         {
             ParserFlags = MarkdownParserFlags.Tables | MarkdownParserFlags.NoHtml,
-            LinkBuilder = (_, _) =>
+            LinkBuilder = _ =>
             {
                 calls++;
                 return TextBlock("custom link");
@@ -873,11 +873,11 @@ public class MarkdownBuilderTests
         var targets = new List<Uri>();
         Md("[one](https://one.example) and [two](https://two.example)", new MarkdownOptions
         {
-            LinkBuilder = (label, uri) =>
+            LinkBuilder = link =>
             {
-                var block = Assert.IsType<RichTextBlockElement>(Assert.Single(label));
+                var block = Assert.IsType<RichTextBlockElement>(link.Label);
                 labels.Add(Inline<RichTextRun>(block, 0).Text);
-                targets.Add(uri);
+                targets.Add(link.Uri);
                 return TextBlock(labels[^1]);
             },
         });
@@ -890,7 +890,7 @@ public class MarkdownBuilderTests
     public void LinkBuilder_NullResult_ThrowsAnActionableError()
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            Md("[link](https://example.com)", new MarkdownOptions { LinkBuilder = (_, _) => null! }));
+            Md("[link](https://example.com)", new MarkdownOptions { LinkBuilder = _ => null! }));
         Assert.Contains(nameof(MarkdownOptions.LinkBuilder), exception.Message);
     }
 
@@ -899,21 +899,21 @@ public class MarkdownBuilderTests
     {
         var failure = new InvalidOperationException("link policy failed");
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            Md("[link](https://example.com)", new MarkdownOptions { LinkBuilder = (_, _) => throw failure }));
+            Md("[link](https://example.com)", new MarkdownOptions { LinkBuilder = _ => throw failure }));
         Assert.Same(failure, exception);
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void LinkRenderer_ReceivesPlainTextFormattedLabelAndTarget(bool unified)
+    public void LinkBuilder_ReceivesPlainTextFormattedLabelAndTarget(bool unified)
     {
         var replacement = TextBlock("approved link");
         var links = new List<MarkdownLink>();
         var result = Md("Before [**bold** *and* `code` &amp;](https://example.com/path) after.", new MarkdownOptions
         {
             UnifiedRichText = unified,
-            LinkRenderer = link =>
+            LinkBuilder = link =>
             {
                 links.Add(link);
                 return replacement;
@@ -939,12 +939,12 @@ public class MarkdownBuilderTests
     }
 
     [Fact]
-    public void LinkRenderer_EmptyLabel_HasNullLabelAndEmptyText()
+    public void LinkBuilder_EmptyLabel_HasNullLabelAndEmptyText()
     {
         MarkdownLink? captured = null;
         Md("[](https://example.com)", new MarkdownOptions
         {
-            LinkRenderer = link =>
+            LinkBuilder = link =>
             {
                 captured = link;
                 return TextBlock("empty link");
@@ -958,14 +958,14 @@ public class MarkdownBuilderTests
     }
 
     [Fact]
-    public void LinkRenderer_ImageLabel_TextUsesAltAndLabelKeepsImage()
+    public void LinkBuilder_ImageLabel_TextUsesAltAndLabelKeepsImage()
     {
         var image = TextBlock("image");
         MarkdownLink? captured = null;
         Md("[see ![the logo](https://example.com/logo.png) now](https://example.com)", new MarkdownOptions
         {
             Image = (_, _) => image,
-            LinkRenderer = link =>
+            LinkBuilder = link =>
             {
                 captured = link;
                 return TextBlock("image link");
@@ -980,14 +980,14 @@ public class MarkdownBuilderTests
     }
 
     [Fact]
-    public void LinkRenderer_ImageAltText_UsesTheImagePositionWhenTheLinkIsNotFirstInline()
+    public void LinkBuilder_ImageAltText_UsesTheImagePositionWhenTheLinkIsNotFirstInline()
     {
         var texts = new List<string>();
         Md("Click [see ![logo](https://example.com/l.png) now](https://one.example) or "
             + "[![second](https://example.com/s.png)](https://two.example)", new MarkdownOptions
         {
             Image = (alt, _) => TextBlock(alt),
-            LinkRenderer = link =>
+            LinkBuilder = link =>
             {
                 texts.Add(link.Text);
                 return TextBlock(link.Text);
@@ -1008,7 +1008,7 @@ public class MarkdownBuilderTests
     }
 
     [Fact]
-    public void LinkRenderer_NumericCharacterReferences_AreDecodedInLabelAndImageAltText()
+    public void LinkBuilder_NumericCharacterReferences_AreDecodedInLabelAndImageAltText()
     {
         string? imageAlt = null;
         var texts = new List<string>();
@@ -1020,7 +1020,7 @@ public class MarkdownBuilderTests
                     imageAlt = alt;
                     return TextBlock(alt);
                 },
-                LinkRenderer = link =>
+                LinkBuilder = link =>
                 {
                     texts.Add(link.Text);
                     return TextBlock(link.Text);
@@ -1033,7 +1033,7 @@ public class MarkdownBuilderTests
     }
 
     [Fact]
-    public void LinkRenderer_ImageAltText_DecodesEntitiesAndBreaksLikeRunText()
+    public void LinkBuilder_ImageAltText_DecodesEntitiesAndBreaksLikeRunText()
     {
         string? imageAlt = null;
         MarkdownLink? captured = null;
@@ -1044,7 +1044,7 @@ public class MarkdownBuilderTests
                 imageAlt = alt;
                 return TextBlock(alt);
             },
-            LinkRenderer = link =>
+            LinkBuilder = link =>
             {
                 captured = link;
                 return TextBlock(link.Text);
@@ -1060,13 +1060,13 @@ public class MarkdownBuilderTests
     [Theory]
     [InlineData("[see ![Docs](javascript:alert(1)) now](https://example.com)", "see  now", true)]
     [InlineData("[![Docs](javascript:alert(1))](https://example.com)", "", false)]
-    public void LinkRenderer_RejectedImageSource_ContributesNeitherLabelNorText(string markdown, string expectedText, bool hasLabel)
+    public void LinkBuilder_RejectedImageSource_ContributesNeitherLabelNorText(string markdown, string expectedText, bool hasLabel)
     {
         MarkdownLink? captured = null;
         Md(markdown, new MarkdownOptions
         {
             Image = (alt, _) => TextBlock(alt),
-            LinkRenderer = link =>
+            LinkBuilder = link =>
             {
                 captured = link;
                 return TextBlock("custom link");
@@ -1081,12 +1081,12 @@ public class MarkdownBuilderTests
     }
 
     [Fact]
-    public void LinkRenderer_HardLineBreak_BecomesSpaceInText()
+    public void LinkBuilder_HardLineBreak_BecomesSpaceInText()
     {
         MarkdownLink? captured = null;
         Md("[first  \nsecond](https://example.com)", new MarkdownOptions
         {
-            LinkRenderer = link =>
+            LinkBuilder = link =>
             {
                 captured = link;
                 return TextBlock(link.Text);
@@ -1102,7 +1102,7 @@ public class MarkdownBuilderTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void LinkRenderer_HeadingAndTableHeaderLabels_MatchLinkBuilderStyling(bool unified)
+    public void LinkBuilder_HeadingAndTableHeaderLabels_GetDefaultStyling(bool unified)
     {
         var labels = new List<RichTextBlockElement>();
         Md("# [Heading](https://h.example)\n\n| [head](https://th.example) |\n| --- |\n| [body](https://td.example) |",
@@ -1110,7 +1110,7 @@ public class MarkdownBuilderTests
             {
                 UnifiedRichText = unified,
                 TableHeaderBackground = null,
-                LinkRenderer = link =>
+                LinkBuilder = link =>
                 {
                     Assert.NotNull(link.Label);
                     labels.Add(link.Label);
@@ -1132,14 +1132,14 @@ public class MarkdownBuilderTests
     [InlineData("[unsafe](javascript:alert(1))", 0)]
     [InlineData("[relative](./page)", 0)]
     [InlineData("![see [docs](https://a.example)](https://img.example/i.png)", 0)]
-    public void LinkRenderer_UsesLinkBuilderUriPolicyAndNestingRules(string markdown, int expectedCalls)
+    public void LinkBuilder_UriPolicyAndImageAltNesting(string markdown, int expectedCalls)
     {
         var calls = 0;
         Md(markdown, new MarkdownOptions
         {
             ParserFlags = MarkdownParserFlags.Tables | MarkdownParserFlags.NoHtml,
             Image = (alt, _) => TextBlock(alt),
-            LinkRenderer = _ =>
+            LinkBuilder = _ =>
             {
                 calls++;
                 return TextBlock("custom link");
@@ -1150,12 +1150,12 @@ public class MarkdownBuilderTests
     }
 
     [Fact]
-    public void LinkRenderer_NestedAutolink_KeepsOuterTargetAndFullText()
+    public void LinkBuilder_NestedAutolink_KeepsOuterTargetAndFullText()
     {
         var links = new List<MarkdownLink>();
         Md("[see https://a.example now](https://b.example)", new MarkdownOptions
         {
-            LinkRenderer = link =>
+            LinkBuilder = link =>
             {
                 links.Add(link);
                 return TextBlock("custom link");
@@ -1165,37 +1165,6 @@ public class MarkdownBuilderTests
         var link = Assert.Single(links);
         Assert.Equal(new Uri("https://b.example"), link.Uri);
         Assert.Equal("see https://a.example now", link.Text);
-    }
-
-    [Fact]
-    public void LinkRenderer_TakesPrecedenceOverLinkBuilder()
-    {
-        var rendererCalls = 0;
-        var builderCalls = 0;
-        Md("[link](https://example.com)", new MarkdownOptions
-        {
-            LinkBuilder = (_, _) =>
-            {
-                builderCalls++;
-                return TextBlock("builder");
-            },
-            LinkRenderer = _ =>
-            {
-                rendererCalls++;
-                return TextBlock("renderer");
-            },
-        });
-
-        Assert.Equal(1, rendererCalls);
-        Assert.Equal(0, builderCalls);
-    }
-
-    [Fact]
-    public void LinkRenderer_NullResult_ThrowsAnActionableError()
-    {
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            Md("[link](https://example.com)", new MarkdownOptions { LinkRenderer = _ => null! }));
-        Assert.Contains(nameof(MarkdownOptions.LinkRenderer), exception.Message);
     }
 
     // ════════════════════════════════════════════════════════════════════

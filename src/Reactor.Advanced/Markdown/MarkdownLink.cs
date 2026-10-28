@@ -3,7 +3,7 @@ using Microsoft.UI.Reactor.Core;
 namespace Microsoft.UI.Reactor.Markdown;
 
 /// <summary>
-/// A Markdown link passed to <see cref="MarkdownOptions.LinkRenderer"/>.
+/// A Markdown link passed to <see cref="MarkdownOptions.LinkBuilder"/>.
 /// </summary>
 public sealed record MarkdownLink
 {

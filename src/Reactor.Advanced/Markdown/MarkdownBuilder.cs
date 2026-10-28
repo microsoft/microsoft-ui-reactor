@@ -71,29 +71,18 @@ public record MarkdownOptions
     /// <summary>Parser flags. Default: DialectGitHub (tables, strikethrough, task lists).</summary>
     public MarkdownParserFlags ParserFlags { get; init; } = MarkdownParserFlags.DialectGitHub;
     /// <summary>
-    /// Override link rendering. (label, navigateUri) → element.
-    /// Apps that want to require a confirmation UX or unfurl/origin-preview
-    /// for cross-site hyperlinks should provide this. TASK-048.
-    /// The label is one selectable RichTextBlock element preserving inline
-    /// formatting, default heading/table-header typography, and images, or an empty
-    /// array for an empty label. The returned
-    /// non-null element is embedded inline as custom UI, with its own selection
-    /// boundary. With no override, links remain native text hyperlinks.
-    /// Ignored when <see cref="LinkRenderer"/> is set; prefer that callback in
-    /// new code because it also supplies the label's plain text.
+    /// Override link rendering. Receives a <see cref="MarkdownLink"/> with the
+    /// link's plain-text label, formatted label, and validated target, and returns
+    /// the element to show in its place. TASK-048.
+    /// Called only for links whose target is an absolute <c>http</c>, <c>https</c>,
+    /// or <c>mailto</c> URI; other links render as plain text. Apps that want to
+    /// require a confirmation UX or unfurl/origin-preview for cross-site hyperlinks
+    /// should provide this. The returned non-null element is embedded inline as
+    /// custom UI with its own selection boundary; the callback owns its accessible
+    /// name, styling, and interaction. With no override, links remain native text
+    /// hyperlinks.
     /// </summary>
-    public Func<Element[], Uri, Element>? LinkBuilder { get; init; }
-    /// <summary>
-    /// Override link rendering with a <see cref="MarkdownLink"/> describing the
-    /// link's plain-text label, formatted label, and validated target.
-    /// Called for the same links as <see cref="LinkBuilder"/> (absolute
-    /// <c>http</c>, <c>https</c>, or <c>mailto</c> targets) under the same
-    /// nesting rules. The returned non-null element is embedded inline as custom
-    /// UI with its own selection boundary; the callback owns its accessible name,
-    /// styling, and interaction. Takes precedence over <see cref="LinkBuilder"/>
-    /// when both are set.
-    /// </summary>
-    public Func<MarkdownLink, Element>? LinkRenderer { get; init; }
+    public Func<MarkdownLink, Element>? LinkBuilder { get; init; }
     /// <summary>
     /// Hard cap on input markdown size in bytes. Default 4 MiB. Inputs past
     /// the cap throw at <see cref="MarkdownBuilder.Build"/>. TASK-049.
@@ -169,7 +158,7 @@ internal sealed class MarkdownBuilder
     // Alt text of images rendered inside a custom link label, keyed by _inlines index.
     private Dictionary<int, string>? _linkImageAlt;
 
-    private bool HasCustomLink => _options.LinkRenderer is not null || _options.LinkBuilder is not null;
+    private bool HasCustomLink => _options.LinkBuilder is not null;
 
     // Image tracking.
     private bool _insideImage;
@@ -781,7 +770,7 @@ internal sealed class MarkdownBuilder
                 if (HasCustomLink && ++_customImageDepth > 1) break;
                 _insideImage = true;
                 _imageAlt = new StringBuilder();
-                if (_linkUri is not null && _options.LinkRenderer is not null)
+                if (_linkUri is not null && HasCustomLink)
                     _imageAltPlain = new StringBuilder();
                 if (detail is MarkdownSpanImgDetail img && img.Src.Text is not null)
                 {
@@ -847,7 +836,7 @@ internal sealed class MarkdownBuilder
         }
 
         var labelInlines = _inlines.GetRange(_linkInlineStart, _inlines.Count - _linkInlineStart).ToArray();
-        if (_options.LinkRenderer is { } renderLink)
+        if (_options.LinkBuilder is { } buildLink)
         {
             var link = new MarkdownLink
             {
@@ -855,15 +844,7 @@ internal sealed class MarkdownBuilder
                 Label = labelInlines.Length == 0 ? null : MakeLinkLabel(labelInlines),
                 Uri = _linkUri,
             };
-            ReplaceLinkInlines(renderLink(link)
-                ?? throw new InvalidOperationException("MarkdownOptions.LinkRenderer must return a non-null Element."));
-            return;
-        }
-
-        if (_options.LinkBuilder is { } buildLink)
-        {
-            Element[] label = labelInlines.Length == 0 ? [] : [MakeLinkLabel(labelInlines)];
-            ReplaceLinkInlines(buildLink(label, _linkUri)
+            ReplaceLinkInlines(buildLink(link)
                 ?? throw new InvalidOperationException("MarkdownOptions.LinkBuilder must return a non-null Element."));
             return;
         }
@@ -950,8 +931,7 @@ internal sealed class MarkdownBuilder
 
             if (_linkUri is not null && HasCustomLink)
             {
-                if (_options.LinkRenderer is not null)
-                    (_linkImageAlt ??= new())[_inlines.Count] = plainAlt;
+                (_linkImageAlt ??= new())[_inlines.Count] = plainAlt;
                 _inlines.Add(new RichTextInlineUIContainer { Child = img });
             }
             else if (_blockStack.Count > 0)

@@ -103,7 +103,7 @@ class MarkdownDemo : Component
 }
 // </snippet:markdown>
 
-// <snippet:markdown-link-renderer>
+// <snippet:markdown-link-builder>
 class ReviewedLinksDemo : Component
 {
     public override Element Render()
@@ -112,7 +112,7 @@ class ReviewedLinksDemo : Component
 
         var options = new MarkdownOptions
         {
-            LinkRenderer = link =>
+            LinkBuilder = link =>
             {
                 Element content = link.Label is { } label
                     ? label with { IsTextSelectionEnabled = false }
@@ -129,7 +129,7 @@ class ReviewedLinksDemo : Component
         ).Padding(24);
     }
 }
-// </snippet:markdown-link-renderer>
+// </snippet:markdown-link-builder>
 
 // <snippet:image>
 class ImageDemo : Component

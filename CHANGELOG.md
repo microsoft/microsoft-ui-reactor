@@ -28,15 +28,6 @@ Conventions for contributors:
 
 ### Added
 
-- **`MarkdownOptions.LinkRenderer` gives custom links their plain-text label.** A new
-  `Func<MarkdownLink, Element>` callback receives a `MarkdownLink` with the label as
-  plain `Text` (image alt text in place of images), the formatted `Label`
-  (`RichTextBlockElement`, `null` when empty), and the validated `Uri`, so setting an
-  accessible name or tooltip no longer means walking the label's inlines. It uses the
-  same URI policy, nesting rules, label styling, and null-result error as
-  `LinkBuilder`, and takes precedence when both are set. `LinkBuilder` is unchanged
-  (follow-up to #1401).
-
 - `JumpList.GetRemovedArgumentsAsync()` reads user removals without updating the list.
   `UpdateAsync` and `ClearAsync` now return the removals observed in their own transaction,
   allowing apps to retain the feedback before Windows clears it. Await-only callers
@@ -265,6 +256,17 @@ Conventions for contributors:
   guide shows a `RegisterType` host reconciling its child.
 
 ### Changed
+
+- **Markdown `LinkBuilder` now receives a `MarkdownLink`** (#1436). Breaking: the
+  callback's type changes from `Func<Element[], Uri, Element>` to
+  `Func<MarkdownLink, Element>`. `MarkdownLink` carries the label as plain `Text`
+  (image alt text in place of images, entities decoded, line breaks as spaces), the
+  formatted `Label` (`RichTextBlockElement`, `null` when empty, where the old
+  callback got a 0- or 1-element array), and the validated `Uri`, so setting an
+  accessible name or tooltip no longer means walking the label's inlines. Existing
+  `(label, uri) => ...` callbacks no longer compile; rewrite them as
+  `link => ...` using `link.Label` and `link.Uri`. The URI policy, nesting rules,
+  label styling and null-result error are unchanged.
 
 - **Picker helpers moved to `Microsoft.Windows.Storage.Pickers` and renamed as non-hooks**
   (issue #1374, spec 054 §8.3). Breaking: `UseFilePickerAsync` / `UseMultipleFilesPickerAsync`
