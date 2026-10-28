@@ -131,6 +131,10 @@ public sealed partial class Reconciler
             if ((HasGestureOrDragSlots(modifiers) || HasGestureOrDragSlots(oldModifiers))
                 && control is FrameworkElement gestFeSE)
                 RefreshGestureDragStateOnSkip(gestFeSE, oldModifiers, modifiers);
+            // A virtualized host's own skipped element re-snapshots here at its own depth
+            // (no-op for every other control or a decorator sharing it, and
+            // allocation-free when nothing changed).
+            RefreshContextCaptureOnSkip(control, newEl, effectiveTheme);
             // No validation refresh here, deliberately (issue #1262). A `.Validate()`
             // verdict is republished only by a component that re-rendered, and that
             // component's output is on the dirty ancestor path, which this arm declines
@@ -178,6 +182,21 @@ public sealed partial class Reconciler
             _contextScope.Push(ctxValues);
             ctxCount = ctxValues.Count;
         }
+        bool providerChanged = !Element.ContextValuesEqual(oldEl.ContextValues, ctxValues);
+        if (providerChanged)
+            EnterProviderChange();
+        bool themeChanged = (oldModifiers?.RequestedTheme ?? ElementTheme.Default)
+            != (modifiers?.RequestedTheme ?? ElementTheme.Default);
+        if (themeChanged)
+            EnterThemeChange();
+
+        // Virtualized hosts realize rows outside this traversal; keep their provider
+        // snapshot current (no-op for every other control, and for a decorator that
+        // shares the host's control — the host element's own Update refreshes it).
+        RefreshContextCapture(control, newEl, effectiveTheme);
+
+        var prevReconcilingElement = _reconcilingElement;
+        _reconcilingElement = newEl;
 
         UIElement? result;
         bool registeredType = false;
@@ -378,6 +397,11 @@ public sealed partial class Reconciler
         }
         finally
         {
+            _reconcilingElement = prevReconcilingElement;
+            if (themeChanged)
+                ExitThemeChange();
+            if (providerChanged)
+                ExitProviderChange();
             if (ctxCount > 0)
                 _contextScope.Pop(ctxCount);
             _ambientRequestedTheme = prevAmbientTheme;

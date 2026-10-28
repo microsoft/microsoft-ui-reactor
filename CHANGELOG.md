@@ -391,6 +391,36 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Virtualized list rows now see their ancestors' `Context`** (issue #1386). Rows of
+  `LazyVStack` / `LazyHStack`, `ItemsRepeater<T>`, `ItemsView<T>`, `ListView` / `GridView`
+  (typed and untyped) and `TreeView<T>` are built by WinUI during layout, after the
+  reconciler has finished walking the tree, so `UseContext` in a row returned the
+  context's default value, and hooks built on it misbehaved: child-mode
+  `UseNavigation<T>()` threw "found no ancestor NavigationHost", `UseIntl()` ignored a
+  `LocaleProvider`, and `UseResource` ignored an enclosing `Pending`. A re-render of the
+  parent temporarily fixed the visible rows, but rows that scrolled in afterwards were
+  wrong again. Each list now saves its ancestors' provided values when it is reconciled
+  and restores them while building a row, so rows see the nearest `.Provide(...)` on first
+  display and while scrolling. Rows that previously read a default will now read the
+  provided value. Lists built by a custom handler on `ElementFactory<T>` are covered too;
+  a custom handler that builds rows itself from `ContainerContentChanging` is not.
+  Removing the only `.Provide(...)` above a reference-stable consumer now also re-renders
+  that consumer with the default, which it previously missed.
+- **Building a list row in the middle of another update no longer corrupts that update**
+  (issue #1386). WinUI can ask a virtualized list for rows synchronously while Reactor is
+  still applying an unrelated update, for example when an effect or a control's own
+  property setter calls `UpdateLayout()`. Such rows used to join that update's
+  bookkeeping:
+  - If the update was mounting an `ErrorBoundary` whose child then failed, the boundary's
+    rollback tore down those rows too: they stayed on screen with their effects cleaned
+    up, so they stopped updating.
+  - A row that threw was reported to that unrelated boundary, which then showed its
+    fallback.
+
+  Row building now sets the surrounding update's state aside and restores the list's own
+  context and theme, so a failing row shows its own error and a failing boundary only
+  rolls back its own subtree. (Window hooks in such rows are covered by the
+  window-owner fix below.)
 - **Wrapped third-party controls now get source-map call sites** (spec 010). A factory
   emitted by `[GenerateReactorWrapper]` (`SettingsCard(...)`, `RadialGauge(...)`) is
   invisible to the source-map generator, because no source generator sees another's
@@ -542,7 +572,6 @@ Conventions for contributors:
   for close as issue #537 requires. Embedded content that needs its window can pass it explicitly
   (`UseWindowSize(window)`, `UseBreakpoint(window, minWidth)`) or read
   `XamlRoot.RasterizationScale` for DPI.
-
 - **Replacing a host's root no longer leaves the old root running** (issue #1326).
   `ReactorHost.Mount(...)` and `ReactorHostControl.Mount(...)` now retire the
   outgoing root before installing the new one: its effect cleanups run, and a
