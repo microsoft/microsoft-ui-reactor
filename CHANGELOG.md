@@ -410,6 +410,14 @@ Conventions for contributors:
   context and theme, so a failing row shows its own error and a failing boundary only
   rolls back its own subtree. (Window hooks in such rows are covered by the
   window-owner fix below.)
+- **Opening a `Flyout` from state no longer replaces the window with a render error**
+  (issue #1419). `Flyout(Button(...), ...) with { IsOpen = open }` opened through
+  `FlyoutBase.ShowAttachedFlyout`, but a Button/SplitButton target holds its flyout in the
+  control's own `Flyout` property, so WinUI threw `ArgumentException` ("ShowAttached was
+  called on an element without an attached FlyoutBase") on mount with `IsOpen = true` and on
+  every `false` → `true` edge. It now opens through the installed flyout's `ShowAt` (deferred
+  to the target's `Loaded` at mount), the path `CommandBarFlyout` already used, so both slots
+  work. `IsOpen` stays a one-shot open trigger; the user dismisses the flyout.
 
 - **Unpackaged Jump Lists now use source-generated COM interop under Native AOT.**
   Shell link activation, property stores and removal queries no longer depend on

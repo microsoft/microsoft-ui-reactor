@@ -5791,6 +5791,14 @@ public record FlyoutElement(
     Element FlyoutContent
 ) : Element
 {
+    /// <summary>
+    /// Opens the flyout declaratively. A one-shot trigger: the flyout is shown on mount when
+    /// already <c>true</c>, and on the <c>false</c> → <c>true</c> edge of an update, against any
+    /// target (a Button/SplitButton target holds the flyout in its own <c>Flyout</c> slot, any
+    /// other target as <c>FlyoutBase.AttachedFlyout</c>). Setting it back to <c>false</c> does not
+    /// close the flyout — the user dismisses it. Reset your state from <see cref="OnClosed"/> so
+    /// the next <c>true</c> is a fresh edge.
+    /// </summary>
     public bool IsOpen { get; init; }
     /// <summary>
     /// Preferred position of the flyout relative to its target. Defaults to

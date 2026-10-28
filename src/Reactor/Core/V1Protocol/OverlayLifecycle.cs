@@ -342,10 +342,10 @@ internal static class OverlayLifecycle
                 flyout.Closed += (_, _) => (Reconciler.GetElementTag(targetFe) as FlyoutElement)?.OnClosed?.Invoke();
             // SetFlyoutOnControl wires .Flyout on Button/SplitButton targets so
             // clicking opens the flyout natively; non-button targets fall back
-            // to SetAttachedFlyout metadata (opened only via ShowAttachedFlyout).
+            // to SetAttachedFlyout metadata (opened only by an explicit show).
             reconciler.SetFlyoutOnControl(targetFe, flyout);
             Reconciler.ApplySetters(flyEl.Setters, flyout);
-            if (flyEl.IsOpen) WinPrim.FlyoutBase.ShowAttachedFlyout(targetFe);
+            if (flyEl.IsOpen) ShowFlyoutWhenReady(targetFe, flyout, IsFlyoutStillRequestingOpen);
         }
         return target;
     }
@@ -418,7 +418,13 @@ internal static class OverlayLifecycle
                 reconciler.SetFlyoutOnControl(targetFe, newFlyout);
                 Reconciler.ApplySetters(n.Setters, newFlyout);
             }
-            if (n.IsOpen && !o.IsOpen) WinPrim.FlyoutBase.ShowAttachedFlyout(targetFe);
+            // Open through the installed flyout itself (ShowAt), never ShowAttachedFlyout:
+            // a Button/SplitButton target holds its flyout in the control's own Flyout
+            // slot, and ShowAttachedFlyout on such a target throws ArgumentException
+            // ("ShowAttached was called on an element without an attached FlyoutBase"),
+            // which tore the whole tree down into a render-error screen.
+            if (n.IsOpen && !o.IsOpen && Reconciler.GetFlyoutOnControl(targetFe) is { } installed)
+                ShowFlyoutWhenReady(targetFe, installed, IsFlyoutStillRequestingOpen);
         }
         return updated == targetControl ? null : updated;
     }
@@ -642,7 +648,7 @@ internal static class OverlayLifecycle
             // ShowAttachedFlyout call, which nothing here makes.
             reconciler.SetFlyoutOnControl(targetFe, flyout);
             Reconciler.ApplySetters(cbf.Setters, flyout);
-            if (cbf.IsOpen) ShowFlyoutWhenReady(targetFe, flyout);
+            if (cbf.IsOpen) ShowFlyoutWhenReady(targetFe, flyout, IsStillRequestingOpen);
         }
         return target;
     }
@@ -701,7 +707,7 @@ internal static class OverlayLifecycle
                 }
                 Reconciler.ApplySetters(n.Setters, existing);
             }
-            if (n.IsOpen && !o.IsOpen) ShowFlyoutWhenReady(targetFe, existing);
+            if (n.IsOpen && !o.IsOpen) ShowFlyoutWhenReady(targetFe, existing, IsStillRequestingOpen);
         }
         return updated == targetControl ? null : updated;
     }
@@ -715,15 +721,22 @@ internal static class OverlayLifecycle
     internal static bool IsStillRequestingOpen(Element? tag) => tag is CommandBarFlyoutElement { IsOpen: true };
 
     /// <summary>
+    /// <see cref="IsStillRequestingOpen"/> for <see cref="FlyoutElement"/>: whether the
+    /// target's current element is still a <see cref="FlyoutElement"/> asking to be open.
+    /// </summary>
+    internal static bool IsFlyoutStillRequestingOpen(Element? tag) => tag is FlyoutElement { IsOpen: true };
+
+    /// <summary>
     /// Opens <paramref name="flyout"/> against <paramref name="target"/>, deferring to the
     /// target's first <c>Loaded</c> when it isn't in a live tree yet (at mount time it has no
     /// XamlRoot and <c>ShowAt</c> would throw).
     ///
     /// Deliberately not <c>FlyoutBase.ShowAttachedFlyout</c>: that reads the AttachedFlyout
     /// property, and a Button/SplitButton target holds its flyout in the control's own
-    /// <c>Flyout</c> slot, so the attached lookup would find nothing and silently no-op.
+    /// <c>Flyout</c> slot, so the attached lookup finds nothing — and WinUI throws
+    /// <see cref="ArgumentException"/> rather than no-op'ing.
     /// </summary>
-    private static void ShowFlyoutWhenReady(FrameworkElement target, WinPrim.FlyoutBase flyout)
+    private static void ShowFlyoutWhenReady(FrameworkElement target, WinPrim.FlyoutBase flyout, Func<Element?, bool> stillRequestingOpen)
     {
         if (target.IsLoaded)
         {
@@ -738,7 +751,7 @@ internal static class OverlayLifecycle
             // target AND the target's current element still asks to be open — otherwise a
             // re-render that cleared IsOpen (or a recycled control) would pop a stale flyout.
             if (ReferenceEquals(Reconciler.GetFlyoutOnControl(target), flyout)
-                && IsStillRequestingOpen(Reconciler.GetElementTag(target)))
+                && stillRequestingOpen(Reconciler.GetElementTag(target)))
             {
                 flyout.ShowAt(target);
             }
