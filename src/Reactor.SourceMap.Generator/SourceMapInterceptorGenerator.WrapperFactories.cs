@@ -1247,6 +1247,13 @@ public sealed partial class SourceMapInterceptorGenerator
                     case MemberAccessExpressionSyntax member
                         when !atRoot && member.Expression == child && member.Parent is InvocationExpressionSyntax modifier && modifier.Expression == member:
                         _accounted.Add(modifier);
+                        // `Gauge().Identity<object>()`: an explicit type argument decides the
+                        // result type, so the call no longer simply passes its receiver on.
+                        if (member.Name is GenericNameSyntax)
+                        {
+                            Unreliable = true;
+                            return;
+                        }
                         switch (NestedCall(modifier, receiverPath: true, record))
                         {
                             case NestedResult.Deterministic:

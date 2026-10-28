@@ -422,6 +422,17 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         Assert.Null(shown.CallSite);
     }
 
+    [Fact]
+    public void ModifierWithAnExplicitTypeArgument_KeepsItsWiderType()
+    {
+        // Identity<object>() makes `boxed` an object in both compilations, so Present(object)
+        // runs; following the receiver's type instead would bind Present(Element).
+        var boxed = FakeGauge().Identity<object>();
+        var shown = Present(boxed);
+
+        Assert.Equal(WinUI.Orientation.Vertical, ((StackElement)shown).Orientation);
+    }
+
     [ReactorSourceTransparent]
     internal static Element PresentMaybe(object? value) => VStack();
 
@@ -746,6 +757,12 @@ public sealed class Duo
     public static implicit operator Element(Duo duo) => Microsoft.UI.Reactor.Factories.TextBlock("single");
 
     public static implicit operator Element[](Duo duo) => [];
+}
+
+/// <summary>A modifier-shaped extension, <c>T M&lt;T&gt;(this T)</c>.</summary>
+public static class IdentityExtensions
+{
+    public static T Identity<T>(this T value) => value;
 }
 
 /// <summary>A generic type with a nested type, which carries the outer type's arguments.</summary>
