@@ -174,6 +174,8 @@ internal sealed class MarkdownBuilder
     // Image tracking.
     private bool _insideImage;
     private StringBuilder? _imageAlt;
+    // Normalized alt text (entities decoded, breaks as spaces) for MarkdownLink.Text.
+    private StringBuilder? _imageAltPlain;
     private Uri? _imageSrc;
 
     // Table state.
@@ -779,6 +781,8 @@ internal sealed class MarkdownBuilder
                 if (HasCustomLink && ++_customImageDepth > 1) break;
                 _insideImage = true;
                 _imageAlt = new StringBuilder();
+                if (_linkUri is not null && _options.LinkRenderer is not null)
+                    _imageAltPlain = new StringBuilder();
                 if (detail is MarkdownSpanImgDetail img && img.Src.Text is not null)
                 {
                     Uri.TryCreate(img.Src.Text, UriKind.RelativeOrAbsolute, out var imgUri);
@@ -842,34 +846,33 @@ internal sealed class MarkdownBuilder
             return;
         }
 
+        var labelInlines = _inlines.GetRange(_linkInlineStart, _inlines.Count - _linkInlineStart).ToArray();
         if (_options.LinkRenderer is { } renderLink)
         {
-            var labelInlines = _inlines.GetRange(_linkInlineStart, _inlines.Count - _linkInlineStart).ToArray();
-            var link = new MarkdownLink(
-                LinkPlainText(labelInlines),
-                labelInlines.Length == 0 ? null : MakeLinkLabel(labelInlines),
-                _linkUri);
-            var element = renderLink(link)
-                ?? throw new InvalidOperationException("MarkdownOptions.LinkRenderer must return a non-null Element.");
-            ReplaceLinkInlines(element);
+            var link = new MarkdownLink
+            {
+                Text = LinkPlainText(labelInlines),
+                Label = labelInlines.Length == 0 ? null : MakeLinkLabel(labelInlines),
+                Uri = _linkUri,
+            };
+            ReplaceLinkInlines(renderLink(link)
+                ?? throw new InvalidOperationException("MarkdownOptions.LinkRenderer must return a non-null Element."));
             return;
         }
 
         if (_options.LinkBuilder is { } buildLink)
         {
-            var labelInlines = _inlines.GetRange(_linkInlineStart, _inlines.Count - _linkInlineStart).ToArray();
             Element[] label = labelInlines.Length == 0 ? [] : [MakeLinkLabel(labelInlines)];
-            var element = buildLink(label, _linkUri)
-                ?? throw new InvalidOperationException("MarkdownOptions.LinkBuilder must return a non-null Element.");
-            ReplaceLinkInlines(element);
+            ReplaceLinkInlines(buildLink(label, _linkUri)
+                ?? throw new InvalidOperationException("MarkdownOptions.LinkBuilder must return a non-null Element."));
             return;
         }
 
         // Flatten all inlines accumulated since the link opened into plain text.
         var sb = new StringBuilder();
-        for (int i = _linkInlineStart; i < _inlines.Count; i++)
+        foreach (var inline in labelInlines)
         {
-            if (_inlines[i] is RichTextRun run)
+            if (inline is RichTextRun run)
                 sb.Append(run.Text);
         }
 
@@ -934,6 +937,8 @@ internal sealed class MarkdownBuilder
         _insideImage = false;
         string alt = _imageAlt?.ToString() ?? "";
         _imageAlt = null;
+        string plainAlt = _imageAltPlain?.ToString() ?? alt;
+        _imageAltPlain = null;
 
         if (_imageSrc is not null)
         {
@@ -946,7 +951,7 @@ internal sealed class MarkdownBuilder
             if (_linkUri is not null && HasCustomLink)
             {
                 if (_options.LinkRenderer is not null)
-                    (_linkImageAlt ??= new())[_inlines.Count] = alt;
+                    (_linkImageAlt ??= new())[_inlines.Count] = plainAlt;
                 _inlines.Add(new RichTextInlineUIContainer { Child = img });
             }
             else if (_blockStack.Count > 0)
@@ -977,6 +982,25 @@ internal sealed class MarkdownBuilder
         if (_insideImage)
         {
             _imageAlt?.Append(text);
+            if (_imageAltPlain is not null)
+            {
+                switch (type)
+                {
+                    case MarkdownTextType.SoftBr:
+                    case MarkdownTextType.Br:
+                        _imageAltPlain.Append(' ');
+                        break;
+                    case MarkdownTextType.Entity:
+                        _imageAltPlain.Append(DecodeEntity(text.ToString()));
+                        break;
+                    case MarkdownTextType.NullChar:
+                        _imageAltPlain.Append('\uFFFD');
+                        break;
+                    default:
+                        _imageAltPlain.Append(text);
+                        break;
+                }
+            }
             return 0;
         }
 
@@ -1025,22 +1049,17 @@ internal sealed class MarkdownBuilder
         });
     }
 
-    private void AddEntityText(string entityStr)
+    private void AddEntityText(string entityStr) => AddInlineRun(DecodeEntity(entityStr));
+
+    private static string DecodeEntity(string entityStr)
     {
         var entity = Md4cEntity.EntityLookup(entityStr);
-        if (entity is not null)
-        {
-            var sb = new StringBuilder();
-            sb.Append(char.ConvertFromUtf32((int)entity.Value.Codepoint0));
-            if (entity.Value.Codepoint1 != 0)
-                sb.Append(char.ConvertFromUtf32((int)entity.Value.Codepoint1));
-            AddInlineRun(sb.ToString());
-        }
-        else
-        {
-            // Unknown entity — pass through verbatim.
-            AddInlineRun(entityStr);
-        }
+        if (entity is null)
+            return entityStr; // Unknown entity — pass through verbatim.
+        var decoded = char.ConvertFromUtf32((int)entity.Value.Codepoint0);
+        return entity.Value.Codepoint1 != 0
+            ? decoded + char.ConvertFromUtf32((int)entity.Value.Codepoint1)
+            : decoded;
     }
 
     private static RichTextBlockElement MakeRichText(RichTextInline[] inlines, double? fontSize = null)

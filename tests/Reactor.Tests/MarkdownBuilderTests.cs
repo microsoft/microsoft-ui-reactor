@@ -980,10 +980,11 @@ public class MarkdownBuilderTests
     }
 
     [Fact]
-    public void LinkRenderer_ImageAltDoesNotLeakIntoNextLinkText()
+    public void LinkRenderer_ImageAltText_UsesTheImagePositionWhenTheLinkIsNotFirstInline()
     {
         var texts = new List<string>();
-        Md("[![alt](https://example.com/i.png)](https://one.example) [two](https://two.example)", new MarkdownOptions
+        Md("Click [see ![logo](https://example.com/l.png) now](https://one.example) or "
+            + "[![second](https://example.com/s.png)](https://two.example)", new MarkdownOptions
         {
             Image = (alt, _) => TextBlock(alt),
             LinkRenderer = link =>
@@ -993,7 +994,55 @@ public class MarkdownBuilderTests
             },
         });
 
-        Assert.Equal(["alt", "two"], texts);
+        Assert.Equal(["see logo now", "second"], texts);
+    }
+
+    [Fact]
+    public void LinkRenderer_ImageAltText_DecodesEntitiesAndBreaksLikeRunText()
+    {
+        string? imageAlt = null;
+        MarkdownLink? captured = null;
+        Md("[![Tom &amp; Jerry\nshow](https://example.com/i.png)](https://example.com)", new MarkdownOptions
+        {
+            Image = (alt, _) =>
+            {
+                imageAlt = alt;
+                return TextBlock(alt);
+            },
+            LinkRenderer = link =>
+            {
+                captured = link;
+                return TextBlock(link.Text);
+            },
+        });
+
+        Assert.NotNull(captured);
+        Assert.Equal("Tom & Jerry show", captured.Text);
+        // The Image callback keeps receiving the unchanged alt text.
+        Assert.Equal("Tom &amp; Jerry\nshow", imageAlt);
+    }
+
+    [Theory]
+    [InlineData("[see ![Docs](javascript:alert(1)) now](https://example.com)", "see  now", true)]
+    [InlineData("[![Docs](javascript:alert(1))](https://example.com)", "", false)]
+    public void LinkRenderer_RejectedImageSource_ContributesNeitherLabelNorText(string markdown, string expectedText, bool hasLabel)
+    {
+        MarkdownLink? captured = null;
+        Md(markdown, new MarkdownOptions
+        {
+            Image = (alt, _) => TextBlock(alt),
+            LinkRenderer = link =>
+            {
+                captured = link;
+                return TextBlock("custom link");
+            },
+        });
+
+        Assert.NotNull(captured);
+        Assert.Equal(expectedText, captured.Text);
+        Assert.Equal(hasLabel, captured.Label is not null);
+        if (captured.Label is { } label)
+            Assert.DoesNotContain(FirstParagraph(label).Inlines, inline => inline is RichTextInlineUIContainer);
     }
 
     [Fact]

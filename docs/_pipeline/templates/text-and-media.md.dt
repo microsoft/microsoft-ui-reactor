@@ -252,9 +252,12 @@ links, under the same URI policy and nesting rules, with a `MarkdownLink`
 that carries three things: `Text`, the label as plain text (image alt text in
 place of images, line breaks as spaces); `Label`, the same formatted
 `RichTextBlockElement` that `LinkBuilder` receives, or `null` for an empty
-label; and `Uri`, the validated target. `Text` is what you want for an
-accessible name, tooltip, or confirmation prompt, so you don't have to walk the
-label's inlines. The same null-result and styling rules apply. When both
+label; and `Uri`, the validated target. Use `Text` for an accessible name or
+tooltip, so you don't have to walk the label's inlines. Don't use it to tell
+the user where a link goes: the document author writes the label, and
+`[https://bank.example](https://other.example)` is a valid link. A confirmation
+prompt must show `Uri`, as the example below does. The same null-result and
+styling rules apply. When both
 callbacks are set, `LinkRenderer` wins and `LinkBuilder` is not called.
 
 ```csharp snippet="text-and-media/markdown-link-renderer"
