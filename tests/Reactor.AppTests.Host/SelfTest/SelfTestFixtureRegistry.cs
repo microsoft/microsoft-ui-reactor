@@ -777,6 +777,7 @@ internal static class SelfTestFixtureRegistry
         "InterState_ConfigImmutability",
         "InterState_NoLayoutProperties",
         "InterState_MountIntegration",
+        "InterState_HoverOutKeepsLayoutOffset",
         // Animation system — Transitions
         "Transition_TypeHierarchy",
         "Transition_Asymmetric",
@@ -807,6 +808,7 @@ internal static class SelfTestFixtureRegistry
         "AnimCombo_FadeEnter",
         "AnimCombo_InteractionSetup",
         "AnimCombo_KeyframesOnMount",
+        "AnimCombo_KeyframesTranslationChannel",
         "AnimCombo_StaggerOnContainer",
         // Animation combination tests — pairs
         "AnimCombo_AnimatePlusLayout",
@@ -2919,6 +2921,7 @@ internal static class SelfTestFixtureRegistry
         "InterState_ConfigImmutability" => new InteractionStatesTests.ConfigImmutability(harness),
         "InterState_NoLayoutProperties" => new InteractionStatesTests.NoLayoutProperties(harness),
         "InterState_MountIntegration" => new InteractionStatesTests.MountIntegration(harness),
+        "InterState_HoverOutKeepsLayoutOffset" => new InteractionStatesTests.HoverOutKeepsLayoutOffset(harness),
         // Animation system — Transitions
         "Transition_TypeHierarchy" => new TransitionTests.TypeHierarchy(harness),
         "Transition_Asymmetric" => new TransitionTests.AsymmetricTransition(harness),
@@ -2949,6 +2952,7 @@ internal static class SelfTestFixtureRegistry
         "AnimCombo_FadeEnter" => new AnimationCombinationTests.TransitionFadeEnter(harness),
         "AnimCombo_InteractionSetup" => new AnimationCombinationTests.InteractionStatesSetup(harness),
         "AnimCombo_KeyframesOnMount" => new AnimationCombinationTests.KeyframesOnMount(harness),
+        "AnimCombo_KeyframesTranslationChannel" => new AnimationCombinationTests.KeyframesTranslationChannel(harness),
         "AnimCombo_StaggerOnContainer" => new AnimationCombinationTests.StaggerOnContainer(harness),
         // Animation combination tests — pairs
         "AnimCombo_AnimatePlusLayout" => new AnimationCombinationTests.AnimatePlusLayout(harness),

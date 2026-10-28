@@ -5078,6 +5078,13 @@ public sealed partial class Reconciler : IDisposable
     // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
     internal static int InteractionTrackerCountForTests => _interactionTrackers.Count;
 
+    // Test-only: drives a hover-in / hover-out transition without synthesizing pointer input.
+    internal static void SimulatePointerOverForTests(UIElement uie, bool isOver)
+    {
+        if (_interactionTrackers.TryGetValue(uie, out var tracker))
+            TransitionToState(uie, tracker, isOver ? InteractionState.PointerOver : InteractionState.Normal);
+    }
+
     private sealed class InteractionStateTracker
     {
         public InteractionState CurrentState;
@@ -5234,9 +5241,12 @@ public sealed partial class Reconciler : IDisposable
 
         if (values?.Translation.HasValue == true || newState == InteractionState.Normal)
         {
+            // Animate Translation, not Offset: on a XAML element's handoff visual, Offset is the
+            // layout position, so animating it to zero pulls the element to its parent's origin.
+            ElementCompositionPreview.SetIsTranslationEnabled(uie, true);
             var targetTranslation = values?.Translation ?? Vector3.Zero;
             var translationAnim = AnimationHelper.CreateVector3TargetAnimation(compositor, targetTranslation, curve);
-            visual.StartAnimation("Offset", translationAnim);
+            visual.StartAnimation("Translation", translationAnim);
         }
 
         if (values?.Rotation.HasValue == true || newState == InteractionState.Normal)
@@ -5414,7 +5424,9 @@ public sealed partial class Reconciler : IDisposable
             {
                 var anim = compositor.CreateVector3KeyFrameAnimation();
                 anim.Duration = def.Duration;
-                anim.Target = "Offset";
+                // Translation, not Offset: Offset is the layout position on a XAML handoff visual (#1432)
+                ElementCompositionPreview.SetIsTranslationEnabled(uie, true);
+                anim.Target = "Translation";
                 if (def.Loop) anim.IterationBehavior = AnimationIterationBehavior.Forever;
                 foreach (var kf in def.Keyframes)
                 {
@@ -5471,7 +5483,7 @@ public sealed partial class Reconciler : IDisposable
             var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(uie);
             visual.StopAnimation("Opacity");
             visual.StopAnimation("Scale");
-            visual.StopAnimation("Offset");
+            visual.StopAnimation("Translation");
             visual.StopAnimation("RotationAngle");
         }
         catch { /* No compositor (e.g. unit tests) */ }
