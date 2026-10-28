@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -166,9 +166,8 @@ public sealed partial class WrapperGenerator
     private static bool TypeIsSettled(SemanticModel model, ExpressionSyntax argument, CancellationToken ct)
     {
         var compilation = model.Compilation;
-        foreach (var node in argument.DescendantNodesAndSelf())
+        foreach (var expression in argument.DescendantNodesAndSelf().OfType<ExpressionSyntax>())
         {
-            if (node is not ExpressionSyntax expression) continue;
             var info = model.GetTypeInfo(expression, ct);
             if (info.Type is IErrorTypeSymbol && expression is not OmittedArraySizeExpressionSyntax) return false;
             if (info.Type is { } type && WrapperFactoryCalls.MentionsIncompleteWrapper(type, compilation)) return false;
