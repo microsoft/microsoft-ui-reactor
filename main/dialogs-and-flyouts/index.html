@@ -1486,6 +1486,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#dialog-theme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dialog theme
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#three-button-dialogs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3469,6 +3480,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#dialog-theme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dialog theme
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#three-button-dialogs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3870,6 +3892,16 @@ reconciles the dialog the same way it reconciles the rest of the tree:</p>
   silent: <code>OnClosed</code> reports dismissals, not the owner going away, so a
   handler that writes back into already-unmounted state never runs.</li>
 </ul>
+<h3 id="dialog-theme">Dialog theme<a class="headerlink" href="#dialog-theme" title="Permanent link">&para;</a></h3>
+<p>A dialog follows the effective theme (<code>ActualTheme</code>) at its declaration's
+position, including a local ancestor override, even though WinUI displays the
+dialog outside that subtree. Changes to the owner's effective theme also update
+an already-open dialog; closing or unmounting detaches the listener.</p>
+<p>Use the existing <code>.RequestedTheme(ElementTheme.Dark)</code> modifier to override the
+real dialog's theme explicitly. Changing that declaration updates the open dialog
+in place; removing it or explicitly requesting <code>ElementTheme.Default</code> resumes
+following the owner, consistent with theme inheritance elsewhere in Reactor.
+Native <code>.Set(dialog =&gt; ...)</code> callbacks run last and can override the theme.</p>
 <h3 id="three-button-dialogs">Three-button dialogs<a class="headerlink" href="#three-button-dialogs" title="Permanent link">&para;</a></h3>
 <p>The three-button shape (<code>Primary</code> + <code>Secondary</code> + <code>Close</code>) is the
 default for destructive confirmations. The convention from
