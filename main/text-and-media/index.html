@@ -3671,6 +3671,30 @@ content), links become inline
 hyperlinks, code spans become monospace <code>TextBlock</code>. No WebView, no HTML
 round-trip — the output composes with every other modifier on this page
 (<code>.Padding</code>, <code>.Width</code>, <code>.TextWrapping</code>).</p>
+<p><code>MarkdownOptions.LinkBuilder</code> overrides rendering for links whose absolute URI
+passes the Markdown URI policy (<code>http</code>, <code>https</code>, or <code>mailto</code>). It receives the
+validated URI and a label array containing one selectable <code>RichTextBlock</code>
+with its inline formatting, default heading/table-header typography, and images
+preserved (an empty array for an empty label). Return a non-null <code>Element</code> for a confirmation action, preview, or
+other custom link UI; exceptions propagate and a null result is an error.
+The returned element is embedded through <code>InlineUIContainer</code>, retaining its
+own styling, lifecycle, and accessibility properties. Like other embedded
+controls, it has its own text-selection boundary. Leave the callback unset
+for ordinary native inline hyperlinks and continuous surrounding prose
+selection; a custom horizontal stack is not equivalent to a text hyperlink.
+The callback owns custom styling and interaction. Configure an explicit
+accessible name on the returned control and verify its role, keyboard
+activation, and pointer behavior in your app. If the returned control is a
+button containing the supplied <code>RichTextBlockElement</code>, set that label's
+<code>IsTextSelectionEnabled</code> to <code>false</code> rather than asking it to select text.
+This configuration is not a guarantee of physical input behavior for every
+custom control.</p>
+<p>With <code>LinkBuilder</code> set, links inside image alternative text are plain alt
+text, not separate actions. Nested parser autolinks remain part of the outer
+link's label: only the outer target is considered for rendering. If that
+target is rejected by the URI policy, the entire label stays plain text;
+a safe-looking URL in the label does not become a separate link. These
+nesting rules describe the callback path, not changes to the default renderer.</p>
 <p>The trade-off vs. <a href="#webview2">WebView2</a> is fidelity: <code>Markdown</code> does not
 support arbitrary HTML, embedded <code>&lt;script&gt;</code>, or CSS. It supports paragraphs,
 headings (h1–h6), lists (bullet, ordered, nested), inline code, fenced code
