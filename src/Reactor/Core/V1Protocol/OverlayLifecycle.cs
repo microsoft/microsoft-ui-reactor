@@ -248,7 +248,10 @@ internal static class OverlayLifecycle
     /// True when <paramref name="control"/>'s tag only attributes it to its element: a side-mounted
     /// <c>ContentDialog</c> tagged for source attribution. The element's modifiers were applied to
     /// the collapsed placeholder, not to the dialog, so diagnostics must not read them as the
-    /// dialog's own.
+    /// dialog's own. The one exception is <c>RequestedTheme</c>, which
+    /// <see cref="ContentDialogThemeBinding"/> also forwards to the dialog; the dialog's theme may
+    /// instead come from its owner or a <c>.Set</c> callback, so it is deliberately not reported
+    /// as an applied property either.
     /// </summary>
     internal static bool IsAttributionOnlyTag(UIElement control, Element tag)
         => control is WinUI.ContentDialog && tag is ContentDialogElement;

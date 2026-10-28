@@ -418,6 +418,17 @@ Conventions for contributors:
   forces a resource refresh even through unchanged subtrees (including when a
   theme-event render runs before the host's Loaded event).
 
+- **A declarative `ContentDialog` follows the theme where it is declared** (issue #1388,
+  PR #1389). The dialog is side-mounted on the window's `XamlRoot`, so it rendered in the
+  window/app theme. It now follows the effective theme (`ActualTheme`) at its declaration
+  site, including local ancestor overrides and secondary windows, and updates while open.
+  `.RequestedTheme(...)` on the dialog is now forwarded to the visible dialog (it only
+  reached the hidden placeholder); an explicit `ElementTheme.Default` follows the owner, as
+  elsewhere in Reactor. `.Set(dialog => ...)` still runs last and wins, even when it writes
+  the theme the dialog would follow. Dialog content `ThemeRef` resources resolve against the
+  dialog's theme on first open. Apps relying on the old look can pin it with
+  `.RequestedTheme(...)` or `.Set(d => d.RequestedTheme = ...)`.
+
 - **Diagnostics an inspector relies on (winapp DevTools) are no longer missing or anonymous**
   (issue #1421, spec 044 / spec 010 / spec 042).
   - A commit-phase failure that replaces a window's content with the error screen now raises a
