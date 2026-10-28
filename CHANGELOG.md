@@ -28,6 +28,12 @@ Conventions for contributors:
 
 ### Added
 
+- `JumpList.GetRemovedArgumentsAsync()` reads user removals without updating the list.
+  `UpdateAsync` and `ClearAsync` now return the removals observed in their own transaction,
+  allowing apps to retain the feedback before Windows clears it. Await-only callers
+  remain source-compatible; existing binaries must be rebuilt for the changed return types
+  (spec 036 §11.3).
+
 - **ReactorGallery catches up with recent framework features.** A new **System →
   File pickers** page demonstrates `PickFileAsync`, `PickMultipleFilesAsync`
   (with labelled `FileTypeChoices`), `PickFolderAsync` / `PickMultipleFoldersAsync`
@@ -386,6 +392,12 @@ Conventions for contributors:
   source-map generator re-binds such containing calls as if each wrapper value were
   already an `Element`, so they keep their location and declared name — or leaves a call
   unstamped where that could change which overload the real compilation picks.
+
+- **Unpackaged Jump Lists now use source-generated COM interop under Native AOT.**
+  Shell link activation, property stores and removal queries no longer depend on
+  built-in COM marshalling. Worker calls use a balanced explicit COM apartment scope and
+  release transaction-owned interfaces deterministically. See the
+  [Jump list guide](docs/guide/windows.md#jump-list) (spec 036 §11.3).
 
 - **A conditional child no longer shifts its unkeyed siblings** (issue #1423). The
   container factories drop `null` / `Empty()` arguments and flatten `Group(...)`, so
