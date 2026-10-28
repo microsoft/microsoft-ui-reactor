@@ -1053,6 +1053,8 @@ internal sealed class MarkdownBuilder
 
     private static string DecodeEntity(string entityStr)
     {
+        if (entityStr.Length > 3 && entityStr[1] == '#')
+            return DecodeNumericReference(entityStr);
         var entity = Md4cEntity.EntityLookup(entityStr);
         if (entity is null)
             return entityStr; // Unknown entity — pass through verbatim.
@@ -1060,6 +1062,25 @@ internal sealed class MarkdownBuilder
         return entity.Value.Codepoint1 != 0
             ? decoded + char.ConvertFromUtf32((int)entity.Value.Codepoint1)
             : decoded;
+    }
+
+    // md4c reports "&#123;" / "&#x7B;" as entity text that the renderer decodes.
+    // Per CommonMark, 0, surrogates and out-of-range code points become U+FFFD.
+    private static string DecodeNumericReference(string reference)
+    {
+        bool hex = reference[2] is 'x' or 'X';
+        uint codepoint = 0;
+        for (int i = hex ? 3 : 2; i < reference.Length - 1; i++)
+        {
+            char c = reference[i];
+            uint digit = hex && !char.IsAsciiDigit(c) ? (uint)(char.ToLowerInvariant(c) - 'a' + 10) : (uint)(c - '0');
+            codepoint = (hex ? 16u : 10u) * codepoint + digit;
+            if (codepoint > 0x10FFFF)
+                break;
+        }
+        if (codepoint == 0 || codepoint > 0x10FFFF || codepoint is >= 0xD800 and <= 0xDFFF)
+            codepoint = 0xFFFD;
+        return char.ConvertFromUtf32((int)codepoint);
     }
 
     private static RichTextBlockElement MakeRichText(RichTextInline[] inlines, double? fontSize = null)

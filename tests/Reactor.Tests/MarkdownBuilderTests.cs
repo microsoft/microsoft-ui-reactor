@@ -997,6 +997,41 @@ public class MarkdownBuilderTests
         Assert.Equal(["see logo now", "second"], texts);
     }
 
+    [Theory]
+    [InlineData("&#65; &#x42; &#X63;", "A B c")]
+    [InlineData("&#128512;", "\U0001F600")]
+    [InlineData("&#0; &#xD800; &#1114112;", "\uFFFD \uFFFD \uFFFD")]
+    public void NumericCharacterReferences_AreDecodedInRenderedText(string markdown, string expected)
+    {
+        var block = Child<RichTextBlockElement>(AsVStack(Md(markdown)), 0);
+        Assert.Equal(expected, string.Concat(FirstParagraph(block).Inlines.OfType<RichTextRun>().Select(run => run.Text)));
+    }
+
+    [Fact]
+    public void LinkRenderer_NumericCharacterReferences_AreDecodedInLabelAndImageAltText()
+    {
+        string? imageAlt = null;
+        var texts = new List<string>();
+        Md("[&#65; &#x42;](https://one.example) [![&#67; &#x44;](https://example.com/i.png)](https://two.example)",
+            new MarkdownOptions
+            {
+                Image = (alt, _) =>
+                {
+                    imageAlt = alt;
+                    return TextBlock(alt);
+                },
+                LinkRenderer = link =>
+                {
+                    texts.Add(link.Text);
+                    return TextBlock(link.Text);
+                },
+            });
+
+        Assert.Equal(["A B", "C D"], texts);
+        // The Image callback keeps receiving the unchanged alt text.
+        Assert.Equal("&#67; &#x44;", imageAlt);
+    }
+
     [Fact]
     public void LinkRenderer_ImageAltText_DecodesEntitiesAndBreaksLikeRunText()
     {
