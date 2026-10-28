@@ -863,15 +863,6 @@ public sealed partial class Reconciler : IDisposable
                 componentWrapper = Diagnostics.ReactorSourcePublisher.IsComponentWrapper(value);
             }
 
-            // A menu or command item built from an item record holds no Reactor content beyond its
-            // own value (and, for a submenu, its items), so it is not probed further.
-            if (node is WinUI.MenuFlyoutSubItem subItem)
-            {
-                foreach (var item in subItem.Items) Push(item);
-                continue;
-            }
-            if (node is WinUI.MenuFlyoutItemBase or WinUI.ICommandBarElement) continue;
-
             // Overlay edges first: a decorator hangs its flyout on its target's control, which
             // can be a component wrapper (Flyout(Component<T>(), body)) or an embedded host
             // whose own content is not this root's, while the flyout body is the decorator
@@ -899,6 +890,9 @@ public sealed partial class Reconciler : IDisposable
                 PushCommandItems(attached);
                 switch (fe)
                 {
+                    case WinUI.MenuFlyoutSubItem subItem:
+                        foreach (var item in subItem.Items) Push(item);
+                        break;
                     case WinUI.MenuBarItem menuBarItem:
                         foreach (var item in menuBarItem.Items) Push(item);
                         break;

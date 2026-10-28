@@ -506,7 +506,11 @@ internal static class RemountView
         // Collapsed and never shown, so their templates are never applied: their items are in
         // no visual child walk.
         MenuBar(Menu("remount-hidden-bar", MenuItem("remount-hidden-bar-item"))).IsVisible(false),
-        CommandBar([AppBarButton("remount-hidden-primary")], [AppBarButton("remount-hidden-secondary")]).IsVisible(false));
+        CommandBar([AppBarButton("remount-hidden-primary")], [AppBarButton("remount-hidden-secondary")]).IsVisible(false),
+        // A native AppBarButton hosted as an element (not built from an item record), carrying a
+        // Reactor-owned tooltip: the walk must still reach its overlay content.
+        XamlHost(static () => new WinUI.AppBarButton { Label = "remount-hosted-command" }, typeKey: "remount-hosted-command")
+            .WithToolTip(TextBlock("remount-hosted-tip")));
 
     // Both roots render this, so swapping the root updates the kept content in place and
     // every call site, key and kind below is unchanged.
@@ -666,6 +670,18 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.Check(name, owned, RetainedItemSource(RetainedFlyoutCommand) ?? "<not found>");
     }
 
+    // The tooltip a .WithToolTip modifier hung on the hosted AppBarButton (or on its host wrapper).
+    private string? HostedCommandTipSource()
+    {
+        for (DependencyObject? d = H.FindControl<WinUI.AppBarButton>(b => b.Label == "remount-hosted-command"); d is not null;
+             d = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(d))
+        {
+            if (d is FrameworkElement fe && WinUI.ToolTipService.GetToolTip(fe) is WinUI.TextBlock tip)
+                return ReactorDiagnostics.GetSource(tip);
+        }
+        return null;
+    }
+
     // The labels of the retained CommandBarFlyout's commands, read from the controls themselves.
     private string RetainedFlyoutCommandLabels()
         => H.FindControl<WinUI.Button>(b => b.Content as string == "remount-commands-target")?.Flyout is WinUI.CommandBarFlyout commands
@@ -706,6 +722,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
                 "remount-flyout-body" => FlyoutBodySource(),
                 "remount-cflyout-body" => ComponentFlyoutBodySource(),
                 "remount-nflyout-inner" => NestedFlyoutInnerSource(),
+                "remount-hosted-tip" => HostedCommandTipSource(),
                 "remount-ctx-body" => H.FindControl<WinUI.Button>(b => b.Content as string == "remount-ctx-target")?.ContextFlyout
                     is WinUI.Flyout { Content: WinUI.TextBlock ctxBody } ? ReactorDiagnostics.GetSource(ctxBody) : null,
                 "remount-navslot-header" => H.FindControl<WinUI.NavigationView>(nv => nv.PaneHeader is WinUI.TextBlock { Text: "remount-navslot-header" })?.PaneHeader
@@ -761,6 +778,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             await Harness.Render();
             H.Check("ReactorSource_RootRemount_Host_FirstRoot", await Owned("remount-leaf", nameof(RemountRootA)));
             await CheckFlyoutCommandOwner("ReactorSource_RootRemount_Host_RetainedFlyoutCommandFirstRoot", nameof(RemountRootA));
+            H.Check("ReactorSource_RootRemount_Host_HostedCommandToolTipFirstRoot", await Owned("remount-hosted-tip", nameof(RemountRootA)), HostedCommandTipSource() ?? "<not found>");
             foreach (var item in RetainedMenuItems)
                 H.Check($"ReactorSource_RootRemount_Host_RetainedMenuItemFirstRoot_{item}", await Owned("remount-item:" + item, nameof(RemountRootA)),
                     RetainedItemSource(item) ?? "<not found>");
@@ -779,6 +797,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
                 H.Check($"ReactorSource_RootRemount_Host_RetainedMenuItemRenamed_{item}", await Owned("remount-item:" + item, nameof(RemountRootB)),
                     RetainedItemSource(item) ?? "<not found>");
             await CheckFlyoutCommandOwner("ReactorSource_RootRemount_Host_RetainedFlyoutCommandRenamed", nameof(RemountRootB));
+            H.Check("ReactorSource_RootRemount_Host_HostedCommandToolTipRenamed", await Owned("remount-hosted-tip", nameof(RemountRootB)), HostedCommandTipSource() ?? "<not found>");
             H.Check("ReactorSource_RootRemount_Host_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             host.Dispose();
             H.SetContent(null);
@@ -836,6 +855,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             // A standalone ReactorHostControl is not ReactorApp.ActiveHost: poll its loop.
             H.Check("ReactorSource_RootRemount_HostControl_FirstRoot", await Owned("remount-leaf", nameof(RemountRootA)));
             await CheckFlyoutCommandOwner("ReactorSource_RootRemount_HostControl_RetainedFlyoutCommandFirstRoot", nameof(RemountRootA));
+            H.Check("ReactorSource_RootRemount_HostControl_HostedCommandToolTipFirstRoot", await Owned("remount-hosted-tip", nameof(RemountRootA)), HostedCommandTipSource() ?? "<not found>");
             foreach (var item in RetainedMenuItems)
                 H.Check($"ReactorSource_RootRemount_HostControl_RetainedMenuItemFirstRoot_{item}", await Owned("remount-item:" + item, nameof(RemountRootA)),
                     RetainedItemSource(item) ?? "<not found>");
@@ -853,6 +873,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
                 H.Check($"ReactorSource_RootRemount_HostControl_RetainedMenuItemRenamed_{item}", await Owned("remount-item:" + item, nameof(RemountRootB)),
                     RetainedItemSource(item) ?? "<not found>");
             await CheckFlyoutCommandOwner("ReactorSource_RootRemount_HostControl_RetainedFlyoutCommandRenamed", nameof(RemountRootB));
+            H.Check("ReactorSource_RootRemount_HostControl_HostedCommandToolTipRenamed", await Owned("remount-hosted-tip", nameof(RemountRootB)), HostedCommandTipSource() ?? "<not found>");
             H.Check("ReactorSource_RootRemount_HostControl_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             hostControl.Dispose();
             H.SetContent(null);
