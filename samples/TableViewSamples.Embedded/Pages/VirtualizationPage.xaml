@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="TableViewSamples.Pages.VirtualizationPage"
+    NavigationCacheMode="Enabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:controls="using:TableViewSamples.Controls">
+
+    <controls:SamplePresenter
+        Header="Row + data virtualization"
+        Description="Bind tens of thousands of in-memory rows, or a million-row incremental source — only the visible viewport is realized, so memory and scroll responsiveness stay flat. Pick a source mode and dataset size below."
+        SourceCaption="VirtualizationPage.xaml.cs (excerpt)"
+        SourceSnippet="Virtualization.xaml.txt"
+        StretchExample="True">
+
+        <controls:SamplePresenter.Example>
+            <Grid RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <muxc:InfoBar
+                    Grid.Row="0"
+                    IsOpen="True"
+                    IsClosable="False"
+                    Severity="Informational"
+                    Title="Try it"
+                    Message="Switch the source mode to Incremental to load 1,000 rows on demand; click Load more for another page. Scroll fast — memory stays flat."
+                    MinHeight="104"/>
+
+                <!-- The virtualized TableView. Fixed height so the ScrollViewer
+                     produces a real viewport and ItemsRepeater realizes only what
+                     fits. -->
+                <Border Grid.Row="1" Style="{StaticResource TableHostBorderStyle}" Padding="0" VerticalAlignment="Stretch">
+                    <muxc:TableView
+                        x:Name="PeopleTable"
+                        SelectionMode="Single"
+                        VerticalAlignment="Stretch"
+                        MinHeight="320">
+                        <muxc:TableViewTextColumn Header="#"          Width="{StaticResource ColWidthId}"  Binding="{Binding Id}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="First name" Width="{StaticResource ColWidthShortName}" Binding="{Binding FirstName}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Last name"  Width="{StaticResource ColWidthShortName}" Binding="{Binding LastName}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Email"      Width="{StaticResource ColWidthEmail}" Binding="{Binding Email}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Department" Width="{StaticResource ColWidthDepartment}" Binding="{Binding Department}" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Role"       Width="{StaticResource ColWidthLongName}" Binding="{Binding Role}" CanUserSort="False" CanUserFilter="False"/>
+                    </muxc:TableView>
+                </Border>
+            </Grid>
+        </controls:SamplePresenter.Example>
+
+        <controls:SamplePresenter.Options>
+            <StackPanel Spacing="12">
+                <TextBlock Text="Source and viewport" Style="{StaticResource SectionHeaderTextStyle}"/>
+                <TextBlock
+                    Text="Pick a source mode and dataset size, then watch the realized-row count stay tiny relative to the data count. The 'Incremental (1M virtual)' mode streams rows from an ISupportIncrementalLoading source 1,000 at a time as you scroll; the in-memory mode materialises all rows up front."
+                    Style="{StaticResource SectionDescriptionTextStyle}"
+                    TextWrapping="Wrap"/>
+
+                <ComboBox
+                    x:Name="SourceModeSelector"
+                    AutomationProperties.AutomationId="SourceModeSelector"
+                    Header="Source mode"
+                    SelectedIndex="0"
+                    SelectionChanged="OnSourceModeChanged"
+                    HorizontalAlignment="Stretch">
+                    <ComboBoxItem Content="In-memory" Tag="InMemory"/>
+                    <ComboBoxItem Content="Incremental (1M virtual)" Tag="Incremental"/>
+                </ComboBox>
+                <ComboBox
+                    x:Name="SizeSelector"
+                    AutomationProperties.AutomationId="SizeSelector"
+                    Header="Row count (in-memory)"
+                    SelectedIndex="2"
+                    SelectionChanged="OnSizeChanged"
+                    HorizontalAlignment="Stretch">
+                    <ComboBoxItem Content="100"   Tag="100"/>
+                    <ComboBoxItem Content="1,000" Tag="1000"/>
+                    <ComboBoxItem Content="10,000" Tag="10000"/>
+                    <ComboBoxItem Content="50,000" Tag="50000"/>
+                </ComboBox>
+
+                <TextBlock Text="Scroll actions" Style="{StaticResource SectionHeaderTextStyle}" Margin="0,8,0,0"/>
+                <StackPanel Spacing="8">
+                    <Button x:Name="ScrollHomeButton" AutomationProperties.AutomationId="ScrollHomeButton" Content="Scroll Home" Click="OnScrollHomeClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                    <Button x:Name="ScrollMidButton" AutomationProperties.AutomationId="ScrollMidButton" Content="Scroll Middle" Click="OnScrollMidClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                    <Button x:Name="ScrollEndButton" AutomationProperties.AutomationId="ScrollEndButton" Content="Scroll End" Click="OnScrollEndClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                    <Button x:Name="LoadMoreButton" AutomationProperties.AutomationId="LoadMoreButton" Content="Load more" Click="OnLoadMoreClick" IsEnabled="False" ToolTipService.ToolTip="Force LoadMoreItemsAsync (incremental mode only)" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                    <Button x:Name="MeasureButton" AutomationProperties.AutomationId="MeasureButton" Content="Refresh realized count" Click="OnMeasureClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                </StackPanel>
+
+                <TextBlock Text="Status" Style="{StaticResource SectionHeaderTextStyle}" Margin="0,8,0,0"/>
+                <Grid ColumnSpacing="12" RowSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Source mode" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="SourceModeText" Text="In-memory" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="SourceModeText"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Total rows" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="TotalRowsText" Text="0" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="TotalRowsText"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Realized rows" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="RealizedRowsText" Text="0" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="RealizedRowsText"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Realized ratio" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="RealizedRatioText" Text="0%" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="RealizedRatioText"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Body offset" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="4" Grid.Column="1" x:Name="BodyOffsetText" Text="V=0  H=0" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="BodyOffsetText"/>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Incremental load stats" Style="{StaticResource StatusReadoutLabelStyle}" VerticalAlignment="Top"/>
+                    <TextBlock Grid.Row="5" Grid.Column="1" x:Name="LoadStatsText" Text="(in-memory mode)" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="LoadStatsText" TextWrapping="Wrap"/>
+                </Grid>
+
+                <muxc:InfoBar
+                    IsOpen="True"
+                    IsClosable="False"
+                    Severity="Informational"
+                    Title="What 'realized' means"
+                    Message="Realized rows are TableViewRow visual-tree elements; they count materialized memory. Off-screen rows are NOT realized — ItemsRepeater pools them and re-binds to a new data item when scrolled into view. In incremental mode an additional layer kicks in: rows that have not been LoadMoreItemsAsync-fetched yet don't even exist as data items, so 'Total rows' below is the loaded count, not the eventual 1,000,000. Click 'Refresh realized count' or 'Load more' (incremental only) to step the readout."/>
+            </StackPanel>
+        </controls:SamplePresenter.Options>
+
+    </controls:SamplePresenter>
+</Page>
