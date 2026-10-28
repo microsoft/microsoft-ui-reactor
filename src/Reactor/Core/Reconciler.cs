@@ -635,8 +635,33 @@ public sealed partial class Reconciler : IDisposable
         var key = ItemKeyOf(itemElement);
         if (key is null && !updated) return;
         if (!string.Equals(GetElementTag(fe)?.Key, key, StringComparison.Ordinal)
-            || (updated && !string.Equals(priorKey, key, StringComparison.Ordinal)))
+            || (updated && !string.Equals(priorKey, key, StringComparison.Ordinal))
+            || (PublishesItemIdentity && fe.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string published
+                && !Diagnostics.ReactorSourcePublisher.HasKey(published, key)))
             RefreshItemIdentityOnSkip(fe, itemElement);
+    }
+
+    private static bool PublishesItemIdentity
+        => global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled;
+
+    /// <summary>
+    /// Publishes <paramref name="element"/> with the item <paramref name="key"/>, unless the
+    /// control's value describes another element: a forwarding <c>RegisterType</c> row's child,
+    /// which in Native AOT tag-skip mode is untagged (so the outer element holds the tag) while
+    /// its value is still its own. That value is re-keyed in place, keeping the child's kind and
+    /// call site.
+    /// </summary>
+    private void PublishItemIdentity(FrameworkElement control, Element element, string? key)
+    {
+        if (control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string current
+            && ForwardsAnotherElement(control, element))
+        {
+            var rekeyed = Diagnostics.ReactorSourcePublisher.WithKey(current, key);
+            if (!string.Equals(rekeyed, current, StringComparison.Ordinal))
+                control.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, rekeyed);
+            return;
+        }
+        PublishSource(control, element);
     }
 
     /// <summary>
@@ -647,7 +672,7 @@ public sealed partial class Reconciler : IDisposable
     {
         var kind = InnermostOf(newEl);
         var key = ItemKeyOf(newEl);
-        bool publish = global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled;
+        bool publish = PublishesItemIdentity;
         // The control can realize an element other than the item's: a keyed Memo's factory
         // output, or the child a forwarding RegisterType callback handed back (whose tag
         // TypeRegistration.TagControl keeps). The control's trampolines and unmount read that
@@ -657,7 +682,7 @@ public sealed partial class Reconciler : IDisposable
         {
             if (!string.Equals(realized.Key, key, StringComparison.Ordinal))
                 state.Element = realized = realized with { Key = key };
-            if (publish) PublishSource(control, realized);
+            if (publish) PublishItemIdentity(control, realized, key);
             return;
         }
         // An untagged keyed Memo output has nothing to re-key, and its wrapper is never the tag.
@@ -666,7 +691,7 @@ public sealed partial class Reconciler : IDisposable
         // re-tagged with the item key.
         var target = string.Equals(kind.Key, key, StringComparison.Ordinal) ? kind : kind with { Key = key };
         SetElementTagIfNeeded(control, target);
-        if (publish) PublishSource(control, target);
+        if (publish) PublishItemIdentity(control, target, key);
     }
 
     /// <summary>
@@ -838,6 +863,15 @@ public sealed partial class Reconciler : IDisposable
                 componentWrapper = Diagnostics.ReactorSourcePublisher.IsComponentWrapper(value);
             }
 
+            // A menu or command item built from an item record holds no Reactor content beyond its
+            // own value (and, for a submenu, its items), so it is not probed further.
+            if (node is WinUI.MenuFlyoutSubItem subItem)
+            {
+                foreach (var item in subItem.Items) Push(item);
+                continue;
+            }
+            if (node is WinUI.MenuFlyoutItemBase or WinUI.ICommandBarElement) continue;
+
             // Overlay edges first: a decorator hangs its flyout on its target's control, which
             // can be a component wrapper (Flyout(Component<T>(), body)) or an embedded host
             // whose own content is not this root's, while the flyout body is the decorator
@@ -865,9 +899,6 @@ public sealed partial class Reconciler : IDisposable
                 PushCommandItems(attached);
                 switch (fe)
                 {
-                    case WinUI.MenuFlyoutSubItem subItem:
-                        foreach (var item in subItem.Items) Push(item);
-                        break;
                     case WinUI.MenuBarItem menuBarItem:
                         foreach (var item in menuBarItem.Items) Push(item);
                         break;
@@ -1488,14 +1519,6 @@ public sealed partial class Reconciler : IDisposable
         /// <c>Items</c> entries through it: an item whose view is Empty has no entry.
         /// </summary>
         public List<(Element Element, bool HasControl)>? MountedItemElements;
-
-        /// <summary>
-        /// For a menu or command-bar item control built from an item record (no element tag):
-        /// the record's exact call site, recorded in diagnostics mode when its <c>ReactorSource</c>
-        /// is published. <c>ReactorSourceMap.GetSource</c> prefers it to the published value,
-        /// whose shortened <c>at=</c> text two call sites can share.
-        /// </summary>
-        public SourceLocation? ItemCallSite;
 
         /// <summary>
         /// For an <c>ItemsHost</c> control: the collection entry each logical item realized

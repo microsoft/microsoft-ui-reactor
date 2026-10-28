@@ -152,7 +152,7 @@ public static partial class ReactorSourceMap
         if (!global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
             || !global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.IsEnabled)
             return null;
-        if (control is FrameworkElement fe && Reconciler.TryGetReactorState(fe, out var state) && state.ItemCallSite is { } itemSite)
+        if (global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics.GetItemSite(control) is { } itemSite)
             return itemSite;
         return global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorSourcePublisher.ResolvePublishedSource(control);
     }

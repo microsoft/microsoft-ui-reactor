@@ -261,6 +261,7 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
                 await CheckWrappedFlipPage(publishPass);
             }
             ReactorSourcePublisher.IsEnabled = publish;
+            if (publish) await CheckTagSkipForwardedRows();
 
             // A descriptor list on the typed TemplatedItems strategy: its warnings name the list
             // element's call site, at mount (the seed) and on update (the diff).
@@ -389,6 +390,63 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
         H.SetContent(null);
     }
 
+    // Native AOT tag-skip mode (no managed agent): a forwarding RegisterType row whose child is a
+    // callback-free TextBlock leaves that child untagged, so the outer element holds the tag while
+    // the published value is the child's. The value must carry the item key, at mount and after a
+    // key change, and keep describing the child (its kind and call site).
+    private async Task CheckTagSkipForwardedRows()
+    {
+        if (TextBlock("call-site probe").CallSite is null)
+        {
+            H.Skip("KeyedListDiagnostics_TagSkipForwardedRow", "call sites are not stamped in this host");
+            return;
+        }
+        var previousAgent = ReactorSourcePublisher.NoManagedAgent;
+        ReactorSourcePublisher.IsEnabled = true;
+        ReactorSourcePublisher.NoManagedAgent = true;
+        try
+        {
+            Action<string[]>? setItems = null;
+            var host = H.CreateHost();
+            host.Reconciler.RegisterType<FwdTextElement, UIElement>(
+                mount: (r, el, rerender) => r.Mount(TextBlock(el.Label), rerender)!,
+                update: (r, oldEl, newEl, control, rerender) => r.UpdateChild(TextBlock(oldEl.Label), TextBlock(newEl.Label), control, rerender));
+            host.Mount(ctx =>
+            {
+                var (items, set) = ctx.UseState<string[]>(["a"]);
+                setItems = set;
+                return VStack(4,
+                    FlipView(items, static s => s, static (_, _) => new FwdTextElement("skip fwd page")).Height(60),
+                    ListView(items, static s => s, static (_, _) => new FwdTextElement("skip fwd row")).Height(60));
+            });
+            await Harness.Render();
+            await Harness.Render(100);
+            string? Value(string text) => H.FindControl<WinUI.TextBlock>(t => t.Text == text) is { } tb ? ReactorDiagnostics.GetSource(tb) : null;
+            bool Describes(string? value, string key)
+                => value is not null && value.Contains("|element=TextBlock", StringComparison.Ordinal)
+                    && value.Contains("|at=", StringComparison.Ordinal)
+                    && ReactorSourcePublisher.HasKey(value, key);
+            var pageAtMount = Value("skip fwd page");
+            var rowAtMount = Value("skip fwd row");
+            setItems!(["b"]);
+            await Harness.Render();
+            await Harness.Render(100);
+            var pageAfter = Value("skip fwd page");
+            var rowAfter = Value("skip fwd row");
+            Console.WriteLine($"# tag-skip forwarded: page {pageAtMount} -> {pageAfter}; row {rowAtMount} -> {rowAfter}");
+            H.Check("KeyedListDiagnostics_TagSkipForwardedFlipPage_KeyedAtMount", Describes(pageAtMount, "a"), pageAtMount ?? "<none>");
+            H.Check("KeyedListDiagnostics_TagSkipForwardedListRow_KeyedAtMount", Describes(rowAtMount, "a"), rowAtMount ?? "<none>");
+            H.Check("KeyedListDiagnostics_TagSkipForwardedFlipPage_RekeyedKeepsChild", Describes(pageAfter, "b"), pageAfter ?? "<none>");
+            H.Check("KeyedListDiagnostics_TagSkipForwardedListRow_NewRowKeyed", Describes(rowAfter, "b"), rowAfter ?? "<none>");
+            host.Dispose();
+            H.SetContent(null);
+        }
+        finally
+        {
+            ReactorSourcePublisher.NoManagedAgent = previousAgent;
+        }
+    }
+
     private static readonly string[] FlipForwardItems = ["only"];
 
     private static KeyedListDiagnostic? DuplicateNaming(string key)
@@ -475,6 +533,8 @@ internal sealed class ItemsViewKeysProbe : Component
 }
 
 internal sealed record FlipForwardElement(string Label) : Element;
+
+internal sealed record FwdTextElement(string Label) : Element;
 
 internal sealed record TypedKeyedListElement(string[] Items) : Element;
 
@@ -667,6 +727,36 @@ internal class FlyoutItemIdentity_Published(Harness h) : SelfTestFixtureBase(h)
                     && Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(swapped!)?.LineNumber == FlyoutItemsProbe.CloseLine);
             }
             H.Check("FlyoutItemIdentity_ReplacedItemPublished", Owned(replaced, "ToggleMenuFlyoutItem"));
+
+            // Item controls a closed CommandBarFlyout or MenuFlyout holds sit outside the live
+            // tree: nothing Reactor stores on them may be a managed object a collection can take
+            // from under them, so reading their tag, exact source and published value afterwards
+            // must not throw. (A closed CommandBarFlyout's command can itself be reset by a
+            // collection, outside Reactor's control, so the exact site is checked on the menu item.)
+            for (int gc = 0; gc < 3; gc++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                await Harness.Render(20);
+            }
+            string? afterGc = null;
+            Exception? gcFailure = null;
+            try
+            {
+                foreach (var item in new UIElement?[] { cut, alpha })
+                {
+                    if (item is not FrameworkElement fe) continue;
+                    _ = Reconciler.GetElementTag(fe);
+                    var site = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(fe);
+                    afterGc += $"{ReactorDiagnostics.GetSource(fe)} @ {site?.LineNumber}; ";
+                }
+            }
+            catch (Exception ex) { gcFailure = ex; }
+            Console.WriteLine($"# after GC: {afterGc} {gcFailure?.GetType().Name}");
+            H.Check("FlyoutItemIdentity_ItemStateSurvivesCollection", gcFailure is null, gcFailure?.ToString() ?? "");
+            if (alphaValue?.Contains("|at=", StringComparison.Ordinal) == true && gcFailure is null)
+                H.Check("FlyoutItemIdentity_ItemSiteSurvivesCollection",
+                    Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(alpha!)?.LineNumber == FlyoutItemsProbe.AlphaLine);
 
             // Two item call sites whose published at= text is identical (the same file name, line
             // and column outside the project, so both publish just the file name): GetSource must

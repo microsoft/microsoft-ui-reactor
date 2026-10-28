@@ -646,9 +646,31 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
         return null;
     }
 
+    // Items a root swap re-attributes. The retained CommandBarFlyout's command is checked apart
+    // (CheckFlyoutCommandOwner): a closed CommandBarFlyout's commands can be reset by a garbage
+    // collection (label and every value gone) whether or not Reactor publishes anything on them.
     private static readonly string[] RetainedMenuItems =
-        ["remount-menu-item", "remount-submenu-item", "remount-command", "remount-bar-item", "remount-primary", "remount-secondary",
+        ["remount-menu-item", "remount-submenu-item", "remount-bar-item", "remount-primary", "remount-secondary",
          "remount-hidden-bar-item", "remount-hidden-primary", "remount-hidden-secondary"];
+
+    private const string RetainedFlyoutCommand = "remount-command";
+
+    // The retained CommandBarFlyout's command names the owner, unless a collection already reset it
+    // (pre-existing, outside Reactor's control: the label goes too), in which case it is skipped.
+    private async Task CheckFlyoutCommandOwner(string name, string owner)
+    {
+        bool owned = await Owned("remount-item:" + RetainedFlyoutCommand, owner);
+        if (RetainedFlyoutCommandLabels() != RetainedFlyoutCommand)
+            H.Skip(name, "the closed CommandBarFlyout's command was reset by a collection");
+        else
+            H.Check(name, owned, RetainedItemSource(RetainedFlyoutCommand) ?? "<not found>");
+    }
+
+    // The labels of the retained CommandBarFlyout's commands, read from the controls themselves.
+    private string RetainedFlyoutCommandLabels()
+        => H.FindControl<WinUI.Button>(b => b.Content as string == "remount-commands-target")?.Flyout is WinUI.CommandBarFlyout commands
+            ? string.Join(",", commands.PrimaryCommands.Select(c => (c as WinUI.AppBarButton)?.Label ?? c?.GetType().Name))
+            : "<no flyout>";
 
     // The published value of an item in RemountView's retained menus, by its text or label.
     private string? RetainedItemSource(string name)
@@ -738,6 +760,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             host.Mount(new RemountRootA());
             await Harness.Render();
             H.Check("ReactorSource_RootRemount_Host_FirstRoot", await Owned("remount-leaf", nameof(RemountRootA)));
+            await CheckFlyoutCommandOwner("ReactorSource_RootRemount_Host_RetainedFlyoutCommandFirstRoot", nameof(RemountRootA));
             foreach (var item in RetainedMenuItems)
                 H.Check($"ReactorSource_RootRemount_Host_RetainedMenuItemFirstRoot_{item}", await Owned("remount-item:" + item, nameof(RemountRootA)),
                     RetainedItemSource(item) ?? "<not found>");
@@ -755,6 +778,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             foreach (var item in RetainedMenuItems)
                 H.Check($"ReactorSource_RootRemount_Host_RetainedMenuItemRenamed_{item}", await Owned("remount-item:" + item, nameof(RemountRootB)),
                     RetainedItemSource(item) ?? "<not found>");
+            await CheckFlyoutCommandOwner("ReactorSource_RootRemount_Host_RetainedFlyoutCommandRenamed", nameof(RemountRootB));
             H.Check("ReactorSource_RootRemount_Host_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             host.Dispose();
             H.SetContent(null);
@@ -811,6 +835,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.SetContent(new WinUI.Border { Child = hostControl });
             // A standalone ReactorHostControl is not ReactorApp.ActiveHost: poll its loop.
             H.Check("ReactorSource_RootRemount_HostControl_FirstRoot", await Owned("remount-leaf", nameof(RemountRootA)));
+            await CheckFlyoutCommandOwner("ReactorSource_RootRemount_HostControl_RetainedFlyoutCommandFirstRoot", nameof(RemountRootA));
             foreach (var item in RetainedMenuItems)
                 H.Check($"ReactorSource_RootRemount_HostControl_RetainedMenuItemFirstRoot_{item}", await Owned("remount-item:" + item, nameof(RemountRootA)),
                     RetainedItemSource(item) ?? "<not found>");
@@ -827,6 +852,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             foreach (var item in RetainedMenuItems)
                 H.Check($"ReactorSource_RootRemount_HostControl_RetainedMenuItemRenamed_{item}", await Owned("remount-item:" + item, nameof(RemountRootB)),
                     RetainedItemSource(item) ?? "<not found>");
+            await CheckFlyoutCommandOwner("ReactorSource_RootRemount_HostControl_RetainedFlyoutCommandRenamed", nameof(RemountRootB));
             H.Check("ReactorSource_RootRemount_HostControl_NestedKeepsItsOwner", await Owned("remount-nested", nameof(RemountNested)));
             hostControl.Dispose();
             H.SetContent(null);

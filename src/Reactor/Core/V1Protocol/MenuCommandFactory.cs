@@ -256,13 +256,7 @@ internal static class MenuCommandFactory
         Diagnostics.ReactorSourcePublisher.PublishItem(control, site, reconciler?.DiagnosticComponent, ItemKind(item.GetType()));
         // The exact call site, for GetSource: the published at= text is shortened and can be
         // shared by two call sites, and these controls have no element tag to tell them apart.
-        if (control is Microsoft.UI.Xaml.FrameworkElement fe)
-        {
-            if (site is not null)
-                Reconciler.GetOrCreateReactorState(fe).ItemCallSite = site;
-            else if (Reconciler.TryGetReactorState(fe, out var state))
-                state.ItemCallSite = null;
-        }
+        Core.Diagnostics.ReactorDiagnostics.SetItemSite(control, site);
     }
 
     /// <summary><c>MenuFlyoutItemData</c> → <c>MenuFlyoutItem</c>, <c>AppBarButtonData</c> → <c>AppBarButton</c>.</summary>
