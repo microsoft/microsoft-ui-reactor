@@ -247,6 +247,31 @@ target is rejected by the URI policy, the entire label stays plain text;
 a safe-looking URL in the label does not become a separate link. These
 nesting rules describe the callback path, not changes to the default renderer.
 
+Prefer `MarkdownOptions.LinkRenderer` in new code. It is called for the same
+links, under the same URI policy and nesting rules, with a `MarkdownLink`
+that carries three things: `Text`, the label as plain text (image alt text in
+place of images, line breaks as spaces); `Label`, the same formatted
+`RichTextBlockElement` that `LinkBuilder` receives, or `null` for an empty
+label; and `Uri`, the validated target. `Text` is what you want for an
+accessible name, tooltip, or confirmation prompt, so you don't have to walk the
+label's inlines. The same null-result and styling rules apply. When both
+callbacks are set, `LinkRenderer` wins and `LinkBuilder` is not called.
+
+```csharp
+new MarkdownOptions
+{
+    LinkRenderer = link =>
+    {
+        Element content = link.Label is { } label
+            ? label with { IsTextSelectionEnabled = false }
+            : TextBlock(link.Uri.ToString());
+        return Button(content, () => OpenAfterConfirmation(link.Uri))
+            .AutomationName(link.Text.Length > 0 ? link.Text : link.Uri.ToString())
+            .ToolTip(link.Uri.ToString());
+    },
+}
+```
+
 The trade-off vs. [WebView2](#webview2) is fidelity: `Markdown` does not
 support arbitrary HTML, embedded `<script>`, or CSS. It supports paragraphs,
 headings (h1–h6), lists (bullet, ordered, nested), inline code, fenced code

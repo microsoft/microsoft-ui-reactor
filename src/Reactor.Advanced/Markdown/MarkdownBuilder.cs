@@ -79,8 +79,21 @@ public record MarkdownOptions
     /// array for an empty label. The returned
     /// non-null element is embedded inline as custom UI, with its own selection
     /// boundary. With no override, links remain native text hyperlinks.
+    /// Ignored when <see cref="LinkRenderer"/> is set; prefer that callback in
+    /// new code because it also supplies the label's plain text.
     /// </summary>
     public Func<Element[], Uri, Element>? LinkBuilder { get; init; }
+    /// <summary>
+    /// Override link rendering with a <see cref="MarkdownLink"/> describing the
+    /// link's plain-text label, formatted label, and validated target.
+    /// Called for the same links as <see cref="LinkBuilder"/> (absolute
+    /// <c>http</c>, <c>https</c>, or <c>mailto</c> targets) under the same
+    /// nesting rules. The returned non-null element is embedded inline as custom
+    /// UI with its own selection boundary; the callback owns its accessible name,
+    /// styling, and interaction. Takes precedence over <see cref="LinkBuilder"/>
+    /// when both are set.
+    /// </summary>
+    public Func<MarkdownLink, Element>? LinkRenderer { get; init; }
     /// <summary>
     /// Hard cap on input markdown size in bytes. Default 4 MiB. Inputs past
     /// the cap throw at <see cref="MarkdownBuilder.Build"/>. TASK-049.
@@ -153,6 +166,10 @@ internal sealed class MarkdownBuilder
     private int _linkInlineStart;
     private int _customLinkDepth;
     private int _customImageDepth;
+    // Alt text of images rendered inside a custom link label, keyed by _inlines index.
+    private Dictionary<int, string>? _linkImageAlt;
+
+    private bool HasCustomLink => _options.LinkRenderer is not null || _options.LinkBuilder is not null;
 
     // Image tracking.
     private bool _insideImage;
@@ -744,7 +761,7 @@ internal sealed class MarkdownBuilder
                 _isStrikethrough = true;
                 break;
             case MarkdownSpanType.A:
-                if (_options.LinkBuilder is not null)
+                if (HasCustomLink)
                 {
                     // Image alt text and nested autolinks belong to the outer label.
                     if (_customImageDepth > 0) break;
@@ -756,9 +773,10 @@ internal sealed class MarkdownBuilder
                     _linkUri = IsSafeUri(uri) ? uri : null;
                 }
                 _linkInlineStart = _inlines.Count;
+                _linkImageAlt?.Clear();
                 break;
             case MarkdownSpanType.Img:
-                if (_options.LinkBuilder is not null && ++_customImageDepth > 1) break;
+                if (HasCustomLink && ++_customImageDepth > 1) break;
                 _insideImage = true;
                 _imageAlt = new StringBuilder();
                 if (detail is MarkdownSpanImgDetail img && img.Src.Text is not null)
@@ -788,7 +806,7 @@ internal sealed class MarkdownBuilder
                 _isStrikethrough = false;
                 break;
             case MarkdownSpanType.A:
-                if (_options.LinkBuilder is not null)
+                if (HasCustomLink)
                 {
                     if (_customImageDepth > 0) break;
                     if (--_customLinkDepth > 0) break;
@@ -796,7 +814,7 @@ internal sealed class MarkdownBuilder
                 LeaveLink();
                 break;
             case MarkdownSpanType.Img:
-                if (_options.LinkBuilder is not null && --_customImageDepth > 0) break;
+                if (HasCustomLink && --_customImageDepth > 0) break;
                 LeaveImage();
                 break;
         }
@@ -824,15 +842,26 @@ internal sealed class MarkdownBuilder
             return;
         }
 
+        if (_options.LinkRenderer is { } renderLink)
+        {
+            var labelInlines = _inlines.GetRange(_linkInlineStart, _inlines.Count - _linkInlineStart).ToArray();
+            var link = new MarkdownLink(
+                LinkPlainText(labelInlines),
+                labelInlines.Length == 0 ? null : MakeLinkLabel(labelInlines),
+                _linkUri);
+            var element = renderLink(link)
+                ?? throw new InvalidOperationException("MarkdownOptions.LinkRenderer must return a non-null Element.");
+            ReplaceLinkInlines(element);
+            return;
+        }
+
         if (_options.LinkBuilder is { } buildLink)
         {
             var labelInlines = _inlines.GetRange(_linkInlineStart, _inlines.Count - _linkInlineStart).ToArray();
             Element[] label = labelInlines.Length == 0 ? [] : [MakeLinkLabel(labelInlines)];
             var element = buildLink(label, _linkUri)
                 ?? throw new InvalidOperationException("MarkdownOptions.LinkBuilder must return a non-null Element.");
-            _inlines.RemoveRange(_linkInlineStart, _inlines.Count - _linkInlineStart);
-            _inlines.Add(new RichTextInlineUIContainer { Child = element });
-            _linkUri = null;
+            ReplaceLinkInlines(element);
             return;
         }
 
@@ -851,6 +880,36 @@ internal sealed class MarkdownBuilder
         // Add the hyperlink inline.
         _inlines.Add(new RichTextHyperlink(sb.ToString(), _linkUri));
         _linkUri = null;
+    }
+
+    private void ReplaceLinkInlines(Element element)
+    {
+        _inlines.RemoveRange(_linkInlineStart, _inlines.Count - _linkInlineStart);
+        _inlines.Add(new RichTextInlineUIContainer { Child = element });
+        _linkImageAlt?.Clear();
+        _linkUri = null;
+    }
+
+    private string LinkPlainText(RichTextInline[] labelInlines)
+    {
+        var sb = new StringBuilder();
+        for (int i = 0; i < labelInlines.Length; i++)
+        {
+            switch (labelInlines[i])
+            {
+                case RichTextRun run:
+                    sb.Append(run.Text);
+                    break;
+                case RichTextLineBreak:
+                    sb.Append(' ');
+                    break;
+                case RichTextInlineUIContainer when _linkImageAlt is not null
+                    && _linkImageAlt.TryGetValue(_linkInlineStart + i, out var alt):
+                    sb.Append(alt);
+                    break;
+            }
+        }
+        return sb.ToString();
     }
 
     private RichTextBlockElement MakeLinkLabel(RichTextInline[] inlines)
@@ -884,8 +943,12 @@ internal sealed class MarkdownBuilder
             else
                 img = Image(_imageSrc.ToString());
 
-            if (_linkUri is not null && _options.LinkBuilder is not null)
+            if (_linkUri is not null && HasCustomLink)
+            {
+                if (_options.LinkRenderer is not null)
+                    (_linkImageAlt ??= new())[_inlines.Count] = alt;
                 _inlines.Add(new RichTextInlineUIContainer { Child = img });
+            }
             else if (_blockStack.Count > 0)
                 _blockStack.Peek().Children.Add(img);
         }

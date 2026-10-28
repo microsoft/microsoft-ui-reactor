@@ -28,6 +28,15 @@ Conventions for contributors:
 
 ### Added
 
+- **`MarkdownOptions.LinkRenderer` gives custom links their plain-text label.** A new
+  `Func<MarkdownLink, Element>` callback receives a `MarkdownLink` with the label as
+  plain `Text` (image alt text in place of images), the formatted `Label`
+  (`RichTextBlockElement`, `null` when empty), and the validated `Uri`, so setting an
+  accessible name or tooltip no longer means walking the label's inlines. It uses the
+  same URI policy, nesting rules, label styling, and null-result error as
+  `LinkBuilder`, and takes precedence when both are set. `LinkBuilder` is unchanged
+  (follow-up to #1401).
+
 - `JumpList.GetRemovedArgumentsAsync()` reads user removals without updating the list.
   `UpdateAsync` and `ClearAsync` now return the removals observed in their own transaction,
   allowing apps to retain the feedback before Windows clears it. Await-only callers
