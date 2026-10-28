@@ -50,4 +50,47 @@ public static partial class ReactorDiagnostics
     /// </summary>
     public static bool IsSourcePublishingEnabled
         => Hosting.ReactorFeatures.DevtoolsSupported && ReactorSourcePublisher.IsEnabled;
+
+    private static DependencyProperty? s_itemSiteProperty;
+
+    // A menu or command-bar item control (built from an item record, so it has no element tag)
+    // records its exact call site for GetSource. It is held as a string id, not as a managed
+    // object: a string value is a native HSTRING, while a managed value on a control that sits
+    // outside the live tree (a closed CommandBarFlyout's commands) can be collected while the
+    // control still refers to it, after which reading the property throws. The id maps back to
+    // the SourceLocation through a table bounded by the app's call sites.
+    private static DependencyProperty ItemSiteProperty => s_itemSiteProperty ??= DependencyProperty.RegisterAttached(
+        "ReactorItemSite",
+        typeof(string),
+        typeof(ReactorDiagnostics),
+        new PropertyMetadata(null));
+
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<SourceLocation, string> s_itemSiteIds = new();
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, SourceLocation> s_itemSites = new(StringComparer.Ordinal);
+    private static int s_nextItemSite;
+
+    /// <summary>Records (or, for <c>null</c>, clears) a menu or command-bar item control's exact call site.</summary>
+    internal static void SetItemSite(DependencyObject control, SourceLocation? site)
+    {
+        if (site is not { } location)
+        {
+            if (control.GetValue(ItemSiteProperty) is not null) control.ClearValue(ItemSiteProperty);
+            return;
+        }
+        var id = s_itemSiteIds.GetOrAdd(location, static loc =>
+        {
+            var newId = global::System.Threading.Interlocked.Increment(ref s_nextItemSite)
+                .ToString(global::System.Globalization.CultureInfo.InvariantCulture);
+            s_itemSites[newId] = loc;
+            return newId;
+        });
+        if (!string.Equals(control.GetValue(ItemSiteProperty) as string, id, StringComparison.Ordinal))
+            control.SetValue(ItemSiteProperty, id);
+    }
+
+    /// <summary>The exact call site <see cref="SetItemSite"/> recorded on <paramref name="control"/>, if any.</summary>
+    internal static SourceLocation? GetItemSite(DependencyObject control)
+        => s_itemSiteProperty is not null && control.GetValue(ItemSiteProperty) is string id && s_itemSites.TryGetValue(id, out var site)
+            ? site
+            : null;
 }

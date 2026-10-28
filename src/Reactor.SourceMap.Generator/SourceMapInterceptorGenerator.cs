@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -36,10 +36,12 @@ namespace Microsoft.UI.Reactor.SourceMap.Generator;
 [Generator(LanguageNames.CSharp)]
 public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerator
 {
-    internal const string InterceptorNamespace = "Microsoft.UI.Reactor.Generated";
+    internal const string InterceptorNamespace = SourceMapPositions.InterceptorNamespace;
     private const string FactoriesMetadataName = "Microsoft.UI.Reactor.Factories";
     private const string ElementMetadataName = "Microsoft.UI.Reactor.Core.Element";
     private const string EmptyElementMetadataName = "Microsoft.UI.Reactor.Core.EmptyElement";
+    private const string MenuFlyoutItemBaseMetadataName = "Microsoft.UI.Reactor.Core.MenuFlyoutItemBase";
+    private const string AppBarItemBaseMetadataName = "Microsoft.UI.Reactor.Core.AppBarItemBase";
 
     /// <summary>
     /// The opt-in marker for helper-method attribution (mechanism 1). Matched by
@@ -47,7 +49,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
     /// somehow sees two copies of the type still gets consistent treatment.
     /// </summary>
     internal const string TransparentAttributeMetadataName =
-        "Microsoft.UI.Reactor.Diagnostics.ReactorSourceTransparentAttribute";
+        ReactorSourceTransparency.TransparentAttributeMetadataName;
 
     /// <summary>
     /// Reported when <c>[ReactorSourceTransparent]</c> is applied to a method the
@@ -135,7 +137,8 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         context.RegisterSourceOutput(input, static (spc, tuple) =>
         {
             var (((sites, isEnabled), polyfill), map) = tuple;
-            if (!isEnabled || sites.IsDefaultOrEmpty) return;
+            // Wrapper-factory sites carry no signature: another generator intercepts them.
+            if (!isEnabled || !sites.Any(static s => s?.Signature is not null)) return;
             spc.AddSource("ReactorSourceMap.Interceptors.g.cs", Emit(sites!, polyfill, map));
         });
 
@@ -331,7 +334,57 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
     {
         var invocation = (InvocationExpressionSyntax)ctx.Node;
 
-        if (ctx.SemanticModel.GetSymbolInfo(invocation, ct).Symbol is not IMethodSymbol method) return null;
+        var symbolInfo = ctx.SemanticModel.GetSymbolInfo(invocation, ct);
+        var method = symbolInfo.Symbol as IMethodSymbol;
+
+        // A call to a factory Reactor.Wrappers.Generator emits binds to nothing here (no
+        // generator sees another's output). That generator intercepts the call itself; all
+        // this one records is the site, so the static facts (declared name, per-file
+        // fingerprint) cover it like any other element.
+        var wrappersInPlay = WrappersInPlay(ctx.SemanticModel, invocation, ct);
+        if (method is null
+            && symbolInfo.CandidateSymbols.IsEmpty
+            && wrappersInPlay
+            && WrapperFactoryCalls.ResolveUnboundCall(ctx.SemanticModel, invocation, ct) is not null)
+        {
+            return DescribeWrapperFactorySite(ctx, invocation, ct);
+        }
+
+        // A generated factory that is invisible here may be the better overload in the real
+        // compilation (`Card(x)` binds to an imported hand-written `Card` here, to the
+        // generated one there); an interceptor for either could be the wrong one. Neither
+        // generator claims such a call.
+        if (HasSourceWrappers(ctx.SemanticModel.Compilation)
+            && (WrapperFactoryCalls.InvisibleFactoryOwners(ctx.SemanticModel, invocation, ct) is not null
+                || IsWrapperConstrainedCall(ctx.SemanticModel, invocation, ct)
+                || WrapperFactoryCalls.GeneratedMemberMayWin(ctx.SemanticModel, invocation, ct)))
+        {
+            return null;
+        }
+
+        // A call whose ARGUMENTS include one of those invisible factories — `VStack(8,
+        // SettingsCard(...))` — fails overload resolution here, or binds against an error
+        // type, even though it is perfectly well-formed in the real compilation. Bind it
+        // again as if each wrapper value were already an Element (the record's generated
+        // `: Element` base is invisible here too), and accept the result only where that
+        // cannot differ from the real binding — see BindAroundWrapperFactoryCalls.
+        var speculative = false;
+        if (method is null)
+        {
+            // Only worth the extra binding when the call could be one this generator
+            // intercepts; a genuinely broken call stays unrecorded, as before.
+            if (!wrappersInPlay || !symbolInfo.CandidateSymbols.Any(static c => c is IMethodSymbol { IsStatic: true } m
+                    && (m.ContainingType?.ToDisplayString() == FactoriesMetadataName || IsTransparent(m))))
+            {
+                return null;
+            }
+
+            if (BindAroundWrapperFactoryCalls(ctx.SemanticModel, invocation, ct) is not { Changed: true, Method: { } rebound })
+                return null;
+            method = rebound;
+            speculative = true;
+        }
+
         if (!method.IsStatic) return null;
         if (method.MethodKind != MethodKind.Ordinary) return null;
 
@@ -355,24 +408,25 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         // filter to the constructed method makes the consumer's build fail. Declining
         // to stamp is what keeps the emitted code compiling; the element still gets a
         // location from the interceptor's own return-path stamp.
+        // Type arguments naming a wrapper record (`Select<FooElement>(...)`, or inferred from a
+        // record-typed argument) are checked against constraints the record does not satisfy
+        // yet, so the candidate set here can differ from the real one. Declined, not guessed.
+        if (wrappersInPlay && method.TypeArguments.Any(t => MentionsIncompleteWrapper(t, ctx.SemanticModel.Compilation))) return null;
         method = method.OriginalDefinition;
 
         // Only the Reactor DSL surface, plus (spec 010 mechanism 1) any static
         // Element-returning method the author explicitly marked
         // `[ReactorSourceTransparent]`.
         //
-        // Deliberately NOT widened to "any static that returns an Element", which
-        // would be the obvious way to also cover the factories
-        // Reactor.Wrappers.Generator emits onto the element type
-        // (`FooWrapperElement.Foo(...)`). That was tried and rejected: Roslyn runs
-        // every source generator against the SAME input compilation, so this
-        // generator cannot see symbols another generator emitted. Widening the
-        // filter therefore covers wrapper factories only in project shapes that
-        // happen to compile twice (a WinUI XAML app, where the second pass sees the
-        // first pass's generated files) and silently covers nothing in a
-        // single-pass library. Both halves of that were measured — see
-        // WrapperFactoryInterceptionTests, which pins the limitation. Coverage that
-        // varies with project shape is worse than a documented, uniform gap.
+        // Deliberately NOT widened to "any static that returns an Element". The factories
+        // Reactor.Wrappers.Generator emits onto the element type (`FooElement.Foo(...)`)
+        // are covered differently: Roslyn runs every source generator against the SAME
+        // input compilation, so this generator normally cannot see them at all, and the
+        // wrapper generator intercepts those calls itself (WrapperGenerator.SourceMap.cs).
+        // In a compilation where such a factory IS visible — a project shape that compiles
+        // twice and feeds the first pass's generated files to the second — the call binds,
+        // the wrapper generator leaves it alone, and it is accepted here instead, so
+        // coverage does not vary with project shape. WrapperFactoryInterceptionTests.
         // Corollary of the same filter: element-producing entry points that live
         // OUTSIDE Factories are likewise unstamped unless annotated —
         // `PendingFactory.Pending(...)` builds its element by calling
@@ -387,10 +441,30 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         // the CALL to it is the attribution they want. Without it there is no way to tell
         // a thin forwarder from a `Render()` body, where the body line is correct.
         var compilation = ctx.SemanticModel.Compilation;
-        var isFactory = method.ContainingType?.ToDisplayString() == FactoriesMetadataName;
+        var isFactory = IsDslFactory(method, compilation, out var isWrapperFactory);
         var isTransparentTarget = IsTransparent(method);
 
         if (!isFactory && !isTransparentTarget) return null;
+
+        // The other half of the wrapper-factory case: Roslyn can also RESOLVE a call whose
+        // argument has an error type (it treats the error as convertible to anything), and
+        // then the overload it picked is a guess the real compilation need not share. An
+        // interceptor for a different overload than the one finally bound is a hard build
+        // error, so the guess is re-checked against the arguments' real types. Asked only
+        // here, after the cheap filters, so non-DSL calls never pay for it.
+        if (!speculative && wrappersInPlay && HasUnresolvedArgument(ctx.SemanticModel, invocation, ct))
+        {
+            var again = BindAroundWrapperFactoryCalls(ctx.SemanticModel, invocation, ct);
+            if (again.Changed)
+            {
+                if (again.Method is not { IsStatic: true, MethodKind: MethodKind.Ordinary } rebound) return null;
+                method = rebound.OriginalDefinition;
+                isFactory = IsDslFactory(method, compilation, out isWrapperFactory);
+                isTransparentTarget = IsTransparent(method);
+                if (!isFactory && !isTransparentTarget) return null;
+                speculative = true;
+            }
+        }
 
         // Resolved once per candidate, and only AFTER the cheap filters above, so an
         // ordinary invocation never pays for it. Every "is this an Element" question below
@@ -413,7 +487,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         // base-Element-returning factories that take a Func<...Element...> ever stops
         // matching it, so a fourth pass-through is a loud failure rather than a silent
         // misattribution.
-        if (isFactory && PassThroughFactories.Contains(method.Name)) return null;
+        if (isFactory && !isWrapperFactory && PassThroughFactories.Contains(method.Name)) return null;
 
         // Mechanism 1 rule 2. An annotated method is only worth intercepting if the
         // emitted interceptor can actually forward to it by name; the diagnostic pass
@@ -433,8 +507,12 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         // emit something subtly wrong if that changes.
         if (method.Parameters.Any(p => p.RefKind != RefKind.None)) return null;
 
-        // Must return something we can stamp.
-        if (!ReturnsElement(method.ReturnType, elementSymbol)) return null;
+        // Must return something we can stamp: an Element, or (from Factories only) a menu or
+        // command-bar item record — MenuItem(...), AppBarButton(...) — which carries a CallSite
+        // of its own so the item a flyout realizes can be mapped back to C#.
+        if (!ReturnsElement(method.ReturnType, elementSymbol)
+            && !(isFactory && ReturnsStampableItem(method.ReturnType, compilation)))
+            return null;
 
         // Mechanism 1 rule 1, and the whole of rule 3. A call written INSIDE a
         // transparent method is not stamped at all, because the element it produces
@@ -489,7 +567,9 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
             column: CallSiteColumn(invocation, lineSpan, ct),
             declaredName: DeclaredNameOf(invocation, ctx.SemanticModel, elementSymbol, ct),
             signature: Signature.From(method, elementSymbol, compilation.GetTypeByMetadataName(EmptyElementMetadataName)),
-            argumentStamps: DescribeArgumentStamps(ctx, invocation, method, elementSymbol, ct));
+            argumentStamps: speculative
+                ? DescribeArgumentStampsWithoutOperation(ctx.SemanticModel, invocation, method, elementSymbol, ct)
+                : DescribeArgumentStamps(ctx, invocation, method, elementSymbol, ct));
     }
 
     /// <summary>
@@ -509,27 +589,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         InvocationExpressionSyntax invocation,
         FileLinePositionSpan parenLineSpan,
         System.Threading.CancellationToken ct)
-    {
-        SyntaxToken? name = invocation.Expression switch
-        {
-            MemberAccessExpressionSyntax member => member.Name.Identifier,
-            MemberBindingExpressionSyntax binding => binding.Name.Identifier,
-            SimpleNameSyntax simple => simple.Identifier,
-            _ => null,
-        };
-
-        if (name is { } token)
-        {
-            var nameSpan = invocation.SyntaxTree.GetMappedLineSpan(token.Span, ct);
-            if (nameSpan.StartLinePosition.Line == parenLineSpan.StartLinePosition.Line
-                && nameSpan.Path == parenLineSpan.Path)
-            {
-                return nameSpan.StartLinePosition.Character + 1;
-            }
-        }
-
-        return parenLineSpan.StartLinePosition.Character + 1;
-    }
+        => SourceMapPositions.CallSiteColumn(invocation, parenLineSpan, ct);
 
     // ── Mechanism 2: argument-position stamping ───────────────────────────
 
@@ -698,8 +758,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
     // ── Mechanism 1: transparent helpers ──────────────────────────────────
 
     private static bool IsTransparent(IMethodSymbol method)
-        => method.GetAttributes()
-            .Any(static a => a.AttributeClass?.ToDisplayString() == TransparentAttributeMetadataName);
+        => ReactorSourceTransparency.IsTransparent(method);
 
     private static bool IsForwardable(IMethodSymbol method, Compilation compilation, INamedTypeSymbol elementSymbol)
         => ForwardabilityProblem(method, compilation, elementSymbol) is null;
@@ -715,45 +774,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
     /// </summary>
     private static string? ForwardabilityProblem(
         IMethodSymbol method, Compilation compilation, INamedTypeSymbol elementSymbol)
-    {
-        if (method.MethodKind == MethodKind.LocalFunction)
-            return "C# interceptors cannot intercept calls to local functions";
-        if (method.MethodKind != MethodKind.Ordinary)
-            return "C# interceptors can only intercept calls to ordinary methods";
-        if (!method.IsStatic)
-        {
-            // Intercepting an instance method requires the interceptor to be an
-            // extension method whose `this` parameter matches the receiver. Supportable,
-            // but it is a separate shape from the static forwarding used here, so it is
-            // an explicit gap rather than something that silently half-works.
-            return "it is an instance method, and only static helpers are supported";
-        }
-        if (!ReturnsElement(method.ReturnType, elementSymbol))
-            return "it does not return a Microsoft.UI.Reactor.Core.Element";
-        if (method.Parameters.Any(p => p.RefKind != RefKind.None))
-            return "it has a by-ref parameter";
-        if (method.IsGenericMethod && method.TypeParameters.Any(HasUnrenderableConstraint))
-            return "its type parameters cannot be restated on an interceptor";
-
-        for (var type = method.ContainingType; type is not null; type = type.ContainingType)
-        {
-            if (type.IsFileLocal)
-                return "it is declared in a file-local type, which generated code cannot name";
-            // "Interceptors cannot be declared in generic types at any level of nesting",
-            // and an interceptor for a method in a generic type would additionally have to
-            // restate the containing type's arity. Out of scope.
-            if (type.IsGenericType)
-                return "it is declared in a generic type";
-        }
-
-        // The interceptor lives in a generated file, so a private or protected member is
-        // out of reach however the call site is written. Asking the compilation settles
-        // internal-across-assemblies (InternalsVisibleTo) correctly too.
-        if (!compilation.IsSymbolAccessibleWithin(method, compilation.Assembly))
-            return "generated code cannot reach it; make it internal or public";
-
-        return null;
-    }
+        => ReactorSourceTransparency.ForwardabilityProblem(method, compilation, elementSymbol);
 
     /// <summary>
     /// True when <paramref name="node"/> sits inside a transparent method whose calls
@@ -771,22 +792,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         Compilation compilation,
         INamedTypeSymbol elementSymbol,
         System.Threading.CancellationToken ct)
-    {
-        for (var symbol = model.GetEnclosingSymbol(node.SpanStart, ct);
-             symbol is not null;
-             symbol = symbol.ContainingSymbol)
-        {
-            if (symbol is ITypeSymbol or INamespaceSymbol) return false;
-            if (symbol is IMethodSymbol enclosing
-                && IsTransparent(enclosing)
-                && IsForwardable(enclosing, compilation, elementSymbol))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+        => ReactorSourceTransparency.IsInsideTransparentMethod(model, node, compilation, elementSymbol, ct);
 
     private static AnnotationProblem? DescribeAnnotationProblem(
         GeneratorAttributeSyntaxContext ctx,
@@ -823,15 +829,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
     /// tree's directory when one is in effect.
     /// </summary>
     private static string ResolveMappedPath(FileLinePositionSpan span, string treePath)
-    {
-        if (!span.HasMappedPath || string.IsNullOrEmpty(span.Path)) return treePath;
-        if (System.IO.Path.IsPathRooted(span.Path)) return span.Path;
-
-        var dir = System.IO.Path.GetDirectoryName(treePath);
-        return string.IsNullOrEmpty(dir)
-            ? span.Path
-            : System.IO.Path.Combine(dir, span.Path);
-    }
+        => SourceMapPositions.ResolveMappedPath(span, treePath);
 
     /// <summary>
     /// A type parameter whose constraints reference ANOTHER type parameter of the
@@ -842,7 +840,8 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
     /// nullability form on a `class` constraint qualifies, and nothing in the
     /// Reactor DSL hits it.
     /// </summary>
-    private static bool HasUnrenderableConstraint(ITypeParameterSymbol tp) => false;
+    private static bool HasUnrenderableConstraint(ITypeParameterSymbol tp)
+        => ReactorSourceTransparency.HasUnrenderableConstraint(tp);
 
     /// <summary>
     /// True when <paramref name="type"/> is <c>Element</c> or derives from it.
@@ -866,10 +865,24 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
     /// returning <c>Element?</c> is an entirely natural shape.</para>
     /// </summary>
     private static bool ReturnsElement(ITypeSymbol type, INamedTypeSymbol elementSymbol)
+        => ReactorSourceTransparency.ReturnsElement(type, elementSymbol);
+
+    /// <summary>
+    /// The menu / command-bar item records (<c>MenuFlyoutItemBase</c>, <c>AppBarItemBase</c>
+    /// and their derived records). They are not elements — a flyout builds their controls
+    /// itself — but carry the same <c>CallSite</c> init property, so the emitted
+    /// <c>with { CallSite = … }</c> stamp applies unchanged.
+    /// </summary>
+    private static bool ReturnsStampableItem(ITypeSymbol type, Compilation compilation)
     {
+        var menuItem = compilation.GetTypeByMetadataName(MenuFlyoutItemBaseMetadataName);
+        var appBarItem = compilation.GetTypeByMetadataName(AppBarItemBaseMetadataName);
+        if (menuItem is null && appBarItem is null) return false;
         for (var t = type; t is not null; t = t.BaseType)
         {
-            if (SymbolEqualityComparer.Default.Equals(t, elementSymbol)) return true;
+            if (SymbolEqualityComparer.Default.Equals(t, menuItem)
+                || SymbolEqualityComparer.Default.Equals(t, appBarItem))
+                return t.GetMembers("CallSite").Any(static m => m is IPropertySymbol);
         }
         return false;
     }
@@ -911,9 +924,9 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
         int index = 0;
         var needsArgumentHelper = sites.Any(static s => s is { ArgumentStamps.IsEmpty: false });
 
-        foreach (var site in sites.Where(static s => s is not null))
+        foreach (var site in sites.Where(static s => s?.Signature is not null))
         {
-            var sig = site!.Signature;
+            var sig = site!.Signature!;
             var mapped = ApplyPathMap(site.FilePath, pathMap);
             var name = $"__Reactor_{sig.MethodName}_{index}";
             var stamps = site.ArgumentStamps;
@@ -1046,22 +1059,9 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
     /// the two providers would disagree on where the code lives.</para>
     /// </summary>
     internal static string ApplyPathMap(string path, ImmutableArray<KeyValuePair<string, string>> pathMap)
-    {
-        if (pathMap.IsDefaultOrEmpty || string.IsNullOrEmpty(path)) return path;
-        foreach (var entry in pathMap.Where(entry => path.StartsWith(entry.Key, StringComparison.Ordinal)))
-        {
-            var suffix = path.Substring(entry.Key.Length);
-            if (entry.Value.IndexOf('/') >= 0 && entry.Value.IndexOf('\\') < 0)
-                suffix = suffix.Replace('\\', '/');
-            else if (entry.Value.IndexOf('\\') >= 0 && entry.Value.IndexOf('/') < 0)
-                suffix = suffix.Replace('/', '\\');
+        => SourceMapPositions.ApplyPathMap(path, pathMap);
 
-            return entry.Value + suffix;
-        }
-        return path;
-    }
-
-    private static string Literal(string value) => "@\"" + value.Replace("\"", "\"\"") + "\"";
+    private static string Literal(string value) => SourceMapPositions.Literal(value);
 
     // ── Models ────────────────────────────────────────────────────────────
 
@@ -1119,7 +1119,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
     private sealed class CallSite : IEquatable<CallSite>
     {
         public CallSite(string attribute, string filePath, int line, int column, string? declaredName,
-                        Signature signature, ImmutableArray<ArgumentStamp> argumentStamps)
+                        Signature? signature, ImmutableArray<ArgumentStamp> argumentStamps)
         {
             Attribute = attribute;
             FilePath = filePath;
@@ -1142,7 +1142,13 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
 
         /// <summary>The identifier the element is assigned to; see <c>DeclaredNameOf</c>.</summary>
         public string? DeclaredName { get; }
-        public Signature Signature { get; }
+
+        /// <summary>
+        /// The intercepted method, or null for a call to a wrapper-generated factory: that
+        /// call is intercepted by Reactor.Wrappers.Generator (the only generator that knows
+        /// the factory's signature), and is recorded here for the static facts alone.
+        /// </summary>
+        public Signature? Signature { get; }
 
         /// <summary>
         /// Arguments of this call that need stamping in place before the real factory
@@ -1157,7 +1163,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
                && Line == other.Line
                && Column == other.Column
                && DeclaredName == other.DeclaredName
-               && Signature.Equals(other.Signature)
+               && object.Equals(Signature, other.Signature)
                && ArgumentStamps.SequenceEqual(other.ArgumentStamps);
 
         public override bool Equals(object? obj) => Equals(obj as CallSite);
@@ -1170,7 +1176,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
                 h = (h * 397) ^ FilePath.GetHashCode();
                 h = (h * 397) ^ Line;
                 h = (h * 397) ^ Column;
-                h = (h * 397) ^ Signature.GetHashCode();
+                h = (h * 397) ^ (Signature?.GetHashCode() ?? 0);
                 foreach (var stamp in ArgumentStamps) h = (h * 397) ^ stamp.GetHashCode();
                 return h;
             }

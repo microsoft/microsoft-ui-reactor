@@ -183,6 +183,27 @@ public sealed partial class HostIdleAndThemeResourcesTests
     }
 
     [Fact]
+    public void Realization_DoesNotConsumeAnArmedHostRefresh()
+    {
+        using var reconciler = new Reconciler();
+        reconciler.RequestResourceRefresh();
+        reconciler.BeginRootPass();
+
+        using (reconciler.EnterRealizationTheme(null))
+        {
+            reconciler.Reconcile(null, EmptyElement.Instance, null, static () => { });
+            Assert.True(reconciler.ResourceRefreshArmedForTest);
+        }
+        Assert.False(reconciler.ResourceRefreshActive);
+        Assert.False(reconciler.ForceFullRenderActive);
+
+        reconciler.Reconcile(null, EmptyElement.Instance, null, static () => { });
+        Assert.False(reconciler.ResourceRefreshArmedForTest);
+        reconciler.EndRootPass();
+        Assert.False(reconciler.ResourceRefreshPendingForTest);
+    }
+
+    [Fact]
     public void LookupThatRacesAnInvalidation_IsNotServed()
     {
         // A lookup captured the generation, then an invalidation incremented it before clearing:

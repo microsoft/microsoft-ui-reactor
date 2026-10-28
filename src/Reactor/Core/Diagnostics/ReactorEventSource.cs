@@ -535,6 +535,25 @@ internal sealed class ReactorEventSource : EventSource
         }
     }
 
+    // ── Host commit failure ──────────────────────────────────────────────
+    //
+    // A failure outside any component's Render() or effects — reconciling the tree into
+    // native controls, installing it in the host, a post-render host callback, or a
+    // deferred-root cleanup — that replaced the host's content with the error fallback.
+    // It has no single owning component, so it is not a RenderError; without this event an
+    // event-source consumer saw nothing while the window showed the error screen.
+    //
+    // PII: phase is a RenderErrorSource name (framework-defined); rootComponent is the
+    //      host's root component CLR type name (developer-authored, like RenderError's
+    //      componentName); exception type only — the message is never on the payload.
+    [Event(41, Level = EventLevel.Error, Keywords = Keywords.Errors,
+        Message = "Commit error (phase={phase}, root={rootComponent}, exception={exceptionType})")]
+    public void CommitError(string phase, string rootComponent, string exceptionType)
+    {
+        if (IsEnabled(EventLevel.Error, Keywords.Errors))
+            WriteEvent(41, phase ?? string.Empty, rootComponent ?? string.Empty, exceptionType ?? string.Empty);
+    }
+
     // ── EventId allocation ──────────────────────────────────────────────
     //
     // Used: 1-15 (original surface), 16-17 (spec 044 Phase A generics),
@@ -543,6 +562,7 @@ internal sealed class ReactorEventSource : EventSource
     //       36    (spec 045 §2.7 docking layout load fallback),
     //       37-38 (spec 049 §6 hot reload state migration),
     //       39    (spec 044 §6.1 generic framework Warning),
-    //       40    (ComponentRendered — per-component render + reason).
-    // Next free EventId: 41.
+    //       40    (ComponentRendered — per-component render + reason),
+    //       41    (CommitError — host-level commit-phase failure).
+    // Next free EventId: 42.
 }

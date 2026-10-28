@@ -42,7 +42,7 @@ namespace Microsoft.UI.Reactor.Wrappers.Generator;
 /// <c>Content</c> slot; <c>RoutedEventHandler</c> fire-and-forget events.</para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
-public sealed class WrapperGenerator : IIncrementalGenerator
+public sealed partial class WrapperGenerator : IIncrementalGenerator
 {
     private const string AttributeFqn = "Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapperAttribute";
     private const string DescriptorAttributeFqn = "Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptorAttribute";
@@ -107,6 +107,8 @@ public sealed class WrapperGenerator : IIncrementalGenerator
             if (model!.Diagnostic is { } d) spc.ReportDiagnostic(d);
             if (model.Source is { } src) spc.AddSource(model.HintName!, SourceText.From(src, Encoding.UTF8));
         });
+
+        InitializeSourceMap(context, models);
     }
 
     private static WrapperModel? BuildModel(GeneratorAttributeSyntaxContext ctx, CancellationToken _, bool descriptorOnly)
@@ -524,6 +526,7 @@ public sealed class WrapperGenerator : IIncrementalGenerator
             contentPropTypeFqn = cps.Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated)
                                         .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
+        var factoryParameters = descriptorOnly ? null : new List<string>();
         var source = Emit(
             ns,
             elementName,
@@ -532,7 +535,13 @@ public sealed class WrapperGenerator : IIncrementalGenerator
             props, contentProp, panelChildren, items, events,
             descriptorOnly, hasManual, contentElementName, registerAssembly,
             panelPerChild, panelAfterAll, lifecycleMount, lifecycleUnmount,
-            contentPropTypeFqn, elementSlots);
+            contentPropTypeFqn, elementSlots, factoryParameters);
+        var factory = factoryParameters is null
+            ? null
+            : new WrapperFactory(
+                element.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                control.Name,
+                factoryParameters.ToImmutableArray());
 
         var hint = descriptorOnly ? $"{elementName}.Descriptor.g.cs" : $"{elementName}.Wrapper.g.cs";
 
@@ -547,10 +556,10 @@ public sealed class WrapperGenerator : IIncrementalGenerator
                 MultipleControlledProps,
                 element.Locations.FirstOrDefault() ?? Location.None,
                 elementName, controlled.Length, string.Join(", ", controlled));
-            return WrapperModel.OkWithDiagnostic(hint, source, d);
+            return WrapperModel.OkWithDiagnostic(hint, source, d) with { Factory = factory };
         }
 
-        return WrapperModel.Ok(hint, source);
+        return WrapperModel.Ok(hint, source) with { Factory = factory };
     }
 
     private static ImmutableHashSet<string> ToStringSet(TypedConstant tc)
@@ -1369,7 +1378,8 @@ public sealed class WrapperGenerator : IIncrementalGenerator
         string? lifecycleMount = null,
         string? lifecycleUnmount = null,
         string? contentPropTypeFqn = null,
-        IReadOnlyList<ElementSlotInfo>? elementSlots = null)
+        IReadOnlyList<ElementSlotInfo>? elementSlots = null,
+        List<string>? factoryParameters = null)
     {
         const string Element = "global::Microsoft.UI.Reactor.Core.Element";
         const string Action = "global::System.Action";
@@ -1782,6 +1792,10 @@ public sealed class WrapperGenerator : IIncrementalGenerator
             assigns.Add("Items = items");
         }
 
+        // The source-map interceptor for this factory restates its parameters
+        // (WrapperGenerator.SourceMap.cs), taken from the very strings declared here.
+        factoryParameters?.AddRange(factoryParams);
+
         sb.AppendLine($"    /// <summary>Creates a <see cref=\"{elementName}\"/> (and guarantees the handler is registered).</summary>");
         // [WrapLifecycle] — wrap the freshly-built element with the imperative
         // mount/unmount wiring via the .OnMount/.OnUnmount modifiers, emitted as
@@ -1866,6 +1880,9 @@ public sealed class WrapperGenerator : IIncrementalGenerator
 
     private sealed record WrapperModel(string? HintName, string? Source, Diagnostic? Diagnostic)
     {
+        /// <summary>The generated factory's shape, when this model emits one.</summary>
+        public WrapperFactory? Factory { get; init; }
+
         public static WrapperModel Ok(string hint, string source) => new(hint, source, null);
         public static WrapperModel OkWithDiagnostic(string hint, string source, Diagnostic d) => new(hint, source, d);
         public static WrapperModel Error(Diagnostic d) => new(null, null, d);

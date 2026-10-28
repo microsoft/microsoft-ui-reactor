@@ -6,7 +6,14 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 // V1-owned factories and patchers for menu flyout and command bar item models.
 internal static class MenuCommandFactory
 {
-    internal static WinUI.ICommandBarElement CreateAppBarItem(AppBarItemBase item)
+    internal static WinUI.ICommandBarElement CreateAppBarItem(AppBarItemBase item, Reconciler? reconciler = null)
+    {
+        var created = CreateAppBarItemCore(item);
+        Publish(created as Microsoft.UI.Xaml.UIElement, item, reconciler);
+        return created;
+    }
+
+    private static WinUI.ICommandBarElement CreateAppBarItemCore(AppBarItemBase item)
     {
         switch (item)
         {
@@ -44,7 +51,14 @@ internal static class MenuCommandFactory
         }
     }
 
-    internal static WinUI.MenuFlyoutItemBase CreateMenuFlyoutItem(MenuFlyoutItemBase item)
+    internal static WinUI.MenuFlyoutItemBase CreateMenuFlyoutItem(MenuFlyoutItemBase item, Reconciler? reconciler = null)
+    {
+        var created = CreateMenuFlyoutItemCore(item, reconciler);
+        Publish(created, item, reconciler);
+        return created;
+    }
+
+    private static WinUI.MenuFlyoutItemBase CreateMenuFlyoutItemCore(MenuFlyoutItemBase item, Reconciler? reconciler)
     {
         switch (item)
         {
@@ -91,7 +105,7 @@ internal static class MenuCommandFactory
             {
                 var subItem = new WinUI.MenuFlyoutSubItem { Text = sub.Text };
                 subItem.Icon = IconResolver.ResolveIcon(sub.IconElement, sub.Icon);
-                foreach (var child in sub.Items) subItem.Items.Add(CreateMenuFlyoutItem(child));
+                foreach (var child in sub.Items) subItem.Items.Add(CreateMenuFlyoutItem(child, reconciler));
                 return subItem;
             }
             default:
@@ -102,7 +116,8 @@ internal static class MenuCommandFactory
     internal static void UpdateMenuFlyoutItems(
         global::System.Collections.Generic.IList<WinUI.MenuFlyoutItemBase> target,
         MenuFlyoutItemBase[] oldSource,
-        MenuFlyoutItemBase[] newSource)
+        MenuFlyoutItemBase[] newSource,
+        Reconciler? reconciler = null)
     {
         int oldCount = oldSource.Length;
         int newCount = newSource.Length;
@@ -146,14 +161,16 @@ internal static class MenuCommandFactory
                     subItem.Icon = IconResolver.ResolveIcon(sub.IconElement, sub.Icon);
                     // Recursively patch sub-items
                     var oldSub = oldSource[i] is MenuFlyoutSubItemData oldSubData ? oldSubData.Items : [];
-                    UpdateMenuFlyoutItems(subItem.Items, oldSub, sub.Items);
+                    UpdateMenuFlyoutItems(subItem.Items, oldSub, sub.Items, reconciler);
                     break;
 
                 default:
-                    // Type mismatch — replace the item
-                    target[i] = CreateMenuFlyoutItem(newSource[i]);
-                    break;
+                    // Type mismatch — replace the item (published as it is created)
+                    target[i] = CreateMenuFlyoutItem(newSource[i], reconciler);
+                    continue;
             }
+            // Patched in place: the item at this slot may come from a different call site now.
+            Publish(target[i], newSource[i], reconciler);
         }
 
         // Remove excess
@@ -162,12 +179,13 @@ internal static class MenuCommandFactory
 
         // Add new
         for (int i = shared; i < newCount; i++)
-            target.Add(CreateMenuFlyoutItem(newSource[i]));
+            target.Add(CreateMenuFlyoutItem(newSource[i], reconciler));
     }
 
     internal static void UpdateAppBarItems(
         global::System.Collections.Generic.IList<WinUI.ICommandBarElement> target,
-        AppBarItemBase[]? source)
+        AppBarItemBase[]? source,
+        Reconciler? reconciler = null)
     {
         int newCount = source?.Length ?? 0;
         int oldCount = target.Count;
@@ -200,10 +218,11 @@ internal static class MenuCommandFactory
                 case AppBarSeparatorData when target[i] is WinUI.AppBarSeparator:
                     break; // nothing to update
                 default:
-                    // Type mismatch — replace
-                    target[i] = CreateAppBarItem(source[i]);
-                    break;
+                    // Type mismatch — replace (published as it is created)
+                    target[i] = CreateAppBarItem(source[i], reconciler);
+                    continue;
             }
+            Publish(target[i] as Microsoft.UI.Xaml.UIElement, source[i], reconciler);
         }
 
         // Remove excess
@@ -213,6 +232,37 @@ internal static class MenuCommandFactory
         // Add new
         if (source is not null)
             for (int i = shared; i < newCount; i++)
-                target.Add(CreateAppBarItem(source[i]));
+                target.Add(CreateAppBarItem(source[i], reconciler));
+    }
+
+    /// <summary>
+    /// Gives a menu or command-bar item control a Reactor identity for inspectors: the
+    /// <c>ReactorSource</c> value (call site of the <c>MenuItem(…)</c> / <c>AppBarButton(…)</c>
+    /// factory, owning component, item kind), so it maps back to C# and to the component
+    /// whose handlers it calls. Diagnostics mode only, like every other published value.
+    /// </summary>
+    private static void Publish(Microsoft.UI.Xaml.UIElement? control, object item, Reconciler? reconciler)
+    {
+        if (control is null
+            || !Hosting.ReactorFeatures.DevtoolsSupported
+            || !Diagnostics.ReactorSourcePublisher.IsEnabled)
+            return;
+        var site = item switch
+        {
+            MenuFlyoutItemBase menuItem => menuItem.CallSite,
+            AppBarItemBase command => command.CallSite,
+            _ => null,
+        };
+        Diagnostics.ReactorSourcePublisher.PublishItem(control, site, reconciler?.DiagnosticComponent, ItemKind(item.GetType()));
+        // The exact call site, for GetSource: the published at= text is shortened and can be
+        // shared by two call sites, and these controls have no element tag to tell them apart.
+        Core.Diagnostics.ReactorDiagnostics.SetItemSite(control, site);
+    }
+
+    /// <summary><c>MenuFlyoutItemData</c> → <c>MenuFlyoutItem</c>, <c>AppBarButtonData</c> → <c>AppBarButton</c>.</summary>
+    internal static string ItemKind(Type itemType)
+    {
+        var name = itemType.Name;
+        return name.Length > 4 && name.EndsWith("Data", StringComparison.Ordinal) ? name.Substring(0, name.Length - 4) : name;
     }
 }

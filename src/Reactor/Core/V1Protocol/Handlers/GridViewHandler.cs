@@ -60,6 +60,7 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
                 && args.ItemContainer.ContentTemplateRoot is ContentControl cc)
             {
                 using var realization = reconciler.EnterRealization((UIElement)sender!);
+                using var realizationTheme = reconciler.EnterRealizationTheme(args.ItemContainer);
                 var ctrl = reconciler.Mount(items[args.ItemIndex], requestRerender);
                 cc.Content = ctrl;
                 // Issue #951 — keep .AutomationName(...) on an item view working

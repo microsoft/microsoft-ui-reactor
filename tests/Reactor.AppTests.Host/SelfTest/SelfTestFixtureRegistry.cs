@@ -138,6 +138,7 @@ internal static class SelfTestFixtureRegistry
         "Markdown_EntityResolution",
         "Markdown_ComplexDocument",
         "Markdown_CustomOptionsCallbacks",
+        "Markdown_CustomLinkBuilder",
         "Markdown_CustomListCallbacks",
         "Markdown_CustomBlockQuoteHtml",
         "Markdown_CustomTableImage",
@@ -430,6 +431,12 @@ internal static class SelfTestFixtureRegistry
         "RenderErrorNames_ErrorBoundaryCatchIsReported",
         "RenderErrorNames_RenderErrorHandlerOutcomesReportOnce",
         "RenderErrorNames_BoundaryRollbackUnmountNamesComponent",
+        // Diagnostic events an out-of-process inspector relies on (DevTools logs / error badge)
+        "DiagnosticEvents_BareChildRenderErrorReportedOnce",
+        "DiagnosticEvents_CommitErrorReported",
+        "DiagnosticEvents_WindowOpenedAndClosedReported",
+        "KeyedListDiagnostics_RowsKeysAndWarnings",
+        "FlyoutItemIdentity_Published",
         "FocusTrapContentDialog_ContainmentProbe",
         // Issue #487 — RichTextBlock + inline UI inside ScrollViewer scroll anchor
         "Issue487_ScrollOffsetRestoredAfterRunMutation",
@@ -696,6 +703,9 @@ internal static class SelfTestFixtureRegistry
         "Item1Mount_OwnThemeWinsAtMount",
         "Item1Mount_PostMountAncestorToggleReResolves",
         "Item1Mount_SiblingSubtreesResolveIndependently",
+        "Item1Mount_HostInheritedThemeResolvesAtMount",
+        "Item1Mount_HostInheritedThemeReviewRegressions",
+        "Item1Mount_HostInheritedThemePooledRows",
         "HotReload_ChildHookOrderRecovery",
         "HotReload_ComponentMigratesState",
         // DSL and extension tests
@@ -794,6 +804,7 @@ internal static class SelfTestFixtureRegistry
         "InterState_ConfigImmutability",
         "InterState_NoLayoutProperties",
         "InterState_MountIntegration",
+        "InterState_HoverOutKeepsLayoutOffset",
         // Animation system — Transitions
         "Transition_TypeHierarchy",
         "Transition_Asymmetric",
@@ -824,6 +835,7 @@ internal static class SelfTestFixtureRegistry
         "AnimCombo_FadeEnter",
         "AnimCombo_InteractionSetup",
         "AnimCombo_KeyframesOnMount",
+        "AnimCombo_KeyframesTranslationChannel",
         "AnimCombo_StaggerOnContainer",
         // Animation combination tests — pairs
         "AnimCombo_AnimatePlusLayout",
@@ -2320,6 +2332,7 @@ internal static class SelfTestFixtureRegistry
         "Markdown_EntityResolution" => new MarkdownFixtures.EntityResolution(harness),
         "Markdown_ComplexDocument" => new MarkdownFixtures.ComplexDocument(harness),
         "Markdown_CustomOptionsCallbacks" => new MarkdownFixtures.CustomOptionsCallbacks(harness),
+        "Markdown_CustomLinkBuilder" => new MarkdownFixtures.CustomLinkBuilder(harness),
         "Markdown_CustomListCallbacks" => new MarkdownFixtures.CustomListCallbacks(harness),
         "Markdown_CustomBlockQuoteHtml" => new MarkdownFixtures.CustomBlockQuoteHtml(harness),
         "Markdown_CustomTableImage" => new MarkdownFixtures.CustomTableImage(harness),
@@ -2588,6 +2601,11 @@ internal static class SelfTestFixtureRegistry
         "RenderErrorNames_ErrorBoundaryCatchIsReported" => new RenderErrorNames_ErrorBoundaryCatchIsReported(harness),
         "RenderErrorNames_RenderErrorHandlerOutcomesReportOnce" => new RenderErrorNames_RenderErrorHandlerOutcomesReportOnce(harness),
         "RenderErrorNames_BoundaryRollbackUnmountNamesComponent" => new RenderErrorNames_BoundaryRollbackUnmountNamesComponent(harness),
+        "DiagnosticEvents_BareChildRenderErrorReportedOnce" => new DiagnosticEventsFixtures.BareChildRenderErrorReportedOnce(harness),
+        "DiagnosticEvents_CommitErrorReported" => new DiagnosticEventsFixtures.CommitErrorReported(harness),
+        "DiagnosticEvents_WindowOpenedAndClosedReported" => new DiagnosticEventsFixtures.WindowOpenedAndClosedReported(harness),
+        "KeyedListDiagnostics_RowsKeysAndWarnings" => new KeyedListDiagnostics_RowsKeysAndWarnings(harness),
+        "FlyoutItemIdentity_Published" => new FlyoutItemIdentity_Published(harness),
         "FocusTrapContentDialog_ContainmentProbe" => new FocusTrapContentDialog_ContainmentProbe(harness),
         "Issue487_ScrollOffsetRestoredAfterRunMutation" => new Issue487ScrollAnchorFixtures.Issue487_ScrollOffsetRestoredAfterRunMutation(harness),
         "Issue487_RepeatedMutationDoesNotDrift" => new Issue487ScrollAnchorFixtures.Issue487_RepeatedMutationDoesNotDrift(harness),
@@ -2839,6 +2857,9 @@ internal static class SelfTestFixtureRegistry
         "Item1Mount_OwnThemeWinsAtMount" => new ResourceOverrideMountThemeFixtures.OwnThemeWinsAtMount(harness),
         "Item1Mount_PostMountAncestorToggleReResolves" => new ResourceOverrideMountThemeFixtures.PostMountAncestorToggleReResolves(harness),
         "Item1Mount_SiblingSubtreesResolveIndependently" => new ResourceOverrideMountThemeFixtures.SiblingSubtreesResolveIndependently(harness),
+        "Item1Mount_HostInheritedThemeResolvesAtMount" => new ResourceOverrideMountThemeFixtures.HostInheritedThemeResolvesAtMount(harness),
+        "Item1Mount_HostInheritedThemeReviewRegressions" => new ResourceOverrideMountThemeFixtures.HostInheritedThemeReviewRegressions(harness),
+        "Item1Mount_HostInheritedThemePooledRows" => new ResourceOverrideMountThemeFixtures.HostInheritedThemePooledRows(harness),
         "HotReload_ChildHookOrderRecovery" => new HotReloadRecoveryFixtures.ChildRecoversAndSiblingStateSurvives(harness),
         "HotReload_ComponentMigratesState" => new HotReloadComponentMigrationFixtures.MigratesPreservingState(harness),
         // DSL and extension tests
@@ -2954,6 +2975,7 @@ internal static class SelfTestFixtureRegistry
         "InterState_ConfigImmutability" => new InteractionStatesTests.ConfigImmutability(harness),
         "InterState_NoLayoutProperties" => new InteractionStatesTests.NoLayoutProperties(harness),
         "InterState_MountIntegration" => new InteractionStatesTests.MountIntegration(harness),
+        "InterState_HoverOutKeepsLayoutOffset" => new InteractionStatesTests.HoverOutKeepsLayoutOffset(harness),
         // Animation system — Transitions
         "Transition_TypeHierarchy" => new TransitionTests.TypeHierarchy(harness),
         "Transition_Asymmetric" => new TransitionTests.AsymmetricTransition(harness),
@@ -2984,6 +3006,7 @@ internal static class SelfTestFixtureRegistry
         "AnimCombo_FadeEnter" => new AnimationCombinationTests.TransitionFadeEnter(harness),
         "AnimCombo_InteractionSetup" => new AnimationCombinationTests.InteractionStatesSetup(harness),
         "AnimCombo_KeyframesOnMount" => new AnimationCombinationTests.KeyframesOnMount(harness),
+        "AnimCombo_KeyframesTranslationChannel" => new AnimationCombinationTests.KeyframesTranslationChannel(harness),
         "AnimCombo_StaggerOnContainer" => new AnimationCombinationTests.StaggerOnContainer(harness),
         // Animation combination tests — pairs
         "AnimCombo_AnimatePlusLayout" => new AnimationCombinationTests.AnimatePlusLayout(harness),
@@ -4176,7 +4199,6 @@ internal static class SelfTestFixtureRegistry
         _ => null,
     };
 }
-
 
 
 

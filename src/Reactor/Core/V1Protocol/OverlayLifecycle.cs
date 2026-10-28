@@ -437,7 +437,7 @@ internal static class OverlayLifecycle
         foreach (var menuItem in mbEl.Items)
         {
             var mbi = new WinUI.MenuBarItem { Title = menuItem.Title };
-            foreach (var flyoutItem in menuItem.Items) mbi.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(flyoutItem));
+            foreach (var flyoutItem in menuItem.Items) mbi.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(flyoutItem, reconciler));
             menuBar.Items.Add(mbi);
         }
         Reconciler.ApplySetters(mbEl.Setters, menuBar);
@@ -456,7 +456,7 @@ internal static class OverlayLifecycle
             var mbi = (WinUI.MenuBarItem)mb.Items[i];
             if (o.Items[i].Title != n.Items[i].Title)
                 mbi.Title = n.Items[i].Title;
-            MenuCommandFactory.UpdateMenuFlyoutItems(mbi.Items, o.Items[i].Items, n.Items[i].Items);
+            MenuCommandFactory.UpdateMenuFlyoutItems(mbi.Items, o.Items[i].Items, n.Items[i].Items, reconciler);
         }
 
         // Remove excess top-level menus
@@ -468,7 +468,7 @@ internal static class OverlayLifecycle
         {
             var mbi = new WinUI.MenuBarItem { Title = n.Items[i].Title };
             foreach (var item in n.Items[i].Items)
-                mbi.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item));
+                mbi.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item, reconciler));
             mb.Items.Add(mbi);
         }
 
@@ -487,9 +487,9 @@ internal static class OverlayLifecycle
         };
         if (cmdEl.Content is not null) commandBar.Content = reconciler.Mount(cmdEl.Content, requestRerender);
         if (cmdEl.PrimaryCommands is not null)
-            foreach (var cmd in cmdEl.PrimaryCommands) commandBar.PrimaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd));
+            foreach (var cmd in cmdEl.PrimaryCommands) commandBar.PrimaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
         if (cmdEl.SecondaryCommands is not null)
-            foreach (var cmd in cmdEl.SecondaryCommands) commandBar.SecondaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd));
+            foreach (var cmd in cmdEl.SecondaryCommands) commandBar.SecondaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
         Reconciler.SetElementTag(commandBar, cmdEl);
         Reconciler.ApplySetters(cmdEl.Setters, commandBar);
         return commandBar;
@@ -501,8 +501,8 @@ internal static class OverlayLifecycle
         cb.IsOpen = n.IsOpen;
 
         // Update primary commands in-place
-        MenuCommandFactory.UpdateAppBarItems(cb.PrimaryCommands, n.PrimaryCommands);
-        MenuCommandFactory.UpdateAppBarItems(cb.SecondaryCommands, n.SecondaryCommands);
+        MenuCommandFactory.UpdateAppBarItems(cb.PrimaryCommands, n.PrimaryCommands, reconciler);
+        MenuCommandFactory.UpdateAppBarItems(cb.SecondaryCommands, n.SecondaryCommands, reconciler);
 
         reconciler.ReconcileChild(o.Content, n.Content,
             () => cb.Content as UIElement,
@@ -523,7 +523,7 @@ internal static class OverlayLifecycle
         if (target is FrameworkElement targetFe)
         {
             var menuFlyout = new WinUI.MenuFlyout();
-            foreach (var item in mfEl.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item));
+            foreach (var item in mfEl.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item, reconciler));
             Reconciler.SetElementTag(targetFe, mfEl);
             // Use SetFlyoutOnControl so clicking a Button/SplitButton target opens
             // the flyout via .Flyout; non-button targets fall back to attached-flyout
@@ -556,14 +556,14 @@ internal static class OverlayLifecycle
             var existingFlyout = Reconciler.GetFlyoutOnControl(targetFe);
             if (existingFlyout is WinUI.MenuFlyout mf)
             {
-                MenuCommandFactory.UpdateMenuFlyoutItems(mf.Items, o.Items, n.Items);
+                MenuCommandFactory.UpdateMenuFlyoutItems(mf.Items, o.Items, n.Items, reconciler);
                 Reconciler.ApplySetters(n.Setters, mf);
             }
             else
             {
                 // Flyout type changed or was missing — create fresh.
                 var menuFlyout = new WinUI.MenuFlyout();
-                foreach (var item in n.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item));
+                foreach (var item in n.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item, reconciler));
                 reconciler.SetFlyoutOnControl(targetFe, menuFlyout);
                 Reconciler.ApplySetters(n.Setters, menuFlyout);
             }
@@ -637,9 +637,9 @@ internal static class OverlayLifecycle
             var flyout = new WinUI.CommandBarFlyout();
             FlyoutPlacement.Apply(flyout, cbf.Placement);
             if (cbf.PrimaryCommands is not null)
-                foreach (var cmd in cbf.PrimaryCommands) flyout.PrimaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd));
+                foreach (var cmd in cbf.PrimaryCommands) flyout.PrimaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
             if (cbf.SecondaryCommands is not null)
-                foreach (var cmd in cbf.SecondaryCommands) flyout.SecondaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd));
+                foreach (var cmd in cbf.SecondaryCommands) flyout.SecondaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
             Reconciler.SetElementTag(targetFe, cbf);
             // SetFlyoutOnControl (not SetAttachedFlyout) so clicking a Button/SplitButton
             // target opens the flyout natively, matching Flyout and MenuFlyout. WinUI's
@@ -686,9 +686,9 @@ internal static class OverlayLifecycle
                 var flyout = new WinUI.CommandBarFlyout();
                 FlyoutPlacement.Apply(flyout, n.Placement);
                 if (n.PrimaryCommands is not null)
-                    foreach (var cmd in n.PrimaryCommands) flyout.PrimaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd));
+                    foreach (var cmd in n.PrimaryCommands) flyout.PrimaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
                 if (n.SecondaryCommands is not null)
-                    foreach (var cmd in n.SecondaryCommands) flyout.SecondaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd));
+                    foreach (var cmd in n.SecondaryCommands) flyout.SecondaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
                 reconciler.SetFlyoutOnControl(targetFe, flyout);
                 Reconciler.ApplySetters(n.Setters, flyout);
                 existing = flyout;
@@ -701,9 +701,9 @@ internal static class OverlayLifecycle
                     existing.PrimaryCommands.Clear();
                     existing.SecondaryCommands.Clear();
                     if (n.PrimaryCommands is not null)
-                        foreach (var cmd in n.PrimaryCommands) existing.PrimaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd));
+                        foreach (var cmd in n.PrimaryCommands) existing.PrimaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
                     if (n.SecondaryCommands is not null)
-                        foreach (var cmd in n.SecondaryCommands) existing.SecondaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd));
+                        foreach (var cmd in n.SecondaryCommands) existing.SecondaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
                 }
                 Reconciler.ApplySetters(n.Setters, existing);
             }

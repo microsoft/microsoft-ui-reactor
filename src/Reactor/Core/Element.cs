@@ -2836,7 +2836,22 @@ public partial record TreeViewNodeData(string Content, TreeViewNodeData[]? Child
 
 public record MenuBarItemData(string Title, MenuFlyoutItemBase[] Items);
 
-public abstract record MenuFlyoutItemBase;
+public abstract record MenuFlyoutItemBase
+{
+    /// <summary>
+    /// Where this item was created in C#, stamped by the source map on the
+    /// <c>MenuItem(…)</c> / <c>ToggleMenuItem(…)</c> / … factory call (the same mechanism as
+    /// <see cref="Element.CallSite"/>). The realized menu item publishes it for inspectors.
+    /// Not part of equality, like <see cref="Element.CallSite"/>.
+    /// </summary>
+    public SourceLocation? CallSite
+    {
+        get => _callSite.Value;
+        init => _callSite = new(value);
+    }
+
+    private readonly EqualityIgnored<SourceLocation> _callSite;
+}
 public record MenuFlyoutItemData(string Text, Action? OnClick = null, string? Icon = null) : MenuFlyoutItemBase
 {
     public bool IsEnabled { get; init; } = true;
@@ -2880,7 +2895,22 @@ public partial record IconElement(IconData Data) : Element
     internal Action<WinUI.IconElement>[] Setters { get; init; } = [];
 }
 
-public abstract record AppBarItemBase;
+public abstract record AppBarItemBase
+{
+    /// <summary>
+    /// Where this command was created in C#, stamped by the source map on the
+    /// <c>AppBarButton(…)</c> / <c>AppBarToggleButton(…)</c> / <c>AppBarSeparator()</c> factory
+    /// call (the same mechanism as <see cref="Element.CallSite"/>). The realized command
+    /// publishes it for inspectors. Not part of equality, like <see cref="Element.CallSite"/>.
+    /// </summary>
+    public SourceLocation? CallSite
+    {
+        get => _callSite.Value;
+        init => _callSite = new(value);
+    }
+
+    private readonly EqualityIgnored<SourceLocation> _callSite;
+}
 public record AppBarButtonData(string Label, Action? OnClick = null, string? Icon = null) : AppBarItemBase
 {
     public bool IsEnabled { get; init; } = true;
@@ -6264,6 +6294,11 @@ public abstract record TemplatedListElementBase : Element, global::Microsoft.UI.
     /// pre-mounts so it does not participate.
     /// </summary>
     internal abstract string GetKeyAt(int index);
+    /// <summary>
+    /// The author's <c>KeySelector</c> key for the item at <paramref name="index"/>, stamped on
+    /// its realized row for diagnostics; <c>null</c> when there is none (no synthetic key).
+    /// </summary>
+    internal virtual string? GetItemIdentityKey(int index) => GetKeyAt(index);
     // §14 Phase 3 close-out — bridge the internal abstract to the public
     // IKeyedItemSource contract via explicit interface implementation so
     // the abstract stays internal (spec 042 decision) while descriptor
@@ -6445,6 +6480,8 @@ public record TemplatedFlipViewElement<T>(
         KeySelector is not null && (uint)index < (uint)Items.Count
             ? KeySelector(Items[index])
             : $"__flip_{index}";
+    internal override string? GetItemIdentityKey(int index) =>
+        KeySelector is not null && (uint)index < (uint)Items.Count ? KeySelector(Items[index]) : null;
     public override void InvokeSelectionChanged(int index) => OnSelectedIndexChanged?.Invoke(index);
     public override void InvokeItemClick(int index) { }
     public override void ApplyControlSetters(object control) =>
@@ -7842,9 +7879,11 @@ public record ItemsViewElement<T>(
 
     public override int ItemCount => Items.Count;
 
+    // A null key passes through (as for the other keyed lists), so the keyed-list binding
+    // reports it and substitutes its positional placeholder.
     internal override string GetKeyAt(int index) =>
         (uint)index < (uint)Items.Count
-            ? (KeySelector(Items[index]) ?? $"__iv_{index}")
+            ? KeySelector(Items[index])!
             : $"__iv_{index}";
 
     /// <summary>

@@ -410,6 +410,68 @@ Conventions for contributors:
   context and theme, so a failing row shows its own error and a failing boundary only
   rolls back its own subtree. (Window hooks in such rows are covered by the
   window-owner fix below.)
+- **Wrapped third-party controls now get source-map call sites** (spec 010). A factory
+  emitted by `[GenerateReactorWrapper]` (`SettingsCard(...)`, `RadialGauge(...)`) is
+  invisible to the source-map generator, because no source generator sees another's
+  output. Its calls were never stamped, and every DSL call taking one as an argument —
+  `VStack(8, SettingsCard(...))`, `HStack(8, gauge.Width(140))` — failed to bind there
+  and was dropped too, so devtools saw a bare `StackPanel` with no Reactor element.
+  `Reactor.Wrappers.Generator` now intercepts calls to the factories it emits (same line,
+  column and `ReactorSourceMap.Enabled` rules; only when `ReactorSourceMap` is true and
+  the build lists `Microsoft.UI.Reactor.Generated` in `InterceptorsNamespaces`), and the
+  source-map generator re-binds such containing calls as if each wrapper value were
+  already an `Element`, so they keep their location and declared name — or leaves a call
+  unstamped where that could change which overload the real compilation picks.
+
+- **ThemeRef resource overrides follow a `RequestedTheme` set outside the Reactor tree**
+  (follow-up to #771). When an app themes a native ancestor of a `ReactorHostControl`
+  or a `ReactorHost.ContentTarget`
+  (for example `RequestedTheme = Dark` on the window root under a Light app),
+  `.Resources(r => r.Set(key, Theme.Ref(...)))` overrides resolved against the app
+  theme: at mount the control is not yet parented, and no theme change follows to
+  re-resolve it. ListView, GridView, TreeView and ItemsView/ItemsRepeater rows realized
+  during layout had the same problem, because they mount outside any root pass.
+  Both hosts now supply a native theme anchor to the reconciler, including for custom
+  error fallbacks. Layout-time realization inherits its container's theme, pooled rows
+  refresh unchanged descendants when reused under a different theme, and a change to the host's inherited theme
+  forces a resource refresh even through unchanged subtrees (including when a
+  theme-event render runs before the host's Loaded event).
+
+- **Diagnostics an inspector relies on (winapp DevTools) are no longer missing or anonymous**
+  (issue #1421, spec 044 / spec 010 / spec 042).
+  - A commit-phase failure that replaces a window's content with the error screen now raises a
+    new `ReactorEventSource.CommitError` event (EventId 41: phase, host root component,
+    exception type). Before, nothing was raised while the window showed the error.
+  - `ReactorEventSource.WindowOpened` / `WindowClosed` were declared but never raised; windows
+    opened through `ReactorApp.OpenWindow` / `Run` now report both (root component type, HWND).
+  - `UseElementRef<T>()` is counted as the single hook slot it is, so the source map's
+    `hooks=` list keeps the ref's name and the indices of every later hook.
+  - Templated `ListView<T>` / `GridView<T>` / `FlipView<T>` rows carry their `KeySelector` key
+    on the realized element (its element tag and published `key=`), as `LazyVStack` /
+    `VirtualList` rows already did. FlipView pages are still matched by position.
+  - A list born with a null or duplicated key (including `LazyVStack`, which used to swap a
+    null key for `__null_N` silently) is reported at mount, and a null key met during an update
+    is reported on every keyed list (the item is still matched by position, and the rest of the
+    list now always diffs incrementally instead of resetting on some paths). Duplicate
+    `.WithKey` siblings in a panel (`VStack(… .WithKey("same"), … .WithKey("same"))`) are
+    reported too. Every `KeyedListDiagnostic` now carries `ComponentName` (while an inspector is
+    attached) and `CallSite`, and the logged warning names both.
+  - `MenuItem(…)` / `AppBarButton(…)` and the other menu and command-bar item factories are
+    source-mapped (new `CallSite` on `MenuFlyoutItemBase` / `AppBarItemBase`, excluded from
+    equality), and the items a `MenuFlyout`, `CommandBarFlyout`, `MenuBar` or `CommandBar`
+    builds publish their `ReactorSource` value, so `ReactorSourceMap.GetSource` and inspectors
+    map them back to C# and their owning component.
+  - `TabView`, `Pivot`, `ListView`, `GridView` and `FlipView` accept a plain `int` selected
+    index (it was ambiguous between `int?` and `Optional<int>`, CS0121), and new `XamlHost(…)` /
+    `XamlPage(…)` factories record a call site for `XamlHostElement` / `XamlPageElement`.
+
+- **Markdown `LinkBuilder` is now invoked** (#1401). Previously the callback was
+  ignored and every link rendered as a default hyperlink. Each link whose target
+  passes the URI policy now calls it with that URI and the formatted label, and
+  the returned element renders inline. Links nested in a label stay part of the
+  outer link. If the outer target is rejected, the whole label renders as plain
+  text, and a URL inside it does not become a separate link. Links render as
+  before when no callback is set.
 - **Opening a `Flyout` from state no longer replaces the window with a render error**
   (issue #1419). `Flyout(Button(...), ...) with { IsOpen = open }` opened through
   `FlyoutBase.ShowAttachedFlyout`, but a Button/SplitButton target holds its flyout in the
@@ -424,6 +486,12 @@ Conventions for contributors:
   built-in COM marshalling. Worker calls use a balanced explicit COM apartment scope and
   release transaction-owned interfaces deterministically. See the
   [Jump list guide](docs/guide/windows.md#jump-list) (spec 036 §11.3).
+
+- **`.InteractionStates()` and `.Keyframes()` translations no longer move an element to its
+  parent's origin** (issue #1432). Both animated the handoff visual's `Offset`, and on a
+  XAML element that `Offset` is its layout position, so a `translation:` replaced the
+  element's position instead of nudging it, and hover-out sent it to the top-left of its
+  parent. Both now animate `Translation`.
 
 - **A conditional child no longer shifts its unkeyed siblings** (issue #1423). The
   container factories drop `null` / `Empty()` arguments and flatten `Group(...)`, so

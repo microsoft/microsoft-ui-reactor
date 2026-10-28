@@ -129,3 +129,26 @@ class EventsFluentExample : Component
     }
 }
 // </snippet:events-fluent>
+
+partial class LegacySettingsPage : Microsoft.UI.Xaml.Controls.Page { }
+
+partial class MyUserControl : Microsoft.UI.Xaml.Controls.UserControl
+{
+    public int Value { get; set; }
+}
+
+// <snippet:xaml-interop>
+class XamlInteropExample : Component
+{
+    public override Element Render()
+    {
+        var (count, _) = UseState(0);
+
+        return VStack(8,
+            XamlPage(typeof(LegacySettingsPage), parameter: "general"),   // a Frame navigated to the page
+            XamlHost(() => new MyUserControl(), c => ((MyUserControl)c).Value = count,
+                     typeKey: "MyUserControl")                            // any FrameworkElement
+        );
+    }
+}
+// </snippet:xaml-interop>

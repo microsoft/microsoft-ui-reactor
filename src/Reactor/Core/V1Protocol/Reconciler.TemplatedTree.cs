@@ -178,6 +178,7 @@ public sealed partial class Reconciler
         // Runs from ContainerContentChanging / Loaded / LayoutUpdated, outside the
         // traversal — replay the tree's provider stack for the node view.
         using var realization = EnterRealization(treeView);
+        using var realizationTheme = EnterRealizationTheme(container);
         var view = el.BuildView(data);
         cc.Content = Mount(view, requestRerender);
         SetElementTag(cc, view);
@@ -245,6 +246,7 @@ public sealed partial class Reconciler
             if (container.ContentTemplateRoot is not ContentControl cc) continue;
             if (list.Items[i] is not WinUI.TreeViewNode node || node.Content is not { } data) continue;
 
+            using var realizationTheme = EnterRealizationTheme(container);
             var newView = n.BuildView(data);
             if (cc.Content is UIElement existing && GetElementTag(cc) is Element oldView && CanUpdate(oldView, newView))
             {

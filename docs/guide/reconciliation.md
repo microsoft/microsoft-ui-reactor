@@ -102,12 +102,18 @@ public UIElement? Reconcile(
         // Consume the hot-reload and resource-refresh signals exactly once per
         // top-level pass so every component re-runs Render() even when props/deps
         // are unchanged (and, for a resource refresh, no element is skipped).
-        _resourceRefreshActive = _resourceRefreshArmed;
-        _resourceRefreshArmed = false;
+        bool hostPass = _realizationThemeDepth == 0;
+        var theme = hostPass ? InheritedRequestedTheme(ThemeAnchor) : _realizationTheme;
+        _resourceRefreshActive = hostPass
+            ? _resourceRefreshArmed || theme != _renderedHostTheme
+            : _realizationResourceRefresh;
+        if (hostPass)
+            _resourceRefreshArmed = false;
         _forceFullRenderActive = ForceFullRenderPending || _resourceRefreshActive;
         ForceFullRenderPending = false;
         _hotReloadRetryActive = HotReloadRetryPending;
         HotReloadRetryPending = false;
+        _ambientRequestedTheme = theme;
 
         // Build the dirty-ancestor path. For every component node
         // whose SelfTriggered is true, walk up the realized visual
@@ -120,17 +126,20 @@ public UIElement? Reconcile(
     try {
     try
     {
+        UIElement? result;
         if (newElement is null or EmptyElement)
         {
             if (existingControl is not null)
                 Unmount(existingControl);
-            return null;
+            result = null;
         }
-
-        if (oldElement is null or EmptyElement || existingControl is null)
-            return Mount(newElement, requestRerender);
-
-        return ReconcileImperative(oldElement, newElement, existingControl, requestRerender);
+        else if (oldElement is null or EmptyElement || existingControl is null)
+            result = Mount(newElement, requestRerender);
+        else
+            result = ReconcileImperative(oldElement, newElement, existingControl, requestRerender);
+        if (_debugReconcileDepth == 1 && _realizationThemeDepth == 0)
+            _renderedHostTheme = _ambientRequestedTheme;
+        return result;
 ```
 
 `Reconcile` is short on purpose. The interesting work is in `Mount`,
@@ -262,6 +271,14 @@ internal static void Reconcile(
     var newFiltered = Filter(newChildren, out var newSlots);
 
     bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
+
+    // Duplicate sibling keys are matched to the wrong controls by the keyed path below;
+    // report them (deduplicated per panel) rather than let that happen silently. Only when
+    // the key sequence changed: an unchanged one was already checked when it first
+    // appeared, here or at mount, so a stable keyed panel's re-render pays one compare
+    // per child (the prefix walk below does the same) rather than a duplicate scan.
+    if (hasKeys && newFiltered.Length > 1 && !SameKeys(oldFiltered, newFiltered))
+        KeyedListDiff.ReportDuplicateSiblingKeys(newFiltered, reconciler, parentControl);
 
     // Spec 042 §6 — read the active Animations.Animate ambient once
     // per reconcile so insert / move / unmount paths can apply the
@@ -527,6 +544,14 @@ internal static void Reconcile(
     var newFiltered = Filter(newChildren, out var newSlots);
 
     bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
+
+    // Duplicate sibling keys are matched to the wrong controls by the keyed path below;
+    // report them (deduplicated per panel) rather than let that happen silently. Only when
+    // the key sequence changed: an unchanged one was already checked when it first
+    // appeared, here or at mount, so a stable keyed panel's re-render pays one compare
+    // per child (the prefix walk below does the same) rather than a duplicate scan.
+    if (hasKeys && newFiltered.Length > 1 && !SameKeys(oldFiltered, newFiltered))
+        KeyedListDiff.ReportDuplicateSiblingKeys(newFiltered, reconciler, parentControl);
 
     // Spec 042 §6 — read the active Animations.Animate ambient once
     // per reconcile so insert / move / unmount paths can apply the

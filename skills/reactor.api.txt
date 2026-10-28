@@ -67,6 +67,7 @@ FlexColumn(Element[] children) → FlexElement
 FlexRow(Element[] children) → FlexElement
 FlipView(Element[] items) → FlipViewElement
 FlipView(Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → FlipViewElement
+FlipView(int selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → FlipViewElement
 FlipView(int? selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → FlipViewElement
 FlipView<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → TemplatedFlipViewElement<T>
 FlipView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedFlipViewElement<T>
@@ -78,6 +79,7 @@ Frame(Type sourcePageType = null, object navigationParameter = null) → FrameEl
 Grid(GridSize[] columns, GridSize[] rows, Element[] children) → GridElement
 GridView(Element[] items) → GridViewElement
 GridView(Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → GridViewElement
+GridView(int selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → GridViewElement
 GridView(int? selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → GridViewElement
 GridView<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → TemplatedGridViewElement<T>
 GridView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedGridViewElement<T>
@@ -113,6 +115,7 @@ Line(double x1, double y1, double x2, double y2) → LineElement
 ListBox(string[] items, Optional<int> selectedIndex = default, Action<int> onSelectedIndexChanged = null) → ListBoxElement
 ListView(Element[] items) → ListViewElement
 ListView(Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → ListViewElement
+ListView(int selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → ListViewElement
 ListView(int? selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → ListViewElement
 ListView<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → TemplatedListViewElement<T>
 ListView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedListViewElement<T>
@@ -145,6 +148,7 @@ PersonPicture() → PersonPictureElement
 PipsPager(int numberOfPages, Optional<int> selectedPageIndex = default, Action<int> onSelectedPageIndexChanged = null) → PipsPagerElement
 Pivot(Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null, PivotItemData[] items) → PivotElement
 Pivot(PivotItemData[] items) → PivotElement
+Pivot(int selectedIndex, Action<int> onSelectedIndexChanged = null, PivotItemData[] items) → PivotElement
 Pivot(int? selectedIndex, Action<int> onSelectedIndexChanged = null, PivotItemData[] items) → PivotElement
 PivotItem(string header, Element content) → PivotItemData
 Popup(Element child, bool isOpen = false, Action onClosed = null) → PopupElement
@@ -183,6 +187,7 @@ SymbolIcon(string symbol) → SymbolIconData
 Tab(string header, Element content) → TabViewItemData
 TabView(Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null, TabViewItemData[] tabs) → TabViewElement
 TabView(TabViewItemData[] tabs) → TabViewElement
+TabView(int selectedIndex, Action<int> onSelectedIndexChanged = null, TabViewItemData[] tabs) → TabViewElement
 TabView(int? selectedIndex, Action<int> onSelectedIndexChanged = null, TabViewItemData[] tabs) → TabViewElement
 TeachingTip(string title, string subtitle = null, ElementRef target = null) → TeachingTipElement
 TextBlock(string content) → TextBlockElement
@@ -215,6 +220,8 @@ WebView2(Uri source = null) → WebView2Element
 When(bool condition, Func<Element> then) → Element
 WrapGrid(Element[] children) → WrapGridElement
 WrapGrid(int maxRowsOrColumns, Element[] children) → WrapGridElement
+XamlHost(Func<FrameworkElement> factory, Action<FrameworkElement> updater = null, string typeKey = null) → XamlHostElement
+XamlPage(Type pageType, object parameter = null) → XamlPageElement
 
 ## Modifiers (extension methods on Element)
 # Fluent — preserves concrete element type. Type-specific sugar (e.g. .Bold()
@@ -1198,6 +1205,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record AppBarItemBase
+SourceLocation? CallSite { get; init; }
 Equals(AppBarItemBase other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
@@ -3312,7 +3320,9 @@ new(DateTime TimestampUtc, string ControlContext, KeyedListDiagnosticKind Kind, 
 DateTime TimestampUtc { get; init; }
 IReadOnlyList<string> SampleKeys { get; init; }
 KeyedListDiagnosticKind Kind { get; init; }
+SourceLocation? CallSite { get; init; }
 int Count { get; init; }
+string ComponentName { get; init; }
 string ControlContext { get; init; }
 Deconstruct(ref DateTime TimestampUtc, ref string ControlContext, ref KeyedListDiagnosticKind Kind, ref IReadOnlyList<string> SampleKeys, ref int Count) → void
 Equals(KeyedListDiagnostic other) → bool
@@ -3734,6 +3744,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record MenuFlyoutItemBase
+SourceLocation? CallSite { get; init; }
 Equals(MenuFlyoutItemBase other) → bool
 Equals(object obj) → bool
 GetHashCode() → int

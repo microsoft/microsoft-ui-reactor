@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -113,6 +113,15 @@ public sealed class SourceMapTransparentGeneratorTests
                 public static T UseMemo<T>(this Microsoft.UI.Reactor.Core.Component component, global::System.Func<T> factory)
                     => factory();
             }
+
+            // Reactor's typed element-ref hook: one UseMemo slot, on either overload.
+            public static class UseElementRefExtensions
+            {
+                public static T UseElementRef<T>(this Microsoft.UI.Reactor.Core.RenderContext ctx) where T : new()
+                    => ctx.UseRef(new T());
+                public static T UseElementRef<T>(this Microsoft.UI.Reactor.Core.Component component) where T : new()
+                    => component.Context.UseElementRef<T>();
+            }
         }
         namespace Microsoft.UI.Reactor.Diagnostics
         {
@@ -178,7 +187,10 @@ public sealed class SourceMapTransparentGeneratorTests
         bool enabled = true,
         IReadOnlyDictionary<string, string>? buildProperties = null,
         SurfaceShape surface = SurfaceShape.InSource,
-        string? librarySource = null)
+        string? librarySource = null,
+        IReadOnlyList<(string Path, string Source)>? extraFiles = null,
+        string? completeAfterGeneration = null,
+        OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary)
     {
         Assert.True(librarySource is null || surface != SurfaceShape.InSource, "a library project needs a referenced surface");
 
@@ -188,7 +200,7 @@ public sealed class SourceMapTransparentGeneratorTests
         var parseOptions = new CSharpParseOptions(LanguageVersion.Preview)
             .WithFeatures([new KeyValuePair<string, string>(
                 "InterceptorsNamespaces", SourceMapInterceptorGenerator.InterceptorNamespace)]);
-        var compilationOptions = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
+        var compilationOptions = new CSharpCompilationOptions(outputKind,
             nullableContextOptions: NullableContextOptions.Enable);
 
         var surfaceTree = CSharpSyntaxTree.ParseText(ReactorSurface, parseOptions, path: "Surface.cs");
@@ -215,11 +227,19 @@ public sealed class SourceMapTransparentGeneratorTests
             trees = [surfaceTree, userTree];
         }
 
+        if (extraFiles is not null)
+            trees = [.. trees, .. extraFiles.Select(f => CSharpSyntaxTree.ParseText(f.Source, parseOptions, path: f.Path))];
+
         var compilation = CSharpCompilation.Create("SourceMapDriverProbe", trees, references, compilationOptions);
 
         // The snippet must bind, or an "expected diagnostic missing" result would just be
         // measuring a broken probe. Binding errors are a test bug, not a product signal.
-        var bindErrors = compilation.GetDiagnostics()
+        // "Bind" as in the real build: with the other generator's half added when there is
+        // one, since a call to a factory only that generator emits binds to nothing here.
+        var probe = completeAfterGeneration is null
+            ? compilation
+            : compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText(completeAfterGeneration, parseOptions, path: "OtherGenerator.g.cs"));
+        var bindErrors = probe.GetDiagnostics()
             .Where(static d => d.Severity == DiagnosticSeverity.Error)
             .ToList();
         Assert.True(bindErrors.Count == 0, "probe snippet failed to compile: " + string.Join("; ", bindErrors));
@@ -232,6 +252,17 @@ public sealed class SourceMapTransparentGeneratorTests
         driver = (CSharpGeneratorDriver)driver.RunGeneratorsAndUpdateCompilation(
             compilation, out var outputCompilation, out _);
         var result = driver.GetRunResult();
+
+        // A generator that threw emits nothing, which would satisfy any "no interceptor"
+        // assertion; Roslyn records the exception here, not as a compilation diagnostic.
+        var crashed = result.Results.Where(static r => r.Exception is not null).ToList();
+        Assert.True(crashed.Count == 0, "a generator threw: " + string.Join("; ", crashed.Select(static r => r.Exception)));
+
+        // What another generator adds in the real build (the half of a [GenerateReactorWrapper]
+        // record this generator cannot see), so the emitted interceptors are checked against
+        // the compilation they will actually be part of.
+        if (completeAfterGeneration is not null)
+            outputCompilation = outputCompilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText(completeAfterGeneration, parseOptions, path: "OtherGenerator.g.cs"));
 
         var emitErrors = outputCompilation.GetDiagnostics()
             .Where(static d => d.Severity == DiagnosticSeverity.Error)

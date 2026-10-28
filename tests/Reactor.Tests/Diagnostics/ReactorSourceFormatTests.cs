@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.Diagnostics;
+using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Reactor.SourceMap.Generator;
 using Xunit;
 
@@ -282,6 +283,7 @@ public sealed class HookSlotTableTests
         { "UseCallback", static c => c.UseCallback(static () => { }, 1, 2) },
         { "UseCallback", static c => c.UseCallback(static () => { }, 1, 2, 3) },
         { "UseContext", static c => c.UseContext(s_context) },
+        { "UseElementRef", static c => c.UseElementRef<global::Microsoft.UI.Xaml.Controls.Border>() },
     };
 
     [Theory]
