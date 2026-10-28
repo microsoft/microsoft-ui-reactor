@@ -97,6 +97,7 @@ public sealed class BuiltInComInteropGuardTests
     [InlineData("GuardSamples.Native.TakesBlittableCallback")]
     [InlineData("GuardSamples.Native.TakesSelfReferencingStruct")]
     [InlineData("GuardSamples.Native.TakesUnknownFieldStructPointer")]
+    [InlineData("GuardSamples.Native.TakesHandleRef")]
     public void Guard_AllowsAotSafeShape(string member)
     {
         var hits = SampleViolations.Value.Where(v => v.Member == member).Select(v => v.Message).ToArray();
@@ -152,9 +153,10 @@ public sealed class BuiltInComInteropGuardTests
     // the built-in COM marshaller, also when nested in an array, a struct / formatted
     // class field, or a delegate's signature. Strings and blittable data don't, and an
     // unmanaged pointer is passed as a raw address, so its pointee is never marshalled.
+    // HandleRef marshals as its IntPtr; its object wrapper only keeps the owner alive.
     private static bool NeedsComMarshaller(Type t, HashSet<Type> visited)
     {
-        if (t.IsPointer)
+        if (t.IsPointer || t == typeof(HandleRef))
             return false;
         if (t.IsByRef || t.IsArray)
             return NeedsComMarshaller(t.GetElementType()!, visited);
@@ -271,6 +273,7 @@ public sealed class BuiltInComInteropGuardTests
             [DllImport("ole32.dll")] public static extern int TakesBlittableCallback(BlittableCallback callback);
             [DllImport("ole32.dll")] public static extern unsafe int TakesSelfReferencingStruct(SelfReferencingStruct* value);
             [DllImport("ole32.dll")] public static extern unsafe int TakesUnknownFieldStructPointer(StructWithUnknownField* value);
+            [DllImport("user32.dll")] public static extern int TakesHandleRef(HandleRef hwnd);
         }
         """;
 }
