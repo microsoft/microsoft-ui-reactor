@@ -377,7 +377,8 @@ public sealed partial class SourceMapInterceptorGenerator
     /// How many <c>RenderContext</c> slots a hook call takes: 1 for <see cref="SingleSlotHooks"/>
     /// on Reactor's own types; for a custom hook written in this compilation, the sum over
     /// the hooks its body calls (straight-line only); otherwise <c>-1</c> (unknown) — including
-    /// a hook whose body is chosen at run time (abstract / virtual / interface) or absent.
+    /// a hook whose body is chosen at run time (abstract / virtual / interface), absent, or
+    /// declared in another project's source.
     /// </summary>
     private static int SlotCount(
         IMethodSymbol method,
@@ -405,6 +406,10 @@ public sealed partial class SourceMapInterceptorGenerator
         foreach (var declaration in method.DeclaringSyntaxReferences.Select(reference => reference.GetSyntax(ct)))
         {
             if (declaration is BaseMethodDeclarationSyntax { Body: null, ExpressionBody: null }) return -1;
+            // Declared in another project's source (a workspace compilation reference, as
+            // under `dotnet watch`): not readable here, and a command-line build sees no
+            // source for it at all, so it is unknown either way.
+            if (!compilation.ContainsSyntaxTree(declaration.SyntaxTree)) return -1;
             var model = compilation.GetSemanticModel(declaration.SyntaxTree);
             foreach (var call in declaration.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(static c => IsHookCandidate(c)))
             {
@@ -443,9 +448,12 @@ public sealed partial class SourceMapInterceptorGenerator
             && owner.Name == "Component" && owner.IsGenericType)
             return true;
         if (owner.ToDisplayString() == ContextExtensionsMetadataName) return true;
-        // Any other hook compiled into Reactor itself (no source in this compilation).
-        return method.DeclaringSyntaxReferences.IsDefaultOrEmpty
-            && SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, renderContext.ContainingAssembly);
+        // Any other hook declared in Reactor itself. Decided by assembly, not by "has no
+        // source": under `dotnet watch` a project-referenced Reactor arrives as a compilation
+        // reference whose symbols DO carry (foreign) syntax. Only when Reactor is the
+        // compilation being generated are its in-source hooks walked like any custom hook.
+        return SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, renderContext.ContainingAssembly)
+            && !SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, compilation.Assembly);
     }
 
     /// <summary>CLR <c>Type.FullName</c> of a type's open definition: <c>Ns.Outer+Inner`1</c>.</summary>

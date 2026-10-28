@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests;
@@ -417,6 +418,101 @@ public sealed class SourceMapStaticInfoGeneratorTests
         Assert.Equal($"0:v@{LineOf(code, "var v = UseOverridable()")};?:w@{LineOf(code, "UseRef(2)")}", hooks["VirtualHookPage"]);
         // Positive control: a non-virtual custom hook is still counted (one UseRef).
         Assert.Equal($"0:s@{LineOf(code, "var s = UseFixed()")};1:t@{LineOf(code, "UseRef(4)")}", hooks["StaticHookPage"]);
+    }
+
+    private const string InterceptorApplication = "[global::System.Runtime.CompilerServices.InterceptsLocationAttribute(";
+
+    // Issue #1404: under `dotnet watch`, a project-referenced Reactor is a compilation
+    // reference whose symbols carry syntax from trees outside the app's compilation. Each
+    // case runs in both shapes with ONE expectation: watch and command-line builds agree.
+    [Theory]
+    [InlineData(SourceMapTransparentGeneratorTests.SurfaceShape.ProjectReference)]
+    [InlineData(SourceMapTransparentGeneratorTests.SurfaceShape.MetadataReference)]
+    public void Hooks_ReactorAsAReference_HooksAreReactorOwned_AndTheGeneratorDoesNotFail(
+        SourceMapTransparentGeneratorTests.SurfaceShape shape)
+    {
+        const string code = """
+            using Microsoft.UI.Reactor.Core;
+            using Microsoft.UI.Reactor.Hooks;
+            using static Microsoft.UI.Reactor.Factories;
+
+            public sealed class RefsPage : Component
+            {
+                public override Element Render()
+                {
+                    var (count, setCount) = UseState(0);
+                    var latest = UseRef(1);
+                    var memo = this.UseMemo(() => 2);
+                    var (focusRef, focus) = this.UseElementFocus();
+                    var (query, setQuery) = UseState("");
+                    return TextBlock("x");
+                }
+            }
+            """;
+
+        var (diagnostics, generated) = SourceMapTransparentGeneratorTests.Run(code, surface: shape);
+
+        Assert.Empty(diagnostics.Where(static d => d.Severity >= DiagnosticSeverity.Warning));
+        Assert.Contains(InterceptorApplication, generated);
+        // UseMemo is Reactor's own (one slot) even when its body is visible; UseElementFocus
+        // is Reactor's own too, but not one this generator counts.
+        Assert.Equal(
+            $"0:count@{LineOf(code, "UseState(0)")};1:latest@{LineOf(code, "UseRef(1)")};"
+            + $"2:memo@{LineOf(code, "this.UseMemo(")};3:focusRef@{LineOf(code, "this.UseElementFocus()")};"
+            + $"?:query@{LineOf(code, "UseState(\"\")")}",
+            Assert.Single(s_componentHooks.Matches(generated)).Groups["hooks"].Value);
+    }
+
+    [Theory]
+    [InlineData(SourceMapTransparentGeneratorTests.SurfaceShape.ProjectReference)]
+    [InlineData(SourceMapTransparentGeneratorTests.SurfaceShape.MetadataReference)]
+    public void Hooks_CustomHookFromAnotherProject_IsUnknown_AndTheGeneratorDoesNotFail(
+        SourceMapTransparentGeneratorTests.SurfaceShape shape)
+    {
+        // Named like a built-in single-slot hook on purpose: only a hook declared in Reactor
+        // gets that count, not every `UseMemo`.
+        const string library = """
+            using Microsoft.UI.Reactor.Core;
+
+            namespace Shared;
+
+            public static class SharedHooks
+            {
+                public static int UseMemo(RenderContext ctx)
+                {
+                    var (value, _) = ctx.UseState(0);
+                    var (other, _) = ctx.UseState(1);
+                    return value + other;
+                }
+            }
+            """;
+        const string code = """
+            using Microsoft.UI.Reactor.Core;
+            using Shared;
+            using static Microsoft.UI.Reactor.Factories;
+
+            public static class Page
+            {
+                public static Element Build() => Memo(ctx =>
+                {
+                    var a = ctx.UseRef(0);
+                    var shared = SharedHooks.UseMemo(ctx);
+                    var b = ctx.UseRef(1);
+                    return TextBlock("x");
+                });
+            }
+            """;
+
+        var (diagnostics, generated) = SourceMapTransparentGeneratorTests.Run(
+            code, surface: shape, librarySource: library);
+
+        Assert.Empty(diagnostics.Where(static d => d.Severity >= DiagnosticSeverity.Warning));
+        Assert.Contains(InterceptorApplication, generated);
+        // Another project's hook takes a slot, and how many is unknown.
+        Assert.Equal(
+            $"0:a@{LineOf(code, "ctx.UseRef(0)")};1:shared@{LineOf(code, "SharedHooks.UseMemo(ctx)")};"
+            + $"?:b@{LineOf(code, "ctx.UseRef(1)")}",
+            Assert.Single(s_functionHooks.Matches(generated)).Groups["hooks"].Value);
     }
 
     [Fact]

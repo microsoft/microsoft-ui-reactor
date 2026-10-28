@@ -28,6 +28,12 @@ Conventions for contributors:
 
 ### Added
 
+- `JumpList.GetRemovedArgumentsAsync()` reads user removals without updating the list.
+  `UpdateAsync` and `ClearAsync` now return the removals observed in their own transaction,
+  allowing apps to retain the feedback before Windows clears it. Await-only callers
+  remain source-compatible; existing binaries must be rebuilt for the changed return types
+  (spec 036 §11.3).
+
 - **ReactorGallery catches up with recent framework features.** A new **System →
   File pickers** page demonstrates `PickFileAsync`, `PickMultipleFilesAsync`
   (with labelled `FileTypeChoices`), `PickFolderAsync` / `PickMultipleFoldersAsync`
@@ -404,6 +410,58 @@ Conventions for contributors:
   context and theme, so a failing row shows its own error and a failing boundary only
   rolls back its own subtree. (Window hooks in such rows are covered by the
   window-owner fix below.)
+
+- **Unpackaged Jump Lists now use source-generated COM interop under Native AOT.**
+  Shell link activation, property stores and removal queries no longer depend on
+  built-in COM marshalling. Worker calls use a balanced explicit COM apartment scope and
+  release transaction-owned interfaces deterministically. See the
+  [Jump list guide](docs/guide/windows.md#jump-list) (spec 036 §11.3).
+
+- **A conditional child no longer shifts its unkeyed siblings** (issue #1423). The
+  container factories drop `null` / `Empty()` arguments and flatten `Group(...)`, so
+  toggling `cond ? X : Empty()` moved every later sibling down one index and the
+  positional reconcile compared it with the child that used to sit there: a sibling of
+  another type remounted (its state reset) and one of the same type took over its
+  neighbour's state. The factories now record each child's argument slot and unkeyed
+  children are matched by slot, as React treats `null`. A child whose argument slot
+  changes is now a different child (`a ? X() : Empty(), a ? Empty() : X()` remounts
+  `X`). Containers with a keyed child keep keyed matching. Re-rendering while a child's
+  exit transition is still playing also no longer pairs its siblings with the wrong control.
+
+- **`ListView<T>` / `GridView<T>` rows are unmounted when WinUI drops their container
+  without recycling it** (issue #1423). Under fast insert / remove churn WinUI could park
+  a container offscreen, unlinked from any item, without raising the recycle
+  `ContainerContentChanging`, so the row's components stayed mounted: their effects never
+  cleaned up, and a `ReactorDiagnostics.TrySetState` on one was accepted but never rendered.
+
+- **`REACTOR_A11Y_001` no longer flags text buttons with a non-literal string label**
+  (spec 006 §6.3). `Button(S("Usage_Refresh"), onClick)` — a localized resource lookup,
+  a `string` variable, or an interpolated string — was reported as an icon-only button
+  needing `.AutomationName(...)` because only string *literals* were recognised as text
+  content. The analyzer now also skips any first argument whose semantic type is (or
+  implicitly converts to) `string`; element/icon content still reports. Icon-glyph or
+  emoji *strings* remain the runtime `AccessibilityScanner` A11Y_001 check's job, as
+  string literals already were.
+
+- **`REACTOR_DSL_001` no longer asks for a key on a `Select` that projects values, not
+  elements** (spec 042). A `Select` passed into a layout factory was flagged whatever it
+  produced, so `Grid(days.Select(_ => GridSize.Star()).ToArray(), rows, …)`, which builds
+  column definitions, raised a missing-`.WithKey()` warning with nothing to key. After the
+  cheap syntactic gates the rule now checks the projection's type and skips anything that
+  is not a `Microsoft.UI.Reactor.Core.Element`. It counts the type a body converts to
+  (`ForEach`'s `Func<T, Element>`) and `where T : Element` constraints, so those
+  projections still report. An unresolved type keeps the old verdict, so broken code
+  still reports.
+
+- **Source-map generator no longer fails under `dotnet watch`** (issue #1404, spec 010).
+  When Reactor is a project reference, Hot Reload's workspace compilation sees Reactor's
+  symbols with their source, so a component calling a hook that is not on `Component`
+  (`this.UseElementRef<T>()`, `this.UseElementFocus()`) made `SourceMapInterceptorGenerator`
+  read a syntax tree outside the app's compilation and throw `CS8785`, dropping every call
+  site in the edited project until restart. Hooks declared in Reactor are now recognised by
+  assembly, and a custom hook declared in another project's source counts as an unknown
+  number of slots — what a command-line build already reported.
+
 - **Window hooks resolve the window that renders the component, not the most recently
   active host** (issue #1396, spec 036 §7.1). `UseWindow`, the parameterless
   `UseWindowSize`, `UseWindowPosition`, `UseIsCovered`, `UseWindowAspectRatio`,

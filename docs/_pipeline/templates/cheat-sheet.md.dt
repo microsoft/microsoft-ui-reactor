@@ -142,7 +142,9 @@ Full token catalog on [Theming Tokens](theming-tokens.md).
 Reactor calls it before the next run (when deps change) and on unmount.
 
 **Conditional render.** `cond ? Element1 : Empty()` keeps the element
-out of the tree when `cond` is false — see the
+out of the tree when `cond` is false; in a container with no keyed
+children it still holds its slot, so the siblings after it keep their
+state — see the
 [modal-dialog recipe](recipes/modal-dialog.md).
 
 **List with stable keys.** `ForEach(items, x => Card(x).WithKey(x.Id))`

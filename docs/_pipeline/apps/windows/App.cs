@@ -521,6 +521,15 @@ class TaskbarDemo : Component
 static class AppJumpList
 {
     // <snippet:jump-list>
+    // In a real app, load this list from the app's tracked destinations.
+    private static readonly List<JumpListItem> Destinations = [
+        JumpListItem.ForUri("New document", "contoso://new"),
+        JumpListItem.ForUri("Open dashboard", "contoso://dashboard",
+            description: "Jump straight to the dashboard"),
+        new JumpListItem("Report a bug", "contoso://bug",
+            Kind: JumpListItemKind.Custom, GroupCategory: "Help"),
+    ];
+
     // Unpackaged apps must set an AppUserModelId once, before the first
     // UpdateAsync — the shell has no other stable identity to hang the
     // jump list off. Packaged apps inherit it from the manifest.
@@ -529,14 +538,19 @@ static class AppJumpList
         JumpList.AppUserModelId = "Contoso.Reactor.Demo";
         JumpList.ShowRecent = true;
 
-        await JumpList.UpdateAsync([
-            JumpListItem.ForUri("New document", "contoso://new"),
-            JumpListItem.ForUri("Open dashboard", "contoso://dashboard",
-                description: "Jump straight to the dashboard"),
-            new JumpListItem("Report a bug", "contoso://bug",
-                Kind: JumpListItemKind.Custom, GroupCategory: "Help"),
-        ]);
+        var removed = await JumpList.GetRemovedArgumentsAsync();
+        PruneDestinations(removed);
+        removed = await JumpList.UpdateAsync(Destinations);
+        // Also process removals made after the query. A successful update
+        // clears the OS records, even for entries absent from this batch.
+        PruneDestinations(removed);
+        // Persist the updated tracked destinations in your app's data store.
+        // New user activity can explicitly add an eligible destination again.
     }
+
+    private static void PruneDestinations(IReadOnlyList<string> removed) =>
+        Destinations.RemoveAll(item => item.Kind != JumpListItemKind.Separator
+            && removed.Contains(item.Arguments, StringComparer.Ordinal));
 
     // Entries come back as a plain process re-launch. Resolve the argument
     // string through the same DeepLinkMap the app already uses for routes;

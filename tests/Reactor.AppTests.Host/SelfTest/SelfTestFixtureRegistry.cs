@@ -9,6 +9,8 @@ internal static class SelfTestFixtureRegistry
 {
     public static readonly string[] AllFixtures =
     [
+        "JumpList_NativeInterop",
+        "Packaged_JumpList",
         "SourceMapReadPath_Enabled",
         "HostDiag_WindowHostIsListedAndBoundariesAreTagged",
         "HostDiag_FlagOffLeavesBoundariesUntagged",
@@ -1057,6 +1059,24 @@ internal static class SelfTestFixtureRegistry
         "IdentityPreserve_ListBox",
         "IdentityPreserve_SelectorBar",
         "IdentityPreserve_SplitView",
+        // Conditional child holds its slot among unkeyed siblings
+        "ConditionalChildSlot_HideShowMiddle",
+        "ConditionalChildSlot_SameTypeSibling",
+        "ConditionalChildSlot_Null",
+        "ConditionalChildSlot_EmptyElementEmpty",
+        "ConditionalChildSlot_GroupResize",
+        "ConditionalChildSlot_ExitTransition",
+        "ConditionalChildSlot_AnimateAmbient",
+        "ConditionalChildSlot_SelfTriggeredSibling",
+        "ConditionalChildSlot_RetoggleDuringExit",
+        "ConditionalChildSlot_CallbackSkipArm",
+        "ConditionalChildSlot_ReplaceWithExitThenRerender",
+        "ConditionalChildSlot_ReplaceWithExitPositional",
+        "ConditionalChildSlot_NestedGroupToggle",
+        "ConditionalChildSlot_DeepNestedGroupToggle",
+        "ConditionalChildSlot_UniformGridExitKeepsColumns",
+        "TemplatedList_ChurnLeavesNoOrphanedRows",
+        "TemplatedList_MoveKeepsRowComponent",
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
         "Issue343_CommandBarContentUpdates",
         "Issue343_TeachingTipContentUpdates",
@@ -2099,6 +2119,7 @@ internal static class SelfTestFixtureRegistry
         new(StringComparer.Ordinal)
         {
             ["Packaged_IdentityGuard"] = SelfTestTier.Packaged,
+            ["Packaged_JumpList"] = SelfTestTier.Packaged,
             ["Packaged_ResourceResolution"] = SelfTestTier.Packaged,
             ["Packaged_SettingsStoreRoundTrip"] = SelfTestTier.Packaged,
             ["Packaged_WindowIconFromResource"] = SelfTestTier.Packaged,
@@ -2184,6 +2205,8 @@ internal static class SelfTestFixtureRegistry
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
     {
+        "JumpList_NativeInterop" => new JumpListNativeInteropFixture(harness),
+        "Packaged_JumpList" => new PackagedJumpListFixture(harness),
         "HarnessGuard_ClickButtonFailsLoudly" => new HarnessGuardFixtures.ClickButtonFailsLoudly(harness),
         "ErrorBoundary_CatchesRenderError" => new ErrorBoundaryFixtures.CatchesRenderError(harness),
         "ErrorBoundary_Recovery" => new ErrorBoundaryFixtures.Recovery(harness),
@@ -3184,6 +3207,23 @@ internal static class SelfTestFixtureRegistry
         "IdentityPreserve_ListBox" => new IdentityPreservationFixtures.ListBoxSurvivesSiblingUpdate(harness),
         "IdentityPreserve_SelectorBar" => new IdentityPreservationFixtures.SelectorBarSurvivesSiblingUpdate(harness),
         "IdentityPreserve_SplitView" => new IdentityPreservationFixtures.SplitViewSurvivesSiblingUpdate(harness),
+        "ConditionalChildSlot_HideShowMiddle" => new ConditionalChildSlotFixtures.HideShowMiddle(harness),
+        "ConditionalChildSlot_SameTypeSibling" => new ConditionalChildSlotFixtures.SameTypeSiblingKeepsOwnState(harness),
+        "ConditionalChildSlot_Null" => new ConditionalChildSlotFixtures.NullConditional(harness),
+        "ConditionalChildSlot_EmptyElementEmpty" => new ConditionalChildSlotFixtures.EmptyElementEmpty(harness),
+        "ConditionalChildSlot_GroupResize" => new ConditionalChildSlotFixtures.GroupResize(harness),
+        "ConditionalChildSlot_ExitTransition" => new ConditionalChildSlotFixtures.ExitTransition(harness),
+        "ConditionalChildSlot_AnimateAmbient" => new ConditionalChildSlotFixtures.AnimateAmbient(harness),
+        "ConditionalChildSlot_SelfTriggeredSibling" => new ConditionalChildSlotFixtures.SelfTriggeredSiblingDuringToggle(harness),
+        "ConditionalChildSlot_RetoggleDuringExit" => new ConditionalChildSlotFixtures.RetoggleDuringExit(harness),
+        "ConditionalChildSlot_CallbackSkipArm" => new ConditionalChildSlotFixtures.CallbackSkipArm(harness),
+        "ConditionalChildSlot_ReplaceWithExitThenRerender" => new ConditionalChildSlotFixtures.ReplaceWithExitThenRerender(harness),
+        "ConditionalChildSlot_ReplaceWithExitPositional" => new ConditionalChildSlotFixtures.ReplaceWithExitPositional(harness),
+        "ConditionalChildSlot_NestedGroupToggle" => new ConditionalChildSlotFixtures.NestedGroupToggle(harness),
+        "ConditionalChildSlot_DeepNestedGroupToggle" => new ConditionalChildSlotFixtures.NestedGroupToggle(harness, depth: 5),
+        "ConditionalChildSlot_UniformGridExitKeepsColumns" => new ConditionalChildSlotFixtures.UniformGridExitKeepsColumns(harness),
+        "TemplatedList_ChurnLeavesNoOrphanedRows" => new TemplatedListOrphanContainerFixtures.ChurnLeavesNoOrphanedRows(harness),
+        "TemplatedList_MoveKeepsRowComponent" => new TemplatedListOrphanContainerFixtures.MoveKeepsRowComponent(harness),
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
         "Issue343_CommandBarContentUpdates" => new Issue343Fixtures.CommandBarContentUpdates(harness),
         "Issue343_TeachingTipContentUpdates" => new Issue343Fixtures.TeachingTipContentUpdates(harness),

@@ -257,9 +257,9 @@ internal static void Reconcile(
     Action requestRerender,
     UIElement? parentControl = null)
 {
-    // Filter out nulls and EmptyElements
-    var oldFiltered = Filter(oldChildren);
-    var newFiltered = Filter(newChildren);
+    // Filter out nulls and EmptyElements, keeping each kept child's slot (ChildSlots)
+    var oldFiltered = Filter(oldChildren, out var oldSlots);
+    var newFiltered = Filter(newChildren, out var newSlots);
 
     bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
 
@@ -278,6 +278,12 @@ internal static void Reconcile(
 
     if (hasKeys)
         ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
+    // The slot walk also steps past controls an earlier pass left playing an exit
+    // transition in this collection (they inflate its count); the index walk would pair
+    // every later child with the wrong control.
+    else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length)
+        || HoldsExitingControls(oldFiltered, children, reconciler))
+        ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
     else
         ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
 }
@@ -293,6 +299,25 @@ update the common prefix in place, mount any extra elements at the
 end, unmount any leftover children. Cost: O(max(old, new)). The catch
 is that an insert at the front re-updates every element rather than
 detecting the shift.
+
+**Conditional children hold their slot.** A position is the child's
+argument slot in the container factory call, not its index in the
+filtered `Children` array. The factories drop `null` and `Empty()`
+arguments and flatten `Group(...)`, but they record which argument
+each kept child came from. When a toggle shifts those slots between
+renders, the unkeyed walk matches children by slot in one merge pass:
+the toggled child mounts or unmounts in place, and every sibling after
+it is updated rather than compared against the child that used to sit
+at its index. So in
+`VStack(Header(), open ? Details() : Empty(), Footer())`, `Footer`
+keeps its state when `Details` closes, as a React sibling of a `null`
+child does. Containers whose children's slots line up by index keep the
+positional walk, unless an exit transition is still playing. Like React,
+a child whose argument slot changes is a different
+child: `a ? X() : Empty(), a ? Empty() : X()` remounts `X`. This
+applies to unkeyed containers only: once any child carries a key, the
+keyed algorithm below matches the unkeyed children positionally, so key
+the siblings of a conditional child there.
 
 **Keyed.** Any child carries a key → run a four-phase algorithm:
 
@@ -318,7 +343,8 @@ property writes in the positional path.
 key at different positions are treated as the same element by the
 keyed child reconciler; two elements with different keys at the same
 position are treated as different elements (force unmount + mount).
-Without a key, identity follows position.
+Without a key, identity follows position — the child's argument slot,
+so a conditional sibling toggling before it does not shift it.
 
 ```csharp
 ForEach(items, item => Card(item).WithKey(item.Id));
@@ -496,9 +522,9 @@ internal static void Reconcile(
     Action requestRerender,
     UIElement? parentControl = null)
 {
-    // Filter out nulls and EmptyElements
-    var oldFiltered = Filter(oldChildren);
-    var newFiltered = Filter(newChildren);
+    // Filter out nulls and EmptyElements, keeping each kept child's slot (ChildSlots)
+    var oldFiltered = Filter(oldChildren, out var oldSlots);
+    var newFiltered = Filter(newChildren, out var newSlots);
 
     bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
 
@@ -517,6 +543,12 @@ internal static void Reconcile(
 
     if (hasKeys)
         ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
+    // The slot walk also steps past controls an earlier pass left playing an exit
+    // transition in this collection (they inflate its count); the index walk would pair
+    // every later child with the wrong control.
+    else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length)
+        || HoldsExitingControls(oldFiltered, children, reconciler))
+        ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
     else
         ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
 }
