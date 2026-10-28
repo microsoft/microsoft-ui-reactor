@@ -287,18 +287,14 @@ public sealed partial class SourceMapInterceptorGenerator
                 && !(factoryNames.Contains(token.ValueText)
                      && token.Parent is IdentifierNameSyntax name
                      && (model.GetSymbolInfo(name, ct) is { Symbol: null, CandidateSymbols.IsEmpty: true }
-                         || (InvocationNamedBy(name) is { } call && WrapperFactoryCalls.InvisibleFactoryOwners(model, call, ct) is not null))));
+                         || WrapperFactoryCalls.InvisibleFactoryOwners(model, NameExpression(name), ct) is not null)));
 
         memo[member] = free;
         return free;
 
-        // `Name(...)` or `Q.Name(...)` whose name this is.
-        static InvocationExpressionSyntax? InvocationNamedBy(IdentifierNameSyntax name) => name.Parent switch
-        {
-            InvocationExpressionSyntax call when call.Expression == name => call,
-            MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax call } access when access.Name == name && call.Expression == access => call,
-            _ => null,
-        };
+        // `Name` or `Q.Name`, called or used as a method group.
+        static ExpressionSyntax NameExpression(IdentifierNameSyntax name)
+            => name.Parent is MemberAccessExpressionSyntax access && access.Name == name ? access : name;
     }
 
     /// <summary>
@@ -477,9 +473,9 @@ public sealed partial class SourceMapInterceptorGenerator
         if (IsNameof(node, model)) return (false, false);
         if (depth > MaxDependencyDepth) return (true, true);
         if (HasWrapperTypeArgument(model, node, ct)
-            || (node is InvocationExpressionSyntax competing && WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(model, competing, ct))
+            || (node is ExpressionSyntax competing && WrapperFactoryCalls.HiddenFactoryMayChange(model, competing, ct))
             || (node is InvocationExpressionSyntax constrained && IsWrapperConstrainedCall(model, constrained, ct))
-            || (node is InvocationExpressionSyntax onRecord && WrapperFactoryCalls.GeneratedMemberMayWin(model, onRecord, ct)))
+            || (node is ExpressionSyntax onRecord && WrapperFactoryCalls.GeneratedMemberMayWin(model, onRecord, ct)))
         {
             memo[node] = true;
             return (true, false);
@@ -1005,9 +1001,9 @@ public sealed partial class SourceMapInterceptorGenerator
             foreach (var expression in unaccounted)
             {
                 if (HasWrapperTypeArgument(_model, expression, _ct)) return false;
-                if (expression is InvocationExpressionSyntax competing && WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(_model, competing, _ct)) return false;
+                if (WrapperFactoryCalls.HiddenFactoryMayChange(_model, expression, _ct)) return false;
                 if (expression is InvocationExpressionSyntax constrained && IsWrapperConstrainedCall(_model, constrained, _ct)) return false;
-                if (expression is InvocationExpressionSyntax onRecord && WrapperFactoryCalls.GeneratedMemberMayWin(_model, onRecord, _ct)) return false;
+                if (WrapperFactoryCalls.GeneratedMemberMayWin(_model, expression, _ct)) return false;
                 // The name half of `x.Name` is judged together with its member access.
                 if (expression.Parent is MemberAccessExpressionSyntax member && member.Name == expression) continue;
                 if (HasErrorType(_model, expression, _ct)) return false;

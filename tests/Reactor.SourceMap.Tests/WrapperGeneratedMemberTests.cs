@@ -56,4 +56,42 @@ public sealed class WrapperGeneratedMemberTests : IDisposable
         Assert.Null(rebound.CallSite);
         Assert.Null(bound.CallSite);
     }
+
+    internal static T ApplySet<T>(global::System.Func<global::System.Action<FakeDial>, T> configure) => configure(_ => { });
+
+    [Fact]
+    public void MethodGroupThatTheGeneratedMemberWouldReplace_IsNotTrusted()
+    {
+        // dial.Set as a method group: the rival returns a string here, the generated Set the
+        // record there, so ApplySet infers a different T and PairUp(Element, Element) runs.
+        FakeDialElement dial = FakeDial();
+        var paired = PairUp(dial, ApplySet(dial.Set));
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)paired).Orientation);
+        Assert.Null(paired.CallSite);
+    }
+
+    [Fact]
+    public void GeneratedMemberOnAnInvisibleFactoryCall_IsNotTrusted()
+    {
+        // FakeDial() binds to nothing here, so its .Set is unknown until generation.
+        var paired = PairUp(FakeGauge(), FakeDial().Set((FakeDial _) => { }));
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)paired).Orientation);
+        Assert.Null(paired.CallSite);
+    }
+
+    [Fact]
+    public void GeneratedMemberInheritedFromAWrapperBase_IsNotTrusted()
+    {
+        // DerivedDial inherits FakeDialElement's generated Set, which beats the rival.
+        DerivedDial dial = new();
+        var paired = PairUp(dial, dial.Set((FakeDial _) => { }));
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)paired).Orientation);
+        Assert.Null(paired.CallSite);
+    }
 }
+
+/// <summary>Inherits the members the wrapper generator adds to <see cref="FakeDialElement"/>.</summary>
+public record DerivedDial : FakeDialElement;

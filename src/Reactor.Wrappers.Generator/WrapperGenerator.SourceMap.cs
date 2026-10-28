@@ -173,10 +173,9 @@ public sealed partial class WrapperGenerator
             if (info.Type is { } type && WrapperFactoryCalls.MentionsIncompleteWrapper(type, compilation)) return false;
             if (info.ConvertedType is { } converted && WrapperFactoryCalls.MentionsIncompleteWrapper(converted, compilation)) return false;
 
-            if (expression is InvocationExpressionSyntax call
-                && (WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(model, call, ct)
-                    || WrapperFactoryCalls.GroupHasWrapperConstraint(model, call, ct)
-                    || WrapperFactoryCalls.GeneratedMemberMayWin(model, call, ct)))
+            if (WrapperFactoryCalls.HiddenFactoryMayChange(model, expression, ct)
+                || WrapperFactoryCalls.GeneratedMemberMayWin(model, expression, ct)
+                || (expression is InvocationExpressionSyntax call && WrapperFactoryCalls.GroupHasWrapperConstraint(model, call, ct)))
             {
                 return false;
             }

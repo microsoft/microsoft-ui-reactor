@@ -196,6 +196,58 @@ public sealed class SourceMapWrapperFastPathTests
     }
 
     [Fact]
+    public void MethodGroupThatAHiddenFactoryWouldShadow_IsNotTrusted()
+    {
+        // The generated Gauge(double?) is imported in an inner scope, so once it exists it
+        // shadows the file-level rival Gauge(double?) returning int: Apply infers T as the
+        // record, not int, and Show(Element?) runs instead of Show(object?) (checked against
+        // real C# binding). Only the control, which names the rival outright, may get the object interceptor.
+        const string user = """
+            using Microsoft.UI.Reactor.Core;
+            using static Rivals.GaugeRival;
+
+            namespace Rivals
+            {
+                public static class GaugeRival
+                {
+                    public static int Gauge(double? value) => 0;
+                }
+            }
+
+            namespace User
+            {
+                using static App.GaugeElement;
+
+                public static class Use
+                {
+                    public static T Apply<T>(System.Func<double?, T> make) => make(1);
+
+                    public static Element R() => App.Helpers.Show(Apply(Gauge));
+
+                    // Positive control: the rival named outright is never shadowed.
+                    public static Element Control() => App.Helpers.Show(Apply(Rivals.GaugeRival.Gauge));
+                }
+            }
+            """;
+        const string completion = """
+            namespace App
+            {
+                partial record GaugeElement : Microsoft.UI.Reactor.Core.Element
+                {
+                    public static GaugeElement Gauge(double? value = default) => new GaugeElement();
+                }
+            }
+            """;
+
+        var (_, generated) = SourceMapTransparentGeneratorTests.Run(
+            user,
+            extraFiles: new List<(string, string)> { ("Common.cs", Common.Replace("EXTRA", "", global::System.StringComparison.Ordinal)) },
+            completeAfterGeneration: completion);
+
+        Assert.Single(global::System.Text.RegularExpressions.Regex.Matches(generated, ObjectOverloadInterceptor));
+    }
+
+    [Fact]
     public void WrapperAttributeThroughAnAlias_IsStillAWrapper()
     {
         // The wrapper generator matches the attribute semantically, so an alias of it still

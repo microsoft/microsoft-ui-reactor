@@ -235,11 +235,29 @@ internal static class WrapperFactoryCalls
         SemanticModel model,
         InvocationExpressionSyntax invocation,
         CancellationToken ct)
+        => InvisibleFactoryOwners(model, invocation.Expression, ct);
+
+    /// <summary>
+    /// <see cref="InvisibleFactoryOwners(SemanticModel, InvocationExpressionSyntax, CancellationToken)"/>
+    /// for the name itself (<c>Gauge</c> or <c>Q.Gauge</c>), whether it is called or used as
+    /// a method group.
+    /// </summary>
+    internal static List<INamedTypeSymbol>? InvisibleFactoryOwners(
+        SemanticModel model,
+        ExpressionSyntax nameExpression,
+        CancellationToken ct)
     {
-        if (CandidateName(invocation) is not { Length: > 0 } name || !SourceFactoryNames(model.Compilation).Contains(name)) return null;
+        var name = nameExpression switch
+        {
+            IdentifierNameSyntax id => id.Identifier.ValueText,
+            MemberAccessExpressionSyntax { Name: IdentifierNameSyntax memberName } access
+                when access.IsKind(SyntaxKind.SimpleMemberAccessExpression) => memberName.Identifier.ValueText,
+            _ => null,
+        };
+        if (name is not { Length: > 0 } || !SourceFactoryNames(model.Compilation).Contains(name)) return null;
 
         List<INamedTypeSymbol>? owners = null;
-        if (invocation.Expression is MemberAccessExpressionSyntax member)
+        if (nameExpression is MemberAccessExpressionSyntax member)
         {
             if (model.GetSymbolInfo(member.Expression, ct).Symbol is INamedTypeSymbol qualifier)
             {
@@ -248,7 +266,7 @@ internal static class WrapperFactoryCalls
             return owners;
         }
 
-        var position = invocation.SpanStart;
+        var position = nameExpression.SpanStart;
         var enclosing = model.GetEnclosingSymbol(position, ct);
         for (var type = enclosing as INamedTypeSymbol ?? enclosing?.ContainingType; type is not null; type = type.ContainingType) Consider(type);
         foreach (var scope in model.GetImportScopes(position, ct))
@@ -278,6 +296,25 @@ internal static class WrapperFactoryCalls
         if (InvisibleFactoryOwners(model, invocation, ct) is not { } owners) return false;
         var type = model.GetTypeInfo(invocation, ct).Type;
         return owners.Any(o => !SymbolEqualityComparer.Default.Equals(o, type));
+    }
+
+    /// <summary>
+    /// True when a hidden generated factory could change how <paramref name="expression"/>
+    /// binds: a call it could outrank (<see cref="ResultCanChangeByInvisibleFactory"/>), or a
+    /// METHOD GROUP of that name (<c>Apply(Gauge)</c>), whose conversion it joins.
+    /// </summary>
+    internal static bool HiddenFactoryMayChange(SemanticModel model, ExpressionSyntax expression, CancellationToken ct)
+    {
+        if (expression is InvocationExpressionSyntax invocation) return ResultCanChangeByInvisibleFactory(model, invocation, ct);
+        if (expression is not (IdentifierNameSyntax or MemberAccessExpressionSyntax)) return false;
+        // The callee of a call is judged with the call; the name half of `Q.Name` with `Q.Name`.
+        if (expression.Parent is InvocationExpressionSyntax call && call.Expression == expression) return false;
+        if (expression.Parent is MemberAccessExpressionSyntax outer && outer.Name == expression) return false;
+        if (SyntaxFacts.IsInTypeOnlyContext(expression)) return false;
+        if (InvisibleFactoryOwners(model, expression, ct) is null) return false;
+        // Only where it can be a method group: not a type, namespace, variable or member value.
+        var info = model.GetSymbolInfo(expression, ct);
+        return info.Symbol is null or IMethodSymbol;
     }
 
     /// <summary>
@@ -318,31 +355,59 @@ internal static class WrapperFactoryCalls
     }
 
     /// <summary>
-    /// True when <paramref name="invocation"/> is <c>x.Name(...)</c> (or <c>x?.Name(...)</c>) on
-    /// a value of a source wrapper record — complete or not — where the wrapper generator may
-    /// add an invocable instance member <c>Name</c> (<see cref="MayGainInvocableMember"/>) that
-    /// beats what binds here: <c>dial.Set(...)</c> resolving to a visible extension.
+    /// True when <paramref name="expression"/> is <c>x.Name(...)</c>, <c>x?.Name(...)</c> or the
+    /// method group <c>x.Name</c>, and the wrapper generator may add an invocable instance
+    /// member <c>Name</c> (<see cref="MayGainInvocableMember"/>) that beats what binds here
+    /// (<c>dial.Set(...)</c> resolving to a visible extension). It may when <c>x</c>'s type is
+    /// a source wrapper record — complete or not — or derives from one, or is a type parameter
+    /// constrained to one; and when <c>x</c> is itself a call to an invisible wrapper factory
+    /// or does not bind at all, whose type is unknown here.
     /// </summary>
-    internal static bool GeneratedMemberMayWin(SemanticModel model, InvocationExpressionSyntax invocation, CancellationToken ct)
+    internal static bool GeneratedMemberMayWin(SemanticModel model, ExpressionSyntax expression, CancellationToken ct)
     {
-        var (receiver, name) = invocation.Expression switch
+        var access = expression is InvocationExpressionSyntax invocation ? invocation.Expression : expression;
+        var (receiver, name) = access switch
         {
             MemberAccessExpressionSyntax member => (member.Expression, member.Name.Identifier.ValueText),
-            MemberBindingExpressionSyntax binding when invocation.Parent is ConditionalAccessExpressionSyntax conditional
+            MemberBindingExpressionSyntax binding when binding.FirstAncestorOrSelf<ConditionalAccessExpressionSyntax>() is { } conditional
                 => (conditional.Expression, binding.Name.Identifier.ValueText),
             _ => (null, null),
         };
         if (receiver is null || name is null) return false;
         if (!string.Equals(name, "Set", StringComparison.Ordinal) && !name.StartsWith("On", StringComparison.Ordinal)) return false;
-        if (model.GetTypeInfo(receiver, ct).Type is not INamedTypeSymbol record
-            || !SourceWrapperRecords(model.Compilation).Contains(record.OriginalDefinition)
-            || !MayGainInvocableMember(record, name))
+        // The method-group form is judged at its call when it has one.
+        if (expression is not InvocationExpressionSyntax && expression.Parent is InvocationExpressionSyntax call && call.Expression == expression) return false;
+
+        var receiverType = model.GetTypeInfo(receiver, ct).Type;
+        if (receiverType is null or IErrorTypeSymbol)
         {
-            return false;
+            return receiver is not InvocationExpressionSyntax receiverCall
+                   || ResolveUnboundCall(model, receiverCall, ct) is not null
+                   || receiverType is IErrorTypeSymbol;
         }
+
+        var sources = SourceWrapperRecords(model.Compilation);
+        if (sources.IsEmpty) return false;
+        var record = WrapperBehind(receiverType, sources, name, depth: 0);
+        if (record is null) return false;
+
         // Already the record's own member (the generated file fed back in): nothing hidden.
-        return model.GetSymbolInfo(invocation, ct).Symbol is not { } bound
+        return model.GetSymbolInfo(access, ct).Symbol is not { } bound
                || !SymbolEqualityComparer.Default.Equals(bound.ContainingType?.OriginalDefinition, record.OriginalDefinition);
+
+        static INamedTypeSymbol? WrapperBehind(ITypeSymbol type, ImmutableHashSet<INamedTypeSymbol> sources, string name, int depth)
+        {
+            if (depth > 8) return null;
+            if (type is ITypeParameterSymbol parameter)
+            {
+                return parameter.ConstraintTypes.Select(c => WrapperBehind(c, sources, name, depth + 1)).FirstOrDefault(static r => r is not null);
+            }
+            for (var current = type as INamedTypeSymbol; current is not null; current = current.BaseType)
+            {
+                if (sources.Contains(current.OriginalDefinition) && MayGainInvocableMember(current.OriginalDefinition, name)) return current.OriginalDefinition;
+            }
+            return null;
+        }
     }
 
     /// <summary>
