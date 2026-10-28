@@ -870,7 +870,9 @@ public sealed partial class SourceMapInterceptorGenerator
     {
         ITypeParameterSymbol => true,
         IArrayTypeSymbol array => ContainsTypeParameter(array.ElementType, depth + 1),
-        INamedTypeSymbol named => named.TypeArguments.Any(a => ContainsTypeParameter(a, depth + 1)),
+        // `Outer<T>.Nested` has no type arguments of its own; its containing type's count.
+        INamedTypeSymbol named => named.TypeArguments.Any(a => ContainsTypeParameter(a, depth + 1))
+                                  || (named.ContainingType is { } outer && ContainsTypeParameter(outer, depth + 1)),
         _ => false,
     };
 
@@ -912,6 +914,12 @@ public sealed partial class SourceMapInterceptorGenerator
                 foreach (var argument in named.TypeArguments)
                 {
                     if (ReachableOnlyByTheRecord(argument, compilation, interfaces, depth + 1, insideConversion)) return true;
+                }
+                // `Outer<FooElement>.Nested`: the record is in the containing type's arguments.
+                if (named.ContainingType is { } containing
+                    && ReachableOnlyByTheRecord(containing, compilation, interfaces, depth + 1, insideConversion))
+                {
+                    return true;
                 }
                 // The CONSTRUCTED signature: `delegate FooElement Maker<T>()` mentions the record
                 // only there, never in `Maker<int>`'s type arguments.

@@ -178,6 +178,13 @@ internal static class WrapperFactoryCalls
     {
         if (CandidateName(invocation) is not { Length: > 0 } name) return null;
 
+        // A dynamic argument makes the call dynamically dispatched once the factory exists,
+        // and a dynamic call cannot be intercepted.
+        foreach (var argument in invocation.ArgumentList.Arguments)
+        {
+            if (model.GetTypeInfo(argument.Expression, ct).Type is { TypeKind: TypeKind.Dynamic }) return null;
+        }
+
         if (invocation.Expression is MemberAccessExpressionSyntax member)
         {
             if (model.GetSymbolInfo(member.Expression, ct).Symbol is not INamedTypeSymbol qualifier) return null;
@@ -201,7 +208,9 @@ internal static class WrapperFactoryCalls
         // Same order C# looks names up in: enclosing types, innermost first, then the
         // `using static` imports of each enclosing scope.
         var enclosing = model.GetEnclosingSymbol(position, ct);
-        for (var type = enclosing as INamedTypeSymbol ?? enclosing?.ContainingType; type is not null; type = type.ContainingType)
+        // An enclosing type's inherited static members are found before any import.
+        for (var outer = enclosing as INamedTypeSymbol ?? enclosing?.ContainingType; outer is not null; outer = outer.ContainingType)
+        for (var type = outer; type is not null; type = type.BaseType)
         {
             if (IsWrapperFactoryOwner(type, name)) return type;
         }
@@ -268,7 +277,11 @@ internal static class WrapperFactoryCalls
 
         var position = nameExpression.SpanStart;
         var enclosing = model.GetEnclosingSymbol(position, ct);
-        for (var type = enclosing as INamedTypeSymbol ?? enclosing?.ContainingType; type is not null; type = type.ContainingType) Consider(type);
+        for (var outer = enclosing as INamedTypeSymbol ?? enclosing?.ContainingType; outer is not null; outer = outer.ContainingType)
+        {
+            // Inherited static members too (`record Derived : FooElement` calling `Foo()`).
+            for (var type = outer; type is not null; type = type.BaseType) Consider(type);
+        }
         foreach (var scope in model.GetImportScopes(position, ct))
         {
             foreach (var imported in scope.Imports.Select(static i => i.NamespaceOrType).OfType<INamedTypeSymbol>()) Consider(imported);
@@ -391,9 +404,11 @@ internal static class WrapperFactoryCalls
         var record = WrapperBehind(receiverType, sources, name, depth: 0);
         if (record is null) return false;
 
-        // Already the record's own member (the generated file fed back in): nothing hidden.
+        // Already the generated member itself (the generated file fed back in): nothing hidden.
+        // A hand-written member of the same name on the record is not evidence: the generated
+        // one may still outrank it.
         return model.GetSymbolInfo(access, ct).Symbol is not { } bound
-               || !SymbolEqualityComparer.Default.Equals(bound.ContainingType?.OriginalDefinition, record.OriginalDefinition);
+               || !bound.Locations.Any(static l => l.SourceTree?.FilePath.EndsWith(".Wrapper.g.cs", StringComparison.OrdinalIgnoreCase) == true);
 
         static INamedTypeSymbol? WrapperBehind(ITypeSymbol type, ImmutableHashSet<INamedTypeSymbol> sources, string name, int depth)
         {

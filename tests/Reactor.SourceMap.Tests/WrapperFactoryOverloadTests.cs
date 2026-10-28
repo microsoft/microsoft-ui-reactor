@@ -403,6 +403,25 @@ public sealed class WrapperFactoryOverloadTests : IDisposable
         Assert.Null(shown.CallSite);
     }
 
+    internal static Outer<T>.Nested Box<T>(T value) => new();
+
+    [ReactorSourceTransparent]
+    internal static Element ShowNested(object value) => VStack();
+
+    [ReactorSourceTransparent]
+    internal static Element ShowNested(Outer<FakeGaugeElement>.Nested nested) => HStack();
+
+    [Fact]
+    public void NestedTypeOfAGenericOverTheRecord_IsNotTrusted()
+    {
+        // Box(FakeGauge()) is an Outer<FakeGaugeElement>.Nested, which only the second
+        // ShowNested takes; an Element placeholder would make it Outer<Element>.Nested.
+        var shown = ShowNested(Box(FakeGauge()));
+
+        Assert.Equal(WinUI.Orientation.Horizontal, ((StackElement)shown).Orientation);
+        Assert.Null(shown.CallSite);
+    }
+
     [ReactorSourceTransparent]
     internal static Element PresentMaybe(object? value) => VStack();
 
@@ -727,6 +746,14 @@ public sealed class Duo
     public static implicit operator Element(Duo duo) => Microsoft.UI.Reactor.Factories.TextBlock("single");
 
     public static implicit operator Element[](Duo duo) => [];
+}
+
+/// <summary>A generic type with a nested type, which carries the outer type's arguments.</summary>
+public class Outer<T>
+{
+    public sealed class Nested
+    {
+    }
 }
 
 /// <summary>A generic delegate whose signature, not its type arguments, names the record.</summary>

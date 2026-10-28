@@ -203,6 +203,22 @@ public sealed class WrapperFactoryInterceptionTests : IDisposable
     }
 
     [Fact]
+    public void DynamicArgument_IsNeverIntercepted()
+    {
+        // A dynamic argument makes both calls dynamically dispatched once the factory exists;
+        // an interceptor for either would not compile.
+        dynamic value = 3d;
+#pragma warning disable IL2026, IL3050 // dynamic dispatch is the subject of this test
+        FakeGaugeElement gauge = FakeGauge(value);
+        Element stack = VStack(8, FakeGauge(value));
+#pragma warning restore IL2026, IL3050
+
+        Assert.Equal(3, gauge.Value);
+        Assert.Null(gauge.CallSite);
+        Assert.Null(stack.CallSite);
+    }
+
+    [Fact]
     public void WrapperRecordThatSpellsItsOwnBase_IsStampedAndSoIsItsContainer()
     {
         // FakeDialElement declares `: Element` itself, so it is complete here — but its
