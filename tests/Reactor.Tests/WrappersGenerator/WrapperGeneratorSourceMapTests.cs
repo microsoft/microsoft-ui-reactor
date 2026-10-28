@@ -109,7 +109,10 @@ public sealed class WrapperGeneratorSourceMapTests
             parseOptions: parse,
             optionsProvider: new Options(reactorSourceMap));
 
-        return driver.RunGenerators(compilation).GetRunResult();
+        var result = driver.RunGenerators(compilation).GetRunResult();
+        // A generator that threw emits nothing, which would satisfy any "no interceptors" assertion.
+        Assert.All(result.Results, static r => Assert.Null(r.Exception));
+        return result;
     }
 
     private static string? Interceptors(GeneratorDriverRunResult result)

@@ -341,6 +341,20 @@ internal static class WrapperFactoryCalls
     internal static bool MayGainInvocableMember(INamedTypeSymbol record, string name)
     {
         if (string.Equals(name, "Set", StringComparison.Ordinal)) return true;
+
+        // Names the record's own attributes spell — [WrapAlias("Level", "Value")] makes the
+        // generated property Level and its callback OnLevelChanged, [WrapControlled],
+        // Include = … — are generated names too.
+        foreach (var spelled in record.GetAttributes().SelectMany(static a => AttributeStrings(a)))
+        {
+            if (string.Equals(name, spelled, StringComparison.Ordinal)
+                || string.Equals(name, "On" + spelled, StringComparison.Ordinal)
+                || string.Equals(name, "On" + spelled + "Changed", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
         foreach (var attribute in record.GetAttributes())
         {
             if (attribute.AttributeClass?.ToDisplayString() != WrapperAttributeMetadataName
@@ -367,6 +381,12 @@ internal static class WrapperFactoryCalls
         return false;
     }
 
+    private static IEnumerable<string> AttributeStrings(AttributeData attribute)
+        => attribute.ConstructorArguments.Concat(attribute.NamedArguments.Select(static n => n.Value))
+            .SelectMany(static c => c.Kind == TypedConstantKind.Array ? c.Values : ImmutableArray.Create(c))
+            .Select(static c => c.Value as string)
+            .Where(static s => !string.IsNullOrEmpty(s))!;
+
     /// <summary>
     /// True when <paramref name="expression"/> is <c>x.Name(...)</c>, <c>x?.Name(...)</c> or the
     /// method group <c>x.Name</c>, and the wrapper generator may add an invocable instance
@@ -386,6 +406,12 @@ internal static class WrapperFactoryCalls
                 => (conditional.Expression, binding.Name.Identifier.ValueText),
             _ => (null, null),
         };
+        if (receiver is null && access is SimpleNameSyntax simple
+            && !(access.Parent is MemberAccessExpressionSyntax outerAccess && outerAccess.Name == access)
+            && access.Parent is not MemberBindingExpressionSyntax)
+        {
+            return ImplicitReceiverMayGain(model, expression, simple, ct);
+        }
         if (receiver is null || name is null) return false;
         if (!string.Equals(name, "Set", StringComparison.Ordinal) && !name.StartsWith("On", StringComparison.Ordinal)) return false;
         // The method-group form is judged at its call when it has one.
@@ -409,6 +435,27 @@ internal static class WrapperFactoryCalls
         // one may still outrank it.
         return model.GetSymbolInfo(access, ct).Symbol is not { } bound
                || !bound.Locations.Any(static l => l.SourceTree?.FilePath.EndsWith(".Wrapper.g.cs", StringComparison.OrdinalIgnoreCase) == true);
+
+        // `Set(f)` written inside a wrapper record (or a type deriving from one): `this.Set`
+        // once the generated member exists, whatever binds here.
+        static bool ImplicitReceiverMayGain(SemanticModel model, ExpressionSyntax expression, SimpleNameSyntax simple, CancellationToken ct)
+        {
+            var name = simple.Identifier.ValueText;
+            if (!string.Equals(name, "Set", StringComparison.Ordinal) && !name.StartsWith("On", StringComparison.Ordinal)) return false;
+            if (expression is not InvocationExpressionSyntax && expression.Parent is InvocationExpressionSyntax call && call.Expression == expression) return false;
+            var sources = SourceWrapperRecords(model.Compilation);
+            if (sources.IsEmpty) return false;
+            var enclosing = model.GetEnclosingSymbol(simple.SpanStart, ct);
+            for (var outer = enclosing as INamedTypeSymbol ?? enclosing?.ContainingType; outer is not null; outer = outer.ContainingType)
+            {
+                if (WrapperBehind(outer, sources, name, depth: 0) is not { } record) continue;
+                var bound = model.GetSymbolInfo(simple, ct).Symbol;
+                if (bound is ILocalSymbol or IParameterSymbol or IRangeVariableSymbol) return false;
+                return bound is null
+                       || !bound.Locations.Any(static l => l.SourceTree?.FilePath.EndsWith(".Wrapper.g.cs", StringComparison.OrdinalIgnoreCase) == true);
+            }
+            return false;
+        }
 
         static INamedTypeSymbol? WrapperBehind(ITypeSymbol type, ImmutableHashSet<INamedTypeSymbol> sources, string name, int depth)
         {

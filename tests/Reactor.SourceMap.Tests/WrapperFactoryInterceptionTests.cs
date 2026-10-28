@@ -218,6 +218,26 @@ public sealed class WrapperFactoryInterceptionTests : IDisposable
         Assert.Null(stack.CallSite);
     }
 
+    internal static double ReadValue(object value) => 1;
+
+    internal static dynamic ReadValue(Element value) => 2d;
+
+    [Fact]
+    public void ArgumentThatBecomesDynamic_IsNeverIntercepted()
+    {
+        // ReadValue(gauge) is a double here and dynamic once the record is an Element, which
+        // makes both calls dynamically dispatched.
+        FakeGaugeElement gauge = FakeGauge();
+#pragma warning disable IL2026, IL3050 // dynamic dispatch is the subject of this test
+        FakeGaugeElement made = FakeGauge(ReadValue(gauge));
+        Element stack = VStack(8, FakeGauge(ReadValue(gauge)));
+#pragma warning restore IL2026, IL3050
+
+        Assert.Equal(2, made.Value);
+        Assert.Null(made.CallSite);
+        Assert.Null(stack.CallSite);
+    }
+
     [Fact]
     public void WrapperRecordThatSpellsItsOwnBase_IsStampedAndSoIsItsContainer()
     {

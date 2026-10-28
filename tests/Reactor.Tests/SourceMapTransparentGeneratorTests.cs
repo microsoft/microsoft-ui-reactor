@@ -253,6 +253,11 @@ public sealed class SourceMapTransparentGeneratorTests
             compilation, out var outputCompilation, out _);
         var result = driver.GetRunResult();
 
+        // A generator that threw emits nothing, which would satisfy any "no interceptor"
+        // assertion; Roslyn records the exception here, not as a compilation diagnostic.
+        var crashed = result.Results.Where(static r => r.Exception is not null).ToList();
+        Assert.True(crashed.Count == 0, "a generator threw: " + string.Join("; ", crashed.Select(static r => r.Exception)));
+
         // What another generator adds in the real build (the half of a [GenerateReactorWrapper]
         // record this generator cannot see), so the emitted interceptors are checked against
         // the compilation they will actually be part of.
