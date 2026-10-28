@@ -221,6 +221,32 @@ hyperlinks, code spans become monospace `TextBlock`. No WebView, no HTML
 round-trip — the output composes with every other modifier on this page
 (`.Padding`, `.Width`, `.TextWrapping`).
 
+`MarkdownOptions.LinkBuilder` overrides rendering for links whose absolute URI
+passes the Markdown URI policy (`http`, `https`, or `mailto`). It receives the
+validated URI and a label array containing one selectable `RichTextBlock`
+with its inline formatting, default heading/table-header typography, and images
+preserved (an empty array for an empty label). Return a non-null `Element` for a confirmation action, preview, or
+other custom link UI; exceptions propagate and a null result is an error.
+The returned element is embedded through `InlineUIContainer`, retaining its
+own styling, lifecycle, and accessibility properties. Like other embedded
+controls, it has its own text-selection boundary. Leave the callback unset
+for ordinary native inline hyperlinks and continuous surrounding prose
+selection; a custom horizontal stack is not equivalent to a text hyperlink.
+The callback owns custom styling and interaction. Configure an explicit
+accessible name on the returned control and verify its role, keyboard
+activation, and pointer behavior in your app. If the returned control is a
+button containing the supplied `RichTextBlockElement`, set that label's
+`IsTextSelectionEnabled` to `false` rather than asking it to select text.
+This configuration is not a guarantee of physical input behavior for every
+custom control.
+
+With `LinkBuilder` set, links inside image alternative text are plain alt
+text, not separate actions. Nested parser autolinks remain part of the outer
+link's label: only the outer target is considered for rendering. If that
+target is rejected by the URI policy, the entire label stays plain text;
+a safe-looking URL in the label does not become a separate link. These
+nesting rules describe the callback path, not changes to the default renderer.
+
 The trade-off vs. [WebView2](#webview2) is fidelity: `Markdown` does not
 support arbitrary HTML, embedded `<script>`, or CSS. It supports paragraphs,
 headings (h1–h6), lists (bullet, ordered, nested), inline code, fenced code

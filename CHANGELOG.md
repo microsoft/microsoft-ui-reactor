@@ -380,11 +380,33 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Markdown `LinkBuilder` is now invoked** (#1401). Previously the callback was
+  ignored and every link rendered as a default hyperlink. Each link whose target
+  passes the URI policy now calls it with that URI and the formatted label, and
+  the returned element renders inline. Links nested in a label stay part of the
+  outer link. If the outer target is rejected, the whole label renders as plain
+  text, and a URL inside it does not become a separate link. Links render as
+  before when no callback is set.
+- **Opening a `Flyout` from state no longer replaces the window with a render error**
+  (issue #1419). `Flyout(Button(...), ...) with { IsOpen = open }` opened through
+  `FlyoutBase.ShowAttachedFlyout`, but a Button/SplitButton target holds its flyout in the
+  control's own `Flyout` property, so WinUI threw `ArgumentException` ("ShowAttached was
+  called on an element without an attached FlyoutBase") on mount with `IsOpen = true` and on
+  every `false` → `true` edge. It now opens through the installed flyout's `ShowAt` (deferred
+  to the target's `Loaded` at mount), the path `CommandBarFlyout` already used, so both slots
+  work. `IsOpen` stays a one-shot open trigger; the user dismisses the flyout.
+
 - **Unpackaged Jump Lists now use source-generated COM interop under Native AOT.**
   Shell link activation, property stores and removal queries no longer depend on
   built-in COM marshalling. Worker calls use a balanced explicit COM apartment scope and
   release transaction-owned interfaces deterministically. See the
   [Jump list guide](docs/guide/windows.md#jump-list) (spec 036 §11.3).
+
+- **`.InteractionStates()` and `.Keyframes()` translations no longer move an element to its
+  parent's origin** (issue #1432). Both animated the handoff visual's `Offset`, and on a
+  XAML element that `Offset` is its layout position, so a `translation:` replaced the
+  element's position instead of nudging it, and hover-out sent it to the top-left of its
+  parent. Both now animate `Translation`.
 
 - **A conditional child no longer shifts its unkeyed siblings** (issue #1423). The
   container factories drop `null` / `Empty()` arguments and flatten `Group(...)`, so
