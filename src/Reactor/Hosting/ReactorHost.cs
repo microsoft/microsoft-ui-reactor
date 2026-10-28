@@ -273,7 +273,11 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     /// Useful for embedding Reactor content in a pre-existing layout (e.g., a test harness
     /// with a persistent TitleBar).
     /// </summary>
-    public WinUI.Border? ContentTarget { get; set; }
+    public WinUI.Border? ContentTarget
+    {
+        get => _reconciler.ThemeAnchor as WinUI.Border;
+        set => _reconciler.ThemeAnchor = value;
+    }
 
     private RenderErrorHandler? _renderErrorHandler;
 

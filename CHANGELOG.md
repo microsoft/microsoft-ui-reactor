@@ -393,6 +393,20 @@ Conventions for contributors:
   already an `Element`, so they keep their location and declared name — or leaves a call
   unstamped where that could change which overload the real compilation picks.
 
+- **ThemeRef resource overrides follow a `RequestedTheme` set outside the Reactor tree**
+  (follow-up to #771). When an app themes a native ancestor of a `ReactorHostControl`
+  or a `ReactorHost.ContentTarget`
+  (for example `RequestedTheme = Dark` on the window root under a Light app),
+  `.Resources(r => r.Set(key, Theme.Ref(...)))` overrides resolved against the app
+  theme: at mount the control is not yet parented, and no theme change follows to
+  re-resolve it. ListView, GridView, TreeView and ItemsView/ItemsRepeater rows realized
+  during layout had the same problem, because they mount outside any root pass.
+  Both hosts now supply a native theme anchor to the reconciler, including for custom
+  error fallbacks. Layout-time realization inherits its container's theme, pooled rows
+  refresh unchanged descendants when reused under a different theme, and a change to the host's inherited theme
+  forces a resource refresh even through unchanged subtrees (including when a
+  theme-event render runs before the host's Loaded event).
+
 - **Diagnostics an inspector relies on (winapp DevTools) are no longer missing or anonymous**
   (issue #1421, spec 044 / spec 010 / spec 042).
   - A commit-phase failure that replaces a window's content with the error screen now raises a

@@ -174,6 +174,7 @@ public sealed partial class Reconciler
         if (cc.Content is not null) return; // already hosted for this realization
         if (item is not WinUI.TreeViewNode node || node.Content is not { } data) return;
 
+        using var realizationTheme = EnterRealizationTheme(container);
         var view = el.BuildView(data);
         cc.Content = Mount(view, requestRerender);
         SetElementTag(cc, view);
@@ -241,6 +242,7 @@ public sealed partial class Reconciler
             if (container.ContentTemplateRoot is not ContentControl cc) continue;
             if (list.Items[i] is not WinUI.TreeViewNode node || node.Content is not { } data) continue;
 
+            using var realizationTheme = EnterRealizationTheme(container);
             var newView = n.BuildView(data);
             if (cc.Content is UIElement existing && GetElementTag(cc) is Element oldView && CanUpdate(oldView, newView))
             {

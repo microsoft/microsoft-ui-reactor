@@ -104,6 +104,93 @@ public sealed partial class Reconciler : IDisposable
     // carries the reconciler's top-down knowledge so ThemeRef-backed ResourceOverrides
     // resolve their concrete brush against the correct effective theme at mount.
     private ElementTheme _ambientRequestedTheme = ElementTheme.Default;
+
+    /// <summary>
+    /// Native parent of the host's content, also used when installing error fallbacks.
+    /// </summary>
+    internal DependencyObject? ThemeAnchor { get; set; }
+    private ElementTheme _renderedHostTheme;
+    private ElementTheme _realizationTheme;
+    private int _realizationThemeDepth;
+    private bool _realizationResourceRefresh;
+    internal bool HostThemeChanged => InheritedRequestedTheme(ThemeAnchor) != _renderedHostTheme;
+
+    /// <summary>
+    /// The nearest explicit <c>RequestedTheme</c> on <paramref name="start"/> or its visual
+    /// ancestors, or Default. Covers themes set by Reactor on realized controls and themes
+    /// an app sets outside the Reactor tree (for example on a window root).
+    /// </summary>
+    internal static ElementTheme InheritedRequestedTheme(DependencyObject? start)
+    {
+        for (var node = start; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+        {
+            if (node is FrameworkElement { RequestedTheme: not ElementTheme.Default } themed)
+                return themed.RequestedTheme;
+        }
+        return ElementTheme.Default;
+    }
+
+    /// <summary>
+    /// Layout-time realization (an ItemsRepeater or ItemsView asking for a row) runs outside
+    /// any root pass, so no ambient theme is threaded to the row. Seed it from the parented
+    /// realization target so ThemeRef resource overrides on the still-unparented row resolve
+    /// against the theme it will render under. A realization nested in a pass keeps the
+    /// pass's ambient.
+    /// </summary>
+    internal RealizationThemeScope EnterRealizationTheme(DependencyObject? realizationParent, UIElement? reused = null)
+    {
+        var inherited = _debugReconcileDepth > 0
+            ? _ambientRequestedTheme : InheritedRequestedTheme(realizationParent);
+        bool refresh = reused is FrameworkElement reusedElement && TryGetReactorState(reusedElement, out var state)
+            && state.RealizationTheme is { } previous && previous != inherited;
+        var scope = new RealizationThemeScope(this, inherited);
+        _realizationThemeDepth++;
+        _realizationTheme = inherited;
+        _ambientRequestedTheme = inherited;
+        // A parked row missed the host refresh. Its unchanged children must not skip.
+        if (refresh)
+        {
+            _realizationResourceRefresh = true;
+            _resourceRefreshActive = true;
+            _forceFullRenderActive = true;
+        }
+        return scope;
+    }
+
+    internal readonly struct RealizationThemeScope : IDisposable
+    {
+        private readonly Reconciler? _owner;
+        private readonly ElementTheme _realization;
+        private readonly ElementTheme _ambient;
+        private readonly bool _realizationRefresh;
+        private readonly bool _refreshActive;
+        private readonly bool _forceActive;
+        internal ElementTheme Theme { get; }
+
+        internal RealizationThemeScope(Reconciler owner, ElementTheme theme)
+        {
+            _owner = owner;
+            Theme = theme;
+            _realization = owner._realizationTheme;
+            _ambient = owner._ambientRequestedTheme;
+            _realizationRefresh = owner._realizationResourceRefresh;
+            _refreshActive = owner._resourceRefreshActive;
+            _forceActive = owner._forceFullRenderActive;
+        }
+
+        public void Dispose()
+        {
+            if (_owner is null)
+                return;
+            _owner._realizationThemeDepth--;
+            _owner._realizationTheme = _realization;
+            _owner._ambientRequestedTheme = _ambient;
+            _owner._realizationResourceRefresh = _realizationRefresh;
+            _owner._resourceRefreshActive = _refreshActive;
+            _owner._forceFullRenderActive = _forceActive;
+        }
+    }
+
     private int _errorBoundaryDepth;
 
     /// <summary>
@@ -1061,7 +1148,11 @@ public sealed partial class Reconciler : IDisposable
     /// realizing or refreshing a row) don't call it, so they can't consume the request.
     /// UI thread only; pair with <see cref="EndRootPass"/> in a finally.
     /// </summary>
-    internal void BeginRootPass() => _resourceRefreshArmed |= Interlocked.Exchange(ref _resourceRefreshPending, 0) != 0;
+    internal void BeginRootPass()
+    {
+        var pending = Interlocked.Exchange(ref _resourceRefreshPending, 0) != 0;
+        _resourceRefreshArmed |= pending || HostThemeChanged;
+    }
 
     /// <summary>
     /// Ends a host root pass. A request <see cref="BeginRootPass"/> armed that the pass never
@@ -1396,6 +1487,7 @@ public sealed partial class Reconciler : IDisposable
     internal sealed class ReactorState
     {
         public Element? Element;
+        internal ElementTheme? RealizationTheme;
         public ModifierEventHandlerState? Modifiers;
         // Per-native-element echo-suppress counter consumed by ChangeEchoSuppressor.
         // Lives here (not in a CWT-by-RCW) so that BeginSuppress on one managed
@@ -2850,12 +2942,18 @@ public sealed partial class Reconciler : IDisposable
             // Consume the hot-reload and resource-refresh signals exactly once per
             // top-level pass so every component re-runs Render() even when props/deps
             // are unchanged (and, for a resource refresh, no element is skipped).
-            _resourceRefreshActive = _resourceRefreshArmed;
-            _resourceRefreshArmed = false;
+            bool hostPass = _realizationThemeDepth == 0;
+            var theme = hostPass ? InheritedRequestedTheme(ThemeAnchor) : _realizationTheme;
+            _resourceRefreshActive = hostPass
+                ? _resourceRefreshArmed || theme != _renderedHostTheme
+                : _realizationResourceRefresh;
+            if (hostPass)
+                _resourceRefreshArmed = false;
             _forceFullRenderActive = ForceFullRenderPending || _resourceRefreshActive;
             ForceFullRenderPending = false;
             _hotReloadRetryActive = HotReloadRetryPending;
             HotReloadRetryPending = false;
+            _ambientRequestedTheme = theme;
 
             // Build the dirty-ancestor path. For every component node
             // whose SelfTriggered is true, walk up the realized visual
@@ -2868,17 +2966,20 @@ public sealed partial class Reconciler : IDisposable
         try {
         try
         {
+            UIElement? result;
             if (newElement is null or EmptyElement)
             {
                 if (existingControl is not null)
                     Unmount(existingControl);
-                return null;
+                result = null;
             }
-
-            if (oldElement is null or EmptyElement || existingControl is null)
-                return Mount(newElement, requestRerender);
-
-            return ReconcileImperative(oldElement, newElement, existingControl, requestRerender);
+            else if (oldElement is null or EmptyElement || existingControl is null)
+                result = Mount(newElement, requestRerender);
+            else
+                result = ReconcileImperative(oldElement, newElement, existingControl, requestRerender);
+            if (_debugReconcileDepth == 1 && _realizationThemeDepth == 0)
+                _renderedHostTheme = _ambientRequestedTheme;
+            return result;
             // </snippet:reconciler-entry>
         }
         finally
@@ -2903,6 +3004,7 @@ public sealed partial class Reconciler : IDisposable
                 _forceFullRenderActive = false;
                 _resourceRefreshActive = false;
                 _hotReloadRetryActive = false;
+                _ambientRequestedTheme = ElementTheme.Default;
                 _dirtyAncestorPath?.Clear();
                 _dirtyPathChildren?.Clear();
             }
@@ -7114,7 +7216,7 @@ public sealed partial class Reconciler : IDisposable
     /// element is not yet parented and so an ancestor <c>RequestedTheme</c> is
     /// unreachable through <paramref name="fe"/>'s own visual-tree walk. Pass
     /// <see cref="ElementTheme.Default"/> to fall back to fe-based resolution
-    /// (host-window themes set outside the Reactor tree; the 3-arg overload).
+    /// (for example, callers of the 3-arg overload).
     /// </param>
     public static void ApplyResourceOverrides(
         FrameworkElement fe,
@@ -7173,8 +7275,7 @@ public sealed partial class Reconciler : IDisposable
         // resolve against it: at mount fe is not yet parented, so its own visual-tree
         // walk cannot see an ancestor RequestedTheme and would otherwise fall back to
         // the app theme (the mount-theme bug). When no ambient theme is supplied
-        // (Default — direct public-API callers, or a host/window theme set outside the
-        // Reactor tree), keep the fe-based resolution.
+        // (Default — for example, direct public-API callers), keep the fe-based resolution.
         foreach (var (key, themeRef) in newOverrides.ThemeRefs)
         {
             var resolved = effectiveTheme != ElementTheme.Default
@@ -7676,4 +7777,3 @@ public sealed partial class Reconciler : IDisposable
         return pendingPropagation;
     }
 }
-

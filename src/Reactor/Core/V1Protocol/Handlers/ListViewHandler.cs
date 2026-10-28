@@ -60,6 +60,7 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
             if (items is not null && args.ItemIndex >= 0 && args.ItemIndex < items.Length
                 && args.ItemContainer.ContentTemplateRoot is ContentControl cc)
             {
+                using var realizationTheme = reconciler.EnterRealizationTheme(args.ItemContainer);
                 var ctrl = reconciler.Mount(items[args.ItemIndex], requestRerender);
                 cc.Content = ctrl;
                 // Issue #951 — keep .AutomationName(...) on an item view working

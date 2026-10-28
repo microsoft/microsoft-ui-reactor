@@ -239,6 +239,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         // already-constructed controls.
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
+        _reconciler.ThemeAnchor = this;
         // Diagnostics mode needs call sites stamped from the very first render, so it
         // implies source mapping (REACTOR_SOURCEMAP=1 alone remains the narrower opt-in).
         if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
@@ -627,6 +628,14 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // A tree rendered while detached resolved ThemeRef resource overrides without the
+        // theme this control inherits from its new ancestors. Re-resolve every one of them.
+        if (_currentControl is not null && _reconciler.HostThemeChanged)
+        {
+            _reconciler.RequestResourceRefresh();
+            RequestRender();
+        }
+
         if (_rootComponent is not null || _rootRenderFunc is not null)
             return; // Already mounted via Mount()
 

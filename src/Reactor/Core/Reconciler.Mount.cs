@@ -711,6 +711,7 @@ public sealed partial class Reconciler
         if (viewSource is not null && args.ItemIndex >= 0 && args.ItemIndex < viewSource.ItemCount
             && args.ItemContainer.ContentTemplateRoot is ContentControl cc)
         {
+            using var realizationTheme = EnterRealizationTheme(args.ItemContainer);
             // WinUI can re-realize a container without first raising the recycle event
             // for its previous row; unmount that row's view or its components leak.
             UnmountItemView(cc, clearContent: false);

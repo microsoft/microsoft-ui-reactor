@@ -157,9 +157,12 @@ public UIElement GetElement(ElementFactoryGetArgs args)
 
     var item = _items[index];
     var element = BuildOrCache(key, item, index, keyed);
+    TryTakeCompatibleFromPool(element, out var reused, out var oldElement, out var parkedVisibility);
+    // Rows realize during layout, outside any root pass: inherit the repeater's theme.
+    using var realizationTheme = _reconciler.EnterRealizationTheme(args.Parent, reused);
 
     UIElement? control;
-    if (TryTakeCompatibleFromPool(element, out var reused, out var oldElement, out var parkedVisibility))
+    if (reused is not null && oldElement is not null)
     {
         // Reuse a previously-recycled container. The framework still has
         // it parented to the ItemsRepeater, so the ViewManager.cpp:866
@@ -221,6 +224,8 @@ public UIElement GetElement(ElementFactoryGetArgs args)
     _mountedElements[key] = element;
     if (control is not null)
     {
+        if (control is FrameworkElement realizedElement)
+            Reconciler.GetOrCreateReactorState(realizedElement).RealizationTheme = realizationTheme.Theme;
         _keyByControl[control] = key;
         _lastElementByControl[control] = element;
         if (_keyByControl.Count > _maxRealized) _maxRealized = _keyByControl.Count;
@@ -306,12 +311,18 @@ public UIElement? Reconcile(
         // Consume the hot-reload and resource-refresh signals exactly once per
         // top-level pass so every component re-runs Render() even when props/deps
         // are unchanged (and, for a resource refresh, no element is skipped).
-        _resourceRefreshActive = _resourceRefreshArmed;
-        _resourceRefreshArmed = false;
+        bool hostPass = _realizationThemeDepth == 0;
+        var theme = hostPass ? InheritedRequestedTheme(ThemeAnchor) : _realizationTheme;
+        _resourceRefreshActive = hostPass
+            ? _resourceRefreshArmed || theme != _renderedHostTheme
+            : _realizationResourceRefresh;
+        if (hostPass)
+            _resourceRefreshArmed = false;
         _forceFullRenderActive = ForceFullRenderPending || _resourceRefreshActive;
         ForceFullRenderPending = false;
         _hotReloadRetryActive = HotReloadRetryPending;
         HotReloadRetryPending = false;
+        _ambientRequestedTheme = theme;
 
         // Build the dirty-ancestor path. For every component node
         // whose SelfTriggered is true, walk up the realized visual
@@ -324,17 +335,20 @@ public UIElement? Reconcile(
     try {
     try
     {
+        UIElement? result;
         if (newElement is null or EmptyElement)
         {
             if (existingControl is not null)
                 Unmount(existingControl);
-            return null;
+            result = null;
         }
-
-        if (oldElement is null or EmptyElement || existingControl is null)
-            return Mount(newElement, requestRerender);
-
-        return ReconcileImperative(oldElement, newElement, existingControl, requestRerender);
+        else if (oldElement is null or EmptyElement || existingControl is null)
+            result = Mount(newElement, requestRerender);
+        else
+            result = ReconcileImperative(oldElement, newElement, existingControl, requestRerender);
+        if (_debugReconcileDepth == 1 && _realizationThemeDepth == 0)
+            _renderedHostTheme = _ambientRequestedTheme;
+        return result;
 ```
 
 `Reconcile` is a tri-state dispatch: `(oldElement, newElement)` resolves
