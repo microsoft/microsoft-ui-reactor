@@ -408,6 +408,13 @@ Conventions for contributors:
     index (it was ambiguous between `int?` and `Optional<int>`, CS0121), and new `XamlHost(…)` /
     `XamlPage(…)` factories record a call site for `XamlHostElement` / `XamlPageElement`.
 
+- **Markdown `LinkBuilder` is now invoked** (#1401). Previously the callback was
+  ignored and every link rendered as a default hyperlink. Each link whose target
+  passes the URI policy now calls it with that URI and the formatted label, and
+  the returned element renders inline. Links nested in a label stay part of the
+  outer link. If the outer target is rejected, the whole label renders as plain
+  text, and a URL inside it does not become a separate link. Links render as
+  before when no callback is set.
 - **Opening a `Flyout` from state no longer replaces the window with a render error**
   (issue #1419). `Flyout(Button(...), ...) with { IsOpen = open }` opened through
   `FlyoutBase.ShowAttachedFlyout`, but a Button/SplitButton target holds its flyout in the

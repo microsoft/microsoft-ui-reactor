@@ -138,6 +138,7 @@ internal static class SelfTestFixtureRegistry
         "Markdown_EntityResolution",
         "Markdown_ComplexDocument",
         "Markdown_CustomOptionsCallbacks",
+        "Markdown_CustomLinkBuilder",
         "Markdown_CustomListCallbacks",
         "Markdown_CustomBlockQuoteHtml",
         "Markdown_CustomTableImage",
@@ -2302,6 +2303,7 @@ internal static class SelfTestFixtureRegistry
         "Markdown_EntityResolution" => new MarkdownFixtures.EntityResolution(harness),
         "Markdown_ComplexDocument" => new MarkdownFixtures.ComplexDocument(harness),
         "Markdown_CustomOptionsCallbacks" => new MarkdownFixtures.CustomOptionsCallbacks(harness),
+        "Markdown_CustomLinkBuilder" => new MarkdownFixtures.CustomLinkBuilder(harness),
         "Markdown_CustomListCallbacks" => new MarkdownFixtures.CustomListCallbacks(harness),
         "Markdown_CustomBlockQuoteHtml" => new MarkdownFixtures.CustomBlockQuoteHtml(harness),
         "Markdown_CustomTableImage" => new MarkdownFixtures.CustomTableImage(harness),
@@ -4139,7 +4141,6 @@ internal static class SelfTestFixtureRegistry
         _ => null,
     };
 }
-
 
 
 
