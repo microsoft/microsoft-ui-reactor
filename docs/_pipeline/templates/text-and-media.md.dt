@@ -257,19 +257,7 @@ accessible name, tooltip, or confirmation prompt, so you don't have to walk the
 label's inlines. The same null-result and styling rules apply. When both
 callbacks are set, `LinkRenderer` wins and `LinkBuilder` is not called.
 
-```csharp
-new MarkdownOptions
-{
-    LinkRenderer = link =>
-    {
-        Element content = link.Label is { } label
-            ? label with { IsTextSelectionEnabled = false }
-            : TextBlock(link.Uri.ToString());
-        return Button(content, () => OpenAfterConfirmation(link.Uri))
-            .AutomationName(link.Text.Length > 0 ? link.Text : link.Uri.ToString())
-            .ToolTip(link.Uri.ToString());
-    },
-}
+```csharp snippet="text-and-media/markdown-link-renderer"
 ```
 
 The trade-off vs. [WebView2](#webview2) is fidelity: `Markdown` does not

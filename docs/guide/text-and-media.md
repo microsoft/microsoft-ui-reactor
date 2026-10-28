@@ -320,17 +320,30 @@ label's inlines. The same null-result and styling rules apply. When both
 callbacks are set, `LinkRenderer` wins and `LinkBuilder` is not called.
 
 ```csharp
-new MarkdownOptions
+class ReviewedLinksDemo : Component
 {
-    LinkRenderer = link =>
+    public override Element Render()
     {
-        Element content = link.Label is { } label
-            ? label with { IsTextSelectionEnabled = false }
-            : TextBlock(link.Uri.ToString());
-        return Button(content, () => OpenAfterConfirmation(link.Uri))
-            .AutomationName(link.Text.Length > 0 ? link.Text : link.Uri.ToString())
-            .ToolTip(link.Uri.ToString());
-    },
+        var (pending, setPending) = UseState<Uri?>(null);
+
+        var options = new MarkdownOptions
+        {
+            LinkRenderer = link =>
+            {
+                Element content = link.Label is { } label
+                    ? label with { IsTextSelectionEnabled = false }
+                    : TextBlock(link.Uri.ToString());
+                return Button(content, () => setPending(link.Uri))
+                    .AutomationName(link.Text.Length > 0 ? link.Text : link.Uri.ToString())
+                    .ToolTip(link.Uri.ToString());
+            },
+        };
+
+        return VStack(8,
+            Markdown("Read [the **review** notes](https://example.com/review) first.", options),
+            TextBlock(pending is null ? "" : $"Open {pending}?")
+        ).Padding(24);
+    }
 }
 ```
 
