@@ -4158,6 +4158,28 @@ in place of the root, so use <code>ComponentFactory</code> or <code>Mount(...)</
 contractor's "Reactor XAML compiler" appears in your search results,
 it doesn't exist — the framework's design eliminates the second
 authoring language deliberately.</p>
+<p>The other direction — an existing XAML <code>Page</code> or control inside a Reactor tree — uses
+<code>XamlPage(...)</code> and <code>XamlHost(...)</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">XamlInteropExample</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="p">{</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="p">(</span><span class="n">count</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UseState</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">            </span><span class="n">XamlPage</span><span class="p">(</span><span class="k">typeof</span><span class="p">(</span><span class="n">LegacySettingsPage</span><span class="p">),</span><span class="w"> </span><span class="n">parameter</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;general&quot;</span><span class="p">),</span><span class="w">   </span><span class="c1">// a Frame navigated to the page</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">            </span><span class="n">XamlHost</span><span class="p">(()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">MyUserControl</span><span class="p">(),</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">((</span><span class="n">MyUserControl</span><span class="p">)</span><span class="n">c</span><span class="p">).</span><span class="n">Value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">count</span><span class="p">,</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">                     </span><span class="n">typeKey</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;MyUserControl&quot;</span><span class="p">)</span><span class="w">                            </span><span class="c1">// any FrameworkElement</span>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="w">        </span><span class="p">);</span>
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="p">}</span>
+</code></pre></div>
+<p><code>XamlPage</code> re-navigates in place when the page type or parameter changes. <code>XamlHost</code>'s
+factory runs once on mount and its updater after creation and on every render; give
+unrelated hosts different <code>typeKey</code>s so one is never updated in place into another.
+Reactor does not manage the hosted control's children. Prefer the factories to the
+<code>XamlPageElement</code> / <code>XamlHostElement</code> constructors: they record the call site, so
+inspectors can map the hosted control back to your code.</p>
 <h2 id="tips">Tips<a class="headerlink" href="#tips" title="Permanent link">&para;</a></h2>
 <p><strong>Think "render the current truth."</strong> In XAML, you often describe relationships
 between properties. In Reactor, you usually compute the current value directly and

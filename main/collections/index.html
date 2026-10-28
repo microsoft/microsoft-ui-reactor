@@ -3922,7 +3922,9 @@ You get this for free as long as <code>keySelector</code> returns a value that i
   having no key.</li>
 <li><strong>Unique</strong> within the list — duplicate keys trigger a bulk-replace
   bailout and a one-shot diagnostic in the dev log.</li>
-<li><strong>Non-null</strong> — null keys bail out the diff for the affected list.</li>
+<li><strong>Non-null</strong> — a null key is reported as a diagnostic and that item is
+  matched by its position, so its row state follows the index rather than
+  the item.</li>
 </ul>
 <h3 id="ireactorkeyed-identity-on-the-data"><code>IReactorKeyed</code> — identity on the data<a class="headerlink" href="#ireactorkeyed-identity-on-the-data" title="Permanent link">&para;</a></h3>
 <p>When a model type owns its identity, implement <code>IReactorKeyed</code> (its single

@@ -3806,12 +3806,12 @@ you're triaging:</p>
 <tr>
 <td><code>Errors</code></td>
 <td><code>0x20</code></td>
-<td>Generic <code>SwallowedError</code> / <code>HResultFailed</code> / <code>Warning</code>, plus <code>RenderError</code></td>
+<td>Generic <code>SwallowedError</code> / <code>HResultFailed</code> / <code>Warning</code>, plus <code>RenderError</code> and <code>CommitError</code></td>
 </tr>
 <tr>
 <td><code>Hosting</code></td>
 <td><code>0x80</code></td>
-<td><code>WindowOpened</code>, <code>WindowClosed</code>, <code>WindowDpiChanged</code>, <code>BackdropMaterializationFailed</code></td>
+<td><code>WindowOpened</code>, <code>WindowClosed</code> (root component type and HWND, for windows opened through <code>ReactorApp</code>), <code>WindowDpiChanged</code>, <code>BackdropMaterializationFailed</code></td>
 </tr>
 <tr>
 <td><code>Persistence</code></td>
@@ -3885,6 +3885,33 @@ three strings:</p>
 </table>
 <p>The message is composed by the framework from developer-authored
 identifiers, never from user data (spec 044 §6.2.1).</p>
+<p><code>RenderError</code> names the component whose <code>Render()</code> or effects threw. A failure
+outside any component — reconciling the tree into native controls, installing
+it in the host, a post-render host callback — has no owning component; when it
+replaces the host's content with the error screen, Reactor raises <code>CommitError</code>
+(EventId 41, <code>Error</code>) instead:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>phase</code></td>
+<td><code>Reconcile</code> (the commit phase) or <code>Cleanup</code> (retiring a replaced root)</td>
+</tr>
+<tr>
+<td><code>rootComponent</code></td>
+<td>The host's root component (<code>FuncElement</code> for a root render function)</td>
+</tr>
+<tr>
+<td><code>exceptionType</code></td>
+<td>Exception type name only; the message is never on the payload</td>
+</tr>
+</tbody>
+</table>
 <h3 id="component-render-notifications">Component render notifications<a class="headerlink" href="#component-render-notifications" title="Permanent link">&para;</a></h3>
 <p><code>ComponentRendered</code> (EventId 40, <code>Verbose</code>, keywords <code>Render | RenderDetail</code>)
 fires once each time a component's <code>Render()</code> runs — on mount, on update, and
