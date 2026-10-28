@@ -4675,38 +4675,52 @@ string. Reactor surfaces that as <code>LaunchKind.JumpList</code> on the
 startup callback. The recommended convention is to put a deep-link URI in
 <code>Arguments</code> (that is what <code>JumpListItem.ForUri</code> is for) and resolve it through
 a <a href="../navigation/"><code>DeepLinkMap&lt;TRoute&gt;</code></a>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="c1">// Unpackaged apps must set an AppUserModelId once, before the first</span>
-<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="c1">// UpdateAsync — the shell has no other stable identity to hang the</span>
-<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="c1">// jump list off. Packaged apps inherit it from the manifest.</span>
-<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="n">Task</span><span class="w"> </span><span class="nf">PublishAsync</span><span class="p">()</span>
-<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="p">{</span>
-<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="w">    </span><span class="n">JumpList</span><span class="p">.</span><span class="n">AppUserModelId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;Contoso.Reactor.Demo&quot;</span><span class="p">;</span>
-<a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a><span class="w">    </span><span class="n">JumpList</span><span class="p">.</span><span class="n">ShowRecent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
-<a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a>
-<a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a><span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="n">JumpList</span><span class="p">.</span><span class="n">UpdateAsync</span><span class="p">([</span>
-<a id="__codelineno-21-10" name="__codelineno-21-10" href="#__codelineno-21-10"></a><span class="w">        </span><span class="n">JumpListItem</span><span class="p">.</span><span class="n">ForUri</span><span class="p">(</span><span class="s">&quot;New document&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;contoso://new&quot;</span><span class="p">),</span>
-<a id="__codelineno-21-11" name="__codelineno-21-11" href="#__codelineno-21-11"></a><span class="w">        </span><span class="n">JumpListItem</span><span class="p">.</span><span class="n">ForUri</span><span class="p">(</span><span class="s">&quot;Open dashboard&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;contoso://dashboard&quot;</span><span class="p">,</span>
-<a id="__codelineno-21-12" name="__codelineno-21-12" href="#__codelineno-21-12"></a><span class="w">            </span><span class="n">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Jump straight to the dashboard&quot;</span><span class="p">),</span>
-<a id="__codelineno-21-13" name="__codelineno-21-13" href="#__codelineno-21-13"></a><span class="w">        </span><span class="k">new</span><span class="w"> </span><span class="nf">JumpListItem</span><span class="p">(</span><span class="s">&quot;Report a bug&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;contoso://bug&quot;</span><span class="p">,</span>
-<a id="__codelineno-21-14" name="__codelineno-21-14" href="#__codelineno-21-14"></a><span class="w">            </span><span class="n">Kind</span><span class="p">:</span><span class="w"> </span><span class="n">JumpListItemKind</span><span class="p">.</span><span class="n">Custom</span><span class="p">,</span><span class="w"> </span><span class="n">GroupCategory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Help&quot;</span><span class="p">),</span>
-<a id="__codelineno-21-15" name="__codelineno-21-15" href="#__codelineno-21-15"></a><span class="w">    </span><span class="p">]);</span>
-<a id="__codelineno-21-16" name="__codelineno-21-16" href="#__codelineno-21-16"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="c1">// In a real app, load this list from the app&#39;s tracked destinations.</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="k">private</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">readonly</span><span class="w"> </span><span class="n">List</span><span class="o">&lt;</span><span class="n">JumpListItem</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Destinations</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="w">    </span><span class="n">JumpListItem</span><span class="p">.</span><span class="n">ForUri</span><span class="p">(</span><span class="s">&quot;New document&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;contoso://new&quot;</span><span class="p">),</span>
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="w">    </span><span class="n">JumpListItem</span><span class="p">.</span><span class="n">ForUri</span><span class="p">(</span><span class="s">&quot;Open dashboard&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;contoso://dashboard&quot;</span><span class="p">,</span>
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="w">        </span><span class="n">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Jump straight to the dashboard&quot;</span><span class="p">),</span>
+<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="w">    </span><span class="k">new</span><span class="w"> </span><span class="nf">JumpListItem</span><span class="p">(</span><span class="s">&quot;Report a bug&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;contoso://bug&quot;</span><span class="p">,</span>
+<a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a><span class="w">        </span><span class="n">Kind</span><span class="p">:</span><span class="w"> </span><span class="n">JumpListItemKind</span><span class="p">.</span><span class="n">Custom</span><span class="p">,</span><span class="w"> </span><span class="n">GroupCategory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Help&quot;</span><span class="p">),</span>
+<a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a><span class="p">];</span>
+<a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a>
+<a id="__codelineno-21-10" name="__codelineno-21-10" href="#__codelineno-21-10"></a><span class="c1">// Unpackaged apps must set an AppUserModelId once, before the first</span>
+<a id="__codelineno-21-11" name="__codelineno-21-11" href="#__codelineno-21-11"></a><span class="c1">// UpdateAsync — the shell has no other stable identity to hang the</span>
+<a id="__codelineno-21-12" name="__codelineno-21-12" href="#__codelineno-21-12"></a><span class="c1">// jump list off. Packaged apps inherit it from the manifest.</span>
+<a id="__codelineno-21-13" name="__codelineno-21-13" href="#__codelineno-21-13"></a><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="n">Task</span><span class="w"> </span><span class="nf">PublishAsync</span><span class="p">()</span>
+<a id="__codelineno-21-14" name="__codelineno-21-14" href="#__codelineno-21-14"></a><span class="p">{</span>
+<a id="__codelineno-21-15" name="__codelineno-21-15" href="#__codelineno-21-15"></a><span class="w">    </span><span class="n">JumpList</span><span class="p">.</span><span class="n">AppUserModelId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;Contoso.Reactor.Demo&quot;</span><span class="p">;</span>
+<a id="__codelineno-21-16" name="__codelineno-21-16" href="#__codelineno-21-16"></a><span class="w">    </span><span class="n">JumpList</span><span class="p">.</span><span class="n">ShowRecent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
 <a id="__codelineno-21-17" name="__codelineno-21-17" href="#__codelineno-21-17"></a>
-<a id="__codelineno-21-18" name="__codelineno-21-18" href="#__codelineno-21-18"></a><span class="c1">// Entries come back as a plain process re-launch. Resolve the argument</span>
-<a id="__codelineno-21-19" name="__codelineno-21-19" href="#__codelineno-21-19"></a><span class="c1">// string through the same DeepLinkMap the app already uses for routes;</span>
-<a id="__codelineno-21-20" name="__codelineno-21-20" href="#__codelineno-21-20"></a><span class="c1">// never act on it unvalidated. DeepLinkResult.Routes is the resolved</span>
-<a id="__codelineno-21-21" name="__codelineno-21-21" href="#__codelineno-21-21"></a><span class="c1">// back stack, deepest route last.</span>
-<a id="__codelineno-21-22" name="__codelineno-21-22" href="#__codelineno-21-22"></a><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">void</span><span class="w"> </span><span class="nf">Start</span><span class="p">(</span><span class="n">DeepLinkMap</span><span class="o">&lt;</span><span class="kt">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">routes</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
-<a id="__codelineno-21-23" name="__codelineno-21-23" href="#__codelineno-21-23"></a><span class="w">    </span><span class="n">ReactorApp</span><span class="p">.</span><span class="n">Run</span><span class="p">(</span><span class="n">ctx</span><span class="w"> </span><span class="o">=&gt;</span>
-<a id="__codelineno-21-24" name="__codelineno-21-24" href="#__codelineno-21-24"></a><span class="w">    </span><span class="p">{</span>
-<a id="__codelineno-21-25" name="__codelineno-21-25" href="#__codelineno-21-25"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ctx</span><span class="p">.</span><span class="n">LaunchActivation</span><span class="p">.</span><span class="n">Kind</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">LaunchKind</span><span class="p">.</span><span class="n">JumpList</span><span class="w"> </span><span class="o">&amp;&amp;</span>
-<a id="__codelineno-21-26" name="__codelineno-21-26" href="#__codelineno-21-26"></a><span class="w">            </span><span class="n">ctx</span><span class="p">.</span><span class="n">LaunchActivation</span><span class="p">.</span><span class="n">TryResolve</span><span class="p">(</span><span class="n">routes</span><span class="p">,</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">var</span><span class="w"> </span><span class="n">deepLink</span><span class="p">))</span>
-<a id="__codelineno-21-27" name="__codelineno-21-27" href="#__codelineno-21-27"></a><span class="w">        </span><span class="p">{</span>
-<a id="__codelineno-21-28" name="__codelineno-21-28" href="#__codelineno-21-28"></a><span class="w">            </span><span class="n">ReactorApp</span><span class="p">.</span><span class="n">OpenWindow</span><span class="p">(</span>
-<a id="__codelineno-21-29" name="__codelineno-21-29" href="#__codelineno-21-29"></a><span class="w">                </span><span class="k">new</span><span class="w"> </span><span class="n">WindowSpec</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Title</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">deepLink</span><span class="p">.</span><span class="n">Routes</span><span class="p">[</span><span class="o">^</span><span class="mi">1</span><span class="p">]</span><span class="w"> </span><span class="p">},</span>
-<a id="__codelineno-21-30" name="__codelineno-21-30" href="#__codelineno-21-30"></a><span class="w">                </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">SettingsWindow</span><span class="p">());</span>
-<a id="__codelineno-21-31" name="__codelineno-21-31" href="#__codelineno-21-31"></a><span class="w">        </span><span class="p">}</span>
-<a id="__codelineno-21-32" name="__codelineno-21-32" href="#__codelineno-21-32"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-21-18" name="__codelineno-21-18" href="#__codelineno-21-18"></a><span class="w">    </span><span class="kt">var</span><span class="w"> </span><span class="n">removed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="n">JumpList</span><span class="p">.</span><span class="n">GetRemovedArgumentsAsync</span><span class="p">();</span>
+<a id="__codelineno-21-19" name="__codelineno-21-19" href="#__codelineno-21-19"></a><span class="w">    </span><span class="n">PruneDestinations</span><span class="p">(</span><span class="n">removed</span><span class="p">);</span>
+<a id="__codelineno-21-20" name="__codelineno-21-20" href="#__codelineno-21-20"></a><span class="w">    </span><span class="n">removed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="n">JumpList</span><span class="p">.</span><span class="n">UpdateAsync</span><span class="p">(</span><span class="n">Destinations</span><span class="p">);</span>
+<a id="__codelineno-21-21" name="__codelineno-21-21" href="#__codelineno-21-21"></a><span class="w">    </span><span class="c1">// Also process removals made after the query. A successful update</span>
+<a id="__codelineno-21-22" name="__codelineno-21-22" href="#__codelineno-21-22"></a><span class="w">    </span><span class="c1">// clears the OS records, even for entries absent from this batch.</span>
+<a id="__codelineno-21-23" name="__codelineno-21-23" href="#__codelineno-21-23"></a><span class="w">    </span><span class="n">PruneDestinations</span><span class="p">(</span><span class="n">removed</span><span class="p">);</span>
+<a id="__codelineno-21-24" name="__codelineno-21-24" href="#__codelineno-21-24"></a><span class="w">    </span><span class="c1">// Persist the updated tracked destinations in your app&#39;s data store.</span>
+<a id="__codelineno-21-25" name="__codelineno-21-25" href="#__codelineno-21-25"></a><span class="w">    </span><span class="c1">// New user activity can explicitly add an eligible destination again.</span>
+<a id="__codelineno-21-26" name="__codelineno-21-26" href="#__codelineno-21-26"></a><span class="p">}</span>
+<a id="__codelineno-21-27" name="__codelineno-21-27" href="#__codelineno-21-27"></a>
+<a id="__codelineno-21-28" name="__codelineno-21-28" href="#__codelineno-21-28"></a><span class="k">private</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">void</span><span class="w"> </span><span class="nf">PruneDestinations</span><span class="p">(</span><span class="n">IReadOnlyList</span><span class="o">&lt;</span><span class="kt">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">removed</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-21-29" name="__codelineno-21-29" href="#__codelineno-21-29"></a><span class="w">    </span><span class="n">Destinations</span><span class="p">.</span><span class="n">RemoveAll</span><span class="p">(</span><span class="n">item</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">item</span><span class="p">.</span><span class="n">Kind</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">JumpListItemKind</span><span class="p">.</span><span class="n">Separator</span>
+<a id="__codelineno-21-30" name="__codelineno-21-30" href="#__codelineno-21-30"></a><span class="w">        </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">removed</span><span class="p">.</span><span class="n">Contains</span><span class="p">(</span><span class="n">item</span><span class="p">.</span><span class="n">Arguments</span><span class="p">,</span><span class="w"> </span><span class="n">StringComparer</span><span class="p">.</span><span class="n">Ordinal</span><span class="p">));</span>
+<a id="__codelineno-21-31" name="__codelineno-21-31" href="#__codelineno-21-31"></a>
+<a id="__codelineno-21-32" name="__codelineno-21-32" href="#__codelineno-21-32"></a><span class="c1">// Entries come back as a plain process re-launch. Resolve the argument</span>
+<a id="__codelineno-21-33" name="__codelineno-21-33" href="#__codelineno-21-33"></a><span class="c1">// string through the same DeepLinkMap the app already uses for routes;</span>
+<a id="__codelineno-21-34" name="__codelineno-21-34" href="#__codelineno-21-34"></a><span class="c1">// never act on it unvalidated. DeepLinkResult.Routes is the resolved</span>
+<a id="__codelineno-21-35" name="__codelineno-21-35" href="#__codelineno-21-35"></a><span class="c1">// back stack, deepest route last.</span>
+<a id="__codelineno-21-36" name="__codelineno-21-36" href="#__codelineno-21-36"></a><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">void</span><span class="w"> </span><span class="nf">Start</span><span class="p">(</span><span class="n">DeepLinkMap</span><span class="o">&lt;</span><span class="kt">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">routes</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-21-37" name="__codelineno-21-37" href="#__codelineno-21-37"></a><span class="w">    </span><span class="n">ReactorApp</span><span class="p">.</span><span class="n">Run</span><span class="p">(</span><span class="n">ctx</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-21-38" name="__codelineno-21-38" href="#__codelineno-21-38"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-21-39" name="__codelineno-21-39" href="#__codelineno-21-39"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ctx</span><span class="p">.</span><span class="n">LaunchActivation</span><span class="p">.</span><span class="n">Kind</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">LaunchKind</span><span class="p">.</span><span class="n">JumpList</span><span class="w"> </span><span class="o">&amp;&amp;</span>
+<a id="__codelineno-21-40" name="__codelineno-21-40" href="#__codelineno-21-40"></a><span class="w">            </span><span class="n">ctx</span><span class="p">.</span><span class="n">LaunchActivation</span><span class="p">.</span><span class="n">TryResolve</span><span class="p">(</span><span class="n">routes</span><span class="p">,</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">var</span><span class="w"> </span><span class="n">deepLink</span><span class="p">))</span>
+<a id="__codelineno-21-41" name="__codelineno-21-41" href="#__codelineno-21-41"></a><span class="w">        </span><span class="p">{</span>
+<a id="__codelineno-21-42" name="__codelineno-21-42" href="#__codelineno-21-42"></a><span class="w">            </span><span class="n">ReactorApp</span><span class="p">.</span><span class="n">OpenWindow</span><span class="p">(</span>
+<a id="__codelineno-21-43" name="__codelineno-21-43" href="#__codelineno-21-43"></a><span class="w">                </span><span class="k">new</span><span class="w"> </span><span class="n">WindowSpec</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Title</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">deepLink</span><span class="p">.</span><span class="n">Routes</span><span class="p">[</span><span class="o">^</span><span class="mi">1</span><span class="p">]</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-21-44" name="__codelineno-21-44" href="#__codelineno-21-44"></a><span class="w">                </span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">SettingsWindow</span><span class="p">());</span>
+<a id="__codelineno-21-45" name="__codelineno-21-45" href="#__codelineno-21-45"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-21-46" name="__codelineno-21-46" href="#__codelineno-21-46"></a><span class="w">    </span><span class="p">});</span>
 </code></pre></div>
 <table>
 <thead>
@@ -4726,11 +4740,15 @@ a <a href="../navigation/"><code>DeepLinkMap&lt;TRoute&gt;</code></a>:</p>
 </tr>
 <tr>
 <td><code>JumpList.UpdateAsync(items)</code></td>
-<td>Replace the whole list. UI thread only.</td>
+<td>Replace the whole list and return user removals observed in that transaction. UI thread only.</td>
 </tr>
 <tr>
 <td><code>JumpList.ClearAsync()</code></td>
-<td>Remove the app's entries.</td>
+<td>Remove the app's entries and return the transaction's observed removals.</td>
+</tr>
+<tr>
+<td><code>JumpList.GetRemovedArgumentsAsync()</code></td>
+<td>Read user-removed entries' argument strings without updating the list. UI thread only.</td>
 </tr>
 <tr>
 <td><code>JumpListItem.ForUri(...)</code></td>
@@ -4761,6 +4779,23 @@ a <a href="../navigation/"><code>DeepLinkMap&lt;TRoute&gt;</code></a>:</p>
 <li><code>UpdateAsync</code> validates the whole batch before touching the shell, so one
   bad entry never leaves a half-populated list behind. Non-separator entries
   must have a non-empty <code>Title</code>.</li>
+<li><strong>Respect user removals.</strong> Before updating, query <code>GetRemovedArgumentsAsync()</code>
+  and prune matching arguments from the app's destination tracking data (not the
+  underlying files). Also retain the arguments returned by <code>UpdateAsync</code> or
+  <code>ClearAsync</code>: they capture removals observed inside that transaction, including
+  removals arriving after the earlier query and removals absent from the new batch.
+  A successful update clears Windows' removal records. Without updating its own
+  tracking data, an app can reintroduce a removed destination on its next refresh.
+  Only offer it again after new user activity; compare arguments ordinally.
+  Results report observations, not commit success; logged shell HRESULT failures
+  keep the existing non-throwing behavior. The return type is now
+  <code>Task&lt;IReadOnlyList&lt;string&gt;&gt;</code>; await-only source callers continue to compile,
+  but existing consumers must rebuild their binaries.</li>
+<li>On unpackaged apps, removal queries cover shell links targeting the current
+  executable, which is the shape this wrapper creates, not <code>IShellItem</code> file
+  destinations or links to other executables. Removal filtering applies to
+  custom categories, not the non-removable User Tasks group. The packaged path
+  uses each loaded item's <code>RemovedByUser</code> flag, including ungrouped entries.</li>
 </ul>
 <h2 id="displays">Displays<a class="headerlink" href="#displays" title="Permanent link">&para;</a></h2>
 <p><code>ReactorDisplay</code> exposes the current monitor layout in Reactor's DIP-oriented
