@@ -281,19 +281,13 @@ public sealed partial class SourceMapInterceptorGenerator
         // A wrapper factory's name (`ToggleSwitch`) can also be a Reactor factory's: only an
         // occurrence that binds to nothing is a call to the invisible generated one.
         var factoryNames = WrapperFactoryCalls.SourceFactoryNames(model.Compilation);
-        var free = true;
-        foreach (var token in member.DescendantTokens().Where(static t => t.IsKind(SyntaxKind.IdentifierToken)))
-        {
-            if (names.Contains(token.ValueText)
-                || (factoryNames.Contains(token.ValueText)
-                    && token.Parent is IdentifierNameSyntax name
-                    && (model.GetSymbolInfo(name, ct) is { Symbol: null, CandidateSymbols.IsEmpty: true }
-                        || (InvocationNamedBy(name) is { } call && WrapperFactoryCalls.InvisibleFactoryOwners(model, call, ct) is not null))))
-            {
-                free = false;
-                break;
-            }
-        }
+        var free = member.DescendantTokens()
+            .Where(static t => t.IsKind(SyntaxKind.IdentifierToken))
+            .All(token => !names.Contains(token.ValueText)
+                && !(factoryNames.Contains(token.ValueText)
+                     && token.Parent is IdentifierNameSyntax name
+                     && (model.GetSymbolInfo(name, ct) is { Symbol: null, CandidateSymbols.IsEmpty: true }
+                         || (InvocationNamedBy(name) is { } call && WrapperFactoryCalls.InvisibleFactoryOwners(model, call, ct) is not null))));
 
         memo[member] = free;
         return free;
@@ -536,9 +530,8 @@ public sealed partial class SourceMapInterceptorGenerator
             }
         }
 
-        foreach (var child in node.ChildNodes())
+        foreach (var result in node.ChildNodes().Select(child => Walk(model, child, ct, depth, visiting, memo)))
         {
-            var result = Walk(model, child, ct, depth, visiting, memo);
             if (result.Depends)
             {
                 if (!result.Incomplete) memo[node] = true;
@@ -1377,22 +1370,18 @@ public sealed partial class SourceMapInterceptorGenerator
                     break;
             }
 
-            var methods = new List<IMethodSymbol>();
-            foreach (var symbol in symbols)
+            var invokes = symbols.Select(static symbol => symbol switch
             {
-                var invoke = symbol switch
-                {
-                    IMethodSymbol m => m,
-                    ILocalSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
-                    IFieldSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
-                    IPropertySymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
-                    IParameterSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
-                    _ => null,
-                };
-                if (invoke is null) return null;
-                methods.Add((invoke.ReducedFrom ?? invoke).OriginalDefinition);
-            }
-            return methods;
+                IMethodSymbol m => m,
+                ILocalSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
+                IFieldSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
+                IPropertySymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
+                IParameterSymbol { Type: INamedTypeSymbol { DelegateInvokeMethod: { } d } } => d,
+                _ => (IMethodSymbol?)null,
+            }).ToList();
+            // Something invocable whose signature is not a method's: the set is unknown.
+            if (invokes.Any(static invoke => invoke is null)) return null;
+            return invokes.Select(static invoke => (invoke!.ReducedFrom ?? invoke).OriginalDefinition).ToList();
         }
 
         public override SyntaxNode? Visit(SyntaxNode? node)

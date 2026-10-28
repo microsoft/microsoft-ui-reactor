@@ -53,18 +53,12 @@ internal static class SourceMapPositions
             if (!features.TryGetValue(key, out var value) || string.IsNullOrEmpty(value)) return false;
             // The compiler accepts an interceptor in a listed namespace or any namespace nested
             // in one (and everywhere for `global`), so the same rule is applied here.
-            foreach (var part in value.Split(';'))
-            {
-                var entry = part.Trim();
-                if (entry.Length == 0) continue;
-                if (string.Equals(entry, "global", StringComparison.Ordinal)
-                    || string.Equals(entry, InterceptorNamespace, StringComparison.Ordinal)
-                    || InterceptorNamespace.StartsWith(entry + ".", StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-            return false;
+            return value.Split(';')
+                .Select(static part => part.Trim())
+                .Any(static entry => entry.Length != 0
+                    && (string.Equals(entry, "global", StringComparison.Ordinal)
+                        || string.Equals(entry, InterceptorNamespace, StringComparison.Ordinal)
+                        || InterceptorNamespace.StartsWith(entry + ".", StringComparison.Ordinal)));
         }
     }
 
@@ -472,15 +466,11 @@ internal static class WrapperFactoryCalls
                     .DescendantNodes(static n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax)
                     .OfType<RecordDeclarationSyntax>()
                     .Where(static r => r.AttributeLists.Count != 0);
-                foreach (var record in attributed)
-                {
-                    if (c.GetSemanticModel(tree).GetDeclaredSymbol(record) is not { } type) continue;
-                    if (type.TypeKind != TypeKind.Error
-                        && type.GetAttributes().Any(static a => a.AttributeClass?.ToDisplayString() == WrapperAttributeMetadataName))
-                    {
-                        builder.Add(type);
-                    }
-                }
+                builder.UnionWith(attributed
+                    .Select(record => c.GetSemanticModel(tree).GetDeclaredSymbol(record))
+                    .OfType<INamedTypeSymbol>()
+                    .Where(static type => type.TypeKind != TypeKind.Error
+                        && type.GetAttributes().Any(static a => a.AttributeClass?.ToDisplayString() == WrapperAttributeMetadataName)));
             }
             return builder.ToImmutable();
         });
