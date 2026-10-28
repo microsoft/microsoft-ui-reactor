@@ -138,7 +138,8 @@ for that render. Common causes:
   customer appears in multiple orders).
 
 A `null` key is always a developer bug too. It is reported the same way, and
-the item is matched by its position (a `__null_<index>` placeholder key), so
+the item is matched by its position (an internal placeholder key that cannot
+collide with any key you return), so
 the rest of the list still diffs incrementally — but that item's row state
 follows its position, not the item.
 

@@ -221,7 +221,7 @@ internal static class KeyedListDiff
                 newKeys[i] = NullKeySentinel(i);
                 continue;
             }
-            newKeys[i] = k;
+            newKeys[i] = StateKey(k, i);
         }
         if (firstNull >= 0)
             ReportNullKey(controlInstance, diagnosticContext, logger, firstNull, attribution);
@@ -549,7 +549,7 @@ internal static class KeyedListDiff
             var k = keySelector(newItems[i], i);
             // Synthesize a sentinel for null / duplicate to keep Reset
             // producing a coherent collection (Reset tolerates duplicates).
-            rebuilt.Add((i, k ?? NullKeySentinel(i)));
+            rebuilt.Add((i, StateKey(k, i)));
         }
         state.Reset(rebuilt);
         return new DiffStats(
@@ -713,9 +713,26 @@ internal static class KeyedListDiff
     /// <summary>
     /// The positional placeholder key a null key is replaced by. Shared by the mount-time seed,
     /// the bailout rebuild and the substituting diff: if two of them disagreed, the first update
-    /// would remove and re-add every null-keyed row.
+    /// would remove and re-add every null-keyed row. It starts with <c>'\0'</c> followed by a
+    /// digit, a form <see cref="StateKey"/> never gives an authored key, so it cannot collide.
     /// </summary>
-    internal static string NullKeySentinel(int index) => $"__null_{index}";
+    internal static string NullKeySentinel(int index)
+        => "\0" + index.ToString(global::System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The key a list state holds for an item: the authored key, or <see cref="NullKeySentinel"/>
+    /// for a null one. An authored key that itself starts with <c>'\0'</c> gets a second
+    /// <c>'\0'</c>, so no authored key can equal a placeholder (whose second character is a
+    /// digit). Injective, so duplicates among authored keys are duplicates among state keys.
+    /// </summary>
+    internal static string StateKey(string? key, int index)
+        => key is null ? NullKeySentinel(index)
+            : key.Length > 0 && key[0] == '\0' ? "\0" + key
+            : key;
+
+    /// <summary>The authored key a non-placeholder <see cref="StateKey"/> stands for (for reports).</summary>
+    internal static string AuthoredKey(string stateKey)
+        => stateKey.Length > 1 && stateKey[0] == '\0' && stateKey[1] == '\0' ? stateKey.Substring(1) : stateKey;
 
     /// <summary>
     /// Seeds a fresh list state's keys (at mount, or when a list is rebound) and reports what
@@ -751,7 +768,7 @@ internal static class KeyedListDiff
                     seeded[i] = (i, NullKeySentinel(i));
                     continue;
                 }
-                seeded[i] = (i, key);
+                seeded[i] = (i, StateKey(key, i));
                 if (seen is not null && !seen.Add(key))
                     (dupes ??= new(StringComparer.Ordinal)).Add(key);
             }
@@ -897,7 +914,7 @@ internal static class KeyedListDiff
         if (dupes.Count == 0) return global::System.Array.Empty<string>();
         var arr = new string[dupes.Count];
         int j = 0;
-        foreach (var d in dupes) arr[j++] = d;
+        foreach (var d in dupes) arr[j++] = AuthoredKey(d);
         global::System.Array.Sort(arr, global::System.StringComparer.Ordinal);
         return arr;
     }

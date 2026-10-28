@@ -34,7 +34,7 @@ public class KeyedListAttributionTests
             keys, keys.Length, static (k, i) => k[i], logger: null, ctx, new object(),
             new KeyedListAttribution("Owner", Site));
 
-        Assert.Equal(["a", "__null_1", "c"], seeded.Select(s => s.Key));
+        Assert.Equal(["a", KeyedListDiff.NullKeySentinel(1), "c"], seeded.Select(s => s.Key));
         var warning = WarningFor(ctx, KeyedListDiagnosticKind.NullKey);
         Assert.NotNull(warning);
         Assert.Equal("Owner", warning!.ComponentName);
@@ -179,6 +179,51 @@ public class KeyedListAttributionTests
         Assert.Equal(["a", "b"], WarningFor(ctx, KeyedListDiagnosticKind.DuplicateKey)?.SampleKeys);
     }
 
+    [Theory]
+    [InlineData("__null_1")] // the placeholder format this replaced
+    [InlineData("\u00001")]  // the current placeholder text for index 1, authored
+    [InlineData("\u0000\u00001")]
+    public void AuthoredKeyLikeAPlaceholder_NeverCollides_AndStaysIncremental(string authored)
+    {
+        // A null key at index 1 next to an authored key spelled like a placeholder: seed and an
+        // unchanged update must report no duplicate and must not bail out (reset the list).
+        var ctx = $"Collide_{NewId()}";
+        var control = new object();
+        string?[] keys = [authored, null];
+
+        var state = new ReactorListState();
+        state.Reset(KeyedListDiff.SeedKeys(keys, keys.Length, static (k, i) => k[i], logger: null, ctx, control, default));
+        var stats = KeyedListDiff.Apply(state, keys, static (k, _) => k!, logger: null, ctx, ambient: null, controlInstance: control);
+        // A real change after it stays incremental too.
+        string?[] grown = [authored, null, "z"];
+        var grownStats = KeyedListDiff.Apply(state, grown, static (k, _) => k!, logger: null, ctx, ambient: null, controlInstance: control);
+
+        Assert.Null(WarningFor(ctx, KeyedListDiagnosticKind.DuplicateKey));
+        Assert.False(stats.Bailout);
+        Assert.False(grownStats.Bailout);
+        Assert.Equal(1, grownStats.Inserts);
+        Assert.Equal(3, state.ByKey.Count);
+    }
+
+    [Fact]
+    public void DuplicateNulPrefixedKeys_AreReportedByTheirAuthoredText_AtSeedAndUpdate()
+    {
+        // The escape is internal: seed and diff both report the authored key, so one entry.
+        var ctx = $"NulDup_{NewId()}";
+        var control = new object();
+        string[] keys = ["\u0000k", "\u0000k"];
+
+        var state = new ReactorListState();
+        state.Reset(KeyedListDiff.SeedKeys(keys, keys.Length, static (k, i) => k[i], logger: null, ctx, control, default));
+        string[] next = ["\u0000k", "\u0000k", "x"];
+        KeyedListDiff.Apply(state, next, static (k, _) => k, logger: null, ctx, ambient: null, controlInstance: control);
+
+        var entry = Assert.Single(ReactorDiagnostics.RecentKeyedListWarnings,
+            w => w.ControlContext == ctx && w.Kind == KeyedListDiagnosticKind.DuplicateKey);
+        Assert.Equal(["\u0000k"], entry.SampleKeys);
+        Assert.Equal(2, entry.Count);
+    }
+
     [Fact]
     public void SeedThenApply_SameDuplicates_ShareOneEntry()
     {
@@ -284,7 +329,7 @@ public class KeyedListAttributionTests
 
         Assert.False(stats.Bailout);
         Assert.Equal(1, stats.Inserts);
-        Assert.Equal(["a", "__null_1", "__null_2", "d"], state.LastKeys);
+        Assert.Equal(["a", KeyedListDiff.NullKeySentinel(1), KeyedListDiff.NullKeySentinel(2), "d"], state.LastKeys);
         var warning = WarningFor(ctx, KeyedListDiagnosticKind.NullKey);
         Assert.Equal(1, warning?.Count); // once for the diff, not once per null item
         Assert.Equal("ListOwner", warning?.ComponentName);
