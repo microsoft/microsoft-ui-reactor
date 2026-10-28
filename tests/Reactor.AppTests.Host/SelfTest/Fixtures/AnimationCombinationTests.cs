@@ -630,4 +630,35 @@ internal static class AnimationCombinationTests
                 && ElementCompositionPreview.GetElementVisual(target).ImplicitAnimations is null);
         }
     }
+
+    /// <summary>Keyframes translation — animates Translation, so the element keeps its layout Offset (#1432).</summary>
+    internal class KeyframesTranslationChannel(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx => VStack(
+                Border(TextBlock("Above")).Height(40),
+                Border(TextBlock("KF"))
+                    .Keyframes("nudge", 1, kf => kf
+                        .Duration(2000)
+                        .At(0f, translation: Vector3.Zero)
+                        .At(1f, translation: new Vector3(0, -4, 0)))
+                    .AutomationId("t-kf-translation")
+            ));
+            await Harness.Render();
+
+            var target = FindById(H, "t-kf-translation");
+            H.Check("KFTranslation_Mounted", target is not null);
+            if (target is null) return;
+            var visual = ElementCompositionPreview.GetElementVisual(target);
+            H.Check("KFTranslation_AnimatesTranslation", visual.TryGetAnimationController("Translation") is not null);
+            H.Check("KFTranslation_LeavesOffsetAlone", visual.TryGetAnimationController("Offset") is null);
+
+            // the first layout pass may not have written Offset yet
+            await Task.Delay(300);
+            await Harness.Render();
+            H.Check("KFTranslation_OffsetKeptLayoutPosition", visual.Offset.Y >= 40, $"offset={visual.Offset}");
+        }
+    }
 }
