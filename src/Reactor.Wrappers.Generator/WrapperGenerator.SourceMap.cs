@@ -274,11 +274,14 @@ public sealed partial class WrapperGenerator
         var body = new StringBuilder();
         var index = 0;
         var needsArgumentHelper = false;
-        foreach (var site in sites)
+        // A site whose element produced no factory (an invalid wrapper target) is a compile
+        // error in the user's code already; emitting nothing keeps it the only one.
+        var resolved = sites
+            .Select(s => (Site: s!, Factory: byElement.TryGetValue((s!.ElementType, s.MethodName), out var f) ? f : null))
+            .Where(static p => p.Factory is not null);
+        foreach (var (site, resolvedFactory) in resolved)
         {
-            // A site whose element produced no factory (an invalid wrapper target) is a
-            // compile error in the user's code already; emitting nothing keeps it the only one.
-            if (!byElement.TryGetValue((site!.ElementType, site.MethodName), out var factory)) continue;
+            var factory = resolvedFactory!;
 
             var parameters = string.Join(", ", factory.Parameters.Select(static (p, i) => $"{FactoryParameterType(p)} __a{i}"));
             var arguments = string.Join(", ", factory.Parameters.Select(static (_, i) => $"__a{i}"));

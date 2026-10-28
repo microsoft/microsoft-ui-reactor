@@ -282,9 +282,8 @@ public sealed partial class SourceMapInterceptorGenerator
         // occurrence that binds to nothing is a call to the invisible generated one.
         var factoryNames = WrapperFactoryCalls.SourceFactoryNames(model.Compilation);
         var free = true;
-        foreach (var token in member.DescendantTokens())
+        foreach (var token in member.DescendantTokens().Where(static t => t.IsKind(SyntaxKind.IdentifierToken)))
         {
-            if (!token.IsKind(SyntaxKind.IdentifierToken)) continue;
             if (names.Contains(token.ValueText)
                 || (factoryNames.Contains(token.ValueText)
                     && token.Parent is IdentifierNameSyntax name
@@ -420,9 +419,8 @@ public sealed partial class SourceMapInterceptorGenerator
             if (wrapper.GetMembers().Any(static m => m is IMethodSymbol { MethodKind: MethodKind.Conversion })) return false;
         }
 
-        foreach (var candidate in candidates)
+        foreach (var overload in candidates.OfType<IMethodSymbol>())
         {
-            if (candidate is not IMethodSymbol overload) continue;
             foreach (var parameter in overload.Parameters)
             {
                 if (ReachableOnlyByTheRecord(parameter.Type, model.Compilation, interfaces, depth: 0)) return false;
@@ -741,9 +739,9 @@ public sealed partial class SourceMapInterceptorGenerator
         var info = model.GetSymbolInfo(expression, ct);
         var compilation = model.Compilation;
         var isMethodGroup = false;
-        foreach (var symbol in info.Symbol is { } single ? ImmutableArray.Create(single) : info.CandidateSymbols)
+        var symbols = info.Symbol is { } single ? ImmutableArray.Create(single) : info.CandidateSymbols;
+        foreach (var method in symbols.OfType<IMethodSymbol>())
         {
-            if (symbol is not IMethodSymbol method) continue;
             isMethodGroup = true;
             if (MentionsIncompleteWrapper(method.ReturnType, compilation)) return true;
             if (method.Parameters.Any(p => MentionsIncompleteWrapper(p.Type, compilation))) return true;
@@ -1008,9 +1006,11 @@ public sealed partial class SourceMapInterceptorGenerator
         /// </summary>
         public bool IsFullyAccountedFor(SyntaxNode root)
         {
-            foreach (var node in root.DescendantNodesAndSelf(n => !_replaced.Contains(n) && !IsNameof(n, _model)))
+            var unaccounted = root.DescendantNodesAndSelf(n => !_replaced.Contains(n) && !IsNameof(n, _model))
+                .Where(n => !_replaced.Contains(n) && !_accounted.Contains(n))
+                .OfType<ExpressionSyntax>();
+            foreach (var expression in unaccounted)
             {
-                if (_replaced.Contains(node) || _accounted.Contains(node) || node is not ExpressionSyntax expression) continue;
                 if (HasWrapperTypeArgument(_model, expression, _ct)) return false;
                 if (expression is InvocationExpressionSyntax competing && WrapperFactoryCalls.ResultCanChangeByInvisibleFactory(_model, competing, _ct)) return false;
                 if (expression is InvocationExpressionSyntax constrained && IsWrapperConstrainedCall(_model, constrained, _ct)) return false;

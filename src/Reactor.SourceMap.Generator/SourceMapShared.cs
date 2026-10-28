@@ -215,9 +215,8 @@ internal static class WrapperFactoryCalls
         foreach (var scope in model.GetImportScopes(position, ct))
         {
             INamedTypeSymbol? match = null;
-            foreach (var import in scope.Imports)
+            foreach (var imported in scope.Imports.Select(static i => i.NamespaceOrType).OfType<INamedTypeSymbol>().Where(i => IsWrapperFactoryOwner(i, name)))
             {
-                if (import.NamespaceOrType is not INamedTypeSymbol imported || !IsWrapperFactoryOwner(imported, name)) continue;
                 // Two imports in one scope offering the same factory name would be an
                 // overload resolution this resolver does not attempt.
                 if (match is not null && !SymbolEqualityComparer.Default.Equals(match, imported)) return null;
@@ -411,9 +410,8 @@ internal static class WrapperFactoryCalls
 
     private static void Collect(INamespaceSymbol ns, ImmutableHashSet<string>.Builder names)
     {
-        foreach (var type in ns.GetTypeMembers())
+        foreach (var type in ns.GetTypeMembers().Where(static t => t.IsRecord && !t.IsGenericType))
         {
-            if (!type.IsRecord || type.IsGenericType) continue;
             foreach (var attribute in type.GetAttributes())
             {
                 if (attribute.AttributeClass?.ToDisplayString() == WrapperAttributeMetadataName
@@ -470,9 +468,12 @@ internal static class WrapperFactoryCalls
             // second on a large project.
             foreach (var tree in c.SyntaxTrees)
             {
-                foreach (var record in tree.GetRoot().DescendantNodes(static n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax).OfType<RecordDeclarationSyntax>())
+                var attributed = tree.GetRoot()
+                    .DescendantNodes(static n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax)
+                    .OfType<RecordDeclarationSyntax>()
+                    .Where(static r => r.AttributeLists.Count != 0);
+                foreach (var record in attributed)
                 {
-                    if (record.AttributeLists.Count == 0) continue;
                     if (c.GetSemanticModel(tree).GetDeclaredSymbol(record) is not { } type) continue;
                     if (type.TypeKind != TypeKind.Error
                         && type.GetAttributes().Any(static a => a.AttributeClass?.ToDisplayString() == WrapperAttributeMetadataName))
