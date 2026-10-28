@@ -290,6 +290,13 @@ public sealed partial class ReactorWindow : IDisposable
 
     internal nint Hwnd => _hwnd;
 
+    /// <summary>
+    /// The type name <c>ReactorEventSource.WindowOpened</c> reported for this window, so the
+    /// matching <c>WindowClosed</c> names it the same way; <c>null</c> until the open is
+    /// reported and again once the close is.
+    /// </summary>
+    internal string? DiagnosticWindowType { get; set; }
+
     // True once teardown has started. The host is disposed first on a native close (its
     // Window.Closed handler runs before this window's), and this window first on a direct
     // Dispose(); component cleanups run during either, so both flags are needed.

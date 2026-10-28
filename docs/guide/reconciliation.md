@@ -263,6 +263,14 @@ internal static void Reconcile(
 
     bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
 
+    // Duplicate sibling keys are matched to the wrong controls by the keyed path below;
+    // report them (deduplicated per panel) rather than let that happen silently. Only when
+    // the key sequence changed: an unchanged one was already checked when it first
+    // appeared, here or at mount, so a stable keyed panel's re-render pays one compare
+    // per child (the prefix walk below does the same) rather than a duplicate scan.
+    if (hasKeys && newFiltered.Length > 1 && !SameKeys(oldFiltered, newFiltered))
+        KeyedListDiff.ReportDuplicateSiblingKeys(newFiltered, reconciler, parentControl);
+
     // Spec 042 §6 — read the active Animations.Animate ambient once
     // per reconcile so insert / move / unmount paths can apply the
     // same kind without re-reading AsyncLocal for every child. Stays
@@ -527,6 +535,14 @@ internal static void Reconcile(
     var newFiltered = Filter(newChildren, out var newSlots);
 
     bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
+
+    // Duplicate sibling keys are matched to the wrong controls by the keyed path below;
+    // report them (deduplicated per panel) rather than let that happen silently. Only when
+    // the key sequence changed: an unchanged one was already checked when it first
+    // appeared, here or at mount, so a stable keyed panel's re-render pays one compare
+    // per child (the prefix walk below does the same) rather than a duplicate scan.
+    if (hasKeys && newFiltered.Length > 1 && !SameKeys(oldFiltered, newFiltered))
+        KeyedListDiff.ReportDuplicateSiblingKeys(newFiltered, reconciler, parentControl);
 
     // Spec 042 §6 — read the active Animations.Animate ambient once
     // per reconcile so insert / move / unmount paths can apply the

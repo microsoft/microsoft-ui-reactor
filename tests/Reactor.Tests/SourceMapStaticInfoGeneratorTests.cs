@@ -368,6 +368,44 @@ public sealed class SourceMapStaticInfoGeneratorTests
             Assert.Single(s_componentHooks.Matches(generated)).Groups["hooks"].Value);
     }
 
+    // Straight-line UseElementRef calls (issue: a ref followed by more hooks published the
+    // ref as an anonymous memo slot and every later hook as `?`). UseElementRef is one
+    // UseMemo slot on both its RenderContext and Component overloads.
+    [Theory]
+    [InlineData(SourceMapTransparentGeneratorTests.SurfaceShape.ProjectReference)]
+    [InlineData(SourceMapTransparentGeneratorTests.SurfaceShape.MetadataReference)]
+    public void Hooks_UseElementRef_TakesOneSlot_AndKeepsLaterHooksIndexed(
+        SourceMapTransparentGeneratorTests.SurfaceShape shape)
+    {
+        const string code = """
+            using Microsoft.UI.Reactor.Core;
+            using Microsoft.UI.Reactor.Hooks;
+            using static Microsoft.UI.Reactor.Factories;
+
+            public sealed class RefsPage : Component
+            {
+                public override Element Render()
+                {
+                    var (count, setCount) = UseState(0);
+                    var holderRef = this.UseElementRef<object>();
+                    var labelRef = this.UseElementRef<object>();
+                    var ctxRef = Context.UseElementRef<object>();
+                    UseEffect(() => { });
+                    return TextBlock("x");
+                }
+            }
+            """;
+
+        var (diagnostics, generated) = SourceMapTransparentGeneratorTests.Run(code, surface: shape);
+
+        Assert.Empty(diagnostics.Where(static d => d.Severity >= DiagnosticSeverity.Warning));
+        Assert.Equal(
+            $"0:count@{LineOf(code, "UseState(0)")};1:holderRef@{LineOf(code, "var holderRef")};"
+            + $"2:labelRef@{LineOf(code, "var labelRef")};3:ctxRef@{LineOf(code, "var ctxRef")};"
+            + $"4:UseEffect@{LineOf(code, "UseEffect(")}",
+            Assert.Single(s_componentHooks.Matches(generated)).Groups["hooks"].Value);
+    }
+
     [Fact]
     public void Hooks_AbstractOrVirtualCustomHook_MakesTheRestUnknown()
     {

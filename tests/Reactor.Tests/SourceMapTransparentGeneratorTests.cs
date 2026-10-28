@@ -113,6 +113,15 @@ public sealed class SourceMapTransparentGeneratorTests
                 public static T UseMemo<T>(this Microsoft.UI.Reactor.Core.Component component, global::System.Func<T> factory)
                     => factory();
             }
+
+            // Reactor's typed element-ref hook: one UseMemo slot, on either overload.
+            public static class UseElementRefExtensions
+            {
+                public static T UseElementRef<T>(this Microsoft.UI.Reactor.Core.RenderContext ctx) where T : new()
+                    => ctx.UseRef(new T());
+                public static T UseElementRef<T>(this Microsoft.UI.Reactor.Core.Component component) where T : new()
+                    => component.Context.UseElementRef<T>();
+            }
         }
         namespace Microsoft.UI.Reactor.Diagnostics
         {

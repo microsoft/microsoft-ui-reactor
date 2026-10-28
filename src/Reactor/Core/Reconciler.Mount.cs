@@ -714,8 +714,9 @@ public sealed partial class Reconciler
             // WinUI can re-realize a container without first raising the recycle event
             // for its previous row; unmount that row's view or its components leak.
             UnmountItemView(cc, clearContent: false);
-            var itemElement = viewSource.BuildItemView(args.ItemIndex);
+            var itemElement = BuildKeyedItemView(viewSource, args.ItemIndex);
             var ctrl = Mount(itemElement, requestRerender);
+            EnsureItemIdentity(ctrl, itemElement);
             cc.Content = ctrl;
             SetElementTag(cc, itemElement); // Store for later reconciliation
 

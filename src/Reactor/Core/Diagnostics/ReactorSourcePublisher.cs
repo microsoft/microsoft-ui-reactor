@@ -170,6 +170,22 @@ internal static class ReactorSourcePublisher
     }
 
     /// <summary>
+    /// Builds and writes the value for a menu or command-bar item control that a flyout,
+    /// menu bar or command bar created from an item record (<c>MenuItem(…)</c>,
+    /// <c>AppBarButton(…)</c>) rather than from an element. <paramref name="kind"/> is the
+    /// record kind (<c>MenuFlyoutItem</c>, <c>AppBarButton</c>, …).
+    /// </summary>
+    internal static string PublishItem(UIElement control, SourceLocation? site, string? owner, string kind)
+    {
+        var value = Cache.Parts.GetOrAdd(
+            new ValueShape(site, owner, kind, null, null, site?.DeclaredName, null),
+            static shape => ValueParts.Create(shape)).Full;
+        if (!string.Equals(control.GetValue(ReactorDiagnostics.SourceProperty) as string, value, StringComparison.Ordinal))
+            control.SetValue(ReactorDiagnostics.SourceProperty, value);
+        return value;
+    }
+
+    /// <summary>
     /// Adds the host-root fields (<c>root=</c>, and <c>hooks=</c> when the value has none) to a
     /// value already published for a host's root content control. Used when the root element
     /// is a <c>Memo(key, …)</c>: its factory output published itself when it mounted, and the
@@ -280,6 +296,28 @@ internal static class ReactorSourcePublisher
         => Field(value, "owner") is { } owner
             ? owner.Replace("%7C", "|", StringComparison.Ordinal).Replace("%25", "%", StringComparison.Ordinal)
             : null;
+
+    /// <summary>
+    /// <paramref name="value"/> with its <c>key=</c> field set to <paramref name="key"/> (removed
+    /// when <c>null</c>), in grammar order (after <c>root=</c>, before <c>name=</c> /
+    /// <c>hooks=</c>); every other field is kept. Used where the value describes an element
+    /// other than the one whose key changed (a forwarded child), so it is re-keyed, not rebuilt.
+    /// </summary>
+    internal static string WithKey(string value, string? key)
+    {
+        var fields = new List<string>(value.Split('|'));
+        fields.RemoveAll(f => f.StartsWith("key=", StringComparison.Ordinal));
+        if (key is not null)
+        {
+            int at = fields.FindIndex(1, f => f.StartsWith("name=", StringComparison.Ordinal) || f.StartsWith("hooks=", StringComparison.Ordinal));
+            fields.Insert(at < 0 ? fields.Count : at, "key=" + ReactorSourceFormat.Escape(key));
+        }
+        return string.Join('|', fields);
+    }
+
+    /// <summary>Whether <paramref name="value"/>'s <c>key=</c> field is <paramref name="key"/>.</summary>
+    internal static bool HasKey(string value, string? key)
+        => string.Equals(Field(value, "key"), key is null ? null : ReactorSourceFormat.Escape(key), StringComparison.Ordinal);
 
     /// <summary>
     /// Whether <paramref name="current"/>, a control's published value, describes an element

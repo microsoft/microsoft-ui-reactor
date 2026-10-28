@@ -57,6 +57,40 @@ public sealed class SourceMapInterceptorTests : IDisposable
         Assert.EndsWith("SourceMapInterceptorTests.cs", element.CallSite!.Value.FilePath, StringComparison.Ordinal);
     }
 
+    // ── Coverage: XAML interop factories ──────────────────────────────────
+    // XamlHostElement / XamlPageElement had constructors only, so an embedded control
+    // never had a call site. The factories make them reachable by the interceptor.
+
+    [Fact]
+    public void XamlInteropFactories_ReportTheirOwnCallSites()
+    {
+        var host = XamlHost(static () => throw new InvalidOperationException()); var hostLine = Line();
+        var page = XamlPage(typeof(object), "p"); var pageLine = Line();
+
+        Assert.Equal(hostLine, host.CallSite!.Value.LineNumber);
+        Assert.Equal(pageLine, page.CallSite!.Value.LineNumber);
+        Assert.EndsWith("SourceMapInterceptorTests.cs", host.CallSite!.Value.FilePath, StringComparison.Ordinal);
+    }
+
+    // ── Coverage: menu / command-bar item factories ───────────────────────
+    // MenuItem(...) / AppBarButton(...) return item records, not elements; a flyout builds
+    // their controls itself. They carry a CallSite so the realized item maps back to C#.
+
+    [Fact]
+    public void MenuAndCommandItemFactories_ReportTheirOwnCallSites()
+    {
+        var alpha = MenuItem("Alpha", static () => { }); var alphaLine = Line();
+        var toggle = ToggleMenuItem("Wrap"); var toggleLine = Line();
+        var cut = AppBarButton("Cut", static () => { }); var cutLine = Line();
+        var separator = AppBarSeparator(); var separatorLine = Line();
+
+        Assert.Equal(alphaLine, alpha.CallSite!.Value.LineNumber);
+        Assert.Equal(toggleLine, toggle.CallSite!.Value.LineNumber);
+        Assert.Equal(cutLine, cut.CallSite!.Value.LineNumber);
+        Assert.Equal(separatorLine, separator.CallSite!.Value.LineNumber);
+        Assert.EndsWith("SourceMapInterceptorTests.cs", cut.CallSite!.Value.FilePath, StringComparison.Ordinal);
+    }
+
     // ── Coverage: params factory — the case CallerInfo cannot reach ────────
 
     [Fact]

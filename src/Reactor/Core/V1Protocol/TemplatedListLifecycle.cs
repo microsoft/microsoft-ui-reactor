@@ -104,7 +104,7 @@ internal static class TemplatedListLifecycle
         // ObservableCollection<ReactorRow> so insert/remove/move surface
         // as INotifyCollectionChanged deltas — WinUI animates only the
         // affected containers rather than re-realizing the entire viewport.
-        var listState = BuildListState(el);
+        var listState = BuildListState(reconciler, listView, el);
         Reconciler.SetListState(listView, listState);
         listView.ItemsSource = listState.Source;
 
@@ -170,7 +170,7 @@ internal static class TemplatedListLifecycle
                 (Reconciler.GetElementTag(g) as TemplatedListElementBase)?.InvokeItemClick(v);
         };
 
-        var gridState = BuildListState(el);
+        var gridState = BuildListState(reconciler, gridView, el);
         Reconciler.SetListState(gridView, gridState);
         gridView.ItemsSource = gridState.Source;
 
@@ -196,13 +196,18 @@ internal static class TemplatedListLifecycle
         // Pre-mount all items — FlipView typically has few items so this is fine.
         // An item whose view mounts nothing (Empty) has no entry in Items, so the record keeps,
         // per logical item, whether it did.
+        // The record holds each page's view WITHOUT its stamped key: a FlipView matches pages by
+        // position (it has no keyed diff), so the key is carried for diagnostics only and must
+        // not decide whether a page updates in place.
         var mounted = new List<(Element Element, bool HasControl)>(el.ItemCount);
         for (int i = 0; i < el.ItemCount; i++)
         {
-            var itemElement = el.BuildItemView(i);
-            var ctrl = reconciler.Mount(itemElement, requestRerender);
+            var view = el.BuildItemView(i);
+            var keyed = Reconciler.WithItemKey(view, el, i);
+            var ctrl = reconciler.Mount(keyed, requestRerender);
+            reconciler.EnsureItemIdentity(ctrl, keyed);
             if (ctrl is not null) flipView.Items.Add(ctrl);
-            mounted.Add((itemElement, ctrl is not null));
+            mounted.Add((view, ctrl is not null));
         }
         Reconciler.GetOrCreateReactorState(flipView).MountedItemElements = mounted;
 
@@ -299,7 +304,7 @@ internal static class TemplatedListLifecycle
         {
             // No state, or another path replaced ItemsSource (bailout from a
             // prior render). Rebuild and rebind in one step.
-            var fresh = BuildListState(n);
+            var fresh = BuildListState(reconciler, lvb, n);
             Reconciler.SetListState(lvb, fresh);
             lvb.ItemsSource = fresh.Source;
             return;
@@ -310,14 +315,16 @@ internal static class TemplatedListLifecycle
         // ContainerContentChanging handler can attach a per-container
         // enter animation as those containers realize. (spec 042 §6.)
         var ambient = AnimationAmbient.Current;
+        var attribution = reconciler.KeyedListAttributionFor(n);
         var stats = KeyedListDiff.Apply(
             state,
             new TemplatedKeyAdapter(n),
-            static (item, _) => item.Key,
+            static (item, _) => item.Key!,
             reconciler._logger,
             lvb.GetType().Name,
             ambient,
-            controlInstance: lvb);
+            controlInstance: lvb,
+            attribution: attribution);
 
         // Drive per-container offset animations for survivors that moved.
         // Insert / Remove animations attach through the realize/recycle
@@ -345,14 +352,16 @@ internal static class TemplatedListLifecycle
     {
         private readonly TemplatedListElementBase _el;
         public TemplatedKeyAdapter(TemplatedListElementBase el) => _el = el;
-        public KeyOnly this[int index] => new(_el.GetKeyAt(index) ?? $"__null_{index}");
+        // A null key passes through: the diff reports it once and matches
+        // the item by position, so the list stays incremental.
+        public KeyOnly this[int index] => new(_el.GetKeyAt(index));
         public int Count => _el.ItemCount;
         public IEnumerator<KeyOnly> GetEnumerator()
         {
             for (int i = 0; i < _el.ItemCount; i++) yield return this[i];
         }
         global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-        public readonly record struct KeyOnly(string Key);
+        public readonly record struct KeyOnly(string? Key);
     }
 
     internal static UIElement? UpdateFlipView(Reconciler reconciler, TemplatedListElementBase o, TemplatedListElementBase n, WinUI.FlipView fv, Action requestRerender)
@@ -373,16 +382,24 @@ internal static class TemplatedListLifecycle
 
         for (int i = 0; i < shared; i++)
         {
+            // Unkeyed views decide in-place vs remount (positional, as before keys were stamped);
+            // the control is given the keyed view. See MountFlipView.
             var (oldItemElement, oldHasControl) = recorded?[i] ?? (o.BuildItemView(i), i < fv.Items.Count);
-            var newItemElement = n.BuildItemView(i);
+            var newView = n.BuildItemView(i);
+            var newItemElement = Reconciler.WithItemKey(newView, n, i);
             if (oldHasControl && ci < fv.Items.Count && fv.Items[ci] is UIElement existingCtrl
-                && reconciler.CanUpdate(oldItemElement, newItemElement))
+                && reconciler.CanUpdate(oldItemElement, newView))
             {
+                var priorKey = existingCtrl is FrameworkElement priorFe ? Reconciler.GetElementTag(priorFe)?.Key : null;
                 var replacement = reconciler.UpdateHostedChild(oldItemElement, newItemElement, existingCtrl, requestRerender);
                 if (replacement is not null && replacement != existingCtrl)
                     fv.Items[ci] = replacement;
+                // A different item at this position can render the same content, and the update
+                // then skips — leaving the previous item's key on the page (or refreshing the tag
+                // without republishing). Refresh it whenever the key changed.
+                reconciler.EnsureItemIdentity(replacement ?? existingCtrl, newItemElement, priorKey, updated: true);
                 ci++;
-                nextMounted.Add((newItemElement, true));
+                nextMounted.Add((newView, true));
                 continue;
             }
 
@@ -392,8 +409,9 @@ internal static class TemplatedListLifecycle
                 fv.Items.RemoveAt(ci);
             }
             var ctrl = reconciler.Mount(newItemElement, requestRerender);
+            reconciler.EnsureItemIdentity(ctrl, newItemElement);
             if (ctrl is not null) fv.Items.Insert(ci++, ctrl);
-            nextMounted.Add((newItemElement, ctrl is not null));
+            nextMounted.Add((newView, ctrl is not null));
         }
 
         // Remove excess: every control past the shared items belongs to a removed item.
@@ -407,10 +425,12 @@ internal static class TemplatedListLifecycle
         // Add new
         for (int i = shared; i < newCount; i++)
         {
-            var itemElement = n.BuildItemView(i);
-            var ctrl = reconciler.Mount(itemElement, requestRerender);
+            var view = n.BuildItemView(i);
+            var keyed = Reconciler.WithItemKey(view, n, i);
+            var ctrl = reconciler.Mount(keyed, requestRerender);
+            reconciler.EnsureItemIdentity(ctrl, keyed);
             if (ctrl is not null) fv.Items.Add(ctrl);
-            nextMounted.Add((itemElement, ctrl is not null));
+            nextMounted.Add((view, ctrl is not null));
         }
         fvState.MountedItemElements = nextMounted;
         // Issue #495 — drift-guarded, suppressed write. Previously
@@ -433,18 +453,16 @@ internal static class TemplatedListLifecycle
     /// <summary>
     /// Builds a fresh <see cref="ReactorListState"/> populated with the
     /// element's current keys. Used at mount time and at bulk-replace
-    /// bailout time. Tolerates duplicate keys per <see cref="ReactorListState.Reset"/>;
-    /// the bailout path is where duplicate-key diagnostics surface (see
-    /// <see cref="KeyedListDiff"/>).
+    /// bailout time. Tolerates duplicate keys per <see cref="ReactorListState.Reset"/>,
+    /// and reports null and duplicate keys through <see cref="KeyedListDiff.SeedKeys{TSource}"/>
+    /// so a list born with bad keys is diagnosed without waiting for an update.
     /// </summary>
-    private static ReactorListState BuildListState(TemplatedListElementBase el)
+    private static ReactorListState BuildListState(Reconciler reconciler, WinUI.ListViewBase control, TemplatedListElementBase el)
     {
         var state = new ReactorListState();
-        int n = el.ItemCount;
-        var seeded = new (int Index, string Key)[n];
-        for (int i = 0; i < n; i++)
-            seeded[i] = (i, el.GetKeyAt(i) ?? $"__null_{i}");
-        state.Reset(seeded);
+        state.Reset(KeyedListDiff.SeedKeys(
+            el, el.ItemCount, static (e, i) => e.GetKeyAt(i),
+            reconciler._logger, control.GetType().Name, control, reconciler.KeyedListAttributionFor(el)));
         return state;
     }
 }

@@ -237,6 +237,10 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
             {
                 var collection = panel.GetCollection(control);
                 var children = panel.GetChildren(element);
+                // An update reports duplicated sibling keys from the keyed reconcile; a panel
+                // that never re-renders is reported here instead.
+                if (children.Count > 1)
+                    Internal.KeyedListDiff.ReportDuplicateSiblingKeys(children, ctx.Reconciler, control);
                 var attached = panel.PerChildAttached;
                 var afterAll = panel.PerChildAttachedAfterAll;
                 var pairs = afterAll is null

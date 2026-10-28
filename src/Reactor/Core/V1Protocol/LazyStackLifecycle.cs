@@ -30,7 +30,7 @@ internal static class LazyStackLifecycle
         // ObservableCollection<ReactorRow>. Without this, every Items.Count
         // change replaced the int-range source wholesale and the
         // ItemsRepeater re-realized every visible child.
-        var listState = BuildListState(lazy);
+        var listState = BuildListState(reconciler, repeater, lazy);
         Reconciler.SetListState(repeater, listState);
         repeater.ItemsSource = listState.Source;
         var factory = lazy.CreateFactory(reconciler, requestRerender, reconciler._pool);
@@ -82,7 +82,7 @@ internal static class LazyStackLifecycle
             {
                 // First mount or type mismatch — full replacement using the
                 // Phase 1 OC<ReactorRow> binding shape.
-                var fresh = BuildListState(n);
+                var fresh = BuildListState(reconciler, repeater, n);
                 Reconciler.SetListState(repeater, fresh);
                 repeater.ItemsSource = fresh.Source;
                 var factory = n.CreateFactory(reconciler, requestRerender, reconciler._pool);
@@ -104,7 +104,7 @@ internal static class LazyStackLifecycle
         var state = Reconciler.GetListState(repeater);
         if (state is null || !ReferenceEquals(repeater.ItemsSource, state.Source))
         {
-            var fresh = BuildListState(n);
+            var fresh = BuildListState(reconciler, repeater, n);
             Reconciler.SetListState(repeater, fresh);
             repeater.ItemsSource = fresh.Source;
             n.AttachListStateToFactory(factory, fresh);
@@ -112,14 +112,16 @@ internal static class LazyStackLifecycle
         }
 
         var ambient = AnimationAmbient.Current;
+        var attribution = reconciler.KeyedListAttributionFor(n);
         var stats = KeyedListDiff.Apply(
             state,
             new LazyKeyAdapter(n),
-            static (item, _) => item.Key,
+            static (item, _) => item.Key!,
             reconciler._logger,
             repeater.GetType().Name,
             ambient,
-            controlInstance: repeater);
+            controlInstance: repeater,
+            attribution: attribution);
 
         // ItemsRepeater realizes containers through ElementFactory, so the
         // enter animation runs from there. Moves on already-realized
@@ -135,24 +137,24 @@ internal static class LazyStackLifecycle
     {
         private readonly LazyStackElementBase _el;
         public LazyKeyAdapter(LazyStackElementBase el) => _el = el;
-        public KeyOnly this[int index] => new(_el.GetKeyAt(index) ?? $"__null_{index}");
+        // A null key passes through: the diff reports it once and matches
+        // the item by position, so the list stays incremental.
+        public KeyOnly this[int index] => new(_el.GetKeyAt(index));
         public int Count => _el.ItemCount;
         public IEnumerator<KeyOnly> GetEnumerator()
         {
             for (int i = 0; i < _el.ItemCount; i++) yield return this[i];
         }
         global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-        public readonly record struct KeyOnly(string Key);
+        public readonly record struct KeyOnly(string? Key);
     }
 
-    private static ReactorListState BuildListState(LazyStackElementBase lazy)
+    private static ReactorListState BuildListState(Reconciler reconciler, WinUI.ItemsRepeater repeater, LazyStackElementBase lazy)
     {
         var state = new ReactorListState();
-        int n = lazy.ItemCount;
-        var seeded = new (int Index, string Key)[n];
-        for (int i = 0; i < n; i++)
-            seeded[i] = (i, lazy.GetKeyAt(i) ?? $"__null_{i}");
-        state.Reset(seeded);
+        state.Reset(KeyedListDiff.SeedKeys(
+            lazy, lazy.ItemCount, static (l, i) => l.GetKeyAt(i),
+            reconciler._logger, repeater.GetType().Name, repeater, reconciler.KeyedListAttributionFor(lazy)));
         return state;
     }
 }

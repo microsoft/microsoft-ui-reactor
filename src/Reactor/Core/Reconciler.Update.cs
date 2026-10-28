@@ -1287,15 +1287,17 @@ public sealed partial class Reconciler
             if (index >= viewSource.ItemCount) continue;
 
             var oldItemElement = GetElementTag(cc);
-            var newItemElement = viewSource.BuildItemView(index);
+            var newItemElement = BuildKeyedItemView(viewSource, index);
 
             // ReconcileV1Child updates in place when it can and remounts otherwise, and either way
             // unmounts a control it replaced (e.g. a same-key Memo whose output changed shape
             // during a resource refresh), so the old item's effects and refs are cleaned up.
             // Untagged content was already unmounted by the orphan sweep: replace it, never
             // unmount it again.
+            var priorKey = cc.Content is FrameworkElement priorFe ? GetElementTag(priorFe)?.Key : null;
             var next = ReconcileV1Child(oldItemElement, newItemElement,
                 oldItemElement is null ? null : cc.Content as UIElement, requestRerender);
+            EnsureItemIdentity(next, newItemElement, priorKey, updated: true);
             if (!ReferenceEquals(cc.Content, next))
                 cc.Content = next;
             SetElementTag(cc, newItemElement);

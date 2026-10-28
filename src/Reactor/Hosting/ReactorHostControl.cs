@@ -1284,7 +1284,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             // A root effect failure belongs to the root component and is reported like a
             // child's effect-flush failure (issue #1321) — before the fallback, because the
             // app's handler may call Propagate(), which throws. A commit-phase failure has no
-            // single owning component and is not a RenderError.
+            // single owning component, so it is not a RenderError: it is reported as a
+            // CommitError naming the phase and the host's root instead.
             if (failurePhase == RenderErrorSource.Effects)
             {
                 Reconciler.EmitRenderError(
@@ -1292,6 +1293,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                         ? Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(effectsRoot, element: null)
                         : nameof(FuncElement),
                     ex);
+            }
+            else
+            {
+                Reconciler.EmitCommitError(failurePhase, DiagnosticRoot, ex);
             }
             ShowErrorFallback(ex, failurePhase,
                 failurePhase == RenderErrorSource.Effects ? effectsRoot?.GetType().Name : null);

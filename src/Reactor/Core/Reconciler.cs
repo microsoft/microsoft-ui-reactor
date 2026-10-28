@@ -509,6 +509,58 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     private string? CurrentDiagnosticOwner => _diagOwner ?? DiagnosticRootOwner;
 
+    /// <summary>
+    /// The component whose render output is being reconciled, for diagnostics that name it
+    /// (keyed-list warnings, menu / command-bar item identity).
+    /// Known only while sources are published (an inspector is attached); <c>null</c> otherwise.
+    /// </summary>
+    internal string? DiagnosticComponent =>
+        global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
+            ? CurrentDiagnosticOwner
+            : null;
+
+    /// <summary>The component and C# call site a keyed-list diagnostic for <paramref name="list"/> names.</summary>
+    internal Internal.KeyedListAttribution KeyedListAttributionFor(Element? list)
+        => new(DiagnosticComponent, Internal.KeyedListAttribution.CallSiteOf(list));
+
+    /// <summary>
+    /// Builds the row view at <paramref name="index"/> of a templated list (<c>ListView&lt;T&gt;</c>,
+    /// <c>GridView&lt;T&gt;</c>, <c>FlipView&lt;T&gt;</c>) and stamps the item's <c>KeySelector</c>
+    /// key onto it, as <c>VirtualList</c> / <c>LazyVStack</c> rows already are (issue #326), so
+    /// the realized row carries its key for diagnostics (<c>key=</c> in its published
+    /// <c>ReactorSource</c>, <see cref="Element.Key"/> on its element tag). A ListView / GridView
+    /// container follows its item through the keyed collection diff, so the stamped key matches
+    /// across updates. An author's own <c>.WithKey(...)</c> on the row wins.
+    /// </summary>
+    internal static Element BuildKeyedItemView(Internal.IItemViewSource source, int index)
+        => WithItemKey(source.BuildItemView(index), source, index);
+
+    /// <summary>
+    /// <paramref name="built"/> (the row view at <paramref name="index"/>) with the item's
+    /// <c>KeySelector</c> key, unless the author keyed it already. See <see cref="BuildKeyedItemView"/>.
+    /// </summary>
+    internal static Element WithItemKey(Element built, Internal.IItemViewSource source, int index)
+    {
+        if (built.Key is not null || source is not Internal.IKeyedItemSource keyed) return built;
+        // A legacy ModifiedElement mounts (and tags) its inner element: an author's key there wins.
+        if (built is ModifiedElement && InnermostOf(built).Key is not null) return built;
+        var key = source is TemplatedListElementBase templated ? templated.GetItemIdentityKey(index) : keyed.GetKeyAt(index);
+        return key is not null ? WithKeyThrough(built, key) : built;
+    }
+
+    private static Element InnermostOf(Element element)
+    {
+        while (element is ModifiedElement modified) element = modified.Inner;
+        return element;
+    }
+
+    // The key on the element the parent diffs (the outermost) and on the one Mount tags and
+    // publishes (the innermost of a ModifiedElement chain).
+    private static Element WithKeyThrough(Element element, string key)
+        => element is ModifiedElement modified
+            ? modified with { Key = key, Inner = WithKeyThrough(modified.Inner, key) }
+            : element with { Key = key };
+
     private void PublishSource(UIElement control, Element element)
     {
         var kind = element;
@@ -560,6 +612,87 @@ public sealed partial class Reconciler : IDisposable
     /// The skip happens inside its parent's reconcile, under the same owner as an update.
     /// </summary>
     internal void PublishSourceOnSkip(UIElement control, Element newEl) => PublishSource(control, newEl);
+
+    /// <summary>
+    /// The key a templated-list item's realized element carries: the stamped item key, or an
+    /// author's own key on a wrapped (<see cref="ModifiedElement"/>) inner element, which
+    /// <see cref="WithItemKey"/> leaves in place.
+    /// </summary>
+    internal static string? ItemKeyOf(Element itemElement) => itemElement.Key ?? InnermostOf(itemElement).Key;
+
+    /// <summary>
+    /// After a templated-list item view was mounted or updated into <paramref name="control"/>:
+    /// makes the control's identity (tag and, in diagnostics mode, published value) carry the
+    /// item's key when it does not. A forwarding <c>RegisterType</c> row keeps its child's tag,
+    /// which the item key never reached, and an update the reconciler skipped (a different item
+    /// with identical content) may refresh the tag without republishing — so
+    /// <paramref name="priorKey"/>, the key the control showed before the update, forces a
+    /// refresh whenever the item key changed.
+    /// </summary>
+    internal void EnsureItemIdentity(UIElement? control, Element itemElement, string? priorKey = null, bool updated = false)
+    {
+        if (control is not FrameworkElement fe) return;
+        var key = ItemKeyOf(itemElement);
+        if (key is null && !updated) return;
+        if (!string.Equals(GetElementTag(fe)?.Key, key, StringComparison.Ordinal)
+            || (updated && !string.Equals(priorKey, key, StringComparison.Ordinal))
+            || (PublishesItemIdentity && fe.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string published
+                && !Diagnostics.ReactorSourcePublisher.HasKey(published, key)))
+            RefreshItemIdentityOnSkip(fe, itemElement);
+    }
+
+    private static bool PublishesItemIdentity
+        => global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled;
+
+    /// <summary>
+    /// Publishes <paramref name="element"/> with the item <paramref name="key"/>, unless the
+    /// control's value describes another element: a forwarding <c>RegisterType</c> row's child,
+    /// which in Native AOT tag-skip mode is untagged (so the outer element holds the tag) while
+    /// its value is still its own. That value is re-keyed in place, keeping the child's kind and
+    /// call site.
+    /// </summary>
+    private void PublishItemIdentity(FrameworkElement control, Element element, string? key)
+    {
+        if (control.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string current
+            && ForwardsAnotherElement(control, element))
+        {
+            var rekeyed = Diagnostics.ReactorSourcePublisher.WithKey(current, key);
+            if (!string.Equals(rekeyed, current, StringComparison.Ordinal))
+                control.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, rekeyed);
+            return;
+        }
+        PublishSource(control, element);
+    }
+
+    /// <summary>
+    /// Refreshes a reused control's identity — element tag and, in diagnostics mode, its
+    /// published value — to the item key of <paramref name="newEl"/> (see <see cref="ItemKeyOf"/>).
+    /// </summary>
+    internal void RefreshItemIdentityOnSkip(FrameworkElement control, Element newEl)
+    {
+        var kind = InnermostOf(newEl);
+        var key = ItemKeyOf(newEl);
+        bool publish = PublishesItemIdentity;
+        // The control can realize an element other than the item's: a keyed Memo's factory
+        // output, or the child a forwarding RegisterType callback handed back (whose tag
+        // TypeRegistration.TagControl keeps). The control's trampolines and unmount read that
+        // element, so re-key it and describe it; the item element never replaces it.
+        if (TryGetReactorState(control, out var state) && state.Element is { } realized
+            && (kind is KeyedMemoElement || realized.GetType() != kind.GetType()))
+        {
+            if (!string.Equals(realized.Key, key, StringComparison.Ordinal))
+                state.Element = realized = realized with { Key = key };
+            if (publish) PublishItemIdentity(control, realized, key);
+            return;
+        }
+        // An untagged keyed Memo output has nothing to re-key, and its wrapper is never the tag.
+        if (kind is KeyedMemoElement) return;
+        // A legacy ModifiedElement mounts (and tags) its inner element, so that element is
+        // re-tagged with the item key.
+        var target = string.Equals(kind.Key, key, StringComparison.Ordinal) ? kind : kind with { Key = key };
+        SetElementTagIfNeeded(control, target);
+        if (publish) PublishItemIdentity(control, target, key);
+    }
 
     /// <summary>
     /// ItemsRepeater adoption (<c>TryAdoptRealizedReplacement</c>) moves a fresh component
@@ -679,8 +812,8 @@ public sealed partial class Reconciler : IDisposable
     /// Root-owned controls whose call site, key and kind did not change were not re-published,
     /// so they still name the previous root. Rewrites <c>owner=</c> on the content's root-owned
     /// controls: the visual tree plus the Reactor subtrees hung off it outside the visual tree
-    /// (flyout content and pass-through element, popup child, a showing dialog's content,
-    /// cached navigation pages). A component wrapper (<c>mounts=</c>) is renamed if the root
+    /// (flyout content and pass-through element, menu and command items, popup child, a
+    /// showing dialog's content, cached navigation pages). A component wrapper (<c>mounts=</c>) is renamed if the root
     /// owns it, but not entered: its subtree is owned by that component. Rare (only on a root
     /// swap), so a walk.
     /// </summary>
@@ -704,6 +837,19 @@ public sealed partial class Reconciler : IDisposable
         {
             if (d is not null && seen.Add(d)) pending.Push(d);
         }
+        void PushCommandItems(WinPrim.FlyoutBase? flyoutBase)
+        {
+            switch (flyoutBase)
+            {
+                case WinUI.MenuFlyout menu:
+                    foreach (var item in menu.Items) Push(item);
+                    break;
+                case WinUI.CommandBarFlyout commandFlyout:
+                    foreach (var command in commandFlyout.PrimaryCommands) Push(command as DependencyObject);
+                    foreach (var command in commandFlyout.SecondaryCommands) Push(command as DependencyObject);
+                    break;
+            }
+        }
 
         Push(root);
         while (pending.Count > 0)
@@ -723,7 +869,8 @@ public sealed partial class Reconciler : IDisposable
             // owner's.
             if (node is FrameworkElement fe)
             {
-                if (GetFlyoutOnControl(fe) is WinUI.Flyout flyout)
+                var onControl = GetFlyoutOnControl(fe);
+                if (onControl is WinUI.Flyout flyout)
                 {
                     Push(flyout.Content);
                     Push(flyout.OverlayInputPassThroughElement);
@@ -731,9 +878,34 @@ public sealed partial class Reconciler : IDisposable
                 // .WithContextFlyout / .AttachedFlyout / .ToolTip modifiers hang Reactor content
                 // off the control too, outside every child walk until opened.
                 if (fe.ContextFlyout is WinUI.Flyout contextFlyout) Push(contextFlyout.Content);
-                if (WinPrim.FlyoutBase.GetAttachedFlyout(fe) is WinUI.Flyout attachedFlyout) Push(attachedFlyout.Content);
+                var attached = WinPrim.FlyoutBase.GetAttachedFlyout(fe);
+                if (attached is WinUI.Flyout attachedFlyout) Push(attachedFlyout.Content);
                 Push(WinUI.ToolTipService.GetToolTip(fe) as UIElement);
                 Push(V1Protocol.OverlayLifecycle.PeekLiveContentDialog(fe));
+                // Menu and command items carry their own published values, and a closed menu's
+                // items (a flyout's, a submenu's, a menu-bar menu's) are in no visual or logical
+                // child walk.
+                PushCommandItems(onControl);
+                PushCommandItems(fe.ContextFlyout);
+                PushCommandItems(attached);
+                switch (fe)
+                {
+                    case WinUI.MenuFlyoutSubItem subItem:
+                        foreach (var item in subItem.Items) Push(item);
+                        break;
+                    case WinUI.MenuBarItem menuBarItem:
+                        foreach (var item in menuBarItem.Items) Push(item);
+                        break;
+                    // A bar whose template is not applied yet (collapsed, never shown) has its
+                    // items in no visual child walk.
+                    case WinUI.MenuBar menuBar:
+                        foreach (var item in menuBar.Items) Push(item);
+                        break;
+                    case WinUI.CommandBar commandBar:
+                        foreach (var command in commandBar.PrimaryCommands) Push(command as DependencyObject);
+                        foreach (var command in commandBar.SecondaryCommands) Push(command as DependencyObject);
+                        break;
+                }
             }
             // A component wrapper's subtree is that component's. An embedded ReactorHostControl
             // is another host, even when it is this root's own content (XamlHost(() => island)):
@@ -2837,6 +3009,32 @@ public sealed partial class Reconciler : IDisposable
                 Diagnostics.ReactorEventSource.Keywords.Errors))
         {
             Diagnostics.ReactorEventSource.Log.RenderError(componentName, ex.GetType().Name, string.Empty);
+        }
+    }
+
+    /// <summary>
+    /// <c>ReactorEventSource.CommitError</c> for a host-level failure outside any component's
+    /// render or effects (<paramref name="phase"/> is <see cref="RenderErrorSource.Reconcile"/>
+    /// or <see cref="RenderErrorSource.Cleanup"/>) that replaced the host's content with the
+    /// error fallback. Names the host's root (<c>FuncElement</c> for a render-function root)
+    /// and the exception type only — the message is never read, as for
+    /// <see cref="EmitRenderError"/>.
+    /// </summary>
+    internal static void EmitCommitError(RenderErrorSource phase, Component? root, Exception ex)
+    {
+        if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                global::System.Diagnostics.Tracing.EventLevel.Error,
+                Diagnostics.ReactorEventSource.Keywords.Errors))
+        {
+            Diagnostics.ReactorEventSource.Log.CommitError(
+                phase switch
+                {
+                    RenderErrorSource.Reconcile => nameof(RenderErrorSource.Reconcile),
+                    RenderErrorSource.Cleanup => nameof(RenderErrorSource.Cleanup),
+                    _ => phase.ToString(),
+                },
+                root is not null ? Diagnostics.ComponentNames.For(root, element: null) : nameof(FuncElement),
+                ex.GetType().Name);
         }
     }
 
@@ -7049,7 +7247,7 @@ public sealed partial class Reconciler : IDisposable
         if (newEl is MenuFlyoutContentElement newMf && existingFlyout is WinUI.MenuFlyout menuFlyout)
         {
             menuFlyout.Items.Clear();
-            foreach (var item in newMf.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item));
+            foreach (var item in newMf.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item, this));
             FlyoutPlacement.Apply(menuFlyout, newMf.Placement);
             return;
         }
@@ -7160,7 +7358,7 @@ public sealed partial class Reconciler : IDisposable
                 // Placement is routed through FlyoutPlacement so Auto is never written
                 // (WinUI's FlyoutBase validator rejects it — see FlyoutPlacement).
                 FlyoutPlacement.Apply(menuFlyout, mf.Placement);
-                foreach (var item in mf.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item));
+                foreach (var item in mf.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item, this));
                 return menuFlyout;
             }
             default:

@@ -19,14 +19,17 @@ public enum KeyedListDiagnosticKind
 }
 
 /// <summary>
-/// One captured keyed-list bailout. Immutable record so the dev tools
+/// One captured keyed-list key diagnostic: a null key, or duplicate keys in a keyed list or
+/// among a panel's <c>.WithKey</c> siblings. A list with duplicate keys is rebuilt in full when
+/// it changes (a bailout); a null-keyed item is matched by position and the list keeps diffing
+/// incrementally. Reported at mount as well as on update. Immutable record so the dev tools
 /// overlay can display an arbitrary subset without locking the producer.
 /// </summary>
 /// <param name="TimestampUtc">When the diagnostic was first observed.</param>
 /// <param name="ControlContext">Human-readable label — the host control's
 /// type name. May be <c>null</c> when the diff ran outside a control
 /// context (e.g. direct unit-test invocation of <c>KeyedListDiff.Apply</c>).</param>
-/// <param name="Kind">Which class of bailout fired (null key vs. duplicate
+/// <param name="Kind">Which class of key problem was found (null key vs. duplicate
 /// keys).</param>
 /// <param name="SampleKeys">A small, bounded set of representative offending
 /// keys (duplicates that collided, or the literal token <c>"&lt;null&gt;"</c>
@@ -40,7 +43,20 @@ public sealed record KeyedListDiagnostic(
     string? ControlContext,
     KeyedListDiagnosticKind Kind,
     IReadOnlyList<string> SampleKeys,
-    int Count);
+    int Count)
+{
+    /// <summary>
+    /// The component whose render produced the list or panel, when known. Reactor knows it
+    /// while an inspector is attached (<c>REACTOR_DIAGNOSTICS=1</c>); otherwise <c>null</c>.
+    /// </summary>
+    public string? ComponentName { get; init; }
+
+    /// <summary>
+    /// The C# call site of the list factory, or of the first duplicated child for sibling
+    /// keys, when the source map recorded one (Debug builds by default); otherwise <c>null</c>.
+    /// </summary>
+    public SourceLocation? CallSite { get; init; }
+}
 
 /// <summary>
 /// Process-wide diagnostic collector for structural problems the reconciler
@@ -77,7 +93,18 @@ public static partial class ReactorDiagnostics
     public const int MaxSampleKeys = 8;
 
     private static readonly Lock _gate = new();
-    private static readonly LinkedList<KeyedListDiagnostic> _recent = new();
+    private static readonly LinkedList<Slot> _recent = new();
+
+    // A buffered entry plus what it was recorded for: the ledger it belongs to (per control,
+    // or the contextual one) and its dedup key. A repeat updates only its own entry, never
+    // another control's entry that happens to share the label, kind and samples. Holding the
+    // ledger does not keep the control alive: the weak table's value never references its key.
+    private sealed class Slot(KeyedListDiagnostic entry, ConcurrentDictionary<long, int> ledger, long dedupKey)
+    {
+        public KeyedListDiagnostic Entry = entry;
+        public readonly ConcurrentDictionary<long, int> Ledger = ledger;
+        public readonly long DedupKey = dedupKey;
+    }
 
     // (control instance) → set of (kind | sample-set hash) keys already
     // logged. ConditionalWeakTable so a control that's torn down doesn't
@@ -91,9 +118,9 @@ public static partial class ReactorDiagnostics
     private static readonly ConcurrentDictionary<long, int> _seenContextual = new();
 
     /// <summary>
-    /// Recent keyed-list bailout diagnostics, newest first. Returns an
-    /// independent snapshot — safe to enumerate while producers continue
-    /// running. Empty when no bailout has ever fired (the common case).
+    /// Recent keyed-list key diagnostics (see <see cref="KeyedListDiagnostic"/>), newest first.
+    /// Returns an independent snapshot — safe to enumerate while producers continue
+    /// running. Empty when no key problem has ever been found (the common case).
     /// </summary>
     public static IReadOnlyList<KeyedListDiagnostic> RecentKeyedListWarnings
     {
@@ -106,7 +133,7 @@ public static partial class ReactorDiagnostics
                 int i = 0;
                 // LinkedList is ordered oldest → newest; reverse for callers.
                 for (var node = _recent.Last; node is not null; node = node.Previous)
-                    arr[i++] = node.Value;
+                    arr[i++] = node.Value.Entry;
                 return arr;
             }
         }
@@ -144,6 +171,8 @@ public static partial class ReactorDiagnostics
     /// <param name="kind">Which class of bailout fired.</param>
     /// <param name="sampleKeys">Representative offending keys. Will be
     /// truncated to <see cref="MaxSampleKeys"/>.</param>
+    /// <param name="componentName">Owning component name, when known.</param>
+    /// <param name="callSite">Source call site to attribute the entry to, when known.</param>
     /// <returns>The recorded entry — useful for tests asserting capture
     /// shape. The same instance is returned on dedup hits with an
     /// incremented <see cref="KeyedListDiagnostic.Count"/>.</returns>
@@ -151,7 +180,9 @@ public static partial class ReactorDiagnostics
         object? controlInstance,
         string? controlContext,
         KeyedListDiagnosticKind kind,
-        IReadOnlyList<string> sampleKeys)
+        IReadOnlyList<string> sampleKeys,
+        string? componentName = null,
+        SourceLocation? callSite = null)
     {
         var truncated = TruncateSamples(sampleKeys);
         var label = controlContext ?? "<unknown>";
@@ -169,31 +200,49 @@ public static partial class ReactorDiagnostics
             {
                 ledger[dedupKey] = existingCount + 1;
 
-                // Update the in-place entry to reflect the new count + ts.
-                // Walk newest → oldest; same (label, kind, samples) wins.
+                // Update the in-place entry to reflect the new count + ts: the entry recorded
+                // for this same ledger and dedup key, newest first.
                 for (var node = _recent.Last; node is not null; node = node.Previous)
                 {
-                    var v = node.Value;
-                    if (v.Kind == kind
-                        && string.Equals(v.ControlContext, label, global::System.StringComparison.Ordinal)
-                        && SampleKeysEqual(v.SampleKeys, truncated))
+                    var slot = node.Value;
+                    if (ReferenceEquals(slot.Ledger, ledger) && slot.DedupKey == dedupKey)
                     {
-                        var updated = v with { TimestampUtc = DateTime.UtcNow, Count = existingCount + 1 };
-                        node.Value = updated;
+                        var v = slot.Entry;
+                        var updated = v with
+                        {
+                            TimestampUtc = DateTime.UtcNow,
+                            Count = existingCount + 1,
+                            // Only the first MaxSampleKeys keys feed the dedup key, so the
+                            // overflow summary ("…and N more") can differ between repeats.
+                            SampleKeys = truncated,
+                            // The latest attribution wins: a reused control can be bound by
+                            // another call site or under another root since the first report.
+                            ComponentName = componentName ?? v.ComponentName,
+                            CallSite = callSite ?? v.CallSite,
+                        };
+                        slot.Entry = updated;
                         return updated;
                     }
                 }
                 // Fell off the back of the buffer — re-add a fresh entry
                 // with the carried-over count so the surface still tells
                 // the user "this has happened N times".
-                var revived = new KeyedListDiagnostic(DateTime.UtcNow, label, kind, truncated, existingCount + 1);
-                AppendBounded(revived);
+                var revived = new KeyedListDiagnostic(DateTime.UtcNow, label, kind, truncated, existingCount + 1)
+                {
+                    ComponentName = componentName,
+                    CallSite = callSite,
+                };
+                AppendBounded(new Slot(revived, ledger, dedupKey));
                 return revived;
             }
 
             ledger[dedupKey] = 1;
-            var fresh = new KeyedListDiagnostic(DateTime.UtcNow, label, kind, truncated, 1);
-            AppendBounded(fresh);
+            var fresh = new KeyedListDiagnostic(DateTime.UtcNow, label, kind, truncated, 1)
+            {
+                ComponentName = componentName,
+                CallSite = callSite,
+            };
+            AppendBounded(new Slot(fresh, ledger, dedupKey));
             return fresh;
         }
     }
@@ -235,7 +284,7 @@ public static partial class ReactorDiagnostics
         return unchecked(((long)(int)kind * 397) ^ samplesHash ^ (labelHash * 31));
     }
 
-    private static void AppendBounded(KeyedListDiagnostic entry)
+    private static void AppendBounded(Slot entry)
     {
         _recent.AddLast(entry);
         while (_recent.Count > MaxRecentEntries) _recent.RemoveFirst();
@@ -268,15 +317,5 @@ public static partial class ReactorDiagnostics
             }
             return (long)hash;
         }
-    }
-
-    private static bool SampleKeysEqual(IReadOnlyList<string> a, IReadOnlyList<string> b)
-    {
-        if (a.Count != b.Count) return false;
-        for (int i = 0; i < a.Count; i++)
-        {
-            if (!string.Equals(a[i], b[i], global::System.StringComparison.Ordinal)) return false;
-        }
-        return true;
     }
 }
