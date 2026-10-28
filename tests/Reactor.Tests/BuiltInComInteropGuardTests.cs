@@ -77,6 +77,7 @@ public sealed class BuiltInComInteropGuardTests
     [InlineData("GuardSamples.Native.TakesNestedStructWithInterfaceField", "'value'")]
     [InlineData("GuardSamples.Native.TakesStructWithUnknownField", "'value'")]
     [InlineData("GuardSamples.Native.TakesFormattedClassWithObjectField", "'value'")]
+    [InlineData("GuardSamples.Native.TakesFormattedDerivedWithPrivateBaseObject", "'value'")]
     [InlineData("GuardSamples.Native.TakesCallbackTakingObject", "'callback'")]
     public void Guard_FlagsBuiltInComShape(string member, string reason)
     {
@@ -95,6 +96,7 @@ public sealed class BuiltInComInteropGuardTests
     [InlineData("GuardSamples.Native.TakesString")]
     [InlineData("GuardSamples.Native.TakesBlittableCallback")]
     [InlineData("GuardSamples.Native.TakesSelfReferencingStruct")]
+    [InlineData("GuardSamples.Native.TakesUnknownFieldStructPointer")]
     public void Guard_AllowsAotSafeShape(string member)
     {
         var hits = SampleViolations.Value.Where(v => v.Member == member).Select(v => v.Message).ToArray();
@@ -148,10 +150,13 @@ public sealed class BuiltInComInteropGuardTests
 
     // object marshals as VARIANT/IUnknown and an interface as its COM vtable — both need
     // the built-in COM marshaller, also when nested in an array, a struct / formatted
-    // class field, or a delegate's signature. Strings, pointers and blittable data don't.
+    // class field, or a delegate's signature. Strings and blittable data don't, and an
+    // unmanaged pointer is passed as a raw address, so its pointee is never marshalled.
     private static bool NeedsComMarshaller(Type t, HashSet<Type> visited)
     {
-        if (t.IsByRef || t.IsPointer || t.IsArray)
+        if (t.IsPointer)
+            return false;
+        if (t.IsByRef || t.IsArray)
             return NeedsComMarshaller(t.GetElementType()!, visited);
         if (t == typeof(object) || t.IsInterface)
             return true;
@@ -166,11 +171,16 @@ public sealed class BuiltInComInteropGuardTests
                     .Any(p => IsComMarshalAs(p.GetCustomAttribute<MarshalAsAttribute>()) || NeedsComMarshaller(p.ParameterType, visited));
         }
 
-        // Structs and formatted (sequential/explicit layout) classes are marshalled field by field.
+        // Structs and formatted (sequential/explicit layout) classes are marshalled field by
+        // field, including private fields declared on base classes (which GetFields omits).
         if (t.IsValueType || (t.IsClass && !t.IsAutoLayout))
         {
-            return t.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                .Any(f => IsComMarshalAs(f.GetCustomAttribute<MarshalAsAttribute>()) || NeedsComMarshaller(f.FieldType, visited));
+            for (var declaring = t; declaring is not null && declaring != typeof(object) && declaring != typeof(ValueType); declaring = declaring.BaseType)
+            {
+                if (declaring.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                    .Any(f => IsComMarshalAs(f.GetCustomAttribute<MarshalAsAttribute>()) || NeedsComMarshaller(f.FieldType, visited)))
+                    return true;
+            }
         }
         return false;
     }
@@ -227,6 +237,8 @@ public sealed class BuiltInComInteropGuardTests
         public struct NestedStructWithInterfaceField { public StructWithInterfaceField Inner; }
         public struct StructWithUnknownField { [MarshalAs(UnmanagedType.IUnknown)] public nint Field; }
         [StructLayout(LayoutKind.Sequential)] public class FormattedClassWithObjectField { public object Field; }
+        [StructLayout(LayoutKind.Sequential)] public class FormattedBaseWithPrivateObjectField { private object _hidden; }
+        [StructLayout(LayoutKind.Sequential)] public class FormattedDerived : FormattedBaseWithPrivateObjectField { public int A; }
         public struct BlittableStruct { public int A; public nint B; }
         public unsafe struct SelfReferencingStruct { public SelfReferencingStruct* Next; public int Value; }
         public delegate int CallbackTakingObject(object value);
@@ -241,6 +253,7 @@ public sealed class BuiltInComInteropGuardTests
             [DllImport("ole32.dll")] public static extern int TakesObjectArray(object[] values);
             [DllImport("ole32.dll")] public static extern int TakesNestedStructWithInterfaceField(ref NestedStructWithInterfaceField value);
             [DllImport("ole32.dll")] public static extern int TakesFormattedClassWithObjectField(FormattedClassWithObjectField value);
+            [DllImport("ole32.dll")] public static extern int TakesFormattedDerivedWithPrivateBaseObject(FormattedDerived value);
             [DllImport("ole32.dll")] public static extern int TakesCallbackTakingObject(CallbackTakingObject callback);
 
             // Caught by the [MarshalAs] check only.
@@ -257,6 +270,7 @@ public sealed class BuiltInComInteropGuardTests
             [DllImport("ole32.dll")] public static extern int TakesString([MarshalAs(UnmanagedType.LPWStr)] string value);
             [DllImport("ole32.dll")] public static extern int TakesBlittableCallback(BlittableCallback callback);
             [DllImport("ole32.dll")] public static extern unsafe int TakesSelfReferencingStruct(SelfReferencingStruct* value);
+            [DllImport("ole32.dll")] public static extern unsafe int TakesUnknownFieldStructPointer(StructWithUnknownField* value);
         }
         """;
 }
