@@ -74,7 +74,18 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
             typedEl = attached;
 
         var ctx = new UnmountContext(reconciler);
-        return _handler.Unmount(ctx, typedEl, control);
+        try
+        {
+            return _handler.Unmount(ctx, typedEl, control);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException
+            && reconciler.IsolatesUnmountCleanupFailures)
+        {
+            // A teardown that must finish (IsolateUnmountCleanupFailures) collects the failure,
+            // and the default traversal still tears down what the decorator wraps.
+            reconciler.ReportIsolatedUnmountFailure(ex);
+            return V1UnmountDisposition.ContinueDefaultTraversal;
+        }
     }
 
     public Element? GetSourceTarget(Element element)
