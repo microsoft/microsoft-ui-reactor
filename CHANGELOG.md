@@ -399,7 +399,9 @@ Conventions for contributors:
   identity and the final child order remains correct when the exits complete.
   Null-mounted Memo slots remain absent from the physical map and insertion
   anchors, including when exits occur in the same panel or another panel sharing
-  the reconciler.
+  the reconciler. The mapping costs no more than the plain keyed pass: it reads each
+  realized control at most once, and none while every child takes the structural skip,
+  and an exit playing in one panel no longer adds a per-child read to every other keyed panel.
 
 - **Wrapped third-party controls now get source-map call sites** (spec 010). A factory
   emitted by `[GenerateReactorWrapper]` (`SettingsCard(...)`, `RadialGauge(...)`) is

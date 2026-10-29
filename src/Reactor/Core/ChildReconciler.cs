@@ -75,14 +75,8 @@ internal static class ChildReconciler
     }
     // </snippet:child-diff>
 
-    private static bool HoldsExitingControls(IChildCollection children, Reconciler reconciler)
-    {
-        if (!reconciler.HasExitingControls) return false;
-        int count = children.Count;
-        for (int i = 0; i < count; i++)
-            if (reconciler.IsExiting(children.Get(i))) return true;
-        return false;
-    }
+    private static bool HoldsExitingControls(IChildCollection children, Reconciler reconciler) =>
+        reconciler.HoldsExitingControlIn(children);
 
     /// <summary>
     /// Unkeyed reconciliation when a conditional child (null / <see cref="EmptyElement"/> /
@@ -421,50 +415,152 @@ internal static class ChildReconciler
         AnimationKind? ambientKind,
         in DirtyChildIndices dirty)
     {
-        if (children.Count == oldChildren.Length && !HoldsExitingControls(children, reconciler))
-        {
-            ReconcileKeyedCore(oldChildren, newChildren, children, reconciler, requestRerender, ambientKind, dirty, null);
-            return;
-        }
-
-        // Logical children can include an unrealized transparent Memo and exclude retained
-        // exits. Keyed controls carry their owner's key, so an absent slot must not consume
-        // the next sibling. Use count as the absent sentinel, outside the physical indices.
-        var oldToPanel = ArrayPool<int>.Shared.Rent(oldChildren.Length);
-        var siblingKeys = RentKeyIndexDict(oldChildren.Length);
+        var map = new KeyedPanelMap(oldChildren, children, reconciler);
         try
         {
-            for (int i = 0; i < oldChildren.Length; i++)
-                if (oldChildren[i].Key is { } siblingKey)
-                    siblingKeys[siblingKey] = i;
+            ReconcileKeyedCore(oldChildren, newChildren, children, reconciler, requestRerender, ambientKind, dirty, ref map);
+        }
+        finally
+        {
+            map.Release();
+        }
+    }
 
-            int count = children.Count;
-            int physical = 0;
-            for (int logical = 0; logical < oldChildren.Length; logical++)
+    /// <summary>
+    /// Old logical child index → physical index in the collection, for the keyed pass.
+    /// Logical children can include an unrealized transparent Memo and exclude retained
+    /// exits; when neither is present the two coincide and nothing is read. Otherwise a
+    /// forward cursor resolves the map on demand, reading each physical child at most once
+    /// and handing the control it claimed to the caller (<see cref="ControlAt"/>), so
+    /// the prefix walk reads no more controls than the identity path does. A child the pass
+    /// skips without touching the collection never advances the cursor.
+    /// Resolving ahead of a mutation is sound: the prefix and suffix walks only Replace
+    /// (count-neutral) a slot the cursor has already passed, and every count-changing
+    /// mutation follows <see cref="Resolve"/>.
+    /// </summary>
+    private struct KeyedPanelMap
+    {
+        private readonly Element[] _oldChildren;
+        private readonly IChildCollection _children;
+        private readonly Reconciler _reconciler;
+        private int[]? _map;
+        private Dictionary<string, int>? _siblingKeys;
+        // Logical children mapped so far; the next physical index to read; the control at
+        // that index when it has been read but not claimed.
+        private int _resolved;
+        private int _physical;
+        private UIElement? _pending;
+        private UIElement? _claimed;
+        private int _claimedLogical;
+
+        /// <summary>The collection's count when the pass began; also the absent-slot sentinel.</summary>
+        internal readonly int ChildCount;
+
+        /// <summary>Logical and physical indices coincide.</summary>
+        internal readonly bool IsIdentity;
+
+        internal KeyedPanelMap(Element[] oldChildren, IChildCollection children, Reconciler reconciler)
+        {
+            _oldChildren = oldChildren;
+            _children = children;
+            _reconciler = reconciler;
+            _map = null;
+            _siblingKeys = null;
+            _resolved = 0;
+            _physical = 0;
+            _pending = null;
+            _claimed = null;
+            _claimedLogical = -1;
+            ChildCount = children.Count;
+            IsIdentity = ChildCount == oldChildren.Length && !HoldsExitingControls(children, reconciler);
+        }
+
+        internal int At(int oldIndex)
+        {
+            if (IsIdentity) return oldIndex;
+            if (oldIndex >= _resolved) ResolveThrough(oldIndex + 1);
+            return _map![oldIndex];
+        }
+
+        /// <summary>
+        /// The control the cursor read when it last claimed a slot, if that slot is
+        /// <paramref name="oldIndex"/>'s; <see langword="null"/> otherwise.
+        /// </summary>
+        private readonly UIElement? ClaimedControl(int oldIndex) =>
+            oldIndex == _claimedLogical ? _claimed : null;
+
+        /// <summary>
+        /// The realized control of old child <paramref name="oldIndex"/>, reusing the read the
+        /// cursor made to map it. Only for a child whose <see cref="At"/> is in range.
+        /// </summary>
+        internal UIElement ControlAt(int oldIndex)
+        {
+            int panelIdx = At(oldIndex);
+            return ClaimedControl(oldIndex) ?? _children.Get(panelIdx);
+        }
+
+        /// <summary>The full map, or <see langword="null"/> when indices coincide.</summary>
+        internal int[]? Resolve()
+        {
+            if (IsIdentity) return null;
+            ResolveThrough(_oldChildren.Length);
+            return _map;
+        }
+
+        internal void Release()
+        {
+            if (_siblingKeys is not null) ReturnKeyIndexDict(_siblingKeys);
+            if (_map is not null) ArrayPool<int>.Shared.Return(_map);
+            _siblingKeys = null;
+            _map = null;
+            _pending = null;
+            _claimed = null;
+        }
+
+        private void ResolveThrough(int end)
+        {
+            var oldChildren = _oldChildren;
+            if (_map is null)
             {
-                while (physical < count && reconciler.IsExiting(children.Get(physical)))
-                    physical++;
-                oldToPanel[logical] = count;
-                if (physical >= count) continue;
-                if (children.Get(physical) is FrameworkElement fe)
+                _map = ArrayPool<int>.Shared.Rent(oldChildren.Length);
+                _siblingKeys = RentKeyIndexDict(oldChildren.Length);
+                for (int i = 0; i < oldChildren.Length; i++)
+                    if (oldChildren[i].Key is { } siblingKey)
+                        _siblingKeys[siblingKey] = i;
+            }
+
+            // Keyed controls carry their owner's key, so an absent slot must not consume
+            // the next sibling: it leaves the control it read pending for the next one.
+            int count = ChildCount;
+            bool skipExiting = _reconciler.HasExitingControls;
+            for (; _resolved < end; _resolved++)
+            {
+                int logical = _resolved;
+                _map[logical] = count;
+                if (_physical >= count) continue;
+                var control = _pending ??= _children.Get(_physical);
+                while (skipExiting && _reconciler.IsExiting(control))
+                {
+                    _pending = null;
+                    if (++_physical >= count) break;
+                    control = _pending = _children.Get(_physical);
+                }
+                if (_physical >= count) continue;
+                if (control is FrameworkElement fe)
                 {
                     var controlKey = Reconciler.GetElementTag(fe)?.Key;
                     // An unkeyed Memo must not claim a keyed sibling, but its own
                     // realized output can carry a key that is not a sibling key.
                     if (oldChildren[logical].Key is { } key
                         ? controlKey != key
-                        : controlKey is not null && siblingKeys.ContainsKey(controlKey))
+                        : controlKey is not null && _siblingKeys!.ContainsKey(controlKey))
                         continue;
                 }
-                oldToPanel[logical] = physical++;
+                _map[logical] = _physical++;
+                _claimed = control;
+                _claimedLogical = logical;
+                _pending = null;
             }
-
-            ReconcileKeyedCore(oldChildren, newChildren, children, reconciler, requestRerender, ambientKind, dirty, oldToPanel);
-        }
-        finally
-        {
-            ReturnKeyIndexDict(siblingKeys);
-            ArrayPool<int>.Shared.Return(oldToPanel);
         }
     }
 
@@ -487,7 +583,7 @@ internal static class ChildReconciler
         Action requestRerender,
         AnimationKind? ambientKind,
         in DirtyChildIndices dirty,
-        int[]? oldToPanel)
+        ref KeyedPanelMap map)
     {
         int oldLen = oldChildren.Length;
         int newLen = newChildren.Length;
@@ -496,7 +592,7 @@ internal static class ChildReconciler
         // only ever Replace (RemoveAt+Insert — count-neutral) or skip, so the
         // panel count is stable across them. This avoids re-reading the COM
         // IVector.get_Size on every iteration of the suffix loop.
-        int childCount = children.Count;
+        int childCount = map.ChildCount;
 
         // Phase 1: Common prefix
         int prefixLen = 0;
@@ -506,7 +602,6 @@ internal static class ChildReconciler
         {
             var oldEl = oldChildren[prefixLen];
             var newEl = newChildren[prefixLen];
-            int panelIdx = OldPanelIndex(prefixLen, oldToPanel);
 
             // Early skip (#30): when the element is structurally identical we
             // can avoid the children.Get COM call and the full property diff
@@ -518,13 +613,15 @@ internal static class ChildReconciler
             // ThemeBindings/ResourceOverrides.ThemeRefs child likewise declines the
             // skip and re-resolves through Update (see UpdateCommonChild's contract note).
             // So does a child leading to a self-triggered component (`dirty`; same note).
+            // The panel index is resolved only where the skip reads the collection, so a
+            // skip that never touches it never advances the map's cursor.
             UIElement? existingControl = null;
             if (Element.CanSkipUpdate(oldEl, newEl)
                 && !reconciler.ForceRenderThroughWrapper(newEl)
-                && !dirty.Contains(panelIdx, children, reconciler, ref existingControl)
+                && (dirty.IsEmpty || !dirty.Contains(map.At(prefixLen), children, reconciler, ref existingControl))
                 && (!reconciler.HasActiveContextValues
-                    || panelIdx >= childCount
-                    || !reconciler.ShouldDeclineSkip(existingControl ??= children.Get(panelIdx))))
+                    || map.At(prefixLen) >= childCount
+                    || !reconciler.ShouldDeclineSkip(existingControl ??= map.ControlAt(prefixLen))))
             {
                 reconciler.DebugElementsSkipped++;
                 // Refresh the Tag when the element carries callbacks so the
@@ -535,8 +632,8 @@ internal static class ChildReconciler
                         || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
                         || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
                         || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
-                    && panelIdx < childCount
-                    && (existingControl ??= children.Get(panelIdx)) is FrameworkElement fe)
+                    && map.At(prefixLen) < childCount
+                    && (existingControl ??= map.ControlAt(prefixLen)) is FrameworkElement fe)
                 {
                     reconciler.RefreshSkippedChildState(fe, oldEl, newEl);
                 }
@@ -545,9 +642,10 @@ internal static class ChildReconciler
             }
 
             // Update in place
+            int panelIdx = map.At(prefixLen);
             if (panelIdx < childCount)
             {
-                existingControl ??= children.Get(panelIdx);
+                existingControl ??= map.ControlAt(prefixLen);
                 var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate);
                 if (replacement is not null)
                 {
@@ -569,18 +667,17 @@ internal static class ChildReconciler
             int newIdx = newLen - 1 - suffixLen;
             var oldEl = oldChildren[oldIdx];
             var newEl = newChildren[newIdx];
-            int panelIdx = oldToPanel is null ? childCount - 1 - suffixLen : oldToPanel[oldIdx];
 
             // Early skip (#30): same fast-path as the prefix loop, applied from
-            // the end of the list.
+            // the end of the list. Identity maps oldIdx to childCount - 1 - suffixLen.
             UIElement? existingControl = null;
             if (Element.CanSkipUpdate(oldEl, newEl)
                 && !reconciler.ForceRenderThroughWrapper(newEl)
-                && !dirty.Contains(panelIdx, children, reconciler, ref existingControl)
+                && (dirty.IsEmpty || !dirty.Contains(map.At(oldIdx), children, reconciler, ref existingControl))
                 && (!reconciler.HasActiveContextValues
-                    || panelIdx < 0
-                    || panelIdx >= childCount
-                    || !reconciler.ShouldDeclineSkip(existingControl ??= children.Get(panelIdx))))
+                    || map.At(oldIdx) < 0
+                    || map.At(oldIdx) >= childCount
+                    || !reconciler.ShouldDeclineSkip(existingControl ??= map.ControlAt(oldIdx))))
             {
                 reconciler.DebugElementsSkipped++;
                 // #721 — refresh Tag + cached gesture/drag dispatch closures on skip.
@@ -588,9 +685,9 @@ internal static class ChildReconciler
                         || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
                         || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
                         || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
-                    && panelIdx >= 0
-                    && panelIdx < childCount
-                    && (existingControl ??= children.Get(panelIdx)) is FrameworkElement fe)
+                    && map.At(oldIdx) >= 0
+                    && map.At(oldIdx) < childCount
+                    && (existingControl ??= map.ControlAt(oldIdx)) is FrameworkElement fe)
                 {
                     reconciler.RefreshSkippedChildState(fe, oldEl, newEl);
                 }
@@ -598,9 +695,10 @@ internal static class ChildReconciler
                 continue;
             }
 
+            int panelIdx = map.At(oldIdx);
             if (panelIdx >= 0 && panelIdx < childCount)
             {
-                existingControl ??= children.Get(panelIdx);
+                existingControl ??= map.ControlAt(oldIdx);
                 var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate);
                 if (replacement is not null)
                 {
@@ -622,6 +720,9 @@ internal static class ChildReconciler
 
         if (oldMidLen == 0 && newMidLen == 0)
             return; // Prefix + suffix covered everything
+
+        // Every branch below positions against the old children, before its first mutation.
+        int[]? oldToPanel = map.Resolve();
 
         if (oldMidLen == 0)
         {

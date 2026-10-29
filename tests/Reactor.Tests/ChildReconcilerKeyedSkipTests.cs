@@ -100,4 +100,24 @@ public class ChildReconcilerKeyedSkipTests
         Assert.Equal(0, mock.GetCalls);
         Assert.Equal(8 * 4, reconciler.DebugElementsSkipped);
     }
+
+    // A collection that holds fewer controls than the old children (a keyed child that
+    // mounts nothing, e.g. a Memo rendering Empty) or more (a control still playing its
+    // exit) needs a logical → physical map to update a child. An unchanged list updates
+    // none, so building that map — one control read per child — is pure overhead.
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(1)]
+    public void Identical_Keyed_List_Over_Mismatched_Collection_Reads_No_Control(int countDelta)
+    {
+        const int count = 16;
+        var mock = new ThrowingGetChildCollection(count + countDelta);
+        var reconciler = new Reconciler();
+
+        ChildReconciler.Reconcile(KeyedRows(count), KeyedRows(count), mock, reconciler, NoOp);
+
+        Assert.Empty(mock.Operations);
+        Assert.Equal(0, mock.GetCalls);
+        Assert.Equal(count, reconciler.DebugElementsSkipped);
+    }
 }

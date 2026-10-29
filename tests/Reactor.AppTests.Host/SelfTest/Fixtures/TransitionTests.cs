@@ -494,4 +494,110 @@ internal static class TransitionTests
             }
         }
     }
+
+    /// <summary>Counts the per-child reads (a WinRT call apiece) and exit probes a pass makes.</summary>
+    private sealed class CountingChildCollection(IChildCollection inner) : IChildCollection
+    {
+        public int Reads;
+        public int Probes;
+        public int Count => inner.Count;
+        public Microsoft.UI.Xaml.UIElement Get(int index) { Reads++; return inner.Get(index); }
+        public int IndexOf(Microsoft.UI.Xaml.UIElement element) { Probes++; return inner.IndexOf(element); }
+        public void Insert(int index, Microsoft.UI.Xaml.UIElement element) => inner.Insert(index, element);
+        public void RemoveAt(int index) => inner.RemoveAt(index);
+        public void Move(int oldIndex, int newIndex) => inner.Move(oldIndex, newIndex);
+        public void Replace(int index, Microsoft.UI.Xaml.UIElement element) => inner.Replace(index, element);
+    }
+
+    // While an exit plays (here or in another panel) or a child mounts nothing, a keyed pass
+    // must read no more controls than when nothing is retained: none for a skipped list, one
+    // per realized child for an updated one. Each read is a WinRT call that allocates, paid
+    // per child per render.
+    internal class KeyedPassReadsEachControlAtMostOnce(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            foreach (var (localExit, unrelatedExit, emptyMemo) in new[]
+            {
+                (false, false, false), (false, true, false), (true, false, false), (false, false, true), (true, true, true),
+            })
+                await RunCase(localExit, unrelatedExit, emptyMemo);
+        }
+
+        private async Task RunCase(bool localExit, bool unrelatedExit, bool emptyMemo)
+        {
+            using var reconciler = new Reconciler();
+            var scenario = $"KeyedReads_Local{localExit}_Unrelated{unrelatedExit}_EmptyMemo{emptyMemo}";
+            var empty = Memo("empty", () => Empty()).WithKey("empty");
+            Element[] Rows(string b, Element? trailing = null)
+            {
+                var rows = new List<Element>();
+                if (emptyMemo) rows.Add(empty);
+                rows.Add(Border(TextBlock("a")).WithKey("a"));
+                rows.Add(Border(TextBlock(b)).WithKey("b"));
+                rows.Add(Border(TextBlock("c")).WithKey("c"));
+                if (trailing is not null) rows.Add(trailing);
+                return [.. rows];
+            }
+
+            var initial = VStack(Rows("b", localExit ? Leaving("local-exit") : null));
+            var otherInitial = VStack(unrelatedExit ? Leaving("other-exit") : Empty());
+            var panel = (StackPanel)reconciler.Mount(initial, () => { })!;
+            var otherPanel = (StackPanel)reconciler.Mount(otherInitial, () => { })!;
+            var root = new StackPanel();
+            root.Children.Add(panel);
+            root.Children.Add(otherPanel);
+            H.SetContent(root);
+            try
+            {
+                await Harness.Render();
+                var current = Rows("b");
+                reconciler.Update(initial, VStack(current), panel, () => { });
+                reconciler.Update(otherInitial, VStack(), otherPanel, () => { });
+                var a = panel.Children[0];
+                var b = panel.Children[1];
+                var c = panel.Children[2];
+                H.Check($"{scenario}_PositiveControl",
+                    panel.Children.Count == (localExit ? 4 : 3)
+                    && current.Length == (emptyMemo ? 4 : 3)
+                    && reconciler.HasExitingControls == (localExit || unrelatedExit));
+
+                // Same records: every child takes the structural skip and nothing is read.
+                var counting = new CountingChildCollection(new PanelChildCollection(panel));
+                ChildReconciler.Reconcile(current, [.. current], counting, reconciler, () => { }, panel);
+                H.Check($"{scenario}_SkippedListReadsNoChild",
+                    counting.Reads == 0
+                    && counting.Probes <= (localExit ? 1 : 0) + (unrelatedExit ? 1 : 0),
+                    $"reads={counting.Reads} probes={counting.Probes}");
+
+                // Fresh records (a Border's child is compared by reference) update every child,
+                // reading each realized control exactly once, as when nothing is retained.
+                var unchanged = Rows("b");
+                counting = new CountingChildCollection(new PanelChildCollection(panel));
+                ChildReconciler.Reconcile(current, unchanged, counting, reconciler, () => { }, panel);
+                H.Check($"{scenario}_UpdatedListReadsEachControlOnce",
+                    counting.Reads == 3
+                    && panel.Children.Where(x => !reconciler.IsExiting(x)).SequenceEqual([a, b, c]),
+                    $"reads={counting.Reads}");
+
+                // A changed child patches its own control.
+                var changed = Rows("b changed");
+                ChildReconciler.Reconcile(unchanged, changed, new PanelChildCollection(panel), reconciler, () => { }, panel);
+                H.Check($"{scenario}_ChangedChildPatchesItsControl",
+                    a is Border { Child: TextBlock { Text: "a" } }
+                    && b is Border { Child: TextBlock { Text: "b changed" } }
+                    && c is Border { Child: TextBlock { Text: "c" } }
+                    && panel.Children.Where(x => !reconciler.IsExiting(x)).SequenceEqual([a, b, c]));
+
+                var completed = await Harness.WaitFor(() => !reconciler.HasExitingControls, maxPasses: 40, perPassMs: 50);
+                H.Check($"{scenario}_ExitsComplete", completed);
+            }
+            finally
+            {
+                H.SetContent(null);
+                reconciler.UnmountChild(panel);
+                reconciler.UnmountChild(otherPanel);
+            }
+        }
+    }
 }

@@ -1130,5 +1130,9 @@ public static class BenchCatalog
         new IH4_ComboBoxEqualStrings100(),
         new IH5_ComboBoxEqualStrings1000(),
         new IH6_ComboBoxOneChanged(),
+        new KX1_KeyedNoExit(),
+        new KX2_KeyedUnrelatedExit(),
+        new KX3_KeyedLocalExit(),
+        new KX4_KeyedEmptyMemo(),
     };
 }

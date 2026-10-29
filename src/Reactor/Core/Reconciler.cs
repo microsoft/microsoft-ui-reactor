@@ -4106,6 +4106,30 @@ public sealed partial class Reconciler : IDisposable
 
     internal bool IsExiting(UIElement control) => _exitingControls?.Contains(control) == true;
 
+    // Above this many in-flight exits, scanning the collection beats probing it once per exit.
+    private const int ExitProbeLimit = 16;
+
+    /// <summary>
+    /// Whether <paramref name="children"/> holds a control that is still playing its exit.
+    /// Probes the collection for each in-flight exit (one native IndexOf apiece) rather than
+    /// reading every child: each projected read is a WinRT call that allocates, and an exit
+    /// playing in one panel would otherwise tax every keyed panel the reconciler visits.
+    /// </summary>
+    internal bool HoldsExitingControlIn(IChildCollection children)
+    {
+        if (_exitingControls is not { Count: > 0 } exiting) return false;
+        if (exiting.Count <= ExitProbeLimit)
+        {
+            foreach (var control in exiting)
+                if (children.IndexOf(control) >= 0) return true;
+            return false;
+        }
+        int count = children.Count;
+        for (int i = 0; i < count; i++)
+            if (exiting.Contains(children.Get(i))) return true;
+        return false;
+    }
+
     private void BeginExit(UIElement control) => (_exitingControls ??= new()).Add(control);
 
     private void EndExit(UIElement control)
