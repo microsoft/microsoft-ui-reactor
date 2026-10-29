@@ -74,7 +74,7 @@ internal static class TemplatedListOrphanContainerFixtures
             // Keyed, so reordering moves the list's Border within the stack: WinUI removes it from
             // the tree and inserts it again.
             var list = Border(ListView<RowProps>(items, x => x.Key, (x, _) => Component<Row, RowProps>(x)))
-                .Height(300).Visible(visible).WithKey("list");
+                .Height(300).IsVisible(visible).WithKey("list");
             var spacer = TextBlock("orphan-spacer").WithKey("spacer");
             return reordered ? VStack(list, spacer) : VStack(spacer, list);
         }
