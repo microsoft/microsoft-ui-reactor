@@ -144,17 +144,38 @@ internal static class TemplatedListOrphanContainerFixtures
     // The same, for a control registered on the host's reconciler with RegisterType.
     private sealed record RegisteredProbe : Element;
 
+    // Hosts a Reactor component its unmount callback tears down; when the callback throws first,
+    // the reconciler must still unmount that component.
     private static void RegisterProbe(ReactorHost host) =>
-        host.Reconciler.RegisterType<RegisteredProbe, TextBlock>(
-            static (_, _, _) => new TextBlock(),
+        host.Reconciler.RegisterType<RegisteredProbe, Border>(
+            static (r, _, rerender) => new Border { Child = r.Mount(Component<RegisteredProbeChild>(), rerender) },
             static (_, _, _, control, _) => control,
-            static (_, probe) =>
+            static (r, probe) =>
             {
-                if (s_parkedCleanup != ParkedCleanup.RegisteredThrows || ContainerOf(probe) is not { ActualOffset.X: <= -10000 })
-                    return;
-                s_parkedCleanup = ParkedCleanup.None;
-                throw new InvalidOperationException(ParkedCleanupMessage);
+                if (s_parkedCleanup == ParkedCleanup.RegisteredThrows && ContainerOf(probe) is { ActualOffset.X: <= -10000 })
+                {
+                    s_parkedCleanup = ParkedCleanup.None;
+                    throw new InvalidOperationException(ParkedCleanupMessage);
+                }
+                if (probe.Child is { } child) r.UnmountChild(child);
             });
+
+    private static readonly Dictionary<object, Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>> s_probeChildren =
+        new(ReferenceEqualityComparer.Instance);
+
+    private sealed class RegisteredProbeChild : Component
+    {
+        public override Element Render()
+        {
+            var root = this.UseElementRef<FrameworkElement>();
+            UseEffect(() =>
+            {
+                s_probeChildren[this] = root;
+                return () => s_probeChildren.Remove(this);
+            });
+            return TextBlock("orphan-probe-child").Ref(root);
+        }
+    }
 
     // The same, for a control handled by a decorator handler.
     private sealed record DecoratorProbe : Element;
@@ -193,6 +214,7 @@ internal static class TemplatedListOrphanContainerFixtures
         s_instances = 0;
         s_parkedCleanup = ParkedCleanup.None;
         s_withRegisteredProbe = false;
+        s_probeChildren.Clear();
     }
 
     private static ListViewItem? ContainerOf(DependencyObject? node)
@@ -426,6 +448,12 @@ internal static class TemplatedListOrphanContainerFixtures
             }
             if (armed)
                 H.Check($"{name}_ParkedCleanupRan", s_parkedCleanup == ParkedCleanup.None);
+            if (throwingRegisteredTeardown)
+            {
+                // The component the throwing callback never reached was still unmounted.
+                int parkedChildren = s_probeChildren.Values.Count(root => Unlinked(lv, root.Current));
+                H.Check($"{name}_UnreachedChildUnmounted", parkedChildren == 0, $"parkedChildren={parkedChildren}");
+            }
             if (throwingParkedCleanup || throwingDescriptorTeardown || throwingRegisteredTeardown || throwingDecoratorTeardown)
             {
                 // The sweep unmounted the parked view even though its cleanup threw, and reported it.

@@ -3917,12 +3917,17 @@ public sealed partial class Reconciler : IDisposable
             && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount
             && TryBeginRegisteredUnmount(regState))
         {
+            bool failed = false;
             try { reg.Unmount(control, this); }
             catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException && IsolatesUnmountCleanupFailures)
             {
                 ReportIsolatedUnmountFailure(ex);
+                failed = true;
             }
             finally { EndRegisteredUnmount(regState); }
+            // The callback stopped part-way: tear down the Reactor children it did not reach.
+            if (failed)
+                ForEachReactorChildControl(control, UnmountRecursive);
             return;
         }
 
@@ -4379,12 +4384,21 @@ public sealed partial class Reconciler : IDisposable
             && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount
             && TryBeginRegisteredUnmount(regState))
         {
+            bool failed = false;
             try { reg.Unmount(control, this); }
             catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException && IsolatesUnmountCleanupFailures)
             {
                 ReportIsolatedUnmountFailure(ex);
+                failed = true;
             }
             finally { EndRegisteredUnmount(regState); }
+            if (failed)
+            {
+                // The callback stopped part-way: tear down the Reactor children it did not
+                // reach (without pooling them), and do not pool a half-torn-down control.
+                ForEachReactorChildControl(control, UnmountRecursive);
+                return;
+            }
             // Collect this control for pooling, but do NOT recurse into children —
             // they were created outside Reactor's tree and must not be pooled.
             // (Mirrors UnmountRecursive which returns early in this case.)
