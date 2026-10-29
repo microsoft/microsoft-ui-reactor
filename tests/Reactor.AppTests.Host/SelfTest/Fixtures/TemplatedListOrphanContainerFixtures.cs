@@ -197,8 +197,75 @@ internal static class TemplatedListOrphanContainerFixtures
         }
     }
 
+    // A control whose descriptor counts its unmounts.
+    private sealed record CountedLeaf : Element;
+    private static int s_leafUnmounts;
+
+    private sealed class CountedLeafHandler() : DescriptorHandler<CountedLeaf, TextBlock>(LeafDescriptor)
+    {
+        private static readonly ControlDescriptor<CountedLeaf, TextBlock> LeafDescriptor =
+            new ControlDescriptor<CountedLeaf, TextBlock>()
+                .WithUnmount(static (in UnmountContext _, TextBlock _) => s_leafUnmounts++);
+    }
+
+    // A registered control whose unmount callback tears its first child down, then throws.
+    private sealed record PartialTeardown : Element;
+    private const string PartialTeardownMessage = "orphan-row partial teardown boom";
+
+    /// <summary>
+    /// A <c>RegisterType</c> unmount callback that tears down one child and then throws, inside
+    /// an isolated teardown (the parked-row sweep, a released tree): the recovery walk tears down
+    /// the child it never reached, and does not tear down the one it did a second time. Covers the
+    /// plain (<paramref name="pool"/> false) and the pooling unmount walk.
+    /// </summary>
+    internal class IsolatedRegisteredTeardownRecovers(Harness h, bool pool) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            string name = pool ? "IsolatedTeardownPooled" : "IsolatedTeardown";
+            var rec = new Reconciler();
+            rec.RegisterType<PartialTeardown, StackPanel>(
+                static (r, _, rerender) =>
+                {
+                    var panel = new StackPanel();
+                    panel.Children.Add(r.Mount(new CountedLeaf(), rerender));
+                    panel.Children.Add(r.Mount(new CountedLeaf(), rerender));
+                    return panel;
+                },
+                static (_, _, _, control, _) => control,
+                static (r, panel) =>
+                {
+                    r.UnmountChild(panel.Children[0]);
+                    throw new InvalidOperationException(PartialTeardownMessage);
+                });
+            var root = new Grid();
+            H.SetContent(root);
+            if (rec.Mount(new PartialTeardown(), static () => { }) is not { } control)
+            {
+                H.Check($"{name}_Mounted", false);
+                return;
+            }
+            root.Children.Add(control);
+            await Harness.Render();
+
+            s_leafUnmounts = 0;
+            var failures = new List<Exception>();
+            using (rec.IsolateUnmountCleanupFailures(failures.Add))
+            {
+                if (pool) rec.UnmountAndPool(control);
+                else rec.UnmountChild(control);
+            }
+            H.Check($"{name}_FailureCollected", failures.Count == 1 && failures[0].Message == PartialTeardownMessage,
+                string.Join(",", failures.Select(f => f.Message)));
+            // The reached child once (by the callback), the unreached one once (by the recovery).
+            H.Check($"{name}_EachChildTornDownOnce", s_leafUnmounts == 2, $"leafUnmounts={s_leafUnmounts}");
+            H.SetContent(null);
+        }
+    }
+
     static TemplatedListOrphanContainerFixtures()
     {
+        ControlRegistry.Register<CountedLeaf, TextBlock>(static () => new CountedLeafHandler());
         ControlRegistry.Register<TeardownProbe, TextBlock>(static () => new TeardownProbeHandler());
         ControlRegistry.RegisterDecorator<DecoratorProbe>(static () => new DecoratorProbeHandler());
     }
