@@ -1318,7 +1318,7 @@ public sealed partial class Reconciler
     /// </summary>
     private void SchedulePostLayoutSweep(WinUI.ListViewBase listViewBase, Internal.ReactorListState list)
     {
-        if (list.PostLayoutSweep is not null || list.ShownWatch is not null) return;
+        if (list.PostLayoutSweep is not null || list.ShownWatch is not null || list.LoadedWatch is not null) return;
         list.PostLayoutSweep = (_, _) => SweepParkedContainers(listViewBase, list);
         listViewBase.LayoutUpdated += list.PostLayoutSweep;
     }
@@ -1334,17 +1334,28 @@ public sealed partial class Reconciler
     /// no longer shows. Only the components are torn down — the visuals stay, so a delete
     /// transition still fades the row out. The check has to wait for the layout pass because
     /// that is when WinUI parks the container: when the update that moved the row runs, the
-    /// container is still linked to it. No pass lays a list out while it (or an ancestor) is
-    /// collapsed, so a sweep that finds it collapsed waits for the list's own
-    /// <c>EffectiveViewportChanged</c>, which the pass that lays it out again raises, rather
-    /// than checking every layout pass in the window. It does not wait for <c>Loaded</c>: a list
-    /// inserted into the tree is laid out, and its container parked, before that event is raised.
+    /// container is still linked to it. No pass lays a list out while it is out of the tree (a
+    /// TabView tab not selected) or while it or an ancestor is collapsed, so a sweep that finds
+    /// it so waits, on the list's own <c>Loaded</c> or <c>EffectiveViewportChanged</c> rather than
+    /// on every layout pass in the window, and then sweeps after the next layout pass: a list
+    /// inserted into the tree is laid out, and its container parked, before <c>Loaded</c>.
     /// </summary>
     private void SweepParkedContainers(WinUI.ListViewBase listViewBase, Internal.ReactorListState list)
     {
         listViewBase.LayoutUpdated -= list.PostLayoutSweep;
         list.PostLayoutSweep = null;
         if (!ReferenceEquals(GetListState(listViewBase), list) || listViewBase.ItemsPanelRoot is not { } panel) return;
+        if (!listViewBase.IsLoaded)
+        {
+            list.LoadedWatch = (_, _) =>
+            {
+                listViewBase.Loaded -= list.LoadedWatch;
+                list.LoadedWatch = null;
+                SchedulePostLayoutSweep(listViewBase, list);
+            };
+            listViewBase.Loaded += list.LoadedWatch;
+            return;
+        }
         if (IsCollapsedInTree(listViewBase))
         {
             list.ShownWatch = (_, _) =>
@@ -1386,6 +1397,11 @@ public sealed partial class Reconciler
         {
             listViewBase.EffectiveViewportChanged -= watch;
             list.ShownWatch = null;
+        }
+        if (list.LoadedWatch is { } loaded)
+        {
+            listViewBase.Loaded -= loaded;
+            list.LoadedWatch = null;
         }
     }
 

@@ -123,6 +123,12 @@ internal sealed class ReactorListState
     /// </summary>
     internal global::Windows.Foundation.TypedEventHandler<Microsoft.UI.Xaml.FrameworkElement, Microsoft.UI.Xaml.EffectiveViewportChangedEventArgs>? ShownWatch { get; set; }
 
+    /// <summary>
+    /// The list's one-shot <c>Loaded</c> handler while a sweep waits for the list to enter the
+    /// tree again.
+    /// </summary>
+    internal Microsoft.UI.Xaml.RoutedEventHandler? LoadedWatch { get; set; }
+
     public ReactorListState() => Source.CollectionChanged += (_, _) => StructureChanged = true;
 
     /// <summary>

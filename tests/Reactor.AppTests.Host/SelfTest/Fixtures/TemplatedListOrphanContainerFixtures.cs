@@ -36,6 +36,7 @@ internal static class TemplatedListOrphanContainerFixtures
     private static Action<bool>? s_setVisible;
     private static Action<bool>? s_setReordered;
     private static Action<bool>? s_setPresent;
+    private static Action<int>? s_selectTab;
 
     private sealed class Row : Component<RowProps>
     {
@@ -76,6 +77,22 @@ internal static class TemplatedListOrphanContainerFixtures
                 .Height(300).Visible(visible).WithKey("list");
             var spacer = TextBlock("orphan-spacer").WithKey("spacer");
             return reordered ? VStack(list, spacer) : VStack(spacer, list);
+        }
+    }
+
+    // The list in the second tab of a TabView: while the first tab is selected, the list stays
+    // mounted (and updates) but WinUI takes it out of the visual tree.
+    private sealed class TabbedChurn : Component<int>
+    {
+        public override Element Render()
+        {
+            var (items, update) = UseReducer(Enumerable.Range(0, Props).Select(i => new RowProps($"c{i}")).ToList());
+            var (tab, setTab) = UseState(1);
+            s_update = update;
+            s_selectTab = setTab;
+            return TabView(tab, setTab,
+                Tab("orphan-tab-a", TextBlock("orphan-other-tab")),
+                Tab("orphan-tab-b", Border(ListView<RowProps>(items, x => x.Key, (x, _) => Component<Row, RowProps>(x))).Height(300)));
         }
     }
 
@@ -192,18 +209,22 @@ internal static class TemplatedListOrphanContainerFixtures
     /// <paramref name="reinsertWithLastSwap"/> moves the list within its parent in the render of the
     /// last swap: WinUI removes and inserts it again, and lays it out before raising its
     /// <c>Loaded</c>, so a sweep must not take "not loaded" for "not laid out".
+    /// <paramref name="inUnselectedTab"/> hosts the list in a TabView tab and switches to the other
+    /// tab in the render of the last swap: the list leaves the tree unlaid out, and WinUI parks the
+    /// container when its tab is selected again.
     /// </remarks>
     internal class MovedRowLeavesNoParkedComponent(Harness h, string name, int count, (int A, int B)[] swaps, string movedKey,
-        bool collapseWithLastSwap = false, bool reinsertWithLastSwap = false)
+        bool collapseWithLastSwap = false, bool reinsertWithLastSwap = false, bool inUnselectedTab = false)
         : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
             Reset();
             var host = H.CreateHost();
-            host.Mount(_ => Component<Churn, int>(count));
+            host.Mount(_ => inUnselectedTab ? Component<TabbedChurn, int>(count) : Component<Churn, int>(count));
             await Harness.Render(300);
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            // Exactly ListView: a TabView's tab strip is a ListView subclass.
+            var lv = H.FindControl<WinUI.ListView>(l => l.GetType() == typeof(WinUI.ListView));
             H.Check($"{name}_Mounted", lv is not null && s_live.Count > 0);
             if (lv is null) return;
 
@@ -218,11 +239,17 @@ internal static class TemplatedListOrphanContainerFixtures
                 });
                 if (collapseWithLastSwap && i == swaps.Length - 1) s_setVisible!(false);
                 if (reinsertWithLastSwap && i == swaps.Length - 1) s_setReordered!(true);
+                if (inUnselectedTab && i == swaps.Length - 1) s_selectTab!(0);
                 await Harness.Render(300);
             }
             if (collapseWithLastSwap)
             {
                 s_setVisible!(true);
+                await Harness.Render(300);
+            }
+            if (inUnselectedTab)
+            {
+                s_selectTab!(1);
                 await Harness.Render(300);
             }
 
@@ -321,12 +348,12 @@ internal static class TemplatedListOrphanContainerFixtures
             s_setVisible!(false);
             await Harness.Render(300);
             var list = Reconciler.GetListState(lv);
-            H.Check("UnmountCollapsed_SweepPending", list is { ShownWatch: not null } or { PostLayoutSweep: not null });
+            H.Check("UnmountCollapsed_SweepPending", list is { ShownWatch: not null } or { PostLayoutSweep: not null } or { LoadedWatch: not null });
 
             s_setPresent!(false);
             await Harness.Render(300);
             H.Check("UnmountCollapsed_ListUnmounted", H.FindControl<WinUI.ListView>(_ => true) is null);
-            H.Check("UnmountCollapsed_SweepDropped", list is { ShownWatch: null, PostLayoutSweep: null });
+            H.Check("UnmountCollapsed_SweepDropped", list is { ShownWatch: null, PostLayoutSweep: null, LoadedWatch: null });
             host.Dispose();
             Reset();
         }
