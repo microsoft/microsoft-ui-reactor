@@ -46,10 +46,16 @@ control property, the single-content/children slot, `On{Event}` callbacks, the
 `SettingsCard(...)` factory. `Setters` is always emitted as an escape hatch
 (`.Set(c => c.Foo = …)`) for anything not surfaced.
 
-**You never call `ReactorApp.RegisterControlAssembly` yourself** — the generator
-emits it in the element's static constructor, so a control library's
-`Themes/Generic.xaml` resolves before first realization (avoids the `0xC000027B`
-crash, spec 058 §9a).
+The generator emits `ReactorApp.TryRegisterControlAssembly(typeof(X).Assembly)`
+in the element's static constructor to discover a control library's metadata
+before first realization (spec 058 §9a). The `Try` call quietly returns `false`
+if the provider has been trimmed; a `0xC000027B` crash when the wrapped control
+is first realized is a symptom that explicit registration may be needed.
+
+For code-only Native AOT apps, implicit discovery of the toolkit provider can be
+trimmed. Explicitly construct and register its generated `XamlMetaDataProvider`
+before realization when needed; see `docs/aot-support.md`. The observable Items
+collection's generated WinRT exposure does not root toolkit metadata.
 
 ## Requirements & setup
 
@@ -74,7 +80,7 @@ generic modifiers like `.Margin()`, `.Width()`):
 | Value prop `P` **paired with** a `{P}Changed` event | a **two-way controlled** `Optional<T>` prop + `On{P}Changed` callback, with echo suppression |
 | The control's `[ContentProperty]` (a `UIElement` child, or `object` named exactly `Content`) | the single **`content:`** child slot |
 | A public `Children` of `UIElementCollection` (a `Panel`) | a `params Element[]` children slot |
-| A public `Items` whose type is/implements `IList<object>` (an `ItemsControl`) | a `params object[] items` slot |
+| A public `Items` whose type is/implements `IList<object>` (an `ItemsControl`) | a `params object[] items` slot; incremental reconciliation, `.WithKey(...)` preserves state across reorders, and writable `IList<object>` sinks get an observable list on mount |
 | A fire-and-forget `RoutedEventHandler` / `TypedEventHandler<,>` / `EventHandler<A>` event | an `On{Event}` callback (typed events auto-surface the whole args as `Action<A>`) |
 
 Two-way auto-pairing keys **strictly on the `{P}Changed` name**. Controls whose
@@ -98,7 +104,7 @@ All live in `Microsoft.UI.Reactor.Wrappers`. All are repeatable unless noted.
 | `[WrapLifecycle(nameof(Start), OnUnmounted = nameof(Stop))]` | run a `static void M(TControl)` on mount/unmount for imperative controls (`CameraPreview.StartAsync`) — **no call-site boilerplate**. |
 | `[WrapPanelChildren(PerChild = …)]` | wire per-child attached props (`Grid.SetRow`, `Canvas.SetLeft`) onto a panel; `AfterAll` for two-pass (RelativePanel). |
 | `[WrapManual("P")]` + `static partial Customize(d)` | hand-chain one entry the generator can't infer while it still generates the rest. |
-| `[WrapElementSlot("Prop", ControlProperty = "…")]` | auto-wire a **secondary single-element slot** that writes a dedicated control property (`TabView.TabStripHeader`, `SettingsCard.HeaderIcon`) — mounts via `ctx.MountChild`, updates via state-preserving `ctx.ReconcileChild`. Use `ControlProperty=` when the element-facing name differs from the control property. The control property must be public-settable and `object`/`UIElement`-typed. For the **primary** child use `[WrapContent]`; for a slot that shares a control prop with a string fallback (`Expander.Header`) stay manual. |
+| `[WrapElementSlot("Prop", ControlProperty = "…")]` | auto-wire a **secondary single-element slot** that writes a dedicated control property (`TabView.TabStripHeader`, `SettingsCard.HeaderIcon`) — mounts via `ctx.MountChild`, updates via state-preserving `ctx.ReconcileChild`, and terminally unmounts the child before detaching it, independently of the descriptor author's `OnUnmount`. When no slot element is declared, the control's constructor default is left untouched. Use `ControlProperty=` when the element-facing name differs from the control property. The control property must be public-settable and `object`/`UIElement`-typed. For the **primary** child use `[WrapContent]`; for a slot that shares a control prop with a string fallback (`Expander.Header`) stay manual. |
 | `[WrapPolymorphic(nameof(Resolve))]` / `[WrapDecorator(nameof(Create))]` | controls whose concrete type is chosen at runtime, or that need a fully custom mount/update/unmount lifecycle (emit an `IDecoratorElementHandler`, not a descriptor). |
 
 ### Imperative control (lifecycle) — paste-ready

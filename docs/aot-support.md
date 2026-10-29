@@ -42,6 +42,23 @@ These subsystems compile cleanly with `IsAotCompatible=true` (the warnings are s
 | **Devtools `properties` / `setProperty` DP discovery** | The tools locate `DependencyProperty` statics by reflection, and the trimmer keeps no reflection metadata for them unless something roots the members — so under AOT the lookups find nothing. Not specific to WinUI's CsWinRT-projected static properties: a C#-authored DP *field* on a custom control is equally undiscoverable. Works under JIT, which is where the devtools inner loop lives. The tool reports the likely cause rather than an empty result. See [Devtools DependencyProperty discovery](#devtools-dependencyproperty-discovery) for the measured cost of fixing it. Affected fixture: `Devtools_PropertyToolsDpDiscovery`. | Issue #1109 |
 | **Third-party-assembly XAML metadata (Issue #142 fixtures)** | Built-in WinUI controls work under AOT now. What remains is `{TemplateBinding}` against private DPs in a third-party assembly that ships *no* `.xaml` file: the XAML compiler only emits an `IXamlMetadataProvider` for projects that have at least one `.xaml`, and AOT trims any implicit metadata path. Affected fixtures: `Issue142_CustomControlPrivateDp_Renders`, `Issue142_ThirdPartyControlPrivateDp_Renders`. The library-author workaround is to register a hand-written `IXamlMetadataProvider` via `RegisterControlAssembly`. The same trim hits a compiled `.xaml` page inside a `ReactorApp.Run` app with no `App.xaml`: `ReactorApplication` finds the app's generated provider only by reflecting over the entry assembly, nothing roots it, and AOT removes it, so the page fails to parse (`Hosting_HostControlXamlComponentType`). A vanilla WinUI app is unaffected: its `App` *is* the provider. | Issue #142 |
 
+### Code-only apps wrapping toolkit controls
+
+An observable `ItemsHost` list has generated WinRT exposure, but that only covers
+the collection ABI, not the control library's XAML templates. A code-only AOT app
+may need to statically root and register the toolkit's generated metadata provider
+before mounting wrapped controls. For example, with WCT SettingsControls:
+
+```csharp
+ReactorApp.RegisterControlAssembly(
+    new CommunityToolkit.WinUI.Controls.SettingsControlsRns.
+        CommunityToolkit_WinUI_Controls_SettingsControls_XamlTypeInfo.XamlMetaDataProvider());
+```
+
+The concrete provider name depends on the library. The SettingsExpander selftest
+uses this registration explicitly; passing it is not proof of automatic metadata
+discovery under trimming.
+
 ## Devtools DependencyProperty discovery
 
 The devtools `properties` / `setProperty` tools find `DependencyProperty` statics by

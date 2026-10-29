@@ -46,11 +46,14 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
     where TControl : FrameworkElement, new()
 {
     private readonly ControlDescriptor<TElement, TControl> _descriptor;
+    private readonly bool _hasPropUnmount;
 
     public DescriptorHandler(ControlDescriptor<TElement, TControl> descriptor)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         _descriptor = descriptor;
+        for (int i = 0; i < descriptor.Properties.Count; i++)
+            if (descriptor.Properties[i].HasUnmount) { _hasPropUnmount = true; break; }
     }
 
     /// <summary>The descriptor this handler interprets. Exposed for tests
@@ -100,7 +103,7 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
         // only for elements that carry callbacks, a key, extensions, or reference modifiers.
         // Without this, OnUnmount would fire for some elements of a type and silently not for
         // others — the callback-free ones — which is not a contract an author can reason about.
-        if (_descriptor.OnUnmount is not null)
+        if (_descriptor.OnUnmount is not null || _hasPropUnmount)
             Reconciler.GetOrCreateReactorState(ctrl);
 
         // §14 Phase 3-final: when the descriptor declares an ItemsHost,
@@ -149,7 +152,12 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
     /// during mount — most notably a one-shot <c>Loaded</c> subscription carrying a deferred
     /// write — could outlive the mount that created it.</summary>
     public void Unmount(UnmountContext ctx, TControl control)
-        => _descriptor.OnUnmount?.Invoke(in ctx, control);
+    {
+        if (_hasPropUnmount)
+            for (int i = 0; i < _descriptor.Properties.Count; i++)
+                _descriptor.Properties[i].Unmount(in ctx, control);
+        _descriptor.OnUnmount?.Invoke(in ctx, control);
+    }
 
     public void Update(UpdateContext ctx, TElement oldEl, TElement newEl, TControl ctrl)
     {
@@ -188,84 +196,12 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
     private static void DispatchItemsHostMount(
         in MountContext ctx, TElement el, TControl ctrl,
         ItemsHost<TElement, TControl> ih)
-    {
-        var newItems = ih.GetItems(el);
-        var collection = ih.GetCollection(ctrl);
-        if (collection.Count > 0) collection.Clear();
-        var entries = new int[newItems.Count];
-        for (int i = 0; i < newItems.Count; i++)
-        {
-            entries[i] = -1;
-            var item = newItems[i];
-            if (item is Element childEl)
-            {
-                var mounted = ctx.MountChild(childEl);
-                if (mounted is not null) { collection.Add(mounted); entries[i] = collection.Count - 1; }
-            }
-            else if (item is not null)
-            {
-                collection.Add(item);
-                entries[i] = collection.Count - 1;
-            }
-        }
-        ih.RememberEntries(ctrl, entries);
-    }
+        => ItemsHostReconciliation.Bind(ih, el, ctrl, ctx.Reconciler, ctx.RequestRerender, isMount: true);
 
     private static void DispatchItemsHostUpdate(
         in UpdateContext ctx, TElement oldEl, TElement newEl, TControl ctrl,
         ItemsHost<TElement, TControl> ih)
-    {
-        var oldItems = ih.GetItems(oldEl);
-        var newItems = ih.GetItems(newEl);
-        if (ReferenceEquals(oldItems, newItems))
-        {
-            ih.RefreshKeptItems(ctx.Reconciler, ctrl, oldItems, newItems, ctx.RequestRerender);
-            return;
-        }
-        var equals = ih.ItemEquals ?? object.Equals;
-        if (oldItems.Count == newItems.Count)
-        {
-            bool same = true;
-            for (int i = 0; i < newItems.Count; i++)
-            {
-                if (!equals(oldItems[i], newItems[i])) { same = false; break; }
-            }
-            if (same)
-            {
-                ih.RefreshKeptItems(ctx.Reconciler, ctrl, oldItems, newItems, ctx.RequestRerender);
-                return;
-            }
-        }
-        // Structural change — unmount Element items via the reconciler so
-        // any descendant component state is torn down, then rebuild flat.
-        // (Keyed reconcile lands separately for typed templated lists.)
-        var reconciler = ctx.Reconciler;
-        var rerender = ctx.RequestRerender;
-        for (int i = 0; i < oldItems.Count; i++)
-        {
-            if (oldItems[i] is Element oldChild)
-                reconciler.ReconcileV1Child(oldChild, null, null, rerender);
-        }
-        var collection = ih.GetCollection(ctrl);
-        if (collection.Count > 0) collection.Clear();
-        var entries = new int[newItems.Count];
-        for (int i = 0; i < newItems.Count; i++)
-        {
-            entries[i] = -1;
-            var item = newItems[i];
-            if (item is Element childEl)
-            {
-                var mounted = ctx.MountChild(childEl);
-                if (mounted is not null) { collection.Add(mounted); entries[i] = collection.Count - 1; }
-            }
-            else if (item is not null)
-            {
-                collection.Add(item);
-                entries[i] = collection.Count - 1;
-            }
-        }
-        ih.RememberEntries(ctrl, entries);
-    }
+        => ItemsHostReconciliation.Bind(ih, newEl, ctrl, ctx.Reconciler, ctx.RequestRerender, isMount: false);
 }
 
 /// <summary>

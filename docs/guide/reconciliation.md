@@ -299,7 +299,7 @@ internal static void Reconcile(
     // transition in this collection (they inflate its count); the index walk would pair
     // every later child with the wrong control.
     else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length)
-        || HoldsExitingControls(oldFiltered, children, reconciler))
+        || HoldsExitingControls(children, reconciler))
         ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
     else
         ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
@@ -572,7 +572,7 @@ internal static void Reconcile(
     // transition in this collection (they inflate its count); the index walk would pair
     // every later child with the wrong control.
     else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length)
-        || HoldsExitingControls(oldFiltered, children, reconciler))
+        || HoldsExitingControls(children, reconciler))
         ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
     else
         ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);

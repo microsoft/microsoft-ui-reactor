@@ -751,4 +751,55 @@ internal static class TemplatedListOrphanContainerFixtures
             Reset();
         }
     }
+
+    private sealed class CleanupProbe : Component<Action>
+    {
+        public override Element Render()
+        {
+            var (value, _) = UseState(0);
+            UseEffect(() => Props, []);
+            return TextBlock($"cleared-row {value}");
+        }
+    }
+
+    internal class ClearedContainerContentUnmountsView(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            using var host = H.CreateHost();
+            host.Mount(_ => TextBlock("orphan-probe-host"));
+            await Harness.Render();
+            var reconciler = host.Reconciler;
+            int cleanups = 0;
+            var element = Component<CleanupProbe, Action>(() => cleanups++);
+            var view = reconciler.Mount(element, () => { })!;
+            var cc = new ContentControl { Content = view };
+            Reconciler.SetElementTag(cc, element);
+            var list = new WinUI.ListView();
+            var container = new ListViewItem();
+            H.SetContent(cc);
+            try
+            {
+                await Harness.Render();
+                H.Check("ClearedRow_SetupIsLive", cleanups == 0
+                    && ReactorDiagnostics.TrySetState(view, 0, "1", out _)
+                    && list.IndexFromContainer(container) < 0 && container.Content is null);
+
+                // WinUI cleared an unlinked container's item but left its tagged template
+                // view mounted. Teardown must not depend on that now-missing data item.
+                reconciler.UnmountOrphanedContainer(list, container, cc);
+                H.Check("ClearedRow_CleanupRuns", cleanups == 1, $"cleanups={cleanups}");
+                H.Check("ClearedRow_NoStaleStateWrites", !ReactorDiagnostics.TrySetState(view, 0, "2", out _));
+                H.Check("ClearedRow_VisualsPreserved", ReferenceEquals(cc.Content, view));
+                H.Check("ClearedRow_LiveTagCleared", Reconciler.GetElementTag(cc) is null);
+                reconciler.UnmountOrphanedContainer(list, container, cc);
+                H.Check("ClearedRow_CleanupIsIdempotent", cleanups == 1, $"cleanups={cleanups}");
+            }
+            finally
+            {
+                H.SetContent(null);
+                reconciler.UnmountItemView(cc, clearContent: true);
+            }
+        }
+    }
 }

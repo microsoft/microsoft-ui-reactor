@@ -34,6 +34,8 @@ Conventions for contributors:
   remain source-compatible; existing binaries must be rebuilt for the changed return types
   (spec 036 §11.3).
 
+- Optional `ItemsHost.SetCollection` and property-owned teardown via the three-callback `ImperativeBridged` overload ([control reconciler guide](docs/guide/control-reconciler-protocol.md)).
+
 - **ReactorGallery catches up with recent framework features.** A new **System →
   File pickers** page demonstrates `PickFileAsync`, `PickMultipleFilesAsync`
   (with labelled `FileTypeChoices`), `PickFolderAsync` / `PickMultipleFoldersAsync`
@@ -391,6 +393,14 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Keyed children keep their own controls while siblings exit** (spec 014, feature 2).
+  Fading controls retained from an earlier render no longer shift keyed prefix, suffix,
+  removal or reorder updates onto another child's control. Live controls keep their
+  identity and the final child order remains correct when the exits complete.
+  Null-mounted Memo slots remain absent from the physical map and insertion
+  anchors, including when exits occur in the same panel or another panel sharing
+  the reconciler.
+
 - **Wrapped third-party controls now get source-map call sites** (spec 010). A factory
   emitted by `[GenerateReactorWrapper]` (`SettingsCard(...)`, `RadialGauge(...)`) is
   invisible to the source-map generator, because no source generator sees another's
@@ -505,9 +515,11 @@ Conventions for contributors:
   could park a container offscreen, unlinked from any item, without raising the recycle
   `ContainerContentChanging`, so the row's components stayed mounted: their effects never
   cleaned up, and a `ReactorDiagnostics.TrySetState` on one was accepted but never rendered.
-  WinUI parks it in the layout pass after the update (a row moved twice, or moved out of the
-  realized range, is enough), so after a structural change the reconciler now checks the
-  containers once that layout pass completes. A throwing cleanup no longer stops that sweep:
+  The update-time sweep also handles an unlinked container whose item was already cleared while
+  its template still holds a live view; its visuals remain available for the native delete
+  transition. WinUI parks it in the layout pass after the update (a row moved twice, or moved
+  out of the realized range, is enough), so after a structural change the reconciler now checks
+  the containers once that layout pass completes. A throwing cleanup no longer stops that sweep:
   every parked row is torn down and the failure goes to the `RenderErrorHandler` as
   `Cleanup`. Teardowns that finish regardless of cleanup failures (issue #1291) now also
   collect a throwing control handler, descriptor `OnUnmount` hook, decorator or `RegisterType`
@@ -532,6 +544,8 @@ Conventions for contributors:
   (`ForEach`'s `Func<T, Element>`) and `where T : Element` constraints, so those
   projections still report. An unresolved type keeps the old verdict, so broken code
   still reports.
+
+- Flat `ItemsHost` children reconcile incrementally, same-instance Element item sources honor dirty-state/context/theme/forced-render invalidation instead of skipping unconditionally, and generated Element slots receive terminal teardown while still parented ([control reconciler guide](docs/guide/control-reconciler-protocol.md)).
 
 - **Source-map generator no longer fails under `dotnet watch`** (issue #1404, spec 010).
   When Reactor is a project reference, Hot Reload's workspace compilation sees Reactor's

@@ -1567,6 +1567,8 @@ public sealed partial class Reconciler : IDisposable
         // ops translate into container-level animations rather than full
         // re-realization.
         public Internal.ReactorListState? ListState;
+        // Flat item state shares the native control's existing attached state.
+        public V1Protocol.ItemsHostState? ItemsHostState;
 
         // Spec 047 §14 Phase 3 close-out — descriptor-side per-index view
         // source. Populated by Reconciler.BindKeyedItemsSource when a
@@ -1621,13 +1623,6 @@ public sealed partial class Reconciler : IDisposable
         public List<(Element Element, bool HasControl)>? MountedItemElements;
 
         /// <summary>
-        /// For an <c>ItemsHost</c> control: the collection entry each logical item realized
-        /// (-1 when it mounted nothing), recorded when the items are filled, so a resource
-        /// refresh can reconcile kept items in place (<c>ItemsHost.RefreshKeptItems</c>).
-        /// </summary>
-        public int[]? ItemsHostEntries;
-
-        /// <summary>
         /// <c>componentId</c> (<c>ReactorEventSource.ComponentRendered</c>) of the component
         /// whose wrapper this control is; 0 when none. Backs
         /// <c>ReactorTrace.TryGetComponentId</c>. Stored here rather than in a
@@ -1649,7 +1644,7 @@ public sealed partial class Reconciler : IDisposable
                 new PropertyMetadata(null));
     }
 
-    internal static ReactorState GetOrCreateReactorState(FrameworkElement fe)
+    internal static ReactorState GetOrCreateReactorState(UIElement fe)
     {
         if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
             return state;
@@ -1710,6 +1705,19 @@ public sealed partial class Reconciler : IDisposable
         if (element is null) return; // nothing to store
         state = new ReactorState { Element = element };
         control.SetValue(ReactorAttached.StateProperty, state);
+    }
+
+    internal void RefreshSkippedChildState(FrameworkElement control, Element oldElement, Element newElement)
+    {
+        if (newElement.HasCallbacks)
+            SetElementTag(control, newElement);
+        else if (CallSiteChangedOnSkip(oldElement, newElement))
+            RefreshCallSiteTagOnSkip(control, newElement);
+        if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+            && Diagnostics.ReactorSourcePublisher.IsEnabled
+            && CallSiteChangedOnSkip(oldElement, newElement))
+            PublishSourceOnSkip(control, newElement);
+        RefreshGestureDragStateOnSkip(control, oldElement.Modifiers, newElement.Modifiers);
     }
 
     /// <summary>
@@ -2018,9 +2026,9 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Drops the item records on a control (a FlipView's mounted items, an ItemsHost's entries).
-    /// They describe one mount, so a control leaving the tree, to the pool or for good, must not
-    /// keep them.
+    /// Drops non-owning item refresh snapshots when a control leaves the tree.
+    /// ItemsHostState also owns child teardown, so ItemsHostReconciliation.Unbind
+    /// clears it after reaching those children, not in this pre-unmount helper.
     /// </summary>
     internal static void ClearRefreshSnapshots(FrameworkElement fe)
     {
@@ -2031,7 +2039,6 @@ public sealed partial class Reconciler : IDisposable
     internal static void ClearRefreshSnapshots(ReactorState state)
     {
         state.MountedItemElements = null;
-        state.ItemsHostEntries = null;
     }
 
     /// <summary>

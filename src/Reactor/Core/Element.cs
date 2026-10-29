@@ -4817,6 +4817,13 @@ public partial record ExpanderElement(
                         oldEl.HeaderTemplate, newEl.HeaderTemplate, existing, ctx.RequestRerender);
                     if (!ReferenceEquals(existing, next))
                         c.Header = next;
+                },
+                unmount: static (ctx, c) =>
+                {
+                    if (Reconciler.GetElementTag(c) is not ExpanderElement { HeaderTemplate: not null }) return;
+                    if (c.Header is global::Microsoft.UI.Xaml.UIElement child)
+                        ctx.Reconciler.UnmountChild(child);
+                    c.Header = null;
                 })
             .OneWayConditional(
                 get:         static e => e.Header ?? string.Empty,

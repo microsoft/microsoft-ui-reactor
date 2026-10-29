@@ -55,6 +55,9 @@ public abstract class PropEntry<TElement, TControl>
     public virtual void Update(in UpdateContext ctx, TControl ctrl, TElement oldEl, TElement newEl)
         => Update(ctrl, oldEl, newEl);
 
+    internal virtual bool HasUnmount => false;
+    internal virtual void Unmount(in UnmountContext ctx, TControl ctrl) { }
+
     /// <summary>Event subscription hook. Default = no-op (one-way / initial
     /// entries do not subscribe to events). Controlled entries override.
     ///
@@ -943,7 +946,7 @@ internal sealed class ImperativePropEntry<TElement, TControl> : PropEntry<TEleme
 /// overlaps with a sibling property — e.g.
 /// <c>Expander.HeaderTemplate</c> reconciles into the same
 /// <c>Header</c> property the string <c>Header</c> writes to. See
-/// <see cref="ControlDescriptor{TElement,TControl}.ImperativeBridged"/>
+/// <c>ControlDescriptor.ImperativeBridged</c>
 /// for the composition recipe.</para></summary>
 internal sealed class ImperativeBridgedPropEntry<TElement, TControl> : PropEntry<TElement, TControl>
     where TElement : Element
@@ -951,13 +954,16 @@ internal sealed class ImperativeBridgedPropEntry<TElement, TControl> : PropEntry
 {
     private readonly Action<MountContext, TControl, TElement> _mount;
     private readonly Action<UpdateContext, TControl, TElement, TElement> _update;
+    private readonly Action<UnmountContext, TControl>? _unmount;
 
     public ImperativeBridgedPropEntry(
         Action<MountContext, TControl, TElement> mount,
-        Action<UpdateContext, TControl, TElement, TElement> update)
+        Action<UpdateContext, TControl, TElement, TElement> update,
+        Action<UnmountContext, TControl>? unmount = null)
     {
         _mount = mount;
         _update = update;
+        _unmount = unmount;
     }
 
     // Parameterless overloads — unreachable; the bridged entry only goes
@@ -973,6 +979,9 @@ internal sealed class ImperativeBridgedPropEntry<TElement, TControl> : PropEntry
     public override void Mount(in MountContext ctx, TControl ctrl, TElement el) => _mount(ctx, ctrl, el);
     public override void Update(in UpdateContext ctx, TControl ctrl, TElement oldEl, TElement newEl)
         => _update(ctx, ctrl, oldEl, newEl);
+
+    internal override bool HasUnmount => _unmount is not null;
+    internal override void Unmount(in UnmountContext ctx, TControl ctrl) => _unmount?.Invoke(ctx, ctrl);
 }
 
 /// <summary>Spec 047 §14 Phase 3-final — <c>.OneWayBridged</c> entry. Same
