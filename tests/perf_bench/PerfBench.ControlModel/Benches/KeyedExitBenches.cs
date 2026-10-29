@@ -1,6 +1,8 @@
 // Keyed child reconciliation while exits are retained or children mount nothing.
-// Each iteration re-renders a 500-child keyed StackPanel with fresh-but-equal children, so
-// every child takes the structural skip and the measured cost is the per-pass bookkeeping.
+// Each iteration re-renders a 500-child keyed StackPanel with fresh records of the same
+// content. A Border compares its child by reference, so every row takes the update path
+// (one control read and a property diff each, no mount); the benches measure what the
+// keyed pass adds on top of that — exit detection and the logical-to-physical map.
 // An exit started during setup stays in flight for the whole rep: its completion callback
 // needs the dispatcher, which the bench loop holds.
 using Microsoft.UI.Reactor;

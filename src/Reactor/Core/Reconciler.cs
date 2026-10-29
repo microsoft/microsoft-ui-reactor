@@ -4106,8 +4106,11 @@ public sealed partial class Reconciler : IDisposable
 
     internal bool IsExiting(UIElement control) => _exitingControls?.Contains(control) == true;
 
-    // Above this many in-flight exits, scanning the collection beats probing it once per exit.
-    private const int ExitProbeLimit = 16;
+    // Up to this many in-flight exits, probing the collection once per exit beats reading it.
+    // A probe is one native IndexOf (a pointer scan, no managed allocation); a read is a
+    // WinRT call per child that allocates its projection. Past it the probes' combined native
+    // scans approach the cost of one managed pass, and only a mass exit gets there.
+    internal const int ExitProbeLimit = 64;
 
     /// <summary>
     /// Whether <paramref name="children"/> holds a control that is still playing its exit.
