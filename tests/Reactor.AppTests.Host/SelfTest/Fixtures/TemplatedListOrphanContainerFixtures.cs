@@ -42,7 +42,9 @@ internal static class TemplatedListOrphanContainerFixtures
     private static Action<int>? s_selectTab;
     // Armed by a fixture: what the next cleanup of a row view in a parked container does —
     // throw, or mount a host (in s_nestedWindow) whose render fails and whose handler declines it.
-    private enum ParkedCleanup { None, Throw, NestedDeclined, DescriptorThrows }
+    private enum ParkedCleanup { None, Throw, NestedDeclined, DescriptorThrows, RegisteredThrows }
+    // Rows also render a RegisteredProbe (its host registers the type) when set.
+    private static bool s_withRegisteredProbe;
     private static ParkedCleanup s_parkedCleanup;
     private static Window? s_nestedWindow;
     private static ReactorHost? s_nestedHost;
@@ -78,7 +80,8 @@ internal static class TemplatedListOrphanContainerFixtures
             return HStack(
                 TextBlock($"orphan-row {Props.Key} #{instance.Current} local {clicks}").Ref(root),
                 Button($"orphan+{Props.Key}", () => setClicks(clicks + 1)),
-                new TeardownProbe());
+                new TeardownProbe(),
+                s_withRegisteredProbe ? new RegisteredProbe() : Empty());
         }
     }
 
@@ -137,6 +140,21 @@ internal static class TemplatedListOrphanContainerFixtures
                 });
     }
 
+    // The same, for a control registered on the host's reconciler with RegisterType.
+    private sealed record RegisteredProbe : Element;
+
+    private static void RegisterProbe(ReactorHost host) =>
+        host.Reconciler.RegisterType<RegisteredProbe, TextBlock>(
+            static (_, _, _) => new TextBlock(),
+            static (_, _, _, control, _) => control,
+            static (_, probe) =>
+            {
+                if (s_parkedCleanup != ParkedCleanup.RegisteredThrows || ContainerOf(probe) is not { ActualOffset.X: <= -10000 })
+                    return;
+                s_parkedCleanup = ParkedCleanup.None;
+                throw new InvalidOperationException(ParkedCleanupMessage);
+            });
+
     static TemplatedListOrphanContainerFixtures() =>
         ControlRegistry.Register<TeardownProbe, TextBlock>(static () => new TeardownProbeHandler());
 
@@ -150,6 +168,7 @@ internal static class TemplatedListOrphanContainerFixtures
         s_live.Clear();
         s_instances = 0;
         s_parkedCleanup = ParkedCleanup.None;
+        s_withRegisteredProbe = false;
     }
 
     private static ListViewItem? ContainerOf(DependencyObject? node)
@@ -265,7 +284,8 @@ internal static class TemplatedListOrphanContainerFixtures
     /// </remarks>
     internal class MovedRowLeavesNoParkedComponent(Harness h, string name, int count, (int A, int B)[] swaps, string movedKey,
         bool collapseWithLastSwap = false, bool reinsertWithLastSwap = false, bool inUnselectedTab = false,
-        bool throwingParkedCleanup = false, bool nestedDeclinedParkedCleanup = false, bool throwingDescriptorTeardown = false)
+        bool throwingParkedCleanup = false, bool nestedDeclinedParkedCleanup = false, bool throwingDescriptorTeardown = false,
+        bool throwingRegisteredTeardown = false)
         : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -288,8 +308,13 @@ internal static class TemplatedListOrphanContainerFixtures
             var host = H.CreateHost();
             // Report-only handler: it would swallow any cleanup failure it is handed.
             var errors = new List<RenderError>();
-            if (throwingParkedCleanup || nestedDeclinedParkedCleanup || throwingDescriptorTeardown)
+            if (throwingParkedCleanup || nestedDeclinedParkedCleanup || throwingDescriptorTeardown || throwingRegisteredTeardown)
                 host.RenderErrorHandler = e => { errors.Add(e); return null; };
+            if (throwingRegisteredTeardown)
+            {
+                RegisterProbe(host);
+                s_withRegisteredProbe = true;
+            }
             Exception? escaped = null;
             Microsoft.UI.Xaml.UnhandledExceptionEventHandler? captureEscape = null;
             if (nestedDeclinedParkedCleanup)
@@ -339,6 +364,7 @@ internal static class TemplatedListOrphanContainerFixtures
                 if (throwingParkedCleanup && i == swaps.Length - 1) s_parkedCleanup = ParkedCleanup.Throw;
                 if (nestedDeclinedParkedCleanup && i == swaps.Length - 1) s_parkedCleanup = ParkedCleanup.NestedDeclined;
                 if (throwingDescriptorTeardown && i == swaps.Length - 1) s_parkedCleanup = ParkedCleanup.DescriptorThrows;
+                if (throwingRegisteredTeardown && i == swaps.Length - 1) s_parkedCleanup = ParkedCleanup.RegisteredThrows;
                 await Harness.Render(300);
             }
             if (collapseWithLastSwap)
@@ -363,16 +389,16 @@ internal static class TemplatedListOrphanContainerFixtures
 
             // The teardown only runs for a parked container, so with none parked the checks of
             // it are as inconclusive as the rest.
-            bool armed = throwingParkedCleanup || nestedDeclinedParkedCleanup || throwingDescriptorTeardown;
+            bool armed = throwingParkedCleanup || nestedDeclinedParkedCleanup || throwingDescriptorTeardown || throwingRegisteredTeardown;
             if (armed && parked.Count == 0 && s_parkedCleanup != ParkedCleanup.None)
             {
                 H.Skip($"{name}_ParkedCleanupRan", "no container was parked, so the parked-row teardown never ran");
                 armed = false;
-                throwingParkedCleanup = nestedDeclinedParkedCleanup = throwingDescriptorTeardown = false;
+                throwingParkedCleanup = nestedDeclinedParkedCleanup = throwingDescriptorTeardown = throwingRegisteredTeardown = false;
             }
             if (armed)
                 H.Check($"{name}_ParkedCleanupRan", s_parkedCleanup == ParkedCleanup.None);
-            if (throwingParkedCleanup || throwingDescriptorTeardown)
+            if (throwingParkedCleanup || throwingDescriptorTeardown || throwingRegisteredTeardown)
             {
                 // The sweep unmounted the parked view even though its cleanup threw, and reported it.
                 H.Check($"{name}_CleanupFailureReported", errors.Any(e => e.Source == RenderErrorSource.Cleanup

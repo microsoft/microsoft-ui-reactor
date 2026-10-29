@@ -1077,6 +1077,7 @@ internal static class SelfTestFixtureRegistry
         "TemplatedList_ParkedRowCleanupFailureIsReported",
         "TemplatedList_ParkedRowCleanupKeepsDeclinedPropagation",
         "TemplatedList_ParkedRowDescriptorTeardownFailureIsReported",
+        "TemplatedList_ParkedRowRegisteredTeardownFailureIsReported",
         "TemplatedList_UnmountWhileCollapsedDropsPendingSweep",
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
         "Issue343_CommandBarContentUpdates",
@@ -3237,6 +3238,8 @@ internal static class SelfTestFixtureRegistry
             harness, "ParkedCleanupNestedDeclined", count: 30, swaps: [(7, 0), (0, 12)], movedKey: "c7", nestedDeclinedParkedCleanup: true),
         "TemplatedList_ParkedRowDescriptorTeardownFailureIsReported" => new TemplatedListOrphanContainerFixtures.MovedRowLeavesNoParkedComponent(
             harness, "ParkedDescriptorThrows", count: 30, swaps: [(7, 0), (0, 12)], movedKey: "c7", throwingDescriptorTeardown: true),
+        "TemplatedList_ParkedRowRegisteredTeardownFailureIsReported" => new TemplatedListOrphanContainerFixtures.MovedRowLeavesNoParkedComponent(
+            harness, "ParkedRegisteredThrows", count: 30, swaps: [(7, 0), (0, 12)], movedKey: "c7", throwingRegisteredTeardown: true),
         "TemplatedList_UnmountWhileCollapsedDropsPendingSweep" => new TemplatedListOrphanContainerFixtures.UnmountWhileCollapsedDropsPendingSweep(harness),
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
         "Issue343_CommandBarContentUpdates" => new Issue343Fixtures.CommandBarContentUpdates(harness),

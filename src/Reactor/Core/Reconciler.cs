@@ -3918,6 +3918,10 @@ public sealed partial class Reconciler : IDisposable
             && TryBeginRegisteredUnmount(regState))
         {
             try { reg.Unmount(control, this); }
+            catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException && IsolatesUnmountCleanupFailures)
+            {
+                ReportIsolatedUnmountFailure(ex);
+            }
             finally { EndRegisteredUnmount(regState); }
             return;
         }
@@ -4376,6 +4380,10 @@ public sealed partial class Reconciler : IDisposable
             && TryBeginRegisteredUnmount(regState))
         {
             try { reg.Unmount(control, this); }
+            catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException && IsolatesUnmountCleanupFailures)
+            {
+                ReportIsolatedUnmountFailure(ex);
+            }
             finally { EndRegisteredUnmount(regState); }
             // Collect this control for pooling, but do NOT recurse into children —
             // they were created outside Reactor's tree and must not be pooled.
