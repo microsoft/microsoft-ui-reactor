@@ -1313,7 +1313,8 @@ public sealed partial class Reconciler
     }
 
     /// <summary>
-    /// Runs <see cref="SweepParkedContainers"/> once, when the list's next layout pass completes.
+    /// Runs <see cref="SweepParkedContainers"/> once, after the next layout pass that lays the
+    /// list out.
     /// </summary>
     private void SchedulePostLayoutSweep(WinUI.ListViewBase listViewBase, Internal.ReactorListState list)
     {
@@ -1333,22 +1334,17 @@ public sealed partial class Reconciler
     /// no longer shows. Only the components are torn down — the visuals stay, so a delete
     /// transition still fades the row out. The check has to wait for the layout pass because
     /// that is when WinUI parks the container: when the update that moved the row runs, the
-    /// container is still linked to it. A collapsed list is not laid out until it is shown, so the
-    /// sweep waits for that pass.
+    /// container is still linked to it. <c>LayoutUpdated</c> fires for every layout pass in the
+    /// window, and none lays the list out while it (or an ancestor) is collapsed, so the sweep
+    /// waits for the list to be shown. It does not wait for <c>Loaded</c>: a list inserted into
+    /// the tree is laid out, and its container parked, before that event is raised.
     /// </summary>
     private void SweepParkedContainers(WinUI.ListViewBase listViewBase, Internal.ReactorListState list)
     {
-        if (ReferenceEquals(GetListState(listViewBase), list) && listViewBase.IsLoaded && IsCollapsedInTree(listViewBase))
-            return; // LayoutUpdated fires for every pass in the window: wait for one that lays this list out.
+        if (ReferenceEquals(GetListState(listViewBase), list) && IsCollapsedInTree(listViewBase)) return;
         listViewBase.LayoutUpdated -= list.PostLayoutSweep;
         list.PostLayoutSweep = null;
         if (!ReferenceEquals(GetListState(listViewBase), list) || listViewBase.ItemsPanelRoot is not { } panel) return;
-        if (!listViewBase.IsLoaded)
-        {
-            // Not in the tree, so not laid out either; the next update schedules the sweep again.
-            list.StructureChanged = true;
-            return;
-        }
         ParkedContainerSweepCount++;
         var children = panel.Children;
         for (int i = 0; i < children.Count; i++)

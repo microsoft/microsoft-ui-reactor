@@ -34,6 +34,7 @@ internal static class TemplatedListOrphanContainerFixtures
     private static int s_instances;
     private static Action<Func<List<RowProps>, List<RowProps>>>? s_update;
     private static Action<bool>? s_setVisible;
+    private static Action<bool>? s_setReordered;
 
     private sealed class Row : Component<RowProps>
     {
@@ -61,9 +62,16 @@ internal static class TemplatedListOrphanContainerFixtures
         {
             var (items, update) = UseReducer(Enumerable.Range(0, Props).Select(i => new RowProps($"c{i}")).ToList());
             var (visible, setVisible) = UseState(true);
+            var (reordered, setReordered) = UseState(false);
             s_update = update;
             s_setVisible = setVisible;
-            return Border(ListView<RowProps>(items, x => x.Key, (x, _) => Component<Row, RowProps>(x))).Height(300).Visible(visible);
+            s_setReordered = setReordered;
+            // Keyed, so reordering moves the list's Border within the stack: WinUI removes it from
+            // the tree and inserts it again.
+            var list = Border(ListView<RowProps>(items, x => x.Key, (x, _) => Component<Row, RowProps>(x)))
+                .Height(300).Visible(visible).WithKey("list");
+            var spacer = TextBlock("orphan-spacer").WithKey("spacer");
+            return reordered ? VStack(list, spacer) : VStack(spacer, list);
         }
     }
 
@@ -177,9 +185,12 @@ internal static class TemplatedListOrphanContainerFixtures
     /// <paramref name="collapseWithLastSwap"/> collapses the list in the render of the last swap
     /// and shows it again afterwards: WinUI lays the panel out (and parks the container) only once
     /// the list is shown, so a sweep spent on an earlier layout pass of the window would miss it.
+    /// <paramref name="reinsertWithLastSwap"/> moves the list within its parent in the render of the
+    /// last swap: WinUI removes and inserts it again, and lays it out before raising its
+    /// <c>Loaded</c>, so a sweep must not take "not loaded" for "not laid out".
     /// </remarks>
     internal class MovedRowLeavesNoParkedComponent(Harness h, string name, int count, (int A, int B)[] swaps, string movedKey,
-        bool movedRowRealized, bool collapseWithLastSwap = false)
+        bool collapseWithLastSwap = false, bool reinsertWithLastSwap = false)
         : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -202,6 +213,7 @@ internal static class TemplatedListOrphanContainerFixtures
                     return copy;
                 });
                 if (collapseWithLastSwap && i == swaps.Length - 1) s_setVisible!(false);
+                if (reinsertWithLastSwap && i == swaps.Length - 1) s_setReordered!(true);
                 await Harness.Render(300);
             }
             if (collapseWithLastSwap)
@@ -248,22 +260,23 @@ internal static class TemplatedListOrphanContainerFixtures
             H.Check($"{name}_SweepUnsubscribes", Reconciler.ParkedContainerSweepCount == sweeps,
                 $"before={sweeps} after={Reconciler.ParkedContainerSweepCount}");
 
-            if (movedRowRealized)
+            // The moved row, scrolled into view if it left the realized range, shows a live view:
+            // the sweep unmounted only the parked container's copy.
+            var movedRow = lv.Items.OfType<ReactorRow>().FirstOrDefault(r => r.Key == movedKey);
+            if (movedRow is not null) lv.ScrollIntoView(movedRow);
+            await Harness.Render(300);
+            var shown = H.FindAllControls<TextBlock>(t => t.Text.StartsWith($"orphan-row {movedKey} ", StringComparison.Ordinal))
+                .FirstOrDefault(t => !Unlinked(lv, t));
+            var button = shown is null ? null : FindDescendant<Button>(VisualTreeHelper.GetParent(shown));
+            if (button is not null)
             {
-                // The row's live view, in the container that shows it, must still respond.
-                var shown = H.FindAllControls<TextBlock>(t => t.Text.StartsWith($"orphan-row {movedKey} ", StringComparison.Ordinal))
-                    .FirstOrDefault(t => !Unlinked(lv, t));
-                var button = shown is null ? null : FindDescendant<Button>(VisualTreeHelper.GetParent(shown));
-                if (button is not null)
-                {
-                    var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(button);
-                    ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)peer.GetPattern(
-                        Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
-                    await Harness.Render();
-                }
-                H.Check($"{name}_MovedRowResponds", shown?.Text.EndsWith(" local 1", StringComparison.Ordinal) == true,
-                    shown?.Text ?? "(moved row not shown)");
+                var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(button);
+                ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)peer.GetPattern(
+                    Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+                await Harness.Render();
             }
+            H.Check($"{name}_MovedRowResponds", shown?.Text.EndsWith(" local 1", StringComparison.Ordinal) == true,
+                shown?.Text ?? "(moved row not shown)");
 
             host.Dispose();
             Reset();

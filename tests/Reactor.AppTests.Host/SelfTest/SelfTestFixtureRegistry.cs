@@ -1072,6 +1072,7 @@ internal static class SelfTestFixtureRegistry
         "TemplatedList_RowMovedTwiceLeavesNoParkedComponent",
         "TemplatedList_RowMovedOutOfRangeLeavesNoParkedComponent",
         "TemplatedList_RowMovedAsListCollapsesLeavesNoParkedComponent",
+        "TemplatedList_RowMovedAsListIsReinsertedLeavesNoParkedComponent",
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
         "Issue343_CommandBarContentUpdates",
         "Issue343_TeachingTipContentUpdates",
@@ -3216,11 +3217,13 @@ internal static class SelfTestFixtureRegistry
         "TemplatedList_ChurnLeavesNoOrphanedRows" => new TemplatedListOrphanContainerFixtures.ChurnLeavesNoOrphanedRows(harness),
         "TemplatedList_MoveKeepsRowComponent" => new TemplatedListOrphanContainerFixtures.MoveKeepsRowComponent(harness),
         "TemplatedList_RowMovedTwiceLeavesNoParkedComponent" => new TemplatedListOrphanContainerFixtures.MovedRowLeavesNoParkedComponent(
-            harness, "MovedTwice", count: 30, swaps: [(7, 0), (0, 12)], movedKey: "c7", movedRowRealized: true),
+            harness, "MovedTwice", count: 30, swaps: [(7, 0), (0, 12)], movedKey: "c7"),
         "TemplatedList_RowMovedOutOfRangeLeavesNoParkedComponent" => new TemplatedListOrphanContainerFixtures.MovedRowLeavesNoParkedComponent(
-            harness, "MovedOutOfRange", count: 60, swaps: [(0, 15), (0, 50)], movedKey: "c15", movedRowRealized: false),
+            harness, "MovedOutOfRange", count: 60, swaps: [(0, 15), (0, 50)], movedKey: "c15"),
         "TemplatedList_RowMovedAsListCollapsesLeavesNoParkedComponent" => new TemplatedListOrphanContainerFixtures.MovedRowLeavesNoParkedComponent(
-            harness, "MovedAsListCollapses", count: 30, swaps: [(7, 0), (0, 12)], movedKey: "c7", movedRowRealized: true, collapseWithLastSwap: true),
+            harness, "MovedAsListCollapses", count: 30, swaps: [(7, 0), (0, 12)], movedKey: "c7", collapseWithLastSwap: true),
+        "TemplatedList_RowMovedAsListIsReinsertedLeavesNoParkedComponent" => new TemplatedListOrphanContainerFixtures.MovedRowLeavesNoParkedComponent(
+            harness, "MovedAsListIsReinserted", count: 30, swaps: [(7, 0), (0, 12)], movedKey: "c7", reinsertWithLastSwap: true),
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
         "Issue343_CommandBarContentUpdates" => new Issue343Fixtures.CommandBarContentUpdates(harness),
         "Issue343_TeachingTipContentUpdates" => new Issue343Fixtures.TeachingTipContentUpdates(harness),

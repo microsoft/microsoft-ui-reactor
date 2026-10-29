@@ -108,13 +108,16 @@ internal sealed class ReactorListState
 
     /// <summary>
     /// Set whenever <see cref="Source"/> changes structurally; cleared by the reconciler's
-    /// realized-container pass, which then checks the containers once WinUI's next layout
-    /// pass completes (<see cref="PostLayoutSweep"/>): that pass can park a container
+    /// realized-container pass, which then checks the containers after the next layout pass
+    /// that lays the list out (<see cref="PostLayoutSweep"/>): that pass can park a container
     /// offscreen without raising its recycle <c>ContainerContentChanging</c>.
     /// </summary>
     internal bool StructureChanged { get; set; }
 
-    /// <summary>The pending one-shot <c>LayoutUpdated</c> handler, if a sweep is scheduled.</summary>
+    /// <summary>
+    /// The pending sweep's <c>LayoutUpdated</c> handler, if one is scheduled. It stays subscribed
+    /// while the list is collapsed and removes itself once it has run.
+    /// </summary>
     internal EventHandler<object>? PostLayoutSweep { get; set; }
 
     public ReactorListState() => Source.CollectionChanged += (_, _) => StructureChanged = true;
