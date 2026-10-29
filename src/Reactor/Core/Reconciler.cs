@@ -4026,7 +4026,10 @@ public sealed partial class Reconciler : IDisposable
         }
         if (!failed) return true;
 
+        // An enclosing recovery's skips still apply: what an outer callback tore down inside
+        // this control must not be torn down again by this control's recovery.
         var outerSkip = _isolatedTeardownSkip;
+        if (outerSkip is not null) track.UnionWith(outerSkip);
         _isolatedTeardownSkip = track;
         try { ForEachReactorChildControl(control, UnmountRecursive); }
         finally { _isolatedTeardownSkip = outerSkip; }

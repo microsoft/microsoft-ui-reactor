@@ -210,6 +210,11 @@ internal static class TemplatedListOrphanContainerFixtures
 
     // A registered control whose unmount callback tears its first child down, then throws.
     private sealed record PartialTeardown : Element;
+
+    // Nested: the outer control's callback tears down the first leaf inside the inner control and
+    // throws; the inner control's callback throws at once, so its own recovery runs inside the outer's.
+    private sealed record OuterPartialTeardown : Element;
+    private sealed record InnerPartialTeardown : Element;
     private const string PartialTeardownMessage = "orphan-row partial teardown boom";
 
     /// <summary>
@@ -218,12 +223,37 @@ internal static class TemplatedListOrphanContainerFixtures
     /// the child it never reached, and does not tear down the one it did a second time. Covers the
     /// plain (<paramref name="pool"/> false) and the pooling unmount walk.
     /// </summary>
-    internal class IsolatedRegisteredTeardownRecovers(Harness h, bool pool) : SelfTestFixtureBase(h)
+    internal class IsolatedRegisteredTeardownRecovers(Harness h, bool pool, bool nested = false) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
-            string name = pool ? "IsolatedTeardownPooled" : "IsolatedTeardown";
+            // Runs the enclosing class's static constructor, which registers CountedLeaf.
+            Reset();
+            string name = (nested ? "NestedIsolatedTeardown" : "IsolatedTeardown") + (pool ? "Pooled" : "");
             var rec = new Reconciler();
+            rec.RegisterType<InnerPartialTeardown, StackPanel>(
+                static (r, _, rerender) =>
+                {
+                    var panel = new StackPanel();
+                    panel.Children.Add(r.Mount(new CountedLeaf(), rerender));
+                    panel.Children.Add(r.Mount(new CountedLeaf(), rerender));
+                    return panel;
+                },
+                static (_, _, _, control, _) => control,
+                static (_, _) => throw new InvalidOperationException(PartialTeardownMessage));
+            rec.RegisterType<OuterPartialTeardown, StackPanel>(
+                static (r, _, rerender) =>
+                {
+                    var panel = new StackPanel();
+                    panel.Children.Add(r.Mount(new InnerPartialTeardown(), rerender));
+                    return panel;
+                },
+                static (_, _, _, control, _) => control,
+                static (r, panel) =>
+                {
+                    r.UnmountChild(((StackPanel)panel.Children[0]).Children[0]);
+                    throw new InvalidOperationException(PartialTeardownMessage);
+                });
             rec.RegisterType<PartialTeardown, StackPanel>(
                 static (r, _, rerender) =>
                 {
@@ -240,7 +270,7 @@ internal static class TemplatedListOrphanContainerFixtures
                 });
             var root = new Grid();
             H.SetContent(root);
-            if (rec.Mount(new PartialTeardown(), static () => { }) is not { } control)
+            if (rec.Mount(nested ? new OuterPartialTeardown() : new PartialTeardown(), static () => { }) is not { } control)
             {
                 H.Check($"{name}_Mounted", false);
                 return;
@@ -255,9 +285,10 @@ internal static class TemplatedListOrphanContainerFixtures
                 if (pool) rec.UnmountAndPool(control);
                 else rec.UnmountChild(control);
             }
-            H.Check($"{name}_FailureCollected", failures.Count == 1 && failures[0].Message == PartialTeardownMessage,
+            int expectedFailures = nested ? 2 : 1;
+            H.Check($"{name}_FailureCollected", failures.Count == expectedFailures && failures.All(f => f.Message == PartialTeardownMessage),
                 string.Join(",", failures.Select(f => f.Message)));
-            // The reached child once (by the callback), the unreached one once (by the recovery).
+            // The reached leaf once (by a callback), the unreached one once (by a recovery).
             H.Check($"{name}_EachChildTornDownOnce", s_leafUnmounts == 2, $"leafUnmounts={s_leafUnmounts}");
             H.SetContent(null);
         }

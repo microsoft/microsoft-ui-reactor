@@ -1081,6 +1081,8 @@ internal static class SelfTestFixtureRegistry
         "TemplatedList_ParkedRowDecoratorTeardownFailureIsReported",
         "TemplatedList_IsolatedRegisteredTeardownRecovers",
         "TemplatedList_IsolatedRegisteredTeardownRecoversPooled",
+        "TemplatedList_NestedIsolatedRegisteredTeardownRecovers",
+        "TemplatedList_NestedIsolatedRegisteredTeardownRecoversPooled",
         "TemplatedList_UnmountWhileCollapsedDropsPendingSweep",
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
         "Issue343_CommandBarContentUpdates",
@@ -3247,6 +3249,8 @@ internal static class SelfTestFixtureRegistry
             harness, "ParkedDecoratorThrows", count: 30, swaps: [(7, 0), (0, 12)], movedKey: "c7", throwingDecoratorTeardown: true),
         "TemplatedList_IsolatedRegisteredTeardownRecovers" => new TemplatedListOrphanContainerFixtures.IsolatedRegisteredTeardownRecovers(harness, pool: false),
         "TemplatedList_IsolatedRegisteredTeardownRecoversPooled" => new TemplatedListOrphanContainerFixtures.IsolatedRegisteredTeardownRecovers(harness, pool: true),
+        "TemplatedList_NestedIsolatedRegisteredTeardownRecovers" => new TemplatedListOrphanContainerFixtures.IsolatedRegisteredTeardownRecovers(harness, pool: false, nested: true),
+        "TemplatedList_NestedIsolatedRegisteredTeardownRecoversPooled" => new TemplatedListOrphanContainerFixtures.IsolatedRegisteredTeardownRecovers(harness, pool: true, nested: true),
         "TemplatedList_UnmountWhileCollapsedDropsPendingSweep" => new TemplatedListOrphanContainerFixtures.UnmountWhileCollapsedDropsPendingSweep(harness),
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
         "Issue343_CommandBarContentUpdates" => new Issue343Fixtures.CommandBarContentUpdates(harness),
