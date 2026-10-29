@@ -4252,7 +4252,15 @@ is mounted, WinUI animates a snapshot from the old position to the new one:</p>
 <a id="__codelineno-6-29" name="__codelineno-6-29" href="#__codelineno-6-29"></a><span class="p">}</span>
 </code></pre></div>
 <p><img alt="Connected animation" src="../images/animation/connected-animation.png" /></p>
-<p>Both the source and destination elements must use the same key string. The
+<p>For a <code>NavigationHost</code> page transition, mark both elements with the same key
+and set <code>NavigateOptions.ConnectedAnimationKey = key</code> for that navigation. Select
+page motion independently with <code>Transition</code> (for example, <code>NavigationTransition.DrillIn()</code>). The host
+prepares the selected source before page teardown, waits for the destination's
+layout, and runs the selected page transition alongside the shared element.
+Both animations finish before page teardown.
+The host coordinates caching and back/forward navigation, retaining the outgoing
+page throughout the motion. See <a href="../navigation/#page-transitions">navigation</a>.</p>
+<p>Outside that navigation-owned path, both the source and destination elements must use the same key string. The
 animation runs automatically when the reconciler detects the transition.
 Source and destination must appear in the <strong>same render</strong> — the reconciler
 publishes the outgoing element's snapshot during the reconcile pass and plays

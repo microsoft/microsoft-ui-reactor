@@ -4163,6 +4163,9 @@ simple push and pop:</p>
 <h2 id="page-lifecycle">Page Lifecycle<a class="headerlink" href="#page-lifecycle" title="Permanent link">&para;</a></h2>
 <p><code>UseNavigationLifecycle</code> lets a component react to navigation events. Use it
 to load data when a page appears or save state when it disappears:</p>
+<p>Lifecycle callbacks belong to the nearest enclosing <code>NavigationHost</code>. Nested
+hosts dispatch their own route contexts and guards, independently of outer-page
+transitions such as opening an overlay around the main navigation.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">LifecyclePage</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="p">{</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
@@ -4294,6 +4297,10 @@ property to control how pages animate in and out:</p>
 <tr>
 <td><code>NavigationTransition.DrillIn()</code></td>
 <td>Scale + fade from center</td>
+</tr>
+<tr>
+<td><code>NavigationTransition.Connected(key)</code></td>
+<td>Shared element between the outgoing and incoming pages</td>
 </tr>
 <tr>
 <td><code>NavigationTransition.Spring()</code></td>
@@ -5032,8 +5039,34 @@ detail page ID), use a discriminated union pattern with records.</p>
 <p><strong>Call <code>UseNavigation(initial)</code> once at the root.</strong> Child components access
 the same handle with <code>UseNavigation&lt;Route&gt;()</code> (no initial value). This
 retrieves the nearest ancestor's handle via <a href="../context/">context</a>.</p>
-<p><strong>Use <code>NavigationTransition.DrillIn()</code> for list-to-detail flows.</strong> It
-signals hierarchy and pairs naturally with Connected Animation keys.</p>
+<p><strong>Select page motion independently from a shared element.</strong>
+For a shared card or image, mark the element on both pages with
+<code>.ConnectedAnimation(key)</code> and navigate with
+<code>new NavigateOptions { Transition = NavigationTransition.DrillIn(), ConnectedAnimationKey = key }</code>.
+NavigationHost captures only the selected source before removing its page,
+waits for the destination's layout, and completes the normal page lifecycle
+after the native animation and the selected page transition have both finished.
+The readiness deadline applies until native motion starts; playback follows the
+selected transition's duration. An interrupted page receives <code>onNavigatedFrom</code>,
+and the latest destination receives <code>onNavigatedTo</code> when its transition completes.
+<code>Transition = null</code> uses the host default. Set <code>Transition = NavigationTransition.None</code>
+for shared-element motion only, or select Fade, Slide, DrillIn, or Spring explicitly.
+<code>NavigationTransition.Connected(key)</code> is also supported as shared-element-only motion.
+Cached pages participate without remounting.</p>
+<p>Per-navigation connected keys and their page transition overrides are remembered for <code>GoBack()</code> and <code>GoForward()</code>
+within the current process. Back navigation creates a new animation from the
+detail element to the restored list element; it does not replay a stale snapshot.
+Serialized navigation state contains routes only, so restoring state does not
+restore animation edges.</p>
+<p>Keys are scoped to each page of the current NavigationHost, including the active
+descendants of nested navigation hosts. Detached cached pages do not participate.
+A missing or duplicate
+key, or a destination that does not become ready within the bounded layout wait,
+falls back to the selected page transition. Disabling system animations swaps the pages immediately.
+Virtualized/off-screen targets are not automatically scrolled into view; realize
+the desired item before navigation or accept the fallback. Do not put an additional
+exit transition on the shared element or run a separate manual connected animation
+for the same navigation.</p>
 <p><strong>Use <code>Reset</code> for sign-out flows.</strong> It clears the entire stack and starts
 fresh, preventing the user from navigating back to authenticated pages.</p>
 <p><strong>Pair <code>UseSystemBackButton</code> with your nav handle.</strong> Call
