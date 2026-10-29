@@ -128,8 +128,9 @@ src/Reactor/                      Core framework library
     Element.cs                    40+ virtual element record types
     RenderContext.cs              Hook state storage, effect tracking
     Reconciler.cs                 Tree diff orchestration
-    Reconciler.Mount.cs           Mount handlers for each element type
-    Reconciler.Update.cs          Update handlers for each element type
+    Reconciler.Mount.cs           Mount dispatch and composition-primitive handlers
+    Reconciler.Update.cs          Update dispatch and composition-primitive handlers
+    V1Protocol/                  Control registry, handlers, descriptors, and child strategies
     ChildReconciler.cs            Keyed child list reconciliation
     ElementPool.cs                Control reuse pool
     PropValueRegistry.cs          Property value caching/hashing
@@ -154,7 +155,9 @@ tests/
   Reactor.Tests/                  1. Unit tests — xUnit (no UI window; includes D3 charting tests)
   Reactor.SelfTests/              2. Selftest runner — MSTest wrapper that subprocess-launches the Host and parses TAP
   Reactor.AppTests.Host/          2. Host app — hosts selftest fixtures and the winapp ui fixture navigator
-  Reactor.AppTests/               3. E2E tests — MSTest + winapp ui
+  Reactor.PackagedTests/          3. Packaged selftest runner — runs fixtures under MSIX identity
+  Reactor.PackagedTests.Host/     3. Packaged host — shares the selftest fixture sources
+  Reactor.AppTests/               4. E2E tests — MSTest + winapp ui
   stress_perf/                    Performance benchmarks
 samples/
   Reactor.TestApp/                Interactive control showcase / demo app
@@ -166,61 +169,16 @@ samples/
 
 ## How to add a new element type
 
-Adding a new WinUI control to Reactor requires changes in four places (plus optional modifiers and tests).
+Controls mount and update through a registered `ControlDescriptor<TElement, TControl>` or `IElementHandler<TElement, TControl>`. The [native-control extension guide](docs/guide/extending-reactor-controls.md) explains the authoring choices, event wiring, echo suppression, pooling, and child strategies; its [StarMeter sample](docs/_pipeline/apps/extending-reactor-controls/App.cs) shows the complete implementation.
 
-### 1. Define the element record (`src/Reactor/Core/Element.cs`)
+1. **Define an immutable element record** with the control's properties and callbacks. Built-in element records live in `src/Reactor/Core/Element.cs`.
+2. **Describe the control's behavior.** Prefer a `ControlDescriptor<TElement, TControl>` for property, event, and child mappings; use an `IElementHandler<TElement, TControl>` when the descriptor cannot express the control's lifecycle. The handler and descriptor infrastructure lives under `src/Reactor/Core/V1Protocol/`.
+3. **Register the handler before the first mount.** For a custom control, follow the sample's factory holder: its static constructor calls `ControlRegistry.Register<TElement, TControl>` with a static handler factory. Generated wrappers emit their own registration. See [registration](docs/guide/control-reconciler-protocol.md#registration) for the supported registration shapes.
+4. **Expose the authoring API.** A factory returns the element record; built-in DSL factories live in `src/Reactor/Elements/Dsl.cs`. Add fluent modifiers in `src/Reactor/Elements/ElementExtensions.cs` where appropriate, and follow the documentation requirements below for new public surface.
 
-```csharp
-public record MyControlElement(
-    string Label,
-    Action? OnClick = null
-) : Element;
-```
+### Add tests
 
-### 2. Add a DSL factory method (`src/Reactor/Elements/Dsl.cs`)
-
-```csharp
-public static MyControlElement MyControl(string label, Action? onClick = null)
-    => new(label, onClick);
-```
-
-### 3. Add a mount handler (`src/Reactor/Core/Reconciler.Mount.cs`)
-
-```csharp
-private FrameworkElement MountMyControl(MyControlElement el)
-{
-    var control = new WinUI.MyControl();
-    control.Label = el.Label;
-    if (el.OnClick != null)
-    {
-        SetElementTag(control, el);
-        control.Click += (s, _) => GetElementTag<MyControlElement>(s)?.OnClick?.Invoke();
-    }
-    return control;
-}
-```
-
-Register it in the mount dispatch switch in `Mount()`.
-
-### 4. Add an update handler (`src/Reactor/Core/Reconciler.Update.cs`)
-
-```csharp
-private void UpdateMyControl(WinUI.MyControl control, MyControlElement old, MyControlElement @new)
-{
-    if (old.Label != @new.Label) control.Label = @new.Label;
-    SetElementTag(control, @new);
-}
-```
-
-Register it in the update dispatch switch in `Update()`.
-
-### 5. (Optional) Add modifiers (`src/Reactor/Elements/ElementExtensions.cs`)
-
-If the control has properties that make sense as fluent modifiers, add extension methods.
-
-### 6. Add tests
-
-Add unit tests in `tests/Reactor.Tests/` for element creation, mount, and update. If the control has user-facing behavior, add a selfhost fixture in `tests/Reactor.AppTests.Host/SelfTest/Fixtures/`.
+Use unit tests in `tests/Reactor.Tests/` for element creation and pure managed logic. Verify mount, update, event callbacks, and reuse against real WinUI controls with selftest fixtures in `tests/Reactor.AppTests.Host/SelfTest/Fixtures/`. Use the packaged selftest tier for behavior that depends on MSIX identity, and E2E tests in `tests/Reactor.AppTests/Tests/` for real input or cross-process UI Automation. See [test tier selection](TESTING.md#when-to-write-which-test) for fixture registration and packaged-tier requirements.
 
 ---
 
@@ -260,7 +218,7 @@ For the full doc-pipeline workflow (compile, check-tier, render-diagrams), see [
 - **Hooks follow React conventions.** Same order every render, no conditional hooks.
 - **Factory methods over constructors.** `TextBlock("hello")` not `new TextBlockElement("hello")`.
 - **Fluent modifiers for layout.** `.Margin(16).Bold()` not constructor parameters.
-- **Tag-based event dispatch.** Event handlers are wired once at mount; the current element is stored in `Tag` so handlers always read the latest closure.
+- **Event dispatch through attached state.** Event trampolines read the current element from `ReactorState`, stored in the `ReactorAttached.StateProperty` attached dependency property, so callbacks stay current across updates and pool reuse.
 - **No XAML.** Everything is C#.
 
 ### Diagnostics: audience, not severity, decides the channel
