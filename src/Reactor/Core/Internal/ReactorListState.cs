@@ -107,6 +107,19 @@ internal sealed class ReactorListState
     internal Dictionary<string, ReactorRow> Scratch { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// Set whenever <see cref="Source"/> changes structurally; cleared by the reconciler's
+    /// realized-container pass, which then checks the containers once WinUI's next layout
+    /// pass completes (<see cref="PostLayoutSweep"/>): that pass can park a container
+    /// offscreen without raising its recycle <c>ContainerContentChanging</c>.
+    /// </summary>
+    internal bool StructureChanged { get; set; }
+
+    /// <summary>The pending one-shot <c>LayoutUpdated</c> handler, if a sweep is scheduled.</summary>
+    internal EventHandler<object>? PostLayoutSweep { get; set; }
+
+    public ReactorListState() => Source.CollectionChanged += (_, _) => StructureChanged = true;
+
+    /// <summary>
     /// Reset the state to a fresh set of (index, key) pairs. Used during
     /// mount and during bulk-replace bailout when the entire list is being
     /// rebuilt from scratch.

@@ -160,11 +160,92 @@ internal static class TemplatedListOrphanContainerFixtures
             host.Dispose();
             Reset();
         }
-
-        // The component wrapper is the Border directly above the row's HStack.
-        private static UIElement? FindWrapper(FrameworkElement? root) =>
-            root is null ? null : VisualTreeHelper.GetParent(VisualTreeHelper.GetParent(root)) as UIElement;
     }
+
+    /// <summary>
+    /// Moves a row with swaps and, with nothing rendering afterwards, checks the container WinUI
+    /// parked for it. WinUI unlinks and parks that container offscreen in the layout pass after
+    /// the update, without the recycle <c>ContainerContentChanging</c>, so neither the realize
+    /// nor the recycle handler sees it; the row's old component stayed mounted, and a
+    /// <see cref="ReactorDiagnostics.TrySetState"/> on it was accepted and never rendered
+    /// (issue #1440).
+    /// </summary>
+    internal class MovedRowLeavesNoParkedComponent(Harness h, string name, int count, (int A, int B)[] swaps, string movedKey, bool movedRowRealized)
+        : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            Reset();
+            var host = H.CreateHost();
+            host.Mount(_ => Component<Churn, int>(count));
+            await Harness.Render(300);
+            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            H.Check($"{name}_Mounted", lv is not null && s_live.Count > 0);
+            if (lv is null) return;
+
+            foreach (var (a, b) in swaps)
+            {
+                s_update!(list =>
+                {
+                    var copy = list.ToList();
+                    (copy[a], copy[b]) = (copy[b], copy[a]);
+                    return copy;
+                });
+                await Harness.Render(300);
+            }
+
+            // Positive control: WinUI parked a container still showing the moved row, or the
+            // checks below pass whether or not the parked view is unmounted.
+            var parked = H.FindAllControls<TextBlock>(t => t.Text.StartsWith($"orphan-row {movedKey} ", StringComparison.Ordinal))
+                .Where(t => Unlinked(lv, t)).ToList();
+            if (parked.Count > 0)
+                H.Check($"{name}_ParkedContainer", true, $"parked={parked.Count}");
+            else
+                H.Skip($"{name}_ParkedContainer", "WinUI parked no container for the moved row during this run; the checks are inconclusive");
+
+            var mountedParked = s_live.Values.Where(r => Unlinked(lv, r.Root.Current)).Select(r => $"{r.Key}#{r.Instance}").ToList();
+            H.Check($"{name}_NoParkedRowStaysMounted", mountedParked.Count == 0, string.Join(", ", mountedParked));
+
+            int accepted = parked.Count(t => FindWrapper(t) is { } wrapper && ReactorDiagnostics.TrySetState(wrapper, 1, "41", out _));
+            H.Check($"{name}_NoWriteToParkedRow", accepted == 0, $"accepted={accepted}");
+
+            var duplicates = s_live.Values.GroupBy(r => r.Key).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+            H.Check($"{name}_OneLiveComponentPerRow", duplicates.Count == 0, string.Join(", ", duplicates));
+
+            if (movedRowRealized)
+            {
+                // The row's live view, in the container that shows it, must still respond.
+                var shown = H.FindAllControls<TextBlock>(t => t.Text.StartsWith($"orphan-row {movedKey} ", StringComparison.Ordinal))
+                    .FirstOrDefault(t => !Unlinked(lv, t));
+                var button = shown is null ? null : FindDescendant<Button>(VisualTreeHelper.GetParent(shown));
+                if (button is not null)
+                {
+                    var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(button);
+                    ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)peer.GetPattern(
+                        Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+                    await Harness.Render();
+                }
+                H.Check($"{name}_MovedRowResponds", shown?.Text.EndsWith(" local 1", StringComparison.Ordinal) == true,
+                    shown?.Text ?? "(moved row not shown)");
+            }
+
+            host.Dispose();
+            Reset();
+        }
+
+        private static T? FindDescendant<T>(DependencyObject? node) where T : DependencyObject
+        {
+            if (node is null) return null;
+            if (node is T match) return match;
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
+                if (FindDescendant<T>(VisualTreeHelper.GetChild(node, i)) is { } found) return found;
+            return null;
+        }
+    }
+
+    // The component wrapper is the Border directly above the row's HStack.
+    private static UIElement? FindWrapper(FrameworkElement? root) =>
+        root is null ? null : VisualTreeHelper.GetParent(VisualTreeHelper.GetParent(root)) as UIElement;
 
     internal class MoveKeepsRowComponent(Harness h) : SelfTestFixtureBase(h)
     {

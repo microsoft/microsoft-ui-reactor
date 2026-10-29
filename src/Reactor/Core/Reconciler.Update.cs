@@ -1279,12 +1279,7 @@ public sealed partial class Reconciler
             if (container.ContentTemplateRoot is not ContentControl cc) continue;
 
             var index = listViewBase.IndexFromContainer(container);
-            if (index < 0)
-            {
-                UnmountOrphanedContainer(listViewBase, container, cc);
-                continue;
-            }
-            if (index >= viewSource.ItemCount) continue;
+            if (index < 0 || index >= viewSource.ItemCount) continue;
 
             var oldItemElement = GetElementTag(cc);
             var newItemElement = BuildKeyedItemView(viewSource, index);
@@ -1292,8 +1287,8 @@ public sealed partial class Reconciler
             // ReconcileV1Child updates in place when it can and remounts otherwise, and either way
             // unmounts a control it replaced (e.g. a same-key Memo whose output changed shape
             // during a resource refresh), so the old item's effects and refs are cleaned up.
-            // Untagged content was already unmounted by the orphan sweep: replace it, never
-            // unmount it again.
+            // Untagged content was already unmounted by the parked-container sweep: replace it,
+            // never unmount it again.
             var priorKey = cc.Content is FrameworkElement priorFe ? GetElementTag(priorFe)?.Key : null;
             var next = ReconcileV1Child(oldItemElement, newItemElement,
                 oldItemElement is null ? null : cc.Content as UIElement, requestRerender);
@@ -1307,32 +1302,53 @@ public sealed partial class Reconciler
             // a renamed item would keep announcing the previous row's name.
             PropagateItemAutomationName(container, cc.Content as UIElement);
         }
+
+        // The layout pass a structural change triggers can park a container offscreen without
+        // raising its recycle ContainerContentChanging, so check the containers once it completes.
+        if (GetListState(listViewBase) is { StructureChanged: true } list)
+        {
+            list.StructureChanged = false;
+            SchedulePostLayoutSweep(listViewBase, list);
+        }
     }
 
     /// <summary>
-    /// Unmounts the item view of a container WinUI has unlinked from its item
-    /// (<c>IndexFromContainer</c> is -1) once that view's row is gone: removed from the list,
-    /// or shown by another container. WinUI normally raises a recycle
-    /// <c>ContainerContentChanging</c> for such a container, but under rapid insert / remove
-    /// churn it can park one offscreen in the items panel without ever doing so, which left the
-    /// row's components mounted: effects never cleaned up and diagnostics writes were accepted
-    /// but never rendered. Only the components are torn down — the visuals stay, so a delete
-    /// transition still fades the row out. A container unlinked for a row still in the list and
-    /// owned by no other container keeps its view: defensively, in case WinUI relinks it on a
-    /// later layout pass without realizing it again (it defers container realignment for a
-    /// move to the next layout pass; in practice it has re-realized moved rows).
+    /// Runs <see cref="SweepParkedContainers"/> once, when the list's next layout pass completes.
     /// </summary>
-    private void UnmountOrphanedContainer(WinUI.ListViewBase listViewBase, WinPrim.SelectorItem container, ContentControl cc)
+    private void SchedulePostLayoutSweep(WinUI.ListViewBase listViewBase, Internal.ReactorListState list)
     {
-        if (GetElementTag(cc) is null || container.Content is not ReactorRow row) return;
-        bool inList = GetListState(listViewBase) is { } state
-            && state.ByKey.TryGetValue(row.Key, out var current) && ReferenceEquals(current, row);
-        if (inList)
+        if (list.PostLayoutSweep is not null) return;
+        list.PostLayoutSweep = (_, _) => SweepParkedContainers(listViewBase, list);
+        listViewBase.LayoutUpdated += list.PostLayoutSweep;
+    }
+
+    /// <summary>
+    /// Unmounts the item view of every container a completed layout pass left unlinked from
+    /// any item (<c>IndexFromContainer</c> is -1). WinUI normally raises a recycle
+    /// <c>ContainerContentChanging</c> for such a container, but under insert / remove / move
+    /// churn it can park one offscreen in the items panel without ever doing so — a row moved
+    /// twice, a row realized into a second container, a row moved out of the realized range —
+    /// which left the row's components mounted: effects never cleaned up, and diagnostics
+    /// writes were accepted but never rendered, because no pass reaches a container the list
+    /// no longer shows. Only the components are torn down — the visuals stay, so a delete
+    /// transition still fades the row out. The check has to wait for the layout pass because
+    /// that is when WinUI parks the container: when the update that moved the row runs, the
+    /// container is still linked to it.
+    /// </summary>
+    private void SweepParkedContainers(WinUI.ListViewBase listViewBase, Internal.ReactorListState list)
+    {
+        listViewBase.LayoutUpdated -= list.PostLayoutSweep;
+        list.PostLayoutSweep = null;
+        if (!ReferenceEquals(GetListState(listViewBase), list) || listViewBase.ItemsPanelRoot is not { } panel) return;
+        var children = panel.Children;
+        for (int i = 0; i < children.Count; i++)
         {
-            var owner = listViewBase.ContainerFromItem(row);
-            if (owner is null || ReferenceEquals(owner, container)) return;
+            if (children[i] is WinPrim.SelectorItem container
+                && container.ContentTemplateRoot is ContentControl cc
+                && GetElementTag(cc) is not null
+                && listViewBase.IndexFromContainer(container) < 0)
+                UnmountItemView(cc, clearContent: false);
         }
-        UnmountItemView(cc, clearContent: false);
     }
 
     private readonly struct ItemsRepeaterKeyAdapter : IReadOnlyList<ItemsRepeaterKeyAdapter.KeyOnly>

@@ -1069,6 +1069,8 @@ internal static class SelfTestFixtureRegistry
         "ConditionalChildSlot_UniformGridExitKeepsColumns",
         "TemplatedList_ChurnLeavesNoOrphanedRows",
         "TemplatedList_MoveKeepsRowComponent",
+        "TemplatedList_RowMovedTwiceLeavesNoParkedComponent",
+        "TemplatedList_RowMovedOutOfRangeLeavesNoParkedComponent",
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
         "Issue343_CommandBarContentUpdates",
         "Issue343_TeachingTipContentUpdates",
@@ -3212,6 +3214,10 @@ internal static class SelfTestFixtureRegistry
         "ConditionalChildSlot_UniformGridExitKeepsColumns" => new ConditionalChildSlotFixtures.UniformGridExitKeepsColumns(harness),
         "TemplatedList_ChurnLeavesNoOrphanedRows" => new TemplatedListOrphanContainerFixtures.ChurnLeavesNoOrphanedRows(harness),
         "TemplatedList_MoveKeepsRowComponent" => new TemplatedListOrphanContainerFixtures.MoveKeepsRowComponent(harness),
+        "TemplatedList_RowMovedTwiceLeavesNoParkedComponent" => new TemplatedListOrphanContainerFixtures.MovedRowLeavesNoParkedComponent(
+            harness, "MovedTwice", count: 30, swaps: [(7, 0), (0, 12)], movedKey: "c7", movedRowRealized: true),
+        "TemplatedList_RowMovedOutOfRangeLeavesNoParkedComponent" => new TemplatedListOrphanContainerFixtures.MovedRowLeavesNoParkedComponent(
+            harness, "MovedOutOfRange", count: 60, swaps: [(0, 15), (0, 50)], movedKey: "c15", movedRowRealized: false),
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
         "Issue343_CommandBarContentUpdates" => new Issue343Fixtures.CommandBarContentUpdates(harness),
         "Issue343_TeachingTipContentUpdates" => new Issue343Fixtures.TeachingTipContentUpdates(harness),
