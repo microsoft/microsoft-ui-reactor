@@ -163,17 +163,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
     {
         var typedControl = (TControl)control;
         var ctx = new UnmountContext(reconciler);
-        try
-        {
-            _handler.Unmount(ctx, typedControl);
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException
-            && reconciler.IsolatesUnmountCleanupFailures)
-        {
-            // A teardown that must finish (IsolateUnmountCleanupFailures) collects the failure
-            // and still tears the control's children down below.
-            reconciler.ReportIsolatedUnmountFailure(ex);
-        }
+        _handler.Unmount(ctx, typedControl);
 
         // Spec 047 §14 — panel-strategy handlers do NOT own child teardown
         // (their Unmount is a no-op; descriptors never recurse into children).

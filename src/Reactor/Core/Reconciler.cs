@@ -3907,7 +3907,11 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement v1Fe && GetElementTag(v1Fe) is Element v1TagEl
             && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
         {
-            var v1Disposition = v1Entry.Unmount(control, this);
+            V1Protocol.V1UnmountDisposition v1Disposition;
+            if (!IsolatesUnmountCleanupFailures)
+                v1Disposition = v1Entry.Unmount(control, this);
+            else if (!RunIsolatedTeardown(control, v1Entry, static (entry, c, r) => entry.Unmount(c, r), out v1Disposition))
+                return;
             if (v1Disposition != V1Protocol.V1UnmountDisposition.ContinueDefaultTraversal)
                 return;
         }
@@ -3981,14 +3985,15 @@ public sealed partial class Reconciler : IDisposable
 
     private void EndRegisteredUnmount(ReactorState state) => _registeredUnmountsRunning?.Remove(state);
 
-    // While a RegisterType unmount callback runs under IsolateUnmountCleanupFailures: the
-    // controls it has torn down. If it throws part-way, the recovery walk over its children
-    // (_isolatedTeardownSkip) skips those, so no child teardown runs twice.
+    // While a control handler's or RegisterType callback's teardown runs under
+    // IsolateUnmountCleanupFailures: the controls it has torn down. If it throws part-way, the
+    // recovery walk over its children (_isolatedTeardownSkip) skips those, so no child
+    // teardown runs twice.
     private HashSet<UIElement>? _isolatedTeardownTrack;
     private HashSet<UIElement>? _isolatedTeardownSkip;
 
     // Entry of both unmount walks: true to skip a control already torn down by the failed
-    // callback being recovered; otherwise records the control for the running callback.
+    // teardown being recovered; otherwise records the control for the running teardown.
     private bool SkipOrTrackIsolatedTeardown(UIElement control)
     {
         if (_isolatedTeardownSkip is { } skip && skip.Contains(control)) return true;
@@ -3997,36 +4002,29 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Runs a <c>RegisterType</c> unmount callback. Inside an isolated teardown
-    /// (<see cref="IsolateUnmountCleanupFailures"/>) a throw is collected, and the Reactor
-    /// children the callback did not reach are torn down; returns false in that case.
+    /// Runs a control's teardown (a V1 handler's or a <c>RegisterType</c> unmount) inside an
+    /// isolated teardown (<see cref="IsolateUnmountCleanupFailures"/>). A throw is collected, and
+    /// the Reactor children the teardown did not reach are torn down, each once; returns false
+    /// then, and the caller must not pool the half-torn-down control.
     /// </summary>
-    private bool RunRegisteredUnmount(ITypeRegistration reg, UIElement control, ReactorState regState)
+    private bool RunIsolatedTeardown<TState>(UIElement control, TState state,
+        Func<TState, UIElement, Reconciler, V1Protocol.V1UnmountDisposition> teardown,
+        out V1Protocol.V1UnmountDisposition disposition)
     {
-        if (!IsolatesUnmountCleanupFailures)
-        {
-            try { reg.Unmount(control, this); }
-            finally { EndRegisteredUnmount(regState); }
-            return true;
-        }
-
+        disposition = default;
         var outerTrack = _isolatedTeardownTrack;
         var track = _isolatedTeardownTrack = new HashSet<UIElement>(ReferenceEqualityComparer.Instance);
         bool failed = false;
-        try { reg.Unmount(control, this); }
+        try { disposition = teardown(state, control, this); }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
             ReportIsolatedUnmountFailure(ex);
             failed = true;
         }
-        finally
-        {
-            _isolatedTeardownTrack = outerTrack;
-            EndRegisteredUnmount(regState);
-        }
+        finally { _isolatedTeardownTrack = outerTrack; }
         if (!failed) return true;
 
-        // An enclosing recovery's skips still apply: what an outer callback tore down inside
+        // An enclosing recovery's skips still apply: what an outer teardown tore down inside
         // this control must not be torn down again by this control's recovery.
         var outerSkip = _isolatedTeardownSkip;
         if (outerSkip is not null) track.UnionWith(outerSkip);
@@ -4034,6 +4032,28 @@ public sealed partial class Reconciler : IDisposable
         try { ForEachReactorChildControl(control, UnmountRecursive); }
         finally { _isolatedTeardownSkip = outerSkip; }
         return false;
+    }
+
+    /// <summary>
+    /// Runs a <c>RegisterType</c> unmount callback; inside an isolated teardown, through
+    /// <see cref="RunIsolatedTeardown"/>. Returns false when it failed part-way.
+    /// </summary>
+    private bool RunRegisteredUnmount(ITypeRegistration reg, UIElement control, ReactorState regState)
+    {
+        try
+        {
+            if (!IsolatesUnmountCleanupFailures)
+            {
+                reg.Unmount(control, this);
+                return true;
+            }
+            return RunIsolatedTeardown(control, reg, static (registration, c, r) =>
+            {
+                registration.Unmount(c, r);
+                return V1Protocol.V1UnmountDisposition.CollectSelf;
+            }, out _);
+        }
+        finally { EndRegisteredUnmount(regState); }
     }
 
     private static void ForEachReactorChildControl(UIElement control, Action<UIElement> visit)
@@ -4412,7 +4432,12 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement v1Fe && GetElementTag(v1Fe) is Element v1TagEl
             && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
         {
-            var v1Disposition = v1Entry.Unmount(control, this);
+            V1Protocol.V1UnmountDisposition v1Disposition;
+            if (!IsolatesUnmountCleanupFailures)
+                v1Disposition = v1Entry.Unmount(control, this);
+            // A teardown that failed part-way leaves a half-torn-down control: never pool it.
+            else if (!RunIsolatedTeardown(control, v1Entry, static (entry, c, r) => entry.Unmount(c, r), out v1Disposition))
+                return;
             switch (v1Disposition)
             {
                 case V1Protocol.V1UnmountDisposition.CollectSelf:

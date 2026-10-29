@@ -215,6 +215,28 @@ internal static class TemplatedListOrphanContainerFixtures
     // throws; the inner control's callback throws at once, so its own recovery runs inside the outer's.
     private sealed record OuterPartialTeardown : Element;
     private sealed record InnerPartialTeardown : Element;
+
+    // The same partial teardown, by a decorator handler.
+    private sealed record DecoratorPartialTeardown : Element;
+
+    private sealed class DecoratorPartialTeardownHandler : IDecoratorElementHandler<DecoratorPartialTeardown>
+    {
+        public UIElement Mount(MountContext ctx, DecoratorPartialTeardown element)
+        {
+            var panel = new StackPanel();
+            panel.Children.Add(ctx.MountChild(new CountedLeaf())!);
+            panel.Children.Add(ctx.MountChild(new CountedLeaf())!);
+            return panel;
+        }
+
+        public UIElement Update(UpdateContext ctx, DecoratorPartialTeardown oldEl, DecoratorPartialTeardown newEl, UIElement control) => control;
+
+        public V1UnmountDisposition Unmount(UnmountContext ctx, DecoratorPartialTeardown? element, UIElement control)
+        {
+            ctx.Reconciler.UnmountChild(((StackPanel)control).Children[0]);
+            throw new InvalidOperationException(PartialTeardownMessage);
+        }
+    }
     private const string PartialTeardownMessage = "orphan-row partial teardown boom";
 
     /// <summary>
@@ -223,13 +245,15 @@ internal static class TemplatedListOrphanContainerFixtures
     /// the child it never reached, and does not tear down the one it did a second time. Covers the
     /// plain (<paramref name="pool"/> false) and the pooling unmount walk.
     /// </summary>
-    internal class IsolatedRegisteredTeardownRecovers(Harness h, bool pool, bool nested = false) : SelfTestFixtureBase(h)
+    internal class IsolatedRegisteredTeardownRecovers(Harness h, bool pool, bool nested = false, bool decorator = false)
+        : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
             // Runs the enclosing class's static constructor, which registers CountedLeaf.
             Reset();
-            string name = (nested ? "NestedIsolatedTeardown" : "IsolatedTeardown") + (pool ? "Pooled" : "");
+            string name = (nested ? "NestedIsolatedTeardown" : decorator ? "DecoratorIsolatedTeardown" : "IsolatedTeardown")
+                + (pool ? "Pooled" : "");
             var rec = new Reconciler();
             rec.RegisterType<InnerPartialTeardown, StackPanel>(
                 static (r, _, rerender) =>
@@ -270,7 +294,8 @@ internal static class TemplatedListOrphanContainerFixtures
                 });
             var root = new Grid();
             H.SetContent(root);
-            if (rec.Mount(nested ? new OuterPartialTeardown() : new PartialTeardown(), static () => { }) is not { } control)
+            Element subject = nested ? new OuterPartialTeardown() : decorator ? new DecoratorPartialTeardown() : new PartialTeardown();
+            if (rec.Mount(subject, static () => { }) is not { } control)
             {
                 H.Check($"{name}_Mounted", false);
                 return;
@@ -290,6 +315,12 @@ internal static class TemplatedListOrphanContainerFixtures
                 string.Join(",", failures.Select(f => f.Message)));
             // The reached leaf once (by a callback), the unreached one once (by a recovery).
             H.Check($"{name}_EachChildTornDownOnce", s_leafUnmounts == 2, $"leafUnmounts={s_leafUnmounts}");
+            if (pool)
+            {
+                // A control whose teardown failed part-way is never handed to a later renter.
+                var rented = rec._pool.TryRent(control.GetType());
+                H.Check($"{name}_FailedControlNotPooled", !ReferenceEquals(rented, control));
+            }
             H.SetContent(null);
         }
     }
@@ -297,6 +328,7 @@ internal static class TemplatedListOrphanContainerFixtures
     static TemplatedListOrphanContainerFixtures()
     {
         ControlRegistry.Register<CountedLeaf, TextBlock>(static () => new CountedLeafHandler());
+        ControlRegistry.RegisterDecorator<DecoratorPartialTeardown>(static () => new DecoratorPartialTeardownHandler());
         ControlRegistry.Register<TeardownProbe, TextBlock>(static () => new TeardownProbeHandler());
         ControlRegistry.RegisterDecorator<DecoratorProbe>(static () => new DecoratorProbeHandler());
     }
