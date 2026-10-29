@@ -1347,54 +1347,61 @@ public sealed partial class Reconciler
         if (!ReferenceEquals(GetListState(listViewBase), list) || listViewBase.ItemsPanelRoot is not { } panel) return;
         if (!listViewBase.IsLoaded)
         {
-            list.LoadedWatch = (_, _) =>
+            RoutedEventHandler? loadedWatch = null;
+            loadedWatch = (_, _) =>
             {
-                listViewBase.Loaded -= list.LoadedWatch;
+                listViewBase.Loaded -= loadedWatch;
                 list.LoadedWatch = null;
                 SchedulePostLayoutSweep(listViewBase, list);
             };
-            listViewBase.Loaded += list.LoadedWatch;
+            list.LoadedWatch = loadedWatch;
+            listViewBase.Loaded += loadedWatch;
             return;
         }
         if (IsCollapsedInTree(listViewBase))
         {
-            list.ShownWatch = (_, _) =>
+            global::Windows.Foundation.TypedEventHandler<FrameworkElement, EffectiveViewportChangedEventArgs>? shownWatch = null;
+            shownWatch = (_, _) =>
             {
-                listViewBase.EffectiveViewportChanged -= list.ShownWatch;
+                listViewBase.EffectiveViewportChanged -= shownWatch;
                 list.ShownWatch = null;
                 SchedulePostLayoutSweep(listViewBase, list);
             };
-            listViewBase.EffectiveViewportChanged += list.ShownWatch;
+            list.ShownWatch = shownWatch;
+            listViewBase.EffectiveViewportChanged += shownWatch;
             return;
         }
-        ParkedContainerSweepCount++;
+        NoteParkedContainerSweep();
         // Runs from a WinUI event after the sweep unsubscribed, so a throwing cleanup must not
         // stop it: every parked view is unmounted, and failures go to the RenderErrorHandler as
-        // Cleanup (with none, the first is rethrown once the sweep is done), as on disposal.
+        // Cleanup (with none, the first is rethrown once the sweep is done), as on disposal. The
+        // propagation scope spans the unmounts too, so an exception a cleanup's nested Reactor
+        // work already declined (RenderError.Propagate) keeps going out instead of being
+        // reported to this list's handler again.
         List<Exception>? failures = null;
-        using (IsolateUnmountCleanupFailures(ex => (failures ??= new()).Add(ex)))
+        using (RenderErrorDispatch.EnterPropagationScope())
         {
-            var children = panel.Children;
-            for (int i = 0; i < children.Count; i++)
+            using (IsolateUnmountCleanupFailures(ex => (failures ??= new()).Add(ex)))
             {
-                if (children[i] is WinPrim.SelectorItem container
-                    && container.ContentTemplateRoot is ContentControl cc
-                    && GetElementTag(cc) is not null
-                    && listViewBase.IndexFromContainer(container) < 0)
-                    UnmountItemView(cc, clearContent: false);
+                var children = panel.Children;
+                for (int i = 0; i < children.Count; i++)
+                {
+                    if (children[i] is WinPrim.SelectorItem container
+                        && container.ContentTemplateRoot is ContentControl cc
+                        && GetElementTag(cc) is not null
+                        && listViewBase.IndexFromContainer(container) < 0)
+                        UnmountItemView(cc, clearContent: false);
+                }
             }
-        }
-        if (failures is not null)
-        {
-            global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? failure;
-            using (RenderErrorDispatch.EnterPropagationScope())
-                failure = RenderErrorDispatch.ReportCleanupFailures(failures, ResolveRenderErrorHandler, isHostLevel: false, _logger);
-            failure?.Throw();
+            if (failures is not null)
+                RenderErrorDispatch.ReportCleanupFailures(failures, ResolveRenderErrorHandler, isHostLevel: false, _logger)?.Throw();
         }
     }
 
     // Test-only seam (InternalsVisibleTo Reactor.AppTests.Host): sweeps run.
     internal static int ParkedContainerSweepCount;
+
+    private static void NoteParkedContainerSweep() => ParkedContainerSweepCount++;
 
     /// <summary>
     /// Drops an unmounted list's pending sweep, so no handler outlives the list.

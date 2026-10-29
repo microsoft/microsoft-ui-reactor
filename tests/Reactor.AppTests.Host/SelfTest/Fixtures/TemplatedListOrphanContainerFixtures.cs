@@ -2,6 +2,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Reactor.Hooks;
+using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -37,9 +38,14 @@ internal static class TemplatedListOrphanContainerFixtures
     private static Action<bool>? s_setReordered;
     private static Action<bool>? s_setPresent;
     private static Action<int>? s_selectTab;
-    // Armed by a fixture: the next cleanup of a row view that sits in a parked container throws.
-    private static bool s_throwFromParkedCleanup;
+    // Armed by a fixture: what the next cleanup of a row view in a parked container does —
+    // throw, or mount a host (in s_nestedWindow) whose render fails and whose handler declines it.
+    private enum ParkedCleanup { None, Throw, NestedDeclined }
+    private static ParkedCleanup s_parkedCleanup;
+    private static Window? s_nestedWindow;
+    private static ReactorHost? s_nestedHost;
     private const string ParkedCleanupMessage = "orphan-row parked cleanup boom";
+    private const string NestedDeclinedMessage = "orphan-row nested render declined";
 
     private sealed class Row : Component<RowProps>
     {
@@ -52,11 +58,14 @@ internal static class TemplatedListOrphanContainerFixtures
             // Before the effect below, so a throw that stopped the cleanups would skip its own.
             UseEffect(() => () =>
             {
-                if (s_throwFromParkedCleanup && ContainerOf(root.Current) is { ActualOffset.X: <= -10000 })
-                {
-                    s_throwFromParkedCleanup = false;
+                if (s_parkedCleanup == ParkedCleanup.None || ContainerOf(root.Current) is not { ActualOffset.X: <= -10000 })
+                    return;
+                var mode = s_parkedCleanup;
+                s_parkedCleanup = ParkedCleanup.None;
+                if (mode == ParkedCleanup.Throw)
                     throw new InvalidOperationException(ParkedCleanupMessage);
-                }
+                s_nestedHost = new ReactorHost(s_nestedWindow!) { RenderErrorHandler = e => { e.Propagate(); return null; } };
+                s_nestedHost.Mount(_ => throw new InvalidOperationException(NestedDeclinedMessage));
             });
             UseEffect(() =>
             {
@@ -112,7 +121,7 @@ internal static class TemplatedListOrphanContainerFixtures
     {
         s_live.Clear();
         s_instances = 0;
-        s_throwFromParkedCleanup = false;
+        s_parkedCleanup = ParkedCleanup.None;
     }
 
     private static ListViewItem? ContainerOf(DependencyObject? node)
@@ -228,16 +237,58 @@ internal static class TemplatedListOrphanContainerFixtures
     /// </remarks>
     internal class MovedRowLeavesNoParkedComponent(Harness h, string name, int count, (int A, int B)[] swaps, string movedKey,
         bool collapseWithLastSwap = false, bool reinsertWithLastSwap = false, bool inUnselectedTab = false,
-        bool throwingParkedCleanup = false)
+        bool throwingParkedCleanup = false, bool nestedDeclinedParkedCleanup = false)
         : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
+            var previousUnhandled = ReactorApplication.OnUnhandledException;
+            try { await RunCoreAsync(); }
+            finally
+            {
+                ReactorApplication.OnUnhandledException = previousUnhandled;
+                s_nestedHost?.Dispose();
+                s_nestedHost = null;
+                s_nestedWindow?.Close();
+                s_nestedWindow = null;
+            }
+        }
+
+        private async Task RunCoreAsync()
+        {
             Reset();
             var host = H.CreateHost();
+            // Report-only handler: it would swallow any cleanup failure it is handed.
             var errors = new List<RenderError>();
-            if (throwingParkedCleanup)
+            if (throwingParkedCleanup || nestedDeclinedParkedCleanup)
                 host.RenderErrorHandler = e => { errors.Add(e); return null; };
+            Exception? escaped = null;
+            Microsoft.UI.Xaml.UnhandledExceptionEventHandler? captureEscape = null;
+            if (nestedDeclinedParkedCleanup)
+            {
+                // The app declines the nested failure (it propagates); once it leaves the sweep,
+                // WinUI surfaces it here, where the fixture captures it and keeps the host alive.
+                ReactorApplication.OnUnhandledException = ex => ex.Message != NestedDeclinedMessage;
+                captureEscape = (_, e) =>
+                {
+                    if (e.Exception?.Message != NestedDeclinedMessage) return;
+                    escaped ??= e.Exception;
+                    e.Handled = true;
+                };
+                Application.Current.UnhandledException += captureEscape;
+                s_nestedWindow = new Window { Title = "Orphan rows nested declined" };
+                s_nestedWindow.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(300, 200));
+                s_nestedWindow.Activate();
+            }
+            try { await RunChecksAsync(host, errors, () => escaped); }
+            finally
+            {
+                if (captureEscape is not null) Application.Current.UnhandledException -= captureEscape;
+            }
+        }
+
+        private async Task RunChecksAsync(ReactorHost host, List<RenderError> errors, Func<Exception?> escapedSoFar)
+        {
             host.Mount(_ => inUnselectedTab ? Component<TabbedChurn, int>(count) : Component<Churn, int>(count));
             await Harness.Render(300);
             // Exactly ListView: a TabView's tab strip is a ListView subclass.
@@ -257,7 +308,8 @@ internal static class TemplatedListOrphanContainerFixtures
                 if (collapseWithLastSwap && i == swaps.Length - 1) s_setVisible!(false);
                 if (reinsertWithLastSwap && i == swaps.Length - 1) s_setReordered!(true);
                 if (inUnselectedTab && i == swaps.Length - 1) s_selectTab!(0);
-                if (throwingParkedCleanup && i == swaps.Length - 1) s_throwFromParkedCleanup = true;
+                if (throwingParkedCleanup && i == swaps.Length - 1) s_parkedCleanup = ParkedCleanup.Throw;
+                if (nestedDeclinedParkedCleanup && i == swaps.Length - 1) s_parkedCleanup = ParkedCleanup.NestedDeclined;
                 await Harness.Render(300);
             }
             if (collapseWithLastSwap)
@@ -280,14 +332,24 @@ internal static class TemplatedListOrphanContainerFixtures
             else
                 H.Skip($"{name}_ParkedContainer", "WinUI parked no container for the moved row during this run; the checks are inconclusive");
 
+            if (throwingParkedCleanup || nestedDeclinedParkedCleanup)
+                H.Check($"{name}_ParkedCleanupRan", s_parkedCleanup == ParkedCleanup.None);
             if (throwingParkedCleanup)
             {
                 // The sweep unmounted the parked view even though its cleanup threw, and reported it.
-                H.Check($"{name}_CleanupThrew", !s_throwFromParkedCleanup);
                 H.Check($"{name}_CleanupFailureReported", errors.Any(e => e.Source == RenderErrorSource.Cleanup
                     && e.Exception.Message == ParkedCleanupMessage), $"errors={errors.Count}");
-                s_throwFromParkedCleanup = false;
             }
+            if (nestedDeclinedParkedCleanup)
+            {
+                // An exception the nested work already declined is not handed to this list's
+                // handler (which would swallow it); it keeps going out.
+                H.Check($"{name}_DeclinedNotReportedAgain", !errors.Any(e => e.Exception.Message == NestedDeclinedMessage),
+                    string.Join(",", errors.Select(e => e.Exception.Message)));
+                var escaped = escapedSoFar();
+                H.Check($"{name}_DeclinedEscapes", escaped?.Message == NestedDeclinedMessage, escaped?.Message ?? "(nothing escaped)");
+            }
+            s_parkedCleanup = ParkedCleanup.None;
 
             var mountedParked = s_live.Values.Where(r => Unlinked(lv, r.Root.Current)).Select(r => $"{r.Key}#{r.Instance}").ToList();
             H.Check($"{name}_NoParkedRowStaysMounted", mountedParked.Count == 0, string.Join(", ", mountedParked));
@@ -300,12 +362,10 @@ internal static class TemplatedListOrphanContainerFixtures
 
             // The sweep must not reach a container the list still shows: every linked container's
             // item view stays live.
-            int deadLinked = 0;
-            foreach (var child in lv.ItemsPanelRoot.Children)
-                if (child is ListViewItem item && lv.IndexFromContainer(item) >= 0
-                    && item.ContentTemplateRoot is ContentControl { Content: not null } itemHost
-                    && Reconciler.GetElementTag(itemHost) is null)
-                    deadLinked++;
+            int deadLinked = lv.ItemsPanelRoot.Children.OfType<ListViewItem>().Count(item =>
+                lv.IndexFromContainer(item) >= 0
+                && item.ContentTemplateRoot is ContentControl { Content: not null } itemHost
+                && Reconciler.GetElementTag(itemHost) is null);
             H.Check($"{name}_LinkedRowsStayLive", deadLinked == 0, $"deadLinked={deadLinked}");
 
             // One sweep per structural change, and it unsubscribes: later layout passes run none.
