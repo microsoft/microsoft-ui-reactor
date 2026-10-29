@@ -1368,14 +1368,28 @@ public sealed partial class Reconciler
             return;
         }
         ParkedContainerSweepCount++;
-        var children = panel.Children;
-        for (int i = 0; i < children.Count; i++)
+        // Runs from a WinUI event after the sweep unsubscribed, so a throwing cleanup must not
+        // stop it: every parked view is unmounted, and failures go to the RenderErrorHandler as
+        // Cleanup (with none, the first is rethrown once the sweep is done), as on disposal.
+        List<Exception>? failures = null;
+        using (IsolateUnmountCleanupFailures(ex => (failures ??= new()).Add(ex)))
         {
-            if (children[i] is WinPrim.SelectorItem container
-                && container.ContentTemplateRoot is ContentControl cc
-                && GetElementTag(cc) is not null
-                && listViewBase.IndexFromContainer(container) < 0)
-                UnmountItemView(cc, clearContent: false);
+            var children = panel.Children;
+            for (int i = 0; i < children.Count; i++)
+            {
+                if (children[i] is WinPrim.SelectorItem container
+                    && container.ContentTemplateRoot is ContentControl cc
+                    && GetElementTag(cc) is not null
+                    && listViewBase.IndexFromContainer(container) < 0)
+                    UnmountItemView(cc, clearContent: false);
+            }
+        }
+        if (failures is not null)
+        {
+            global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? failure;
+            using (RenderErrorDispatch.EnterPropagationScope())
+                failure = RenderErrorDispatch.ReportCleanupFailures(failures, ResolveRenderErrorHandler, isHostLevel: false, _logger);
+            failure?.Throw();
         }
     }
 

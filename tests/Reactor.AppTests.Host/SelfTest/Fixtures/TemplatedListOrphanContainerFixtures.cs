@@ -37,6 +37,9 @@ internal static class TemplatedListOrphanContainerFixtures
     private static Action<bool>? s_setReordered;
     private static Action<bool>? s_setPresent;
     private static Action<int>? s_selectTab;
+    // Armed by a fixture: the next cleanup of a row view that sits in a parked container throws.
+    private static bool s_throwFromParkedCleanup;
+    private const string ParkedCleanupMessage = "orphan-row parked cleanup boom";
 
     private sealed class Row : Component<RowProps>
     {
@@ -46,6 +49,15 @@ internal static class TemplatedListOrphanContainerFixtures
             if (instance.Current == 0) instance.Current = ++s_instances;
             var (clicks, setClicks) = UseState(0);
             var root = this.UseElementRef<FrameworkElement>();
+            // Before the effect below, so a throw that stopped the cleanups would skip its own.
+            UseEffect(() => () =>
+            {
+                if (s_throwFromParkedCleanup && ContainerOf(root.Current) is { ActualOffset.X: <= -10000 })
+                {
+                    s_throwFromParkedCleanup = false;
+                    throw new InvalidOperationException(ParkedCleanupMessage);
+                }
+            });
             UseEffect(() =>
             {
                 var info = new RowInfo { Root = root, Key = Props.Key, Instance = instance.Current };
@@ -100,6 +112,7 @@ internal static class TemplatedListOrphanContainerFixtures
     {
         s_live.Clear();
         s_instances = 0;
+        s_throwFromParkedCleanup = false;
     }
 
     private static ListViewItem? ContainerOf(DependencyObject? node)
@@ -214,13 +227,17 @@ internal static class TemplatedListOrphanContainerFixtures
     /// container when its tab is selected again.
     /// </remarks>
     internal class MovedRowLeavesNoParkedComponent(Harness h, string name, int count, (int A, int B)[] swaps, string movedKey,
-        bool collapseWithLastSwap = false, bool reinsertWithLastSwap = false, bool inUnselectedTab = false)
+        bool collapseWithLastSwap = false, bool reinsertWithLastSwap = false, bool inUnselectedTab = false,
+        bool throwingParkedCleanup = false)
         : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
             Reset();
             var host = H.CreateHost();
+            var errors = new List<RenderError>();
+            if (throwingParkedCleanup)
+                host.RenderErrorHandler = e => { errors.Add(e); return null; };
             host.Mount(_ => inUnselectedTab ? Component<TabbedChurn, int>(count) : Component<Churn, int>(count));
             await Harness.Render(300);
             // Exactly ListView: a TabView's tab strip is a ListView subclass.
@@ -240,6 +257,7 @@ internal static class TemplatedListOrphanContainerFixtures
                 if (collapseWithLastSwap && i == swaps.Length - 1) s_setVisible!(false);
                 if (reinsertWithLastSwap && i == swaps.Length - 1) s_setReordered!(true);
                 if (inUnselectedTab && i == swaps.Length - 1) s_selectTab!(0);
+                if (throwingParkedCleanup && i == swaps.Length - 1) s_throwFromParkedCleanup = true;
                 await Harness.Render(300);
             }
             if (collapseWithLastSwap)
@@ -261,6 +279,15 @@ internal static class TemplatedListOrphanContainerFixtures
                 H.Check($"{name}_ParkedContainer", true, $"parked={parked.Count}");
             else
                 H.Skip($"{name}_ParkedContainer", "WinUI parked no container for the moved row during this run; the checks are inconclusive");
+
+            if (throwingParkedCleanup)
+            {
+                // The sweep unmounted the parked view even though its cleanup threw, and reported it.
+                H.Check($"{name}_CleanupThrew", !s_throwFromParkedCleanup);
+                H.Check($"{name}_CleanupFailureReported", errors.Any(e => e.Source == RenderErrorSource.Cleanup
+                    && e.Exception.Message == ParkedCleanupMessage), $"errors={errors.Count}");
+                s_throwFromParkedCleanup = false;
+            }
 
             var mountedParked = s_live.Values.Where(r => Unlinked(lv, r.Root.Current)).Select(r => $"{r.Key}#{r.Instance}").ToList();
             H.Check($"{name}_NoParkedRowStaysMounted", mountedParked.Count == 0, string.Join(", ", mountedParked));
