@@ -33,6 +33,7 @@ internal static class TemplatedListOrphanContainerFixtures
     private static readonly Dictionary<object, RowInfo> s_live = new(ReferenceEqualityComparer.Instance);
     private static int s_instances;
     private static Action<Func<List<RowProps>, List<RowProps>>>? s_update;
+    private static Action<bool>? s_setVisible;
 
     private sealed class Row : Component<RowProps>
     {
@@ -59,8 +60,10 @@ internal static class TemplatedListOrphanContainerFixtures
         public override Element Render()
         {
             var (items, update) = UseReducer(Enumerable.Range(0, Props).Select(i => new RowProps($"c{i}")).ToList());
+            var (visible, setVisible) = UseState(true);
             s_update = update;
-            return Border(ListView<RowProps>(items, x => x.Key, (x, _) => Component<Row, RowProps>(x))).Height(300);
+            s_setVisible = setVisible;
+            return Border(ListView<RowProps>(items, x => x.Key, (x, _) => Component<Row, RowProps>(x))).Height(300).Visible(visible);
         }
     }
 
@@ -170,7 +173,13 @@ internal static class TemplatedListOrphanContainerFixtures
     /// <see cref="ReactorDiagnostics.TrySetState"/> on it was accepted and never rendered
     /// (issue #1440).
     /// </summary>
-    internal class MovedRowLeavesNoParkedComponent(Harness h, string name, int count, (int A, int B)[] swaps, string movedKey, bool movedRowRealized)
+    /// <remarks>
+    /// <paramref name="collapseWithLastSwap"/> collapses the list in the render of the last swap
+    /// and shows it again afterwards: WinUI lays the panel out (and parks the container) only once
+    /// the list is shown, so a sweep spent on an earlier layout pass of the window would miss it.
+    /// </remarks>
+    internal class MovedRowLeavesNoParkedComponent(Harness h, string name, int count, (int A, int B)[] swaps, string movedKey,
+        bool movedRowRealized, bool collapseWithLastSwap = false)
         : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -183,14 +192,21 @@ internal static class TemplatedListOrphanContainerFixtures
             H.Check($"{name}_Mounted", lv is not null && s_live.Count > 0);
             if (lv is null) return;
 
-            foreach (var (a, b) in swaps)
+            for (int i = 0; i < swaps.Length; i++)
             {
+                var (a, b) = swaps[i];
                 s_update!(list =>
                 {
                     var copy = list.ToList();
                     (copy[a], copy[b]) = (copy[b], copy[a]);
                     return copy;
                 });
+                if (collapseWithLastSwap && i == swaps.Length - 1) s_setVisible!(false);
+                await Harness.Render(300);
+            }
+            if (collapseWithLastSwap)
+            {
+                s_setVisible!(true);
                 await Harness.Render(300);
             }
 
@@ -211,6 +227,26 @@ internal static class TemplatedListOrphanContainerFixtures
 
             var duplicates = s_live.Values.GroupBy(r => r.Key).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
             H.Check($"{name}_OneLiveComponentPerRow", duplicates.Count == 0, string.Join(", ", duplicates));
+
+            // The sweep must not reach a container the list still shows: every linked container's
+            // item view stays live.
+            int deadLinked = 0;
+            foreach (var child in lv.ItemsPanelRoot.Children)
+                if (child is ListViewItem item && lv.IndexFromContainer(item) >= 0
+                    && item.ContentTemplateRoot is ContentControl { Content: not null } itemHost
+                    && Reconciler.GetElementTag(itemHost) is null)
+                    deadLinked++;
+            H.Check($"{name}_LinkedRowsStayLive", deadLinked == 0, $"deadLinked={deadLinked}");
+
+            // One sweep per structural change, and it unsubscribes: later layout passes run none.
+            int sweeps = Reconciler.ParkedContainerSweepCount;
+            for (int i = 0; i < 3; i++)
+            {
+                lv.InvalidateMeasure();
+                await Harness.Render(50);
+            }
+            H.Check($"{name}_SweepUnsubscribes", Reconciler.ParkedContainerSweepCount == sweeps,
+                $"before={sweeps} after={Reconciler.ParkedContainerSweepCount}");
 
             if (movedRowRealized)
             {

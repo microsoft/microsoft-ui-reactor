@@ -1333,13 +1333,23 @@ public sealed partial class Reconciler
     /// no longer shows. Only the components are torn down — the visuals stay, so a delete
     /// transition still fades the row out. The check has to wait for the layout pass because
     /// that is when WinUI parks the container: when the update that moved the row runs, the
-    /// container is still linked to it.
+    /// container is still linked to it. A collapsed list is not laid out until it is shown, so the
+    /// sweep waits for that pass.
     /// </summary>
     private void SweepParkedContainers(WinUI.ListViewBase listViewBase, Internal.ReactorListState list)
     {
+        if (ReferenceEquals(GetListState(listViewBase), list) && listViewBase.IsLoaded && IsCollapsedInTree(listViewBase))
+            return; // LayoutUpdated fires for every pass in the window: wait for one that lays this list out.
         listViewBase.LayoutUpdated -= list.PostLayoutSweep;
         list.PostLayoutSweep = null;
         if (!ReferenceEquals(GetListState(listViewBase), list) || listViewBase.ItemsPanelRoot is not { } panel) return;
+        if (!listViewBase.IsLoaded)
+        {
+            // Not in the tree, so not laid out either; the next update schedules the sweep again.
+            list.StructureChanged = true;
+            return;
+        }
+        ParkedContainerSweepCount++;
         var children = panel.Children;
         for (int i = 0; i < children.Count; i++)
         {
@@ -1349,6 +1359,17 @@ public sealed partial class Reconciler
                 && listViewBase.IndexFromContainer(container) < 0)
                 UnmountItemView(cc, clearContent: false);
         }
+    }
+
+    // Test-only seam (InternalsVisibleTo Reactor.AppTests.Host): sweeps run.
+    internal static int ParkedContainerSweepCount;
+
+    private static bool IsCollapsedInTree(UIElement element)
+    {
+        for (DependencyObject? node = element; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+            if (node is UIElement { Visibility: Visibility.Collapsed })
+                return true;
+        return false;
     }
 
     private readonly struct ItemsRepeaterKeyAdapter : IReadOnlyList<ItemsRepeaterKeyAdapter.KeyOnly>
