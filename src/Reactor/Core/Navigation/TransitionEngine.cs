@@ -36,7 +36,6 @@ internal static class TransitionEngine
         Core.ElementPool.MarkCompositorTainted(incoming);
 
         var compositor = outVisual.Compositor;
-        var usesCenterPointBinding = transition is DrillInTransition;
         var suppressesHitTesting = transition is SlideTransition;
 
         // Claim both pages for this transition before anything else, on every path including
@@ -91,10 +90,12 @@ internal static class TransitionEngine
         inVisual.Offset = Vector3.Zero;
         inVisual.Scale = Vector3.One;
 
+        HitTestSuppression? outgoingSuppression = null;
+        HitTestSuppression? incomingSuppression = null;
         if (suppressesHitTesting)
         {
-            SuppressHitTesting(outgoing);
-            SuppressHitTesting(incoming);
+            outgoingSuppression = SuppressHitTesting(outgoing);
+            incomingSuppression = SuppressHitTesting(incoming);
         }
         else
         {
@@ -108,13 +109,7 @@ internal static class TransitionEngine
             ClearHitTestSuppression(incoming);
         }
 
-        if (usesCenterPointBinding)
-        {
-            // Expression animations are persistent, so start these before the scoped
-            // batch to keep them from blocking the transition's completion callback.
-            BindCenterPointToVisualSize(compositor, outVisual);
-            BindCenterPointToVisualSize(compositor, inVisual);
-        }
+        PrepareTransitionAnimations(compositor, outVisual, inVisual, transition);
 
         var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
 
@@ -132,10 +127,10 @@ internal static class TransitionEngine
             }
             if (suppressesHitTesting)
             {
-                // Nest-aware by depth, so this is safe to run even for a page a newer
-                // transition has taken over — it only restores once the last one finishes.
-                RestoreHitTesting(outgoing);
-                RestoreHitTesting(incoming);
+                // Release only the entries this transition acquired. A newer
+                // navigation may have cleared them and installed replacements.
+                RestoreHitTesting(outgoing, outgoingSuppression);
+                RestoreHitTesting(incoming, incomingSuppression);
             }
 
             try
@@ -169,6 +164,23 @@ internal static class TransitionEngine
             }
         };
 
+        StartTransitionAnimations(compositor, outVisual, inVisual, transition, mode);
+        batch.End();
+    }
+
+    internal static void PrepareTransitionAnimations(
+        Compositor compositor, Visual outVisual, Visual inVisual, NavigationTransition transition)
+    {
+        if (transition is not DrillInTransition) return;
+        // Persistent expressions must not become part of a finite animation batch.
+        BindCenterPointToVisualSize(compositor, outVisual);
+        BindCenterPointToVisualSize(compositor, inVisual);
+    }
+
+    internal static void StartTransitionAnimations(
+        Compositor compositor, Visual outVisual, Visual inVisual,
+        NavigationTransition transition, NavigationMode mode)
+    {
         switch (transition)
         {
             case EntranceTransition:
@@ -187,16 +199,16 @@ internal static class TransitionEngine
                 RunSpringSlide(compositor, outVisual, inVisual, spring, mode);
                 break;
             case ConnectedTransition:
-                // Stub — shared-element animation isn't implemented yet, so play the platform
-                // default instead. Entrance is the right fallback: it's what the navigation would
-                // have got had no transition been requested, and unlike a slide it doesn't invent
-                // a direction or opt into the slide path's hit-test suppression.
-                global::System.Diagnostics.Debug.WriteLine("[Reactor] ConnectedTransition not yet implemented; falling back to EntranceTransition.");
+                // NavigationHost owns the shared-element lifecycle. Direct callers of
+                // this whole-page engine have no element pair; use its documented fallback.
                 RunEntrance(compositor, outVisual, inVisual, mode);
                 break;
+            default:
+                // Shared-element-only navigation still swaps the surrounding pages.
+                outVisual.Opacity = 0;
+                inVisual.Opacity = 1;
+                break;
         }
-
-        batch.End();
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -320,7 +332,7 @@ internal static class TransitionEngine
     /// <summary>
     /// Stops the animations this engine starts and returns the visual to its resting state.
     /// </summary>
-    private static void NormalizeVisual(Visual visual)
+    internal static void NormalizeVisual(Visual visual)
     {
         ReleaseAnimatedProperties(visual);
         visual.Opacity = 1;
@@ -371,7 +383,7 @@ internal static class TransitionEngine
     //  unclickable.
     // ════════════════════════════════════════════════════════════════
 
-    private sealed class HitTestSuppression
+    internal sealed class HitTestSuppression
     {
         public bool OriginalValue;
         public int Depth;
@@ -380,27 +392,26 @@ internal static class TransitionEngine
     private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, HitTestSuppression>
         _hitTestSuppressions = new();
 
-    internal static void SuppressHitTesting(UIElement element)
+    internal static HitTestSuppression SuppressHitTesting(UIElement element)
     {
-        if (_hitTestSuppressions.TryGetValue(element, out var existing))
+        if (!_hitTestSuppressions.TryGetValue(element, out var state))
         {
-            existing.Depth++;
-        }
-        else
-        {
-            _hitTestSuppressions.Add(element, new HitTestSuppression
+            state = new HitTestSuppression
             {
                 OriginalValue = element.IsHitTestVisible,
-                Depth = 1,
-            });
+            };
+            _hitTestSuppressions.Add(element, state);
         }
 
+        state.Depth++;
         element.IsHitTestVisible = false;
+        return state;
     }
 
-    internal static void RestoreHitTesting(UIElement element)
+    internal static void RestoreHitTesting(UIElement element, HitTestSuppression? expected)
     {
-        if (!_hitTestSuppressions.TryGetValue(element, out var state)) return;
+        if (!_hitTestSuppressions.TryGetValue(element, out var state)
+            || !ReferenceEquals(state, expected)) return;
 
         if (--state.Depth > 0) return;
 
@@ -413,7 +424,7 @@ internal static class TransitionEngine
     /// from before the first suppression. Used by the instant-swap path: those navigations must
     /// leave both pages interactive immediately, even when an older animated transition still
     /// holds a claim. A later <see cref="RestoreHitTesting"/> from that transition is then a
-    /// no-op, since the entry is gone.
+    /// no-op, since its entry has been invalidated, even if a newer one exists.
     /// </summary>
     internal static void ClearHitTestSuppression(UIElement element)
     {

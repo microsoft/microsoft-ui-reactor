@@ -3863,6 +3863,7 @@ ToString() → string
 new()
 NavigationTransition Transition { get; init; }
 bool PushToBackStack { get; init; }
+string ConnectedAnimationKey { get; init; }
 Equals(NavigateOptions other) → bool
 Equals(object obj) → bool
 GetHashCode() → int

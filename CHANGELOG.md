@@ -257,6 +257,22 @@ Conventions for contributors:
   `Reconcile` (neither reached the bad path), and the Extending Reactor Controls
   guide shows a `RegisterType` host reconciling its child.
 
+- **Connected animations between navigation pages (issue #1414).**
+  `NavigationTransition.Connected(key)` was a stub that played the Entrance page
+  transition; it now animates the element marked `.ConnectedAnimation(key)` on the
+  outgoing page into the matching element on the incoming page. The new
+  `NavigateOptions.ConnectedAnimationKey` pairs that shared element with any page
+  transition, such as DrillIn or Fade. `NavigationHost` waits briefly for the
+  destination's layout (including cold `ScrollView` content and elements an effect
+  creates), keeps both pages until both animations finish, and animates back on
+  `GoBack()` / `GoForward()`. Cached pages and the active pages of nested hosts take
+  part. A missing, duplicate or unmeasurable target falls back to the selected page
+  transition, and with Windows animations off the navigation completes immediately.
+  Each `NavigationHost` now owns its pages' lifecycle callbacks and guards, so a page
+  that hosts an inner navigation stack no longer runs that stack's callbacks and guards
+  as its own, and a page whose navigation is interrupted still receives
+  `onNavigatedFrom`. See the [navigation guide](docs/guide/navigation.md).
+
 ### Changed
 
 - **Markdown `LinkBuilder` now receives a `MarkdownLink`** (#1436). Breaking: the

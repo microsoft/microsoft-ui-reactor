@@ -3819,12 +3819,15 @@ public sealed partial class Reconciler : IDisposable
     {
         if (!_navigationHostNodes.TryGetValue(control, out var navNode))
             return;
+        navNode.TransitionGeneration++;
+        navNode.ConnectedOperation?.Dispose();
+        navNode.ConnectedOperation = null;
         if (navNode.RouteChangedHandler is not null)
             navNode.Handle.RouteChanged -= navNode.RouteChangedHandler;
         navNode.Handle.Detach();
         navNode.Cache?.Clear();
         if (navNode.CurrentChildControl is not null)
-            UnmountRecursive(navNode.CurrentChildControl);
+            Navigation.ConnectedNavigationOperation.UnmountPage(this, navNode.CurrentChildControl);
         _navigationHostNodes.Remove(control);
     }
 
@@ -4061,6 +4064,18 @@ public sealed partial class Reconciler : IDisposable
             }, out _);
         }
         finally { EndRegisteredUnmount(regState); }
+    }
+
+    // Mounted content can exist before a control template attaches it to the
+    // visual tree. Navigation must see those slots without forcing template/layout.
+    internal void VisitMountedChildControls(UIElement control, Action<UIElement> visit)
+    {
+        ForEachReactorChildControl(control, visit);
+        if (GetElementTag(control) is { } element
+            && global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.UnwrapDecorators(element) is { } hostElement
+            && _v1Handlers.TryGet(hostElement.GetType(), out var entry)
+            && entry is IV1ChildEnumerator children)
+            children.VisitLiveChildren(control, visit);
     }
 
     private static void ForEachReactorChildControl(UIElement control, Action<UIElement> visit)
@@ -5760,6 +5775,15 @@ public sealed partial class Reconciler : IDisposable
     // never cancelled; see PrepareConnectedAnimationSource for why a cancel can crash.
     private readonly HashSet<string> _preparedConnectedAnimationKeys = new(StringComparer.Ordinal);
 
+    private readonly Dictionary<UIElement, int> _navigationConnectedElements = new();
+    internal void ClaimNavigationConnectedElement(UIElement element) =>
+        _navigationConnectedElements[element] = _navigationConnectedElements.GetValueOrDefault(element) + 1;
+    internal void ReleaseNavigationConnectedElement(UIElement element)
+    {
+        if (_navigationConnectedElements.GetValueOrDefault(element) <= 1) _navigationConnectedElements.Remove(element);
+        else _navigationConnectedElements[element]--;
+    }
+
     /// <summary>
     /// Publishes the source snapshot for an unmounting element, so a destination mounting
     /// under the same key in this pass can travel from it.
@@ -5797,6 +5821,7 @@ public sealed partial class Reconciler : IDisposable
     /// </remarks>
     private void PrepareConnectedAnimationSource(string key, UIElement control)
     {
+        if (_navigationConnectedElements.ContainsKey(control)) return;
         if (ConnectedAnimationFrameGate.IsAwaitingFrame(key))
         {
             ConnectedAnimationPreparationsSkipped++;
@@ -5856,6 +5881,7 @@ public sealed partial class Reconciler : IDisposable
 
             foreach (var (key, target) in _pendingConnectedAnimationStarts)
             {
+                if (_navigationConnectedElements.ContainsKey(target)) continue;
                 try
                 {
                     // Scoped to this pass on purpose: the service is view-wide and holds
@@ -7635,6 +7661,8 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal class NavigationHostNode
     {
+        public Navigation.ConnectedNavigationOperation? ConnectedOperation { get; set; }
+        public long TransitionGeneration { get; set; }
         /// <summary>The type-erased navigation handle (implements INavigationHandle internally).</summary>
         public Navigation.INavigationHandle Handle { get; set; } = null!;
         /// <summary>The route that was last rendered.</summary>
@@ -7680,7 +7708,9 @@ public sealed partial class Reconciler : IDisposable
 
     private void CollectLifecycleHooksRecursive(UIElement? control, List<RenderContext.NavigationLifecycleHookState> hooks)
     {
-        if (control is null) return;
+        // A nested host owns its pages' lifecycle. Its route contexts and guards
+        // belong to that stack, not the enclosing page's navigation operation.
+        if (control is null || _navigationHostNodes.ContainsKey(control)) return;
 
         if (_componentNodes.TryGetValue(control, out var node))
         {
@@ -7751,7 +7781,7 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal void InvokeNavigatingFrom(UIElement? root, Navigation.NavigatingFromContext ctx)
     {
-        if (root is null) return;
+        if (root is null || _navigationHostNodes.ContainsKey(root)) return;
 
         if (_componentNodes.TryGetValue(root, out var node))
         {
@@ -7861,11 +7891,14 @@ public sealed partial class Reconciler : IDisposable
         _errorBoundaryNodes.Clear();
         foreach (var node in _navigationHostNodes.Values)
         {
+            node.TransitionGeneration++;
+            node.ConnectedOperation?.Dispose();
+            node.ConnectedOperation = null;
             if (node.RouteChangedHandler is not null)
                 node.Handle.RouteChanged -= node.RouteChangedHandler;
             node.Handle.Detach();
             if (node.CurrentChildControl is not null)
-                UnmountRecursive(node.CurrentChildControl);
+                Navigation.ConnectedNavigationOperation.UnmountPage(this, node.CurrentChildControl);
             node.Cache?.Clear();
         }
         _navigationHostNodes.Clear();

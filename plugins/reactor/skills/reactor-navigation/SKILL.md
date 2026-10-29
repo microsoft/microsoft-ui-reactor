@@ -140,6 +140,9 @@ Use tabs when users switch freely between parallel workspaces.
 
 `UseNavigationLifecycle` fires callbacks when a page appears or disappears:
 
+Callbacks are scoped to the nearest enclosing `NavigationHost`. Each nested host
+dispatches lifecycle events and guards for its own navigation stack.
+
 ```csharp
 UseNavigationLifecycle(
     onNavigatedTo: ctx => LoadData(ctx.PreviousRoute),
@@ -176,12 +179,40 @@ NavigationHost(nav, route => ...) with
 | `NavigationTransition.DrillIn()` | Scale + fade — use for list→detail |
 | `NavigationTransition.Spring()` | Spring-physics slide |
 | `NavigationTransition.None` | Instant swap |
+| `NavigationTransition.Connected(key)` | Native shared-element motion |
 
 `NavigationTransition.Default` is an alias for `Entrance()`. Use `Entrance()` when you
 mean the motion; use `Default` only when you mean "whatever the framework default is".
 
 GoBack automatically reverses direction. Transitions run on the compositor
 thread.
+
+### Shared elements with independent page motion
+
+Mark the source and destination with the same `.ConnectedAnimation(key)` and
+select that key for the navigation:
+
+```csharp
+nav.Navigate(Route.Details, new NavigateOptions
+{
+    ConnectedAnimationKey = "device-card",
+    Transition = NavigationTransition.DrillIn(),
+});
+```
+
+The shared element and page transition run together. `Transition = null` uses
+the host's default; `NavigationTransition.None` selects shared-element-only
+motion. `NavigationTransition.Connected(key)` is a shorthand for that latter case.
+The key and page transition travel together on back/forward navigation.
+
+Use a unique key within each active page subtree, including nested hosts. The
+destination can appear after its first render or effect: navigation waits for
+its measured bounds before starting native motion. Missing, duplicate, or
+zero-sized destinations fall back to the selected page transition. Reduced
+motion completes the navigation immediately. Both motions finish before the
+old page is cached or unmounted and lifecycle completion callbacks run.
+Interrupted navigation still delivers the outgoing page's `onNavigatedFrom`;
+the current destination receives `onNavigatedTo` when its transition completes.
 
 ## 8. Deep linking
 
