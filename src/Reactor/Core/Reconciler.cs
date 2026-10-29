@@ -3817,6 +3817,7 @@ public sealed partial class Reconciler : IDisposable
     {
         NoteUnmountDuringSlotUpdate(control);
         EndExit(control);
+        CancelPostLayoutSweep(control);
         // Before any early exit: an unmounted control an app still holds must not keep a
         // FlipView's mounted item elements alive.
         if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);
@@ -4278,6 +4279,7 @@ public sealed partial class Reconciler : IDisposable
         NoteUnmountDuringSlotUpdate(control);
         // A control torn down with an ancestor while still fading out is no longer exiting.
         EndExit(control);
+        CancelPostLayoutSweep(control);
         // Before any early exit: an unmounted control an app still holds must not keep a
         // FlipView's mounted item elements alive.
         if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);

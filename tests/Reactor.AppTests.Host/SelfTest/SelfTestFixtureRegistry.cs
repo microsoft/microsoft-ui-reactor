@@ -1073,6 +1073,7 @@ internal static class SelfTestFixtureRegistry
         "TemplatedList_RowMovedOutOfRangeLeavesNoParkedComponent",
         "TemplatedList_RowMovedAsListCollapsesLeavesNoParkedComponent",
         "TemplatedList_RowMovedAsListIsReinsertedLeavesNoParkedComponent",
+        "TemplatedList_UnmountWhileCollapsedDropsPendingSweep",
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
         "Issue343_CommandBarContentUpdates",
         "Issue343_TeachingTipContentUpdates",
@@ -3224,6 +3225,7 @@ internal static class SelfTestFixtureRegistry
             harness, "MovedAsListCollapses", count: 30, swaps: [(7, 0), (0, 12)], movedKey: "c7", collapseWithLastSwap: true),
         "TemplatedList_RowMovedAsListIsReinsertedLeavesNoParkedComponent" => new TemplatedListOrphanContainerFixtures.MovedRowLeavesNoParkedComponent(
             harness, "MovedAsListIsReinserted", count: 30, swaps: [(7, 0), (0, 12)], movedKey: "c7", reinsertWithLastSwap: true),
+        "TemplatedList_UnmountWhileCollapsedDropsPendingSweep" => new TemplatedListOrphanContainerFixtures.UnmountWhileCollapsedDropsPendingSweep(harness),
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
         "Issue343_CommandBarContentUpdates" => new Issue343Fixtures.CommandBarContentUpdates(harness),
         "Issue343_TeachingTipContentUpdates" => new Issue343Fixtures.TeachingTipContentUpdates(harness),

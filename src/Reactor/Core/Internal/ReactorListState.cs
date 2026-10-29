@@ -114,11 +114,14 @@ internal sealed class ReactorListState
     /// </summary>
     internal bool StructureChanged { get; set; }
 
-    /// <summary>
-    /// The pending sweep's <c>LayoutUpdated</c> handler, if one is scheduled. It stays subscribed
-    /// while the list is collapsed and removes itself once it has run.
-    /// </summary>
+    /// <summary>The pending sweep's one-shot <c>LayoutUpdated</c> handler, if one is scheduled.</summary>
     internal EventHandler<object>? PostLayoutSweep { get; set; }
+
+    /// <summary>
+    /// The list's one-shot <c>EffectiveViewportChanged</c> handler while a sweep waits for the
+    /// collapsed list to be laid out again.
+    /// </summary>
+    internal global::Windows.Foundation.TypedEventHandler<Microsoft.UI.Xaml.FrameworkElement, Microsoft.UI.Xaml.EffectiveViewportChangedEventArgs>? ShownWatch { get; set; }
 
     public ReactorListState() => Source.CollectionChanged += (_, _) => StructureChanged = true;
 

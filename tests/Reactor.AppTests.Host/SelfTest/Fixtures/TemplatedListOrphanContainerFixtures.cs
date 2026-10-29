@@ -35,6 +35,7 @@ internal static class TemplatedListOrphanContainerFixtures
     private static Action<Func<List<RowProps>, List<RowProps>>>? s_update;
     private static Action<bool>? s_setVisible;
     private static Action<bool>? s_setReordered;
+    private static Action<bool>? s_setPresent;
 
     private sealed class Row : Component<RowProps>
     {
@@ -63,9 +64,12 @@ internal static class TemplatedListOrphanContainerFixtures
             var (items, update) = UseReducer(Enumerable.Range(0, Props).Select(i => new RowProps($"c{i}")).ToList());
             var (visible, setVisible) = UseState(true);
             var (reordered, setReordered) = UseState(false);
+            var (present, setPresent) = UseState(true);
             s_update = update;
             s_setVisible = setVisible;
             s_setReordered = setReordered;
+            s_setPresent = setPresent;
+            if (!present) return TextBlock("orphan-gone");
             // Keyed, so reordering moves the list's Border within the stack: WinUI removes it from
             // the tree and inserts it again.
             var list = Border(ListView<RowProps>(items, x => x.Key, (x, _) => Component<Row, RowProps>(x)))
@@ -289,6 +293,42 @@ internal static class TemplatedListOrphanContainerFixtures
             for (int i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
                 if (FindDescendant<T>(VisualTreeHelper.GetChild(node, i)) is { } found) return found;
             return null;
+        }
+    }
+
+    /// <summary>
+    /// A list unmounted while collapsed, with a sweep still waiting for it to be shown, must
+    /// drop that sweep, so no handler outlives the list (issue #1440).
+    /// </summary>
+    internal class UnmountWhileCollapsedDropsPendingSweep(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            Reset();
+            var host = H.CreateHost();
+            host.Mount(_ => Component<Churn, int>(30));
+            await Harness.Render(300);
+            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            H.Check("UnmountCollapsed_Mounted", lv is not null);
+            if (lv is null) return;
+
+            s_update!(list =>
+            {
+                var copy = list.ToList();
+                (copy[0], copy[1]) = (copy[1], copy[0]);
+                return copy;
+            });
+            s_setVisible!(false);
+            await Harness.Render(300);
+            var list = Reconciler.GetListState(lv);
+            H.Check("UnmountCollapsed_SweepPending", list is { ShownWatch: not null } or { PostLayoutSweep: not null });
+
+            s_setPresent!(false);
+            await Harness.Render(300);
+            H.Check("UnmountCollapsed_ListUnmounted", H.FindControl<WinUI.ListView>(_ => true) is null);
+            H.Check("UnmountCollapsed_SweepDropped", list is { ShownWatch: null, PostLayoutSweep: null });
+            host.Dispose();
+            Reset();
         }
     }
 

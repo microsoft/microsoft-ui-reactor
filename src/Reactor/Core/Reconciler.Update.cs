@@ -1318,7 +1318,7 @@ public sealed partial class Reconciler
     /// </summary>
     private void SchedulePostLayoutSweep(WinUI.ListViewBase listViewBase, Internal.ReactorListState list)
     {
-        if (list.PostLayoutSweep is not null) return;
+        if (list.PostLayoutSweep is not null || list.ShownWatch is not null) return;
         list.PostLayoutSweep = (_, _) => SweepParkedContainers(listViewBase, list);
         listViewBase.LayoutUpdated += list.PostLayoutSweep;
     }
@@ -1334,17 +1334,28 @@ public sealed partial class Reconciler
     /// no longer shows. Only the components are torn down — the visuals stay, so a delete
     /// transition still fades the row out. The check has to wait for the layout pass because
     /// that is when WinUI parks the container: when the update that moved the row runs, the
-    /// container is still linked to it. <c>LayoutUpdated</c> fires for every layout pass in the
-    /// window, and none lays the list out while it (or an ancestor) is collapsed, so the sweep
-    /// waits for the list to be shown. It does not wait for <c>Loaded</c>: a list inserted into
-    /// the tree is laid out, and its container parked, before that event is raised.
+    /// container is still linked to it. No pass lays a list out while it (or an ancestor) is
+    /// collapsed, so a sweep that finds it collapsed waits for the list's own
+    /// <c>EffectiveViewportChanged</c>, which the pass that lays it out again raises, rather
+    /// than checking every layout pass in the window. It does not wait for <c>Loaded</c>: a list
+    /// inserted into the tree is laid out, and its container parked, before that event is raised.
     /// </summary>
     private void SweepParkedContainers(WinUI.ListViewBase listViewBase, Internal.ReactorListState list)
     {
-        if (ReferenceEquals(GetListState(listViewBase), list) && IsCollapsedInTree(listViewBase)) return;
         listViewBase.LayoutUpdated -= list.PostLayoutSweep;
         list.PostLayoutSweep = null;
         if (!ReferenceEquals(GetListState(listViewBase), list) || listViewBase.ItemsPanelRoot is not { } panel) return;
+        if (IsCollapsedInTree(listViewBase))
+        {
+            list.ShownWatch = (_, _) =>
+            {
+                listViewBase.EffectiveViewportChanged -= list.ShownWatch;
+                list.ShownWatch = null;
+                SchedulePostLayoutSweep(listViewBase, list);
+            };
+            listViewBase.EffectiveViewportChanged += list.ShownWatch;
+            return;
+        }
         ParkedContainerSweepCount++;
         var children = panel.Children;
         for (int i = 0; i < children.Count; i++)
@@ -1359,6 +1370,24 @@ public sealed partial class Reconciler
 
     // Test-only seam (InternalsVisibleTo Reactor.AppTests.Host): sweeps run.
     internal static int ParkedContainerSweepCount;
+
+    /// <summary>
+    /// Drops an unmounted list's pending sweep, so no handler outlives the list.
+    /// </summary>
+    private static void CancelPostLayoutSweep(UIElement control)
+    {
+        if (control is not WinUI.ListViewBase listViewBase || GetListState(listViewBase) is not { } list) return;
+        if (list.PostLayoutSweep is { } sweep)
+        {
+            listViewBase.LayoutUpdated -= sweep;
+            list.PostLayoutSweep = null;
+        }
+        if (list.ShownWatch is { } watch)
+        {
+            listViewBase.EffectiveViewportChanged -= watch;
+            list.ShownWatch = null;
+        }
+    }
 
     private static bool IsCollapsedInTree(UIElement element)
     {
