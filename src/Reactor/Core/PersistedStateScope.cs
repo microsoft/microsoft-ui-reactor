@@ -46,7 +46,8 @@ public interface IPersistedStateScope : IDisposable
     /// <summary>
     /// Try to read a previously-stored value for <paramref name="key"/>. Returns
     /// <c>false</c> when the key is absent or the stored value is not assignable
-    /// to <typeparamref name="T"/>. Reads promote the entry to MRU.
+    /// to <typeparamref name="T"/>. Stored null values are returned successfully
+    /// for reference types and nullable value types. Reads promote the entry to MRU.
     /// </summary>
     bool TryGet<T>(string key, out T value);
 

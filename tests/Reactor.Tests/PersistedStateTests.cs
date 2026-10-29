@@ -203,6 +203,26 @@ public class PersistedStateTests : IDisposable
     }
 
     [Fact]
+    public void After_Unmount_Remount_UsePersisted_Preserves_Null()
+    {
+        var first = new RenderContext();
+        first.BeginRender(() => { });
+        var (_, set) = first.UsePersisted<int?>("selected-id", 7, PersistedScope.Application);
+        first.FlushEffects();
+        set(null);
+
+        first.BeginRender(() => { });
+        Assert.Null(first.UsePersisted<int?>("selected-id", 7, PersistedScope.Application).Value);
+        first.FlushEffects();
+        first.RunCleanups();
+
+        var second = new RenderContext();
+        second.BeginRender(() => { });
+        Assert.Null(second.UsePersisted<int?>("selected-id", 7, PersistedScope.Application).Value);
+        second.FlushEffects();
+    }
+
+    [Fact]
     public void UsePersisted_Same_Key_Different_Components_Shares_State()
     {
         // Component A writes

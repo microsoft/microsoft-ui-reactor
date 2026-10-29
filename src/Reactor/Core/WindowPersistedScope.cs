@@ -44,13 +44,15 @@ public sealed class WindowPersistedScope : IPersistedStateScope
     {
         if (_disposed) { value = default!; return false; }
         ValidateKey(key);
-        if (_cache.TryGet(key, out var boxed) && boxed is T typed)
+        bool found = _cache.TryGet(key, out var boxed);
+        if (found && boxed is T typed)
         {
             value = typed;
             return true;
         }
         value = default!;
-        return false;
+        // A stored null is valid for reference and nullable value types.
+        return found && boxed is null && default(T) is null;
     }
 
     public void Set<T>(string key, T value)

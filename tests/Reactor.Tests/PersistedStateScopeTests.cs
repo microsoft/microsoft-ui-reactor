@@ -105,6 +105,31 @@ public class PersistedStateScopeTests
         Assert.True(lru.Count > 0);
     }
 
+    [Theory]
+    [InlineData(PersistedScope.Application)]
+    [InlineData(PersistedScope.Window)]
+    public void Scopes_Roundtrip_Null_Values(PersistedScope scopeKind)
+    {
+        using IPersistedStateScope scope = scopeKind == PersistedScope.Application
+            ? new ApplicationPersistedScope(8)
+            : new WindowPersistedScope(8);
+
+        Assert.False(scope.TryGet<string?>("missing", out _));
+        scope.Set("text", "saved");
+        scope.Set<string?>("text", null);
+        Assert.True(scope.TryGet<string?>("text", out var text));
+        Assert.Null(text);
+
+        scope.Set<int?>("number", 42);
+        scope.Set<int?>("number", null);
+        Assert.True(scope.TryGet<int?>("number", out var number));
+        Assert.Null(number);
+        Assert.False(scope.TryGet<int>("number", out _));
+
+        scope.Set("other", "saved");
+        Assert.False(scope.TryGet<int>("other", out _));
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  ApplicationPersistedScope public surface
     // ════════════════════════════════════════════════════════════════

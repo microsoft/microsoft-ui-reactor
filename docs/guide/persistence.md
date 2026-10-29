@@ -36,12 +36,19 @@ class NotesEditor : Component
 
 ![Notes editor — UsePersisted demo](images/persistence/notes-editor.png)
 
-The lookup happens once per mount: the hook checks the named scope
-for `"notes/body"`, returns the cached value if present (otherwise
-the supplied `initialValue`), and writes the latest value back into
-the scope on every state update. When the component unmounts and
-later remounts, the second mount finds the stored value and skips the
-default.
+The hook reads the scope once per mount, using `initialValue` when no
+compatible cached value is available. State updates change the hook's
+current value; the latest value is saved to the scope when the component
+unmounts.
+
+For nullable state, setting the value to `null` is preserved across an
+unmount/remount. A stored null is a cached value; it does not cause the next
+mount to fall back to `initialValue`.
+
+Implementation: [mount lookup](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/Reactor/Core/RenderContext.cs#L877-L886),
+[save on unmount](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/Reactor/Core/RenderContext.cs#L3013-L3017),
+[window-scope reads](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/Reactor/Core/WindowPersistedScope.cs#L43-L56), and
+[application-scope reads](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/Reactor/Core/PersistedStateCache.cs#L46-L59).
 
 ## Reference
 
