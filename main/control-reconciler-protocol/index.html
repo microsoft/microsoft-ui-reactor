@@ -2858,6 +2858,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Children strategies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dynamic-flat-items" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dynamic flat items
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3504,6 +3521,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Children strategies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dynamic-flat-items" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dynamic flat items
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -4006,7 +4040,7 @@ cannot happen:</p>
 <a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">    </span><span class="c1">// only for elements that carry callbacks, a key, extensions, or reference modifiers.</span>
 <a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">    </span><span class="c1">// Without this, OnUnmount would fire for some elements of a type and silently not for</span>
 <a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">    </span><span class="c1">// others — the callback-free ones — which is not a contract an author can reason about.</span>
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">_descriptor</span><span class="p">.</span><span class="n">OnUnmount</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="p">)</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">_descriptor</span><span class="p">.</span><span class="n">OnUnmount</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">_hasPropUnmount</span><span class="p">)</span>
 <a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">        </span><span class="n">Reconciler</span><span class="p">.</span><span class="n">GetOrCreateReactorState</span><span class="p">(</span><span class="n">ctrl</span><span class="p">);</span>
 <a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>
 <a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="w">    </span><span class="c1">// §14 Phase 3-final: when the descriptor declares an ItemsHost,</span>
@@ -4247,6 +4281,58 @@ component state across reorderings that do not change identity;
 <code>KeyedListDiff</code> realization plumbing — and so on. Adding a new
 strategy is a Reactor-internals task; adding a new handler that
 <em>consumes</em> one of these strategies is what extension authors do.</p>
+<h3 id="dynamic-flat-items">Dynamic flat items<a class="headerlink" href="#dynamic-flat-items" title="Permanent link">&para;</a></h3>
+<p><code>ItemsHost</code> reconciles Element items against their mounted controls: keyed
+items retain their identity across moves, while unkeyed elements match by
+source position. Element children follow the same skip rules as panel children:
+an unchanged child is skipped unless it is on a dirty path, consumes changed
+context, is theme-sensitive, participates in a resource refresh, or is force-rendered. Raw values use
+<code>ItemEquals</code> (or <code>object.Equals</code>). Insertions and removals update the sink incrementally rather
+than clearing and rebuilding it. Removed Element controls are unmounted
+while still parented, then detached; the host owns their terminal unmount.
+Raw-only lists retain the unchanged-list fast path. Element in-place matches
+avoid rebuilding the collection while retaining descendant update rules.
+<code>Theme.NotifyResourcesChanged()</code> also revisits retained Element items through
+their tracked controls, including components whose theme bindings are inside
+their render bodies. It does not rebuild the native collection or reset selection;
+raw-only item lists can retain their no-op fast paths.
+For raw values, a positionally equal list retains existing instances;
+structural updates retain value-equal instances but refresh Id-equal objects
+whose payload differs by <code>object.Equals</code>.</p>
+<p>For a managed control with a writable <code>IList&lt;object&gt; Items</code> property,
+provide the optional <code>SetCollection</code> callback:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">public</span><span class="w"> </span><span class="k">sealed</span><span class="w"> </span><span class="k">record</span><span class="w"> </span><span class="nf">FlatItemsElement</span><span class="p">(</span><span class="n">IReadOnlyList</span><span class="o">&lt;</span><span class="kt">object</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Items</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Element</span><span class="p">;</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="k">public</span><span class="w"> </span><span class="k">sealed</span><span class="w"> </span><span class="k">partial</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">FlatItemsControl</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">Control</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="p">{</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="n">IList</span><span class="o">&lt;</span><span class="kt">object</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Items</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">get</span><span class="p">;</span><span class="w"> </span><span class="k">set</span><span class="p">;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">List</span><span class="o">&lt;</span><span class="kt">object</span><span class="o">&gt;</span><span class="p">();</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="p">}</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">FlatItemsDescriptor</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="p">{</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">readonly</span><span class="w"> </span><span class="n">ControlDescriptor</span><span class="o">&lt;</span><span class="n">FlatItemsElement</span><span class="p">,</span><span class="w"> </span><span class="n">FlatItemsControl</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Descriptor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="p">()</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">        </span><span class="n">Children</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ItemsHost</span><span class="o">&lt;</span><span class="n">FlatItemsElement</span><span class="p">,</span><span class="w"> </span><span class="n">FlatItemsControl</span><span class="o">&gt;</span><span class="p">(</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">            </span><span class="n">GetItems</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">Items</span><span class="p">,</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="w">            </span><span class="n">GetCollection</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">Items</span><span class="p">)</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="w">        </span><span class="p">{</span>
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="w">            </span><span class="n">SetCollection</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">items</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">Items</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">items</span><span class="p">,</span>
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="w">        </span><span class="p">},</span>
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="w">    </span><span class="p">};</span>
+<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="p">}</span>
+</code></pre></div>
+<p>On mount, a non-notifying sink is replaced with an
+<code>ObservableCollection&lt;object&gt;</code>; an existing notifying sink is retained.
+The collection then remains stable, and observable moves use <code>Move</code> rather
+than <code>Reset</code>. This lets controls that forward <code>Items</code> to an <code>ItemsRepeater</code>
+(such as WCT <code>SettingsExpander</code>) realize dynamic children. Generated
+wrappers supply this callback for public, writable <code>IList&lt;object&gt;</code>
+properties. Read-only and concrete native <code>ItemCollection</code> properties
+keep their existing sink. The framework supplies the WinRT exposure for
+its observable list with <code>GeneratedWinRTExposedExternalType</code>, including indirect
+Native AOT collection boundaries. This does not root a toolkit's XAML metadata;
+code-only Native AOT apps may also need explicit provider registration (see
+<a href="https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/aot-support.md">AOT support</a>).</p>
 <h2 id="pool-integration">Pool integration<a class="headerlink" href="#pool-integration" title="Permanent link">&para;</a></h2>
 <p>The descriptor's <code>PoolPolicy</code> (and the corresponding parameter to
 <code>MountContext.RentControl&lt;T&gt;</code>) determines whether the control type
@@ -4345,38 +4431,38 @@ strategy, optional factory, and optional pool policy. The
 hand-coded handler and a descriptor — the dispatch shell is identical,
 and any cost difference is the interpreter's iteration over a small
 list of entries.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1">// A descriptor declares property bindings against the WinUI control the</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="c1">// element targets. The framework&#39;s DescriptorHandler interprets the entries</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1">// during Mount and Update — there is no per-element interpreter overhead</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1">// beyond a dictionary lookup and the entry-loop iteration.</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">LedIndicatorDescriptor</span>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="p">{</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">readonly</span><span class="w"> </span><span class="n">ControlDescriptor</span><span class="o">&lt;</span><span class="n">LedIndicatorElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">Border</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Descriptor</span><span class="w"> </span><span class="o">=</span>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">        </span><span class="k">new</span><span class="w"> </span><span class="n">ControlDescriptor</span><span class="o">&lt;</span><span class="n">LedIndicatorElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">Border</span><span class="o">&gt;</span>
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">        </span><span class="p">{</span>
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">            </span><span class="c1">// The descriptor&#39;s children strategy says &quot;no children&quot; — this is</span>
-<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">            </span><span class="c1">// a leaf control. See ChildrenStrategy survey in the prose.</span>
-<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">            </span><span class="n">Children</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">None</span><span class="o">&lt;</span><span class="n">LedIndicatorElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">Border</span><span class="o">&gt;</span><span class="p">(),</span>
-<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">        </span><span class="p">}</span>
-<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="w">        </span><span class="c1">// OneWay: write on Mount, diff-and-write on Update. Equality skips</span>
-<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="w">        </span><span class="c1">// the write when the element value didn&#39;t change.</span>
-<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="w">        </span><span class="p">.</span><span class="n">OneWay</span><span class="p">(</span>
-<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="w">            </span><span class="k">get</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">Size</span><span class="p">,</span>
-<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="w">            </span><span class="k">set</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">Width</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="p">;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">Height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="p">;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">CornerRadius</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Xaml</span><span class="p">.</span><span class="n">CornerRadius</span><span class="p">(</span><span class="n">v</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">2</span><span class="p">);</span><span class="w"> </span><span class="p">})</span>
-<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="w">        </span><span class="c1">// The IsOn → Background mapping coerces both inputs onto one WinUI</span>
-<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a><span class="w">        </span><span class="c1">// property. A single OneWay entry observes (Color, IsOn) jointly</span>
-<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a><span class="w">        </span><span class="c1">// by reading both off the element in the get/set lambdas.</span>
-<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a><span class="w">        </span><span class="p">.</span><span class="n">OneWay</span><span class="p">(</span>
-<a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a><span class="w">            </span><span class="k">get</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">(</span><span class="n">e</span><span class="p">.</span><span class="n">Color</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">IsOn</span><span class="p">),</span>
-<a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a><span class="w">            </span><span class="k">set</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
-<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a><span class="w">                </span><span class="n">c</span><span class="p">.</span><span class="n">Background</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">SolidColorBrush</span><span class="p">(</span>
-<a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a><span class="w">                    </span><span class="n">v</span><span class="p">.</span><span class="n">IsOn</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">Color</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Color</span><span class="p">.</span><span class="n">FromArgb</span><span class="p">(</span><span class="mh">0x40</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">Color</span><span class="p">.</span><span class="n">R</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">Color</span><span class="p">.</span><span class="n">G</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">Color</span><span class="p">.</span><span class="n">B</span><span class="p">)));</span>
-<a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a>
-<a id="__codelineno-6-28" name="__codelineno-6-28" href="#__codelineno-6-28"></a><span class="w">    </span><span class="k">internal</span><span class="w"> </span><span class="k">sealed</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">Handler</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">DescriptorHandler</span><span class="o">&lt;</span><span class="n">LedIndicatorElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">Border</span><span class="o">&gt;</span>
-<a id="__codelineno-6-29" name="__codelineno-6-29" href="#__codelineno-6-29"></a><span class="w">    </span><span class="p">{</span>
-<a id="__codelineno-6-30" name="__codelineno-6-30" href="#__codelineno-6-30"></a><span class="w">        </span><span class="k">public</span><span class="w"> </span><span class="nf">Handler</span><span class="p">()</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="k">base</span><span class="p">(</span><span class="n">LedIndicatorDescriptor</span><span class="p">.</span><span class="n">Descriptor</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-6-31" name="__codelineno-6-31" href="#__codelineno-6-31"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-6-32" name="__codelineno-6-32" href="#__codelineno-6-32"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1">// A descriptor declares property bindings against the WinUI control the</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="c1">// element targets. The framework&#39;s DescriptorHandler interprets the entries</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="c1">// during Mount and Update — there is no per-element interpreter overhead</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1">// beyond a dictionary lookup and the entry-loop iteration.</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">LedIndicatorDescriptor</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="p">{</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">readonly</span><span class="w"> </span><span class="n">ControlDescriptor</span><span class="o">&lt;</span><span class="n">LedIndicatorElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">Border</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Descriptor</span><span class="w"> </span><span class="o">=</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">        </span><span class="k">new</span><span class="w"> </span><span class="n">ControlDescriptor</span><span class="o">&lt;</span><span class="n">LedIndicatorElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">Border</span><span class="o">&gt;</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">        </span><span class="p">{</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">            </span><span class="c1">// The descriptor&#39;s children strategy says &quot;no children&quot; — this is</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="w">            </span><span class="c1">// a leaf control. See ChildrenStrategy survey in the prose.</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="w">            </span><span class="n">Children</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">None</span><span class="o">&lt;</span><span class="n">LedIndicatorElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">Border</span><span class="o">&gt;</span><span class="p">(),</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="w">        </span><span class="c1">// OneWay: write on Mount, diff-and-write on Update. Equality skips</span>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="w">        </span><span class="c1">// the write when the element value didn&#39;t change.</span>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="w">        </span><span class="p">.</span><span class="n">OneWay</span><span class="p">(</span>
+<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a><span class="w">            </span><span class="k">get</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">Size</span><span class="p">,</span>
+<a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a><span class="w">            </span><span class="k">set</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">Width</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="p">;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">Height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="p">;</span><span class="w"> </span><span class="n">c</span><span class="p">.</span><span class="n">CornerRadius</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Xaml</span><span class="p">.</span><span class="n">CornerRadius</span><span class="p">(</span><span class="n">v</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">2</span><span class="p">);</span><span class="w"> </span><span class="p">})</span>
+<a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a><span class="w">        </span><span class="c1">// The IsOn → Background mapping coerces both inputs onto one WinUI</span>
+<a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a><span class="w">        </span><span class="c1">// property. A single OneWay entry observes (Color, IsOn) jointly</span>
+<a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a><span class="w">        </span><span class="c1">// by reading both off the element in the get/set lambdas.</span>
+<a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a><span class="w">        </span><span class="p">.</span><span class="n">OneWay</span><span class="p">(</span>
+<a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a><span class="w">            </span><span class="k">get</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">(</span><span class="n">e</span><span class="p">.</span><span class="n">Color</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">IsOn</span><span class="p">),</span>
+<a id="__codelineno-7-24" name="__codelineno-7-24" href="#__codelineno-7-24"></a><span class="w">            </span><span class="k">set</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-7-25" name="__codelineno-7-25" href="#__codelineno-7-25"></a><span class="w">                </span><span class="n">c</span><span class="p">.</span><span class="n">Background</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">SolidColorBrush</span><span class="p">(</span>
+<a id="__codelineno-7-26" name="__codelineno-7-26" href="#__codelineno-7-26"></a><span class="w">                    </span><span class="n">v</span><span class="p">.</span><span class="n">IsOn</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">Color</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Color</span><span class="p">.</span><span class="n">FromArgb</span><span class="p">(</span><span class="mh">0x40</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">Color</span><span class="p">.</span><span class="n">R</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">Color</span><span class="p">.</span><span class="n">G</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">Color</span><span class="p">.</span><span class="n">B</span><span class="p">)));</span>
+<a id="__codelineno-7-27" name="__codelineno-7-27" href="#__codelineno-7-27"></a>
+<a id="__codelineno-7-28" name="__codelineno-7-28" href="#__codelineno-7-28"></a><span class="w">    </span><span class="k">internal</span><span class="w"> </span><span class="k">sealed</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">Handler</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">DescriptorHandler</span><span class="o">&lt;</span><span class="n">LedIndicatorElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">Border</span><span class="o">&gt;</span>
+<a id="__codelineno-7-29" name="__codelineno-7-29" href="#__codelineno-7-29"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-7-30" name="__codelineno-7-30" href="#__codelineno-7-30"></a><span class="w">        </span><span class="k">public</span><span class="w"> </span><span class="nf">Handler</span><span class="p">()</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="k">base</span><span class="p">(</span><span class="n">LedIndicatorDescriptor</span><span class="p">.</span><span class="n">Descriptor</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-7-31" name="__codelineno-7-31" href="#__codelineno-7-31"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-7-32" name="__codelineno-7-32" href="#__codelineno-7-32"></a><span class="p">}</span>
 </code></pre></div>
 <p>The descriptor above declares a single one-way mapping from
 <code>(Color, IsOn)</code> onto <code>Border.Background</code>, plus a size hook that
@@ -4451,10 +4537,20 @@ hatches a hand-coded handler would otherwise need:</p>
 </tr>
 <tr>
 <td><code>.ImperativeBridged(mount, update)</code></td>
-<td>Same shape with the <code>MountContext</code> / <code>UpdateContext</code> available — primary use is a secondary Element slot that needs structural reconcile via <code>ReconcileV1Child</code>.</td>
+<td>Same shape with <code>MountContext</code> / <code>UpdateContext</code> available, for bindings without owned child lifetime.</td>
+</tr>
+<tr>
+<td><code>.ImperativeBridged(mount, update, unmount)</code></td>
+<td>Adds property-owned teardown with an <code>UnmountContext</code>; unmount a secondary Element slot while parented, then detach it. Runs before descriptor <code>OnUnmount</code> and roots per-control ReactorState. The two-callback overload remains available for bindings without owned child lifetime.</td>
 </tr>
 </tbody>
 </table>
+<p>Property-owned <code>unmount</code> callbacks run before the descriptor's <code>OnUnmount</code>,
+independently of that callback. Unmount an owned slot with
+<code>ctx.Reconciler.UnmountChild(child)</code> while it is still parented, then detach it. Generated
+<code>[WrapElementSlot]</code> bindings do this automatically on terminal unmount;
+they leave constructor-owned defaults alone when no Element slot was
+declared. Do not also unmount the same slot in the descriptor callback.</p>
 <p>The entries iterate as a flat list, in declaration order. The
 descriptor's children strategy runs first when it is an items binder
 (so selection-tracking props see the populated collection at Mount);

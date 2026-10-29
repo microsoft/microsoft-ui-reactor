@@ -4152,6 +4152,18 @@ contract:</p>
 </tr>
 </tbody>
 </table>
+<p>For a writable managed <code>IList&lt;object&gt; Items</code> sink, also supply
+<code>ItemsHost.SetCollection = static (c, items) =&gt; c.Items = items</code> so a
+non-notifying list becomes an observable collection at mount. Generated
+wrappers provide this automatically. Element items reconcile incrementally
+and preserve keyed control identity; see
+<a href="../control-reconciler-protocol/#dynamic-flat-items">Dynamic flat items</a>.
+Secondary Element slots can own their teardown through
+<code>.ImperativeBridged(mount, update, unmount)</code>; <code>[WrapElementSlot]</code> generates
+that binding automatically. Unmount the owned child while it is still
+parented, then detach it. Property teardown runs before the descriptor's
+own <code>OnUnmount</code>; an undeclared generated slot leaves the control's
+constructor default untouched.</p>
 <p>The standard strategies cover everything in the built-in catalog. The
 <code>Imperative&lt;TElement, TControl&gt;</code> escape hatch exists for the case
 where none of them fit — for example, a control whose children live
