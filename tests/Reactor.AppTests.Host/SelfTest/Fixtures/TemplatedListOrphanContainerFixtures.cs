@@ -216,6 +216,57 @@ internal static class TemplatedListOrphanContainerFixtures
     private sealed record OuterPartialTeardown : Element;
     private sealed record InnerPartialTeardown : Element;
 
+    // A descriptor control whose unmount hook throws, with a CountedLeaf in a named slot the
+    // engine's generic child walk does not visit (TeachingTip.HeroContent).
+    private sealed record SlotProbe(Element Hero) : Element;
+
+    private sealed class SlotProbeHandler() : DescriptorHandler<SlotProbe, WinUI.TeachingTip>(SlotDescriptor)
+    {
+        private static readonly ControlDescriptor<SlotProbe, WinUI.TeachingTip> SlotDescriptor =
+            new ControlDescriptor<SlotProbe, WinUI.TeachingTip>
+            {
+                Children = new NamedSlots<SlotProbe, WinUI.TeachingTip>(
+                [
+                    new NamedSlot<SlotProbe, WinUI.TeachingTip>("Hero", static e => e.Hero, static (tip, child) => tip.HeroContent = child)
+                    {
+                        GetCurrentChild = static tip => tip.HeroContent as UIElement,
+                    },
+                ]),
+            }.WithUnmount(static (in UnmountContext _, WinUI.TeachingTip _) =>
+                throw new InvalidOperationException(PartialTeardownMessage));
+    }
+
+    /// <summary>
+    /// A descriptor's unmount hook throws inside an isolated teardown: its children strategy
+    /// still tears down the named slot's child (exactly once), and the failure is collected.
+    /// </summary>
+    internal class IsolatedDescriptorTeardownTearsDownSlots(Harness h, bool pool) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            Reset();
+            string name = pool ? "SlotTeardownPooled" : "SlotTeardown";
+            var rec = new Reconciler();
+            if (rec.Mount(new SlotProbe(new CountedLeaf()), static () => { }) is not WinUI.TeachingTip tip
+                || tip.HeroContent is null)
+            {
+                H.Check($"{name}_Mounted", false);
+                return Task.CompletedTask;
+            }
+            s_leafUnmounts = 0;
+            var failures = new List<Exception>();
+            using (rec.IsolateUnmountCleanupFailures(failures.Add))
+            {
+                if (pool) rec.UnmountAndPool(tip);
+                else rec.UnmountChild(tip);
+            }
+            H.Check($"{name}_FailureCollected", failures.Count == 1 && failures[0].Message == PartialTeardownMessage,
+                string.Join(",", failures.Select(f => f.Message)));
+            H.Check($"{name}_SlotChildTornDownOnce", s_leafUnmounts == 1, $"leafUnmounts={s_leafUnmounts}");
+            return Task.CompletedTask;
+        }
+    }
+
     // The same partial teardown, by a decorator handler.
     private sealed record DecoratorPartialTeardown : Element;
 
@@ -329,6 +380,7 @@ internal static class TemplatedListOrphanContainerFixtures
     {
         ControlRegistry.Register<CountedLeaf, TextBlock>(static () => new CountedLeafHandler());
         ControlRegistry.RegisterDecorator<DecoratorPartialTeardown>(static () => new DecoratorPartialTeardownHandler());
+        ControlRegistry.Register<SlotProbe, WinUI.TeachingTip>(static () => new SlotProbeHandler());
         ControlRegistry.Register<TeardownProbe, TextBlock>(static () => new TeardownProbeHandler());
         ControlRegistry.RegisterDecorator<DecoratorProbe>(static () => new DecoratorProbeHandler());
     }
