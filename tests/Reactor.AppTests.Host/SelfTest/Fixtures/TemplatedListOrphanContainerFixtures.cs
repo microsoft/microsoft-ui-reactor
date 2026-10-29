@@ -1,6 +1,8 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Core.Internal;
+using Microsoft.UI.Reactor.Core.V1Protocol;
+using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
@@ -40,7 +42,7 @@ internal static class TemplatedListOrphanContainerFixtures
     private static Action<int>? s_selectTab;
     // Armed by a fixture: what the next cleanup of a row view in a parked container does —
     // throw, or mount a host (in s_nestedWindow) whose render fails and whose handler declines it.
-    private enum ParkedCleanup { None, Throw, NestedDeclined }
+    private enum ParkedCleanup { None, Throw, NestedDeclined, DescriptorThrows }
     private static ParkedCleanup s_parkedCleanup;
     private static Window? s_nestedWindow;
     private static ReactorHost? s_nestedHost;
@@ -58,7 +60,7 @@ internal static class TemplatedListOrphanContainerFixtures
             // Before the effect below, so a throw that stopped the cleanups would skip its own.
             UseEffect(() => () =>
             {
-                if (s_parkedCleanup == ParkedCleanup.None || ContainerOf(root.Current) is not { ActualOffset.X: <= -10000 })
+                if (s_parkedCleanup is not (ParkedCleanup.Throw or ParkedCleanup.NestedDeclined) || ContainerOf(root.Current) is not { ActualOffset.X: <= -10000 })
                     return;
                 var mode = s_parkedCleanup;
                 s_parkedCleanup = ParkedCleanup.None;
@@ -75,7 +77,8 @@ internal static class TemplatedListOrphanContainerFixtures
             });
             return HStack(
                 TextBlock($"orphan-row {Props.Key} #{instance.Current} local {clicks}").Ref(root),
-                Button($"orphan+{Props.Key}", () => setClicks(clicks + 1)));
+                Button($"orphan+{Props.Key}", () => setClicks(clicks + 1)),
+                new TeardownProbe());
         }
     }
 
@@ -117,6 +120,31 @@ internal static class TemplatedListOrphanContainerFixtures
         }
     }
 
+    // A control whose descriptor's unmount hook throws when armed (DescriptorThrows) and the
+    // control sits in a parked container: teardown outside the component cleanups.
+    private sealed record TeardownProbe : Element;
+
+    private sealed class TeardownProbeHandler() : DescriptorHandler<TeardownProbe, TextBlock>(ProbeDescriptor)
+    {
+        private static readonly ControlDescriptor<TeardownProbe, TextBlock> ProbeDescriptor =
+            new ControlDescriptor<TeardownProbe, TextBlock>()
+                .WithUnmount(static (in UnmountContext _, TextBlock probe) =>
+                {
+                    if (s_parkedCleanup != ParkedCleanup.DescriptorThrows || ContainerOf(probe) is not { ActualOffset.X: <= -10000 })
+                        return;
+                    s_parkedCleanup = ParkedCleanup.None;
+                    throw new InvalidOperationException(ParkedCleanupMessage);
+                });
+    }
+
+    static TemplatedListOrphanContainerFixtures() =>
+        ControlRegistry.Register<TeardownProbe, TextBlock>(static () => new TeardownProbeHandler());
+
+    // The fixture's own list, not a TabView's tab strip (a ListView subclass, which NativeAOT
+    // may project as a plain ListView).
+    private static WinUI.ListView? FindList(Harness h) =>
+        h.FindControl<WinUI.ListView>(l => l.ItemsSource is global::System.Collections.ObjectModel.ObservableCollection<ReactorRow>);
+
     private static void Reset()
     {
         s_live.Clear();
@@ -144,7 +172,7 @@ internal static class TemplatedListOrphanContainerFixtures
             var host = H.CreateHost();
             host.Mount(_ => Component<Churn, int>(30));
             await Harness.Render(200);
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = FindList(H);
             H.Check("OrphanRows_Mounted", lv is not null && s_live.Count > 0);
             if (lv is null) return;
 
@@ -237,7 +265,7 @@ internal static class TemplatedListOrphanContainerFixtures
     /// </remarks>
     internal class MovedRowLeavesNoParkedComponent(Harness h, string name, int count, (int A, int B)[] swaps, string movedKey,
         bool collapseWithLastSwap = false, bool reinsertWithLastSwap = false, bool inUnselectedTab = false,
-        bool throwingParkedCleanup = false, bool nestedDeclinedParkedCleanup = false)
+        bool throwingParkedCleanup = false, bool nestedDeclinedParkedCleanup = false, bool throwingDescriptorTeardown = false)
         : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -260,7 +288,7 @@ internal static class TemplatedListOrphanContainerFixtures
             var host = H.CreateHost();
             // Report-only handler: it would swallow any cleanup failure it is handed.
             var errors = new List<RenderError>();
-            if (throwingParkedCleanup || nestedDeclinedParkedCleanup)
+            if (throwingParkedCleanup || nestedDeclinedParkedCleanup || throwingDescriptorTeardown)
                 host.RenderErrorHandler = e => { errors.Add(e); return null; };
             Exception? escaped = null;
             Microsoft.UI.Xaml.UnhandledExceptionEventHandler? captureEscape = null;
@@ -292,7 +320,7 @@ internal static class TemplatedListOrphanContainerFixtures
             host.Mount(_ => inUnselectedTab ? Component<TabbedChurn, int>(count) : Component<Churn, int>(count));
             await Harness.Render(300);
             // Exactly ListView: a TabView's tab strip is a ListView subclass.
-            var lv = H.FindControl<WinUI.ListView>(l => l.GetType() == typeof(WinUI.ListView));
+            var lv = FindList(H);
             H.Check($"{name}_Mounted", lv is not null && s_live.Count > 0);
             if (lv is null) return;
 
@@ -310,6 +338,7 @@ internal static class TemplatedListOrphanContainerFixtures
                 if (inUnselectedTab && i == swaps.Length - 1) s_selectTab!(0);
                 if (throwingParkedCleanup && i == swaps.Length - 1) s_parkedCleanup = ParkedCleanup.Throw;
                 if (nestedDeclinedParkedCleanup && i == swaps.Length - 1) s_parkedCleanup = ParkedCleanup.NestedDeclined;
+                if (throwingDescriptorTeardown && i == swaps.Length - 1) s_parkedCleanup = ParkedCleanup.DescriptorThrows;
                 await Harness.Render(300);
             }
             if (collapseWithLastSwap)
@@ -332,13 +361,22 @@ internal static class TemplatedListOrphanContainerFixtures
             else
                 H.Skip($"{name}_ParkedContainer", "WinUI parked no container for the moved row during this run; the checks are inconclusive");
 
-            if (throwingParkedCleanup || nestedDeclinedParkedCleanup)
+            // The teardown only runs for a parked container, so with none parked the checks of
+            // it are as inconclusive as the rest.
+            bool armed = throwingParkedCleanup || nestedDeclinedParkedCleanup || throwingDescriptorTeardown;
+            if (armed && parked.Count == 0 && s_parkedCleanup != ParkedCleanup.None)
+            {
+                H.Skip($"{name}_ParkedCleanupRan", "no container was parked, so the parked-row teardown never ran");
+                armed = false;
+                throwingParkedCleanup = nestedDeclinedParkedCleanup = throwingDescriptorTeardown = false;
+            }
+            if (armed)
                 H.Check($"{name}_ParkedCleanupRan", s_parkedCleanup == ParkedCleanup.None);
-            if (throwingParkedCleanup)
+            if (throwingParkedCleanup || throwingDescriptorTeardown)
             {
                 // The sweep unmounted the parked view even though its cleanup threw, and reported it.
                 H.Check($"{name}_CleanupFailureReported", errors.Any(e => e.Source == RenderErrorSource.Cleanup
-                    && e.Exception.Message == ParkedCleanupMessage), $"errors={errors.Count}");
+                    && e.Exception.Message == ParkedCleanupMessage), string.Join(" | ", errors.Select(e => $"{e.Source}:{e.Exception.GetType().Name}:{e.Exception.Message}")));
             }
             if (nestedDeclinedParkedCleanup)
             {
@@ -350,6 +388,12 @@ internal static class TemplatedListOrphanContainerFixtures
                 H.Check($"{name}_DeclinedEscapes", escaped?.Message == NestedDeclinedMessage, escaped?.Message ?? "(nothing escaped)");
             }
             s_parkedCleanup = ParkedCleanup.None;
+
+            // Every parked container's view was released (its tag cleared), even past a throwing teardown.
+            int liveParked = lv.ItemsPanelRoot.Children.OfType<ListViewItem>().Count(item =>
+                lv.IndexFromContainer(item) < 0
+                && item.ContentTemplateRoot is ContentControl itemHost && Reconciler.GetElementTag(itemHost) is not null);
+            H.Check($"{name}_ParkedViewsReleased", liveParked == 0, $"liveParked={liveParked}");
 
             var mountedParked = s_live.Values.Where(r => Unlinked(lv, r.Root.Current)).Select(r => $"{r.Key}#{r.Instance}").ToList();
             H.Check($"{name}_NoParkedRowStaysMounted", mountedParked.Count == 0, string.Join(", ", mountedParked));
@@ -422,7 +466,7 @@ internal static class TemplatedListOrphanContainerFixtures
             var host = H.CreateHost();
             host.Mount(_ => Component<Churn, int>(30));
             await Harness.Render(300);
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = FindList(H);
             H.Check("UnmountCollapsed_Mounted", lv is not null);
             if (lv is null) return;
 
@@ -439,7 +483,7 @@ internal static class TemplatedListOrphanContainerFixtures
 
             s_setPresent!(false);
             await Harness.Render(300);
-            H.Check("UnmountCollapsed_ListUnmounted", H.FindControl<WinUI.ListView>(_ => true) is null);
+            H.Check("UnmountCollapsed_ListUnmounted", FindList(H) is null);
             H.Check("UnmountCollapsed_SweepDropped", list is { ShownWatch: null, PostLayoutSweep: null, LoadedWatch: null });
             host.Dispose();
             Reset();
@@ -458,7 +502,7 @@ internal static class TemplatedListOrphanContainerFixtures
             var host = H.CreateHost();
             host.Mount(_ => Component<Churn, int>(5));
             await Harness.Render(200);
-            var lv = H.FindControl<WinUI.ListView>(_ => true);
+            var lv = FindList(H);
             H.Check("MoveRow_Mounted", lv is not null);
             if (lv is null) return;
 

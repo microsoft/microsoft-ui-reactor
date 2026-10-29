@@ -351,11 +351,12 @@ public sealed partial class Reconciler : IDisposable
     internal void NoteBoundaryMountRegistration(UIElement control) => _boundaryMountJournal?.Add(control);
 
     /// <summary>
-    /// When set, unmount runs every component cleanup and <c>.OnUnmount</c> action and hands
-    /// failures here instead of stopping at the first one (issue #1291). Used where a
+    /// When set, unmount runs every component cleanup, <c>.OnUnmount</c> action and control
+    /// handler / descriptor unmount hook and hands failures here instead of stopping at the
+    /// first one (issue #1291). Used where a
     /// teardown must complete regardless — replacing or releasing a tree for a render-error
-    /// outcome, and rolling back a failed boundary child — because the caller forgets the
-    /// tree afterwards and nothing could finish the job later. <c>null</c> keeps the normal
+    /// outcome, rolling back a failed boundary child, and sweeping a templated list's parked
+    /// containers — because nothing could finish the job later. <c>null</c> keeps the normal
     /// behaviour: the first failure escapes.
     /// </summary>
     private Action<Exception>? _unmountCleanupErrorSink;
@@ -371,6 +372,13 @@ public sealed partial class Reconciler : IDisposable
     {
         public void Dispose() => owner._unmountCleanupErrorSink = previous;
     }
+
+    /// <summary>Whether an <see cref="IsolateUnmountCleanupFailures"/> scope is collecting failures.</summary>
+    internal bool IsolatesUnmountCleanupFailures => _unmountCleanupErrorSink is not null;
+
+    /// <summary>Hands a teardown failure to the active isolation scope (a control handler's or
+    /// descriptor's unmount hook, which runs outside <see cref="RunUnmountCleanups"/>).</summary>
+    internal void ReportIsolatedUnmountFailure(Exception ex) => _unmountCleanupErrorSink?.Invoke(ex);
 
     private void RunUnmountCleanups(ComponentNode node)
     {

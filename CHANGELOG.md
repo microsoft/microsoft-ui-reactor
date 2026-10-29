@@ -507,7 +507,10 @@ Conventions for contributors:
   cleaned up, and a `ReactorDiagnostics.TrySetState` on one was accepted but never rendered.
   WinUI parks it in the layout pass after the update (a row moved twice, or moved out of the
   realized range, is enough), so after a structural change the reconciler now checks the
-  containers once that layout pass completes.
+  containers once that layout pass completes. A throwing cleanup no longer stops that sweep:
+  every parked row is torn down and the failure goes to the `RenderErrorHandler` as
+  `Cleanup`. Teardowns that finish regardless of cleanup failures (issue #1291) now also
+  collect a throwing control descriptor `OnUnmount` hook rather than stopping at it.
 
 - **`REACTOR_A11Y_001` no longer flags text buttons with a non-literal string label**
   (spec 006 §6.3). `Button(S("Usage_Refresh"), onClick)` — a localized resource lookup,

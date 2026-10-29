@@ -1347,7 +1347,7 @@ public sealed partial class Reconciler
         if (!ReferenceEquals(GetListState(listViewBase), list) || listViewBase.ItemsPanelRoot is not { } panel) return;
         if (!listViewBase.IsLoaded)
         {
-            RoutedEventHandler? loadedWatch = null;
+            RoutedEventHandler loadedWatch = null!;
             loadedWatch = (_, _) =>
             {
                 listViewBase.Loaded -= loadedWatch;
@@ -1360,7 +1360,7 @@ public sealed partial class Reconciler
         }
         if (IsCollapsedInTree(listViewBase))
         {
-            global::Windows.Foundation.TypedEventHandler<FrameworkElement, EffectiveViewportChangedEventArgs>? shownWatch = null;
+            global::Windows.Foundation.TypedEventHandler<FrameworkElement, EffectiveViewportChangedEventArgs> shownWatch = null!;
             shownWatch = (_, _) =>
             {
                 listViewBase.EffectiveViewportChanged -= shownWatch;
