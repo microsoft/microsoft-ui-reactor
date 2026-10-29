@@ -353,7 +353,7 @@ MSBuild severity is what the *language* / *analyzer* author chose, not what the 
 Where:
 
 - `<SEV>` is `E` / `W` / `I` (error, warning, info).
-- `<message>` is truncated to ~100 chars.
+- On stdout, error messages are emitted in full; warning and info messages are truncated to 100 characters.
 - `<hint>` is the Tier 1 hint pointer if present, else the highest-confidence Tier 2 / Tier 3 suggestion above threshold.
 - `<evidence>` (optional, after `//`) is a brief justification — `[factory has Action onClick parameter]`, `[matched rule: FluentToNamed]`, `[skill: SKILL.md §Hooks]`. Always present so the agent can sanity-check.
 
