@@ -212,7 +212,14 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
         // descriptor exposes the real strategy here for the teardown walk.
         var strategy = _handler.ChildrenForUnmount;
         if (strategy is not null)
-            DispatchChildrenUnmount(strategy, reconciler, typedControl);
+        {
+            if (hookFailure is null)
+                DispatchChildrenUnmount(strategy, reconciler, typedControl);
+            else
+                // The failed hook may have torn some children down already: skip those.
+                reconciler.SkippingIsolatedTornDown((strategy, reconciler, typedControl),
+                    static s => DispatchChildrenUnmount(s.strategy, s.reconciler, s.typedControl));
+        }
         hookFailure?.Throw();
 
         // Standard handlers always opt into pool collection — matches

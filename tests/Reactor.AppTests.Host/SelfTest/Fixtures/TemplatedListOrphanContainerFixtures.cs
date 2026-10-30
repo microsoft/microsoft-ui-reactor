@@ -232,20 +232,29 @@ internal static class TemplatedListOrphanContainerFixtures
                         GetCurrentChild = static tip => tip.HeroContent as UIElement,
                     },
                 ]),
-            }.WithUnmount(static (in UnmountContext _, WinUI.TeachingTip _) =>
-                throw new InvalidOperationException(PartialTeardownMessage));
+            }.WithUnmount(static (in UnmountContext ctx, WinUI.TeachingTip tip) =>
+            {
+                // Optionally tears the slot's child down itself before failing.
+                if (s_slotHookTearsDownChild && tip.HeroContent is UIElement hero)
+                    ctx.Reconciler.UnmountChild(hero);
+                throw new InvalidOperationException(PartialTeardownMessage);
+            });
     }
+
+    private static bool s_slotHookTearsDownChild;
 
     /// <summary>
     /// A descriptor's unmount hook throws inside an isolated teardown: its children strategy
     /// still tears down the named slot's child (exactly once), and the failure is collected.
     /// </summary>
-    internal class IsolatedDescriptorTeardownTearsDownSlots(Harness h, bool pool) : SelfTestFixtureBase(h)
+    internal class IsolatedDescriptorTeardownTearsDownSlots(Harness h, bool pool, bool hookTearsDownChild = false)
+        : SelfTestFixtureBase(h)
     {
         public override Task RunAsync()
         {
             Reset();
-            string name = pool ? "SlotTeardownPooled" : "SlotTeardown";
+            s_slotHookTearsDownChild = hookTearsDownChild;
+            string name = (hookTearsDownChild ? "SlotPartialTeardown" : "SlotTeardown") + (pool ? "Pooled" : "");
             var rec = new Reconciler();
             if (rec.Mount(new SlotProbe(new CountedLeaf()), static () => { }) is not WinUI.TeachingTip tip
                 || tip.HeroContent is null)
@@ -263,6 +272,7 @@ internal static class TemplatedListOrphanContainerFixtures
             H.Check($"{name}_FailureCollected", failures.Count == 1 && failures[0].Message == PartialTeardownMessage,
                 string.Join(",", failures.Select(f => f.Message)));
             H.Check($"{name}_SlotChildTornDownOnce", s_leafUnmounts == 1, $"leafUnmounts={s_leafUnmounts}");
+            s_slotHookTearsDownChild = false;
             return Task.CompletedTask;
         }
     }

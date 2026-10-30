@@ -4045,6 +4045,22 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
+    /// Runs <paramref name="teardown"/> (a handler's own child teardown after its unmount hook
+    /// failed, inside <see cref="RunIsolatedTeardown"/>) skipping the controls the running
+    /// teardown already tore down, so none is torn down twice.
+    /// </summary>
+    internal void SkippingIsolatedTornDown<TState>(TState state, Action<TState> teardown)
+    {
+        var outerSkip = _isolatedTeardownSkip;
+        var skip = new HashSet<UIElement>(ReferenceEqualityComparer.Instance);
+        if (_isolatedTeardownTrack is { } track) skip.UnionWith(track);
+        if (outerSkip is not null) skip.UnionWith(outerSkip);
+        _isolatedTeardownSkip = skip;
+        try { teardown(state); }
+        finally { _isolatedTeardownSkip = outerSkip; }
+    }
+
+    /// <summary>
     /// Runs a <c>RegisterType</c> unmount callback; inside an isolated teardown, through
     /// <see cref="RunIsolatedTeardown"/>. Returns false when it failed part-way.
     /// </summary>
