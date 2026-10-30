@@ -153,10 +153,45 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
     /// write — could outlive the mount that created it.</summary>
     public void Unmount(UnmountContext ctx, TControl control)
     {
+        if (ctx.Reconciler.IsolatesUnmountCleanupFailures)
+        {
+            UnmountIsolated(ctx, control);
+            return;
+        }
         if (_hasPropUnmount)
             for (int i = 0; i < _descriptor.Properties.Count; i++)
                 _descriptor.Properties[i].Unmount(in ctx, control);
         _descriptor.OnUnmount?.Invoke(in ctx, control);
+    }
+
+    // Inside a teardown that must finish (IsolateUnmountCleanupFailures): every property's
+    // unmount callback and the hook run even when an earlier one throws (each may own a
+    // secondary slot no other walk reaches). The first failure is rethrown for the adapter and
+    // the engine; any later one is reported here, so each is reported once.
+    private void UnmountIsolated(UnmountContext ctx, TControl control)
+    {
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? first = null;
+        if (_hasPropUnmount)
+            for (int i = 0; i < _descriptor.Properties.Count; i++)
+            {
+                try { _descriptor.Properties[i].Unmount(in ctx, control); }
+                catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+                {
+                    Note(ref first, ctx, ex);
+                }
+            }
+        try { _descriptor.OnUnmount?.Invoke(in ctx, control); }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            Note(ref first, ctx, ex);
+        }
+        first?.Throw();
+
+        static void Note(ref global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? first, UnmountContext ctx, Exception ex)
+        {
+            if (first is null) first = global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+            else ctx.Reconciler.ReportIsolatedUnmountFailure(ex);
+        }
     }
 
     public void Update(UpdateContext ctx, TElement oldEl, TElement newEl, TControl ctrl)

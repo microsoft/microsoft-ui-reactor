@@ -540,7 +540,8 @@ Conventions for contributors:
   the containers once that layout pass completes. A throwing cleanup no longer stops that sweep:
   every parked row is torn down and the failure goes to the `RenderErrorHandler` as
   `Cleanup`. Teardowns that finish regardless of cleanup failures (issue #1291) now also
-  collect a throwing control handler, descriptor `OnUnmount` hook, decorator or `RegisterType`
+  collect a throwing control handler, descriptor `OnUnmount` hook or property unmount callback,
+  decorator or `RegisterType`
   unmount callback rather than stopping at it: the children it did not reach are torn down (once
   each), and the half-torn-down control is never pooled.
 

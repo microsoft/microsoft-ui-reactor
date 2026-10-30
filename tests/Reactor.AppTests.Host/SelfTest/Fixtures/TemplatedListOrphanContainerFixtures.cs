@@ -277,6 +277,63 @@ internal static class TemplatedListOrphanContainerFixtures
         }
     }
 
+    // A descriptor control with two property-owned (ImperativeBridged) children outside every
+    // walk: the first property's unmount throws, the second tears its child down; the hook counts.
+    private sealed record BridgedProbe : Element;
+    private static readonly Dictionary<object, UIElement> s_bridgedSecond = new(ReferenceEqualityComparer.Instance);
+    private static int s_bridgedHookRuns;
+
+    private sealed class BridgedProbeHandler() : DescriptorHandler<BridgedProbe, TextBlock>(BridgedDescriptor)
+    {
+        private static readonly ControlDescriptor<BridgedProbe, TextBlock> BridgedDescriptor =
+            new ControlDescriptor<BridgedProbe, TextBlock>()
+                .ImperativeBridged(
+                    static (ctx, _, _) => ctx.MountChild(new CountedLeaf()),
+                    static (_, _, _, _) => { },
+                    static (_, _) => throw new InvalidOperationException(PartialTeardownMessage))
+                .ImperativeBridged(
+                    static (ctx, control, _) => s_bridgedSecond[control] = ctx.MountChild(new CountedLeaf())!,
+                    static (_, _, _, _) => { },
+                    static (ctx, control) =>
+                    {
+                        if (s_bridgedSecond.Remove(control, out var child)) ctx.Reconciler.UnmountChild(child);
+                    })
+                .WithUnmount(static (in UnmountContext _, TextBlock _) => s_bridgedHookRuns++);
+    }
+
+    /// <summary>
+    /// The first of two property unmount callbacks throws inside an isolated teardown: the second
+    /// still tears its child down, the descriptor hook still runs, and one failure is collected.
+    /// </summary>
+    internal class IsolatedPropertyUnmountsRunIndependently(Harness h, bool pool) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            Reset();
+            string name = pool ? "BridgedTeardownPooled" : "BridgedTeardown";
+            var rec = new Reconciler();
+            if (rec.Mount(new BridgedProbe(), static () => { }) is not TextBlock probe)
+            {
+                H.Check($"{name}_Mounted", false);
+                return Task.CompletedTask;
+            }
+            s_leafUnmounts = 0;
+            s_bridgedHookRuns = 0;
+            var failures = new List<Exception>();
+            using (rec.IsolateUnmountCleanupFailures(failures.Add))
+            {
+                if (pool) rec.UnmountAndPool(probe);
+                else rec.UnmountChild(probe);
+            }
+            H.Check($"{name}_FailureCollected", failures.Count == 1 && failures[0].Message == PartialTeardownMessage,
+                string.Join(",", failures.Select(f => f.Message)));
+            H.Check($"{name}_SecondCallbackRan", s_leafUnmounts == 1, $"leafUnmounts={s_leafUnmounts}");
+            H.Check($"{name}_HookRan", s_bridgedHookRuns == 1, $"hookRuns={s_bridgedHookRuns}");
+            s_bridgedSecond.Clear();
+            return Task.CompletedTask;
+        }
+    }
+
     // The same partial teardown, by a decorator handler.
     private sealed record DecoratorPartialTeardown : Element;
 
@@ -391,6 +448,7 @@ internal static class TemplatedListOrphanContainerFixtures
         ControlRegistry.Register<CountedLeaf, TextBlock>(static () => new CountedLeafHandler());
         ControlRegistry.RegisterDecorator<DecoratorPartialTeardown>(static () => new DecoratorPartialTeardownHandler());
         ControlRegistry.Register<SlotProbe, WinUI.TeachingTip>(static () => new SlotProbeHandler());
+        ControlRegistry.Register<BridgedProbe, TextBlock>(static () => new BridgedProbeHandler());
         ControlRegistry.Register<TeardownProbe, TextBlock>(static () => new TeardownProbeHandler());
         ControlRegistry.RegisterDecorator<DecoratorProbe>(static () => new DecoratorProbeHandler());
     }
