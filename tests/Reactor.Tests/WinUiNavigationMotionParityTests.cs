@@ -67,8 +67,15 @@ public class WinUiNavigationMotionParityTests
     /// ContentPresenter, and x:Bind/Setter markup codegen) and touches no animation code —
     /// that non-empty diff is the positive control proving the comparison can detect a
     /// change, so "no change here" is a measurement rather than a broken query.</para>
+    /// <para>Re-verified for the 2.2.0 → 2.5.4-experimental bump (WinUI
+    /// 2.3.10-experimental). The <c>winui3/release/2.5.4-experimental</c> tag
+    /// (<c>7b12709347527238494ca28cb9fed326d513e779</c>) moved the tree up one level, so the
+    /// same four files live at <c>dxaml/phone/lib/…</c> (no <c>src/</c> prefix) — and their
+    /// blob SHAs are unchanged: <c>ade27cbf…</c>, <c>2c9bb435…</c>, <c>8761d909…</c>,
+    /// <c>bf82d5cd…</c>. The tag-to-tag diff touches 300 files (positive control), none of
+    /// them these four.</para>
     /// </remarks>
-    private const string VerifiedAgainstWindowsAppSdkVersion = "2.2.0";
+    private const string VerifiedAgainstWindowsAppSdkVersion = "2.5.4-experimental";
 
     // ════════════════════════════════════════════════════════════════
     //  Entrance — ThemeTransitions.cpp,
