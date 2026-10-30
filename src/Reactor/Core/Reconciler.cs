@@ -1087,20 +1087,39 @@ public sealed partial class Reconciler : IDisposable
     /// placeholder's published <c>owner=</c> is the owner its body was declared under, so it is
     /// restored for the mount. Nested components still scope their own subtrees.
     /// </summary>
-    internal UIElement? MountDialogContent(FrameworkElement placeholder, Element content, Action requestRerender, ElementTheme theme)
+    internal UIElement? MountDialogContent(
+        FrameworkElement placeholder,
+        Element content,
+        Action requestRerender,
+        ElementTheme theme,
+        V1Protocol.OverlayLifecycle.ContentDialogLifetime lifetime)
     {
+        if (lifetime.Retired || IsDisposingContentDialogs) return null;
+
         var previousTheme = _ambientRequestedTheme;
         _ambientRequestedTheme = theme;
+        UIElement? mounted;
         try
         {
             if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
                 && CurrentDiagnosticOwner is null
                 && placeholder.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string published
                 && Diagnostics.ReactorSourcePublisher.Owner(published) is { } owner)
-                return MountUnderOwner(content, requestRerender, owner);
-            return Mount(content, requestRerender);
+                mounted = MountUnderOwner(content, requestRerender, owner);
+            else
+                mounted = Mount(content, requestRerender);
         }
         finally { _ambientRequestedTheme = previousTheme; }
+
+        // A child setter can dispose the host while Mount is walking siblings.
+        // Disposal drains the current component set, so tear down the completed
+        // side-mounted subtree too; this also makes a later dialog.Content write a no-op.
+        if (lifetime.Retired || IsDisposingContentDialogs)
+        {
+            if (mounted is not null) UnmountChild(mounted);
+            return null;
+        }
+        return mounted;
     }
 
     private UIElement? MountUnderOwner(Element element, Action requestRerender, string owner)
@@ -7915,6 +7934,19 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    internal HashSet<V1Protocol.OverlayLifecycle.ContentDialogLifetime>? ContentDialogLifetimes;
+    internal bool IsDisposingContentDialogs { get; private set; }
+
+    internal void RetireContentDialogs()
+    {
+        if (IsDisposingContentDialogs) return;
+        IsDisposingContentDialogs = true;
+        if (ContentDialogLifetimes is not { Count: > 0 } lifetimes) return;
+        foreach (var lifetime in lifetimes.ToArray())
+            lifetime.Retire();
+        ContentDialogLifetimes = null;
+    }
+
     public void Dispose()
     {
         global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? pendingPropagation;
@@ -7932,6 +7964,7 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? DisposeCollectingPropagation()
     {
+        RetireContentDialogs();
         // Hosts dispose through here rather than Dispose(); a disposed reconciler's nodes are dead.
         _disposedForDiagnostics = true;
         // Issue #1291: with a RenderErrorHandler configured, every effect cleanup runs and

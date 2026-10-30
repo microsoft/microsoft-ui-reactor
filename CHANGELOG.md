@@ -409,6 +409,14 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Disposing a host retires its ContentDialogs.** `ReactorHostControl.Dispose()`,
+  `ReactorHost.Dispose()`, and standalone reconciler disposal cancel deferred opens
+  and detach/hide owned dialogs before user cleanup, without raising the element's
+  `OnClosed`. Previously effect cleanup ran but the native modal could remain on
+  screen after its host was disposed. Ordinary tree-disposal cleanup semantics
+  are unchanged (spec 047 §4.5). Reentrant disposal during dialog-content mount
+  or update also leaves the dialog detached, and closed dialogs release their
+  `Opened` handler after `ShowAsync` completes.
 - **Unmount callbacks survive managed-wrapper collection** (spec 047 §3).
   `.OnUnmount(...)` now lives in native attached state rather than a weak table
   keyed by a managed wrapper, so a still-mounted control keeps its teardown callback

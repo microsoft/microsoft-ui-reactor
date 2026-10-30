@@ -138,6 +138,13 @@ Rule of thumb: start with a unit test. Drop to selftest only when you need a liv
 
 ### Mutation checks must prove the mutation ran
 
+For native control-identity checks, compare the control's attached `ReactorState`
+(`Reconciler.GetOrCreateReactorState`), not `RuntimeHelpers.GetHashCode` of a
+C#/WinRT wrapper. GC can collect an unrooted wrapper while its native control
+remains mounted; a later query then gets a different managed hash for the same
+control. The Stack/WrapGrid panel fixtures force GC between observations and
+assert both native identity and the reordered child sequence.
+
 Before interpreting a green mutation run, verify the source diff contains the intended edit at
 exactly the target site, the build and test processes both exited successfully, and the product
 assembly containing that source was rebuilt after the edit. Do not infer success by matching
