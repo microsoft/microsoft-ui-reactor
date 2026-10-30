@@ -409,6 +409,13 @@ Conventions for contributors:
 
 ### Fixed
 
+- Async resource hooks detect dependency changes even when hashes collide and
+  treat mismatched cached dependencies as a miss, preventing wrong-query data
+  in `UseResource` and `UseInfiniteResource`. Cursor-paged resources also use
+  the requested predecessor's cursor after page eviction and cache invalidation
+  ([issue #1430](https://github.com/microsoft/microsoft-ui-reactor/issues/1430),
+  spec 020 §6.2, §7, §9.2).
+
 - **Unmount callbacks survive managed-wrapper collection** (spec 047 §3).
   `.OnUnmount(...)` now lives in native attached state rather than a weak table
   keyed by a managed wrapper, so a still-mounted control keeps its teardown callback

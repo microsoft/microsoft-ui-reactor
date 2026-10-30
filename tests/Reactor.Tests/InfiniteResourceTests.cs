@@ -220,6 +220,27 @@ public class InfiniteResourceTests
         Assert.Equal("cursor_value", resource.GetCursor<string>());
     }
 
+    [Theory]
+    [InlineData("cursor2")]
+    [InlineData(null)]
+    public void TryGetPageCursor_Distinguishes_Retained_Pages_From_Missing_Or_InFlight(string? nextCursor)
+    {
+        var resource = new InfiniteResource<string>(new InfiniteResourceOptions(PageSize: 1));
+        resource.ApplyPageResult(0, new Page<string, string>(["a"], "cursor1"));
+        resource.ApplyPageResult(1, new Page<string, string>(["b"], nextCursor));
+
+        Assert.True(resource.TryGetPageCursor<string>(0, out var cursor));
+        Assert.Equal("cursor1", cursor);
+        Assert.True(resource.TryGetPageCursor<string>(1, out cursor));
+        Assert.Equal(nextCursor, cursor);
+        Assert.Equal(nextCursor, resource.GetCursor<string>());
+        Assert.False(resource.TryGetPageCursor<string>(2, out _));
+        resource.MarkPageInFlight(2);
+        Assert.False(resource.TryGetPageCursor<string>(2, out _));
+        resource.ClearAllPages();
+        Assert.False(resource.TryGetPageCursor<string>(0, out _));
+    }
+
     [Fact]
     public void ClearInflightSlot_RemovesUnstartedFetch()
     {

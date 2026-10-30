@@ -331,8 +331,12 @@ public sealed record ResourceOptions(
 
 ### 6.2 Behavior
 
-1. On first render, the hook computes a cache key = `CacheKey ?? (calling hook
-   identity + deps)` and looks it up in `QueryCache`.
+1. On first render, the hook computes a cache key =
+   `CacheKey ?? $"{CallerHookId}/{DepsHash}"` and looks it up in `QueryCache`.
+   For automatically keyed queries, the hash selects a cache slot; dependency
+   identity is checked separately by comparing snapshots element-wise with
+   `object.Equals`. A dependency mismatch is a cache miss even when the key
+   matches. Explicit-key exceptions are described in §9.2.
 2. **Cache miss** → invoke `fetcher(ct)` once. If the returned `Task<T>` is
    already in the `RanToCompletion` state (synchronous/hot-cached fetchers,
    in-memory test doubles), unwrap it and return `Data(result)` on this same
@@ -345,8 +349,12 @@ public sealed record ResourceOptions(
 5. When an async fetch completes, the continuation marshals back to the UI
    dispatcher captured at hook registration, stores the result in the cache,
    and triggers re-render of every component subscribed to that key.
-6. When `deps` change, **cancel** the in-flight token for the old key and
-   re-evaluate from step 1 with the new key. The old result stays in cache.
+6. For automatically keyed queries, when `deps` differ element-wise, **cancel**
+   the in-flight token and re-evaluate from step 1, even if a hash collision
+   leaves the key unchanged. A different key leaves the old result in its old
+   slot; a colliding result replaces the old entry in the same slot (§9.2).
+   With an explicit `CacheKey`, changing that key switches the query; changing
+   only `deps` neither cancels the current request nor triggers a refetch.
 7. On unmount, cancel the in-flight token and unsubscribe from the cache key.
    If this was the last subscriber, start the `CacheTime` eviction timer. A
    fetch that was already cached before unmount remains in cache until the
@@ -608,10 +616,28 @@ public sealed record CacheEntry<T>(
 ### 9.2 Key derivation
 
 Cache keys are `$"{CallerHookId}/{DepsHash}"` unless the user overrides via
-`ResourceOptions.CacheKey`. `CallerHookId` is derived at hook-registration
-time from the component type + hook index — stable across renders, unique
-per call-site. `DepsHash` is the existing `ValueEqualityComparer` hash
-(spec 009 §4.2).
+`ResourceOptions.CacheKey`. `CallerHookId` is stable across renders for a
+component instance and hook slot.
+
+For automatically keyed queries, `DepsHash` selects the cache slot, not the
+dependency identity. Dependency identity uses shallow, element-wise
+`object.Equals` against a stored snapshot. Resource cache writes, including
+infinite-resource pages, associate the result with the request's dependency
+snapshot; resource reads validate that snapshot before reusing a tagged entry.
+
+Different dependencies with the same hash are a cache miss. The next successful
+write replaces the value and dependency snapshot in the existing slot; there
+are no collision buckets or additional keys. Switching A → B → A can therefore
+require another fetch for A after B has overwritten the slot.
+
+The explicit-key exceptions are:
+
+- `ResourceOptions.CacheKey` is the complete query identity. Dependency changes
+  alone do not cancel or refetch, and cache reads do not check dependency tags.
+  Callers must change the key when they intend to switch queries.
+- Public `QueryCache.Set` writes an untagged entry, clearing any previous
+  dependency snapshot. Such entries remain reusable by key and result type,
+  without dependency validation, preserving the public explicit-key behavior.
 
 Two different components calling the *same* fetcher will get different cache
 keys unless they supply an explicit `CacheKey`. This matches TanStack Query's

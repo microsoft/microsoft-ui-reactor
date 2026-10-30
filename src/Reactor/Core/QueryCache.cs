@@ -74,12 +74,16 @@ public sealed class QueryCache : IDisposable
     /// and <see cref="CacheEntry{T}.StaleTime"/> are both returned on a hit.
     /// </summary>
     public bool TryGet<T>(string key, out CacheEntry<T> entry)
+        => TryGetResource(key, null, out entry);
+
+    internal bool TryGetResource<T>(string key, object[]? deps, out CacheEntry<T> entry)
     {
         if (_slots.TryGetValue(key, out var slot))
         {
             lock (slot.Lock)
             {
-                if (slot.Entry is CacheEntry<T> typed)
+                if (slot.Entry is CacheEntry<T> typed &&
+                    (deps is null || slot.Deps is null || ResourceDependencies.DepsEqual(slot.Deps, deps)))
                 {
                     entry = typed;
                     return true;
@@ -95,6 +99,11 @@ public sealed class QueryCache : IDisposable
     /// subscriber count on the slot. Fires <see cref="EntryChanged"/>.
     /// </summary>
     public void Set<T>(string key, T value, TimeSpan staleTime, TimeSpan cacheTime)
+        => SetResource(key, value, staleTime, cacheTime, null);
+
+    // Resource hooks pass their already-isolated dependency snapshot. Public Set
+    // remains an explicit-key write; untagged entries retain their existing behavior.
+    internal void SetResource<T>(string key, T value, TimeSpan staleTime, TimeSpan cacheTime, object[]? deps)
     {
         while (true)
         {
@@ -104,6 +113,7 @@ public sealed class QueryCache : IDisposable
                 if (slot.IsEvicted) continue;
                 slot.CacheTime = cacheTime;
                 slot.Entry = new CacheEntry<T>(value, UtcNow(), staleTime, slot.SubscriberCount);
+                slot.Deps = deps;
                 // A Set clears a pending eviction only if there are subscribers; otherwise
                 // the newly-set entry is still evictable after CacheTime with no one listening.
                 slot.ZeroSubscribersAt = slot.SubscriberCount == 0 ? UtcNow() : null;
@@ -333,6 +343,7 @@ public sealed class QueryCache : IDisposable
         // Set under Lock when the slot has been removed from the dictionary, so
         // concurrent Subscribe/Set observers can discard it and retry with a fresh slot.
         public bool IsEvicted;
+        public object[]? Deps;
     }
 }
 

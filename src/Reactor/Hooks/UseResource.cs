@@ -8,6 +8,17 @@ namespace Microsoft.UI.Reactor.Hooks;
 /// TanStack Query — zero <see cref="StaleTime"/> (always refetch-on-mount but dedup
 /// concurrent requests), five-minute <see cref="CacheTime"/>.
 /// </summary>
+/// <param name="StaleTime">Freshness interval; null uses zero.</param>
+/// <param name="CacheTime">Retention after the last subscriber leaves; null uses five minutes.</param>
+/// <param name="RetryCount">Number of retries after a failed fetch.</param>
+/// <param name="RefetchOnMount">Whether to fetch on a cache miss.</param>
+/// <param name="CacheKey">
+/// Overrides the generated cache key; null uses a key derived from deps.
+/// When set, the key identifies the query; deps changes alone do not cancel
+/// an in-flight request or start a new fetch. Include values that select
+/// different data in the key, for example <c>$"user:{userId}"</c>.
+/// </param>
+/// <param name="RefetchOnWindowFocus">Whether to opt into window-focus revalidation.</param>
 public sealed record ResourceOptions(
     TimeSpan? StaleTime = null,
     TimeSpan? CacheTime = null,
@@ -135,6 +146,7 @@ public static class UseResourceExtensions
             requestRerender: () => rerenderTick(n => n + 1),
             pendingScope: pendingScope,
             focusService: options.RefetchOnWindowFocus ? focusService : null);
+        state.CheckDependencies = options.CacheKey is null;
 
         // Run-once-on-unmount cleanup. Deps-change is driven synchronously below rather than
         // via UseEffect, because we need the updated value inside this same render.
@@ -142,7 +154,8 @@ public static class UseResourceExtensions
 
         string newKey = options.CacheKey ?? $"{hookIdRef.Current}/{DepsHash(deps)}";
         bool firstRender = state.LastDeps is null;
-        bool depsChanged = !firstRender && (!string.Equals(state.CacheKey, newKey, StringComparison.Ordinal));
+        bool depsChanged = !firstRender && (!string.Equals(state.CacheKey, newKey, StringComparison.Ordinal)
+            || (state.CheckDependencies && !ResourceDependencies.DepsEqual(state.LastDeps, deps)));
 
         if (firstRender || depsChanged)
         {
@@ -181,7 +194,7 @@ public static class UseResourceExtensions
         ResourceOptions options)
     {
         // Cache hit path — check what's there first so we honour stale-while-revalidate.
-        if (state.Cache.TryGet<T>(state.CacheKey, out var entry))
+        if (state.Cache.TryGetResource<T>(state.CacheKey, state.CacheDeps, out var entry))
         {
             var age = state.Cache.UtcNow() - entry.FetchedAt;
             if (age <= options.EffectiveStaleTime)
@@ -214,7 +227,7 @@ public static class UseResourceExtensions
         // An external invalidation removed the cache entry. Re-enter the key so we
         // refetch with the current deps.
         if (state.LastValue is AsyncValue<T>.Data &&
-            !state.Cache.TryGet<T>(state.CacheKey, out _))
+            !state.Cache.TryGetResource<T>(state.CacheKey, state.CacheDeps, out _))
         {
             // Treat as stale-without-prior: kick off a fetch but keep the Data state
             // visible during the refetch. Callers generally want the existing value
@@ -262,7 +275,7 @@ public static class UseResourceExtensions
         if (inlineSyncResult && task.IsCompletedSuccessfully)
         {
             var v = task.Result;
-            state.Cache.Set(state.CacheKey, v, options.EffectiveStaleTime, options.EffectiveCacheTime);
+            state.Cache.SetResource(state.CacheKey, v, options.EffectiveStaleTime, options.EffectiveCacheTime, state.CacheDeps);
             state.LastValue = new AsyncValue<T>.Data(v);
             state.InFlight = false;
             return;
@@ -330,6 +343,8 @@ public static class UseResourceExtensions
     {
         var cts = state.Cts!;
         var ct = cts.Token;
+        var cacheKey = state.CacheKey;
+        var deps = state.CacheDeps;
         task.ContinueWith(t =>
         {
             void Apply()
@@ -351,7 +366,7 @@ public static class UseResourceExtensions
 
                 // Success.
                 var value = t.Result;
-                state.Cache.Set(state.CacheKey, value, options.EffectiveStaleTime, options.EffectiveCacheTime);
+                state.Cache.SetResource(cacheKey, value, options.EffectiveStaleTime, options.EffectiveCacheTime, deps);
                 var next2 = new AsyncValue<T>.Data(value);
                 var changed = !EqualityComparer<AsyncValue<T>>.Default.Equals(state.LastValue, next2);
                 state.LastValue = next2;
@@ -391,6 +406,8 @@ internal sealed class ResourceHookState<T> : IDisposable
     public readonly PendingScope? PendingScope;
     public string CacheKey = "";
     public object[]? LastDeps;
+    public bool CheckDependencies;
+    public object[]? CacheDeps => CheckDependencies ? LastDeps : null;
     public CancellationTokenSource? Cts;
     private AsyncValue<T> _lastValue = AsyncValue<T>.Loading.Instance;
     public AsyncValue<T> LastValue
@@ -433,7 +450,7 @@ internal sealed class ResourceHookState<T> : IDisposable
         if (!string.Equals(key, CacheKey, StringComparison.Ordinal)) return;
         // Only react when the entry is gone — a Set that just wrote the value we
         // already hold would trigger a no-op re-render otherwise.
-        if (LastValue is AsyncValue<T>.Data && !Cache.TryGet<T>(key, out _))
+        if (LastValue is AsyncValue<T>.Data && !Cache.TryGetResource<T>(key, CacheDeps, out _))
             RequestRerender();
     }
 
@@ -452,15 +469,22 @@ internal sealed class ResourceHookState<T> : IDisposable
         Cts = null;
         InFlight = false;
 
-        if (!string.IsNullOrEmpty(CacheKey) && !string.Equals(CacheKey, newKey, StringComparison.Ordinal))
+        bool keyChanged = !string.Equals(CacheKey, newKey, StringComparison.Ordinal);
+        bool subscribe = LastDeps is null || keyChanged;
+        if (!string.IsNullOrEmpty(CacheKey) && keyChanged)
         {
             try { Cache.Unsubscribe(CacheKey); } catch (InvalidOperationException) { /* defensive */ }
             _focusService?.Unenroll(CacheKey);
         }
 
         CacheKey = newKey;
-        Cache.Subscribe(newKey);
-        _focusService?.Enroll(newKey);
+        // A deps-hash collision restarts the request under the same key. Keep its
+        // existing subscription rather than incrementing the refcount a second time.
+        if (subscribe)
+        {
+            Cache.Subscribe(newKey);
+            _focusService?.Enroll(newKey);
+        }
         LastDeps = newDeps.ToArray();
     }
 
