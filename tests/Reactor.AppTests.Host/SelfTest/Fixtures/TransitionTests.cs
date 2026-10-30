@@ -494,4 +494,254 @@ internal static class TransitionTests
             }
         }
     }
+
+    /// <summary>Counts the per-child reads (a WinRT call apiece) and exit probes a pass makes.</summary>
+    private sealed class CountingChildCollection(IChildCollection inner) : IChildCollection
+    {
+        public int Reads;
+        public int Probes;
+        public int Count => inner.Count;
+        public Microsoft.UI.Xaml.UIElement Get(int index) { Reads++; return inner.Get(index); }
+        public int IndexOf(Microsoft.UI.Xaml.UIElement element) { Probes++; return inner.IndexOf(element); }
+        public void Insert(int index, Microsoft.UI.Xaml.UIElement element) => inner.Insert(index, element);
+        public void RemoveAt(int index) => inner.RemoveAt(index);
+        public void Move(int oldIndex, int newIndex) => inner.Move(oldIndex, newIndex);
+        public void Replace(int index, Microsoft.UI.Xaml.UIElement element) => inner.Replace(index, element);
+    }
+
+    // While an exit plays (here or in another panel) or a child mounts nothing, a keyed pass
+    // must read no more controls than when nothing is retained: none for a skipped list, one
+    // per realized child for an updated one. Each read is a WinRT call that allocates, paid
+    // per child per render.
+    internal class KeyedPassReadsEachControlAtMostOnce(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            foreach (var (localExit, unrelatedExit, emptyMemo) in new[]
+            {
+                (false, false, false), (false, true, false), (true, false, false), (false, false, true), (true, true, true),
+            })
+                await RunCase(localExit, unrelatedExit, emptyMemo);
+        }
+
+        private async Task RunCase(bool localExit, bool unrelatedExit, bool emptyMemo)
+        {
+            using var reconciler = new Reconciler();
+            var scenario = $"KeyedReads_Local{localExit}_Unrelated{unrelatedExit}_EmptyMemo{emptyMemo}";
+            var empty = Memo("empty", () => Empty()).WithKey("empty");
+            Element[] Rows(string b, Element? trailing = null, bool lead = false)
+            {
+                var rows = new List<Element>();
+                if (emptyMemo) rows.Add(empty);
+                if (lead) rows.Add(Border(TextBlock("x")).WithKey("x"));
+                rows.Add(Border(TextBlock("a")).WithKey("a"));
+                rows.Add(Border(TextBlock(b)).WithKey("b"));
+                rows.Add(Border(TextBlock("c")).WithKey("c"));
+                if (trailing is not null) rows.Add(trailing);
+                return [.. rows];
+            }
+
+            var initial = VStack(Rows("b", localExit ? Leaving("local-exit") : null));
+            var otherInitial = VStack(unrelatedExit ? Leaving("other-exit") : Empty());
+            var panel = (StackPanel)reconciler.Mount(initial, () => { })!;
+            var otherPanel = (StackPanel)reconciler.Mount(otherInitial, () => { })!;
+            var root = new StackPanel();
+            root.Children.Add(panel);
+            root.Children.Add(otherPanel);
+            H.SetContent(root);
+            try
+            {
+                await Harness.Render();
+                var current = Rows("b");
+                reconciler.Update(initial, VStack(current), panel, () => { });
+                reconciler.Update(otherInitial, VStack(), otherPanel, () => { });
+                var a = panel.Children[0];
+                var b = panel.Children[1];
+                var c = panel.Children[2];
+                H.Check($"{scenario}_PositiveControl",
+                    panel.Children.Count == (localExit ? 4 : 3)
+                    && current.Length == (emptyMemo ? 4 : 3)
+                    && reconciler.HasExitingControls == (localExit || unrelatedExit));
+
+                // Same records: every child takes the structural skip, so the pass neither reads
+                // a control nor probes for exits.
+                var counting = new CountingChildCollection(new PanelChildCollection(panel));
+                ChildReconciler.Reconcile(current, [.. current], counting, reconciler, () => { }, panel);
+                H.Check($"{scenario}_SkippedListReadsNoChild",
+                    counting.Reads == 0 && counting.Probes == 0,
+                    $"reads={counting.Reads} probes={counting.Probes}");
+
+                // Fresh records (a Border's child is compared by reference) update every child,
+                // reading each realized control exactly once, as when nothing is retained.
+                var unchanged = Rows("b");
+                counting = new CountingChildCollection(new PanelChildCollection(panel));
+                ChildReconciler.Reconcile(current, unchanged, counting, reconciler, () => { }, panel);
+                H.Check($"{scenario}_UpdatedListReadsEachControlOnce",
+                    counting.Reads == 3
+                    && panel.Children.Where(x => !reconciler.IsExiting(x)).SequenceEqual([a, b, c]),
+                    $"reads={counting.Reads}");
+
+                // A changed child patches its own control.
+                var changed = Rows("b changed");
+                ChildReconciler.Reconcile(unchanged, changed, new PanelChildCollection(panel), reconciler, () => { }, panel);
+                H.Check($"{scenario}_ChangedChildPatchesItsControl",
+                    a is Border { Child: TextBlock { Text: "a" } }
+                    && b is Border { Child: TextBlock { Text: "b changed" } }
+                    && c is Border { Child: TextBlock { Text: "c" } }
+                    && panel.Children.Where(x => !reconciler.IsExiting(x)).SequenceEqual([a, b, c]));
+
+                // A leading insertion breaks the prefix, so the fresh rows update from the suffix
+                // walk, which resolves the map from the front: still one read per realized child.
+                var inserted = Rows("b changed", lead: true);
+                counting = new CountingChildCollection(new PanelChildCollection(panel));
+                ChildReconciler.Reconcile(changed, inserted, counting, reconciler, () => { }, panel);
+                var live = panel.Children.Where(x => !reconciler.IsExiting(x)).ToList();
+                H.Check($"{scenario}_SuffixReadsEachControlOnce",
+                    counting.Reads == 3
+                    && live.Count == 4 && live[0] is Border { Child: TextBlock { Text: "x" } }
+                    && live.Skip(1).SequenceEqual([a, b, c])
+                    && b is Border { Child: TextBlock { Text: "b changed" } },
+                    $"reads={counting.Reads} live={live.Count}");
+
+                var completed = await Harness.WaitFor(() => !reconciler.HasExitingControls, maxPasses: 40, perPassMs: 50);
+                H.Check($"{scenario}_ExitsComplete", completed);
+            }
+            finally
+            {
+                H.SetContent(null);
+                reconciler.UnmountChild(panel);
+                reconciler.UnmountChild(otherPanel);
+            }
+        }
+    }
+
+    // Exit detection probes the collection once per in-flight exit up to
+    // Reconciler.ExitProbeLimit and scans it past that. Either arm must find a retained exit
+    // in a panel whose counts match only because a keyed Memo mounts nothing; reading it as
+    // the identity would pair every child with its neighbour's control.
+    internal class KeyedExitProbeLimitBoundary(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            await RunCase(Reconciler.ExitProbeLimit);
+            await RunCase(Reconciler.ExitProbeLimit + 1);
+        }
+
+        private async Task RunCase(int exits)
+        {
+            using var reconciler = new Reconciler();
+            bool probes = exits <= Reconciler.ExitProbeLimit;
+            var scenario = $"KeyedExitProbe_{exits}Exits";
+            var empty = Memo("empty", () => Empty()).WithKey("empty");
+            Element[] Rows(string suffix) =>
+            [
+                empty,
+                Border(TextBlock("a" + suffix)).WithKey("a"),
+                Border(TextBlock("b" + suffix)).WithKey("b"),
+                Border(TextBlock("c" + suffix)).WithKey("c"),
+            ];
+            var others = new Element[exits - 1];
+            for (int i = 0; i < others.Length; i++) others[i] = Leaving("other-" + i);
+            var otherInitial = VStack(others);
+            var initial = VStack([.. Rows(""), Leaving("local")]);
+            var otherPanel = (StackPanel)reconciler.Mount(otherInitial, () => { })!;
+            var panel = (StackPanel)reconciler.Mount(initial, () => { })!;
+            var root = new StackPanel();
+            root.Children.Add(panel);
+            root.Children.Add(otherPanel);
+            H.SetContent(root);
+            try
+            {
+                await Harness.Render();
+                var current = Rows("");
+                reconciler.Update(otherInitial, VStack(), otherPanel, () => { });
+                reconciler.Update(initial, VStack(current), panel, () => { });
+                var a = panel.Children[0];
+                var b = panel.Children[1];
+                var c = panel.Children[2];
+                H.Check($"{scenario}_PositiveControl",
+                    panel.Children.Count == current.Length && reconciler.IsExiting(panel.Children[3])
+                    && otherPanel.Children.Count == exits - 1 && otherPanel.Children.All(reconciler.IsExiting));
+
+                var counting = new CountingChildCollection(new PanelChildCollection(panel));
+                ChildReconciler.Reconcile(current, Rows(" 2"), counting, reconciler, () => { }, panel);
+                H.Check($"{scenario}_EachChildPatchesItsControl",
+                    a is Border { Child: TextBlock { Text: "a 2" } }
+                    && b is Border { Child: TextBlock { Text: "b 2" } }
+                    && c is Border { Child: TextBlock { Text: "c 2" } }
+                    && panel.Children.Where(x => !reconciler.IsExiting(x)).SequenceEqual([a, b, c]));
+                // Probing reads only the three mapped controls; scanning first reads all four.
+                H.Check($"{scenario}_{(probes ? "Probes" : "Scans")}",
+                    probes ? counting.Probes >= 1 && counting.Reads == 3 : counting.Probes == 0 && counting.Reads == 4 + 3,
+                    $"probes={counting.Probes} reads={counting.Reads}");
+
+                var completed = await Harness.WaitFor(() => !reconciler.HasExitingControls, maxPasses: 60, perPassMs: 50);
+                H.Check($"{scenario}_ExitsComplete", completed && panel.Children.Count == 3 && otherPanel.Children.Count == 0);
+            }
+            finally
+            {
+                H.SetContent(null);
+                reconciler.UnmountChild(panel);
+                reconciler.UnmountChild(otherPanel);
+            }
+        }
+    }
+
+    private static readonly Context<string> SkipArmContext = new("ctx-0");
+
+    private sealed record SkipArmConsumerProps(string Name);
+
+    private sealed class SkipArmConsumer : Component<SkipArmConsumerProps>
+    {
+        public override Element Render() => TextBlock($"{Props.Name}:{UseContext(SkipArmContext)}");
+    }
+
+    // The skip arms that read a child's control (context decline, callback refresh) must
+    // reach that child's own control through the keyed map, in the prefix and the suffix,
+    // while a keyed Memo that mounts nothing shifts every later physical index.
+    internal class KeyedMapSkipArmsUseOwnControls(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            string? clicked = null;
+            Action? bump = null;
+            var empty = Memo("skip-empty", () => Empty()).WithKey("skip-empty");
+            var consumerA = Component<SkipArmConsumer, SkipArmConsumerProps>(new("ctx-a")).WithKey("ctx-a");
+            var consumerB = Component<SkipArmConsumer, SkipArmConsumerProps>(new("ctx-b")).WithKey("ctx-b");
+            using var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (n, setN) = ctx.UseState(0);
+                bump = () => setN(n + 1);
+                // The lead key changes every render, so the prefix ends before it and the
+                // children after it are reconciled by the suffix walk.
+                return VStack(
+                        empty,
+                        consumerA,
+                        Button("skip-arm-a", () => clicked = $"a{n}").WithKey("cb-a"),
+                        TextBlock($"lead-{n}").WithKey($"lead-{n}"),
+                        Button("skip-arm-b", () => clicked = $"b{n}").WithKey("cb-b"),
+                        consumerB)
+                    .Provide(SkipArmContext, $"ctx-{n}");
+            });
+            await Harness.Render();
+            var labelA = H.FindText("ctx-a:ctx-0");
+            var labelB = H.FindText("ctx-b:ctx-0");
+            H.Check("KeyedMapSkipArms_Mounted", labelA is not null && labelB is not null && bump is not null);
+
+            bump!();
+            await Harness.Render();
+            H.Check("KeyedMapSkipArms_PrefixContextConsumerRerendered",
+                H.FindText("ctx-a:ctx-1") is { } a1 && ReferenceEquals(a1, labelA));
+            H.Check("KeyedMapSkipArms_SuffixContextConsumerRerendered",
+                H.FindText("ctx-b:ctx-1") is { } b1 && ReferenceEquals(b1, labelB));
+
+            H.ClickButton("skip-arm-a");
+            await Harness.Render();
+            H.Check("KeyedMapSkipArms_PrefixCallbackRefreshed", clicked == "a1", clicked ?? "<none>");
+            H.ClickButton("skip-arm-b");
+            await Harness.Render();
+            H.Check("KeyedMapSkipArms_SuffixCallbackRefreshed", clicked == "b1", clicked ?? "<none>");
+        }
+    }
 }

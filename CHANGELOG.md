@@ -415,7 +415,9 @@ Conventions for contributors:
   identity and the final child order remains correct when the exits complete.
   Null-mounted Memo slots remain absent from the physical map and insertion
   anchors, including when exits occur in the same panel or another panel sharing
-  the reconciler.
+  the reconciler. Retained exits and null-mounted slots no longer add control reads to
+  keyed updates that keep the children's order, and an exit playing in one panel no longer
+  adds a read per child to other keyed panels (up to 64 concurrent exits).
 
 - **Wrapped third-party controls now get source-map call sites** (spec 010). A factory
   emitted by `[GenerateReactorWrapper]` (`SettingsCard(...)`, `RadialGauge(...)`) is

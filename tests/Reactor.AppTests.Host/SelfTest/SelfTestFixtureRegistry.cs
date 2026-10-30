@@ -824,6 +824,9 @@ internal static class SelfTestFixtureRegistry
         "Transition_KeyedGridChildReplaceKeepsPlacement",
         "Transition_KeyedEmptyMemoKeepsSuffixIdentity",
         "Transition_KeyedDirtyChildDuringExitRenders",
+        "Transition_KeyedPassReadsEachControlAtMostOnce",
+        "Transition_KeyedExitProbeLimitBoundary",
+        "Transition_KeyedMapSkipArmsUseOwnControls",
         // Animation system — WithAnimationAsync
         "AsyncAnim_TaskCompletes",
         "AsyncAnim_SequentialAwait",
@@ -3047,6 +3050,9 @@ internal static class SelfTestFixtureRegistry
         "Transition_KeyedGridChildReplaceKeepsPlacement" => new TransitionTests.KeyedGridChildReplaceKeepsPlacement(harness),
         "Transition_KeyedEmptyMemoKeepsSuffixIdentity" => new TransitionTests.KeyedEmptyMemoKeepsSuffixIdentity(harness),
         "Transition_KeyedDirtyChildDuringExitRenders" => new TransitionTests.KeyedDirtyChildDuringExitRenders(harness),
+        "Transition_KeyedPassReadsEachControlAtMostOnce" => new TransitionTests.KeyedPassReadsEachControlAtMostOnce(harness),
+        "Transition_KeyedExitProbeLimitBoundary" => new TransitionTests.KeyedExitProbeLimitBoundary(harness),
+        "Transition_KeyedMapSkipArmsUseOwnControls" => new TransitionTests.KeyedMapSkipArmsUseOwnControls(harness),
         // Animation system — WithAnimationAsync
         "AsyncAnim_TaskCompletes" => new AnimationAsyncTests.TaskCompletes(harness),
         "AsyncAnim_SequentialAwait" => new AnimationAsyncTests.SequentialAwait(harness),
