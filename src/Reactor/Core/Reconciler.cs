@@ -4028,7 +4028,9 @@ public sealed partial class Reconciler : IDisposable
         try { disposition = teardown(state, control, this); }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
-            ReportIsolatedUnmountFailure(ex);
+            // A handler that reported its failures itself (in order) only signals the failure.
+            if (ex is not V1Protocol.ReportedUnmountFailureException)
+                ReportIsolatedUnmountFailure(ex);
             failed = true;
         }
         finally { _isolatedTeardownTrack = outerTrack; }

@@ -541,9 +541,9 @@ Conventions for contributors:
   every parked row is torn down and the failure goes to the `RenderErrorHandler` as
   `Cleanup`. Teardowns that finish regardless of cleanup failures (issue #1291) now also
   collect a throwing control handler, descriptor `OnUnmount` hook or property unmount callback,
-  decorator or `RegisterType`
-  unmount callback rather than stopping at it: the children it did not reach are torn down (once
-  each), and the half-torn-down control is never pooled.
+  decorator or `RegisterType` unmount callback rather than stopping at it: each failure is
+  reported once, in order, the children it did not reach are torn down (once each), and the
+  half-torn-down control is never pooled.
 
 - **`REACTOR_A11Y_001` no longer flags text buttons with a non-literal string label**
   (spec 006 §6.3). `Button(S("Usage_Refresh"), onClick)` — a localized resource lookup,

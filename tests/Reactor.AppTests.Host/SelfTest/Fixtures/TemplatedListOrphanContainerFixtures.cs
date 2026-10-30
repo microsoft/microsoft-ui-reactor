@@ -334,6 +334,52 @@ internal static class TemplatedListOrphanContainerFixtures
         }
     }
 
+    // Two descriptor callbacks fail: a property unmount ("first"), then the hook ("second").
+    private sealed record TwoFailureProbe : Element;
+
+    private sealed class TwoFailureProbeHandler() : DescriptorHandler<TwoFailureProbe, TextBlock>(TwoFailureDescriptor)
+    {
+        private static readonly ControlDescriptor<TwoFailureProbe, TextBlock> TwoFailureDescriptor =
+            new ControlDescriptor<TwoFailureProbe, TextBlock>()
+                .ImperativeBridged(
+                    static (_, _, _) => { },
+                    static (_, _, _, _) => { },
+                    static (_, _) => throw new InvalidOperationException("first"))
+                .WithUnmount(static (in UnmountContext _, TextBlock _) => throw new InvalidOperationException("second"));
+    }
+
+    /// <summary>
+    /// Two descriptor unmount callbacks fail inside an isolated teardown: the failures reach the
+    /// isolation sink once each, in the order they happened, so with no handler the first one
+    /// is the one that escapes.
+    /// </summary>
+    internal class IsolatedFailuresKeepEncounterOrder(Harness h, bool pool) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            Reset();
+            string name = pool ? "FailureOrderPooled" : "FailureOrder";
+            var rec = new Reconciler();
+            if (rec.Mount(new TwoFailureProbe(), static () => { }) is not TextBlock probe)
+            {
+                H.Check($"{name}_Mounted", false);
+                return Task.CompletedTask;
+            }
+            var failures = new List<Exception>();
+            using (rec.IsolateUnmountCleanupFailures(failures.Add))
+            {
+                if (pool) rec.UnmountAndPool(probe);
+                else rec.UnmountChild(probe);
+            }
+            var messages = string.Join(",", failures.Select(f => f.Message));
+            H.Check($"{name}_ReportedOnceInOrder", messages == "first,second", messages);
+            var escaping = RenderErrorDispatch.ReportCleanupFailures(failures, static () => null, isHostLevel: false, logger: null);
+            H.Check($"{name}_FirstEscapesWithoutHandler", escaping?.SourceException.Message == "first",
+                escaping?.SourceException.Message ?? "(none)");
+            return Task.CompletedTask;
+        }
+    }
+
     // The same partial teardown, by a decorator handler.
     private sealed record DecoratorPartialTeardown : Element;
 
@@ -449,6 +495,7 @@ internal static class TemplatedListOrphanContainerFixtures
         ControlRegistry.RegisterDecorator<DecoratorPartialTeardown>(static () => new DecoratorPartialTeardownHandler());
         ControlRegistry.Register<SlotProbe, WinUI.TeachingTip>(static () => new SlotProbeHandler());
         ControlRegistry.Register<BridgedProbe, TextBlock>(static () => new BridgedProbeHandler());
+        ControlRegistry.Register<TwoFailureProbe, TextBlock>(static () => new TwoFailureProbeHandler());
         ControlRegistry.Register<TeardownProbe, TextBlock>(static () => new TeardownProbeHandler());
         ControlRegistry.RegisterDecorator<DecoratorProbe>(static () => new DecoratorProbeHandler());
     }

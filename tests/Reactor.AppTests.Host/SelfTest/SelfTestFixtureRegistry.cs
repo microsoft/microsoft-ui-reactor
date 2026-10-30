@@ -1128,6 +1128,8 @@ internal static class SelfTestFixtureRegistry
         "TemplatedList_IsolatedDescriptorPartialTeardownSkipsSlotsPooled",
         "TemplatedList_IsolatedPropertyUnmountsRunIndependently",
         "TemplatedList_IsolatedPropertyUnmountsRunIndependentlyPooled",
+        "TemplatedList_IsolatedFailuresKeepEncounterOrder",
+        "TemplatedList_IsolatedFailuresKeepEncounterOrderPooled",
         "TemplatedList_UnmountWhileCollapsedDropsPendingSweep",
         "TemplatedList_ClearedContainerContentUnmountsView",
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
@@ -3358,6 +3360,8 @@ internal static class SelfTestFixtureRegistry
         "TemplatedList_IsolatedDescriptorPartialTeardownSkipsSlotsPooled" => new TemplatedListOrphanContainerFixtures.IsolatedDescriptorTeardownTearsDownSlots(harness, pool: true, hookTearsDownChild: true),
         "TemplatedList_IsolatedPropertyUnmountsRunIndependently" => new TemplatedListOrphanContainerFixtures.IsolatedPropertyUnmountsRunIndependently(harness, pool: false),
         "TemplatedList_IsolatedPropertyUnmountsRunIndependentlyPooled" => new TemplatedListOrphanContainerFixtures.IsolatedPropertyUnmountsRunIndependently(harness, pool: true),
+        "TemplatedList_IsolatedFailuresKeepEncounterOrder" => new TemplatedListOrphanContainerFixtures.IsolatedFailuresKeepEncounterOrder(harness, pool: false),
+        "TemplatedList_IsolatedFailuresKeepEncounterOrderPooled" => new TemplatedListOrphanContainerFixtures.IsolatedFailuresKeepEncounterOrder(harness, pool: true),
         "TemplatedList_UnmountWhileCollapsedDropsPendingSweep" => new TemplatedListOrphanContainerFixtures.UnmountWhileCollapsedDropsPendingSweep(harness),
         "TemplatedList_ClearedContainerContentUnmountsView" => new TemplatedListOrphanContainerFixtures.ClearedContainerContentUnmountsView(harness),
         // Issue 343 — CommandBar/TeachingTip Content reconciliation
