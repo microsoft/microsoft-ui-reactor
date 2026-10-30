@@ -291,6 +291,19 @@ indent_size = unset
 insert_final_newline = unset
 trim_trailing_whitespace = unset
 
+# EXPERIMENTAL WINDOWS APP SDK CHANNEL ONLY — remove together with the
+# experimental versions in Directory.Build.props.
+#
+# The XAML compiler's generated XamlTypeInfo.g.cs references the SDK's own
+# [Experimental] metadata providers (XamlControlsCharts / XamlControlsTabular),
+# so every WinUI project emits CS8305 from code nobody here can annotate. This
+# is scoped to that one generated file, so Reactor's own experimental API use
+# still reports CS8305. An .editorconfig severity is used rather than
+# WarningsNotAsErrors because CI jobs pass WarningsNotAsErrors on the command
+# line, and a global property replaces any project-level value.
+[**/XamlTypeInfo.g.cs]
+dotnet_diagnostic.CS8305.severity = none
+
 # Markdown under docs/guide/ is generated — leave formatting flexible.
 [docs/guide/**.md]
 trim_trailing_whitespace = false

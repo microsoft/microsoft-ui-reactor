@@ -36,10 +36,6 @@ public sealed partial class Reconciler : IDisposable
     // look up per-instance navigation state; teardown stays here (Dispose loop +
     // CleanupNavigationHostNode).
     internal readonly Dictionary<UIElement, NavigationHostNode> _navigationHostNodes = new();
-    // Per-control unmount actions (.OnUnmount). Captured at ApplyModifiers from the
-    // authoritative modifier set (same source .OnMount reads), so it doesn't depend
-    // on the tagged element's identity at teardown. Invoked + removed on unmount.
-    private readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, Action<FrameworkElement>> _onUnmountActions = new();
     // Internal so V1-owned lifecycle classes (e.g. LazyStackLifecycle) can rent
     // pooled controls and pass the pool into element factories.
     internal readonly ElementPool _pool = new();
@@ -334,11 +330,8 @@ public sealed partial class Reconciler : IDisposable
                         Diagnostics.ComponentRenderControls.Registry.Forget(node.DiagnosticId, wrapper);
                     RunUnmountCleanups(node);
                 }
-                if (wrapper is FrameworkElement fe && _onUnmountActions.TryGetValue(fe, out var onUnmount))
-                {
-                    _onUnmountActions.Remove(fe);
+                if (wrapper is FrameworkElement fe && TryTakeOnUnmountAction(fe, out var onUnmount))
                     RunUnmountAction(onUnmount, fe);
-                }
                 if (_navigationHostNodes.ContainsKey(wrapper))
                     CleanupNavigationHostNode(wrapper);
             }
@@ -1451,27 +1444,53 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     /// <summary>
     /// A shared DataTemplate containing a ContentControl shell.
-    /// Parsed once via XamlReader.Load, reused across all items controls (ListView, GridView, FlipView).
+    /// Built once from code via <c>new DataTemplate(factory)</c> and reused across
+    /// all items controls (ListView, GridView, FlipView). The factory overload
+    /// replaces a <c>XamlReader.Load</c> of an equivalent markup string — see the
+    /// PR description for why parsing markup at runtime was a problem here.
     /// </summary>
     internal static readonly Lazy<DataTemplate> SharedContentControlTemplate = new(() =>
-        (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(
-            "<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>" +
-            "<ContentControl HorizontalContentAlignment='Stretch' VerticalContentAlignment='Stretch'/>" +
-            "</DataTemplate>"));
+        new DataTemplate(() => new Microsoft.UI.Xaml.Controls.ContentControl
+        {
+            HorizontalContentAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch,
+            VerticalContentAlignment = Microsoft.UI.Xaml.VerticalAlignment.Stretch,
+        }));
 
     /// <summary>
     /// Spec 047 §14 Phase 3 finish — text-bound TreeView item template
     /// shared between the legacy <c>MountTreeView</c> arm and the
     /// <see cref="V1Protocol.TreeChildren{TElement,TControl}"/> strategy.
-    /// In node mode the template's DataContext is <c>TreeViewNode</c>, so
-    /// <c>{Binding Content.Content}</c> resolves <c>TreeViewNode.Content</c>
-    /// (a <c>TreeViewNodeData</c>) → its <c>Content</c> (the display string).
+    /// In node mode the template's DataContext is <c>TreeViewNode</c>, so the
+    /// handler reads <c>TreeViewNode.Content</c> (a <c>TreeViewNodeData</c>) →
+    /// its <c>Content</c> (the display string).
     /// </summary>
     internal static readonly Lazy<DataTemplate> TreeViewTextItemTemplate = new(() =>
-        (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(
-            "<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>" +
-            "<TextBlock Text='{Binding Content.Content}'/>" +
-            "</DataTemplate>"));
+        new DataTemplate(() =>
+        {
+            var tb = new Microsoft.UI.Xaml.Controls.TextBlock();
+
+            // Strongly-typed replacement for {Binding Content.Content}. A classic
+            // Binding resolves that path by string through CsWinRT's
+            // ICustomPropertyProvider, i.e. by reflection — which NativeAOT trims
+            // unless the source type is annotated, and which costs a reflective
+            // lookup per realized row even when it works. Reading the same chain in
+            // a DataContextChanged handler is reflection-free, so it needs no
+            // annotation and does no lookup. The event re-fires when a virtualized
+            // row is recycled onto new data, so reused rows retext correctly.
+            tb.DataContextChanged += static (sender, args) =>
+            {
+                if (sender is not Microsoft.UI.Xaml.Controls.TextBlock text) return;
+                text.Text = args.NewValue switch
+                {
+                    Microsoft.UI.Xaml.Controls.TreeViewNode { Content: TreeViewNodeData d } => d.Content,
+                    Microsoft.UI.Xaml.Controls.TreeViewNode { Content: string s } => s,
+                    TreeViewNodeData d => d.Content,
+                    _ => string.Empty,
+                };
+            };
+
+            return tb;
+        }));
 
     // ════════════════════════════════════════════════════════════════════
     //  ReactorAttached.StateProperty  (ReactorState)
@@ -1632,6 +1651,31 @@ public sealed partial class Reconciler : IDisposable
         /// Cleared when the component unmounts, before the wrapper can be pooled.
         /// </summary>
         public long ComponentDiagnosticId;
+
+        /// <summary>
+        /// The control's <c>.OnUnmount</c> action. Captured at <c>ApplyModifiers</c> from the
+        /// authoritative modifier set and taken (read + cleared) at teardown. Stored here
+        /// rather than in a <c>ConditionalWeakTable</c> keyed by the wrapper for the same
+        /// duplicate-RCW reason as <see cref="EchoSuppressCount"/>, with a sharper
+        /// consequence: nothing else roots a plain control's managed wrapper, so a GC between
+        /// mount and unmount collected the key and the action silently never ran.
+        /// </summary>
+        public Action<FrameworkElement>? OnUnmountAction;
+    }
+
+    /// <summary>
+    /// Takes the control's <c>.OnUnmount</c> action, clearing it so it fires at most once.
+    /// </summary>
+    private static bool TryTakeOnUnmountAction(FrameworkElement fe, [NotNullWhen(true)] out Action<FrameworkElement>? action)
+    {
+        if (TryGetReactorState(fe, out var state) && state.OnUnmountAction is { } a)
+        {
+            state.OnUnmountAction = null;
+            action = a;
+            return true;
+        }
+        action = null;
+        return false;
     }
 
     internal static class ReactorAttached
@@ -3875,11 +3919,8 @@ public sealed partial class Reconciler : IDisposable
         WithdrawAttachedValidation(control);
 
         // OnUnmountAction (.OnUnmount) — imperative teardown half of .OnMount.
-        if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
-        {
-            _onUnmountActions.Remove(umFe);
+        if (control is FrameworkElement umFe && TryTakeOnUnmountAction(umFe, out var onUnmount))
             RunUnmountAction(onUnmount, umFe);
-        }
 
         // Issue #917 — a TitleBar going away withdraws both its
         // ExtendsContentIntoTitleBar inference and its caption-height
@@ -4459,11 +4500,8 @@ public sealed partial class Reconciler : IDisposable
         WithdrawAttachedValidation(control);
 
         // OnUnmountAction (.OnUnmount) — imperative teardown half of .OnMount.
-        if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
-        {
-            _onUnmountActions.Remove(umFe);
+        if (control is FrameworkElement umFe && TryTakeOnUnmountAction(umFe, out var onUnmount))
             RunUnmountAction(onUnmount, umFe);
-        }
 
         // Issue #917 — mirrors UnmountRecursive: a TitleBar reached through the
         // pooling traversal (nested in a poolable container) must also withdraw
@@ -6365,16 +6403,19 @@ public sealed partial class Reconciler : IDisposable
 
         // OnUnmountAction — captured here (authoritative modifier set) so it fires
         // reliably at teardown regardless of the tagged element's identity. Keep the
-        // latest action across re-renders; clear unconditionally when absent so a
+        // latest action across re-renders; when absent, clear on every mount so a
         // pooled control reused for a no-OnUnmount element can't fire a stale action
-        // (pool reuse remounts with oldM == null, so this can't be gated on oldM).
+        // (pool reuse remounts with oldM == null, so a mount always clears). An update
+        // whose previous modifiers carried no action has nothing to clear, which keeps
+        // the attached-state read off the re-render hot path.
         if (m.OnUnmountAction is not null)
         {
-            _onUnmountActions.AddOrUpdate(fe, m.OnUnmountAction);
+            GetOrCreateReactorState(fe).OnUnmountAction = m.OnUnmountAction;
             _boundaryMountJournal?.Add(fe);
         }
-        else
-            _onUnmountActions.Remove(fe);
+        else if ((oldM is null || oldM.OnUnmountAction is not null)
+            && TryGetReactorState(fe, out var unmountState))
+            unmountState.OnUnmountAction = null;
 
         // Element ref — populate on mount/update so imperative APIs (FocusManager.Focus)
         // can target the mounted control. Writing on every update is cheap (single field

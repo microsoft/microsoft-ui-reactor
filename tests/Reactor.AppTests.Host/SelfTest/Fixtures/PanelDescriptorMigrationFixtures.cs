@@ -290,14 +290,19 @@ internal static class PanelDescriptorMigrationFixtures
 
             await Harness.Render();
 
-            int? Hash(string key) =>
+            // Hold the wrappers themselves, not their hash codes: nothing else roots a
+            // plain control's managed wrapper, so after a GC the same native Border comes
+            // back under a new wrapper and a hash compare reports a false identity break.
+            // While these stay alive, CsWinRT hands back the same wrapper for the same
+            // native object, so ReferenceEquals is a true native-identity check.
+            WinXC.Border? Find(string key) =>
                 H.FindControl<WinXC.TextBlock>(t =>
                     Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == $"pdm_wg_{key}") is { Parent: WinXC.Border br }
-                    ? global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(br)
+                    ? br
                     : null;
 
             var keys = new[] { "a", "b", "c", "d", "e" };
-            var before = keys.ToDictionary(k => k, Hash);
+            var before = keys.ToDictionary(k => k, Find);
             H.Check("PDM_WrapGrid_Reverse_AllInitial", before.Values.All(v => v is not null));
 
             H.ClickButton("Reverse");
@@ -308,7 +313,7 @@ internal static class PanelDescriptorMigrationFixtures
             // survivor is back with its original Border instance. A genuine
             // identity break never satisfies the predicate and still fails.
             H.Check("PDM_WrapGrid_Reverse_AllSurvivorsKeepIdentity",
-                await Harness.WaitFor(() => keys.All(k => before[k] == Hash(k))));
+                await Harness.WaitFor(() => keys.All(k => before[k] is { } b && ReferenceEquals(b, Find(k)))));
         }
     }
 
