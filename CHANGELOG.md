@@ -415,6 +415,27 @@ Conventions for contributors:
   concrete `.Background(brush)` modifier. Explicit brushes and native setters
   retain precedence (spec 050 §6.3).
 
+- **Disposing a host retires its ContentDialogs.** `ReactorHostControl.Dispose()`,
+  `ReactorHost.Dispose()`, and standalone reconciler disposal cancel deferred opens
+  and detach/hide owned dialogs before user cleanup, without raising the element's
+  `OnClosed`. Previously effect cleanup ran but the native modal could remain on
+  screen after its host was disposed. Ordinary tree-disposal cleanup semantics
+  are unchanged (PR #1444). Reentrant disposal during dialog-content mount
+  or update also leaves the dialog detached, and closed dialogs release their
+  `Opened` handler after `ShowAsync` completes.
+
+- Async resource hooks detect dependency changes even when hashes collide and
+  treat mismatched cached dependencies as a miss, preventing wrong-query data
+  in `UseResource` and `UseInfiniteResource`. Cursor-paged resources also use
+  the requested predecessor's cursor after page eviction and cache invalidation
+  ([issue #1430](https://github.com/microsoft/microsoft-ui-reactor/issues/1430),
+  spec 020 §6.2, §7, §9.2).
+
+- `UsePersisted` restores saved null values for reference and nullable value
+  types instead of falling back to `initialValue` after remount
+  ([issue #1442](https://github.com/microsoft/microsoft-ui-reactor/issues/1442),
+  spec 033 §2).
+
 - **Unmount callbacks survive managed-wrapper collection** (spec 047 §3).
   `.OnUnmount(...)` now lives in native attached state rather than a weak table
   keyed by a managed wrapper, so a still-mounted control keeps its teardown callback

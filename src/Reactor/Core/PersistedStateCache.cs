@@ -45,15 +45,21 @@ public sealed class ApplicationPersistedScope : IPersistedStateScope
 
     public bool TryGet<T>(string key, out T value)
     {
-        if (_disposed) { value = default!; return false; }
-        ValidateKey(key);
-        if (_cache.TryGet(key, out var boxed) && boxed is T typed)
+        if (TryGetValue(key, out var boxed) && boxed is T typed)
         {
             value = typed;
             return true;
         }
         value = default!;
         return false;
+    }
+
+    /// <summary>Reads a cache entry, including a stored null, for hook restoration.</summary>
+    internal bool TryGetValue(string key, out object? value)
+    {
+        if (_disposed) { value = null; return false; }
+        ValidateKey(key);
+        return _cache.TryGet(key, out value);
     }
 
     public void Set<T>(string key, T value)
