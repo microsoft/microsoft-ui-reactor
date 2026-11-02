@@ -92,10 +92,57 @@ internal sealed class BorderThemeBackgroundFixture(Harness h, bool reuse) : Self
             await Harness.Render();
             Check("RemovingDirectValueRestoresTheme", dark);
 
+            var modifier = new SolidColorBrush(Color.FromArgb(255, 30, 180, 90));
+            state = state with { ModifierBackground = modifier, DirectBackground = direct };
+            setState(state);
+            await Harness.Render();
+            H.Check(prefix + "_ConcreteModifierWinsOnChange", ReferenceEquals(Find().Background, modifier));
+
+            var changedRecord = new SolidColorBrush(Color.FromArgb(255, 80, 90, 200));
+            state = state with { DirectBackground = changedRecord };
+            setState(state);
+            await Harness.Render();
+            H.Check(prefix + "_RecordUpdateWithUnchangedModifierWins",
+                ReferenceEquals(Find().Background, changedRecord));
+
+            state = state with { DirectBackground = null };
+            setState(state);
+            await Harness.Render();
+            H.Check(prefix + "_RemovingRecordValuePreservesConcreteModifier",
+                ReferenceEquals(Find(), original) && ReferenceEquals(Find().Background, modifier)
+                && ReferenceEquals(Find().ReadLocalValue(WinUI.Border.BackgroundProperty), modifier));
+
+            state = state with { ModifierBackground = null };
+            setState(state);
+            await Harness.Render();
+            Check("RemovingConcreteModifierRestoresTheme", dark);
+
             state = state with { SetterBackground = direct };
             setState(state);
             await Harness.Render();
             H.Check(prefix + "_NativeSetterWins", ReferenceEquals(Find().Background, direct));
+
+            if (reuse)
+            {
+                state = state with { SetterBackground = null, DirectBackground = direct };
+                setState(state);
+                await Harness.Render();
+                H.Check(prefix + "_RealPoolCycleStartsWithDirectBrush",
+                    ReferenceEquals(Find(), original) && ReferenceEquals(Find().Background, direct));
+
+                state = state with { ShowBorder = false };
+                setState(state);
+                await Harness.Render();
+                H.Check(prefix + "_RealPoolCycleUnmounted",
+                    H.FindControl<WinUI.Border>(border => ReferenceEquals(border, original)) is null);
+                H.Check(prefix + "_PoolReturnClearsLocalBackground",
+                    ReferenceEquals(original.ReadLocalValue(WinUI.Border.BackgroundProperty), DependencyProperty.UnsetValue));
+
+                state = state with { ShowBorder = true, DirectBackground = null };
+                setState(state);
+                await Harness.Render();
+                Check("RealPoolCycleRestoresThemeOnSameInstance", dark);
+            }
 
             WinUI.Border Find() => H.FindControl<WinUI.Border>(border =>
                 Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(border) == prefix)
@@ -128,7 +175,9 @@ internal sealed class BorderThemeBackgroundFixture(Harness h, bool reuse) : Self
         string Text = "3",
         ElementTheme Theme = ElementTheme.Light,
         Brush? DirectBackground = null,
-        Brush? SetterBackground = null);
+        Brush? SetterBackground = null,
+        Brush? ModifierBackground = null,
+        bool ShowBorder = true);
 
     private sealed record ScenarioProps(string Key, ScenarioState Initial, Action<Action<ScenarioState>> Capture);
 
@@ -142,9 +191,11 @@ internal sealed class BorderThemeBackgroundFixture(Harness h, bool reuse) : Self
             var pill = Border(TextBlock(state.Text)).Padding(8, 2).MinWidth(24).MinHeight(24)
                 .CornerRadius(12).Background(Theme.Ref(Props.Key)).VAlign(VerticalAlignment.Center)
                 .AutomationName(name) with { Background = state.DirectBackground };
+            if (state.ModifierBackground is { } modifier)
+                pill = pill.Background(modifier);
             if (state.SetterBackground is { } brush)
                 pill = pill.Set(border => border.Background = brush);
-            return VStack(pill, TextBlock($"overview {state.Revision}")).RequestedTheme(state.Theme);
+            return VStack(state.ShowBorder ? pill : null, TextBlock($"overview {state.Revision}")).RequestedTheme(state.Theme);
         }
     }
 }

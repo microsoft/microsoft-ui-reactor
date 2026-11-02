@@ -163,7 +163,7 @@ internal sealed class OneWayClearValuePropEntry<TElement, TControl, TValue> : Pr
 /// <summary>§6.1 <c>Prop.OneWay</c> with a "should I write?" predicate — for
 /// nullable / optional values where the host control should be left at its
 /// default unless the element actually has a value. Used by Border's
-/// nullable Background / BorderBrush props and ToggleSwitch's optional
+/// nullable BorderBrush prop and ToggleSwitch's optional
 /// Header.</summary>
 internal sealed class OneWayConditionalPropEntry<TElement, TControl, TValue> : PropEntry<TElement, TControl>
     where TElement : Element

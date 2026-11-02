@@ -105,9 +105,10 @@ tokens for theme-aware colors:
 Tokens are the right default. Reserve hex and `Brush` for brand colors
 that should stay constant regardless of mode.
 
-On `Border`, an unset `Background` record property releases its local value so
-the theme style can supply the brush, including after control reuse. An explicit
-brush or native `.Set(...)` background still takes precedence.
+On `Border`, `with { Background = brush }` overrides `.Background(Theme.X)`.
+Changing that record value back to `null` restores the themed brush, including
+on reused controls, or restores a still-present `.Background(brush)` modifier.
+A native `.Set(b => b.Background = brush)` also overrides the themed brush.
 
 ## Signal colors
 

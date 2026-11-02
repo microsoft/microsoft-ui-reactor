@@ -411,8 +411,9 @@ Conventions for contributors:
 
 - **Border theme-background precedence.** An unset background now releases local
   values on pooled controls and direct-to-themed updates so a `ThemeRef` style
-  can supply the brush. Explicit brushes and native setters retain precedence
-  (spec 050).
+  can supply the brush. Removing a record background preserves a still-present
+  concrete `.Background(brush)` modifier. Explicit brushes and native setters
+  retain precedence (spec 050 §6.3).
 
 - **Unmount callbacks survive managed-wrapper collection** (spec 047 §3).
   `.OnUnmount(...)` now lives in native attached state rather than a weak table

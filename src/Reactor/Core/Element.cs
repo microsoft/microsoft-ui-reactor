@@ -4734,9 +4734,8 @@ public partial record ScrollViewElement(Element Child) : Element
 /// <summary>Border element — a single-child container with brush/corner/thickness chrome.</summary>
 // Spec 058 §15 (P5.18) — Child is the single-content slot ([WrapContent]); CornerRadius and
 // BorderThickness are ergonomic double scalars converted to the WinUI structs ([WrapConvert]);
-// BorderBrush auto-maps; unset Background releases local precedence to theme styles. No events.
-// Replaces the
-// hand-coded BorderHandler + the parallel hand-written BorderDescriptor.
+// BorderBrush auto-maps; unset Background restores a concrete modifier or releases local
+// precedence to theme styles. No events. Replaces BorderHandler + BorderDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.Border))]
 [global::Microsoft.UI.Reactor.Wrappers.WrapContent("Child")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Background")]
@@ -4753,7 +4752,8 @@ public partial record BorderElement(Element? Child) : Element
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<BorderElement, WinUI.Border> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<BorderElement, WinUI.Border> d)
         => d.OneWay<Brush>(
-            static e => e.Background is null ? Optional<Brush>.Unset : e.Background,
+            // ApplyModifiers skips unchanged brushes, so restore its value when the record releases it.
+            static e => (e.Background ?? e.Modifiers?.Background) is { } brush ? brush : Optional<Brush>.Unset,
             static (border, brush) => border.Background = brush,
             WinUI.Border.BackgroundProperty);
 }
