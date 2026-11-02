@@ -4756,6 +4756,19 @@ public partial record BorderElement(Element? Child) : Element
             static e => (e.Background ?? e.Modifiers?.Background) is { } brush ? brush : Optional<Brush>.Unset,
             static (border, brush) => border.Background = brush,
             WinUI.Border.BackgroundProperty);
+
+    /// <summary>
+    /// Removing a concrete <c>.Background(brush)</c> makes the reconciler clear
+    /// <c>Border.Background</c> after the descriptor ran. The descriptor saw no record change,
+    /// so restore a record brush that is still set.
+    /// </summary>
+    internal static void RestoreRecordBackgroundAfterModifiers(
+        WinUI.Border border, BorderElement element, ElementModifiers? oldModifiers, ElementModifiers? modifiers)
+    {
+        if (element.Background is { } recordBackground
+            && modifiers?.Background is null && oldModifiers?.Background is not null)
+            border.Background = recordBackground;
+    }
 }
 
 /// <summary>Expander element. <c>IsExpanded</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its expansion state until explicitly set.</summary>

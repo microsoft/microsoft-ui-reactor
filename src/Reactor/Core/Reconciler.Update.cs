@@ -291,6 +291,8 @@ public sealed partial class Reconciler
 
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender);
+        if (target is WinUI.Border bgBorder && newEl is BorderElement bgEl)
+            BorderElement.RestoreRecordBackgroundAfterModifiers(bgBorder, bgEl, oldModifiers, modifiers);
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
         // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is

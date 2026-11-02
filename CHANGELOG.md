@@ -412,8 +412,9 @@ Conventions for contributors:
 - **Border theme-background precedence.** An unset background now releases local
   values on pooled controls and direct-to-themed updates so a `ThemeRef` style
   can supply the brush. Removing a record background preserves a still-present
-  concrete `.Background(brush)` modifier. Explicit brushes and native setters
-  retain precedence (spec 050 §6.3).
+  concrete `.Background(brush)` modifier, and removing that modifier restores a
+  still-set record background. Explicit brushes and native setters retain
+  precedence (spec 050 §6.3).
 
 - **Disposing a host retires its ContentDialogs.** `ReactorHostControl.Dispose()`,
   `ReactorHost.Dispose()`, and standalone reconciler disposal cancel deferred opens

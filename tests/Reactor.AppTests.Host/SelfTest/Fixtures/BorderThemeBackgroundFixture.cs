@@ -117,6 +117,25 @@ internal sealed class BorderThemeBackgroundFixture(Harness h, bool reuse) : Self
             await Harness.Render();
             Check("RemovingConcreteModifierRestoresTheme", dark);
 
+            // Mirror case: removing the modifier while the record brush stays set must restore
+            // the record brush, not fall back to the theme.
+            state = state with { DirectBackground = changedRecord, ModifierBackground = modifier };
+            setState(state);
+            await Harness.Render();
+            H.Check(prefix + "_ModifierAddedOverRecordWins", ReferenceEquals(Find().Background, modifier));
+
+            state = state with { ModifierBackground = null };
+            setState(state);
+            await Harness.Render();
+            H.Check(prefix + "_RemovingConcreteModifierRestoresRecordValue",
+                ReferenceEquals(Find(), original) && ReferenceEquals(Find().Background, changedRecord)
+                && ReferenceEquals(Find().ReadLocalValue(WinUI.Border.BackgroundProperty), changedRecord));
+
+            state = state with { DirectBackground = null };
+            setState(state);
+            await Harness.Render();
+            Check("RemovingRecordValueAfterModifierRestoresTheme", dark);
+
             state = state with { SetterBackground = direct };
             setState(state);
             await Harness.Render();
