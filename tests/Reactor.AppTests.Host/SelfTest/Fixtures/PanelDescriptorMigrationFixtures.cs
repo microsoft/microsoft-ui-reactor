@@ -290,14 +290,15 @@ internal static class PanelDescriptorMigrationFixtures
 
             await Harness.Render();
 
-            int? Hash(string key) =>
+            WinXC.Border? Control(string key) =>
                 H.FindControl<WinXC.TextBlock>(t =>
                     Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == $"pdm_wg_{key}") is { Parent: WinXC.Border br }
-                    ? global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(br)
+                    ? br
                     : null;
 
             var keys = new[] { "a", "b", "c", "d", "e" };
-            var before = keys.ToDictionary(k => k, Hash);
+            // Hold the wrappers: managed identity hashes can change after a native child is reprojected.
+            var before = keys.ToDictionary(k => k, Control);
             H.Check("PDM_WrapGrid_Reverse_AllInitial", before.Values.All(v => v is not null));
 
             H.ClickButton("Reverse");
@@ -308,7 +309,10 @@ internal static class PanelDescriptorMigrationFixtures
             // survivor is back with its original Border instance. A genuine
             // identity break never satisfies the predicate and still fails.
             H.Check("PDM_WrapGrid_Reverse_AllSurvivorsKeepIdentity",
-                await Harness.WaitFor(() => keys.All(k => before[k] == Hash(k))));
+                await Harness.WaitFor(() => keys.All(k => before[k] is { } original && ReferenceEquals(original, Control(k)))));
+            H.Check("PDM_WrapGrid_Reverse_OrderChanged",
+                H.FindControl<WinXC.VariableSizedWrapGrid>(_ => true) is { } grid
+                && grid.Children.OfType<WinXC.Border>().SequenceEqual(keys.Reverse().Select(k => before[k])));
         }
     }
 

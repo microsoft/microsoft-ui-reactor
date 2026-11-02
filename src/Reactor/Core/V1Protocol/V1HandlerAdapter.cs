@@ -163,7 +163,20 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
     {
         var typedControl = (TControl)control;
         var ctx = new UnmountContext(reconciler);
-        _handler.Unmount(ctx, typedControl);
+        // Inside a teardown that must finish (IsolateUnmountCleanupFailures), a throwing unmount
+        // hook still lets the strategy tear the control's children down (a named slot is out of
+        // the engine's generic child walk); the failure is rethrown afterwards for the engine
+        // to report once and to keep the half-torn-down control out of the pool.
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? hookFailure = null;
+        try
+        {
+            _handler.Unmount(ctx, typedControl);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException
+            && reconciler.IsolatesUnmountCleanupFailures)
+        {
+            hookFailure = global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+        }
 
         // Spec 047 §14 — panel-strategy handlers do NOT own child teardown
         // (their Unmount is a no-op; descriptors never recurse into children).
@@ -175,7 +188,10 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
         // early-return before the panel-child recursion and leak child Component
         // effect cleanups.
         if (_handler.ChildrenForUnmount is Panel<TElement, TControl>)
+        {
+            hookFailure?.Throw();
             return V1UnmountDisposition.ContinueDefaultTraversal;
+        }
 
         // Issue #375 — strategy-driven child teardown on Unmount. Without
         // this, a Component nested under a SingleContent / NamedSlots /
@@ -196,7 +212,15 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
         // descriptor exposes the real strategy here for the teardown walk.
         var strategy = _handler.ChildrenForUnmount;
         if (strategy is not null)
-            DispatchChildrenUnmount(strategy, reconciler, typedControl);
+        {
+            if (hookFailure is null)
+                DispatchChildrenUnmount(strategy, reconciler, typedControl);
+            else
+                // The failed hook may have torn some children down already: skip those.
+                reconciler.SkippingIsolatedTornDown((strategy, reconciler, typedControl),
+                    static s => DispatchChildrenUnmount(s.strategy, s.reconciler, s.typedControl));
+        }
+        hookFailure?.Throw();
 
         // Standard handlers always opt into pool collection — matches
         // the pre-Phase-3-completion behavior.

@@ -2882,7 +2882,9 @@ public static partial class ElementExtensions
     /// the React <c>useEffect</c> cleanup / Compose <c>DisposableEffect { onDispose }</c>
     /// shape — for controls that need an imperative stop/dispose (e.g. stopping a
     /// camera preview, releasing a media session). Runs on genuine unmount, not on
-    /// re-render/update.
+    /// re-render/update. Disposing the host drops its tree without unmounting it, so
+    /// this callback is not guaranteed to run then. Release anything that must not
+    /// outlive the host from a <c>UseEffect</c> cleanup, which disposal does run.
     /// Usage: CameraPreview(...).OnMount(fe =&gt; Start(fe)).OnUnmount(fe =&gt; Stop(fe))
     /// </summary>
     public static T OnUnmount<T>(this T el, Action<FrameworkElement> action) where T : Element =>

@@ -153,10 +153,43 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
     /// write — could outlive the mount that created it.</summary>
     public void Unmount(UnmountContext ctx, TControl control)
     {
+        if (ctx.Reconciler.IsolatesUnmountCleanupFailures)
+        {
+            UnmountIsolated(ctx, control);
+            return;
+        }
         if (_hasPropUnmount)
             for (int i = 0; i < _descriptor.Properties.Count; i++)
                 _descriptor.Properties[i].Unmount(in ctx, control);
         _descriptor.OnUnmount?.Invoke(in ctx, control);
+    }
+
+    // Inside a teardown that must finish (IsolateUnmountCleanupFailures): every property's
+    // unmount callback and the hook run even when an earlier one throws (each may own a
+    // secondary slot no other walk reaches). Each failure is reported as it happens, so the
+    // isolation sink sees them in order; afterwards an already-reported marker tells the adapter
+    // and the engine the teardown failed (strategy teardown, recovery, no pooling) without
+    // reporting anything twice.
+    private void UnmountIsolated(UnmountContext ctx, TControl control)
+    {
+        bool failed = false;
+        if (_hasPropUnmount)
+            for (int i = 0; i < _descriptor.Properties.Count; i++)
+            {
+                try { _descriptor.Properties[i].Unmount(in ctx, control); }
+                catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+                {
+                    ctx.Reconciler.ReportIsolatedUnmountFailure(ex);
+                    failed = true;
+                }
+            }
+        try { _descriptor.OnUnmount?.Invoke(in ctx, control); }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            ctx.Reconciler.ReportIsolatedUnmountFailure(ex);
+            failed = true;
+        }
+        if (failed) throw new ReportedUnmountFailureException();
     }
 
     public void Update(UpdateContext ctx, TElement oldEl, TElement newEl, TControl ctrl)

@@ -1300,7 +1300,7 @@ public abstract record Element
             // new one — otherwise the shallow-skip path strands a stale ElementRef.
             && ReferenceEquals(a.Ref, b.Ref)
             // Imperative teardown slot (.OnUnmount). ApplyModifiers re-registers the
-            // latest OnUnmountAction (Reconciler._onUnmountActions) on every non-skip
+            // latest OnUnmountAction (ReactorState.UnmountAction) on every non-skip
             // Update, and that captured delegate is what fires at unmount — so a
             // changed teardown closure must decline the skip or the stale (first-render)
             // action is stranded and runs in place of the current one. Unlike
@@ -3874,10 +3874,9 @@ public partial record AutoSuggestBoxElement(
     // reused verbatim from the hand-written descriptor (shared AutoSuggestBoxEventPayload).
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<AutoSuggestBoxElement, WinUI.AutoSuggestBox> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<AutoSuggestBoxElement, WinUI.AutoSuggestBox> d)
-        => d.OneWayConditional(
+        => d.OneWay(
                 get:         static e => e.Suggestions,
-                set:         static (c, v) => c.ItemsSource = v,
-                shouldWrite: static e => e.Suggestions.Length > 0)
+                set:         static (c, v) => c.ItemsSource = v.Length > 0 ? v : null)
             .HandCodedControlled<global::Microsoft.UI.Reactor.Core.V1Protocol.AutoSuggestBoxEventPayload, string,
                 global::Windows.Foundation.TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs>>(
                 get:         static e => e.Text,

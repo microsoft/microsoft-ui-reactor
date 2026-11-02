@@ -158,7 +158,16 @@ is mounted, WinUI animates a snapshot from the old position to the new one:
 
 ![Connected animation](screenshot://animation/connected-animation)
 
-Both the source and destination elements must use the same key string. The
+For a `NavigationHost` page transition, mark both elements with the same key
+and set `NavigateOptions.ConnectedAnimationKey = key` for that navigation. Select
+page motion independently with `Transition` (for example, `NavigationTransition.DrillIn()`). The host
+prepares the selected source before page teardown, waits for the destination's
+layout, and runs the selected page transition alongside the shared element.
+Both animations finish before page teardown.
+The host coordinates caching and back/forward navigation, retaining the outgoing
+page throughout the motion. See [navigation](navigation.md#page-transitions).
+
+Outside that navigation-owned path, both the source and destination elements must use the same key string. The
 animation runs automatically when the reconciler detects the transition.
 Source and destination must appear in the **same render** — the reconciler
 publishes the outgoing element's snapshot during the reconcile pass and plays
