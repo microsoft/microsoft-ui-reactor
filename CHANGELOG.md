@@ -409,6 +409,11 @@ Conventions for contributors:
 
 ### Fixed
 
+- `UsePersisted` restores saved null values for reference and nullable value
+  types instead of falling back to `initialValue` after remount
+  ([issue #1442](https://github.com/microsoft/microsoft-ui-reactor/issues/1442),
+  spec 033 §2).
+
 - **Unmount callbacks survive managed-wrapper collection** (spec 047 §3).
   `.OnUnmount(...)` now lives in native attached state rather than a weak table
   keyed by a managed wrapper, so a still-mounted control keeps its teardown callback
