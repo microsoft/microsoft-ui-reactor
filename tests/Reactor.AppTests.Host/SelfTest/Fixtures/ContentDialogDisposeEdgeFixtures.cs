@@ -35,12 +35,17 @@ internal static class ContentDialogDisposeEdgeFixtures
             using var reconciler = new Reconciler();
             var opened = 0;
             var closed = 0;
+            var nativeOpened = 0;
             WinUI.ContentDialog? dialog = null;
             var element = (ContentDialog("Disposed pending show", TextBlock("content"), "OK") with
             {
                 OnOpened = () => opened++,
                 OnClosed = _ => closed++,
-            }).Set(native => dialog = native);
+            }).Set(native =>
+            {
+                dialog = native;
+                native.Opened += (_, _) => nativeOpened++;
+            });
             var anchor = (FrameworkElement)reconciler.Mount(element, () => { })!;
             H.SetContent(anchor);
             try
@@ -50,9 +55,56 @@ internal static class ContentDialogDisposeEdgeFixtures
                 H.Check("DialogDispose_PendingShowCreated", dialog is not null && opened == 0);
                 reconciler.Dispose();
                 await Harness.Render(100);
+                Console.WriteLine($"# Pending show native Opened={nativeOpened}");
                 H.Check("DialogDispose_PendingShowCloses", await ContentDialogProbe.WaitForNoneOpen(H));
                 H.Check("DialogDispose_PendingShowDetached", dialog is { Content: null, IsLoaded: false });
                 H.Check("DialogDispose_PendingShowNoCallbacks", opened == 0 && closed == 0);
+            }
+            finally
+            {
+                dialog?.Hide();
+                await ContentDialogProbe.WaitForNoneOpen(H);
+                H.SetContent(null);
+            }
+        }
+    }
+
+    internal sealed class LateOpened(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var nativeOpened = 0;
+            var nativeClosed = 0;
+            var opened = 0;
+            WinUI.ContentDialog? dialog = null;
+            var element = (ContentDialog("Retired before native Opened", TextBlock("content"), "OK") with
+            {
+                OnOpened = () => opened++,
+            }).Set(native =>
+            {
+                dialog = native;
+                native.Opened += (_, _) => nativeOpened++;
+                native.Closed += (_, _) => nativeClosed++;
+            });
+            var anchor = (FrameworkElement)reconciler.Mount(element, () => { })!;
+            H.SetContent(anchor);
+            try
+            {
+                H.Check("DialogDispose_LateOpenedAnchorLoaded", await Harness.WaitFor(() => anchor.IsLoaded));
+                reconciler.Reconcile(element, element with { IsOpen = true }, anchor, () => { });
+                H.Check("DialogDispose_LateOpenedPending", dialog is not null && nativeOpened == 0);
+                var lifetime = reconciler.ContentDialogLifetimes!.Single();
+                // Isolate the late-Opened guard: this WinUI build cancels ShowAsync if
+                // Retire's earlier Hide runs, so mark retirement without that first Hide.
+                lifetime.Retired = true;
+                Reconciler.ClearElementTag(anchor);
+                H.Check("DialogDispose_LateOpenedNativeDelivered", await Harness.WaitFor(() => nativeOpened == 1));
+                Console.WriteLine($"# Late native Opened={nativeOpened}; element OnOpened={opened}");
+                H.Check("DialogDispose_LateOpenedHidden", await Harness.WaitFor(() => nativeClosed == 1));
+                H.Check("DialogDispose_LateOpenedDetached",
+                    await Harness.WaitFor(() => dialog is { Content: null, IsLoaded: false }));
+                H.Check("DialogDispose_LateOpenedNoCallback", opened == 0);
             }
             finally
             {
@@ -119,9 +171,10 @@ internal static class ContentDialogDisposeEdgeFixtures
         {
             using var reconciler = new Reconciler();
             var shows = 0;
+            WinUI.ContentDialog? dialog = null;
             var anchor = (FrameworkElement)reconciler.Mount(
                 (ContentDialog("Disposed deferred", TextBlock("content"), "OK") with { IsOpen = true })
-                    .Set(_ => shows++), () => { })!;
+                    .Set(native => { dialog = native; shows++; }), () => { })!;
             H.Check("DialogDispose_DeferredWasArmed", reconciler.ContentDialogLifetimes?.Count == 1 && anchor.XamlRoot is null);
             reconciler.Dispose();
             H.Check("DialogDispose_DeferredRetired", reconciler.ContentDialogLifetimes is null);
@@ -131,7 +184,12 @@ internal static class ContentDialogDisposeEdgeFixtures
                 H.Check("DialogDispose_DeferredAnchorLoaded", await Harness.WaitFor(() => anchor.IsLoaded));
                 H.Check("DialogDispose_DeferredNeverShows", shows == 0 && ContentDialogProbe.FindAnyOpen(H) is null);
             }
-            finally { H.SetContent(null); }
+            finally
+            {
+                dialog?.Hide();
+                await ContentDialogProbe.WaitForNoneOpen(H);
+                H.SetContent(null);
+            }
         }
     }
 
@@ -141,9 +199,10 @@ internal static class ContentDialogDisposeEdgeFixtures
         {
             using var reconciler = new Reconciler();
             var shows = 0;
+            WinUI.ContentDialog? dialog = null;
             var anchor = (FrameworkElement)reconciler.Mount(
                 (ContentDialog("Unmounted deferred", TextBlock("content"), "OK") with { IsOpen = true })
-                    .Set(_ => shows++), () => { })!;
+                    .Set(native => { dialog = native; shows++; }), () => { })!;
             H.Check("DialogDispose_UnmountPendingArmed", reconciler.ContentDialogLifetimes?.Count == 1);
             reconciler.UnmountChild(anchor);
             H.Check("DialogDispose_UnmountReleasesPending", reconciler.ContentDialogLifetimes?.Count == 0);
@@ -153,7 +212,12 @@ internal static class ContentDialogDisposeEdgeFixtures
                 H.Check("DialogDispose_UnmountedAnchorLoaded", await Harness.WaitFor(() => anchor.IsLoaded));
                 H.Check("DialogDispose_UnmountedNeverShows", shows == 0 && ContentDialogProbe.FindAnyOpen(H) is null);
             }
-            finally { H.SetContent(null); }
+            finally
+            {
+                dialog?.Hide();
+                await ContentDialogProbe.WaitForNoneOpen(H);
+                H.SetContent(null);
+            }
         }
     }
 
@@ -235,6 +299,7 @@ internal static class ContentDialogDisposeEdgeFixtures
             using var host = new ReactorHostControl();
             var setters = 0;
             var opened = 0;
+            var nativeOpened = 0;
             WinUI.ContentDialog? dialog = null;
             H.SetContent(host);
             host.Mount(_ => (ContentDialog("Disposed before show", TextBlock("content"), "OK") with
@@ -245,12 +310,15 @@ internal static class ContentDialogDisposeEdgeFixtures
             {
                 dialog = native;
                 setters++;
+                native.Opened += (_, _) => nativeOpened++;
                 host.Dispose();
             }));
             try
             {
                 H.Check("DialogDispose_BeforeShowSetterRan", await Harness.WaitFor(() => setters == 1));
-                await Harness.Render();
+                await Harness.Render(100);
+                Console.WriteLine($"# Before show native Opened={nativeOpened}");
+                H.Check("DialogDispose_BeforeShowNoNativeOpened", nativeOpened == 0);
                 H.Check("DialogDispose_BeforeShowNeverOpened", opened == 0 && ContentDialogProbe.FindAnyOpen(H) is null);
                 H.Check("DialogDispose_BeforeShowDetached", dialog is { Content: null });
             }
@@ -259,6 +327,100 @@ internal static class ContentDialogDisposeEdgeFixtures
                 dialog?.Hide();
                 await ContentDialogProbe.WaitForNoneOpen(H);
                 H.SetContent(null);
+            }
+        }
+    }
+
+    internal sealed class OpenSiblingAfterDisposal(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            using var host = new ReactorHostControl();
+            Action<bool>? setOpen = null;
+            var firstSetters = 0;
+            var secondSetters = 0;
+            var secondNativeOpened = 0;
+            WinUI.ContentDialog? first = null;
+            WinUI.ContentDialog? second = null;
+            H.SetContent(host);
+            host.Mount(ctx =>
+            {
+                var (open, set) = ctx.UseState(false);
+                setOpen = set;
+                return VStack(
+                    (ContentDialog("Dispose before sibling opens", TextBlock("first"), "OK") with { IsOpen = open })
+                        .Set(native =>
+                        {
+                            first = native;
+                            firstSetters++;
+                            host.Dispose();
+                        }),
+                    (ContentDialog("Sibling must not open", TextBlock("second"), "OK") with { IsOpen = open })
+                        .Set(native =>
+                        {
+                            second = native;
+                            secondSetters++;
+                            native.Opened += (_, _) => secondNativeOpened++;
+                        }));
+            });
+            try
+            {
+                H.Check("DialogDispose_OpenSiblingHostLoaded", await Harness.WaitFor(() => host.IsLoaded && setOpen is not null));
+                setOpen!(true);
+                H.Check("DialogDispose_OpenSiblingFirstDisposed", await Harness.WaitFor(() => firstSetters == 1));
+                await Harness.Render(100);
+                Console.WriteLine($"# Sibling setters={secondSetters}; native Opened={secondNativeOpened}");
+                H.Check("DialogDispose_OpenSiblingNeverCreated", secondSetters == 0);
+                H.Check("DialogDispose_OpenSiblingNeverOpened", secondNativeOpened == 0 && ContentDialogProbe.FindAnyOpen(H) is null);
+            }
+            finally
+            {
+                first?.Hide();
+                second?.Hide();
+                await ContentDialogProbe.WaitForNoneOpen(H);
+                H.SetContent(null);
+            }
+        }
+    }
+
+    internal sealed class ThrowingWindowRoot(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            using var host = H.CreateHost();
+            var expected = new InvalidOperationException("window root cleanup failure");
+            var committed = false;
+            var closed = 0;
+            WinUI.ContentDialog? dialog = null;
+            host.Mount(ctx =>
+            {
+                ctx.UseEffect(() =>
+                {
+                    committed = true;
+                    return () => throw expected;
+                }, []);
+                return (ContentDialog("Throwing window disposal", TextBlock("content"), "OK") with
+                {
+                    IsOpen = true,
+                    OnClosed = _ => closed++,
+                }).Set(native => dialog = native);
+            });
+            try
+            {
+                H.Check("DialogDispose_ThrowingWindowOpened",
+                    await ContentDialogProbe.WaitForOpen(H, "Throwing window disposal") is not null);
+                H.Check("DialogDispose_ThrowingWindowCommitted", await Harness.WaitFor(() => committed));
+                Exception? caught = null;
+                try { host.Dispose(); }
+                catch (InvalidOperationException ex) { caught = ex; }
+                H.Check("DialogDispose_ThrowingWindowExceptionPreserved", ReferenceEquals(caught, expected));
+                H.Check("DialogDispose_ThrowingWindowCloses", await ContentDialogProbe.WaitForClosed(H, "Throwing window disposal"));
+                H.Check("DialogDispose_ThrowingWindowDetaches", dialog is { Content: null } && closed == 0);
+            }
+            finally
+            {
+                dialog?.Hide();
+                await ContentDialogProbe.WaitForNoneOpen(H);
             }
         }
     }

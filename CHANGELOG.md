@@ -414,7 +414,7 @@ Conventions for contributors:
   and detach/hide owned dialogs before user cleanup, without raising the element's
   `OnClosed`. Previously effect cleanup ran but the native modal could remain on
   screen after its host was disposed. Ordinary tree-disposal cleanup semantics
-  are unchanged (spec 047 §4.5). Reentrant disposal during dialog-content mount
+  are unchanged (PR #1444). Reentrant disposal during dialog-content mount
   or update also leaves the dialog detached, and closed dialogs release their
   `Opened` handler after `ShowAsync` completes.
 - **Unmount callbacks survive managed-wrapper collection** (spec 047 §3).

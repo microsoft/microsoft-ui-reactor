@@ -5795,7 +5795,9 @@ public partial record FlipViewElement(
 /// content is reconciled live while the dialog is open.
 /// OnClosed reports how the dialog was dismissed — the button the user chose,
 /// or <see cref="ContentDialogResult.None"/> for a declared IsOpen = false. It
-/// does not fire when the dialog is torn down because its owner unmounted.
+/// does not fire when the dialog is torn down because its owner unmounted or
+/// its host/reconciler was disposed. Disposal also cancels deferred opens without
+/// OnOpened. State reset needed during teardown belongs in effect cleanup, not OnClosed.
 /// </summary>
 public record ContentDialogElement(
     string Title,
