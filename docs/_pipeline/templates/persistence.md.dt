@@ -27,12 +27,14 @@ restart"; that one needs a disk bridge in `UseEffect`, covered below.
 
 ![Notes editor — UsePersisted demo](screenshot://persistence/notes-editor)
 
-The lookup happens once per mount: the hook checks the named scope
-for `"notes/body"`, returns the cached value if present (otherwise
-the supplied `initialValue`), and writes the latest value back into
-the scope on every state update. When the component unmounts and
-later remounts, the second mount finds the stored value and skips the
-default.
+The hook reads the scope once per mount, using `initialValue` when no
+compatible cached value is available. State updates change the hook's
+current value; the latest value is saved to the scope when the component
+unmounts.
+
+For nullable state, setting the value to `null` is preserved across an
+unmount/remount. A stored null is a cached value; it does not cause the next
+mount to fall back to `initialValue`.
 
 ## Reference
 
