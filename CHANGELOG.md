@@ -409,6 +409,13 @@ Conventions for contributors:
 
 ### Fixed
 
+- Async resource hooks detect dependency changes even when hashes collide and
+  treat mismatched cached dependencies as a miss, preventing wrong-query data
+  in `UseResource` and `UseInfiniteResource`. Cursor-paged resources also use
+  the requested predecessor's cursor after page eviction and cache invalidation
+  ([issue #1430](https://github.com/microsoft/microsoft-ui-reactor/issues/1430),
+  spec 020 §6.2, §7, §9.2).
+
 - `UsePersisted` restores saved null values for reference and nullable value
   types instead of falling back to `initialValue` after remount
   ([issue #1442](https://github.com/microsoft/microsoft-ui-reactor/issues/1442),

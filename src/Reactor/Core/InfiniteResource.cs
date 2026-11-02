@@ -38,6 +38,16 @@ public abstract record LoadState
 /// Tuning for <c>UseInfiniteResource</c>. Defaults: 50 items per page, no LRU cap
 /// (keeps every loaded page), 5-minute <c>CacheTime</c>, 0 <c>StaleTime</c>.
 /// </summary>
+/// <param name="PageSize">Number of items per page.</param>
+/// <param name="MaxLoadedPages">Maximum retained pages; null keeps all loaded pages.</param>
+/// <param name="StaleTime">Stale-time setting; null uses zero.</param>
+/// <param name="CacheTime">Retention after the last subscriber leaves; null uses five minutes.</param>
+/// <param name="CacheKeyPrefix">
+/// Overrides the prefix for page cache keys; null uses a prefix unique to this hook.
+/// Page keys still include the dependency hash and page index. Changing deps
+/// cancels in-flight page requests, resets the page set, and loads the first page
+/// for the new deps, even if the prefix is unchanged.
+/// </param>
 public sealed record InfiniteResourceOptions(
     int PageSize = 50,
     int? MaxLoadedPages = null,
@@ -249,6 +259,21 @@ public sealed class InfiniteResource<TItem>
         lock (_lock) MarkPageInFlightLocked(pageIndex);
     }
 
+    /// <summary>Gets a retained page's next cursor, including null at the end of the list.</summary>
+    internal bool TryGetPageCursor<TCursor>(int pageIndex, out TCursor? cursor)
+    {
+        lock (_lock)
+        {
+            if (_pages.TryGetValue(pageIndex, out var slot) && slot.Items is not null)
+            {
+                cursor = slot.NextCursor is TCursor c ? c : default;
+                return true;
+            }
+            cursor = default;
+            return false;
+        }
+    }
+
     private void MarkPageInFlightLocked(int pageIndex)
     {
         if (_pages.TryGetValue(pageIndex, out var slot) && slot.Items is not null)
@@ -268,7 +293,8 @@ public sealed class InfiniteResource<TItem>
     {
         lock (_lock)
         {
-            _pages[pageIndex] = new PageSlot(page.Items);
+            object? nextCursor = page.NextCursor;
+            _pages[pageIndex] = new PageSlot(page.Items, nextCursor);
             TouchLru(pageIndex);
             _loadedItemCount += page.Items.Count;
             int endExclusive = pageIndex * _options.PageSize + page.Items.Count;
@@ -276,8 +302,8 @@ public sealed class InfiniteResource<TItem>
 
             if (page.TotalCount is { } tc) _totalCount = tc;
 
-            // The cursor we cache is always the most recent one — that's what FetchNext uses.
-            _nextCursor = page.NextCursor;
+            // Preserve the last-applied cursor for the resource's overall end-of-list state.
+            _nextCursor = nextCursor;
             bool atEnd = page.NextCursor is null;
 
             _loadState = atEnd ? LoadState.EndOfList.Instance : LoadState.Idle.Instance;
@@ -433,7 +459,7 @@ public sealed class InfiniteResource<TItem>
         Items = new ItemsView<TItem>(backing);
     }
 
-    private readonly record struct PageSlot(IReadOnlyList<TItem>? Items);
+    private readonly record struct PageSlot(IReadOnlyList<TItem>? Items, object? NextCursor = null);
 }
 
 /// <summary>Thin <see cref="IReadOnlyList{T}"/> wrapper so <c>Items</c> swaps atomically.</summary>
