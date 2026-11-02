@@ -879,9 +879,21 @@ public sealed class RenderContext
         if (_hookIndex >= _hooks.Count)
         {
             var resolvedScope = ResolvePersistedScope(scope);
-            T initial = (resolvedScope is not null && resolvedScope.TryGet<T>(key, out var cached))
-                ? cached
-                : initialValue;
+            object? cached = null;
+            bool found = resolvedScope switch
+            {
+                WindowPersistedScope window => window.TryGetValue(key, out cached),
+                ApplicationPersistedScope application => application.TryGetValue(key, out cached),
+                _ => false,
+            };
+            T initial = initialValue;
+            if (found)
+            {
+                if (cached is T typed)
+                    initial = typed;
+                else if (cached is null && default(T) is null)
+                    initial = default!;
+            }
             _hooks.Add(new PersistedHookState<T>(initial) { PersistKey = key, Scope = resolvedScope });
         }
 
