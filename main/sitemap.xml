@@ -309,6 +309,14 @@
          <lastmod>2026-11-02</lastmod>
     </url>
     <url>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/CacheKey/</loc>
+         <lastmod>2026-11-02</lastmod>
+    </url>
+    <url>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/CacheTime/</loc>
+         <lastmod>2026-11-02</lastmod>
+    </url>
+    <url>
          <loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Changed/</loc>
          <lastmod>2026-11-02</lastmod>
     </url>
@@ -465,6 +473,14 @@
          <lastmod>2026-11-02</lastmod>
     </url>
     <url>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/RefetchOnMount/</loc>
+         <lastmod>2026-11-02</lastmod>
+    </url>
+    <url>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/RefetchOnWindowFocus/</loc>
+         <lastmod>2026-11-02</lastmod>
+    </url>
+    <url>
          <loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Region/</loc>
          <lastmod>2026-11-02</lastmod>
     </url>
@@ -485,6 +501,10 @@
          <lastmod>2026-11-02</lastmod>
     </url>
     <url>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/RetryCount/</loc>
+         <lastmod>2026-11-02</lastmod>
+    </url>
+    <url>
          <loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/RunAsync/</loc>
          <lastmod>2026-11-02</lastmod>
     </url>
@@ -498,6 +518,10 @@
     </url>
     <url>
          <loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/SetSubmitHandler/</loc>
+         <lastmod>2026-11-02</lastmod>
+    </url>
+    <url>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/StaleTime/</loc>
          <lastmod>2026-11-02</lastmod>
     </url>
     <url>
