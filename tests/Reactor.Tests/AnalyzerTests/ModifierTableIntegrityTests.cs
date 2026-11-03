@@ -981,14 +981,15 @@ public class ModifierTableIntegrityTests
             {
                 hooks++;
 
-                var elementName = QualifiedTypeName(
-                    (Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax)method.Parent!);
+                var elementType = (Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax)method.Parent!;
+                var elementName = QualifiedTypeName(elementType);
 
                 var gatedReads = method.DescendantNodes()
                     .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.MemberAccessExpressionSyntax>()
                     .Where(access =>
                         access.Expression is Microsoft.CodeAnalysis.CSharp.Syntax.IdentifierNameSyntax receiver
                         && gated.Contains(access.Name.Identifier.Text)
+                        && IsCommonModifierProperty(elementType, access.Name.Identifier.Text)
                         && IsLambdaParameter(access, receiver.Identifier.Text));
 
                 foreach (var access in gatedReads)
@@ -998,6 +999,27 @@ public class ModifierTableIntegrityTests
 
         return (keys, hooks);
     }
+
+    [Theory]
+    [InlineData("partial record BorderElement { public Brush? Background { get; init; } }", "Background", false)]
+    [InlineData("partial record BorderElement { public Brush? Background { get; init; } }", "Padding", true)]
+    [InlineData("partial record RichTextBlockElement { }", "Padding", true)]
+    [InlineData("partial record OtherElement(Brush? Background);", "Background", false)]
+    public void Common_Modifier_Reads_Exclude_Record_Owned_Properties(string source, string name, bool expected)
+    {
+        var elementType = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree
+            .ParseText(source, cancellationToken: TestContext.Current.CancellationToken)
+            .GetRoot(TestContext.Current.CancellationToken)
+            .DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax>().Single();
+        Assert.Equal(expected, IsCommonModifierProperty(elementType, name));
+    }
+
+    private static bool IsCommonModifierProperty(
+        Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax elementType, string name)
+        => !elementType.Members.OfType<Microsoft.CodeAnalysis.CSharp.Syntax.PropertyDeclarationSyntax>()
+                .Any(property => property.Identifier.Text == name)
+            && !(elementType is Microsoft.CodeAnalysis.CSharp.Syntax.RecordDeclarationSyntax record
+                && record.ParameterList?.Parameters.Any(parameter => parameter.Identifier.Text == name) == true);
 
     /// <summary>Namespace-qualified name of the type declaration owning a member.</summary>
     private static string QualifiedTypeName(Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax type)
