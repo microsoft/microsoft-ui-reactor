@@ -283,8 +283,8 @@ UseResourceCore:
 3. Updates `CacheKey` to `newKey`. Subscribes and enrolls on the first query or a
    changed key; a same-key collision keeps the existing subscription. Snapshots `LastDeps`.
 
-Dependency comparisons use `RenderContext.DepsEqual` (`RenderContext.cs:2742-2751`),
-shared with `UseEffect`, `UseMemo`, memo elements, and `UseMemoCells`.
+Dependency comparisons use `RenderContext.DepsEqual`,
+shared by the hook, memo, and resource dependency paths.
 Resource-written cache entries also carry the hook's dependency snapshot. A matching
 hash with unequal dependencies is a cache miss, including infinite-resource page
 cache reads. Page sequencing also checks the resource's own loaded pages (§5.2).

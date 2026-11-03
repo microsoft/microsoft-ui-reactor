@@ -390,7 +390,7 @@ See §5.1 for when `.Match()` is the better tool (explicit
 
 - `deps` is `object[]` to match `UseEffect` / `UseMemo` convention from spec
   009. Arrays are compared element-wise with `object.Equals` through
-  `RenderContext.DepsEqual` (`RenderContext.cs:2742-2751`), shared with
+  `RenderContext.DepsEqual`, shared with
   `UseEffect` / `UseMemo`.
 - **Threading.** `Render()` runs on the UI thread (enforced by
   `RenderContext.AssertUIThread`, `RenderContext.cs:17-22`). The hook invokes

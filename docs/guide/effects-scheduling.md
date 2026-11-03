@@ -82,7 +82,7 @@ second, the cleanup would dispose the timer the body just created.
 ## Dependency equality is value equality, with one trap
 
 Reactor compares dependency arrays element-wise with `object.Equals` through
-`RenderContext.DepsEqual` (`RenderContext.cs:2742-2751`).
+`RenderContext.DepsEqual`.
 For primitives and records that's value equality.
 For classes that don't override `Equals(object)`, it's reference equality,
 even if they implement `IEquatable<T>`. The typed overloads retain their

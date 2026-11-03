@@ -323,7 +323,7 @@ lambda"); `RenderContext.cs:363-482`.
 every frame, plus memo bookkeeping overhead.
 
 > **Accuracy note (review):** `MemoElement` deps are compared with `Equals`, not
-> reference identity (`RenderContext.DepsEqual`, `RenderContext.cs:2742-2751`), so
+> reference identity (`RenderContext.DepsEqual`), so
 > `new[] { filter, sort }` passed to the
 > `params object?[]` slot compares element-wise **by value** and is *fine* when
 > the elements have value equality. The real miss is a single dep whose type

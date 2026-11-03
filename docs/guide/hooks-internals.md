@@ -206,7 +206,7 @@ public void UseEffect(Action effect, params object[] dependencies)
 
 `UseEffect` doesn't run the body during `Render()`. It allocates an
 `EffectHookState` if needed, compares the dependencies against the
-previous render's deps (`RenderContext.DepsEqual` in `RenderContext.cs:2742-2751`
+previous render's deps (`RenderContext.DepsEqual`
 uses `object.Equals` element-wise),
 and if they differ — or if this is the first render — it stashes the
 old cleanup as `PendingCleanup`, replaces the deps and body, and
