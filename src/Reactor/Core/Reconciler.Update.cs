@@ -289,8 +289,12 @@ public sealed partial class Reconciler
                 .ObserveAfterSetters(preModCtl);
         }
 
+        // Set by BorderElement's built-in descriptor when it already released or replaced a removed
+        // Background modifier before native setters ran; clearing here would discard both.
+        var keepRemovedBackground = _backgroundRemovalHandled.Count > 0
+            && _backgroundRemovalHandled.Remove(control) && ReferenceEquals(target, control);
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
-            ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender);
+            ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender, keepRemovedBackground);
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
         // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is
@@ -381,6 +385,10 @@ public sealed partial class Reconciler
             if (ctxCount > 0)
                 _contextScope.Pop(ctxCount);
             _ambientRequestedTheme = prevAmbientTheme;
+            // A throw between the descriptor's mark and its consumption above must not leave
+            // the set holding this control.
+            if (_backgroundRemovalHandled.Count > 0)
+                _backgroundRemovalHandled.Remove(control);
         }
 
         return result;
