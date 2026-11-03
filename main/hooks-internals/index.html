@@ -3805,7 +3805,8 @@ the surviving cells and remounts).</p>
 </code></pre></div>
 <p><code>UseEffect</code> doesn't run the body during <code>Render()</code>. It allocates an
 <code>EffectHookState</code> if needed, compares the dependencies against the
-previous render's deps (<code>DepsEqual</code> uses <code>object.Equals</code> element-wise),
+previous render's deps (<code>RenderContext.DepsEqual</code>
+uses <code>object.Equals</code> element-wise),
 and if they differ — or if this is the first render — it stashes the
 old cleanup as <code>PendingCleanup</code>, replaces the deps and body, and
 flips <code>Pending = true</code>. The reconciler calls <code>FlushEffectsTraced</code>

@@ -3646,10 +3646,12 @@ to the factory — reason from the control the reconciler actually
 attached.</p>
 </blockquote>
 <h2 id="dependency-equality-is-value-equality-with-one-trap">Dependency equality is value equality, with one trap<a class="headerlink" href="#dependency-equality-is-value-equality-with-one-trap" title="Permanent link">&para;</a></h2>
-<p>Reactor compares dependency arrays with <code>EqualityComparer&lt;T&gt;.Default</code>.
-For primitives and records that's value equality. For classes that
-don't override <code>Equals</code>, it's reference equality — same identity
-trap React's <code>useEffect</code> has.</p>
+<p>Reactor compares dependency arrays element-wise with <code>object.Equals</code> through
+<code>RenderContext.DepsEqual</code>.
+For primitives and records that's value equality.
+For classes that don't override <code>Equals(object)</code>, it's reference equality,
+even if they implement <code>IEquatable&lt;T&gt;</code>. The typed overloads retain their
+allocation-free <code>EqualityComparer&lt;T&gt;.Default</code> path for value-type dependencies.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">public</span><span class="w"> </span><span class="p">(</span><span class="n">T</span><span class="w"> </span><span class="n">Value</span><span class="p">,</span><span class="w"> </span><span class="n">Action</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Set</span><span class="p">)</span><span class="w"> </span><span class="n">UseState</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">T</span><span class="w"> </span><span class="n">initialValue</span><span class="p">,</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="n">threadSafe</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">false</span><span class="p">)</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="p">{</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">_hookIndex</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">_hooks</span><span class="p">.</span><span class="n">Count</span><span class="p">)</span>
@@ -3765,7 +3767,7 @@ is your only chance to cancel the in-flight task — capture a
 </tr>
 <tr>
 <td>primitives / records</td>
-<td>when <code>EqualityComparer&lt;T&gt;.Default.Equals</code> flips</td>
+<td>when a dependency's value changes</td>
 </tr>
 <tr>
 <td>reference-typed object built in render</td>
