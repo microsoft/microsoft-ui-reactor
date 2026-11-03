@@ -3399,7 +3399,7 @@ public sealed partial class Reconciler : IDisposable
                 var newDeps = newMemo.Dependencies;
                 bool depsChanged = oldDeps is null && newDeps is null
                     ? false // both null = render once, never re-render from parent
-                    : oldDeps is null || newDeps is null || !DepsEqual(oldDeps, newDeps);
+                    : oldDeps is null || newDeps is null || !RenderContext.DepsEqual(oldDeps, newDeps);
                 bool contextChanged = HasConsumedContextChanged(node);
                 skipRender = !depsChanged && !contextChanged;
                 memoReason = depsChanged
@@ -4841,16 +4841,6 @@ public sealed partial class Reconciler : IDisposable
     // ════════════════════════════════════════════════════════════════════
     //  Shared helpers (used by Mount + Update)
     // ════════════════════════════════════════════════════════════════════
-
-    private static bool DepsEqual(object?[] prev, object?[] next)
-    {
-        if (prev.Length != next.Length) return false;
-        for (int i = 0; i < prev.Length; i++)
-        {
-            if (!Equals(prev[i], next[i])) return false;
-        }
-        return true;
-    }
 
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Runs each setter

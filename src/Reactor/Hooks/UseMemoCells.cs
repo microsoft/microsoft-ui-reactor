@@ -79,7 +79,7 @@ public static class UseMemoCellsExtensions
 
         var stateRef = ctx.UseRef<MemoCellsState<T>?>(null);
         var prev = stateRef.Current;
-        var depsChanged = prev is null || !DepsEqual(prev.Deps, dependencies);
+        var depsChanged = prev is null || !RenderContext.DepsEqual(prev.Deps, dependencies);
         var count = items.Count;
 
         // Issue #659 (#47), hardened per review: full-cache-hit fast path.
@@ -170,7 +170,7 @@ public static class UseMemoCellsExtensions
 
         var stateRef = ctx.UseRef<MemoCellsByKeyState<T, TKey>?>(null);
         var prev = stateRef.Current;
-        var depsChanged = prev is null || !DepsEqual(prev.Deps, dependencies);
+        var depsChanged = prev is null || !RenderContext.DepsEqual(prev.Deps, dependencies);
         var count = items.Count;
         var children = new Element[count];
         var keyToIndex = depsChanged ? null : prev!.KeyToIndex;
@@ -262,7 +262,7 @@ public static class UseMemoCellsExtensions
 
         var stateRef = ctx.UseRef<MemoCellsState<T>?>(null);
         var prev = stateRef.Current;
-        var depsChanged = prev is null || !DepsEqual(prev.Deps, dependencies);
+        var depsChanged = prev is null || !RenderContext.DepsEqual(prev.Deps, dependencies);
         var count = items.Count;
         var children = new Element[count];
 
@@ -405,16 +405,6 @@ public static class UseMemoCellsExtensions
         for (int i = 0; i < cells.Length; i++)
             if (ChildDiffHints.IsThemeSensitive(cells[i])) n++;
         return n;
-    }
-
-    private static bool DepsEqual(object[] prev, object[] next)
-    {
-        if (prev.Length != next.Length) return false;
-        for (int i = 0; i < prev.Length; i++)
-        {
-            if (!Equals(prev[i], next[i])) return false;
-        }
-        return true;
     }
 
     // Issue #659 (#47): positional value-equality scan for the full-cache-hit

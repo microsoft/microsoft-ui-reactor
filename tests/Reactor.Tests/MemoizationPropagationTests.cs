@@ -118,17 +118,7 @@ public class MemoizationPropagationTests
         else if (oldDeps is null || newDeps is null)
             depsChanged = true;
         else
-        {
-            if (oldDeps.Length != newDeps.Length) depsChanged = true;
-            else
-            {
-                depsChanged = false;
-                for (int i = 0; i < oldDeps.Length; i++)
-                {
-                    if (!Equals(oldDeps[i], newDeps[i])) { depsChanged = true; break; }
-                }
-            }
-        }
+            depsChanged = !RenderContext.DepsEqual(oldDeps, newDeps);
 
         bool contextChanged = false;
         foreach (var ctxHook in renderCtx.ContextHooks)

@@ -265,7 +265,7 @@ UseResourceCore:
 
   firstRender = state.LastDeps is null
   depsChanged = !firstRender && (state.CacheKey != newKey ||
-      (options.CacheKey is null && !DepsEqual(state.LastDeps, deps)))
+      (state.CheckDependencies && !RenderContext.DepsEqual(state.LastDeps, deps)))
 
   if firstRender or depsChanged:
       state.TransitionToKey(newKey, deps)     // cancels old CTS; keeps subscription if key is unchanged
@@ -283,6 +283,8 @@ UseResourceCore:
 3. Updates `CacheKey` to `newKey`. Subscribes and enrolls on the first query or a
    changed key; a same-key collision keeps the existing subscription. Snapshots `LastDeps`.
 
+Dependency comparisons use `RenderContext.DepsEqual`,
+shared by the hook, memo, and resource dependency paths.
 Resource-written cache entries also carry the hook's dependency snapshot. A matching
 hash with unequal dependencies is a cache miss, including infinite-resource page
 cache reads. Page sequencing also checks the resource's own loaded pages (§5.2).
@@ -701,7 +703,7 @@ computed prefix differs **or** the dependency snapshot is unequal:
 
 ```csharp
 if (!string.Equals(state.KeyPrefix, newKeyPrefix, StringComparison.Ordinal)
-    || !ResourceDependencies.DepsEqual(state.LastDeps, deps))
+    || !RenderContext.DepsEqual(state.LastDeps, deps))
 {
     state.TransitionToDeps(newKeyPrefix, deps);
     state.KickOffFirstPage();
