@@ -168,6 +168,22 @@ internal sealed class BorderThemeBackgroundFixture(Harness h, bool reuse) : Self
                 ReferenceEquals(Find().Background, direct)
                 && ReferenceEquals(Find().ReadLocalValue(WinUI.Border.BackgroundProperty), direct));
 
+            // Removing the Background modifier must not re-run setters over other modifiers that
+            // changed in the same render.
+            state = state with { ModifierBackground = modifier, ModifierWidth = 200, SetterWidth = 100 };
+            setState(state);
+            await Harness.Render();
+            state = state with { ModifierBackground = null, ModifierWidth = 300 };
+            setState(state);
+            await Harness.Render();
+            Console.WriteLine($"# {prefix}_RemovingModifierKeepsChangedWidth: width={Find().Width}");
+            H.Check(prefix + "_RemovingModifierKeepsChangedWidth",
+                Find().Width == 300 && ReferenceEquals(Find().Background, direct));
+
+            state = state with { ModifierWidth = null, SetterWidth = null };
+            setState(state);
+            await Harness.Render();
+
             if (reuse)
             {
                 state = state with { SetterBackground = null, DirectBackground = direct };
@@ -223,6 +239,8 @@ internal sealed class BorderThemeBackgroundFixture(Harness h, bool reuse) : Self
         Brush? DirectBackground = null,
         Brush? SetterBackground = null,
         Brush? ModifierBackground = null,
+        double? ModifierWidth = null,
+        double? SetterWidth = null,
         bool ShowBorder = true);
 
     private sealed record ScenarioProps(string Key, ScenarioState Initial, Action<Action<ScenarioState>> Capture);
@@ -241,6 +259,10 @@ internal sealed class BorderThemeBackgroundFixture(Harness h, bool reuse) : Self
                 pill = pill.Background(modifier);
             if (state.SetterBackground is { } brush)
                 pill = pill.Set(border => border.Background = brush);
+            if (state.ModifierWidth is { } width)
+                pill = pill.Width(width);
+            if (state.SetterWidth is { } setterWidth)
+                pill = pill.Set(border => border.Width = setterWidth);
             return VStack(state.ShowBorder ? pill : null, TextBlock($"overview {state.Revision}")).RequestedTheme(state.Theme);
         }
     }

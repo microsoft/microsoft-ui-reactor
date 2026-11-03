@@ -4751,26 +4751,15 @@ public partial record BorderElement(Element? Child) : Element
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<BorderElement, WinUI.Border> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<BorderElement, WinUI.Border> d)
-        => d.OneWay<Brush>(
-            // ApplyModifiers skips unchanged brushes, so restore its value when the record releases it.
-            static e => (e.Background ?? e.Modifiers?.Background) is { } brush ? brush : Optional<Brush>.Unset,
-            static (border, brush) => border.Background = brush,
+        => d.OneWay<(Brush? Record, Brush? Modifier)>(
+            // The modifier is part of the value so removing it (or the record) rewrites the
+            // remaining brush here, before native setters run. ApplyModifiers skips unchanged
+            // brushes and leaves the clear of a modifier this entry saw to it.
+            static e => e.Background is null && e.Modifiers?.Background is null
+                ? Optional<(Brush? Record, Brush? Modifier)>.Unset
+                : (e.Background, e.Modifiers?.Background),
+            static (border, brushes) => border.Background = brushes.Record ?? brushes.Modifier,
             WinUI.Border.BackgroundProperty);
-
-    /// <summary>
-    /// Removing a concrete <c>.Background(brush)</c> makes the reconciler clear
-    /// <c>Border.Background</c> after the descriptor and native setters ran. Restore a record
-    /// brush that is still set (the descriptor saw no record change), then re-run the native
-    /// setters so they keep precedence, as on every other update.
-    /// </summary>
-    internal static void RestoreBackgroundAfterModifiers(
-        WinUI.Border border, BorderElement element, ElementModifiers? oldModifiers, ElementModifiers? modifiers)
-    {
-        if (modifiers?.Background is not null || oldModifiers?.Background is null) return;
-        if (element.Background is { } recordBackground)
-            border.Background = recordBackground;
-        Reconciler.ApplySetters(element.Setters, border);
-    }
 }
 
 /// <summary>Expander element. <c>IsExpanded</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its expansion state until explicitly set.</summary>

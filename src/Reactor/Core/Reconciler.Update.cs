@@ -290,9 +290,10 @@ public sealed partial class Reconciler
         }
 
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
-            ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender);
-        if (target is WinUI.Border bgBorder && newEl is BorderElement bgEl)
-            BorderElement.RestoreBackgroundAfterModifiers(bgBorder, bgEl, oldModifiers, modifiers);
+            ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender,
+                // BorderElement's descriptor already released or replaced a Background modifier
+                // it saw removed, before native setters ran; clearing here would discard both.
+                keepRemovedBackground: oldEl is BorderElement { Modifiers.Background: not null } && newEl is BorderElement);
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
         // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is

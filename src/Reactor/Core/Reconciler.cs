@@ -5986,7 +5986,8 @@ public sealed partial class Reconciler : IDisposable
     private static void ApplyDragAttached(FrameworkElement fe, DragAttached? attached)
         => DragAttachedProperties.SetIsDragEnabled(fe, attached?.IsEnabled);
 
-    internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender)
+    internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender,
+        bool keepRemovedBackground = false)
     {
         // Guard each property: only call into WinUI when the value actually changed.
         // Each WinUI property set is a managed→native interop call, so avoiding
@@ -6246,7 +6247,7 @@ public sealed partial class Reconciler : IDisposable
             else if (fe is WinUI.Control ctrl2) ctrl2.Background = m.Background;
             else if (fe is WinUI.Border bdr) bdr.Background = m.Background;
         }
-        else if (m.Background is null && oldM?.Background is not null)
+        else if (m.Background is null && oldM?.Background is not null && !keepRemovedBackground)
         {
             if (fe is WinUI.Panel panel) panel.ClearValue(WinUI.Panel.BackgroundProperty);
             else if (fe is WinUI.Control ctrl2) ctrl2.ClearValue(WinUI.Control.BackgroundProperty);
