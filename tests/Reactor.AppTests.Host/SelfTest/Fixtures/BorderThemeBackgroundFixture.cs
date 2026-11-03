@@ -178,7 +178,7 @@ internal sealed class BorderThemeBackgroundFixture(Harness h, bool reuse) : Self
             await Harness.Render();
             Console.WriteLine($"# {prefix}_RemovingModifierKeepsChangedWidth: width={Find().Width}");
             H.Check(prefix + "_RemovingModifierKeepsChangedWidth",
-                Find().Width == 300 && ReferenceEquals(Find().Background, direct));
+                global::System.Math.Abs(Find().Width - 300d) < 0.001d && ReferenceEquals(Find().Background, direct));
 
             state = state with { ModifierWidth = null, SetterWidth = null };
             setState(state);
@@ -264,6 +264,63 @@ internal sealed class BorderThemeBackgroundFixture(Harness h, bool reuse) : Self
             if (state.SetterWidth is { } setterWidth)
                 pill = pill.Set(border => border.Width = setterWidth);
             return VStack(state.ShowBorder ? pill : null, TextBlock($"overview {state.Revision}")).RequestedTheme(state.Theme);
+        }
+    }
+}
+
+/// <summary>
+/// A per-host handler override for <see cref="BorderElement"/> bypasses the built-in descriptor,
+/// so removing a concrete <c>.Background(brush)</c> must still clear the brush through the
+/// reconciler's own modifier path.
+/// </summary>
+internal sealed class BorderCustomHandlerBackgroundFixture(Harness h) : SelfTestFixtureBase(h)
+{
+    private const string Name = "BorderCustomHandlerBackground";
+
+    public override async Task RunAsync()
+    {
+        var host = H.CreateHost();
+        try
+        {
+            host.Reconciler.RegisterType<BorderElement, WinUI.Border>(
+                static (_, _, _) => new WinUI.Border(),
+                static (_, _, _, _, _) => null);
+            var brush = new SolidColorBrush(Color.FromArgb(255, 200, 30, 40));
+            Action<bool>? setShowBackground = null;
+            host.Mount(_ => Component<Toggle, ToggleProps>(new(brush, setter => setShowBackground = setter)));
+            await Harness.Render();
+
+            var border = H.FindControl<WinUI.Border>(b =>
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(b) == Name)
+                ?? throw new InvalidOperationException("Custom-handled Border is missing.");
+            // The custom handler never mounts the child, which proves it replaced the descriptor.
+            H.Check(Name + "_CustomHandlerUsed", border.Child is null);
+            H.Check(Name + "_ModifierApplied", ReferenceEquals(border.Background, brush));
+
+            setShowBackground!(false);
+            await Harness.Render();
+            var local = border.ReadLocalValue(WinUI.Border.BackgroundProperty);
+            Console.WriteLine($"# {Name}_RemovedModifierCleared: local={local ?? "null"}");
+            H.Check(Name + "_RemovedModifierCleared", ReferenceEquals(local, DependencyProperty.UnsetValue));
+        }
+        finally
+        {
+            host.Dispose();
+            H.SetContent(null);
+            await Harness.Render();
+        }
+    }
+
+    private sealed record ToggleProps(Brush Brush, Action<Action<bool>> Capture);
+
+    private sealed class Toggle : Component<ToggleProps>
+    {
+        public override Element Render()
+        {
+            var (showBackground, setShowBackground) = UseState(true);
+            Props.Capture(setShowBackground);
+            var border = Border(TextBlock("custom")).AutomationName(Name);
+            return showBackground ? border.Background(Props.Brush) : border;
         }
     }
 }

@@ -289,11 +289,12 @@ public sealed partial class Reconciler
                 .ObserveAfterSetters(preModCtl);
         }
 
+        // Set by BorderElement's built-in descriptor when it already released or replaced a removed
+        // Background modifier before native setters ran; clearing here would discard both.
+        var keepRemovedBackground = _backgroundRemovalHandled.Count > 0
+            && _backgroundRemovalHandled.Remove(control) && ReferenceEquals(target, control);
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
-            ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender,
-                // BorderElement's descriptor already released or replaced a Background modifier
-                // it saw removed, before native setters ran; clearing here would discard both.
-                keepRemovedBackground: oldEl is BorderElement { Modifiers.Background: not null } && newEl is BorderElement);
+            ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender, keepRemovedBackground);
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
         // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is

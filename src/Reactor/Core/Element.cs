@@ -4759,7 +4759,16 @@ public partial record BorderElement(Element? Child) : Element
                 ? Optional<(Brush? Record, Brush? Modifier)>.Unset
                 : (e.Background, e.Modifiers?.Background),
             static (border, brushes) => border.Background = brushes.Record ?? brushes.Modifier,
-            WinUI.Border.BackgroundProperty);
+            WinUI.Border.BackgroundProperty)
+        // Tell the reconciler the removed modifier was handled here, so ApplyModifiers keeps the
+        // brush this entry restored. A custom handler for BorderElement never marks it.
+        .ImperativeBridged(
+            static (_, _, _) => { },
+            static (ctx, border, oldEl, newEl) =>
+            {
+                if (oldEl.Modifiers?.Background is not null && newEl.Modifiers?.Background is null)
+                    ctx.Reconciler.MarkBackgroundRemovalHandled(border);
+            });
 }
 
 /// <summary>Expander element. <c>IsExpanded</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its expansion state until explicitly set.</summary>

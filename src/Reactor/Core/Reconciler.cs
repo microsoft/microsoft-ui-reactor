@@ -2415,6 +2415,12 @@ public sealed partial class Reconciler : IDisposable
         _v1Handlers.AddForDerivedTypes(typeof(TBase), new V1Protocol.V1DecoratorHandlerAdapter<TBase>(handler));
     }
 
+    // Borders whose built-in BorderElement descriptor already released or replaced a removed
+    // Background modifier in the current update; Update consumes the mark before ApplyModifiers.
+    private readonly HashSet<UIElement> _backgroundRemovalHandled = new(ReferenceEqualityComparer.Instance);
+
+    internal void MarkBackgroundRemovalHandled(UIElement control) => _backgroundRemovalHandled.Add(control);
+
     // ════════════════════════════════════════════════════════════════════
     //  Pool rent / return — public author-facing surface (spec 047 §13 Q18)
     // ════════════════════════════════════════════════════════════════════
