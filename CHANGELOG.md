@@ -275,6 +275,10 @@ Conventions for contributors:
 
 ### Changed
 
+- Consolidate hook and memo dependency comparisons in `RenderContext.DepsEqual`,
+  preserving existing equality semantics and typed fast paths
+  (spec 020 §6.4; follow-up to #1431).
+
 - **Markdown `LinkBuilder` now receives a `MarkdownLink`** (#1436). Breaking: the
   callback's type changes from `Func<Element[], Uri, Element>` to
   `Func<MarkdownLink, Element>`. `MarkdownLink` carries the label as plain `Text`

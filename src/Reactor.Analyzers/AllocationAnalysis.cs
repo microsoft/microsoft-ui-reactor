@@ -68,7 +68,7 @@ internal static class AllocationAnalysis
     ///   value types, records, <c>IEquatable&lt;T&gt;</c> implementers, and <c>Equals(object)</c>
     ///   overriders all count.</description></item>
     /// <item><description><paramref name="objectEqualsSemantics"/> = true — matches
-    ///   <c>object.Equals</c> (memo-deps <c>Reconciler.DepsEqual</c> and context
+    ///   <c>object.Equals</c> (memo-deps <c>RenderContext.DepsEqual</c> and context
     ///   <c>Element.ContextValuesEqual</c>, used by HOOKS_012 / CTX_001): a bare
     ///   <c>IEquatable&lt;T&gt;</c> implementer that does <b>not</b> override <c>Equals(object)</c>
     ///   falls back to <b>reference</b> equality at runtime, so it does NOT count. Only value types,

@@ -389,7 +389,9 @@ See §5.1 for when `.Match()` is the better tool (explicit
 ### 6.4 Design points
 
 - `deps` is `object[]` to match `UseEffect` / `UseMemo` convention from spec
-  009. Equality uses `ValueEqualityComparer` (same as `UseMemo`).
+  009. Arrays are compared element-wise with `object.Equals` through
+  `RenderContext.DepsEqual` (`RenderContext.cs:2742-2751`), shared with
+  `UseEffect` / `UseMemo`.
 - **Threading.** `Render()` runs on the UI thread (enforced by
   `RenderContext.AssertUIThread`, `RenderContext.cs:17-22`). The hook invokes
   `fetcher(ct)` *from* the UI thread, but the fetcher body must do its actual
