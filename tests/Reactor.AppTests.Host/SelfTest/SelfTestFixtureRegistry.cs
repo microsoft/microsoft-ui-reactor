@@ -392,6 +392,7 @@ internal static class SelfTestFixtureRegistry
         "BorderThemeBackground_Fresh",
         "BorderThemeBackground_Pooled",
         "BorderCustomHandlerBackground",
+        "BorderBackgroundRemovalThrow",
         // Flyout placement guard — Reactor must never write FlyoutPlacementMode.Auto
         // onto a WinUI FlyoutBase, because the show-time validator rejects it and
         // fail-fasts the process. The Flyout/ContentFlyout/fresh-create fixtures
@@ -2647,6 +2648,7 @@ internal static class SelfTestFixtureRegistry
         "BorderThemeBackground_Fresh" => new BorderThemeBackgroundFixture(harness, reuse: false),
         "BorderThemeBackground_Pooled" => new BorderThemeBackgroundFixture(harness, reuse: true),
         "BorderCustomHandlerBackground" => new BorderCustomHandlerBackgroundFixture(harness),
+        "BorderBackgroundRemovalThrow" => new BorderBackgroundRemovalThrowFixture(harness),
         // Flyout placement guard — Auto must never reach FlyoutBase.Placement.
         "FlyoutPlacement_Platform_FlyoutBase_PlacementDefault" => new FlyoutPlacementFixtures.Platform_FlyoutBase_PlacementDefault(harness),
         "FlyoutPlacement_Flyout_DefaultPlacement_Opens" => new FlyoutPlacementFixtures.Flyout_DefaultPlacement_Opens(harness),

@@ -2421,6 +2421,9 @@ public sealed partial class Reconciler : IDisposable
 
     internal void MarkBackgroundRemovalHandled(UIElement control) => _backgroundRemovalHandled.Add(control);
 
+    // Test seam: marks still held after an update (always 0 once Update returns or throws).
+    internal int BackgroundRemovalMarkCount => _backgroundRemovalHandled.Count;
+
     // ════════════════════════════════════════════════════════════════════
     //  Pool rent / return — public author-facing surface (spec 047 §13 Q18)
     // ════════════════════════════════════════════════════════════════════

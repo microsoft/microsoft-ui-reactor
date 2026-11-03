@@ -279,7 +279,7 @@ internal sealed class BorderCustomHandlerBackgroundFixture(Harness h) : SelfTest
 
     public override async Task RunAsync()
     {
-        var host = H.CreateHost();
+        using var host = H.CreateHost();
         try
         {
             host.Reconciler.RegisterType<BorderElement, WinUI.Border>(
@@ -305,7 +305,6 @@ internal sealed class BorderCustomHandlerBackgroundFixture(Harness h) : SelfTest
         }
         finally
         {
-            host.Dispose();
             H.SetContent(null);
             await Harness.Render();
         }
@@ -321,6 +320,57 @@ internal sealed class BorderCustomHandlerBackgroundFixture(Harness h) : SelfTest
             Props.Capture(setShowBackground);
             var border = Border(TextBlock("custom")).AutomationName(Name);
             return showBackground ? border.Background(Props.Brush) : border;
+        }
+    }
+}
+
+/// <summary>
+/// A native setter that throws on the update that removes a concrete <c>.Background(brush)</c>
+/// must not leave the descriptor's removal mark holding the discarded Border.
+/// </summary>
+internal sealed class BorderBackgroundRemovalThrowFixture(Harness h) : SelfTestFixtureBase(h)
+{
+    private const string Name = "BorderBackgroundRemovalThrow";
+
+    public override async Task RunAsync()
+    {
+        using var host = H.CreateHost();
+        try
+        {
+            var brush = new SolidColorBrush(Color.FromArgb(255, 200, 30, 40));
+            Action<bool>? setRemove = null;
+            host.Mount(_ => ErrorBoundary(
+                Component<Thrower, ThrowerProps>(new(brush, setter => setRemove = setter)),
+                _ => TextBlock(Name + " caught")));
+            await Harness.Render();
+            H.Check(Name + "_Mounted", H.FindText(Name + " caught") is null);
+
+            setRemove!(true);
+            await Harness.Render();
+            // Positive control: the setter really threw during this update.
+            H.Check(Name + "_SetterThrew", H.FindText(Name + " caught") is not null);
+            Console.WriteLine($"# {Name}_NoMarkRetained: marks={host.Reconciler.BackgroundRemovalMarkCount}");
+            H.Check(Name + "_NoMarkRetained", host.Reconciler.BackgroundRemovalMarkCount == 0);
+        }
+        finally
+        {
+            H.SetContent(null);
+            await Harness.Render();
+        }
+    }
+
+    private sealed record ThrowerProps(Brush Brush, Action<Action<bool>> Capture);
+
+    private sealed class Thrower : Component<ThrowerProps>
+    {
+        public override Element Render()
+        {
+            var (remove, setRemove) = UseState(false);
+            Props.Capture(setRemove);
+            var border = Border(TextBlock("throw")).AutomationName(Name);
+            return remove
+                ? border.Set(static _ => throw new InvalidOperationException("setter boom"))
+                : border.Background(Props.Brush);
         }
     }
 }

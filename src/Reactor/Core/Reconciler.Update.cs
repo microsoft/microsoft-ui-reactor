@@ -385,6 +385,10 @@ public sealed partial class Reconciler
             if (ctxCount > 0)
                 _contextScope.Pop(ctxCount);
             _ambientRequestedTheme = prevAmbientTheme;
+            // A throw between the descriptor's mark and its consumption above must not leave
+            // the set holding this control.
+            if (_backgroundRemovalHandled.Count > 0)
+                _backgroundRemovalHandled.Remove(control);
         }
 
         return result;
