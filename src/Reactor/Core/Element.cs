@@ -4759,15 +4759,17 @@ public partial record BorderElement(Element? Child) : Element
 
     /// <summary>
     /// Removing a concrete <c>.Background(brush)</c> makes the reconciler clear
-    /// <c>Border.Background</c> after the descriptor ran. The descriptor saw no record change,
-    /// so restore a record brush that is still set.
+    /// <c>Border.Background</c> after the descriptor and native setters ran. Restore a record
+    /// brush that is still set (the descriptor saw no record change), then re-run the native
+    /// setters so they keep precedence, as on every other update.
     /// </summary>
-    internal static void RestoreRecordBackgroundAfterModifiers(
+    internal static void RestoreBackgroundAfterModifiers(
         WinUI.Border border, BorderElement element, ElementModifiers? oldModifiers, ElementModifiers? modifiers)
     {
-        if (element.Background is { } recordBackground
-            && modifiers?.Background is null && oldModifiers?.Background is not null)
+        if (modifiers?.Background is not null || oldModifiers?.Background is null) return;
+        if (element.Background is { } recordBackground)
             border.Background = recordBackground;
+        Reconciler.ApplySetters(element.Setters, border);
     }
 }
 

@@ -141,6 +141,33 @@ internal sealed class BorderThemeBackgroundFixture(Harness h, bool reuse) : Self
             await Harness.Render();
             H.Check(prefix + "_NativeSetterWins", ReferenceEquals(Find().Background, direct));
 
+            // Native setters keep precedence over a record brush, including on the render that
+            // removes a concrete modifier (the modifier clear runs after the setters).
+            state = state with { DirectBackground = changedRecord };
+            setState(state);
+            await Harness.Render();
+            H.Check(prefix + "_NativeSetterWinsOverRecord", ReferenceEquals(Find().Background, direct));
+
+            state = state with { ModifierBackground = modifier };
+            setState(state);
+            await Harness.Render();
+            state = state with { ModifierBackground = null };
+            setState(state);
+            await Harness.Render();
+            H.Check(prefix + "_RemovingModifierKeepsNativeSetterOverRecord",
+                ReferenceEquals(Find().Background, direct)
+                && ReferenceEquals(Find().ReadLocalValue(WinUI.Border.BackgroundProperty), direct));
+
+            state = state with { DirectBackground = null, ModifierBackground = modifier };
+            setState(state);
+            await Harness.Render();
+            state = state with { ModifierBackground = null };
+            setState(state);
+            await Harness.Render();
+            H.Check(prefix + "_RemovingModifierKeepsNativeSetter",
+                ReferenceEquals(Find().Background, direct)
+                && ReferenceEquals(Find().ReadLocalValue(WinUI.Border.BackgroundProperty), direct));
+
             if (reuse)
             {
                 state = state with { SetterBackground = null, DirectBackground = direct };
