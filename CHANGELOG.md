@@ -409,6 +409,10 @@ Conventions for contributors:
 
 ### Fixed
 
+- On initial use, `UseDataSource` uses one page size for data-source requests, offset cursors,
+  and resource row positions, preventing missing or misplaced rows when options
+  are omitted or specify a different size (spec 020 §7.3).
+
 - **Border theme-background precedence.** An unset background now releases local
   values on pooled controls and direct-to-themed updates so a `ThemeRef` style
   can supply the brush. Removing a record background preserves a still-present

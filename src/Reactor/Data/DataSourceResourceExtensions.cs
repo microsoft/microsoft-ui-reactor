@@ -30,10 +30,15 @@ public static class DataSourceResourceExtensions
         // scrolls can fetch pages in parallel this way, which matters for DataGrid
         // workflows that jump from row 0 to row 50 000 in a single scroll gesture.
         int pageSize = Math.Max(1, options?.PageSize ?? request.PageSize);
+        // Use the same size for request batches, offset cursors, and resource row positions.
+        options ??= InfiniteResourceOptions.Default;
+        if (options.PageSize != pageSize)
+            options = options with { PageSize = pageSize };
+
         return ctx.UseInfiniteResource<T, string>(
             fetchPage: async (cursor, ct) =>
             {
-                var req = request with { ContinuationToken = cursor };
+                var req = request with { PageSize = pageSize, ContinuationToken = cursor };
                 var page = await source.GetPageAsync(req, ct).ConfigureAwait(false);
                 return new Page<T, string>(page.Items, page.ContinuationToken, page.TotalCount);
             },

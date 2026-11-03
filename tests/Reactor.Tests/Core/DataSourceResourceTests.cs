@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Data;
+using Microsoft.UI.Reactor.Data.Providers;
 using Microsoft.UI.Reactor.Hooks;
 using Xunit;
 
@@ -7,6 +8,8 @@ namespace Microsoft.UI.Reactor.Tests.Core;
 
 public class DataSourceResourceTests
 {
+    private sealed record Row(int Id);
+
     private sealed class InlineDispatcher : IHookDispatcher
     {
         public void Post(Action action) => action();
@@ -81,6 +84,77 @@ public class DataSourceResourceTests
 
         // Different search query → deps change → new first page fetch.
         Assert.Equal(2, source.CallCount);
+    }
+
+    [Theory]
+    [InlineData(10, null, 10)]
+    [InlineData(10, 20, 20)]
+    [InlineData(20, 10, 10)]
+    [InlineData(10, 10, 10)]
+    [InlineData(0, null, 1)]
+    [InlineData(10, 0, 1)]
+    public void UseDataSource_Uses_One_PageSize_For_Requests_Cursors_And_Row_Positions(
+        int requestPageSize, int? optionsPageSize, int expectedPageSize)
+    {
+        using var cache = new QueryCache();
+        var rows = Enumerable.Range(0, 101).Select(id => new Row(id)).ToArray();
+        var source = new ListDataSource<Row>(rows, row => row.Id);
+        var ctx = new RenderContext();
+        ctx.BeginRender(() => { });
+
+        var resource = ctx.UseDataSource(source, new DataRequest { PageSize = requestPageSize }, cache,
+            optionsPageSize is { } size ? new InfiniteResourceOptions(PageSize: size) : null,
+            new InlineDispatcher());
+
+        Assert.Equal(expectedPageSize, resource.Items.TakeWhile(row => row is not null).Count());
+        resource.EnsureRange(0, rows.Length - 1);
+
+        Assert.Equal(rows.Length, resource.TotalCount);
+        Assert.Equal(rows.Length, resource.Items.Count);
+        for (int i = 0; i < rows.Length; i++)
+            Assert.Equal(rows[i], resource.Items[i]);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10)]
+    public void UseDataSource_Preserves_Options_Across_Renders_And_Prefix_Changes(int pageSize)
+    {
+        using var cache = new QueryCache();
+        var rows = Enumerable.Range(0, 21).Select(id => new Row(id)).ToArray();
+        var source = new ListDataSource<Row>(rows, row => row.Id);
+        var ctx = new RenderContext();
+        var options = new InfiniteResourceOptions(PageSize: pageSize, MaxLoadedPages: 1,
+            StaleTime: TimeSpan.FromMinutes(2), CacheTime: TimeSpan.FromMinutes(3), CacheKeyPrefix: "first");
+        string? latestKey = null;
+        cache.EntryChanged += key => latestKey = key;
+
+        InfiniteResource<Row> Render(InfiniteResourceOptions currentOptions)
+        {
+            ctx.BeginRender(() => { });
+            var resource = ctx.UseDataSource(source, new DataRequest { PageSize = 10 }, cache,
+                currentOptions, new InlineDispatcher());
+            ctx.FlushEffects();
+            return resource;
+        }
+
+        try
+        {
+            var resource = Render(options);
+            Assert.Same(resource, Render(options));
+            resource.FetchNext();
+            Assert.Equal(rows[Math.Max(1, pageSize)], resource.Items[Math.Max(1, pageSize)]);
+            Assert.Null(resource.Items[0]); // MaxLoadedPages still evicts the first page.
+
+            var restarted = Render(options with { CacheKeyPrefix = "second" });
+            Assert.NotSame(resource, restarted);
+            Assert.Equal(rows[0], restarted.Items[0]);
+            Assert.StartsWith("second/", latestKey!);
+            Assert.True(cache.TryGet<Page<Row, string>>(latestKey!, out var entry));
+            Assert.Equal(options.StaleTime, entry.StaleTime);
+            Assert.Equal(pageSize, options.PageSize);
+        }
+        finally { ctx.RunCleanups(); }
     }
 
     /// <summary>

@@ -732,21 +732,32 @@ page slots, so a later write can replace an earlier query's pages even within
 
 ### 5.9 `IDataSource<T>` adapter
 
-`DataSourceResourceExtensions.UseDataSource` (`DataSourceResourceExtensions.cs:18-37`)
+`DataSourceResourceExtensions.UseDataSource` (`DataSourceResourceExtensions.cs:18-49`)
 is a thin hook that projects any `IDataSource<T>` into `UseInfiniteResource`:
 
 ```csharp
+int pageSize = Math.Max(1, options?.PageSize ?? request.PageSize);
+options ??= InfiniteResourceOptions.Default;
+if (options.PageSize != pageSize)
+    options = options with { PageSize = pageSize };
+
 return ctx.UseInfiniteResource<T, string>(
     fetchPage: async (cursor, ct) =>
     {
-        var req = request with { ContinuationToken = cursor };
+        var req = request with { PageSize = pageSize, ContinuationToken = cursor };
         var page = await source.GetPageAsync(req, ct).ConfigureAwait(false);
         return new Page<T, string>(page.Items, page.ContinuationToken, page.TotalCount);
     },
     cache: cache,
     deps: new object[] { source, request.Sort ?? (object)"", request.Filters ?? (object)"", request.SearchQuery ?? "" },
-    options: options, dispatcher: dispatcher);
+    options: options, dispatcher: dispatcher,
+    cursorFromPageIndex: pageIndex => pageIndex == 0 ? null : (pageIndex * pageSize).ToString(global::System.Globalization.CultureInfo.InvariantCulture));
 ```
+
+On the initial call, `options.PageSize` takes precedence over `request.PageSize`,
+clamped to at least 1. Requests, offset cursors, and resource row positions all
+use this size. The adapter copies options only when their page size differs;
+the caller's options and all other settings are preserved.
 
 Deps include the source *identity* plus the request's sort/filter/search —
 any change restarts pagination, which is the correct behavior for an
