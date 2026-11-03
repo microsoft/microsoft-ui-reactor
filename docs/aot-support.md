@@ -15,6 +15,13 @@ This page enumerates what works, what doesn't, and what's planned. **If you publ
 - **Charting (D3)** — algorithm port is pure C#.
 - **Markdown** — md4c-backed parser and renderer.
 - **Commanding** — command records, focus-scoped accelerators.
+- **Unpackaged jump lists** — source-generated COM, including removal queries
+  and transaction removal results. The backend uses explicit, transaction-scoped
+  interface ownership and a balanced COM apartment scope (thread-pool threads
+  already have implicit MTA membership). `JumpList_NativeInterop` exercises real
+  shell links and the public update/query/clear APIs from the unpackaged Native
+  AOT host. The packaged WinRT path has a packaged JIT fixture, but is not covered
+  by that Native AOT host; packaged AOT support is not established by this fixture.
 - **Animation** — compositor-layer transitions, keyframes.
 - **Theming** — `ThemeRef` tokens, style caching. Brushes resolved through `XamlControlsResources` work under AOT.
 - **Built-in WinUI controls** — `NavigationView`, `TabView`, `Pivot`, `TreeView`, `Expander`, `InfoBar`, `MenuBar`, `BreadcrumbBar`, `RefreshContainer`, `TeachingTip`, `ColorPicker`, `NumberBox`, `RatingControl`, `SplitButton`, etc. all mount and update under AOT. `{TemplateBinding}` against built-in DPs works; private DPs declared in a separate third-party assembly without an `IXamlMetadataProvider` are still broken (Issue #142).
@@ -35,6 +42,23 @@ These subsystems compile cleanly with `IsAotCompatible=true` (the warnings are s
 | **Component discovery (`ReactorApp.Run<TApp>` reflection paths)** | The instantiation of `TApp` itself is annotated and works. Devtools component enumeration is available only when the app opts into `Reactor.DevtoolsSupport` at build time and launches with `--devtools`; leave the switch off for retail/AOT builds. | Issue #70 |
 | **Devtools `properties` / `setProperty` DP discovery** | The tools locate `DependencyProperty` statics by reflection, and the trimmer keeps no reflection metadata for them unless something roots the members — so under AOT the lookups find nothing. Not specific to WinUI's CsWinRT-projected static properties: a C#-authored DP *field* on a custom control is equally undiscoverable. Works under JIT, which is where the devtools inner loop lives. The tool reports the likely cause rather than an empty result. See [Devtools DependencyProperty discovery](#devtools-dependencyproperty-discovery) for the measured cost of fixing it. Affected fixture: `Devtools_PropertyToolsDpDiscovery`. | Issue #1109 |
 | **Third-party-assembly XAML metadata (Issue #142 fixtures)** | Built-in WinUI controls work under AOT now. What remains is `{TemplateBinding}` against private DPs in a third-party assembly that ships *no* `.xaml` file: the XAML compiler only emits an `IXamlMetadataProvider` for projects that have at least one `.xaml`, and AOT trims any implicit metadata path. Affected fixtures: `Issue142_CustomControlPrivateDp_Renders`, `Issue142_ThirdPartyControlPrivateDp_Renders`. The library-author workaround is to register a hand-written `IXamlMetadataProvider` via `RegisterControlAssembly`. The same trim hits a compiled `.xaml` page inside a `ReactorApp.Run` app with no `App.xaml`: `ReactorApplication` finds the app's generated provider only by reflecting over the entry assembly, nothing roots it, and AOT removes it, so the page fails to parse (`Hosting_HostControlXamlComponentType`). A vanilla WinUI app is unaffected: its `App` *is* the provider. | Issue #142 |
+
+### Code-only apps wrapping toolkit controls
+
+An observable `ItemsHost` list has generated WinRT exposure, but that only covers
+the collection ABI, not the control library's XAML templates. A code-only AOT app
+may need to statically root and register the toolkit's generated metadata provider
+before mounting wrapped controls. For example, with WCT SettingsControls:
+
+```csharp
+ReactorApp.RegisterControlAssembly(
+    new CommunityToolkit.WinUI.Controls.SettingsControlsRns.
+        CommunityToolkit_WinUI_Controls_SettingsControls_XamlTypeInfo.XamlMetaDataProvider());
+```
+
+The concrete provider name depends on the library. The SettingsExpander selftest
+uses this registration explicitly; passing it is not proof of automatic metadata
+discovery under trimming.
 
 ## Devtools DependencyProperty discovery
 

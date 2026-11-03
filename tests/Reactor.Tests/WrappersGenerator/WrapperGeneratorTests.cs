@@ -557,6 +557,53 @@ public partial record ToggleElement;
     }
 
     [Fact]
+    public void Writable_Interface_Items_Emit_Observable_Collection_Setter()
+    {
+        var result = Run(Stubs + @"
+namespace App
+{
+    public class DynamicItems : Microsoft.UI.Xaml.Controls.Control
+    {
+        public global::System.Collections.Generic.IList<object> Items { get; set; }
+            = new global::System.Collections.Generic.List<object>();
+    }
+}
+[Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(App.DynamicItems))]
+public partial record DynamicItemsElement;
+");
+        var src = WrapperFor(result, "DynamicItemsElement");
+        Assert.Contains("SetCollection = static (c, items) => c.Items = items,", src);
+        Assert.DoesNotContain("c.Items = v", src);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Theory]
+    [InlineData("public Microsoft.UI.Xaml.Controls.ItemCollection Items { get; set; }")]
+    [InlineData("public global::System.Collections.Generic.IList<string> Items { get; set; }")]
+    [InlineData("public global::System.Collections.Generic.IList<object> Items { get; init; }")]
+    [InlineData("public global::System.Collections.Generic.IList<object> Items { get; private set; }")]
+    public void Incompatible_Items_Properties_Do_Not_Emit_Collection_Setter(string property)
+    {
+        var result = Run(Stubs + @"
+namespace Microsoft.UI.Xaml.Controls
+{
+    public class ItemCollection : global::System.Collections.Generic.List<object> {}
+}
+namespace App
+{
+    public class RestrictedItems : Microsoft.UI.Xaml.Controls.Control
+    {
+        " + property + @"
+    }
+}
+[Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(App.RestrictedItems))]
+public partial record RestrictedItemsElement;
+");
+        Assert.DoesNotContain("SetCollection =", WrapperFor(result, "RestrictedItemsElement"));
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
     public void Items_Control_Emit_ItemsHost_Strategy_And_Items_Slot()
     {
         // A control with a public `Items` of type ItemCollection
@@ -596,6 +643,7 @@ public partial record MyListElement;
         Assert.Contains("Children = new global::Microsoft.UI.Reactor.Core.V1Protocol.ItemsHost<MyListElement,", src);
         Assert.Contains("GetItems:      static e => e.Items,", src);
         Assert.Contains("GetCollection: static c => c.Items),", src);
+        Assert.DoesNotContain("SetCollection =", src);
         Assert.DoesNotContain("SingleContent", src);
         Assert.DoesNotContain("Panel<MyListElement", src);
 
@@ -1703,6 +1751,9 @@ public partial record SlotControlElement;
 
         // ImperativeBridged mount/reconcile with a hard cast to the narrow control type.
         Assert.Contains(".ImperativeBridged(", src);
+        Assert.Contains("unmount: static (ctx, c) =>", src);
+        Assert.Contains("is not SlotControlElement { HeaderIcon: not null }", src);
+        Assert.Contains("if (__child is not null) ctx.Reconciler.UnmountChild(__child);", src);
         Assert.Contains("if (e.HeaderIcon is not null) c.HeaderIcon = (global::Microsoft.UI.Xaml.Controls.IconElement)ctx.MountChild(e.HeaderIcon)!;", src);
         Assert.Contains("var __next = ctx.ReconcileChild(__o.HeaderIcon, __n.HeaderIcon, __existing);", src);
         Assert.Contains("if (!ReferenceEquals(__existing, __next)) c.HeaderIcon = (global::Microsoft.UI.Xaml.Controls.IconElement)__next!;", src);
@@ -1732,8 +1783,8 @@ public partial record SlotControlElement;
 ");
         var src = WrapperFor(result, "SlotControlElement");
 
-        Assert.Contains("if (e.Banner is not null) c.Banner = ctx.MountChild(e.Banner);", src);
-        Assert.Contains("if (!ReferenceEquals(__existing, __next)) c.Banner = __next;", src);
+        Assert.Contains("if (e.Banner is not null) c.Banner = ctx.MountChild(e.Banner)!;", src);
+        Assert.Contains("if (!ReferenceEquals(__existing, __next)) c.Banner = __next!;", src);
         // No value-prop write and no object? value prop leaked for the slot.
         Assert.DoesNotContain("c.Banner = v", src);
 

@@ -67,32 +67,33 @@ internal static class PanelDescriptorMigrationFixtures
 
             await Harness.Render();
 
-            // The Border wrapper itself, compared by reference. Holding it in `before` keeps it
-            // alive, so CsWinRT keeps returning that same wrapper for the native Border; an
-            // identity hash of a wrapper changes whenever a GC collects and re-projects it,
-            // with no change to the native tree (seen under NativeAOT).
-            WinXC.Border? Hash(string key) =>
+            Reconciler.ReactorState? NativeState(string key) =>
                 H.FindControl<WinXC.TextBlock>(t =>
                     Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == $"pdm_st_{key}") is { Parent: WinXC.Border br }
-                    ? br
+                    ? Reconciler.GetOrCreateReactorState(br)
                     : null;
 
             var keys = new[] { "a", "b", "c", "d" };
-            var before = keys.ToDictionary(k => k, Hash);
+            var before = keys.ToDictionary(k => k, NativeState);
             H.Check("PDM_Stack_Swap_AllInitial", before.Values.All(v => v is not null));
+
+            // Native controls survive GC, but their unrooted C#/WinRT wrappers
+            // need not. Compare attached native state, not managed wrapper hashes.
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
 
             H.ClickButton("Swap");
             await Harness.Render();
-            // After the swap, the survivor TextBlocks re-realize over one or
-            // more dispatcher waves; Hash() returns null until a child is back
-            // in the tree. Gate on the identity assertion itself so we converge
-            // as soon as every survivor is back with its original Border
-            // instance. This is stricter than the previous presence-only gate
-            // (keys.All(k => Hash(k) is not null)) which let a rare 1/1000
-            // dispatcher-drain drift slip through before identity stabilized; a
-            // genuine identity break never satisfies the predicate and fails.
             H.Check("PDM_Stack_Swap_AllSurvivorsKeepIdentity",
-                await Harness.WaitFor(() => keys.All(k => ReferenceEquals(before[k], Hash(k)))));
+                await Harness.WaitFor(() => keys.All(k => before[k] is not null
+                    && ReferenceEquals(before[k], NativeState(k)))));
+            H.Check("PDM_Stack_Swap_OrderChanged",
+                H.FindControl<WinXC.TextBlock>(t =>
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == "pdm_st_a")
+                    ?.Parent is WinXC.Border { Parent: WinXC.StackPanel panel }
+                && panel.Children.OfType<WinXC.Border>().Select(b => (b.Child as WinXC.TextBlock)?.Text)
+                    .SequenceEqual(new[] { "a", "c", "b", "d" }));
         }
     }
 
@@ -294,29 +295,31 @@ internal static class PanelDescriptorMigrationFixtures
 
             await Harness.Render();
 
-            // The Border wrapper itself, compared by reference. Holding it in `before` keeps it
-            // alive, so CsWinRT keeps returning that same wrapper for the native Border; an
-            // identity hash of a wrapper changes whenever a GC collects and re-projects it,
-            // with no change to the native tree (seen under NativeAOT).
-            WinXC.Border? Hash(string key) =>
+            Reconciler.ReactorState? NativeState(string key) =>
                 H.FindControl<WinXC.TextBlock>(t =>
                     Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == $"pdm_wg_{key}") is { Parent: WinXC.Border br }
-                    ? br
+                    ? Reconciler.GetOrCreateReactorState(br)
                     : null;
-
             var keys = new[] { "a", "b", "c", "d", "e" };
-            var before = keys.ToDictionary(k => k, Hash);
+            var before = keys.ToDictionary(k => k, NativeState);
             H.Check("PDM_WrapGrid_Reverse_AllInitial", before.Values.All(v => v is not null));
+
+            // Exercise wrapper collection between observations; the native
+            // control's attached state must still identify the same survivor.
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
 
             H.ClickButton("Reverse");
             await Harness.Render();
 
-            // The survivors re-realize over one or more dispatcher waves; gate
-            // on the identity assertion itself so we converge as soon as every
-            // survivor is back with its original Border instance. A genuine
-            // identity break never satisfies the predicate and still fails.
             H.Check("PDM_WrapGrid_Reverse_AllSurvivorsKeepIdentity",
-                await Harness.WaitFor(() => keys.All(k => ReferenceEquals(before[k], Hash(k)))));
+                await Harness.WaitFor(() => keys.All(k => before[k] is not null
+                    && ReferenceEquals(before[k], NativeState(k)))));
+            H.Check("PDM_WrapGrid_Reverse_OrderChanged",
+                H.FindControl<WinXC.VariableSizedWrapGrid>(_ => true) is { } grid
+                && grid.Children.OfType<WinXC.Border>().Select(b => (b.Child as WinXC.TextBlock)?.Text)
+                    .SequenceEqual(new[] { "e", "d", "c", "b", "a" }));
         }
     }
 

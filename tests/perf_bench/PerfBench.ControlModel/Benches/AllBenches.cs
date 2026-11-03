@@ -1124,5 +1124,15 @@ public static class BenchCatalog
         new OptionalReconcilerUpdateBench(),
         new C207_ChangeHandlerDpRead(),
         new M14_DslRebuildCascade(),
+        new IH1_ComboBoxElementsSameArray(),
+        new IH2_ComboBoxElementsEqualFresh(),
+        new IH3_ComboBoxElementsOneChanged(),
+        new IH4_ComboBoxEqualStrings100(),
+        new IH5_ComboBoxEqualStrings1000(),
+        new IH6_ComboBoxOneChanged(),
+        new KX1_KeyedNoExit(),
+        new KX2_KeyedUnrelatedExit(),
+        new KX3_KeyedLocalExit(),
+        new KX4_KeyedEmptyMemo(),
     };
 }

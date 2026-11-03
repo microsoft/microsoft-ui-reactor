@@ -370,12 +370,28 @@ internal static class ControlUpdateFixtures2
         public override async Task RunAsync()
         {
             var host = H.CreateHost();
+            host.Mount(_ => AutoSuggestBox("manual_query").Set(c => c.Items.Add("manual")));
+            await Harness.Render();
+            var manualBox = H.FindControl<AutoSuggestBox>(_ => true);
+            H.Check("ASBUpdate_DefaultSuggestionsLeaveItemsSourceNull",
+                manualBox is not null && manualBox.ItemsSource is null);
+            H.Check("ASBUpdate_DefaultSuggestionsAllowDirectItems",
+                manualBox?.Items.Cast<string>().SequenceEqual(["manual"]) == true);
+
             host.Mount(ctx =>
             {
                 var (phase, set) = ctx.UseState(0);
                 return VStack(
-                    Button("UpdASB", () => set(1)),
-                    AutoSuggestBox(phase == 0 ? "asb_query" : "asb_changed")
+                    Button("UpdASB", () => set(phase + 1)),
+                    AutoSuggestBox(phase == 0 ? "asb_query" : "asb_changed") with
+                    {
+                        Suggestions = phase switch
+                        {
+                            2 => [],
+                            3 => ["c"],
+                            _ => ["a", "b"],
+                        },
+                    }
                 );
             });
 
@@ -388,6 +404,21 @@ internal static class ControlUpdateFixtures2
 
             H.Check("ASBUpdate_StillPresent",
                 H.FindControl<AutoSuggestBox>(_ => true) is not null);
+            var box = H.FindControl<AutoSuggestBox>(_ => true);
+            H.Check("ASBUpdate_TextChanged", box?.Text == "asb_changed");
+            H.Check("ASBUpdate_InitialSuggestions", box?.Items.Cast<string>().SequenceEqual(["a", "b"]) == true);
+
+            H.ClickButton("UpdASB");
+            await Harness.Render();
+            H.Check("ASBUpdate_EmptySuggestionsClearItems", box?.Items.Count == 0);
+            H.Check("ASBUpdate_EmptySuggestionsResetItemsSource",
+                box is not null && box.ItemsSource is null);
+            H.Check("ASBUpdate_ClearDoesNotRemount",
+                ReferenceEquals(box, H.FindControl<AutoSuggestBox>(_ => true)));
+
+            H.ClickButton("UpdASB");
+            await Harness.Render();
+            H.Check("ASBUpdate_SuggestionsRepopulate", box?.Items.Cast<string>().SequenceEqual(["c"]) == true);
         }
     }
 }

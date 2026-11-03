@@ -882,8 +882,9 @@ public static class JumpList
 {
     public static string? AppUserModelId { get; set; }
 
-    public static Task UpdateAsync(IEnumerable<JumpListItem> items);
-    public static Task ClearAsync();
+    public static Task<IReadOnlyList<string>> UpdateAsync(IEnumerable<JumpListItem> items);
+    public static Task<IReadOnlyList<string>> ClearAsync();
+    public static Task<IReadOnlyList<string>> GetRemovedArgumentsAsync();
 
     // System-controlled categories. SetVisibility(true) shows them,
     // false hides; recent/frequent are managed by the OS, the app
@@ -896,6 +897,19 @@ public static class JumpList
 Implementation: `Windows.UI.StartScreen.JumpList` (WinRT) for the
 async update API, with a Win32 `ICustomDestinationList` fallback for
 unpackaged apps where the WinRT API throws.
+
+`GetRemovedArgumentsAsync` is a read-only snapshot of user-removed argument
+strings. A successful update clears Windows' removal records, so `UpdateAsync`
+and `ClearAsync` also return every distinct removal observed during their own
+transaction, including arguments absent from the new items. The packaged path
+captures `RemovedByUser` before replacing entries; the unpackaged path captures
+the array returned by `ICustomDestinationList.BeginList` before committing.
+Applications should prune their tracked destinations using both the optional
+pre-update query and the update's return value, and persist that change as
+appropriate. Querying alone leaves a race with removals made before the update.
+Reactor does not maintain a permanent blacklist: new user activity may make a
+destination eligible again. The result reports observed removals, not commit
+success; native HRESULT failures retain their existing diagnostic logging.
 
 The `JumpListItem.Arguments` round-trip back to the process via the
 existing command-line entrypoint; `Reactor.Cli` already exposes a

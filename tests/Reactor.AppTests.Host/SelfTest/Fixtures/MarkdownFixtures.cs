@@ -767,6 +767,58 @@ internal static class MarkdownFixtures
         }
     }
 
+    internal class CustomLinkBuilder(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            MarkdownLink? received = null;
+            Uri? clickedUri = null;
+            var host = H.CreateHost();
+            host.Mount(ctx => ScrollView(
+                Microsoft.UI.Reactor.Advanced.Factories.Markdown(
+                    "Read [the **review** notes](https://example.com/review) first.", new MarkdownOptions
+                    {
+                        UnifiedRichText = true,
+                        LinkBuilder = link =>
+                        {
+                            received = link;
+                            var label = link.Label ?? throw new InvalidOperationException("Expected a rich-text label.");
+                            return Button(label with { IsTextSelectionEnabled = false }, () => clickedUri = link.Uri)
+                                .AutomationName(link.Text)
+                                .ToolTip(link.Uri.ToString());
+                        },
+                    })));
+
+            await Harness.Render();
+
+            H.Check("Md_CustomLink_PlainText", received?.Text == "the review notes");
+            var button = H.FindControl<Button>(control =>
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(control) == "the review notes");
+            H.Check("Md_CustomLink_ButtonMounted", button is not null);
+            var nativeLabel = button?.Content as RichTextBlock;
+            H.Check("Md_CustomLink_FormattedLabelMounted", nativeLabel is not null
+                && nativeLabel.Blocks.OfType<Paragraph>()
+                    .SelectMany(paragraph => paragraph.Inlines.OfType<Run>())
+                    .Any(run => run.Text == "review" && run.FontWeight.Weight == Microsoft.UI.Text.FontWeights.Bold.Weight));
+            H.Check("Md_CustomLink_LabelSelectionDisabled", nativeLabel?.IsTextSelectionEnabled == false);
+            var inlines = H.FindAllControls<RichTextBlock>(_ => true)
+                .SelectMany(block => block.Blocks.OfType<Paragraph>())
+                .SelectMany(paragraph => paragraph.Inlines)
+                .ToArray();
+            H.Check("Md_CustomLink_NoFallbackNavigation", !inlines.OfType<Hyperlink>().Any());
+            H.Check("Md_CustomLink_ButtonIsInline",
+                inlines.OfType<InlineUIContainer>().Any(inline => ReferenceEquals(inline.Child, button)));
+
+            if (button is null) return;
+            var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(button);
+            H.Check("Md_CustomLink_AccessibleNameFromText", peer.GetName() == "the review notes");
+            ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
+                peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+            H.Check("Md_CustomLink_ClickUsesValidatedTarget",
+                clickedUri == new Uri("https://example.com/review"));
+        }
+    }
+
     // ── Custom list option callbacks ─────────────────────────────────────
 
     internal class CustomListCallbacks(Harness h) : SelfTestFixtureBase(h)

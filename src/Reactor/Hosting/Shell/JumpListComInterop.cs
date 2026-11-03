@@ -1,145 +1,164 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling;
 using Microsoft.UI.Reactor.Core.Diagnostics;
 
 namespace Microsoft.UI.Reactor.Hosting.Shell;
 
 /// <summary>
-/// Win32 <c>ICustomDestinationList</c> COM wrapper for unpackaged jump-list
-/// updates. The packaged path goes through <c>Windows.UI.StartScreen.JumpList</c>
-/// instead — this is the fallback used when <see cref="PackageRuntime.IsPackaged"/>
-/// returns false. (spec 036 §11.3)
+/// Source-generated COM interop for unpackaged jump lists. Packaged apps use
+/// Windows.UI.StartScreen.JumpList instead. All interfaces preserve the native
+/// HRESULT and vtable layout; activation and ownership require no built-in RCW.
 /// </summary>
-/// <remarks>
-/// <para>The COM surface is intentionally small: <c>BeginList</c> →
-/// <c>AppendCategory</c> / <c>AddUserTasks</c> → <c>CommitList</c>. Each
-/// task is an <c>IShellLinkW</c> whose <c>IPropertyStore</c> carries the
-/// title (<c>System.Title</c> = <c>PKEY_Title</c>) and arguments
-/// (<c>SetArguments</c>).</para>
-/// <para>This implementation supports the conventional shapes Reactor needs:
-/// Task entries grouped under "Tasks", Custom entries grouped by
-/// <c>GroupCategory</c>, and Separator entries (rendered as horizontal
-/// rules in the Tasks group). Recent / Frequent OS-managed groups are
-/// configured via <c>EnableAutoRecycle</c> on the <c>BeginList</c> result.</para>
-/// </remarks>
-internal static class JumpListComInterop
+internal static partial class JumpListComInterop
 {
-    /// <summary>
-    /// Apply the supplied items to the unpackaged jump list. UI-thread
-    /// callable but the implementation does no XAML work — safe to run
-    /// on a worker via <c>Task.Run</c>.
-    /// </summary>
-    public static void UpdateUnpackaged(
-        string appUserModelId,
-        IReadOnlyList<JumpListItem> items,
-        bool showRecent,
-        bool showFrequent)
-    {
-        ArgumentNullException.ThrowIfNull(appUserModelId);
-        if (string.IsNullOrEmpty(appUserModelId))
-            throw new ArgumentException("AppUserModelId required for unpackaged JumpList.", nameof(appUserModelId));
-        ArgumentNullException.ThrowIfNull(items);
+    private static readonly StrategyBasedComWrappers ComWrappers = new();
+    private static readonly Guid DestinationListClass = new("77f10cf0-3db5-4966-b520-b7c54fd35ed6");
+    private static readonly Guid ObjectCollectionClass = new("2d3468c1-36a7-43b6-ac24-d3f02fd9607a");
+    private static readonly Guid ShellLinkClass = new("00021401-0000-0000-c000-000000000046");
+    private static readonly Guid DestinationListInterface = new("6332debf-87b5-4670-90c0-5e57b408a49e");
+    private static readonly Guid ObjectArrayInterface = new("92ca9dcd-5622-4bba-a805-5e9f541bd8c9");
+    private static readonly Guid ObjectCollectionInterface = new("5632b1a4-e38a-400a-928a-d4cd63230295");
+    private static readonly Guid ShellLinkInterface = new("000214f9-0000-0000-c000-000000000046");
+    private static readonly Guid FmtIdSummaryInfo = new("F29F85E0-4FF9-1068-AB91-08002B27B3D9");
+    private static readonly Guid FmtIdAppUserModel = new("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3");
+    private const int NoInterface = unchecked((int)0x80004002);
+    private const int ChangedApartmentMode = unchecked((int)0x80010106);
 
-        ICustomDestinationList? cdl = null;
-        IObjectArray? removed = null;
+    public static (bool Succeeded, IReadOnlyList<string> RemovedArguments) UpdateUnpackaged(
+        string appUserModelId, IReadOnlyList<JumpListItem> items,
+        bool showRecent, bool showFrequent)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(appUserModelId);
+        ArgumentNullException.ThrowIfNull(items);
+        using var apartment = InitializeApartment();
+        using var destination = Create<ICustomDestinationList>(DestinationListClass, DestinationListInterface);
+        var list = destination.Value;
+        Marshal.ThrowExceptionForHR(list.SetAppID(appUserModelId));
+        return UpdateUnpackaged(list, items, showRecent, showFrequent);
+    }
+
+    // The transaction is shared by native activation and controlled shell tests.
+    internal static (bool Succeeded, IReadOnlyList<string> RemovedArguments) UpdateUnpackaged(
+        ICustomDestinationList list, IReadOnlyList<JumpListItem> items,
+        bool showRecent, bool showFrequent)
+    {
+        bool begun = false;
+        bool committed = false;
         try
         {
-            cdl = (ICustomDestinationList)new DestinationList();
-            cdl.SetAppID(appUserModelId);
-
-            uint slotCount;
-            var iidObjArray = typeof(IObjectArray).GUID;
-            int hr = cdl.BeginList(out slotCount, ref iidObjArray, out removed);
+            int hr = list.BeginList(out _, in ObjectArrayInterface, out var removedPointer);
             if (hr < 0)
             {
+                Release(removedPointer);
                 DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.BeginList", hr);
-                return;
+                return (false, Array.Empty<string>());
             }
+            begun = true;
+            using var removed = WrapOwned<IObjectArray>(removedPointer);
+            var removedArguments = ReadRemovedArguments(removed.Value, Environment.ProcessPath ?? string.Empty);
+            items = JumpList.ExcludeRemovedItems(items, removedArguments, customCategoriesOnly: true);
 
-            // Group by category. Separators stay in the Tasks group with
-            // their kind preserved on the IShellLink via PKEY_AppUserModel_IsDestListSeparator.
-            var taskItems = new List<JumpListItem>();
-            var customGroups = new Dictionary<string, List<JumpListItem>>(StringComparer.Ordinal);
-            for (int i = 0; i < items.Count; i++)
+            var tasks = new List<JumpListItem>();
+            bool accepted = true;
+            var groups = new Dictionary<string, List<JumpListItem>>(StringComparer.Ordinal);
+            foreach (var item in items)
             {
-                var item = items[i];
                 if (item.Kind == JumpListItemKind.Custom && !string.IsNullOrEmpty(item.GroupCategory))
                 {
-                    if (!customGroups.TryGetValue(item.GroupCategory!, out var bucket))
-                        customGroups[item.GroupCategory!] = bucket = new List<JumpListItem>();
-                    bucket.Add(item);
+                    if (!groups.TryGetValue(item.GroupCategory, out var group))
+                        groups[item.GroupCategory] = group = new List<JumpListItem>();
+                    group.Add(item);
                 }
                 else
-                {
-                    taskItems.Add(item);
-                }
+                    tasks.Add(item);
             }
 
-            // User Tasks group.
-            if (taskItems.Count > 0)
+            if (tasks.Count > 0)
             {
-                var coll = BuildShellLinkArray(taskItems);
-                try
-                {
-                    var asArray = (IObjectArray)coll;
-                    int taskHr = cdl.AddUserTasks(asArray);
-                    if (taskHr < 0) DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.AddUserTasks", taskHr);
-                }
-                finally { Marshal.ReleaseComObject(coll); }
+                using var collection = BuildShellLinkArray(tasks);
+                int taskHr = list.AddUserTasks(collection.Value);
+                accepted &= taskHr >= 0;
+                LogFailure("JumpList.AddUserTasks", taskHr);
             }
-
-            // Custom groups.
-            foreach (var (category, list) in customGroups)
+            foreach (var (category, entries) in groups)
             {
-                var coll = BuildShellLinkArray(list);
-                try
-                {
-                    var asArray = (IObjectArray)coll;
-                    int catHr = cdl.AppendCategory(category, asArray);
-                    if (catHr < 0) DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.AppendCategory", catHr);
-                }
-                finally { Marshal.ReleaseComObject(coll); }
+                using var collection = BuildShellLinkArray(entries);
+                int categoryHr = list.AppendCategory(category, collection.Value);
+                accepted &= categoryHr >= 0;
+                LogFailure("JumpList.AppendCategory", categoryHr);
             }
-
             if (showRecent)
             {
-                int recHr = cdl.AppendKnownCategory(KnownDestCategory.Recent);
-                if (recHr < 0) DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.AppendKnownCategory.Recent", recHr);
+                int recentHr = list.AppendKnownCategory(KnownDestCategory.Recent);
+                accepted &= recentHr >= 0;
+                LogFailure("JumpList.AppendKnownCategory.Recent", recentHr);
             }
             if (showFrequent)
             {
-                int freqHr = cdl.AppendKnownCategory(KnownDestCategory.Frequent);
-                if (freqHr < 0) DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.AppendKnownCategory.Frequent", freqHr);
+                int frequentHr = list.AppendKnownCategory(KnownDestCategory.Frequent);
+                accepted &= frequentHr >= 0;
+                LogFailure("JumpList.AppendKnownCategory.Frequent", frequentHr);
             }
-
-            int commitHr = cdl.CommitList();
-            if (commitHr < 0)
-                DiagnosticLog.HResultFailed(LogCategory.Shell, "JumpList.CommitList", commitHr);
+            int commitHr = list.CommitList();
+            committed = commitHr >= 0;
+            LogFailure("JumpList.CommitList", commitHr);
+            return (accepted && committed, removedArguments);
         }
         finally
         {
-            if (removed is not null)
-                Marshal.ReleaseComObject(removed);
-            if (cdl is not null)
-                Marshal.ReleaseComObject(cdl);
+            if (begun && !committed)
+                LogFailure("JumpList.AbortList", list.AbortList());
         }
     }
 
-    /// <summary>
-    /// Test hook — clear the unpackaged jump list for this AumId.
-    /// Best-effort.
-    /// </summary>
+    /// <summary>Read removals without beginning or committing a list update.</summary>
+    internal static IReadOnlyList<string> GetRemovedArguments(string appUserModelId)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(appUserModelId);
+        using var apartment = InitializeApartment();
+        using var destination = Create<ICustomDestinationList>(DestinationListClass, DestinationListInterface);
+        Marshal.ThrowExceptionForHR(destination.Value.SetAppID(appUserModelId));
+        int hr = destination.Value.GetRemovedDestinations(in ObjectArrayInterface, out var pointer);
+        using var removed = WrapResult<IObjectArray>(hr, pointer);
+        return ReadRemovedArguments(removed.Value, Environment.ProcessPath ?? string.Empty);
+    }
+
+    internal static unsafe IReadOnlyList<string> ReadRemovedArguments(IObjectArray removed, string executablePath)
+    {
+        Marshal.ThrowExceptionForHR(removed.GetCount(out var count));
+        var arguments = new HashSet<string>(StringComparer.Ordinal);
+        var buffer = new char[32768];
+        for (uint i = 0; i < count; i++)
+        {
+            // A destination may be an IShellItem, not a link. Ask for the link
+            // interface directly instead of relying on runtime object marshalling.
+            int hr = removed.GetAt(i, in ShellLinkInterface, out var pointer);
+            if (hr == NoInterface)
+            {
+                Release(pointer);
+                continue;
+            }
+            using var link = WrapResult<IShellLinkW>(hr, pointer);
+            fixed (char* text = buffer)
+            {
+                Marshal.ThrowExceptionForHR(link.Value.GetPath(text, buffer.Length, 0, 0));
+                if (string.IsNullOrEmpty(executablePath) ||
+                    !string.Equals(new string(text), executablePath, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                Marshal.ThrowExceptionForHR(link.Value.GetArguments(text, buffer.Length));
+                arguments.Add(new string(text));
+            }
+        }
+        return arguments.ToArray();
+    }
+
+    /// <summary>Test hook: delete only the supplied test application's list.</summary>
     public static void DeleteListForTests(string appUserModelId)
     {
         try
         {
-            var cdl = (ICustomDestinationList)new DestinationList();
-            try
-            {
-                cdl.SetAppID(appUserModelId);
-                _ = cdl.DeleteList(appUserModelId);
-            }
-            finally { Marshal.ReleaseComObject(cdl); }
+            DeleteList(appUserModelId);
         }
         catch (Exception ex)
         {
@@ -147,204 +166,237 @@ internal static class JumpListComInterop
         }
     }
 
-    private static IObjectCollection BuildShellLinkArray(IReadOnlyList<JumpListItem> items)
+    internal static void DeleteList(string appUserModelId)
     {
-        var coll = (IObjectCollection)new EnumerableObjectCollection();
+        ArgumentException.ThrowIfNullOrEmpty(appUserModelId);
+        using var apartment = InitializeApartment();
+        using var destination = Create<ICustomDestinationList>(DestinationListClass, DestinationListInterface);
+        Marshal.ThrowExceptionForHR(destination.Value.SetAppID(appUserModelId));
+        Marshal.ThrowExceptionForHR(destination.Value.DeleteList(appUserModelId));
+    }
 
-        // Path to the current executable. Jump-list shell links re-launch
-        // the same exe with the supplied arguments.
-        string exePath = Environment.ProcessPath ?? string.Empty;
-
-        for (int i = 0; i < items.Count; i++)
+    /// <summary>Caller keeps its COM apartment alive until the collection is disposed.</summary>
+    internal static OwnedCom<IObjectCollection> BuildShellLinkArray(IReadOnlyList<JumpListItem> items)
+    {
+        var collection = Create<IObjectCollection>(ObjectCollectionClass, ObjectCollectionInterface);
+        try
         {
-            var item = items[i];
-            var link = (IShellLinkW)new CShellLink();
-            try
+            string executable = Environment.ProcessPath ?? string.Empty;
+            foreach (var item in items)
             {
+                using var link = Create<IShellLinkW>(ShellLinkClass, ShellLinkInterface);
                 if (item.Kind == JumpListItemKind.Separator)
-                {
-                    ApplySeparator(link);
-                }
+                    ApplyProperty(link.Value, new PropertyKey(FmtIdAppUserModel, 6),
+                        new PropVariant { vt = 11, p1 = new IntPtr(-1) });
                 else
                 {
-                    if (!string.IsNullOrEmpty(exePath))
-                        link.SetPath(exePath);
-                    link.SetArguments(item.Arguments ?? string.Empty);
+                    if (!string.IsNullOrEmpty(executable))
+                        Marshal.ThrowExceptionForHR(link.Value.SetPath(executable));
+                    Marshal.ThrowExceptionForHR(link.Value.SetArguments(item.Arguments ?? string.Empty));
                     if (!string.IsNullOrEmpty(item.Description))
-                        link.SetDescription(item.Description);
-                    // Icon: WindowIcon.FromPath maps to filesystem; resource
-                    // URIs aren't honoured by ICustomDestinationList without
-                    // additional resource-extraction work that the unpackaged
-                    // path doesn't carry today (silently skipped).
-                    if (item.Icon is { IsResource: false, Source: var iconPath } && !string.IsNullOrEmpty(iconPath))
-                        link.SetIconLocation(iconPath, 0);
-
-                    ApplyTitle(link, item.Title);
+                        Marshal.ThrowExceptionForHR(link.Value.SetDescription(item.Description));
+                    if (item.Icon is { IsResource: false, Source: var icon } && !string.IsNullOrEmpty(icon))
+                        Marshal.ThrowExceptionForHR(link.Value.SetIconLocation(icon, 0));
+                    ApplyProperty(link.Value, new PropertyKey(FmtIdSummaryInfo, 2),
+                        new PropVariant { vt = 31, p1 = Marshal.StringToCoTaskMemUni(item.Title) });
                 }
-
-                coll.AddObject(link);
+                Marshal.ThrowExceptionForHR(collection.Value.AddObject(link.Pointer));
             }
-            finally { Marshal.ReleaseComObject(link); }
+            return collection;
         }
-        return coll;
+        catch
+        {
+            collection.Dispose();
+            throw;
+        }
     }
 
-    private static void ApplyTitle(IShellLinkW link, string title)
+    private static void ApplyProperty(IShellLinkW link, PropertyKey key, PropVariant value)
     {
-        var store = (IPropertyStore)link;
-        var titleKey = new PropertyKey(FmtIdSummaryInfo, 2);   // PKEY_Title
-        var pv = new PropVariant();
         try
         {
-            InitPropVariantFromString(title, out pv);
-            store.SetValue(ref titleKey, ref pv);
-            store.Commit();
+            var store = (IPropertyStore)link;
+            Marshal.ThrowExceptionForHR(store.SetValue(in key, in value));
+            Marshal.ThrowExceptionForHR(store.Commit());
         }
         finally
         {
-            PropVariantClear(ref pv);
+            Marshal.ThrowExceptionForHR(PropVariantClear(ref value));
         }
     }
 
-    private static void ApplySeparator(IShellLinkW link)
+    private static void LogFailure(string operation, int hr)
     {
-        var store = (IPropertyStore)link;
-        var sepKey = new PropertyKey(FmtIdAppUserModel, 6);    // PKEY_AppUserModel_IsDestListSeparator
-        var pv = new PropVariant();
+        if (hr < 0) DiagnosticLog.HResultFailed(LogCategory.Shell, operation, hr);
+    }
+
+    private static OwnedCom<T> Create<T>(in Guid classId, in Guid interfaceId) where T : class
+    {
+        int hr = CoCreateInstance(in classId, 0, 1, in interfaceId, out var pointer);
+        return WrapResult<T>(hr, pointer);
+    }
+
+    private static OwnedCom<T> WrapResult<T>(int hr, nint pointer) where T : class
+    {
+        if (hr < 0)
+        {
+            Release(pointer);
+            Marshal.ThrowExceptionForHR(hr);
+        }
+        return WrapOwned<T>(pointer);
+    }
+
+    private static OwnedCom<T> WrapOwned<T>(nint pointer) where T : class
+    {
+        if (pointer == 0) throw new InvalidOperationException("The shell returned a null COM interface.");
+        ComObject? wrapper = null;
         try
         {
-            InitPropVariantFromBoolean(true, out pv);
-            store.SetValue(ref sepKey, ref pv);
-            store.Commit();
+            // UniqueInstance allows deterministic release without invalidating
+            // another caller's wrapper for the same native COM identity.
+            wrapper = (ComObject)ComWrappers.GetOrCreateObjectForComInstance(pointer, CreateObjectFlags.UniqueInstance);
+            return new OwnedCom<T>((T)(object)wrapper, wrapper, pointer);
         }
-        finally
+        catch
         {
-            PropVariantClear(ref pv);
+            wrapper?.FinalRelease();
+            Release(pointer);
+            throw;
         }
     }
 
-    // ── COM definitions ───────────────────────────────────────────────────
-
-    [ComImport, Guid("77f10cf0-3db5-4966-b520-b7c54fd35ed6"), ClassInterface(ClassInterfaceType.None)]
-    private class DestinationList { }
-
-    [ComImport, Guid("2d3468c1-36a7-43b6-ac24-d3f02fd9607a"), ClassInterface(ClassInterfaceType.None)]
-    private class EnumerableObjectCollection { }
-
-    [ComImport, Guid("00021401-0000-0000-c000-000000000046"), ClassInterface(ClassInterfaceType.None)]
-    private class CShellLink { }
-
-    [ComImport, Guid("6332debf-87b5-4670-90c0-5e57b408a49e"),
-     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface ICustomDestinationList
+    private static void Release(nint pointer)
     {
-        [PreserveSig] void SetAppID([MarshalAs(UnmanagedType.LPWStr)] string pszAppID);
-        [PreserveSig] int BeginList(out uint pcMaxSlots, ref Guid riid,
-            [MarshalAs(UnmanagedType.Interface)] out IObjectArray ppv);
-        [PreserveSig] int AppendCategory([MarshalAs(UnmanagedType.LPWStr)] string pszCategory,
-            [MarshalAs(UnmanagedType.Interface)] IObjectArray poa);
+        if (pointer != 0) Marshal.Release(pointer);
+    }
+
+    internal sealed class OwnedCom<T>(T value, ComObject wrapper, nint pointer) : IDisposable where T : class
+    {
+        private ComObject? _wrapper = wrapper;
+        private nint _pointer = pointer;
+        internal T Value { get; } = value;
+        internal nint Pointer => _pointer;
+
+        public void Dispose()
+        {
+            var owned = Interlocked.Exchange(ref _wrapper, null);
+            if (owned is null) return;
+            try { owned.FinalRelease(); }
+            finally { Release(Interlocked.Exchange(ref _pointer, 0)); }
+        }
+    }
+
+    internal readonly struct ApartmentScope(bool uninitialize) : IDisposable
+    {
+        public void Dispose()
+        {
+            if (uninitialize) CoUninitialize();
+        }
+    }
+
+    internal static ApartmentScope InitializeApartment()
+    {
+        int hr = CoInitializeEx(0, 0); // COINIT_MULTITHREADED on worker threads.
+        if (hr == ChangedApartmentMode)
+            return new ApartmentScope(false); // Preserve the caller's existing STA.
+        Marshal.ThrowExceptionForHR(hr); // S_OK and S_FALSE both need a matching uninitialize.
+        return new ApartmentScope(true);
+    }
+
+    [GeneratedComInterface(StringMarshalling = StringMarshalling.Utf16)]
+    [Guid("6332debf-87b5-4670-90c0-5e57b408a49e")]
+    internal partial interface ICustomDestinationList
+    {
+        [PreserveSig] int SetAppID(string appId);
+        [PreserveSig] int BeginList(out uint maxSlots, in Guid iid, out nint value);
+        [PreserveSig] int AppendCategory(string category, IObjectArray array);
         [PreserveSig] int AppendKnownCategory(KnownDestCategory category);
-        [PreserveSig] int AddUserTasks([MarshalAs(UnmanagedType.Interface)] IObjectArray poa);
+        [PreserveSig] int AddUserTasks(IObjectArray array);
         [PreserveSig] int CommitList();
-        [PreserveSig] int GetRemovedDestinations(ref Guid riid,
-            [MarshalAs(UnmanagedType.Interface)] out object ppv);
-        [PreserveSig] int DeleteList([MarshalAs(UnmanagedType.LPWStr)] string pszAppID);
+        [PreserveSig] int GetRemovedDestinations(in Guid iid, out nint value);
+        [PreserveSig] int DeleteList(string appId);
         [PreserveSig] int AbortList();
     }
 
-    private enum KnownDestCategory : uint { Frequent = 1, Recent = 2 }
+    internal enum KnownDestCategory : uint { Frequent = 1, Recent = 2 }
 
-    [ComImport, Guid("92ca9dcd-5622-4bba-a805-5e9f541bd8c9"),
-     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IObjectArray
+    [GeneratedComInterface]
+    [Guid("92ca9dcd-5622-4bba-a805-5e9f541bd8c9")]
+    internal partial interface IObjectArray
     {
-        [PreserveSig] int GetCount(out uint pcObjects);
-        [PreserveSig] int GetAt(uint uiIndex, ref Guid riid,
-            [MarshalAs(UnmanagedType.Interface)] out object ppv);
+        [PreserveSig] int GetCount(out uint count);
+        [PreserveSig] int GetAt(uint index, in Guid iid, out nint value);
     }
 
-    [ComImport, Guid("5632b1a4-e38a-400a-928a-d4cd63230295"),
-     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IObjectCollection
+    [GeneratedComInterface]
+    [Guid("5632b1a4-e38a-400a-928a-d4cd63230295")]
+    internal partial interface IObjectCollection : IObjectArray
     {
-        // IObjectArray
-        [PreserveSig] int GetCount(out uint pcObjects);
-        [PreserveSig] int GetAt(uint uiIndex, ref Guid riid,
-            [MarshalAs(UnmanagedType.Interface)] out object ppv);
-        // IObjectCollection
-        [PreserveSig] int AddObject([MarshalAs(UnmanagedType.IUnknown)] object punk);
-        [PreserveSig] int AddFromArray([MarshalAs(UnmanagedType.Interface)] IObjectArray source);
-        [PreserveSig] int RemoveObjectAt(uint uiIndex);
+        [PreserveSig] int AddObject(nint value);
+        [PreserveSig] int AddFromArray(IObjectArray array);
+        [PreserveSig] int RemoveObjectAt(uint index);
         [PreserveSig] int Clear();
     }
 
-    [ComImport, Guid("000214f9-0000-0000-c000-000000000046"),
-     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IShellLinkW
+    [GeneratedComInterface(StringMarshalling = StringMarshalling.Utf16)]
+    [Guid("000214f9-0000-0000-c000-000000000046")]
+    internal unsafe partial interface IShellLinkW
     {
-        [PreserveSig] int GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] global::System.Text.StringBuilder pszFile,
-            int cch, IntPtr pfd, uint fFlags);
-        [PreserveSig] int GetIDList(out IntPtr ppidl);
-        [PreserveSig] int SetIDList(IntPtr pidl);
-        [PreserveSig] int GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] global::System.Text.StringBuilder pszName, int cch);
-        [PreserveSig] int SetDescription([MarshalAs(UnmanagedType.LPWStr)] string pszName);
-        [PreserveSig] int GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] global::System.Text.StringBuilder pszDir, int cch);
-        [PreserveSig] int SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string pszDir);
-        [PreserveSig] int GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] global::System.Text.StringBuilder pszArgs, int cch);
-        [PreserveSig] int SetArguments([MarshalAs(UnmanagedType.LPWStr)] string pszArgs);
-        [PreserveSig] int GetHotkey(out short pwHotkey);
-        [PreserveSig] int SetHotkey(short wHotkey);
-        [PreserveSig] int GetShowCmd(out int piShowCmd);
-        [PreserveSig] int SetShowCmd(int iShowCmd);
-        [PreserveSig] int GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] global::System.Text.StringBuilder pszIconPath, int cch, out int piIcon);
-        [PreserveSig] int SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string pszIconPath, int iIcon);
-        [PreserveSig] int SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string pszPathRel, uint dwReserved);
-        [PreserveSig] int Resolve(IntPtr hwnd, uint fFlags);
-        [PreserveSig] int SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);
+        [PreserveSig] int GetPath(char* path, int capacity, nint findData, uint flags);
+        [PreserveSig] int GetIDList(out nint itemIdList);
+        [PreserveSig] int SetIDList(nint itemIdList);
+        [PreserveSig] int GetDescription(char* text, int capacity);
+        [PreserveSig] int SetDescription(string description);
+        [PreserveSig] int GetWorkingDirectory(char* text, int capacity);
+        [PreserveSig] int SetWorkingDirectory(string directory);
+        [PreserveSig] int GetArguments(char* text, int capacity);
+        [PreserveSig] int SetArguments(string arguments);
+        [PreserveSig] int GetHotkey(out short hotkey);
+        [PreserveSig] int SetHotkey(short hotkey);
+        [PreserveSig] int GetShowCmd(out int show);
+        [PreserveSig] int SetShowCmd(int show);
+        [PreserveSig] int GetIconLocation(char* path, int capacity, out int index);
+        [PreserveSig] int SetIconLocation(string path, int index);
+        [PreserveSig] int SetRelativePath(string path, uint reserved);
+        [PreserveSig] int Resolve(nint window, uint flags);
+        [PreserveSig] int SetPath(string path);
     }
 
-    [ComImport, Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99"),
-     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IPropertyStore
+    [GeneratedComInterface]
+    [Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99")]
+    internal partial interface IPropertyStore
     {
-        [PreserveSig] int GetCount(out uint cProps);
-        [PreserveSig] int GetAt(uint iProp, out PropertyKey pkey);
-        [PreserveSig] int GetValue(ref PropertyKey key, out PropVariant pv);
-        [PreserveSig] int SetValue(ref PropertyKey key, ref PropVariant pv);
+        [PreserveSig] int GetCount(out uint count);
+        [PreserveSig] int GetAt(uint index, out PropertyKey key);
+        [PreserveSig] int GetValue(in PropertyKey key, out PropVariant value);
+        [PreserveSig] int SetValue(in PropertyKey key, in PropVariant value);
         [PreserveSig] int Commit();
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
-    private struct PropertyKey
+    internal struct PropertyKey(Guid format, uint id)
     {
-        public Guid fmtid;
-        public uint pid;
-        public PropertyKey(Guid fmtid, uint pid) { this.fmtid = fmtid; this.pid = pid; }
+        public Guid fmtid = format;
+        public uint pid = id;
     }
 
-    // PROPVARIANT — only the variants we set (LPWSTR, BOOL).
     [StructLayout(LayoutKind.Sequential)]
-    private struct PropVariant
+    internal struct PropVariant
     {
         public ushort vt;
-        public ushort wReserved1;
-        public ushort wReserved2;
-        public ushort wReserved3;
-        public IntPtr p1;
-        public IntPtr p2;
+        public ushort wReserved1, wReserved2, wReserved3;
+        public IntPtr p1, p2;
     }
 
-    private static readonly Guid FmtIdSummaryInfo = new Guid("F29F85E0-4FF9-1068-AB91-08002B27B3D9");
-    private static readonly Guid FmtIdAppUserModel = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3");
+    [LibraryImport("ole32.dll")]
+    private static partial int CoCreateInstance(in Guid classId, nint outer, uint context, in Guid iid, out nint value);
 
-    [DllImport("propsys.dll", PreserveSig = false)]
-    private static extern void InitPropVariantFromString(
-        [MarshalAs(UnmanagedType.LPWStr)] string psz, out PropVariant ppropvar);
+    [LibraryImport("ole32.dll")]
+    private static partial int CoInitializeEx(nint reserved, uint concurrency);
 
-    [DllImport("propsys.dll", PreserveSig = false)]
-    private static extern void InitPropVariantFromBoolean(
-        [MarshalAs(UnmanagedType.Bool)] bool fVal, out PropVariant ppropvar);
+    [LibraryImport("ole32.dll")]
+    private static partial void CoUninitialize();
 
-    [DllImport("ole32.dll")]
-    private static extern int PropVariantClear(ref PropVariant pvar);
+    [LibraryImport("ole32.dll")]
+    private static partial int PropVariantClear(ref PropVariant value);
 }

@@ -1300,7 +1300,7 @@ public abstract record Element
             // new one — otherwise the shallow-skip path strands a stale ElementRef.
             && ReferenceEquals(a.Ref, b.Ref)
             // Imperative teardown slot (.OnUnmount). ApplyModifiers re-registers the
-            // latest OnUnmountAction (ReactorState.OnUnmountAction) on every non-skip
+            // latest OnUnmountAction (ReactorState.UnmountAction) on every non-skip
             // Update, and that captured delegate is what fires at unmount — so a
             // changed teardown closure must decline the skip or the stale (first-render)
             // action is stranded and runs in place of the current one. Unlike
@@ -2836,7 +2836,22 @@ public partial record TreeViewNodeData(string Content, TreeViewNodeData[]? Child
 
 public record MenuBarItemData(string Title, MenuFlyoutItemBase[] Items);
 
-public abstract record MenuFlyoutItemBase;
+public abstract record MenuFlyoutItemBase
+{
+    /// <summary>
+    /// Where this item was created in C#, stamped by the source map on the
+    /// <c>MenuItem(…)</c> / <c>ToggleMenuItem(…)</c> / … factory call (the same mechanism as
+    /// <see cref="Element.CallSite"/>). The realized menu item publishes it for inspectors.
+    /// Not part of equality, like <see cref="Element.CallSite"/>.
+    /// </summary>
+    public SourceLocation? CallSite
+    {
+        get => _callSite.Value;
+        init => _callSite = new(value);
+    }
+
+    private readonly EqualityIgnored<SourceLocation> _callSite;
+}
 public record MenuFlyoutItemData(string Text, Action? OnClick = null, string? Icon = null) : MenuFlyoutItemBase
 {
     public bool IsEnabled { get; init; } = true;
@@ -2880,7 +2895,22 @@ public partial record IconElement(IconData Data) : Element
     internal Action<WinUI.IconElement>[] Setters { get; init; } = [];
 }
 
-public abstract record AppBarItemBase;
+public abstract record AppBarItemBase
+{
+    /// <summary>
+    /// Where this command was created in C#, stamped by the source map on the
+    /// <c>AppBarButton(…)</c> / <c>AppBarToggleButton(…)</c> / <c>AppBarSeparator()</c> factory
+    /// call (the same mechanism as <see cref="Element.CallSite"/>). The realized command
+    /// publishes it for inspectors. Not part of equality, like <see cref="Element.CallSite"/>.
+    /// </summary>
+    public SourceLocation? CallSite
+    {
+        get => _callSite.Value;
+        init => _callSite = new(value);
+    }
+
+    private readonly EqualityIgnored<SourceLocation> _callSite;
+}
 public record AppBarButtonData(string Label, Action? OnClick = null, string? Icon = null) : AppBarItemBase
 {
     public bool IsEnabled { get; init; } = true;
@@ -3844,10 +3874,9 @@ public partial record AutoSuggestBoxElement(
     // reused verbatim from the hand-written descriptor (shared AutoSuggestBoxEventPayload).
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<AutoSuggestBoxElement, WinUI.AutoSuggestBox> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<AutoSuggestBoxElement, WinUI.AutoSuggestBox> d)
-        => d.OneWayConditional(
+        => d.OneWay(
                 get:         static e => e.Suggestions,
-                set:         static (c, v) => c.ItemsSource = v,
-                shouldWrite: static e => e.Suggestions.Length > 0)
+                set:         static (c, v) => c.ItemsSource = v.Length > 0 ? v : null)
             .HandCodedControlled<global::Microsoft.UI.Reactor.Core.V1Protocol.AutoSuggestBoxEventPayload, string,
                 global::Windows.Foundation.TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs>>(
                 get:         static e => e.Text,
@@ -4705,10 +4734,11 @@ public partial record ScrollViewElement(Element Child) : Element
 /// <summary>Border element — a single-child container with brush/corner/thickness chrome.</summary>
 // Spec 058 §15 (P5.18) — Child is the single-content slot ([WrapContent]); CornerRadius and
 // BorderThickness are ergonomic double scalars converted to the WinUI structs ([WrapConvert]);
-// Background/BorderBrush auto-map (Brush is a supported reference). No events. Replaces the
-// hand-coded BorderHandler + the parallel hand-written BorderDescriptor.
+// BorderBrush auto-maps; unset Background restores a concrete modifier or releases local
+// precedence to theme styles. No events. Replaces BorderHandler + BorderDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.Border))]
 [global::Microsoft.UI.Reactor.Wrappers.WrapContent("Child")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Background")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapConvert("CornerRadius")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapConvert("BorderThickness")]
 public partial record BorderElement(Element? Child) : Element
@@ -4718,6 +4748,27 @@ public partial record BorderElement(Element? Child) : Element
     public Brush? BorderBrush { get; init; }
     public double? BorderThickness { get; init; }
     internal Action<WinUI.Border>[] Setters { get; init; } = [];
+
+    private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<BorderElement, WinUI.Border> Customize(
+        global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<BorderElement, WinUI.Border> d)
+        => d.OneWay<(Brush? Record, Brush? Modifier)>(
+            // The modifier is part of the value so removing it (or the record) rewrites the
+            // remaining brush here, before native setters run. ApplyModifiers skips unchanged
+            // brushes and leaves the clear of a modifier this entry saw to it.
+            static e => e.Background is null && e.Modifiers?.Background is null
+                ? Optional<(Brush? Record, Brush? Modifier)>.Unset
+                : (e.Background, e.Modifiers?.Background),
+            static (border, brushes) => border.Background = brushes.Record ?? brushes.Modifier,
+            WinUI.Border.BackgroundProperty)
+        // Tell the reconciler the removed modifier was handled here, so ApplyModifiers keeps the
+        // brush this entry restored. A custom handler for BorderElement never marks it.
+        .ImperativeBridged(
+            static (_, _, _) => { },
+            static (ctx, border, oldEl, newEl) =>
+            {
+                if (oldEl.Modifiers?.Background is not null && newEl.Modifiers?.Background is null)
+                    ctx.Reconciler.MarkBackgroundRemovalHandled(border);
+            });
 }
 
 /// <summary>Expander element. <c>IsExpanded</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its expansion state until explicitly set.</summary>
@@ -4787,6 +4838,13 @@ public partial record ExpanderElement(
                         oldEl.HeaderTemplate, newEl.HeaderTemplate, existing, ctx.RequestRerender);
                     if (!ReferenceEquals(existing, next))
                         c.Header = next;
+                },
+                unmount: static (ctx, c) =>
+                {
+                    if (Reconciler.GetElementTag(c) is not ExpanderElement { HeaderTemplate: not null }) return;
+                    if (c.Header is global::Microsoft.UI.Xaml.UIElement child)
+                        ctx.Reconciler.UnmountChild(child);
+                    c.Header = null;
                 })
             .OneWayConditional(
                 get:         static e => e.Header ?? string.Empty,
@@ -5759,7 +5817,9 @@ public partial record FlipViewElement(
 /// content is reconciled live while the dialog is open.
 /// OnClosed reports how the dialog was dismissed — the button the user chose,
 /// or <see cref="ContentDialogResult.None"/> for a declared IsOpen = false. It
-/// does not fire when the dialog is torn down because its owner unmounted.
+/// does not fire when the dialog is torn down because its owner unmounted or
+/// its host/reconciler was disposed. Disposal also cancels deferred opens without
+/// OnOpened. State reset needed during teardown belongs in effect cleanup, not OnClosed.
 /// </summary>
 public record ContentDialogElement(
     string Title,
@@ -5791,6 +5851,14 @@ public record FlyoutElement(
     Element FlyoutContent
 ) : Element
 {
+    /// <summary>
+    /// Opens the flyout declaratively. A one-shot trigger: the flyout is shown on mount when
+    /// already <c>true</c>, and on the <c>false</c> → <c>true</c> edge of an update, against any
+    /// target (a Button/SplitButton target holds the flyout in its own <c>Flyout</c> slot, any
+    /// other target as <c>FlyoutBase.AttachedFlyout</c>). Setting it back to <c>false</c> does not
+    /// close the flyout — the user dismisses it. Reset your state from <see cref="OnClosed"/> so
+    /// the next <c>true</c> is a fresh edge.
+    /// </summary>
     public bool IsOpen { get; init; }
     /// <summary>
     /// Preferred position of the flyout relative to its target. Defaults to
@@ -6256,6 +6324,11 @@ public abstract record TemplatedListElementBase : Element, global::Microsoft.UI.
     /// pre-mounts so it does not participate.
     /// </summary>
     internal abstract string GetKeyAt(int index);
+    /// <summary>
+    /// The author's <c>KeySelector</c> key for the item at <paramref name="index"/>, stamped on
+    /// its realized row for diagnostics; <c>null</c> when there is none (no synthetic key).
+    /// </summary>
+    internal virtual string? GetItemIdentityKey(int index) => GetKeyAt(index);
     // §14 Phase 3 close-out — bridge the internal abstract to the public
     // IKeyedItemSource contract via explicit interface implementation so
     // the abstract stays internal (spec 042 decision) while descriptor
@@ -6437,6 +6510,8 @@ public record TemplatedFlipViewElement<T>(
         KeySelector is not null && (uint)index < (uint)Items.Count
             ? KeySelector(Items[index])
             : $"__flip_{index}";
+    internal override string? GetItemIdentityKey(int index) =>
+        KeySelector is not null && (uint)index < (uint)Items.Count ? KeySelector(Items[index]) : null;
     public override void InvokeSelectionChanged(int index) => OnSelectedIndexChanged?.Invoke(index);
     public override void InvokeItemClick(int index) { }
     public override void ApplyControlSetters(object control) =>
@@ -7834,9 +7909,11 @@ public record ItemsViewElement<T>(
 
     public override int ItemCount => Items.Count;
 
+    // A null key passes through (as for the other keyed lists), so the keyed-list binding
+    // reports it and substitutes its positional placeholder.
     internal override string GetKeyAt(int index) =>
         (uint)index < (uint)Items.Count
-            ? (KeySelector(Items[index]) ?? $"__iv_{index}")
+            ? KeySelector(Items[index])!
             : $"__iv_{index}";
 
     /// <summary>

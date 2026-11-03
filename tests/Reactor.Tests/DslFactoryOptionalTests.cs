@@ -108,6 +108,42 @@ public class DslFactoryOptionalTests
         AssertUnset(FlipView(Optional<int>.Unset, null, TextBlock("A")).SelectedIndex);
     }
 
+    // A plain int converts equally well to int? and Optional<int>; without an int overload
+    // these calls were CS0121 (ambiguous). This test failing to compile is the regression.
+    [Fact]
+    public void NavigationSelectionFactories_AcceptPlainInt()
+    {
+        int selected = 1;
+        Action<int> setSelected = _ => { };
+
+        AssertOptional(1, TabView(selected, setSelected, Tab("A", TextBlock("A"))).SelectedIndex);
+        Assert.Same(setSelected, TabView(selected, setSelected, Tab("A", TextBlock("A"))).OnSelectedIndexChanged);
+        AssertOptional(1, Pivot(selected, setSelected, PivotItem("A", TextBlock("A"))).SelectedIndex);
+        AssertOptional(1, ListView(selected, setSelected, TextBlock("A")).SelectedIndex);
+        AssertOptional(1, GridView(selected, setSelected, TextBlock("A")).SelectedIndex);
+        AssertOptional(1, FlipView(selected, setSelected, TextBlock("A")).SelectedIndex);
+        AssertOptional(0, TabView(0).SelectedIndex);
+    }
+
+    [Fact]
+    public void XamlInteropFactories_BuildTheirElements()
+    {
+        Func<global::Microsoft.UI.Xaml.FrameworkElement> factory = () => throw new InvalidOperationException();
+        Action<global::Microsoft.UI.Xaml.FrameworkElement> updater = _ => { };
+
+        var host = XamlHost(factory, updater);
+        Assert.Same(factory, host.Factory);
+        Assert.Same(updater, host.Updater);
+        Assert.Null(XamlHost(factory).Updater);
+        Assert.Null(XamlHost(factory).TypeKey);
+        Assert.Equal("chart", XamlHost(factory, typeKey: "chart").TypeKey);
+
+        var page = XamlPage(typeof(string), "param");
+        Assert.Equal(typeof(string), page.PageType);
+        Assert.Equal("param", page.Parameter);
+        Assert.Null(XamlPage(typeof(string)).Parameter);
+    }
+
     [Fact]
     public void DateAndColorFactories_WrapPlainValues_AndAcceptUnset()
     {

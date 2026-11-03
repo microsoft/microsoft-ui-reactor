@@ -141,28 +141,26 @@ public class JumpListUpdateValidationTests : IDisposable
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  UpdateAsync happy(-ish) path — items pass validation, the
-    //  COM call inside Task.Run fails, the exception propagates.
+    //  Enumeration failures must surface before the platform is touched.
     // ══════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task UpdateAsync_With_Valid_Items_And_AumiD_Throws_When_COM_Unavailable()
+    public async Task UpdateAsync_Input_Enumeration_Failure_Propagates_Before_Platform_Access()
     {
-        // With exceptions no longer swallowed, COM/platform failures (test
-        // context, remote-desktop sessions without taskbar, group-policy-
-        // locked shells) propagate to callers. Callers who want fire-and-
-        // forget semantics should catch at their call site.
-        JumpList.AppUserModelId = "Test.App";
-        var items = new[]
+        // A headless test does not imply COM is unavailable. The previous
+        // version of this test passed because of an invalid propsys import,
+        // rather than a deliberately induced platform failure.
+        var expected = new global::System.IO.IOException("Enumeration failed");
+        global::System.Collections.Generic.IEnumerable<JumpListItem> Items()
         {
-            new JumpListItem("Open", "open --doc /path"),
-            new JumpListItem("Help", "help"),
-        };
-        // In unit test context, the platform call fails — must be a platform
-        // exception (COM/EntryPoint/DllNotFound), NOT a validation exception.
-        var ex = await Assert.ThrowsAnyAsync<Exception>(
-            async () => await JumpList.UpdateAsync(items));
-        Assert.False(ex is ArgumentException or InvalidOperationException,
-            $"Expected a platform failure, not a validation exception: {ex.GetType().Name}: {ex.Message}");
+            yield return JumpListItem.ForUri("Open", "app://open");
+            throw expected;
+        }
+
+        // No AppUserModelId is configured. Reaching the platform gate instead
+        // of enumerating first would report a different exception.
+        var actual = await Assert.ThrowsAsync<global::System.IO.IOException>(
+            () => JumpList.UpdateAsync(Items()));
+        Assert.Same(expected, actual);
     }
 }

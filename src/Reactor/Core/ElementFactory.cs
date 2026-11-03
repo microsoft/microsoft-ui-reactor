@@ -345,6 +345,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
         if (!_reconciler.ResourceRefreshActive && ShouldSkipRefresh?.Invoke() == true)
             return;
 
+        using var realizationTheme = _reconciler.EnterRealizationTheme(repeater);
         // Snapshot the keys we currently believe are realized. The actual
         // realized set may have changed since the last GetElement, but the
         // ItemsRepeater authoritatively tells us per-key via TryGetElement
@@ -478,6 +479,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
                     _mountedElements.Remove(key);
                     _reconciler.UnmountChild(replacement);
                     ScheduleReRealize(key);
+                    continue;
                 }
             }
             else
@@ -490,6 +492,8 @@ public sealed partial class ElementFactory<T> : IElementFactory
                 // (PR #324 review)
                 _lastElementByControl[child] = newElement;
             }
+            if (child is FrameworkElement realizedElement)
+                Reconciler.GetOrCreateReactorState(realizedElement).RealizationTheme = realizationTheme.Theme;
         }
     }
 
@@ -601,9 +605,12 @@ public sealed partial class ElementFactory<T> : IElementFactory
 
         var item = _items[index];
         var element = BuildOrCache(key, item, index, keyed);
+        TryTakeCompatibleFromPool(element, out var reused, out var oldElement, out var parkedVisibility);
+        // Rows realize during layout, outside any root pass: inherit the repeater's theme.
+        using var realizationTheme = _reconciler.EnterRealizationTheme(args.Parent, reused);
 
         UIElement? control;
-        if (TryTakeCompatibleFromPool(element, out var reused, out var oldElement, out var parkedVisibility))
+        if (reused is not null && oldElement is not null)
         {
             // Reuse a previously-recycled container. The framework still has
             // it parented to the ItemsRepeater, so the ViewManager.cpp:866
@@ -665,6 +672,8 @@ public sealed partial class ElementFactory<T> : IElementFactory
         _mountedElements[key] = element;
         if (control is not null)
         {
+            if (control is FrameworkElement realizedElement)
+                Reconciler.GetOrCreateReactorState(realizedElement).RealizationTheme = realizationTheme.Theme;
             _keyByControl[control] = key;
             _lastElementByControl[control] = element;
             if (_keyByControl.Count > _maxRealized) _maxRealized = _keyByControl.Count;

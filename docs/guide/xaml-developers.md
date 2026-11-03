@@ -445,6 +445,32 @@ contractor's "Reactor XAML compiler" appears in your search results,
 it doesn't exist — the framework's design eliminates the second
 authoring language deliberately.
 
+The other direction — an existing XAML `Page` or control inside a Reactor tree — uses
+`XamlPage(...)` and `XamlHost(...)`:
+
+```csharp
+class XamlInteropExample : Component
+{
+    public override Element Render()
+    {
+        var (count, _) = UseState(0);
+
+        return VStack(8,
+            XamlPage(typeof(LegacySettingsPage), parameter: "general"),   // a Frame navigated to the page
+            XamlHost(() => new MyUserControl(), c => ((MyUserControl)c).Value = count,
+                     typeKey: "MyUserControl")                            // any FrameworkElement
+        );
+    }
+}
+```
+
+`XamlPage` re-navigates in place when the page type or parameter changes. `XamlHost`'s
+factory runs once on mount and its updater after creation and on every render; give
+unrelated hosts different `typeKey`s so one is never updated in place into another.
+Reactor does not manage the hosted control's children. Prefer the factories to the
+`XamlPageElement` / `XamlHostElement` constructors: they record the call site, so
+inspectors can map the hosted control back to your code.
+
 ## Tips
 
 **Think "render the current truth."** In XAML, you often describe relationships

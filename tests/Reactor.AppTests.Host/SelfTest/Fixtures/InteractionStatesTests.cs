@@ -116,4 +116,52 @@ internal static class InteractionStatesTests
             H.Check("InterState_Mount_HandlersRegistered", true);
         }
     }
+
+    // A state's translation used to animate the handoff visual's Offset, which is the layout
+    // position: hover-in moved the element to an absolute (0,-4) and hover-out to (0,0), so an
+    // element below a sibling jumped to its parent's origin and stayed there (#1432).
+    // Reading a composition property returns its static value, not the animated one, so the
+    // checks look at which property has a running animation instead.
+    internal class HoverOutKeepsLayoutOffset(Harness h) : SelfTestFixtureBase(h)
+    {
+        static readonly Vector3 Lift = new(0, -4, 0);
+
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                return VStack(
+                    Border(TextBlock("Above")).Height(40),
+                    Border(TextBlock("Hover me"))
+                        .InteractionStates(states => states.PointerOver(translation: Lift))
+                        .AutomationId("interact-below")
+                );
+            });
+
+            await Harness.Render();
+
+            var target = H.FindControl<Border>(b =>
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(b) == "interact-below");
+            H.Check("InterState_HoverOut_TargetMounted", target is not null);
+            if (target is null) return;
+
+            var visual = ElementCompositionPreview.GetElementVisual(target);
+            var layoutY = visual.Offset.Y;
+
+            Reconciler.SimulatePointerOverForTests(target, isOver: true);
+            H.Check("InterState_HoverIn_AnimatesTranslation", visual.TryGetAnimationController("Translation") is not null);
+            H.Check("InterState_HoverIn_LeavesOffsetAlone", visual.TryGetAnimationController("Offset") is null);
+            await Task.Delay(400);
+            await Harness.Render();
+            H.Check("InterState_HoverIn_OffsetKeptLayoutPosition", visual.Offset.Y >= 40, $"offset={visual.Offset} layoutY={layoutY}");
+
+            Reconciler.SimulatePointerOverForTests(target, isOver: false);
+            H.Check("InterState_HoverOut_AnimatesTranslation", visual.TryGetAnimationController("Translation") is not null);
+            H.Check("InterState_HoverOut_LeavesOffsetAlone", visual.TryGetAnimationController("Offset") is null);
+            await Task.Delay(400);
+            await Harness.Render();
+            H.Check("InterState_HoverOut_OffsetKeptLayoutPosition", visual.Offset.Y >= 40, $"offset={visual.Offset}");
+        }
+    }
 }

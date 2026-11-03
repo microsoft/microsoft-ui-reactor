@@ -27,7 +27,8 @@ public sealed partial class SourceMapInterceptorGenerator
     /// <summary>
     /// Built-in hooks that occupy exactly ONE slot in a <c>RenderContext</c>, on
     /// <c>RenderContext</c> itself, its <c>Component</c> forwarders, and
-    /// <c>ContextExtensions</c>. Anything else Reactor ships (composite hooks such as
+    /// <c>ContextExtensions</c>, plus <c>UseElementRef&lt;T&gt;</c> (a single <c>UseMemo</c>
+    /// on either its <c>RenderContext</c> or <c>Component</c> overload). Anything else Reactor ships (composite hooks such as
     /// <c>UseCommand</c>, <c>UseResource</c>, the window hooks) has a slot count this
     /// generator does not track, so the slot index of every hook AFTER it is reported as
     /// <c>?</c>. <c>HookSlotTableTests</c> in Reactor.Tests runs each of these against a live
@@ -35,7 +36,8 @@ public sealed partial class SourceMapInterceptorGenerator
     /// </summary>
     internal static readonly ImmutableHashSet<string> SingleSlotHooks = ImmutableHashSet.Create(
         StringComparer.Ordinal,
-        "UseState", "UseReducer", "UseRef", "UseEffect", "UseMemo", "UseCallback", "UseContext");
+        "UseState", "UseReducer", "UseRef", "UseEffect", "UseMemo", "UseCallback", "UseContext",
+        "UseElementRef");
 
     private static void InitializeStaticInfo(
         IncrementalGeneratorInitializationContext context,
@@ -100,6 +102,25 @@ public sealed partial class SourceMapInterceptorGenerator
     // ── Declared names ────────────────────────────────────────────────────
 
     /// <summary>
+    /// True when <paramref name="chained"/> is the uninferred <c>T</c> of a fluent modifier
+    /// shaped <c>T M&lt;T&gt;(this T, …) where T : Element</c> — what <c>SettingsCard(...).Width(140)</c>
+    /// reports when the receiver is a wrapper factory this compilation cannot see. Whatever
+    /// <c>T</c> becomes, the call returns its receiver's element.
+    /// </summary>
+    private static bool IsElementPreservingModifier(ITypeSymbol chained, INamedTypeSymbol elementSymbol)
+    {
+        if (chained is not ITypeParameterSymbol { TypeParameterKind: TypeParameterKind.Method, DeclaringMethod: { } declaring } tp)
+            return false;
+        var definition = (declaring.ReducedFrom ?? declaring).OriginalDefinition;
+        if (!definition.IsExtensionMethod || definition.Parameters.Length == 0) return false;
+        var receiver = definition.TypeParameters.FirstOrDefault(p => p.Name == tp.Name);
+        return receiver is not null
+            && SymbolEqualityComparer.Default.Equals(definition.Parameters[0].Type, receiver)
+            && SymbolEqualityComparer.Default.Equals(definition.ReturnType, receiver)
+            && receiver.ConstraintTypes.Any(c => ReturnsElement(c, elementSymbol));
+    }
+
+    /// <summary>
     /// The identifier the value of <paramref name="invocation"/> is assigned to, looking
     /// through fluent modifier chains (<c>TextBlock("x").Bold().Margin(4)</c>), parentheses,
     /// <c>!</c>, casts and the arms of a conditional:
@@ -141,8 +162,11 @@ public sealed partial class SourceMapInterceptorGenerator
                          && outer.Expression == member:
                     // A fluent modifier keeps describing the same element only while it
                     // returns one; `.ToString()` at the end of a chain is not the element.
-                    if (model.GetTypeInfo(outer, ct).Type is not { } chained || !ReturnsElement(chained, elementSymbol))
+                    if (model.GetTypeInfo(outer, ct).Type is not { } chained
+                        || !(ReturnsElement(chained, elementSymbol) || IsElementPreservingModifier(chained, elementSymbol)))
+                    {
                         return null;
+                    }
                     node = outer;
                     continue;
                 case EqualsValueClauseSyntax equals:
@@ -377,7 +401,8 @@ public sealed partial class SourceMapInterceptorGenerator
     /// How many <c>RenderContext</c> slots a hook call takes: 1 for <see cref="SingleSlotHooks"/>
     /// on Reactor's own types; for a custom hook written in this compilation, the sum over
     /// the hooks its body calls (straight-line only); otherwise <c>-1</c> (unknown) — including
-    /// a hook whose body is chosen at run time (abstract / virtual / interface) or absent.
+    /// a hook whose body is chosen at run time (abstract / virtual / interface), absent, or
+    /// declared in another project's source.
     /// </summary>
     private static int SlotCount(
         IMethodSymbol method,
@@ -405,6 +430,10 @@ public sealed partial class SourceMapInterceptorGenerator
         foreach (var declaration in method.DeclaringSyntaxReferences.Select(reference => reference.GetSyntax(ct)))
         {
             if (declaration is BaseMethodDeclarationSyntax { Body: null, ExpressionBody: null }) return -1;
+            // Declared in another project's source (a workspace compilation reference, as
+            // under `dotnet watch`): not readable here, and a command-line build sees no
+            // source for it at all, so it is unknown either way.
+            if (!compilation.ContainsSyntaxTree(declaration.SyntaxTree)) return -1;
             var model = compilation.GetSemanticModel(declaration.SyntaxTree);
             foreach (var call in declaration.DescendantNodes().OfType<InvocationExpressionSyntax>().Where(static c => IsHookCandidate(c)))
             {
@@ -443,9 +472,12 @@ public sealed partial class SourceMapInterceptorGenerator
             && owner.Name == "Component" && owner.IsGenericType)
             return true;
         if (owner.ToDisplayString() == ContextExtensionsMetadataName) return true;
-        // Any other hook compiled into Reactor itself (no source in this compilation).
-        return method.DeclaringSyntaxReferences.IsDefaultOrEmpty
-            && SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, renderContext.ContainingAssembly);
+        // Any other hook declared in Reactor itself. Decided by assembly, not by "has no
+        // source": under `dotnet watch` a project-referenced Reactor arrives as a compilation
+        // reference whose symbols DO carry (foreign) syntax. Only when Reactor is the
+        // compilation being generated are its in-source hooks walked like any custom hook.
+        return SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, renderContext.ContainingAssembly)
+            && !SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, compilation.Assembly);
     }
 
     /// <summary>CLR <c>Type.FullName</c> of a type's open definition: <c>Ns.Outer+Inner`1</c>.</summary>

@@ -49,7 +49,7 @@ internal static class NavigationHostLifecycle
         if (element.CacheMode != Navigation.NavigationCacheMode.Disabled)
         {
             node.Cache = new Navigation.NavigationCache(
-                element.CacheSize, evicted => reconciler.UnmountChild(evicted));
+                element.CacheSize, evicted => Navigation.ConnectedNavigationOperation.UnmountPage(reconciler, evicted));
         }
 
         // Subscribe to route changes so NavigationHost updates even if an intermediate
@@ -154,6 +154,21 @@ internal static class NavigationHostLifecycle
         else
         {
             // Route changed — transition from old page to new page.
+            var transitionGeneration = ++node.TransitionGeneration;
+            // Disposal runs departure callbacks synchronously. Consume this
+            // navigation's options first so a callback's redirect keeps its own
+            // pending state for the next render pass.
+            var pendingMode = node.PendingNavigationMode;
+            var pendingPreviousRoute = node.PendingPreviousRoute;
+            var transitionOverride = handle.PendingTransitionOverride;
+            var connectedKey = handle.PendingConnectedAnimationKey;
+            node.PendingNavigationMode = null;
+            node.PendingPreviousRoute = null;
+            handle.PendingTransitionOverride = null;
+            handle.PendingConnectedAnimationKey = null;
+            var interruptedOperation = node.ConnectedOperation;
+            node.ConnectedOperation = null;
+            interruptedOperation?.Dispose();
             // Lifecycle sequence per spec:
             //   1. onNavigatingFrom (already done by LifecycleGuard before stack mutation)
             //   2-3. Stack mutation (already done)
@@ -166,10 +181,6 @@ internal static class NavigationHostLifecycle
             var oldChildControl = node.CurrentChildControl;
             var oldChildElement = node.CurrentChildElement;
             var previousRoute = node.LastRenderedRoute;
-            var pendingMode = node.PendingNavigationMode;
-            var pendingPreviousRoute = node.PendingPreviousRoute;
-            node.PendingNavigationMode = null;
-            node.PendingPreviousRoute = null;
 
             // Collect lifecycle hooks from old page BEFORE detach/unmount
             var oldHooks = pendingMode is not null
@@ -177,9 +188,14 @@ internal static class NavigationHostLifecycle
                 : null;
 
             // Resolve transition: per-navigation override > host default
-            var transitionOverride = handle.PendingTransitionOverride;
-            handle.PendingTransitionOverride = null;
             var transition = transitionOverride ?? node.HostTransition;
+            // Connected(key) remains a shared-element-only transition. The
+            // independent option composes with any ordinary page transition.
+            if (transition is Navigation.ConnectedTransition connectedTransition)
+            {
+                connectedKey ??= connectedTransition.AnimationKey;
+                transition = Navigation.NavigationTransition.None;
+            }
             var mode = pendingMode ?? Navigation.NavigationMode.Push;
 
             // Resolve new child: check cache first, then mount fresh
@@ -194,6 +210,24 @@ internal static class NavigationHostLifecycle
                 newChildElement = cached.LastElement;
                 node.Cache.Remove(currentRoute);
                 wasCacheHit = true;
+                if (connectedKey is not null && newChildControl is { } cachedControl)
+                {
+                    // Route payloads can change while the page is cached (for
+                    // example selecting a second device for the same detail route).
+                    // Reconcile current props before looking up the shared key.
+                    var refreshedElement = node.RouteMap(currentRoute);
+                    var candidates = Navigation.ConnectedNavigationOperation.Collect(reconciler, cachedControl);
+                    foreach (var candidate in candidates) reconciler.ClaimNavigationConnectedElement(candidate);
+                    try
+                    {
+                        newChildControl = reconciler.Reconcile(newChildElement, refreshedElement, cachedControl, requestRerender);
+                        newChildElement = refreshedElement;
+                    }
+                    finally
+                    {
+                        foreach (var candidate in candidates) reconciler.ReleaseNavigationConnectedElement(candidate);
+                    }
+                }
             }
             else
             {
@@ -219,7 +253,7 @@ internal static class NavigationHostLifecycle
             // Action to finalize the old page (cache or unmount)
             void FinalizeOldPage(UIElement? oldCtrl, Element? oldElem, object? oldRoute)
             {
-                if (oldCtrl is null) return;
+                if (oldCtrl is null || ReferenceEquals(oldCtrl, node.CurrentChildControl)) return;
                 grid.Children.Remove(oldCtrl);
 
                 if (node.Cache is not null && node.CacheMode != Navigation.NavigationCacheMode.Disabled
@@ -236,12 +270,12 @@ internal static class NavigationHostLifecycle
                 }
                 else
                 {
-                    reconciler.UnmountChild(oldCtrl);
+                    Navigation.ConnectedNavigationOperation.UnmountPage(reconciler, oldCtrl);
                 }
             }
 
             // Determine whether to run an animated transition
-            bool useAnimation = transition is not Navigation.SuppressTransition
+            bool useAnimation = (connectedKey is not null || transition is not Navigation.SuppressTransition)
                 && oldChildControl is not null
                 && newChildControl is not null;
 
@@ -264,17 +298,34 @@ internal static class NavigationHostLifecycle
                 var capturedPreviousRoute = pendingPreviousRoute;
                 var capturedOldHooks = oldHooks;
 
-                Navigation.TransitionEngine.RunTransition(
-                    capturedOldControl!, capturedNewControl, transition, capturedMode,
-                    onComplete: () =>
+                void CompleteTransition()
+                {
+                    if (node.TransitionGeneration == transitionGeneration)
                     {
                         node.TransitionInProgress = false;
-                        FinalizeOldPage(capturedOldControl, capturedOldElement, capturedOldRoute);
+                        node.ConnectedOperation = null;
+                    }
+                    FinalizeOldPage(capturedOldControl, capturedOldElement, capturedOldRoute);
 
-                        reconciler.InvokePostNavigationLifecycle(
-                            capturedNewControl, capturedOldHooks,
-                            capturedCurrentRoute, capturedPreviousRoute, capturedMode);
-                    });
+                    // Every departed page receives its completion callback,
+                    // including when a newer navigation interrupts this edge.
+                    // Only the latest destination receives OnNavigatedTo.
+                    reconciler.InvokePostNavigationLifecycle(
+                        node.TransitionGeneration == transitionGeneration ? capturedNewControl : null,
+                        capturedOldHooks,
+                        capturedCurrentRoute, capturedPreviousRoute, capturedMode);
+                }
+
+                if (connectedKey is not null)
+                {
+                    var operation = new Navigation.ConnectedNavigationOperation(
+                        reconciler, capturedOldControl!, capturedNewControl, connectedKey,
+                        transition, capturedMode, CompleteTransition);
+                    node.ConnectedOperation = operation.IsCompleted ? null : operation;
+                }
+                else
+                    Navigation.TransitionEngine.RunTransition(
+                        capturedOldControl!, capturedNewControl, transition, capturedMode, CompleteTransition);
             }
             else
             {
@@ -335,7 +386,8 @@ internal static class NavigationHostLifecycle
             }
             else if (newEl.CacheMode != Navigation.NavigationCacheMode.Disabled && node.Cache is null)
             {
-                node.Cache = new Navigation.NavigationCache(newEl.CacheSize, evicted => reconciler.UnmountChild(evicted));
+                node.Cache = new Navigation.NavigationCache(newEl.CacheSize,
+                    evicted => Navigation.ConnectedNavigationOperation.UnmountPage(reconciler, evicted));
             }
         }
         if (node.Cache is not null)

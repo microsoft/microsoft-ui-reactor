@@ -808,6 +808,11 @@ public static partial class Factories
                 : filtered[i].Grid(row: i, column: 0);
         }
 
+        // Carry the cells' argument slots over to the positioned copy, so a conditional
+        // cell holds its slot like a child of any other container.
+        if (ChildSlots.Get(filtered) is { } slots)
+            ChildSlots.Set(positioned, slots);
+
         return isHorizontal
             ? Grid(sizes, oneStar, positioned)
             : Grid(oneStar, sizes, positioned);
@@ -852,6 +857,17 @@ public static partial class Factories
     }
 
     /// <summary>
+    /// Creates a tab view with a controlled selected index. Disambiguates a plain <see cref="int"/>
+    /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// Any <see cref="int"/> — including <c>default</c>, which is <c>0</c> — selects that index; pass
+    /// <c>(int?)null</c> or <see cref="Optional{T}.Unset"/> to leave the selection uncontrolled.
+    /// </summary>
+    public static TabViewElement TabView(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params TabViewItemData[] tabs)
+    {
+        return new(tabs) { SelectedIndex = Optional<int>.Of(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
     /// Creates a tab view whose selected index is unset when <paramref name="selectedIndex"/> is <c>null</c>.
     /// </summary>
     public static TabViewElement TabView(int? selectedIndex, Action<int>? onSelectedIndexChanged = null, params TabViewItemData[] tabs)
@@ -882,6 +898,17 @@ public static partial class Factories
     }
 
     /// <summary>
+    /// Creates a pivot with a controlled selected index. Disambiguates a plain <see cref="int"/>
+    /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// Any <see cref="int"/> — including <c>default</c>, which is <c>0</c> — selects that index; pass
+    /// <c>(int?)null</c> or <see cref="Optional{T}.Unset"/> to leave the selection uncontrolled.
+    /// </summary>
+    public static PivotElement Pivot(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params PivotItemData[] items)
+    {
+        return new(items) { SelectedIndex = Optional<int>.Of(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
     /// Creates a pivot whose selected index is unset when <paramref name="selectedIndex"/> is <c>null</c>.
     /// </summary>
     public static PivotElement Pivot(int? selectedIndex, Action<int>? onSelectedIndexChanged = null, params PivotItemData[] items)
@@ -908,6 +935,18 @@ public static partial class Factories
     }
 
     /// <summary>
+    /// Creates a list view with a controlled selected index. Disambiguates a plain <see cref="int"/>
+    /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// Any <see cref="int"/> — including <c>default</c>, which is <c>0</c> — selects that index; pass
+    /// <c>(int?)null</c> or <see cref="Optional{T}.Unset"/> to leave the selection uncontrolled.
+    /// </summary>
+    public static ListViewElement ListView(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
+    {
+        _ = V1.Reg<ListViewElement, WinUI.ListView, V1.Handlers.ListViewHandler>.Done;
+        return new(items) { SelectedIndex = Optional<int>.Of(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
     /// Creates a list view whose selected index is unset when <paramref name="selectedIndex"/> is <c>null</c>.
     /// </summary>
     public static ListViewElement ListView(int? selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
@@ -929,6 +968,18 @@ public static partial class Factories
     {
         _ = V1.Reg<GridViewElement, WinUI.GridView, V1.Handlers.GridViewHandler>.Done;
         return new(items);
+    }
+
+    /// <summary>
+    /// Creates a grid view with a controlled selected index. Disambiguates a plain <see cref="int"/>
+    /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// Any <see cref="int"/> — including <c>default</c>, which is <c>0</c> — selects that index; pass
+    /// <c>(int?)null</c> or <see cref="Optional{T}.Unset"/> to leave the selection uncontrolled.
+    /// </summary>
+    public static GridViewElement GridView(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
+    {
+        _ = V1.Reg<GridViewElement, WinUI.GridView, V1.Handlers.GridViewHandler>.Done;
+        return new(items) { SelectedIndex = Optional<int>.Of(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
     }
 
     /// <summary>
@@ -1004,6 +1055,17 @@ public static partial class Factories
     }
 
     /// <summary>
+    /// Creates a flip view with a controlled selected index. Disambiguates a plain <see cref="int"/>
+    /// argument, which converts equally well to <see cref="Nullable{T}"/> and <see cref="Optional{T}"/>.
+    /// Any <see cref="int"/> — including <c>default</c>, which is <c>0</c> — selects that index; pass
+    /// <c>(int?)null</c> or <see cref="Optional{T}.Unset"/> to leave the selection uncontrolled.
+    /// </summary>
+    public static FlipViewElement FlipView(int selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
+    {
+        return new(items) { SelectedIndex = Optional<int>.Of(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
     /// Creates a flip view whose selected index is unset when <paramref name="selectedIndex"/> is <c>null</c>.
     /// </summary>
     public static FlipViewElement FlipView(int? selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
@@ -1018,6 +1080,32 @@ public static partial class Factories
     {
         return new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
     }
+
+    // ── XAML interop ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Embeds an existing XAML <see cref="Page"/> in a <see cref="Frame"/>, navigated to
+    /// <paramref name="pageType"/> with <paramref name="parameter"/>. Re-navigates in place
+    /// when either changes. Equivalent to <c>new XamlPageElement(pageType, parameter)</c>,
+    /// but records the call site for the source map like every other factory.
+    /// </summary>
+    public static Hosting.XamlPageElement XamlPage(Type pageType, object? parameter = null) =>
+        new(pageType, parameter);
+
+    /// <summary>
+    /// Embeds an arbitrary <see cref="FrameworkElement"/> (a UserControl, a custom control)
+    /// created by <paramref name="factory"/> on mount; <paramref name="updater"/> runs after
+    /// creation and on every update. Equivalent to
+    /// <c>new XamlHostElement(factory, updater) { TypeKey = typeKey }</c>, but records the call
+    /// site for the source map like every other factory.
+    /// </summary>
+    /// <param name="factory">Creates the hosted control on mount.</param>
+    /// <param name="updater">Patches the hosted control after creation and on every update.</param>
+    /// <param name="typeKey">Discriminator for in-place updates: two hosts update in place only
+    /// when their keys match, so unrelated hosted controls are not reconciled against each other.</param>
+    public static Hosting.XamlHostElement XamlHost(
+        Func<FrameworkElement> factory, Action<FrameworkElement>? updater = null, string? typeKey = null) =>
+        new(factory, updater) { TypeKey = typeKey };
 
     // ── Dialogs / Overlays ──────────────────────────────────────────
 
@@ -1994,7 +2082,10 @@ public static partial class Factories
     /// <summary>
     /// Flattens one level of <see cref="GroupElement"/> and drops
     /// <see langword="null"/> / <see cref="EmptyElement"/> entries, returning the
-    /// children array stored on a container element.
+    /// children array stored on a container element. When it drops or flattens
+    /// anything it also records, in <see cref="ChildSlots"/>, which argument each
+    /// kept child came from, so a conditional child holds its slot among its
+    /// unkeyed siblings across renders.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -2060,22 +2151,46 @@ public static partial class Factories
         }
 
         var result = new Element[count];
+        // Slot ids for ChildSlots: the argument each kept child came from, so the
+        // reconciler can match a conditional child's siblings across a toggle.
+        long[]? slots = count > 0 ? new long[count] : null;
+        // A map equal to the implicit index ids (only a trailing argument was dropped) is not
+        // registered: it says nothing the reconciler doesn't assume.
+        bool identity = true;
         int idx = 0;
         for (int i = 0; i < children.Length; i++)
         {
             if (children[i] is GroupElement group)
             {
-                foreach (var gc in group.Children)
+                // The group's own map holds each child's path inside the group (its own dropped
+                // arguments, and nested groups), which nests under this argument. A group with no
+                // map uses its children's positions.
+                var groupSlots = slots is null ? null : ChildSlots.Get(group.Children);
+                for (int j = 0; j < group.Children.Length; j++)
                 {
+                    var gc = group.Children[j];
                     if (gc is not null and not EmptyElement)
+                    {
+                        if (slots is not null)
+                        {
+                            slots[idx] = groupSlots is null ? ChildSlots.ForGroupChild(i, j) : ChildSlots.Nest(i, groupSlots[j]);
+                            identity = false;
+                        }
                         result[idx++] = gc;
+                    }
                 }
             }
             else if (children[i] is not null and not EmptyElement)
             {
+                if (slots is not null)
+                {
+                    slots[idx] = ChildSlots.ForIndex(i);
+                    identity &= i == idx;
+                }
                 result[idx++] = children[i]!;
             }
         }
+        if (slots is not null && !identity) ChildSlots.Set(result, slots);
         return result;
     }
 }

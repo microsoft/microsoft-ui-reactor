@@ -267,6 +267,30 @@ public sealed class ReactorSourcePublisherTests
         Assert.Null(ReactorSourcePublisher.WithOwner(ReactorSourcePublisher.Format(element, null), "Old|Root", "New"));
         Assert.False(ReactorSourcePublisher.IsComponentWrapper(old));
     }
+
+    [Theory]
+    [MemberData(nameof(Shapes))]
+    public void WithKey_MatchesFormatOfTheKeyedElement(string shape)
+    {
+        // A forwarded child's value is re-keyed in place: the result must be exactly what Format
+        // gives the same element with that key, and removing the key gives the unkeyed value.
+        var (element, owner) = ShapeOf(shape);
+        var unkeyed = ReactorSourcePublisher.Format(element with { Key = null }, owner);
+        var keyed = ReactorSourcePublisher.Format(element with { Key = "k|7%" }, owner);
+
+        Assert.Equal(keyed, ReactorSourcePublisher.WithKey(unkeyed, "k|7%"));
+        Assert.Equal(keyed, ReactorSourcePublisher.WithKey(ReactorSourcePublisher.Format(element with { Key = "old" }, owner), "k|7%"));
+        Assert.Equal(unkeyed, ReactorSourcePublisher.WithKey(keyed, null));
+        Assert.True(ReactorSourcePublisher.HasKey(keyed, "k|7%"));
+        Assert.False(ReactorSourcePublisher.HasKey(unkeyed, "k|7%"));
+        Assert.True(ReactorSourcePublisher.HasKey(unkeyed, null));
+    }
+
+    [Fact]
+    public void WithKey_GoesBeforeNameAndHooks()
+        => Assert.Equal(
+            "v=1|at=A.cs:1|owner=O|element=Func|mounts=FuncElement|key=k|name=Row|hooks=0:state",
+            ReactorSourcePublisher.WithKey("v=1|at=A.cs:1|owner=O|element=Func|mounts=FuncElement|name=Row|hooks=0:state", "k"));
     [Fact]
     public void Format_UnkeyedSameShape_SharesOneString()
     {

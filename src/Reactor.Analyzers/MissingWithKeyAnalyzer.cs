@@ -141,6 +141,12 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         // to elements (e.g., to a List<Element>).
         if (!IsConsumedAsLayoutChildren(inv)) return;
 
+        // Layout factories also take non-child arguments built with Select, for
+        // example Grid(cols.Select(_ => GridSize.Star()).ToArray(), rows, ...).
+        // Those project to values, not elements, and must not be asked for a key.
+        // Checked after the syntactic gates so only real candidates pay for it.
+        if (!ProjectsReactorElement((ExpressionSyntax)body, ctx)) return;
+
         // Last, and only for the handful of candidates that survived every
         // cheap gate: confirm the callee really is Reactor's factory. Syntax
         // cannot separate a bare `ForEach(items, lambda)` under
@@ -156,6 +162,46 @@ public sealed class MissingWithKeyAnalyzer : DiagnosticAnalyzer
         if (confirmReactorFactory && ProjectsSelfKeyingItems(inv, ctx)) return;
 
         ctx.ReportDiagnostic(Diagnostic.Create(Rule, inv.GetLocation(), projectionName));
+    }
+
+    // True when the projected expression is a Reactor element. The converted
+    // type counts too: ForEach's Func<T, Element> (or an explicit
+    // Select<T, Element>) turns a string or chart builder into an element through
+    // an implicit operator. An unresolved or dynamic type keeps the historical
+    // syntactic verdict, so broken code still reports.
+    static bool ProjectsReactorElement(ExpressionSyntax projection, SyntaxNodeAnalysisContext ctx)
+    {
+        var info = ctx.SemanticModel.GetTypeInfo(projection, ctx.CancellationToken);
+        if (IsUnresolved(info.Type)) return true;
+        return IsReactorElementType(info.Type!, depth: 0)
+            || (!IsUnresolved(info.ConvertedType) && IsReactorElementType(info.ConvertedType!, depth: 0));
+    }
+
+    static bool IsUnresolved(ITypeSymbol? type)
+        => type is null || type.TypeKind == TypeKind.Error || type.TypeKind == TypeKind.Dynamic;
+
+    static bool IsReactorElementType(ITypeSymbol type, int depth)
+    {
+        // A type parameter has no BaseType; `where T : Element` (directly or via
+        // another type parameter) lives in its constraints. The depth bound only
+        // guards against pathological constraint chains.
+        if (type is ITypeParameterSymbol typeParameter)
+        {
+            if (depth > 8) return false;
+            foreach (var constraint in typeParameter.ConstraintTypes)
+            {
+                if (IsReactorElementType(constraint, depth + 1)) return true;
+            }
+            return false;
+        }
+
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            if (current.Name == "Element"
+                && current.ContainingNamespace?.ToDisplayString() == "Microsoft.UI.Reactor.Core")
+                return true;
+        }
+        return false;
     }
 
     // True when the ForEach type argument implements IReactorKeyed, i.e. the

@@ -2298,12 +2298,12 @@ internal static class ReconcilerBigCoverageFixtures
                 .GetMethod("BuildListState", BindingFlags.Static | BindingFlags.NonPublic)
                 ?? throw new MissingMethodException("TemplatedListLifecycle", "BuildListState");
             var listState = (ReactorListState)buildListState.Invoke(null,
-                new object?[] { ListView(rows, r => r.Key, (r, _) => TextBlock(r.Key)) })!;
+                new object?[] { reconciler, new WinXC.ListView(), ListView(rows, r => r.Key, (r, _) => TextBlock(r.Key)) })!;
             var lazyBuild = typeof(global::Microsoft.UI.Reactor.Core.V1Protocol.LazyStackLifecycle)
                 .GetMethod("BuildListState", BindingFlags.Static | BindingFlags.NonPublic)
                 ?? throw new MissingMethodException("LazyStackLifecycle", "BuildListState");
             var lazyState = (ReactorListState)lazyBuild.Invoke(null,
-                new object?[] { LazyVStack(rows, r => r.Key, (r, _) => TextBlock(r.Key)) })!;
+                new object?[] { reconciler, new WinXC.ItemsRepeater(), LazyVStack(rows, r => r.Key, (r, _) => TextBlock(r.Key)) })!;
             H.Check("PrivUpdate_ListStates", listState.Source.Count == 3 && lazyState.Source.Count == 3);
 
             var repeater = new WinXC.ItemsRepeater();

@@ -805,6 +805,7 @@ public static partial class ReactorApp
             configure?.Invoke(window.Host);
             RegisterWindow(window);
             window.MountAndActivate(rootFactory, renderFunc, mountSite);
+            EmitWindowOpened(window);
         }
         catch (Exception)
         {
@@ -938,6 +939,23 @@ public static partial class ReactorApp
         catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] WindowOpened threw: {ex.Message}"); }
     }
 
+    /// <summary>
+    /// <c>ReactorEventSource.WindowOpened</c> for a window whose open completed (its root
+    /// mounted, so the root component type is known). Records the reported type on the
+    /// window so <see cref="UnregisterWindow(ReactorWindow, bool)"/> reports the matching
+    /// <c>WindowClosed</c> — and only for a window whose open was reported. A window the
+    /// first render already closed is no longer registered and is not reported at all.
+    /// </summary>
+    private static void EmitWindowOpened(ReactorWindow window)
+    {
+        if (Array.IndexOf(Volatile.Read(ref _windows), window) < 0) return;
+        var windowType = window.Host.RootComponent is { } root
+            ? Core.Diagnostics.ComponentNames.For(root, element: null)
+            : nameof(ReactorWindow);
+        window.DiagnosticWindowType = windowType;
+        Core.Diagnostics.ReactorEventSource.Log.WindowOpened(windowType, window.Hwnd);
+    }
+
     // Pick the first window eligible to be the application's PrimaryWindow,
     // skipping auxiliary windows (e.g. docking tear-off floating windows) that
     // opted out via ExcludeFromShutdownPolicy. Returns null when only auxiliary
@@ -985,6 +1003,13 @@ public static partial class ReactorApp
             PrimaryWindow = ElectPrimaryWindow(next);
 
         ReactorDisplay.UnregisterWindowMonitor(window);
+
+        // Only a window whose open was reported: a failed open never announced itself.
+        if (window.DiagnosticWindowType is { } windowType)
+        {
+            window.DiagnosticWindowType = null;
+            Core.Diagnostics.ReactorEventSource.Log.WindowClosed(windowType, window.Hwnd);
+        }
 
         try { WindowClosed?.Invoke(null, window); }
         catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] WindowClosed threw: {ex.Message}"); }

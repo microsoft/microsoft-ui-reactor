@@ -73,15 +73,15 @@ every invocation.
 `SemanticModel.GetSymbolInfo` is allocation-heavy and not free even on a
 single call. Don't reach for it inside the syntax callback unless a
 cheaper syntactic check has already filtered the node down to plausible
-candidates. The `MissingWithKeyAnalyzer` is the extreme: it never calls
-`GetSymbolInfo` at all. Its `REACTOR_DSL_001` arm decides with a substring
-check for `.WithKey(` in the lambda body — false positives only fire when
-the layout container also turns out to be a Reactor factory, which the
-analyzer then confirms by name list. Its `REACTOR_DSL_002` arm (non-stable
-keys) goes a step further but stays just as syntactic: it walks the key
+candidates. The `MissingWithKeyAnalyzer` is the extreme: every syntactic
+gate runs before any semantic call. Its `REACTOR_DSL_001` arm decides with
+a substring check for `.WithKey(` in the lambda body and a by-name walk to
+a layout factory, and only the few candidates that survive pay for
+`GetTypeInfo` on the projection and, for `ForEach`, `GetSymbolInfo` on the
+callee. Its `REACTOR_DSL_002` arm (non-stable
+keys) stays syntactic for the key itself: it walks the key
 expression and matches lambda parameter names and well-known per-render
-calls (`Guid.NewGuid()`, `DateTime.Now`, …) by name, still without resolving
-a single symbol.
+calls (`Guid.NewGuid()`, `DateTime.Now`, …) by name.
 <!-- /ai:caveat -->
 
 ## Diagnostic descriptors
@@ -102,6 +102,9 @@ a `.AutomationName(...)` modifier. The walk caps at the enclosing
 statement so a chain that wanders into another statement doesn't
 falsely satisfy the rule. The `HasModifierInChain` helper is the same
 shape every analyzer that needs to look at trailing modifiers uses.
+Only after those cheap syntactic filters does it ask the semantic model
+for the first argument's type: a `string`-typed label (a localized
+resource lookup, a variable) is a text button and needs no extra name.
 
 ## The current diagnostic set
 
@@ -196,11 +199,17 @@ cheap matching done right. It fires on a projection — either
 `items.Select(x => Row(x))` or Reactor's own
 `ForEach(items, x => Row(x))` — where `Row(...)` doesn't end in
 `.WithKey(...)`, and the keyed/unkeyed decision itself is nothing but a
-substring check on `body.ToString()`. The trade-off is conservative: a
-projection to a non-Reactor element type also gets the substring check,
-but the follow-on `IsConsumedAsLayoutChildren` walk filters to
+substring check on `body.ToString()`. The follow-on
+`IsConsumedAsLayoutChildren` walk filters to
 [`VStack`](layout.md) / `HStack` / `FlexRow` / `Grid` / `WrapGrid`
-parents by name.
+parents by name. A name match is not enough on its own, because a layout
+factory also takes values built with `Select`, such as
+`Grid(days.Select(_ => GridSize.Star()).ToArray(), rows, …)`. So the rule
+then resolves the projection's type and skips anything that is not a
+Reactor `Element`. It accepts the type the body converts to as well as its
+own type, so a string or chart builder that `ForEach` converts to an
+element still reports. It also follows `where T : Element` constraints.
+An unresolved type keeps the syntactic verdict.
 
 The two shapes need different amounts of evidence, and that is the
 lesson. `Select` is safe on syntax alone: it is always a member access

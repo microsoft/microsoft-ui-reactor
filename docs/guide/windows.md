@@ -774,6 +774,15 @@ startup callback. The recommended convention is to put a deep-link URI in
 a [`DeepLinkMap<TRoute>`](navigation.md):
 
 ```csharp
+// In a real app, load this list from the app's tracked destinations.
+private static readonly List<JumpListItem> Destinations = [
+    JumpListItem.ForUri("New document", "contoso://new"),
+    JumpListItem.ForUri("Open dashboard", "contoso://dashboard",
+        description: "Jump straight to the dashboard"),
+    new JumpListItem("Report a bug", "contoso://bug",
+        Kind: JumpListItemKind.Custom, GroupCategory: "Help"),
+];
+
 // Unpackaged apps must set an AppUserModelId once, before the first
 // UpdateAsync — the shell has no other stable identity to hang the
 // jump list off. Packaged apps inherit it from the manifest.
@@ -782,14 +791,19 @@ public static async Task PublishAsync()
     JumpList.AppUserModelId = "Contoso.Reactor.Demo";
     JumpList.ShowRecent = true;
 
-    await JumpList.UpdateAsync([
-        JumpListItem.ForUri("New document", "contoso://new"),
-        JumpListItem.ForUri("Open dashboard", "contoso://dashboard",
-            description: "Jump straight to the dashboard"),
-        new JumpListItem("Report a bug", "contoso://bug",
-            Kind: JumpListItemKind.Custom, GroupCategory: "Help"),
-    ]);
+    var removed = await JumpList.GetRemovedArgumentsAsync();
+    PruneDestinations(removed);
+    removed = await JumpList.UpdateAsync(Destinations);
+    // Also process removals made after the query. A successful update
+    // clears the OS records, even for entries absent from this batch.
+    PruneDestinations(removed);
+    // Persist the updated tracked destinations in your app's data store.
+    // New user activity can explicitly add an eligible destination again.
 }
+
+private static void PruneDestinations(IReadOnlyList<string> removed) =>
+    Destinations.RemoveAll(item => item.Kind != JumpListItemKind.Separator
+        && removed.Contains(item.Arguments, StringComparer.Ordinal));
 
 // Entries come back as a plain process re-launch. Resolve the argument
 // string through the same DeepLinkMap the app already uses for routes;
@@ -812,8 +826,9 @@ public static void Start(DeepLinkMap<string> routes) =>
 | --- | --- |
 | `JumpList.AppUserModelId` | Shell identity. Required before the first `UpdateAsync` on unpackaged apps; ignored under MSIX. |
 | `JumpList.ShowRecent` / `ShowFrequent` | Toggle the OS-managed categories. Contents are shell-owned. |
-| `JumpList.UpdateAsync(items)` | Replace the whole list. UI thread only. |
-| `JumpList.ClearAsync()` | Remove the app's entries. |
+| `JumpList.UpdateAsync(items)` | Replace the whole list and return user removals observed in that transaction. UI thread only. |
+| `JumpList.ClearAsync()` | Remove the app's entries and return the transaction's observed removals. |
+| `JumpList.GetRemovedArgumentsAsync()` | Read user-removed entries' argument strings without updating the list. UI thread only. |
 | `JumpListItem.ForUri(...)` | Deep-link entry — `Arguments` is the URI. |
 | `JumpListItem.ForCommandLine(...)` | argv-style entry; escapes each value for `CommandLineToArgvW`. |
 | `JumpListItemKind` | `Task`, `Custom` (needs `GroupCategory`), `Separator` |
@@ -833,6 +848,23 @@ Caveats:
 - `UpdateAsync` validates the whole batch before touching the shell, so one
   bad entry never leaves a half-populated list behind. Non-separator entries
   must have a non-empty `Title`.
+- **Respect user removals.** Before updating, query `GetRemovedArgumentsAsync()`
+  and prune matching arguments from the app's destination tracking data (not the
+  underlying files). Also retain the arguments returned by `UpdateAsync` or
+  `ClearAsync`: they capture removals observed inside that transaction, including
+  removals arriving after the earlier query and removals absent from the new batch.
+  A successful update clears Windows' removal records. Without updating its own
+  tracking data, an app can reintroduce a removed destination on its next refresh.
+  Only offer it again after new user activity; compare arguments ordinally.
+  Results report observations, not commit success; logged shell HRESULT failures
+  keep the existing non-throwing behavior. The return type is now
+  `Task<IReadOnlyList<string>>`; await-only source callers continue to compile,
+  but existing consumers must rebuild their binaries.
+- On unpackaged apps, removal queries cover shell links targeting the current
+  executable, which is the shape this wrapper creates, not `IShellItem` file
+  destinations or links to other executables. Removal filtering applies to
+  custom categories, not the non-removable User Tasks group. The packaged path
+  uses each loaded item's `RemovedByUser` flag, including ungrouped entries.
 
 ## Displays
 

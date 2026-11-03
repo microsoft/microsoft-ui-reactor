@@ -218,12 +218,8 @@ public class ReconcilerCorrectnessTests
     [Fact]
     public void Filter_Preserves_Non_Empty_Elements()
     {
-        var method = typeof(ChildReconciler).GetMethod("Filter",
-            global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static);
-        Assert.NotNull(method);
-
         var elements = new Element[] { new TextBlockElement("A"), new TextBlockElement("B") };
-        var result = (Element[])method!.Invoke(null, [elements])!;
+        var result = ChildReconciler.Filter(elements, out _);
 
         // No filtering needed — should return same array (fast path)
         Assert.Same(elements, result);
@@ -232,9 +228,6 @@ public class ReconcilerCorrectnessTests
     [Fact]
     public void Filter_Removes_Nulls_And_EmptyElements()
     {
-        var method = typeof(ChildReconciler).GetMethod("Filter",
-            global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static);
-
         var elements = new Element[]
         {
             new TextBlockElement("A"),
@@ -243,7 +236,7 @@ public class ReconcilerCorrectnessTests
             new TextBlockElement("B"),
             null!,
         };
-        var result = (Element[])method!.Invoke(null, [elements])!;
+        var result = ChildReconciler.Filter(elements, out _);
 
         Assert.Equal(2, result.Length);
         Assert.Equal("A", ((TextBlockElement)result[0]).Content);
@@ -253,11 +246,8 @@ public class ReconcilerCorrectnessTests
     [Fact]
     public void Filter_All_Empty_Returns_Empty_Array()
     {
-        var method = typeof(ChildReconciler).GetMethod("Filter",
-            global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static);
-
         var elements = new Element[] { null!, new EmptyElement(), null! };
-        var result = (Element[])method!.Invoke(null, [elements])!;
+        var result = ChildReconciler.Filter(elements, out _);
 
         Assert.Empty(result);
     }

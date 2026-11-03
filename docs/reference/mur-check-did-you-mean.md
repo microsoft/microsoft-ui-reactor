@@ -28,7 +28,7 @@ The doc covers what's shipped through **Phase 0 (instrumentation)**, **Phase 1 (
 
 ## 1. The problem in one paragraph
 
-When an AI agent writes a Microsoft.UI.Reactor (Reactor) app, it usually compiles, finds a build error, reads the error, edits the file, and tries again. Each of those round-trips costs time, tokens, and money. The biggest single bucket of that cost on agent-eval runs is the **build/fix loop**: roughly 150K tokens and 2–4 turns per run, mostly spent pasting MSBuild output into context and inferring what to do next. `mur check` is a thin wrapper around `dotnet build` that compresses each diagnostic into one short line. The "did-you-mean" engine in this PR goes further — it tries to answer *the agent's next question* in the same line, so the agent can fix the bug without an extra inspection turn.
+When an AI agent writes a Microsoft.UI.Reactor (Reactor) app, it usually compiles, finds a build error, reads the error, edits the file, and tries again. Each of those round-trips costs time, tokens, and money. The biggest single bucket of that cost on agent-eval runs is the **build/fix loop**: roughly 150K tokens and 2–4 turns per run, mostly spent pasting MSBuild output into context and inferring what to do next. `mur check` is a thin wrapper around `dotnet build` that formats each diagnostic as a single line. The "did-you-mean" engine in this PR goes further — it tries to answer *the agent's next question* in the same line, so the agent can fix the bug without an extra inspection turn.
 
 **Concrete example.** Before:
 
@@ -69,10 +69,11 @@ The combination — experimental API + structurally weak / cross-framework-confu
 `mur check` emits one line per diagnostic. The shape is:
 
 ```
-<file>:<line>:<col>  <SEV>  <CODE>  <short message>[  → <hint>][  // <evidence>]
+<file>:<line>:<col>  <SEV>  <CODE>  <message>[  → <hint>][  // <evidence>]
 ```
 
 - `<SEV>` is `E`, `W`, or `I` (error, warning, info).
+- On stdout, error messages are emitted in full; warning and info messages are truncated to 100 characters.
 - `<hint>` is **either** a static skill-file pointer (when the code is one of the 12 known `REACTOR_*` analyzer IDs) **or** a `→ try: …` suggestion from the new Roslyn-backed engine.
 - `<evidence>` is a short justification so the agent (and the human reader) can sanity-check the hint. Examples: `[factory has Action onClick parameter]`, `[member of TextBlockElement, similarity 0.91]`.
 

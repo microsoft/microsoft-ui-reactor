@@ -394,30 +394,30 @@ internal static class NavigationCoverageFixtures
             H.Check("NavHitTest_StartsVisible", page.IsHitTestVisible);
 
             // First transition suppresses.
-            TransitionEngine.SuppressHitTesting(page);
+            var firstSuppression = TransitionEngine.SuppressHitTesting(page);
             H.Check("NavHitTest_SuppressedOnce", !page.IsHitTestVisible);
 
             // A second, overlapping transition suppresses the same page.
-            TransitionEngine.SuppressHitTesting(page);
+            var secondSuppression = TransitionEngine.SuppressHitTesting(page);
             H.Check("NavHitTest_SuppressedTwice", !page.IsHitTestVisible);
 
             // The first finishing must NOT re-enable it — the second is still running.
-            TransitionEngine.RestoreHitTesting(page);
+            TransitionEngine.RestoreHitTesting(page, firstSuppression);
             H.Check("NavHitTest_StillSuppressedAfterFirstRestore", !page.IsHitTestVisible);
 
             // Only the last one restores. Naive per-transition snapshotting would capture the
             // first transition's `false` here and restore that, leaving the page dead forever.
-            TransitionEngine.RestoreHitTesting(page);
+            TransitionEngine.RestoreHitTesting(page, secondSuppression);
             H.Check("NavHitTest_RestoredAfterLastRestore", page.IsHitTestVisible);
 
             // An unbalanced restore is a no-op rather than flipping the value.
-            TransitionEngine.RestoreHitTesting(page);
+            TransitionEngine.RestoreHitTesting(page, secondSuppression);
             H.Check("NavHitTest_ExtraRestoreIsNoOp", page.IsHitTestVisible);
 
             // An element the app itself made non-hit-testable keeps that value.
             var inert = new Border { IsHitTestVisible = false };
-            TransitionEngine.SuppressHitTesting(inert);
-            TransitionEngine.RestoreHitTesting(inert);
+            var inertSuppression = TransitionEngine.SuppressHitTesting(inert);
+            TransitionEngine.RestoreHitTesting(inert, inertSuppression);
             H.Check("NavHitTest_PreservesAuthorFalse", !inert.IsHitTestVisible);
 
             // An instant-swap navigation must leave both its pages interactive even when an
@@ -425,7 +425,7 @@ internal static class NavigationCoverageFixtures
             // a slide and then straight back to A instantly would otherwise show A while it is
             // still non-hit-testable. Nesting depth is irrelevant here — clear outright.
             var preempted = new Border();
-            TransitionEngine.SuppressHitTesting(preempted);
+            var preemptedSuppression = TransitionEngine.SuppressHitTesting(preempted);
             TransitionEngine.SuppressHitTesting(preempted);
             H.Check("NavHitTest_PreemptedIsSuppressed", !preempted.IsHitTestVisible);
 
@@ -442,8 +442,15 @@ internal static class NavigationCoverageFixtures
 
             // The older transition's completion then finds nothing to restore, rather than
             // flipping the page back to non-hit-testable.
-            TransitionEngine.RestoreHitTesting(preempted);
+            TransitionEngine.RestoreHitTesting(preempted, preemptedSuppression);
             H.Check("NavHitTest_LateRestoreAfterClearIsNoOp", preempted.IsHitTestVisible);
+
+            var replacementSuppression = TransitionEngine.SuppressHitTesting(preempted);
+            H.Check("NavHitTest_ReplacementReallySuppresses", !preempted.IsHitTestVisible);
+            TransitionEngine.RestoreHitTesting(preempted, preemptedSuppression);
+            H.Check("NavHitTest_StaleRestoreCannotConsumeReplacement", !preempted.IsHitTestVisible);
+            TransitionEngine.RestoreHitTesting(preempted, replacementSuppression);
+            H.Check("NavHitTest_ReplacementOwnerRestoresInput", preempted.IsHitTestVisible);
 
             // Same hazard when the preempting navigation is an *animated* non-slide transition:
             // Entrance/DrillIn/Fade never suppress, so without the clear they would inherit an

@@ -90,8 +90,12 @@ public abstract record NavigationTransition
         => new DrillInTransition { Duration = duration };
 
     /// <summary>
-    /// Connected animation transition (stub — shared-element animation is not implemented yet,
-    /// so this currently plays <see cref="Entrance"/>).
+    /// Animates the element marked with the same ConnectedAnimation key on both pages.
+    /// This selects shared-element-only motion. To compose with a page transition,
+    /// use <see cref="NavigateOptions.ConnectedAnimationKey"/> alongside
+    /// <see cref="NavigateOptions.Transition"/>. Missing or ambiguous elements
+    /// fall back to the selected page transition (an instant swap for this method).
+    /// Per-navigation keys are remembered for back/forward navigation within this session.
     /// </summary>
     public static NavigationTransition Connected(string animationKey)
         => new ConnectedTransition { AnimationKey = animationKey };
@@ -149,7 +153,7 @@ public sealed record DrillInTransition : NavigationTransition
     public TimeSpan? Duration { get; init; }
 }
 
-/// <summary>Connected animation transition (stub — full implementation deferred to Phase 6).</summary>
+/// <summary>Shared-element navigation animation, coordinated by NavigationHost.</summary>
 public sealed record ConnectedTransition : NavigationTransition
 {
     public required string AnimationKey { get; init; }

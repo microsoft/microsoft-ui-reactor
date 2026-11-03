@@ -8,7 +8,7 @@ namespace Microsoft.UI.Reactor.Tests.Internal;
 /// <summary>
 /// Exhaustive coverage of <see cref="KeyedListDiff.Apply"/> per spec 042
 /// §4.3 — single insert/remove/move, prefix/suffix lockstep, reverse,
-/// shuffle, duplicate-key + null-key bailout, churn-threshold bailout,
+/// shuffle, duplicate-key bailout, null keys matched by position, churn-threshold bailout,
 /// idempotency, and the survivor-identity invariant WinUI relies on.
 /// </summary>
 public class KeyedListDiffTests
@@ -395,7 +395,7 @@ public class KeyedListDiffTests
     }
 
     [Fact]
-    public void Apply_Null_Key_Triggers_Bailout()
+    public void Apply_Null_Key_IsReported_AndMatchedByPosition()
     {
         var s = Seed("a", "b");
         var logger = new TestLogger();
@@ -407,7 +407,10 @@ public class KeyedListDiffTests
             logger,
             "TestList");
 
-        Assert.True(stats.Bailout);
+        // No reset: the null-keyed item takes its positional placeholder and the diff stays
+        // incremental (here: "b" is removed, the placeholder row is inserted at index 1).
+        Assert.False(stats.Bailout);
+        Assert.Equal(new[] { "a", KeyedListDiff.NullKeySentinel(1) }, s.LastKeys);
         Assert.Contains("null key", string.Join('\n', logger.Messages));
     }
 

@@ -102,12 +102,18 @@ public UIElement? Reconcile(
         // Consume the hot-reload and resource-refresh signals exactly once per
         // top-level pass so every component re-runs Render() even when props/deps
         // are unchanged (and, for a resource refresh, no element is skipped).
-        _resourceRefreshActive = _resourceRefreshArmed;
-        _resourceRefreshArmed = false;
+        bool hostPass = _realizationThemeDepth == 0;
+        var theme = hostPass ? InheritedRequestedTheme(ThemeAnchor) : _realizationTheme;
+        _resourceRefreshActive = hostPass
+            ? _resourceRefreshArmed || theme != _renderedHostTheme
+            : _realizationResourceRefresh;
+        if (hostPass)
+            _resourceRefreshArmed = false;
         _forceFullRenderActive = ForceFullRenderPending || _resourceRefreshActive;
         ForceFullRenderPending = false;
         _hotReloadRetryActive = HotReloadRetryPending;
         HotReloadRetryPending = false;
+        _ambientRequestedTheme = theme;
 
         // Build the dirty-ancestor path. For every component node
         // whose SelfTriggered is true, walk up the realized visual
@@ -120,17 +126,20 @@ public UIElement? Reconcile(
     try {
     try
     {
+        UIElement? result;
         if (newElement is null or EmptyElement)
         {
             if (existingControl is not null)
                 Unmount(existingControl);
-            return null;
+            result = null;
         }
-
-        if (oldElement is null or EmptyElement || existingControl is null)
-            return Mount(newElement, requestRerender);
-
-        return ReconcileImperative(oldElement, newElement, existingControl, requestRerender);
+        else if (oldElement is null or EmptyElement || existingControl is null)
+            result = Mount(newElement, requestRerender);
+        else
+            result = ReconcileImperative(oldElement, newElement, existingControl, requestRerender);
+        if (_debugReconcileDepth == 1 && _realizationThemeDepth == 0)
+            _renderedHostTheme = _ambientRequestedTheme;
+        return result;
 ```
 
 `Reconcile` is short on purpose. The interesting work is in `Mount`,
@@ -257,11 +266,19 @@ internal static void Reconcile(
     Action requestRerender,
     UIElement? parentControl = null)
 {
-    // Filter out nulls and EmptyElements
-    var oldFiltered = Filter(oldChildren);
-    var newFiltered = Filter(newChildren);
+    // Filter out nulls and EmptyElements, keeping each kept child's slot (ChildSlots)
+    var oldFiltered = Filter(oldChildren, out var oldSlots);
+    var newFiltered = Filter(newChildren, out var newSlots);
 
     bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
+
+    // Duplicate sibling keys are matched to the wrong controls by the keyed path below;
+    // report them (deduplicated per panel) rather than let that happen silently. Only when
+    // the key sequence changed: an unchanged one was already checked when it first
+    // appeared, here or at mount, so a stable keyed panel's re-render pays one compare
+    // per child (the prefix walk below does the same) rather than a duplicate scan.
+    if (hasKeys && newFiltered.Length > 1 && !SameKeys(oldFiltered, newFiltered))
+        KeyedListDiff.ReportDuplicateSiblingKeys(newFiltered, reconciler, parentControl);
 
     // Spec 042 §6 — read the active Animations.Animate ambient once
     // per reconcile so insert / move / unmount paths can apply the
@@ -278,6 +295,12 @@ internal static void Reconcile(
 
     if (hasKeys)
         ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
+    // The slot walk also steps past controls an earlier pass left playing an exit
+    // transition in this collection (they inflate its count); the index walk would pair
+    // every later child with the wrong control.
+    else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length)
+        || HoldsExitingControls(children, reconciler))
+        ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
     else
         ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
 }
@@ -293,6 +316,25 @@ update the common prefix in place, mount any extra elements at the
 end, unmount any leftover children. Cost: O(max(old, new)). The catch
 is that an insert at the front re-updates every element rather than
 detecting the shift.
+
+**Conditional children hold their slot.** A position is the child's
+argument slot in the container factory call, not its index in the
+filtered `Children` array. The factories drop `null` and `Empty()`
+arguments and flatten `Group(...)`, but they record which argument
+each kept child came from. When a toggle shifts those slots between
+renders, the unkeyed walk matches children by slot in one merge pass:
+the toggled child mounts or unmounts in place, and every sibling after
+it is updated rather than compared against the child that used to sit
+at its index. So in
+`VStack(Header(), open ? Details() : Empty(), Footer())`, `Footer`
+keeps its state when `Details` closes, as a React sibling of a `null`
+child does. Containers whose children's slots line up by index keep the
+positional walk, unless an exit transition is still playing. Like React,
+a child whose argument slot changes is a different
+child: `a ? X() : Empty(), a ? Empty() : X()` remounts `X`. This
+applies to unkeyed containers only: once any child carries a key, the
+keyed algorithm below matches the unkeyed children positionally, so key
+the siblings of a conditional child there.
 
 **Keyed.** Any child carries a key → run a four-phase algorithm:
 
@@ -318,7 +360,8 @@ property writes in the positional path.
 key at different positions are treated as the same element by the
 keyed child reconciler; two elements with different keys at the same
 position are treated as different elements (force unmount + mount).
-Without a key, identity follows position.
+Without a key, identity follows position — the child's argument slot,
+so a conditional sibling toggling before it does not shift it.
 
 ```csharp
 ForEach(items, item => Card(item).WithKey(item.Id));
@@ -496,11 +539,19 @@ internal static void Reconcile(
     Action requestRerender,
     UIElement? parentControl = null)
 {
-    // Filter out nulls and EmptyElements
-    var oldFiltered = Filter(oldChildren);
-    var newFiltered = Filter(newChildren);
+    // Filter out nulls and EmptyElements, keeping each kept child's slot (ChildSlots)
+    var oldFiltered = Filter(oldChildren, out var oldSlots);
+    var newFiltered = Filter(newChildren, out var newSlots);
 
     bool hasKeys = HasAnyKeys(oldFiltered) || HasAnyKeys(newFiltered);
+
+    // Duplicate sibling keys are matched to the wrong controls by the keyed path below;
+    // report them (deduplicated per panel) rather than let that happen silently. Only when
+    // the key sequence changed: an unchanged one was already checked when it first
+    // appeared, here or at mount, so a stable keyed panel's re-render pays one compare
+    // per child (the prefix walk below does the same) rather than a duplicate scan.
+    if (hasKeys && newFiltered.Length > 1 && !SameKeys(oldFiltered, newFiltered))
+        KeyedListDiff.ReportDuplicateSiblingKeys(newFiltered, reconciler, parentControl);
 
     // Spec 042 §6 — read the active Animations.Animate ambient once
     // per reconcile so insert / move / unmount paths can apply the
@@ -517,6 +568,12 @@ internal static void Reconcile(
 
     if (hasKeys)
         ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, dirty);
+    // The slot walk also steps past controls an earlier pass left playing an exit
+    // transition in this collection (they inflate its count); the index walk would pair
+    // every later child with the wrong control.
+    else if (!ChildSlots.AlignByIndex(oldSlots, oldFiltered.Length, newSlots, newFiltered.Length)
+        || HoldsExitingControls(children, reconciler))
+        ReconcileSlotted(oldFiltered, oldSlots, newFiltered, newSlots, children, reconciler, requestRerender, ambientKind, dirty);
     else
         ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl, dirty);
 }

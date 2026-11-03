@@ -63,8 +63,8 @@ you're triaging:
 
 | Keyword | Bit | Covers |
 |---|---|---|
-| `Errors` | `0x20` | Generic `SwallowedError` / `HResultFailed` / `Warning`, plus `RenderError` |
-| `Hosting` | `0x80` | `WindowOpened`, `WindowClosed`, `WindowDpiChanged`, `BackdropMaterializationFailed` |
+| `Errors` | `0x20` | Generic `SwallowedError` / `HResultFailed` / `Warning`, plus `RenderError` and `CommitError` |
+| `Hosting` | `0x80` | `WindowOpened`, `WindowClosed` (root component type and HWND, for windows opened through `ReactorApp`), `WindowDpiChanged`, `BackdropMaterializationFailed` |
 | `Persistence` | `0x100` | `PersistenceRead`, `PersistenceWrite`, `PersistenceRejected` |
 | `Navigation` | `0x200` | `NavigationRequested`, `NavigationCompleted`, `NavigationCancelled`, cache hit/miss/evict, transitions, deep-link |
 | `Intl` | `0x400` | `IntlMissingKey` |
@@ -94,6 +94,18 @@ three strings:
 
 The message is composed by the framework from developer-authored
 identifiers, never from user data (spec 044 §6.2.1).
+
+`RenderError` names the component whose `Render()` or effects threw. A failure
+outside any component — reconciling the tree into native controls, installing
+it in the host, a post-render host callback — has no owning component; when it
+replaces the host's content with the error screen, Reactor raises `CommitError`
+(EventId 41, `Error`) instead:
+
+| Field | Meaning |
+|---|---|
+| `phase` | `Reconcile` (the commit phase) or `Cleanup` (retiring a replaced root) |
+| `rootComponent` | The host's root component (`FuncElement` for a root render function) |
+| `exceptionType` | Exception type name only; the message is never on the payload |
 
 ### Component render notifications
 

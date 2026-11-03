@@ -105,6 +105,16 @@ public class ReactorEventSourceCoverageTests : IDisposable
     }
 
     [Fact]
+    public void Commit_Error_Emits_PhaseRootAndExceptionType()
+    {
+        ReactorEventSource.Log.CommitError("Reconcile", "MyRoot", "InvalidOperationException");
+        var e = Assert.Single(_listener.Events, e => e.EventName == nameof(ReactorEventSource.CommitError)
+            && e.Payload![1] as string == "MyRoot");
+        Assert.Equal(EventLevel.Error, e.Level);
+        Assert.Equal(new object[] { "Reconcile", "MyRoot", "InvalidOperationException" }, e.Payload!.ToArray());
+    }
+
+    [Fact]
     public void Docking_Layout_Load_Fallback_Emits()
     {
         ReactorEventSource.Log.DockingLayoutLoadFallback("json-parse");

@@ -3,7 +3,7 @@
 // Goal: give an agent a small, structured error stream instead of a 500-line
 // MSBuild dump. For each diagnostic we emit one line:
 //
-//   path:line:col  RXNNN  short message  → hint
+//   path:line:col  RXNNN  message  → hint
 //
 // where `hint` is a skill-file pointer for known Reactor analyzer IDs (so the
 // agent can read 5 lines of guidance instead of grepping the codebase).
@@ -380,7 +380,7 @@ public static class CheckCommand
         public string Format(Suggestion? suggestion = null)
         {
             var hint = HintFor(Code);
-            var msg = Message.Length > 100 ? Message[..97] + "..." : Message;
+            var msg = Severity != "error" && Message.Length > 100 ? Message[..97] + "..." : Message;
             string suffix;
             if (hint is not null)
             {

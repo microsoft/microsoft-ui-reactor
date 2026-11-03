@@ -122,85 +122,39 @@ public sealed record NamedSlot<TElement, TControl>(
     public Func<TControl, UIElement?>? GetCurrentChild { get; init; }
 }
 
-/// <summary>Items host for controls whose items collection is a flat
-/// <c>IList&lt;object&gt;</c> sink the descriptor populates directly —
-/// <c>ListBox</c>, <c>ComboBox.Items</c>, <c>RadioButtons.Items</c>, and
-/// any future control with a non-virtualizing items collection.
+/// <summary>Flat items host for native ItemCollection sinks and third-party
+/// controls that forward an IList&lt;object&gt; to an ItemsRepeater.
+/// Element children are reconciled in place: keys match across insertions and
+/// moves; unkeyed children retain positional identity. Raw items are compared
+/// with ItemEquals (object.Equals by default).
 ///
-/// <para><b>§14 Phase 3-final shape:</b>
-/// <list type="bullet">
-///   <item><see cref="GetItems"/> projects the element's items (typically
-///   <c>string[]</c> or <c>Element[]</c>) as an <c>IReadOnlyList&lt;object&gt;</c>.</item>
-///   <item><see cref="GetCollection"/> resolves the control's WinUI
-///   <c>ItemCollection</c> / <c>IList&lt;object&gt;</c> sink (e.g.
-///   <c>cb =&gt; cb.Items</c>).</item>
-///   <item><see cref="ItemEquals"/> optional per-item equality check used
-///   to short-circuit Mount/Update when the items collection hasn't
-///   structurally changed. Defaults to
-///   <see cref="object.Equals(object,object)"/>.</item>
-/// </list></para>
+/// <para>The live collection is incrementally inserted, removed and reordered,
+/// never reset on update. ObservableCollection moves emit one Move notification.
+/// Property-only and descendant-state updates do not mutate the collection.</para>
 ///
-/// <para><b>Mount semantics:</b> Clear the collection and Add each item
-/// once. Element items are mounted through the reconciler first; string
-/// items are passed through.</para>
-///
-/// <para><b>Update semantics:</b> If <see cref="ItemEquals"/> reports the
-/// collections are positionally equal, no-op. Otherwise rebuild positionally
-/// (clear + add). Spec-042 keyed-reconcile integration for typed templated
-/// lists lands separately with the
-/// <c>ListView&lt;T&gt;</c>/<c>GridView&lt;T&gt;</c> ports in Batch G2.</para></summary>
+/// <para>SetCollection opts interface-typed, writable Items properties into a
+/// stable observable backing collection when their initial list has no change
+/// notifications. Native read-only ItemCollection properties keep their sink.
+/// Removed and terminally unmounted Element children receive real teardown.</para></summary>
 public sealed record ItemsHost<TElement, TControl>(
     Func<TElement, IReadOnlyList<object>> GetItems,
     Func<TControl, IList<object>> GetCollection) : ChildrenStrategy<TElement, TControl>
     where TElement : Element
     where TControl : UIElement
 {
-    /// <summary>Optional per-item equality predicate. When provided, an
-    /// Update that compares equal element-by-element skips the rebuild.
-    /// Default = reference + value equality via
-    /// <see cref="object.Equals(object,object)"/>.</summary>
+    /// <summary>Optional equality predicate for raw (non-Element) items.
+    /// A positionally equal list retains its existing raw instances, matching
+    /// the legacy unchanged-list fast path. On a structural update, matched raw
+    /// value-equal instances are retained; Id-equal objects with changed payloads
+    /// are replaced. Element children follow panel skip rules: dirty paths,
+    /// changed context, theme sensitivity, resource refresh and force-rendering decline the skip.
+    /// Defaults to object.Equals.</summary>
     public Func<object?, object?, bool>? ItemEquals { get; init; }
 
-    /// <summary>
-    /// Called when an Update keeps the item list (same list, or every item equal). Outside a
-    /// resource-refresh pass that is the whole update. During one
-    /// (<see cref="Theme.NotifyResourcesChanged"/>) each <see cref="Element"/> item is still
-    /// reconciled in place, so theme values inside the kept items are re-applied.
-    /// </summary>
-    internal void RefreshKeptItems(
-        Reconciler reconciler, TControl control,
-        IReadOnlyList<object> oldItems, IReadOnlyList<object> newItems, Action requestRerender)
-    {
-        if (!reconciler.ResourceRefreshActive) return;
-        // Which collection entry each item realized (or -1), recorded when the items were
-        // filled. An item that mounted nothing (Empty, a memo of Empty, ...) has no entry.
-        if (oldItems.Count != newItems.Count
-            || control is not FrameworkElement fe
-            || !Reconciler.TryGetReactorState(fe, out var state)
-            || state.ItemsHostEntries is not { } entries
-            || entries.Length != newItems.Count)
-            return;
-        var collection = GetCollection(control);
-        for (int i = 0; i < newItems.Count; i++)
-        {
-            int entry = entries[i];
-            if (entry < 0 || entry >= collection.Count) continue;
-            if (newItems[i] is Element newChild && oldItems[i] is Element oldChild
-                && collection[entry] is UIElement existing)
-            {
-                var updated = reconciler.ReconcileV1Child(oldChild, newChild, existing, requestRerender);
-                if (updated is not null && !ReferenceEquals(updated, existing))
-                    collection[entry] = updated;
-            }
-        }
-    }
-
-    /// <summary>Records which collection entry each item realized (-1 for none).</summary>
-    internal void RememberEntries(TControl control, int[] entries)
-    {
-        if (control is FrameworkElement fe)
-            Reconciler.GetOrCreateReactorState(fe).ItemsHostEntries = entries;
-    }
+    /// <summary>Optional setter for an interface-typed Items property. On mount the
+    /// engine replaces a non-observable backing list with a stable observable
+    /// collection. Read-only native ItemCollection sinks are never replaced.</summary>
+    public Action<TControl, IList<object>>? SetCollection { get; init; }
 }
 
 /// <summary>Placeholder for future ItemsHost options (virtualization mode,
@@ -338,7 +292,7 @@ public sealed record TemplatedItems<TItem, TElement, TControl>(
         var typedEl = (TElement)element;
         var typedCtrl = (TControl)control;
         var items = GetItems(typedEl);
-        reconciler.BindKeyedItemsSource(typedCtrl, items, KeySelector, BuildItemView, requestRerender, isMount);
+        reconciler.BindKeyedItemsSource(typedCtrl, items, KeySelector, BuildItemView, requestRerender, isMount, element);
     }
 }
 

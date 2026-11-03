@@ -439,6 +439,36 @@ public class FlyoutAttachmentTests
             Flyout(Button("t", null), TextBlock("content")) with { IsOpen = true }));
     }
 
+    // FlyoutElement.IsOpen goes through the same deferred ShowAt as CommandBarFlyout (it used
+    // ShowAttachedFlyout, which throws on a Button target), with its own element-typed guard.
+
+    [Fact]
+    public void FlyoutDeferredOpen_Honoured_While_Element_Still_Wants_Open()
+    {
+        Assert.True(OverlayLifecycle.IsFlyoutStillRequestingOpen(
+            Flyout(Button("t", null), TextBlock("content")) with { IsOpen = true }));
+    }
+
+    [Fact]
+    public void FlyoutDeferredOpen_Dropped_When_Element_Rerendered_Closed()
+    {
+        Assert.False(OverlayLifecycle.IsFlyoutStillRequestingOpen(
+            Flyout(Button("t", null), TextBlock("content")) with { IsOpen = false }));
+    }
+
+    [Fact]
+    public void FlyoutDeferredOpen_Dropped_When_Target_Untagged()
+    {
+        Assert.False(OverlayLifecycle.IsFlyoutStillRequestingOpen(null));
+    }
+
+    [Fact]
+    public void FlyoutDeferredOpen_Dropped_When_Target_Now_Hosts_A_Different_Element()
+    {
+        Assert.False(OverlayLifecycle.IsFlyoutStillRequestingOpen(
+            CommandBarFlyout(Button("t", null)) with { IsOpen = true }));
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  ContentDialog deferred-open guard
     //  (OverlayLifecycle.ShouldStartDeferredDialog)

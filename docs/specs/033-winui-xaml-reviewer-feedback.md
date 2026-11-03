@@ -275,6 +275,12 @@ public interface IPersistedStateScope
 }
 ```
 
+The public `TryGet<T>` returns `false` for missing keys, stored nulls, and
+incompatible values. `UsePersisted` uses an internal lookup on the built-in
+scopes to distinguish a missing key from a stored null. On remount, reference
+and nullable value-type state restores that null while the entry remains
+available under the same key in the same scope.
+
 #### Two built-in scopes
 
 - `WindowPersistedScope` — keyed off `ReactorHost`/`ReactorHostControl`
@@ -345,6 +351,8 @@ need this — it's bounded by window lifetime.
 - Window scope: state survives a component unmount/remount within a
   window; *does not* leak across windows.
 - Application scope: state survives across windows.
+- Null reference and nullable value-type state survives unmount/remount;
+  missing keys and incompatible reads remain cache misses.
 - Memory-pressure shrink callback hits LRU eviction, not a `Clear()`.
 - Analyzer fixture for `REACTOR_PERSIST_001`.
 
@@ -354,8 +362,13 @@ need this — it's bounded by window lifetime.
   `ApplicationPersistedScope` + `LruCache<TKey,TValue>` helper).
 - New `src/Reactor/Core/PersistedStateScope.cs`,
   `WindowPersistedScope.cs`.
-- `src/Reactor/Core/RenderContext.cs:344-380` — `UsePersisted` resolves
-  scope at hook entry.
+- [`RenderContext.UsePersisted`](../../src/Reactor/Core/RenderContext.cs)
+  resolves the scope and restores a compatible cached value at hook entry;
+  `PersistedHookState<T>.SaveToCache` saves the latest value on unmount.
+- [`WindowPersistedScope.TryGet<T>`](../../src/Reactor/Core/WindowPersistedScope.cs)
+  and [`ApplicationPersistedScope.TryGet<T>`](../../src/Reactor/Core/PersistedStateCache.cs)
+  keep their non-null public lookup behavior. Their internal `TryGetValue` methods
+  also expose stored nulls for hook restoration.
 - `src/Reactor.Analyzers` — new `REACTOR_PERSIST_001`.
 
 ---

@@ -570,9 +570,9 @@ shrink lands after V1 ships ON by default.
         `!ReferenceEquals(o.QueryIcon, n.QueryIcon)` — descriptor's
         OneWay path can't see the previous element ref). Same visual
         result, slightly more work per pass when QueryIcon is set.
-      - `AutoSuggestBoxDescriptor.Suggestions` transition to empty
-        does not clear the previous `ItemsSource` (mirrors the legacy
-        mount guard's `Length > 0` gate).
+      - **Resolved (#1434):** `AutoSuggestBoxElement.Suggestions` now uses
+        ordinary `OneWay`; empty suggestions clear `ItemsSource` to null,
+        preserving direct `Items.Add(...)` setters on an empty mount.
       - `ComboBoxElement.IsDropDownOpen` is not exposed on the element
         record itself; descriptor doesn't surface it. (Legacy parity.)
 - [x] **Batch 7** — `Viewbox`, `Expander`, `ScrollViewer`, `ScrollView`.

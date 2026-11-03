@@ -42,7 +42,7 @@ namespace Microsoft.UI.Reactor.Wrappers.Generator;
 /// <c>Content</c> slot; <c>RoutedEventHandler</c> fire-and-forget events.</para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
-public sealed class WrapperGenerator : IIncrementalGenerator
+public sealed partial class WrapperGenerator : IIncrementalGenerator
 {
     private const string AttributeFqn = "Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapperAttribute";
     private const string DescriptorAttributeFqn = "Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptorAttribute";
@@ -107,6 +107,8 @@ public sealed class WrapperGenerator : IIncrementalGenerator
             if (model!.Diagnostic is { } d) spc.ReportDiagnostic(d);
             if (model.Source is { } src) spc.AddSource(model.HintName!, SourceText.From(src, Encoding.UTF8));
         });
+
+        InitializeSourceMap(context, models);
     }
 
     private static WrapperModel? BuildModel(GeneratorAttributeSyntaxContext ctx, CancellationToken _, bool descriptorOnly)
@@ -524,6 +526,7 @@ public sealed class WrapperGenerator : IIncrementalGenerator
             contentPropTypeFqn = cps.Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated)
                                         .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
+        var factoryParameters = descriptorOnly ? null : new List<string>();
         var source = Emit(
             ns,
             elementName,
@@ -532,7 +535,13 @@ public sealed class WrapperGenerator : IIncrementalGenerator
             props, contentProp, panelChildren, items, events,
             descriptorOnly, hasManual, contentElementName, registerAssembly,
             panelPerChild, panelAfterAll, lifecycleMount, lifecycleUnmount,
-            contentPropTypeFqn, elementSlots);
+            contentPropTypeFqn, elementSlots, writableItems: CanAssignItems(control), factoryParameters: factoryParameters);
+        var factory = factoryParameters is null
+            ? null
+            : new WrapperFactory(
+                element.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                control.Name,
+                factoryParameters.ToImmutableArray());
 
         var hint = descriptorOnly ? $"{elementName}.Descriptor.g.cs" : $"{elementName}.Wrapper.g.cs";
 
@@ -547,10 +556,10 @@ public sealed class WrapperGenerator : IIncrementalGenerator
                 MultipleControlledProps,
                 element.Locations.FirstOrDefault() ?? Location.None,
                 elementName, controlled.Length, string.Join(", ", controlled));
-            return WrapperModel.OkWithDiagnostic(hint, source, d);
+            return WrapperModel.OkWithDiagnostic(hint, source, d) with { Factory = factory };
         }
 
-        return WrapperModel.Ok(hint, source);
+        return WrapperModel.Ok(hint, source) with { Factory = factory };
     }
 
     private static ImmutableHashSet<string> ToStringSet(TypedConstant tc)
@@ -864,6 +873,21 @@ public sealed class WrapperGenerator : IIncrementalGenerator
         return fqn is "global::System.Object"
             or "object"
             or "global::Microsoft.UI.Xaml.RoutedEventArgs";
+    }
+
+    // Only the interface-typed setter can accept the engine's observable list.
+    // Concrete native ItemCollection properties must keep their existing sink.
+    private static bool CanAssignItems(INamedTypeSymbol control)
+    {
+        for (INamedTypeSymbol? t = control; t is not null; t = t.BaseType)
+            foreach (var p in t.GetMembers("Items").OfType<IPropertySymbol>())
+                if (!p.IsStatic && p.DeclaredAccessibility == Accessibility.Public &&
+                    p.SetMethod is { DeclaredAccessibility: Accessibility.Public, IsInitOnly: false } &&
+                    p.Type is INamedTypeSymbol n &&
+                    n.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IList_T &&
+                    n.TypeArguments[0].SpecialType == SpecialType.System_Object)
+                    return true;
+        return false;
     }
 
     private static bool HasItems(INamedTypeSymbol control)
@@ -1369,7 +1393,9 @@ public sealed class WrapperGenerator : IIncrementalGenerator
         string? lifecycleMount = null,
         string? lifecycleUnmount = null,
         string? contentPropTypeFqn = null,
-        IReadOnlyList<ElementSlotInfo>? elementSlots = null)
+        IReadOnlyList<ElementSlotInfo>? elementSlots = null,
+        bool writableItems = false,
+        List<string>? factoryParameters = null)
     {
         const string Element = "global::Microsoft.UI.Reactor.Core.Element";
         const string Action = "global::System.Action";
@@ -1562,7 +1588,15 @@ public sealed class WrapperGenerator : IIncrementalGenerator
         {
             sb.AppendLine($"            Children = new {itemsHost}(");
             sb.AppendLine("                GetItems:      static e => e.Items,");
-            sb.AppendLine("                GetCollection: static c => c.Items),");
+            if (writableItems)
+            {
+                sb.AppendLine("                GetCollection: static c => c.Items)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                SetCollection = static (c, items) => c.Items = items,");
+                sb.AppendLine("            },");
+            }
+            else
+                sb.AppendLine("                GetCollection: static c => c.Items),");
         }
         sb.AppendLine("            GetSetters = static e => e.Setters,");
         sb.Append("        }");
@@ -1676,8 +1710,8 @@ public sealed class WrapperGenerator : IIncrementalGenerator
                 // ReconcileChild — casting an actual null reference still yields null (no throw).
                 var mountExpr = narrow
                     ? $"({slot.ControlPropTypeFqn})ctx.MountChild(e.{slot.Name})!"
-                    : $"ctx.MountChild(e.{slot.Name})";
-                var nextExpr = narrow ? $"({slot.ControlPropTypeFqn})__next!" : "__next";
+                    : $"ctx.MountChild(e.{slot.Name})!";
+                var nextExpr = narrow ? $"({slot.ControlPropTypeFqn})__next!" : "__next!";
                 sb.AppendLine();
                 sb.AppendLine("        .ImperativeBridged(");
                 sb.AppendLine($"            mount: static (ctx, c, e) => {{ if (e.{slot.Name} is not null) c.{slot.ControlProp} = {mountExpr}; }},");
@@ -1692,7 +1726,15 @@ public sealed class WrapperGenerator : IIncrementalGenerator
                 sb.AppendLine("                }");
                 sb.AppendLine($"                var __existing = c.{slot.ControlProp} as {UIElement};");
                 sb.AppendLine($"                var __next = ctx.ReconcileChild(__o.{slot.Name}, __n.{slot.Name}, __existing);");
-                sb.Append($"                if (!ReferenceEquals(__existing, __next)) c.{slot.ControlProp} = {nextExpr};\n            }})");
+                sb.AppendLine($"                if (!ReferenceEquals(__existing, __next)) c.{slot.ControlProp} = {nextExpr};");
+                sb.AppendLine("            },");
+                sb.AppendLine("            unmount: static (ctx, c) =>");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                if ({Reconciler}.GetElementTag(c) is not {elementName} {{ {slot.Name}: not null }}) return;");
+                sb.AppendLine($"                var __child = c.{slot.ControlProp} as {UIElement};");
+                sb.AppendLine("                if (__child is not null) ctx.Reconciler.UnmountChild(__child);");
+                sb.AppendLine($"                c.{slot.ControlProp} = null!;");
+                sb.Append("            })");
             }
         sb.AppendLine(";");
         sb.AppendLine();
@@ -1782,6 +1824,10 @@ public sealed class WrapperGenerator : IIncrementalGenerator
             assigns.Add("Items = items");
         }
 
+        // The source-map interceptor for this factory restates its parameters
+        // (WrapperGenerator.SourceMap.cs), taken from the very strings declared here.
+        factoryParameters?.AddRange(factoryParams);
+
         sb.AppendLine($"    /// <summary>Creates a <see cref=\"{elementName}\"/> (and guarantees the handler is registered).</summary>");
         // [WrapLifecycle] — wrap the freshly-built element with the imperative
         // mount/unmount wiring via the .OnMount/.OnUnmount modifiers, emitted as
@@ -1866,6 +1912,9 @@ public sealed class WrapperGenerator : IIncrementalGenerator
 
     private sealed record WrapperModel(string? HintName, string? Source, Diagnostic? Diagnostic)
     {
+        /// <summary>The generated factory's shape, when this model emits one.</summary>
+        public WrapperFactory? Factory { get; init; }
+
         public static WrapperModel Ok(string hint, string source) => new(hint, source, null);
         public static WrapperModel OkWithDiagnostic(string hint, string source, Diagnostic d) => new(hint, source, d);
         public static WrapperModel Error(Diagnostic d) => new(null, null, d);

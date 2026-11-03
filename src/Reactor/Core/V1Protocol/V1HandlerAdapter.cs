@@ -163,7 +163,20 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
     {
         var typedControl = (TControl)control;
         var ctx = new UnmountContext(reconciler);
-        _handler.Unmount(ctx, typedControl);
+        // Inside a teardown that must finish (IsolateUnmountCleanupFailures), a throwing unmount
+        // hook still lets the strategy tear the control's children down (a named slot is out of
+        // the engine's generic child walk); the failure is rethrown afterwards for the engine
+        // to report once and to keep the half-torn-down control out of the pool.
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? hookFailure = null;
+        try
+        {
+            _handler.Unmount(ctx, typedControl);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException
+            && reconciler.IsolatesUnmountCleanupFailures)
+        {
+            hookFailure = global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+        }
 
         // Spec 047 §14 — panel-strategy handlers do NOT own child teardown
         // (their Unmount is a no-op; descriptors never recurse into children).
@@ -175,7 +188,10 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
         // early-return before the panel-child recursion and leak child Component
         // effect cleanups.
         if (_handler.ChildrenForUnmount is Panel<TElement, TControl>)
+        {
+            hookFailure?.Throw();
             return V1UnmountDisposition.ContinueDefaultTraversal;
+        }
 
         // Issue #375 — strategy-driven child teardown on Unmount. Without
         // this, a Component nested under a SingleContent / NamedSlots /
@@ -196,7 +212,15 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
         // descriptor exposes the real strategy here for the teardown walk.
         var strategy = _handler.ChildrenForUnmount;
         if (strategy is not null)
-            DispatchChildrenUnmount(strategy, reconciler, typedControl);
+        {
+            if (hookFailure is null)
+                DispatchChildrenUnmount(strategy, reconciler, typedControl);
+            else
+                // The failed hook may have torn some children down already: skip those.
+                reconciler.SkippingIsolatedTornDown((strategy, reconciler, typedControl),
+                    static s => DispatchChildrenUnmount(s.strategy, s.reconciler, s.typedControl));
+        }
+        hookFailure?.Throw();
 
         // Standard handlers always opt into pool collection — matches
         // the pre-Phase-3-completion behavior.
@@ -237,6 +261,10 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
             {
                 var collection = panel.GetCollection(control);
                 var children = panel.GetChildren(element);
+                // An update reports duplicated sibling keys from the keyed reconcile; a panel
+                // that never re-renders is reported here instead.
+                if (children.Count > 1)
+                    Internal.KeyedListDiff.ReportDuplicateSiblingKeys(children, ctx.Reconciler, control);
                 var attached = panel.PerChildAttached;
                 var afterAll = panel.PerChildAttachedAfterAll;
                 var pairs = afterAll is null
@@ -279,40 +307,8 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
                 return;
 
             case ItemsHost<TElement, TControl> ih:
-            {
-                // §14 Phase 3-final: ItemsHost dispatches a flat items
-                // collection rebuild for descriptor authors of items-host
-                // controls (ListBox / ComboBox.Items / RadioButtons items).
-                // Typed templated lists (ListView<T>, GridView<T>, etc.) keep
-                // their own delegate-body handlers in Batch G2 with spec-042
-                // keyed reconciliation; ItemsHost is for the flat case only.
-                //
-                // Note: descriptors hit this only via hand-coded handlers —
-                // DescriptorHandler interleaves ItemsHost dispatch between
-                // RentControl and the prop loop so initial writes like
-                // SelectedIndex see a populated collection.
-                var newItems = ih.GetItems(element);
-                var collection = ih.GetCollection(control);
-                if (collection.Count > 0) collection.Clear();
-                var entries = new int[newItems.Count];
-                for (int i = 0; i < newItems.Count; i++)
-                {
-                    entries[i] = -1;
-                    var item = newItems[i];
-                    if (item is Element childEl)
-                    {
-                        var mounted = ctx.MountChild(childEl);
-                        if (mounted is not null) { collection.Add(mounted); entries[i] = collection.Count - 1; }
-                    }
-                    else
-                    {
-                        collection.Add(item);
-                        entries[i] = collection.Count - 1;
-                    }
-                }
-                ih.RememberEntries(control, entries);
+                ItemsHostReconciliation.Bind(ih, element, control, ctx.Reconciler, ctx.RequestRerender, isMount: true);
                 return;
-            }
         }
     }
 
@@ -387,12 +383,19 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
                     var pairs = afterAll is null
                         ? null
                         : new List<(UIElement, Element)>(newChildren.Length);
+                    // A control still in the collection only to play its exit transition belongs
+                    // to no new child; step past it, or every later child gets its neighbour's
+                    // attached props (a Grid cell's column) and keeps them after the fade.
+                    bool skipExiting = reconciler.HasExitingControls;
                     int panelIdx = 0;
                     for (int i = 0; i < newChildren.Length && panelIdx < collection.Count; i++)
                     {
                         var childEl = newChildren[i];
                         if (childEl is null or EmptyElement) continue;
                         var live = collection[panelIdx];
+                        while (skipExiting && reconciler.IsExiting(live) && ++panelIdx < collection.Count)
+                            live = collection[panelIdx];
+                        if (panelIdx >= collection.Count) break;
                         attached?.Invoke(control, live, childEl);
                         pairs?.Add((live, childEl));
                         panelIdx++;
@@ -432,59 +435,8 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
                 return;
 
             case ItemsHost<TElement, TControl> ih:
-            {
-                // §14 Phase 3-final: positional rebuild gated by ItemEquals.
-                var oldItems = ih.GetItems(oldEl);
-                var newItems = ih.GetItems(newEl);
-                var equals = ih.ItemEquals ?? object.Equals;
-                if (ReferenceEquals(oldItems, newItems))
-                {
-                    ih.RefreshKeptItems(reconciler, control, oldItems, newItems, requestRerender);
-                    return;
-                }
-                if (oldItems.Count == newItems.Count)
-                {
-                    bool same = true;
-                    for (int i = 0; i < newItems.Count; i++)
-                    {
-                        if (!equals(oldItems[i], newItems[i])) { same = false; break; }
-                    }
-                    if (same)
-                    {
-                        ih.RefreshKeptItems(reconciler, control, oldItems, newItems, requestRerender);
-                        return;
-                    }
-                }
-                // Structural change — rebuild. Element items are unmounted via
-                // the existing UnmountChild path (ReconcileV1Child(old, null, ...))
-                // walks them; strings are dropped directly.
-                var collection = ih.GetCollection(control);
-                var ctx = new MountContext(reconciler, requestRerender);
-                for (int i = 0; i < oldItems.Count; i++)
-                {
-                    if (oldItems[i] is Element oldChild)
-                        reconciler.ReconcileV1Child(oldChild, null, null, requestRerender);
-                }
-                if (collection.Count > 0) collection.Clear();
-                var entries = new int[newItems.Count];
-                for (int i = 0; i < newItems.Count; i++)
-                {
-                    entries[i] = -1;
-                    var item = newItems[i];
-                    if (item is Element childEl)
-                    {
-                        var mounted = ctx.MountChild(childEl);
-                        if (mounted is not null) { collection.Add(mounted); entries[i] = collection.Count - 1; }
-                    }
-                    else
-                    {
-                        collection.Add(item);
-                        entries[i] = collection.Count - 1;
-                    }
-                }
-                ih.RememberEntries(control, entries);
+                ItemsHostReconciliation.Bind(ih, newEl, control, reconciler, requestRerender, isMount: false);
                 return;
-            }
         }
     }
 
@@ -565,17 +517,8 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
             }
 
             case ItemsHost<TElement, TControl> ih:
-            {
-                var collection = ih.GetCollection(control);
-                // Walk top-down so we don't surprise an inner unmount with
-                // a sibling already collected by the strategy's flat sink.
-                for (int i = 0; i < collection.Count; i++)
-                {
-                    if (collection[i] is UIElement childCtrl)
-                        reconciler.UnmountChild(childCtrl);
-                }
+                ItemsHostReconciliation.Unbind(ih, control, reconciler);
                 return;
-            }
 
             case Imperative<TElement, TControl>:
                 // The handler owns reconciliation and child identity for
