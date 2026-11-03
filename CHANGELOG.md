@@ -257,6 +257,22 @@ Conventions for contributors:
   `Reconcile` (neither reached the bad path), and the Extending Reactor Controls
   guide shows a `RegisterType` host reconciling its child.
 
+- **Connected animations between navigation pages (issue #1414).**
+  `NavigationTransition.Connected(key)` was a stub that played the Entrance page
+  transition; it now animates the element marked `.ConnectedAnimation(key)` on the
+  outgoing page into the matching element on the incoming page. The new
+  `NavigateOptions.ConnectedAnimationKey` pairs that shared element with any page
+  transition, such as DrillIn or Fade. `NavigationHost` waits briefly for the
+  destination's layout (including cold `ScrollView` content and elements an effect
+  creates), keeps both pages until both animations finish, and animates back on
+  `GoBack()` / `GoForward()`. Cached pages and the active pages of nested hosts take
+  part. A missing, duplicate or unmeasurable target falls back to the selected page
+  transition, and with Windows animations off the navigation completes immediately.
+  Each `NavigationHost` now owns its pages' lifecycle callbacks and guards, so a page
+  that hosts an inner navigation stack no longer runs that stack's callbacks and guards
+  as its own, and a page whose navigation is interrupted still receives
+  `onNavigatedFrom`. See the [navigation guide](docs/guide/navigation.md).
+
 ### Changed
 
 - **Markdown `LinkBuilder` now receives a `MarkdownLink`** (#1436). Breaking: the
@@ -393,11 +409,60 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Border theme-background precedence.** An unset background now releases local
+  values on pooled controls and direct-to-themed updates so a `ThemeRef` style
+  can supply the brush. Removing a record background preserves a still-present
+  concrete `.Background(brush)` modifier. Explicit brushes and native setters
+  retain precedence (spec 050 §6.3).
+
+- **Disposing a host retires its ContentDialogs.** `ReactorHostControl.Dispose()`,
+  `ReactorHost.Dispose()`, and standalone reconciler disposal cancel deferred opens
+  and detach/hide owned dialogs before user cleanup, without raising the element's
+  `OnClosed`. Previously effect cleanup ran but the native modal could remain on
+  screen after its host was disposed. Ordinary tree-disposal cleanup semantics
+  are unchanged (PR #1444). Reentrant disposal during dialog-content mount
+  or update also leaves the dialog detached, and closed dialogs release their
+  `Opened` handler after `ShowAsync` completes.
+
 - Async resource hooks detect dependency changes even when hashes collide and
   treat mismatched cached dependencies as a miss, preventing wrong-query data
-  in `UseResource` and `UseInfiniteResource`
+  in `UseResource` and `UseInfiniteResource`. Cursor-paged resources also use
+  the requested predecessor's cursor after page eviction and cache invalidation
   ([issue #1430](https://github.com/microsoft/microsoft-ui-reactor/issues/1430),
   spec 020 §6.2, §7, §9.2).
+
+- `UsePersisted` restores saved null values for reference and nullable value
+  types instead of falling back to `initialValue` after remount
+  ([issue #1442](https://github.com/microsoft/microsoft-ui-reactor/issues/1442),
+  spec 033 §2).
+
+- **Unmount callbacks survive managed-wrapper collection** (spec 047 §3).
+  `.OnUnmount(...)` now lives in native attached state rather than a weak table
+  keyed by a managed wrapper, so a still-mounted control keeps its teardown callback
+  when WinRT projects a new wrapper before removal. Callbacks stay scoped to the host
+  that registered them. A wrapper that shares its control with an inner target, as
+  `Flyout` does, no longer erases the target's callback when the wrapper has no callback
+  of its own, or drops its own while the target re-registers.
+
+- **Keyed-list diagnostics retain their native control identity** (spec 047 §3).
+  Duplicate/null-key warning counters now share one ledger across managed wrappers
+  for the same control instead of emitting a second entry after wrapper collection.
+
+- **`AutoSuggestBox` clears stale choices when `Suggestions` becomes empty**
+  (spec 047 §6.1). The suggestions binding now clears the native `ItemsSource`
+  instead of skipping empty updates, preserving the existing control and allowing
+  later suggestions to repopulate it. Empty suggestions leave `ItemsSource` null,
+  so direct `Items.Add(...)` setters continue to work on mount.
+
+- **Keyed children keep their own controls while siblings exit** (spec 014, feature 2).
+  Fading controls retained from an earlier render no longer shift keyed prefix, suffix,
+  removal or reorder updates onto another child's control. Live controls keep their
+  identity and the final child order remains correct when the exits complete.
+  Null-mounted Memo slots remain absent from the physical map and insertion
+  anchors, including when exits occur in the same panel or another panel sharing
+  the reconciler. Retained exits and null-mounted slots no longer add control reads to
+  keyed updates that keep the children's order, and an exit playing in one panel no longer
+  adds a read per child to other keyed panels (up to 64 concurrent exits).
 
 - **Wrapped third-party controls now get source-map call sites** (spec 010). A factory
   emitted by `[GenerateReactorWrapper]` (`SettingsCard(...)`, `RadialGauge(...)`) is
@@ -509,10 +574,21 @@ Conventions for contributors:
   exit transition is still playing also no longer pairs its siblings with the wrong control.
 
 - **`ListView<T>` / `GridView<T>` rows are unmounted when WinUI drops their container
-  without recycling it** (issue #1423). Under fast insert / remove churn WinUI could park
-  a container offscreen, unlinked from any item, without raising the recycle
+  without recycling it** (issues #1423, #1440). Under fast insert / remove / move churn WinUI
+  could park a container offscreen, unlinked from any item, without raising the recycle
   `ContainerContentChanging`, so the row's components stayed mounted: their effects never
   cleaned up, and a `ReactorDiagnostics.TrySetState` on one was accepted but never rendered.
+  The update-time sweep also handles an unlinked container whose item was already cleared while
+  its template still holds a live view; its visuals remain available for the native delete
+  transition. WinUI parks it in the layout pass after the update (a row moved twice, or moved
+  out of the realized range, is enough), so after a structural change the reconciler now checks
+  the containers once that layout pass completes. A throwing cleanup no longer stops that sweep:
+  every parked row is torn down and the failure goes to the `RenderErrorHandler` as
+  `Cleanup`. Teardowns that finish regardless of cleanup failures (issue #1291) now also
+  collect a throwing control handler, descriptor `OnUnmount` hook or property unmount callback,
+  decorator or `RegisterType` unmount callback rather than stopping at it: each failure is
+  reported once, in order, the children it did not reach are torn down (once each), and the
+  half-torn-down control is never pooled.
 
 - **`REACTOR_A11Y_001` no longer flags text buttons with a non-literal string label**
   (spec 006 §6.3). `Button(S("Usage_Refresh"), onClick)` — a localized resource lookup,

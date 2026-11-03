@@ -98,7 +98,7 @@ public static partial class ReactorDiagnostics
     // A buffered entry plus what it was recorded for: the ledger it belongs to (per control,
     // or the contextual one) and its dedup key. A repeat updates only its own entry, never
     // another control's entry that happens to share the label, kind and samples. Holding the
-    // ledger does not keep the control alive: the weak table's value never references its key.
+    // ledger does not keep the control alive: it never references the control or its state.
     private sealed class Slot(KeyedListDiagnostic entry, ConcurrentDictionary<long, int> ledger, long dedupKey)
     {
         public KeyedListDiagnostic Entry = entry;
@@ -106,10 +106,7 @@ public static partial class ReactorDiagnostics
         public readonly long DedupKey = dedupKey;
     }
 
-    // (control instance) → set of (kind | sample-set hash) keys already
-    // logged. ConditionalWeakTable so a control that's torn down doesn't
-    // leak its dedup state; a fresh control instance reusing the same type
-    // gets a fresh ledger.
+    // Non-native callers retain weak object identity; native ledgers live on ReactorState.
     private static readonly ConditionalWeakTable<object, ConcurrentDictionary<long, int>> _seenPerControl = new();
 
     // For diff sites that don't have a control instance (unit tests,
@@ -140,7 +137,7 @@ public static partial class ReactorDiagnostics
     }
 
     /// <summary>
-    /// Drop every captured entry and forget per-control dedup state.
+    /// Drop every captured entry and contextual dedup state, retaining per-control counts.
     /// Tests use this between scenarios; production code never needs to call it.
     /// </summary>
     public static void ClearRecentKeyedListWarnings()
@@ -149,11 +146,8 @@ public static partial class ReactorDiagnostics
         {
             _recent.Clear();
             _seenContextual.Clear();
-            // ConditionalWeakTable has no Clear in netstandard2.0 / .NET 10
-            // semantics worth depending on; entries age out naturally with
-            // their control instance. For test isolation, swap the field —
-            // but doing so during a live run would race the producer. Tests
-            // that absolutely need a clean slate construct fresh controls.
+            // Per-control ledgers retain counts for the control's lifetime.
+            // Tests that need a clean slate construct fresh controls.
         }
     }
 
@@ -192,9 +186,7 @@ public static partial class ReactorDiagnostics
         {
             // Dedup ledger lookup — per-control for live instances, global
             // for context-only callers.
-            ConcurrentDictionary<long, int> ledger = controlInstance is not null
-                ? _seenPerControl.GetValue(controlInstance, static _ => new ConcurrentDictionary<long, int>())
-                : _seenContextual;
+            var ledger = LedgerFor(controlInstance);
 
             if (ledger.TryGetValue(dedupKey, out var existingCount))
             {
@@ -265,11 +257,17 @@ public static partial class ReactorDiagnostics
         var label = controlContext ?? "<unknown>";
         long dedupKey = ComputeDedupKey(kind, sampleKeys, label);
 
-        ConcurrentDictionary<long, int> ledger = controlInstance is not null
-            ? _seenPerControl.GetValue(controlInstance, static _ => new ConcurrentDictionary<long, int>())
-            : _seenContextual;
+        var ledger = LedgerFor(controlInstance);
 
         return !ledger.ContainsKey(dedupKey);
+    }
+
+    private static ConcurrentDictionary<long, int> LedgerFor(object? controlInstance)
+    {
+        if (controlInstance is null) return _seenContextual;
+        if (controlInstance is global::Microsoft.UI.Xaml.FrameworkElement control)
+            return Reconciler.GetOrCreateReactorState(control).KeyedDiagnosticLedger ??= new();
+        return _seenPerControl.GetValue(controlInstance, static _ => new ConcurrentDictionary<long, int>());
     }
 
     // Dedup key = kind ⊕ samples-hash ⊕ context-label hash. Folding the

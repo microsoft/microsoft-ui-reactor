@@ -315,6 +315,48 @@ public class ResourceDependencyIdentityTests
         finally { a.RunCleanups(); b.RunCleanups(); returningA.RunCleanups(); }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Infinite_Evicted_Page_Uses_Its_Predecessors_Cursor(bool localPredecessor)
+    {
+        using var cache = new QueryCache();
+        var ctx = new RenderContext();
+        var requests = new List<int>();
+        string? pageOneKey = null;
+        cache.EntryChanged += key =>
+        {
+            if (key.EndsWith("/page:1", StringComparison.Ordinal)) pageOneKey = key;
+        };
+        try
+        {
+            ctx.BeginRender(() => { });
+            var resource = ctx.UseInfiniteResource(FakeFetcher(1000, requests, totalCount: 60),
+                cache, [], new InfiniteResourceOptions(PageSize: 10, MaxLoadedPages: 2),
+                new InlineDispatcher());
+            ctx.FlushEffects();
+            resource.FetchNext();
+
+            if (localPredecessor)
+                Assert.Equal(1000, resource.ItemAt(0)); // Keep page 0 when page 2 evicts page 1.
+            resource.FetchNext();
+            if (!localPredecessor)
+                resource.FetchNext(); // Keep pages 2/3; page 0 is only in the shared cache.
+
+            Assert.NotNull(pageOneKey);
+            Assert.Equal(localPredecessor ? new[] { 0, 10, 20 } : new[] { 0, 10, 20, 30 }, requests);
+            if (localPredecessor) cache.Clear();
+            else cache.Invalidate(pageOneKey);
+
+            resource.EnsureRange(10, 19);
+
+            Assert.Equal(1010, resource.ItemAt(10));
+            Assert.Equal(1019, resource.ItemAt(19));
+            Assert.Equal(localPredecessor ? new[] { 0, 10, 20, 10 } : new[] { 0, 10, 20, 30, 10 }, requests);
+        }
+        finally { ctx.RunCleanups(); }
+    }
+
     [Fact]
     public void Infinite_Reused_Mutated_Array_With_Unchanged_Hash_Refetches_Each_Page()
     {

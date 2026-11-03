@@ -203,6 +203,56 @@ public class PersistedStateTests : IDisposable
     }
 
     [Fact]
+    public void After_Unmount_Remount_UsePersisted_Preserves_Null()
+    {
+        var first = new RenderContext();
+        first.BeginRender(() => { });
+        var (_, set) = first.UsePersisted<int?>("selected-id", 7, PersistedScope.Application);
+        first.FlushEffects();
+        set(null);
+
+        first.BeginRender(() => { });
+        Assert.Null(first.UsePersisted<int?>("selected-id", 7, PersistedScope.Application).Value);
+        first.FlushEffects();
+        first.RunCleanups();
+
+        var second = new RenderContext();
+        second.BeginRender(() => { });
+        Assert.Null(second.UsePersisted<int?>("selected-id", 7, PersistedScope.Application).Value);
+        second.FlushEffects();
+    }
+
+    [Fact]
+    public void After_Unmount_Remount_UsePersisted_Preserves_Null_String()
+    {
+        var first = new RenderContext();
+        first.BeginRender(() => { });
+        var (_, set) = first.UsePersisted<string?>("assignee", "alice", PersistedScope.Application);
+        first.FlushEffects();
+        set(null);
+        first.RunCleanups();
+
+        Assert.False(ApplicationPersistedScope.Default.TryGet<string>("assignee", out _));
+
+        var second = new RenderContext();
+        second.BeginRender(() => { });
+        Assert.Null(second.UsePersisted<string?>("assignee", "alice", PersistedScope.Application).Value);
+        second.FlushEffects();
+    }
+
+    [Fact]
+    public void UsePersisted_Incompatible_Cached_Values_Use_Initial_Value()
+    {
+        PersistedStateCache.Set<string?>("null-key", null);
+        PersistedStateCache.Set("wrong-type", "saved");
+
+        var ctx = new RenderContext();
+        ctx.BeginRender(() => { });
+        Assert.Equal(7, ctx.UsePersisted("null-key", 7).Value);
+        Assert.Equal(9, ctx.UsePersisted("wrong-type", 9).Value);
+    }
+
+    [Fact]
     public void UsePersisted_Same_Key_Different_Components_Shares_State()
     {
         // Component A writes

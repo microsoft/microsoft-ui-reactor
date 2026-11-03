@@ -148,6 +148,11 @@ class ColorModifiersExample : Component
 Tokens are the right default. Reserve hex and `Brush` for brand colors
 that should stay constant regardless of mode.
 
+On `Border`, `with { Background = brush }` overrides `.Background(Theme.X)`.
+Changing that record value back to `null` restores the themed brush, including
+on reused controls, or restores a still-present `.Background(brush)` modifier.
+A native `.Set(b => b.Background = brush)` also overrides the themed brush.
+
 ## Signal colors
 
 Status indicators use semantic signal colors:

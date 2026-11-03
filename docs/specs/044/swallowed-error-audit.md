@@ -104,7 +104,7 @@ row gains a column and the gate rejects it.
 | Verdict | Sites | Shipped | Deferred |
 |---|---|---|---|
 | `Keep` | 34 | 34 | 0 |
-| `Narrow` | 38 | 38 | 0 |
+| `Narrow` | 41 | 41 | 0 |
 | `Propagate` | 7 | 7 | 0 |
 | `TryFinally` | 7 | 7 | 0 |
 | `TryXxx` | 10 | 0 | 10 |
@@ -426,6 +426,13 @@ ledger row sits under the path it describes.
 | Site(s) | Sites | Verdict | Status | Notes |
 |---|---|---|---|---|
 | HICON loaders | 2 | `TryXxx` | deferred | Task 4.8. |
+
+### `src/Reactor/Core/Navigation/ConnectedNavigationOperation.cs` — connected navigation
+
+| Site(s) | Sites | Verdict | Status | Notes |
+|---|---|---|---|---|
+| Preparing and starting the native connected animation | 2 | Narrow | shipped | Only COM and argument failures degrade to ordinary navigation; report through DiagnosticLog so Release/AOT failures remain observable. |
+| Cancelling a native animation during completion or teardown | 1 | Narrow | shipped | COM teardown failures are diagnosed; managed event subscriptions and page claims are still released. |
 
 <!-- ledger:end -->
 

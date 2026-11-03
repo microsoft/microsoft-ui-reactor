@@ -518,11 +518,11 @@ Pages are cached in two places:
 
 1. **`InfiniteResource._pages` dictionary** (`InfiniteResource.cs:79`) — the
    hot-path accessor for `ItemAt`. Subject to LRU eviction when
-   `InfiniteResourceOptions.MaxLoadedPages` is set. Holds `PageSlot(IReadOnlyList<TItem>?)`
-   — `null` items means in-flight placeholder.
+   `InfiniteResourceOptions.MaxLoadedPages` is set. Each `PageSlot` holds the
+   items and that page's `NextCursor`; `null` items means in-flight placeholder.
 2. **`QueryCache` under `{keyPrefix}/page:{n}`** — the warm-path. Survives
    LRU eviction from `_pages`; survives unmount-and-remount inside `CacheTime`.
-   `InfiniteHookState.SubscribeKey` (`UseInfiniteResource.cs:402-406`) ref-counts every page key that
+   `InfiniteHookState.SubscribeKey` (`UseInfiniteResource.cs:407-411`) ref-counts every page key that
    this hook has ever loaded or started loading, so the cache retains them
    until unmount.
 
@@ -532,9 +532,12 @@ A matching hit warm-starts the page into `_pages` via `Resource.ApplyPageResult`
 skipping the network round-trip. Navigation can reuse pages while matching
 cache entries remain available; a hash collision may have replaced them.
 
-For cursor sequencing, `HasLoadedPage` (`UseInfiniteResource.cs:395-400`)
-first checks `Resource.HasLoadedPage` (`InfiniteResource.cs:262-266`), then
-falls back to the dependency-aware cache lookup. A page is locally loaded
+For cursor sequencing, `TryGetPageCursor` (`UseInfiniteResource.cs:394-405`)
+first checks `Resource.TryGetPageCursor` (`InfiniteResource.cs:263-276`), then
+falls back to the dependency-aware cache lookup. Both return the requested
+predecessor's `NextCursor`, not the most recently applied page's cursor; these
+can differ after LRU eviction and cache invalidation. A found null cursor
+signals the end of the list, rather than a missing page. A page is locally loaded
 only when its page-table entry has non-null `Items`; an in-flight placeholder
 does not count. Another query overwriting the shared cache does not unload
 the resource's own pages. Keeping those pages avoids re-fetching and
@@ -580,7 +583,7 @@ So the "in-flight placeholder" is visible to concurrent callers and dedupes
 them — even before the hook's `_pageRequestedCallback` has returned. This is
 why the spec's "one fetch per page" guarantee holds under pull-model race.
 
-The hook's `RequestPage` (`UseInfiniteResource.cs:213`) also dedupes via
+The hook's `RequestPage` (`UseInfiniteResource.cs:233`) also dedupes via
 `_pageCts.ContainsKey(pageIndex)`, giving a belt-and-suspenders defense: the
 resource-side claim prevents duplicate callback invocations, and the
 hook-side check prevents duplicate `CancellationTokenSource` creation.
@@ -588,15 +591,15 @@ hook-side check prevents duplicate `CancellationTokenSource` creation.
 ### 5.4 Cursor-chained page fetch
 
 Page N ≥ 1 needs the cursor returned by page N-1. `RequestPage` handles this
-by recursing (`UseInfiniteResource.cs:239-252`):
+by recursing (`UseInfiniteResource.cs:274-304`; deferred-request handling omitted):
 
 ```csharp
-if (!HasLoadedPage(pageIndex - 1))
+if (!TryGetPageCursor(pageIndex - 1, out cursor))
 {
     RequestPage(pageIndex - 1);
-    if (!HasLoadedPage(pageIndex - 1)) return;   // N-1 still pending — drop
+    if (!TryGetPageCursor(pageIndex - 1, out cursor)) return;
 }
-cursor = Resource.GetCursor<TCursor>();
+if (cursor is null) return; // The predecessor is the last page.
 ```
 
 If the recursive call for N-1 completes synchronously (sync-complete fetcher
@@ -630,7 +633,7 @@ When `_totalCount` is known (page 0 reported it), `lastIndex` is clamped to
 
 ### 5.6 `Refresh` — invalidate and restart
 
-`InfiniteHookState.Refresh` (`UseInfiniteResource.cs:337-364`):
+`InfiniteHookState.Refresh` (`UseInfiniteResource.cs:413-441`):
 
 1. Cancel every in-flight page CTS.
 2. `Cache.Invalidate(key)` for every subscribed page key — fires

@@ -1463,6 +1463,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     {
         if (_disposed) return;
         _disposed = true;
+        // Retire modal UI before user cleanup can throw or pump the dispatcher.
+        _reconciler.RetireContentDialogs();
 
         ThemeResourceListeners.Unregister(this);
         Core.Diagnostics.ReactorHostRegistry.Unregister(this);

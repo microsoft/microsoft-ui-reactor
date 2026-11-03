@@ -1300,7 +1300,7 @@ public abstract record Element
             // new one — otherwise the shallow-skip path strands a stale ElementRef.
             && ReferenceEquals(a.Ref, b.Ref)
             // Imperative teardown slot (.OnUnmount). ApplyModifiers re-registers the
-            // latest OnUnmountAction (Reconciler._onUnmountActions) on every non-skip
+            // latest OnUnmountAction (ReactorState.UnmountAction) on every non-skip
             // Update, and that captured delegate is what fires at unmount — so a
             // changed teardown closure must decline the skip or the stale (first-render)
             // action is stranded and runs in place of the current one. Unlike
@@ -3874,10 +3874,9 @@ public partial record AutoSuggestBoxElement(
     // reused verbatim from the hand-written descriptor (shared AutoSuggestBoxEventPayload).
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<AutoSuggestBoxElement, WinUI.AutoSuggestBox> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<AutoSuggestBoxElement, WinUI.AutoSuggestBox> d)
-        => d.OneWayConditional(
+        => d.OneWay(
                 get:         static e => e.Suggestions,
-                set:         static (c, v) => c.ItemsSource = v,
-                shouldWrite: static e => e.Suggestions.Length > 0)
+                set:         static (c, v) => c.ItemsSource = v.Length > 0 ? v : null)
             .HandCodedControlled<global::Microsoft.UI.Reactor.Core.V1Protocol.AutoSuggestBoxEventPayload, string,
                 global::Windows.Foundation.TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs>>(
                 get:         static e => e.Text,
@@ -4735,10 +4734,11 @@ public partial record ScrollViewElement(Element Child) : Element
 /// <summary>Border element — a single-child container with brush/corner/thickness chrome.</summary>
 // Spec 058 §15 (P5.18) — Child is the single-content slot ([WrapContent]); CornerRadius and
 // BorderThickness are ergonomic double scalars converted to the WinUI structs ([WrapConvert]);
-// Background/BorderBrush auto-map (Brush is a supported reference). No events. Replaces the
-// hand-coded BorderHandler + the parallel hand-written BorderDescriptor.
+// BorderBrush auto-maps; unset Background restores a concrete modifier or releases local
+// precedence to theme styles. No events. Replaces BorderHandler + BorderDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.Border))]
 [global::Microsoft.UI.Reactor.Wrappers.WrapContent("Child")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Background")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapConvert("CornerRadius")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapConvert("BorderThickness")]
 public partial record BorderElement(Element? Child) : Element
@@ -4748,6 +4748,14 @@ public partial record BorderElement(Element? Child) : Element
     public Brush? BorderBrush { get; init; }
     public double? BorderThickness { get; init; }
     internal Action<WinUI.Border>[] Setters { get; init; } = [];
+
+    private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<BorderElement, WinUI.Border> Customize(
+        global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<BorderElement, WinUI.Border> d)
+        => d.OneWay<Brush>(
+            // ApplyModifiers skips unchanged brushes, so restore its value when the record releases it.
+            static e => (e.Background ?? e.Modifiers?.Background) is { } brush ? brush : Optional<Brush>.Unset,
+            static (border, brush) => border.Background = brush,
+            WinUI.Border.BackgroundProperty);
 }
 
 /// <summary>Expander element. <c>IsExpanded</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its expansion state until explicitly set.</summary>
@@ -5796,7 +5804,9 @@ public partial record FlipViewElement(
 /// content is reconciled live while the dialog is open.
 /// OnClosed reports how the dialog was dismissed — the button the user chose,
 /// or <see cref="ContentDialogResult.None"/> for a declared IsOpen = false. It
-/// does not fire when the dialog is torn down because its owner unmounted.
+/// does not fire when the dialog is torn down because its owner unmounted or
+/// its host/reconciler was disposed. Disposal also cancels deferred opens without
+/// OnOpened. State reset needed during teardown belongs in effect cleanup, not OnClosed.
 /// </summary>
 public record ContentDialogElement(
     string Title,

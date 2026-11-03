@@ -77,7 +77,7 @@ public class PerfDiffSkipPathTests
     {
         // FLAGSHIP-1 lets a stable .OnTapped element take the skip path. The
         // imperative .OnUnmount teardown is re-registered ONLY on the non-skip Update
-        // path (the reconciler's _onUnmountActions), and the latest registered
+        // path (the control's ReactorState.UnmountAction), and the latest registered
         // delegate is what fires at unmount — so a *changed* teardown closure must
         // decline the skip, or the stale (first-render) action is stranded and runs
         // in place of the current one. Pre-FLAGSHIP-1 this was masked because any

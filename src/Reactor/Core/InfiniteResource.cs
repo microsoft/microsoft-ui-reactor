@@ -259,10 +259,19 @@ public sealed class InfiniteResource<TItem>
         lock (_lock) MarkPageInFlightLocked(pageIndex);
     }
 
-    internal bool HasLoadedPage(int pageIndex)
+    /// <summary>Gets a retained page's next cursor, including null at the end of the list.</summary>
+    internal bool TryGetPageCursor<TCursor>(int pageIndex, out TCursor? cursor)
     {
         lock (_lock)
-            return _pages.TryGetValue(pageIndex, out var slot) && slot.Items is not null;
+        {
+            if (_pages.TryGetValue(pageIndex, out var slot) && slot.Items is not null)
+            {
+                cursor = slot.NextCursor is TCursor c ? c : default;
+                return true;
+            }
+            cursor = default;
+            return false;
+        }
     }
 
     private void MarkPageInFlightLocked(int pageIndex)
@@ -284,7 +293,8 @@ public sealed class InfiniteResource<TItem>
     {
         lock (_lock)
         {
-            _pages[pageIndex] = new PageSlot(page.Items);
+            object? nextCursor = page.NextCursor;
+            _pages[pageIndex] = new PageSlot(page.Items, nextCursor);
             TouchLru(pageIndex);
             _loadedItemCount += page.Items.Count;
             int endExclusive = pageIndex * _options.PageSize + page.Items.Count;
@@ -292,8 +302,8 @@ public sealed class InfiniteResource<TItem>
 
             if (page.TotalCount is { } tc) _totalCount = tc;
 
-            // The cursor we cache is always the most recent one — that's what FetchNext uses.
-            _nextCursor = page.NextCursor;
+            // Preserve the last-applied cursor for the resource's overall end-of-list state.
+            _nextCursor = nextCursor;
             bool atEnd = page.NextCursor is null;
 
             _loadState = atEnd ? LoadState.EndOfList.Instance : LoadState.Idle.Instance;
@@ -449,7 +459,7 @@ public sealed class InfiniteResource<TItem>
         Items = new ItemsView<TItem>(backing);
     }
 
-    private readonly record struct PageSlot(IReadOnlyList<TItem>? Items);
+    private readonly record struct PageSlot(IReadOnlyList<TItem>? Items, object? NextCursor = null);
 }
 
 /// <summary>Thin <see cref="IReadOnlyList{T}"/> wrapper so <c>Items</c> swaps atomically.</summary>

@@ -738,8 +738,8 @@ public sealed partial class Reconciler
 
     /// <summary>
     /// Unmounts the item view a templated items control's container hosts. The container's
-    /// element tag marks the view as live: an orphan sweep
-    /// (<see cref="RefreshRealizedContainers"/>) unmounts a view but leaves its visuals in
+    /// element tag marks the view as live: a sweep of parked containers
+    /// (<see cref="SweepParkedContainers"/>) unmounts a view but leaves its visuals in
     /// place for a delete transition, and clears the tag so no path unmounts it twice.
     /// </summary>
     internal void UnmountItemView(ContentControl cc, bool clearContent)

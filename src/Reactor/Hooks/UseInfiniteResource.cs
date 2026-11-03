@@ -271,12 +271,12 @@ internal sealed class InfiniteHookState<TItem, TCursor> : IDisposable
         }
         else
         {
-            if (!HasLoadedPage(pageIndex - 1))
+            if (!TryGetPageCursor(pageIndex - 1, out cursor))
             {
                 RequestPage(pageIndex - 1);
                 // If the recursive call completed synchronously (sync-complete fetcher, cache
                 // hit), the previous page is now loaded — fall through and request this one.
-                if (!HasLoadedPage(pageIndex - 1))
+                if (!TryGetPageCursor(pageIndex - 1, out cursor))
                 {
                     // The prior page isn't loaded yet. Remember we want this one; we'll retry
                     // from CommitSuccess when the chain advances. Also clear the claim on
@@ -296,7 +296,6 @@ internal sealed class InfiniteHookState<TItem, TCursor> : IDisposable
                     return;
                 }
             }
-            cursor = Resource.GetCursor<TCursor>();
             if (cursor is null)
             {
                 // No cursor means we're already at the end — don't fetch.
@@ -371,7 +370,7 @@ internal sealed class InfiniteHookState<TItem, TCursor> : IDisposable
         if (_deferredRequests.Count > 0)
         {
             int next = _deferredRequests.Min;
-            if (HasLoadedPage(next - 1))
+            if (TryGetPageCursor(next - 1, out _))
             {
                 _deferredRequests.Remove(next);
                 RequestPage(next);
@@ -392,11 +391,17 @@ internal sealed class InfiniteHookState<TItem, TCursor> : IDisposable
         _rerender();
     }
 
-    private bool HasLoadedPage(int pageIndex)
+    private bool TryGetPageCursor(int pageIndex, out TCursor? cursor)
     {
         // A colliding cache write does not unload pages retained by this resource.
-        return Resource.HasLoadedPage(pageIndex)
-            || _cache.TryGetResource<Page<TItem, TCursor>>(CacheKeyFor(pageIndex), LastDeps, out _);
+        if (Resource.TryGetPageCursor(pageIndex, out cursor)) return true;
+        if (_cache.TryGetResource<Page<TItem, TCursor>>(CacheKeyFor(pageIndex), LastDeps, out var entry))
+        {
+            cursor = entry.Value.NextCursor;
+            return true;
+        }
+        cursor = default;
+        return false;
     }
 
     private void SubscribeKey(string key)
