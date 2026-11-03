@@ -1529,13 +1529,17 @@ internal class ReactorSource_LiveDialogPublished(Harness h) : SelfTestFixtureBas
                     var openValue = kept is null ? null : ReactorDiagnostics.GetSource(kept);
                     var openSite = kept is null ? null : Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(kept);
                     shownDialog?.Hide();
-                    await Harness.Render(50);
-                    await Harness.Render(50);
+                    // Hide starts an asynchronous close transition. Its ShowAsync
+                    // continuation owns attribution cleanup, so two fixed frame
+                    // delays can observe a dialog that has not finished closing.
+                    var attributionCleared = await Harness.WaitFor(() =>
+                        kept is not null && ReactorDiagnostics.GetSource(kept) is null);
                     var closedValue = kept is null ? null : ReactorDiagnostics.GetSource(kept);
                     var closedSite = kept is null ? null : Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(kept);
                     Console.WriteLine($"# kept dialog ({title}): open {openValue} @ {openSite}; closed {closedValue} @ {closedSite}");
                     H.Check($"ReactorSource_LiveDialog_{title}_ClosedDialogStopsDescribingItsElement",
                         openValue?.Contains("|element=ContentDialog", StringComparison.Ordinal) == true
+                        && attributionCleared
                         && closedValue is null
                         && (openSite is null || closedSite is null));
                     keptHost.Dispose();

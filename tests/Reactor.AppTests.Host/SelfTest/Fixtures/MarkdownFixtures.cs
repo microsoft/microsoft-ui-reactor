@@ -771,38 +771,36 @@ internal static class MarkdownFixtures
     {
         public override async Task RunAsync()
         {
-            int calls = 0;
+            MarkdownLink? received = null;
             Uri? clickedUri = null;
             var host = H.CreateHost();
             host.Mount(ctx => ScrollView(
                 Microsoft.UI.Reactor.Advanced.Factories.Markdown(
-                    "Before <https://example.com/review> after.", new MarkdownOptions
+                    "Read [the **review** notes](https://example.com/review) first.", new MarkdownOptions
                     {
-                        ParserFlags = MarkdownParserFlags.Tables | MarkdownParserFlags.NoHtml,
                         UnifiedRichText = true,
-                        LinkBuilder = (label, uri) =>
+                        LinkBuilder = link =>
                         {
-                            calls++;
-                            if (label is not [RichTextBlockElement labelBlock])
-                                throw new InvalidOperationException("Expected one rich-text link label.");
-                            return Button(labelBlock with { IsTextSelectionEnabled = false }, () => clickedUri = uri)
-                                .AutomationName("Open reviewed link");
+                            received = link;
+                            var label = link.Label ?? throw new InvalidOperationException("Expected a rich-text label.");
+                            return Button(label with { IsTextSelectionEnabled = false }, () => clickedUri = link.Uri)
+                                .AutomationName(link.Text)
+                                .ToolTip(link.Uri.ToString());
                         },
                     })));
 
             await Harness.Render();
 
-            H.Check("Md_CustomLink_CallbackInvoked", calls > 0);
+            H.Check("Md_CustomLink_PlainText", received?.Text == "the review notes");
             var button = H.FindControl<Button>(control =>
-                Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(control) == "Open reviewed link");
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(control) == "the review notes");
             H.Check("Md_CustomLink_ButtonMounted", button is not null);
             var nativeLabel = button?.Content as RichTextBlock;
-            H.Check("Md_CustomLink_ProvidedLabelMounted", nativeLabel is not null);
-            H.Check("Md_CustomLink_LabelSelectionDisabled", nativeLabel?.IsTextSelectionEnabled == false);
-            H.Check("Md_CustomLink_LabelTextPreserved", nativeLabel is not null
-                && string.Concat(nativeLabel.Blocks.OfType<Paragraph>()
+            H.Check("Md_CustomLink_FormattedLabelMounted", nativeLabel is not null
+                && nativeLabel.Blocks.OfType<Paragraph>()
                     .SelectMany(paragraph => paragraph.Inlines.OfType<Run>())
-                    .Select(run => run.Text)) == "https://example.com/review");
+                    .Any(run => run.Text == "review" && run.FontWeight.Weight == Microsoft.UI.Text.FontWeights.Bold.Weight));
+            H.Check("Md_CustomLink_LabelSelectionDisabled", nativeLabel?.IsTextSelectionEnabled == false);
             var inlines = H.FindAllControls<RichTextBlock>(_ => true)
                 .SelectMany(block => block.Blocks.OfType<Paragraph>())
                 .SelectMany(paragraph => paragraph.Inlines)
@@ -813,7 +811,7 @@ internal static class MarkdownFixtures
 
             if (button is null) return;
             var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(button);
-            H.Check("Md_CustomLink_AccessibleName", peer.GetName() == "Open reviewed link");
+            H.Check("Md_CustomLink_AccessibleNameFromText", peer.GetName() == "the review notes");
             ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
                 peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
             H.Check("Md_CustomLink_ClickUsesValidatedTarget",

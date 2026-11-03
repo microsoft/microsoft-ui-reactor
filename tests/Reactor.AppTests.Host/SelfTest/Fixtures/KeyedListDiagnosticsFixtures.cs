@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Core.V1Protocol;
@@ -158,6 +159,19 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             H.CreateHost().Mount(new ItemsViewKeysProbe());
             await Harness.Render();
             await Harness.Render(100);
+            // WinRT WeakReference can reproject a live native object, so track managed identity
+            // with a weak table instead. Capture outside this async frame to avoid rooting it.
+            var ivWrappers = CaptureItemsViewWrapper(H);
+            await Task.Run(static () =>
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            });
+            var ivAfterGc = H.FindControl<WinUI.ItemsView>(_ => true);
+            H.Check("KeyedListDiagnostics_ItemsViewWrapperCollected",
+                ivAfterGc is not null && !ivWrappers.TryGetValue(ivAfterGc, out _),
+                "the native ItemsView must remain mounted with a fresh managed wrapper");
             H.ClickButton("iv-bump");
             await Harness.Render();
             await Harness.Render(100);
@@ -165,10 +179,12 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             Console.WriteLine("# items view: " + string.Join("; ", ivWarnings.Select(w => Describe(w) + $" x{w.Count}")));
             var ivDup = ivWarnings.Where(w => w.Kind == KeyedListDiagnosticKind.DuplicateKey).ToList();
             H.Check("KeyedListDiagnostics_ItemsViewDuplicateKeys_OneEntryAcrossMountAndUpdate",
-                ivDup.Count == 1 && ivDup[0].Count == 2 && ivDup[0].SampleKeys.SequenceEqual(["dup"]));
+                ivDup.Count == 1 && ivDup[0].Count == 2 && ivDup[0].SampleKeys.SequenceEqual(["dup"]),
+                string.Join("; ", ivWarnings.Select(w => Describe(w) + $" x{w.Count}")));
             H.Check("KeyedListDiagnostics_ItemsViewNullKeyReported",
                 ivWarnings.Count(w => w.Kind == KeyedListDiagnosticKind.NullKey) == 1
-                && ivWarnings.First(w => w.Kind == KeyedListDiagnosticKind.NullKey).Count == 2);
+                && ivWarnings.First(w => w.Kind == KeyedListDiagnosticKind.NullKey).Count == 2,
+                string.Join("; ", ivWarnings.Select(w => Describe(w) + $" x{w.Count}")));
             H.SetContent(null);
 
             // ── FlipView pages stay positional ───────────────────────────
@@ -285,6 +301,16 @@ internal class KeyedListDiagnostics_RowsKeysAndWarnings(Harness h) : SelfTestFix
             ReactorSourcePublisher.IsEnabled = previous;
             ReactorDiagnostics.ClearRecentKeyedListWarnings();
         }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static ConditionalWeakTable<WinUI.ItemsView, object> CaptureItemsViewWrapper(Harness h)
+    {
+        var control = h.FindControl<WinUI.ItemsView>(_ => true)
+            ?? throw new InvalidOperationException("Expected ItemsView in visual tree.");
+        var wrappers = new ConditionalWeakTable<WinUI.ItemsView, object>();
+        wrappers.Add(control, new object());
+        return wrappers;
     }
 
     private async Task CheckForwardedFlipPage(bool publishPass)

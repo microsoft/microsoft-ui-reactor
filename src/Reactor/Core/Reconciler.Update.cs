@@ -1316,8 +1316,8 @@ public sealed partial class Reconciler
             // ReconcileV1Child updates in place when it can and remounts otherwise, and either way
             // unmounts a control it replaced (e.g. a same-key Memo whose output changed shape
             // during a resource refresh), so the old item's effects and refs are cleaned up.
-            // Untagged content was already unmounted by the orphan sweep: replace it, never
-            // unmount it again.
+            // Untagged content was already unmounted by an orphan or parked-container sweep: replace it,
+            // never unmount it again.
             var priorKey = cc.Content is FrameworkElement priorFe ? GetElementTag(priorFe)?.Key : null;
             var next = ReconcileV1Child(oldItemElement, newItemElement,
                 oldItemElement is null ? null : cc.Content as UIElement, requestRerender);
@@ -1331,12 +1331,142 @@ public sealed partial class Reconciler
             // a renamed item would keep announcing the previous row's name.
             PropagateItemAutomationName(container, cc.Content as UIElement);
         }
+
+        // The layout pass a structural change triggers can park a container offscreen without
+        // raising its recycle ContainerContentChanging, so check the containers once it completes.
+        if (GetListState(listViewBase) is { StructureChanged: true } list)
+        {
+            list.StructureChanged = false;
+            SchedulePostLayoutSweep(listViewBase, list);
+        }
+    }
+
+    /// <summary>
+    /// Runs <see cref="SweepParkedContainers"/> once, after the next layout pass that lays the
+    /// list out.
+    /// </summary>
+    private void SchedulePostLayoutSweep(WinUI.ListViewBase listViewBase, Internal.ReactorListState list)
+    {
+        if (list.PostLayoutSweep is not null || list.ShownWatch is not null || list.LoadedWatch is not null) return;
+        list.PostLayoutSweep = (_, _) => SweepParkedContainers(listViewBase, list);
+        listViewBase.LayoutUpdated += list.PostLayoutSweep;
+    }
+
+    /// <summary>
+    /// Unmounts the item view of every container a completed layout pass left unlinked from
+    /// any item (<c>IndexFromContainer</c> is -1). WinUI normally raises a recycle
+    /// <c>ContainerContentChanging</c> for such a container, but under insert / remove / move
+    /// churn it can park one offscreen in the items panel without ever doing so — a row moved
+    /// twice, a row realized into a second container, a row moved out of the realized range —
+    /// which left the row's components mounted: effects never cleaned up, and diagnostics
+    /// writes were accepted but never rendered, because no pass reaches a container the list
+    /// no longer shows. Only the components are torn down — the visuals stay, so a delete
+    /// transition still fades the row out. The check has to wait for the layout pass because
+    /// that is when WinUI parks the container: when the update that moved the row runs, the
+    /// container is still linked to it. No pass lays a list out while it is out of the tree (a
+    /// TabView tab not selected) or while it or an ancestor is collapsed, so a sweep that finds
+    /// it so waits, on the list's own <c>Loaded</c> or <c>EffectiveViewportChanged</c> rather than
+    /// on every layout pass in the window, and then sweeps after the next layout pass: a list
+    /// inserted into the tree is laid out, and its container parked, before <c>Loaded</c>.
+    /// </summary>
+    private void SweepParkedContainers(WinUI.ListViewBase listViewBase, Internal.ReactorListState list)
+    {
+        listViewBase.LayoutUpdated -= list.PostLayoutSweep;
+        list.PostLayoutSweep = null;
+        if (!ReferenceEquals(GetListState(listViewBase), list) || listViewBase.ItemsPanelRoot is not { } panel) return;
+        if (!listViewBase.IsLoaded)
+        {
+            RoutedEventHandler loadedWatch = null!;
+            loadedWatch = (_, _) =>
+            {
+                listViewBase.Loaded -= loadedWatch;
+                list.LoadedWatch = null;
+                SchedulePostLayoutSweep(listViewBase, list);
+            };
+            list.LoadedWatch = loadedWatch;
+            listViewBase.Loaded += loadedWatch;
+            return;
+        }
+        if (IsCollapsedInTree(listViewBase))
+        {
+            global::Windows.Foundation.TypedEventHandler<FrameworkElement, EffectiveViewportChangedEventArgs> shownWatch = null!;
+            shownWatch = (_, _) =>
+            {
+                listViewBase.EffectiveViewportChanged -= shownWatch;
+                list.ShownWatch = null;
+                SchedulePostLayoutSweep(listViewBase, list);
+            };
+            list.ShownWatch = shownWatch;
+            listViewBase.EffectiveViewportChanged += shownWatch;
+            return;
+        }
+        NoteParkedContainerSweep();
+        // Runs from a WinUI event after the sweep unsubscribed, so a throwing cleanup must not
+        // stop it: every parked view is unmounted, and failures go to the RenderErrorHandler as
+        // Cleanup (with none, the first is rethrown once the sweep is done), as on disposal. The
+        // propagation scope spans the unmounts too, so an exception a cleanup's nested Reactor
+        // work already declined (RenderError.Propagate) keeps going out instead of being
+        // reported to this list's handler again.
+        List<Exception>? failures = null;
+        using (RenderErrorDispatch.EnterPropagationScope())
+        {
+            using (IsolateUnmountCleanupFailures(ex => (failures ??= new()).Add(ex)))
+            {
+                var children = panel.Children;
+                for (int i = 0; i < children.Count; i++)
+                {
+                    if (children[i] is WinPrim.SelectorItem container
+                        && container.ContentTemplateRoot is ContentControl cc
+                        && GetElementTag(cc) is not null
+                        && listViewBase.IndexFromContainer(container) < 0)
+                        UnmountItemView(cc, clearContent: false);
+                }
+            }
+            if (failures is not null)
+                RenderErrorDispatch.ReportCleanupFailures(failures, ResolveRenderErrorHandler, isHostLevel: false, _logger)?.Throw();
+        }
+    }
+
+    // Test-only seam (InternalsVisibleTo Reactor.AppTests.Host): sweeps run.
+    internal static int ParkedContainerSweepCount;
+
+    private static void NoteParkedContainerSweep() => ParkedContainerSweepCount++;
+
+    /// <summary>
+    /// Drops an unmounted list's pending sweep, so no handler outlives the list.
+    /// </summary>
+    private static void CancelPostLayoutSweep(UIElement control)
+    {
+        if (control is not WinUI.ListViewBase listViewBase || GetListState(listViewBase) is not { } list) return;
+        if (list.PostLayoutSweep is { } sweep)
+        {
+            listViewBase.LayoutUpdated -= sweep;
+            list.PostLayoutSweep = null;
+        }
+        if (list.ShownWatch is { } watch)
+        {
+            listViewBase.EffectiveViewportChanged -= watch;
+            list.ShownWatch = null;
+        }
+        if (list.LoadedWatch is { } loaded)
+        {
+            listViewBase.Loaded -= loaded;
+            list.LoadedWatch = null;
+        }
+    }
+
+    private static bool IsCollapsedInTree(UIElement element)
+    {
+        for (DependencyObject? node = element; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+            if (node is UIElement { Visibility: Visibility.Collapsed })
+                return true;
+        return false;
     }
 
     /// <summary>
     /// Unmounts the item view of a container WinUI has unlinked from its item
-    /// (<c>IndexFromContainer</c> is -1) once that view's row is gone: removed from the list,
-    /// or shown by another container. WinUI normally raises a recycle
+    /// (<c>IndexFromContainer</c> is -1) once its item was cleared or that view's row is gone:
+    /// removed from the list, or shown by another container. WinUI normally raises a recycle
     /// <c>ContainerContentChanging</c> for such a container, but under rapid insert / remove
     /// churn it can park one offscreen in the items panel without ever doing so, which left the
     /// row's components mounted: effects never cleaned up and diagnostics writes were accepted
@@ -1346,16 +1476,20 @@ public sealed partial class Reconciler
     /// later layout pass without realizing it again (it defers container realignment for a
     /// move to the next layout pass; in practice it has re-realized moved rows).
     /// </summary>
-    private void UnmountOrphanedContainer(WinUI.ListViewBase listViewBase, WinPrim.SelectorItem container, ContentControl cc)
+    internal void UnmountOrphanedContainer(WinUI.ListViewBase listViewBase, WinPrim.SelectorItem container, ContentControl cc)
     {
-        if (GetElementTag(cc) is null || container.Content is not ReactorRow row) return;
-        bool inList = GetListState(listViewBase) is { } state
-            && state.ByKey.TryGetValue(row.Key, out var current) && ReferenceEquals(current, row);
-        if (inList)
+        if (GetElementTag(cc) is null) return;
+        if (container.Content is ReactorRow row)
         {
-            var owner = listViewBase.ContainerFromItem(row);
-            if (owner is null || ReferenceEquals(owner, container)) return;
+            bool inList = GetListState(listViewBase) is { } state
+                && state.ByKey.TryGetValue(row.Key, out var current) && ReferenceEquals(current, row);
+            if (inList)
+            {
+                var owner = listViewBase.ContainerFromItem(row);
+                if (owner is null || ReferenceEquals(owner, container)) return;
+            }
         }
+        else if (container.Content is not null) return;
         UnmountItemView(cc, clearContent: false);
     }
 

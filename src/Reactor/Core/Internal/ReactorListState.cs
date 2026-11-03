@@ -107,6 +107,31 @@ internal sealed class ReactorListState
     internal Dictionary<string, ReactorRow> Scratch { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// Set whenever <see cref="Source"/> changes structurally; cleared by the reconciler's
+    /// realized-container pass, which then checks the containers after the next layout pass
+    /// that lays the list out (<see cref="PostLayoutSweep"/>): that pass can park a container
+    /// offscreen without raising its recycle <c>ContainerContentChanging</c>.
+    /// </summary>
+    internal bool StructureChanged { get; set; }
+
+    /// <summary>The pending sweep's one-shot <c>LayoutUpdated</c> handler, if one is scheduled.</summary>
+    internal EventHandler<object>? PostLayoutSweep { get; set; }
+
+    /// <summary>
+    /// The list's one-shot <c>EffectiveViewportChanged</c> handler while a sweep waits for the
+    /// collapsed list to be laid out again.
+    /// </summary>
+    internal global::Windows.Foundation.TypedEventHandler<Microsoft.UI.Xaml.FrameworkElement, Microsoft.UI.Xaml.EffectiveViewportChangedEventArgs>? ShownWatch { get; set; }
+
+    /// <summary>
+    /// The list's one-shot <c>Loaded</c> handler while a sweep waits for the list to enter the
+    /// tree again.
+    /// </summary>
+    internal Microsoft.UI.Xaml.RoutedEventHandler? LoadedWatch { get; set; }
+
+    public ReactorListState() => Source.CollectionChanged += (_, _) => StructureChanged = true;
+
+    /// <summary>
     /// Reset the state to a fresh set of (index, key) pairs. Used during
     /// mount and during bulk-replace bailout when the entire list is being
     /// rebuilt from scratch.

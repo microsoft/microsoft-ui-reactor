@@ -245,4 +245,49 @@ public class ReactorListStateTests
         Assert.Equal("Row[0]=beta", before);
         Assert.Equal("Row[7]=beta", row.DebugDescription);
     }
+
+    // Issue #1440 — StructureChanged gates the post-layout sweep of parked ListView containers:
+    // set by any structural edit of Source, and only by one, so a re-render that keeps the key
+    // order schedules no sweep.
+    private static ReactorListState SeededAndCleared(params string[] keys)
+    {
+        var state = new ReactorListState();
+        state.Reset(keys.Select((k, i) => (i, k)));
+        state.StructureChanged = false;
+        return state;
+    }
+
+    [Fact]
+    public void StructureChanged_Set_By_Reset()
+    {
+        var state = new ReactorListState();
+        Assert.False(state.StructureChanged);
+
+        state.Reset([(0, "a")]);
+
+        Assert.True(state.StructureChanged);
+    }
+
+    [Theory]
+    [InlineData("b,a,c")]   // move
+    [InlineData("a,b,c,d")] // insert
+    [InlineData("a,c")]     // remove
+    public void StructureChanged_Set_By_A_Structural_Diff(string next)
+    {
+        var state = SeededAndCleared("a", "b", "c");
+
+        KeyedListDiff.Apply(state, next.Split(','), static (k, _) => k);
+
+        Assert.True(state.StructureChanged);
+    }
+
+    [Fact]
+    public void StructureChanged_Stays_Clear_When_The_Keys_Do_Not_Change()
+    {
+        var state = SeededAndCleared("a", "b", "c");
+
+        KeyedListDiff.Apply(state, new[] { "a", "b", "c" }, static (k, _) => k);
+
+        Assert.False(state.StructureChanged);
+    }
 }

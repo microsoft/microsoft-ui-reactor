@@ -284,23 +284,62 @@ round-trip — the output composes with every other modifier on this page
 (`.Padding`, `.Width`, `.TextWrapping`).
 
 `MarkdownOptions.LinkBuilder` overrides rendering for links whose absolute URI
-passes the Markdown URI policy (`http`, `https`, or `mailto`). It receives the
-validated URI and a label array containing one selectable `RichTextBlock`
-with its inline formatting, default heading/table-header typography, and images
-preserved (an empty array for an empty label). Return a non-null `Element` for a confirmation action, preview, or
-other custom link UI; exceptions propagate and a null result is an error.
-The returned element is embedded through `InlineUIContainer`, retaining its
-own styling, lifecycle, and accessibility properties. Like other embedded
-controls, it has its own text-selection boundary. Leave the callback unset
-for ordinary native inline hyperlinks and continuous surrounding prose
-selection; a custom horizontal stack is not equivalent to a text hyperlink.
-The callback owns custom styling and interaction. Configure an explicit
-accessible name on the returned control and verify its role, keyboard
+passes the Markdown URI policy (`http`, `https`, or `mailto`). It receives a
+`MarkdownLink` with three properties:
+
+- `Text`: the label as plain text, with image alt text in place of images,
+  entities decoded, and line breaks as spaces. Use it for an accessible name or
+  tooltip.
+- `Label`: the label as one selectable `RichTextBlockElement` with its inline
+  formatting, default heading/table-header typography, and images preserved,
+  or `null` for an empty label.
+- `Uri`: the validated target.
+
+Don't use `Text` to tell the user where a link goes: the document author writes
+the label, and `[https://bank.example](https://other.example)` is a valid link.
+A confirmation prompt must show `Uri`, as the example below does.
+
+```csharp
+class ReviewedLinksDemo : Component
+{
+    public override Element Render()
+    {
+        var (pending, setPending) = UseState<Uri?>(null);
+
+        var options = new MarkdownOptions
+        {
+            LinkBuilder = link =>
+            {
+                Element content = link.Label is { } label
+                    ? label with { IsTextSelectionEnabled = false }
+                    : TextBlock(link.Uri.ToString());
+                return Button(content, () => setPending(link.Uri))
+                    .AutomationName(link.Text.Length > 0 ? link.Text : link.Uri.ToString())
+                    .ToolTip(link.Uri.ToString());
+            },
+        };
+
+        return VStack(8,
+            Markdown("Read [the **review** notes](https://example.com/review) first.", options),
+            TextBlock(pending is null ? "" : $"Open {pending}?")
+        ).Padding(24);
+    }
+}
+```
+
+Return a non-null `Element` for a confirmation action, preview, or other custom
+link UI; exceptions propagate and a null result is an error. The returned
+element is embedded through `InlineUIContainer`, retaining its own styling,
+lifecycle, and accessibility properties. Like other embedded controls, it has
+its own text-selection boundary. Leave the callback unset for ordinary native
+inline hyperlinks and continuous surrounding prose selection; a custom
+horizontal stack is not equivalent to a text hyperlink. The callback owns
+custom styling and interaction. Set an explicit accessible name on the
+returned control (`Text` is a good default) and verify its role, keyboard
 activation, and pointer behavior in your app. If the returned control is a
-button containing the supplied `RichTextBlockElement`, set that label's
-`IsTextSelectionEnabled` to `false` rather than asking it to select text.
-This configuration is not a guarantee of physical input behavior for every
-custom control.
+button containing `Label`, set that label's `IsTextSelectionEnabled` to `false`
+rather than asking it to select text. This configuration is not a guarantee of
+physical input behavior for every custom control.
 
 With `LinkBuilder` set, links inside image alternative text are plain alt
 text, not separate actions. Nested parser autolinks remain part of the outer

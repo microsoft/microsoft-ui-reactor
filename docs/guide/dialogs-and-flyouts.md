@@ -106,6 +106,22 @@ reconciles the dialog the same way it reconciles the rest of the tree:
   unmounts while the dialog is still showing. That teardown path is
   silent: `OnClosed` reports dismissals, not the owner going away, so a
   handler that writes back into already-unmounted state never runs.
+  Disposing the host or reconciler also hides the dialog without `OnClosed`
+  and cancels deferred opens without `OnOpened`. Put state reset needed during
+  teardown in effect cleanup rather than `OnClosed`.
+
+### Dialog theme
+
+A dialog follows the effective theme (`ActualTheme`) at its declaration's
+position, including a local ancestor override, even though WinUI displays the
+dialog outside that subtree. Changes to the owner's effective theme also update
+an already-open dialog; closing or unmounting detaches the listener.
+
+Use the existing `.RequestedTheme(ElementTheme.Dark)` modifier to override the
+real dialog's theme explicitly. Changing that declaration updates the open dialog
+in place; removing it or explicitly requesting `ElementTheme.Default` resumes
+following the owner, consistent with theme inheritance elsewhere in Reactor.
+Native `.Set(dialog => ...)` callbacks run last and can override the theme.
 
 ### Three-button dialogs
 

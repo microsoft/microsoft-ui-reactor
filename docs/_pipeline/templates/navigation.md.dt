@@ -126,6 +126,10 @@ Use `CanGoBack` and `CanGoForward` to enable/disable navigation buttons.
 `UseNavigationLifecycle` lets a component react to navigation events. Use it
 to load data when a page appears or save state when it disappears:
 
+Lifecycle callbacks belong to the nearest enclosing `NavigationHost`. Nested
+hosts dispatch their own route contexts and guards, independently of outer-page
+transitions such as opening an overlay around the main navigation.
+
 ```csharp snippet="navigation/lifecycle"
 ```
 
@@ -176,6 +180,7 @@ property to control how pages animate in and out:
 | `NavigationTransition.Slide()` | Slide + fade — vertical unless you pass a direction |
 | `NavigationTransition.Fade()` | Crossfade |
 | `NavigationTransition.DrillIn()` | Scale + fade from center |
+| `NavigationTransition.Connected(key)` | Shared element between the outgoing and incoming pages |
 | `NavigationTransition.Spring()` | Spring-physics slide |
 | `NavigationTransition.None` | Instant swap |
 
@@ -580,8 +585,36 @@ detail page ID), use a discriminated union pattern with records.
 the same handle with `UseNavigation<Route>()` (no initial value). This
 retrieves the nearest ancestor's handle via [context](context.md).
 
-**Use `NavigationTransition.DrillIn()` for list-to-detail flows.** It
-signals hierarchy and pairs naturally with Connected Animation keys.
+**Select page motion independently from a shared element.**
+For a shared card or image, mark the element on both pages with
+`.ConnectedAnimation(key)` and navigate with
+`new NavigateOptions { Transition = NavigationTransition.DrillIn(), ConnectedAnimationKey = key }`.
+NavigationHost captures only the selected source before removing its page,
+waits for the destination's layout, and completes the normal page lifecycle
+after the native animation and the selected page transition have both finished.
+The readiness deadline applies until native motion starts; playback follows the
+selected transition's duration. An interrupted page receives `onNavigatedFrom`,
+and the latest destination receives `onNavigatedTo` when its transition completes.
+`Transition = null` uses the host default. Set `Transition = NavigationTransition.None`
+for shared-element motion only, or select Fade, Slide, DrillIn, or Spring explicitly.
+`NavigationTransition.Connected(key)` is also supported as shared-element-only motion.
+Cached pages participate without remounting.
+
+Per-navigation connected keys and their page transition overrides are remembered for `GoBack()` and `GoForward()`
+within the current process. Back navigation creates a new animation from the
+detail element to the restored list element; it does not replay a stale snapshot.
+Serialized navigation state contains routes only, so restoring state does not
+restore animation edges.
+
+Keys are scoped to each page of the current NavigationHost, including the active
+descendants of nested navigation hosts. Detached cached pages do not participate.
+A missing or duplicate
+key, or a destination that does not become ready within the bounded layout wait,
+falls back to the selected page transition. Disabling system animations swaps the pages immediately.
+Virtualized/off-screen targets are not automatically scrolled into view; realize
+the desired item before navigation or accept the fallback. Do not put an additional
+exit transition on the shared element or run a separate manual connected animation
+for the same navigation.
 
 **Use `Reset` for sign-out flows.** It clears the entire stack and starts
 fresh, preventing the user from navigating back to authenticated pages.

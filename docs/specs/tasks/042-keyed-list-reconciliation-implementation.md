@@ -731,10 +731,12 @@ box.
          bounded snapshot (newest-first, capped at 64 entries × 8 sample
          keys each). Producer side is `internal Record(...)` /
          `IsFirstOccurrence(...)` with dedup keyed on
-         (controlInstance, kind, hashed-sample-set). Per-control dedup
-         uses a `ConditionalWeakTable` so a torn-down control doesn't
-         leak; contextual fallback uses a global concurrent dictionary
-         for unit-test / standalone callers.
+         (controlInstance, kind, hashed-sample-set). Native-control dedup
+         lives in `ReactorState.KeyedDiagnosticLedger`, preserving counts
+         across managed-wrapper collection and pool reuse (#1434).
+         Non-native objects use a `ConditionalWeakTable`; contextual
+         fallback uses a global concurrent dictionary for unit-test /
+         standalone callers. Ledgers never reference their owning controls.
       2. **`KeyedListDiff.Apply`** gained a `controlInstance` parameter
          and now routes both bailout paths through `ReportBailout`,
          which records into the collector *and* logs through `ILogger`

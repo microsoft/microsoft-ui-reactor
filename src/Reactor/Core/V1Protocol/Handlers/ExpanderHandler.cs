@@ -95,5 +95,14 @@ internal sealed class ExpanderHandler : IDecoratorElementHandler<ExpanderElement
     }
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, ExpanderElement? element, UIElement control)
-        => V1UnmountDisposition.ContinueDefaultTraversal;
+    {
+        var expander = (WinUI.Expander)control;
+        // The default ContentControl traversal owns Content, but not Header.
+        if (element?.HeaderTemplate is not null)
+        {
+            if (expander.Header is UIElement header) ctx.Reconciler.UnmountChild(header);
+            expander.Header = null;
+        }
+        return V1UnmountDisposition.ContinueDefaultTraversal;
+    }
 }
