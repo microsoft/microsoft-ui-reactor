@@ -3969,6 +3969,8 @@ that should stay constant regardless of mode.</p>
 <p>On <code>Border</code>, <code>with { Background = brush }</code> overrides <code>.Background(Theme.X)</code>.
 Changing that record value back to <code>null</code> restores the themed brush, including
 on reused controls, or restores a still-present <code>.Background(brush)</code> modifier.
+Likewise, removing a <code>.Background(brush)</code> modifier restores a record brush that
+is still set.
 A native <code>.Set(b =&gt; b.Background = brush)</code> also overrides the themed brush.</p>
 <h2 id="signal-colors">Signal colors<a class="headerlink" href="#signal-colors" title="Permanent link">&para;</a></h2>
 <p>Status indicators use semantic signal colors:</p>
