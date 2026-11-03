@@ -3966,6 +3966,10 @@ tokens for theme-aware colors:</p>
 </table>
 <p>Tokens are the right default. Reserve hex and <code>Brush</code> for brand colors
 that should stay constant regardless of mode.</p>
+<p>On <code>Border</code>, <code>with { Background = brush }</code> overrides <code>.Background(Theme.X)</code>.
+Changing that record value back to <code>null</code> restores the themed brush, including
+on reused controls, or restores a still-present <code>.Background(brush)</code> modifier.
+A native <code>.Set(b =&gt; b.Background = brush)</code> also overrides the themed brush.</p>
 <h2 id="signal-colors">Signal colors<a class="headerlink" href="#signal-colors" title="Permanent link">&para;</a></h2>
 <p>Status indicators use semantic signal colors:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">SignalColorsExample</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
