@@ -17,13 +17,36 @@ namespace Microsoft.UI.Reactor.Core;
 /// because the dictionary's int keys no longer matched the repeater's
 /// new positions. Keying by string makes the mapping reorder-stable.
 /// </remarks>
-public sealed partial class ElementFactory<T> : IElementFactory
+public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturingFactory
 {
     private IReadOnlyList<T> _items;
     private Func<T, int, Element> _viewBuilder;
     private readonly Reconciler _reconciler;
     private readonly Action _requestRerender;
     private readonly ElementPool? _pool;
+
+    // The host's provider-stack snapshot. GetElement runs from WinUI layout,
+    // outside the traversal that maintains the reconciler's context stack, so
+    // rows replay this instead (see ContextCapture). Built-in hosts attach the
+    // capture registered on their control, which the reconciler also refreshes
+    // when the host is skipped. A factory installed by an out-of-tree handler has
+    // none attached and falls back to _ownCapture, which it takes itself at
+    // construction and in UpdateInPlace — both run inside the host's Mount/Update,
+    // where the live stack is the host's. Attaching a host capture drops the
+    // fallback so it cannot pin mount-time provider values for the list's lifetime.
+    private ContextCapture? _hostCapture;
+    private ContextCapture? _ownCapture;
+
+    ContextCapture? IContextCapturingFactory.ContextCapture
+    {
+        get => _hostCapture;
+        set
+        {
+            _hostCapture = value;
+            if (value is not null)
+                _ownCapture = null;
+        }
+    }
     // Optional state used when ItemsSource is the OC<ReactorRow> path
     // (spec 042). Lets GetElement translate an ItemsRepeater realized
     // index → stable key for _mountedElements lookup. Null when running
@@ -288,6 +311,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
         _reconciler = reconciler;
         _requestRerender = requestRerender;
         _pool = pool;
+        _ownCapture = reconciler.CaptureLiveContext();
     }
 
     /// <summary>
@@ -301,6 +325,8 @@ public sealed partial class ElementFactory<T> : IElementFactory
     {
         _items = items;
         _viewBuilder = viewBuilder;
+        if (_ownCapture is not null)
+            _reconciler.RefreshLiveContext(_ownCapture);
         // A new viewBuilder closure may capture different external state (UseState
         // cells, Observable subscriptions, theme, etc.) than the one that produced the
         // cached <see cref="ViewBuilderCacheEntry.Built"/> entries. We can't see through
@@ -602,6 +628,8 @@ public sealed partial class ElementFactory<T> : IElementFactory
 
         if (index < 0 || index >= _items.Count)
             return new TextBlock { Text = "" };
+
+        using var restoreContext = _reconciler.EnterRealization(_hostCapture ?? _ownCapture, args.Parent);
 
         var item = _items[index];
         var element = BuildOrCache(key, item, index, keyed);

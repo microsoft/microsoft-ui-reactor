@@ -43,6 +43,7 @@ internal static class LazyStackLifecycle
         Reconciler.ApplySetters(lazy.RepeaterSetters, repeater);
 
         var sv = reconciler._pool.TryRent(typeof(WinUI.ScrollViewer)) as WinUI.ScrollViewer ?? new WinUI.ScrollViewer();
+        reconciler.AttachContextCapture(factory, sv);
         sv.Content = repeater;
         sv.HorizontalScrollBarVisibility = lazy.Orientation == Microsoft.UI.Xaml.Controls.Orientation.Horizontal
             ? WinUI.ScrollBarVisibility.Auto
@@ -87,6 +88,7 @@ internal static class LazyStackLifecycle
                 repeater.ItemsSource = fresh.Source;
                 var factory = n.CreateFactory(reconciler, requestRerender, reconciler._pool);
                 n.AttachListStateToFactory(factory, fresh);
+                reconciler.AttachContextCapture(factory, sv);
                 repeater.ItemTemplate = factory;
             }
             if (repeater.Layout is WinUI.StackLayout layout)
