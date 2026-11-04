@@ -4751,11 +4751,24 @@ public partial record BorderElement(Element? Child) : Element
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<BorderElement, WinUI.Border> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<BorderElement, WinUI.Border> d)
-        => d.OneWay<Brush>(
-            // ApplyModifiers skips unchanged brushes, so restore its value when the record releases it.
-            static e => (e.Background ?? e.Modifiers?.Background) is { } brush ? brush : Optional<Brush>.Unset,
-            static (border, brush) => border.Background = brush,
-            WinUI.Border.BackgroundProperty);
+        => d.OneWay<(Brush? Record, Brush? Modifier)>(
+            // The modifier is part of the value so removing it (or the record) rewrites the
+            // remaining brush here, before native setters run. ApplyModifiers skips unchanged
+            // brushes and leaves the clear of a modifier this entry saw to it.
+            static e => e.Background is null && e.Modifiers?.Background is null
+                ? Optional<(Brush? Record, Brush? Modifier)>.Unset
+                : (e.Background, e.Modifiers?.Background),
+            static (border, brushes) => border.Background = brushes.Record ?? brushes.Modifier,
+            WinUI.Border.BackgroundProperty)
+        // Tell the reconciler the removed modifier was handled here, so ApplyModifiers keeps the
+        // brush this entry restored. A custom handler for BorderElement never marks it.
+        .ImperativeBridged(
+            static (_, _, _) => { },
+            static (ctx, border, oldEl, newEl) =>
+            {
+                if (oldEl.Modifiers?.Background is not null && newEl.Modifiers?.Background is null)
+                    ctx.Reconciler.MarkBackgroundRemovalHandled(border);
+            });
 }
 
 /// <summary>Expander element. <c>IsExpanded</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its expansion state until explicitly set.</summary>

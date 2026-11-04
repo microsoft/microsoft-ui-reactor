@@ -83,7 +83,7 @@ public sealed class QueryCache : IDisposable
             lock (slot.Lock)
             {
                 if (slot.Entry is CacheEntry<T> typed &&
-                    (deps is null || slot.Deps is null || ResourceDependencies.DepsEqual(slot.Deps, deps)))
+                    (deps is null || slot.Deps is null || RenderContext.DepsEqual(slot.Deps, deps)))
                 {
                     entry = typed;
                     return true;

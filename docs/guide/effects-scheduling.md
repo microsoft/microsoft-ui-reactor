@@ -81,10 +81,12 @@ second, the cleanup would dispose the timer the body just created.
 
 ## Dependency equality is value equality, with one trap
 
-Reactor compares dependency arrays with `EqualityComparer<T>.Default`.
-For primitives and records that's value equality. For classes that
-don't override `Equals`, it's reference equality — same identity
-trap React's `useEffect` has.
+Reactor compares dependency arrays element-wise with `object.Equals` through
+`RenderContext.DepsEqual`.
+For primitives and records that's value equality.
+For classes that don't override `Equals(object)`, it's reference equality,
+even if they implement `IEquatable<T>`. The typed overloads retain their
+allocation-free `EqualityComparer<T>.Default` path for value-type dependencies.
 
 ```csharp
 public (T Value, Action<T> Set) UseState<T>(T initialValue, bool threadSafe = false)
@@ -204,7 +206,7 @@ is your only chance to cancel the in-flight task — capture a
 |---|---|
 | omitted (`UseEffect(body)`) | after every commit |
 | empty (`UseEffect(body, Array.Empty<object>())`) | once, after the first commit |
-| primitives / records | when `EqualityComparer<T>.Default.Equals` flips |
+| primitives / records | when a dependency's value changes |
 | reference-typed object built in render | every commit (almost never what you want) |
 | `setX` from `UseState` | never re-triggers — setter identity is stable |
 

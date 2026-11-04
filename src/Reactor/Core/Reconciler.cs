@@ -2439,6 +2439,15 @@ public sealed partial class Reconciler : IDisposable
         _v1Handlers.AddForDerivedTypes(typeof(TBase), new V1Protocol.V1DecoratorHandlerAdapter<TBase>(handler));
     }
 
+    // Borders whose built-in BorderElement descriptor already released or replaced a removed
+    // Background modifier in the current update; Update consumes the mark before ApplyModifiers.
+    private readonly HashSet<UIElement> _backgroundRemovalHandled = new(ReferenceEqualityComparer.Instance);
+
+    internal void MarkBackgroundRemovalHandled(UIElement control) => _backgroundRemovalHandled.Add(control);
+
+    // Test seam: marks still held after an update (always 0 once Update returns or throws).
+    internal int BackgroundRemovalMarkCount => _backgroundRemovalHandled.Count;
+
     // ════════════════════════════════════════════════════════════════════
     //  Pool rent / return — public author-facing surface (spec 047 §13 Q18)
     // ════════════════════════════════════════════════════════════════════
@@ -3665,7 +3674,7 @@ public sealed partial class Reconciler : IDisposable
                 var newDeps = newMemo.Dependencies;
                 bool depsChanged = oldDeps is null && newDeps is null
                     ? false // both null = render once, never re-render from parent
-                    : oldDeps is null || newDeps is null || !DepsEqual(oldDeps, newDeps);
+                    : oldDeps is null || newDeps is null || !RenderContext.DepsEqual(oldDeps, newDeps);
                 bool contextChanged = HasConsumedContextChanged(node);
                 skipRender = !depsChanged && !contextChanged;
                 memoReason = depsChanged
@@ -5115,16 +5124,6 @@ public sealed partial class Reconciler : IDisposable
     //  Shared helpers (used by Mount + Update)
     // ════════════════════════════════════════════════════════════════════
 
-    private static bool DepsEqual(object?[] prev, object?[] next)
-    {
-        if (prev.Length != next.Length) return false;
-        for (int i = 0; i < prev.Length; i++)
-        {
-            if (!Equals(prev[i], next[i])) return false;
-        }
-        return true;
-    }
-
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Runs each setter
     /// inside the §8.2 echo-suppression scope so user-authored
@@ -6268,7 +6267,8 @@ public sealed partial class Reconciler : IDisposable
     private static void ApplyDragAttached(FrameworkElement fe, DragAttached? attached)
         => DragAttachedProperties.SetIsDragEnabled(fe, attached?.IsEnabled);
 
-    internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender)
+    internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender,
+        bool keepRemovedBackground = false)
     {
         // Guard each property: only call into WinUI when the value actually changed.
         // Each WinUI property set is a managed→native interop call, so avoiding
@@ -6528,7 +6528,7 @@ public sealed partial class Reconciler : IDisposable
             else if (fe is WinUI.Control ctrl2) ctrl2.Background = m.Background;
             else if (fe is WinUI.Border bdr) bdr.Background = m.Background;
         }
-        else if (m.Background is null && oldM?.Background is not null)
+        else if (m.Background is null && oldM?.Background is not null && !keepRemovedBackground)
         {
             if (fe is WinUI.Panel panel) panel.ClearValue(WinUI.Panel.BackgroundProperty);
             else if (fe is WinUI.Control ctrl2) ctrl2.ClearValue(WinUI.Control.BackgroundProperty);

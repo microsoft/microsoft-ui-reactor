@@ -275,6 +275,10 @@ Conventions for contributors:
 
 ### Changed
 
+- Consolidate hook and memo dependency comparisons in `RenderContext.DepsEqual`,
+  preserving existing equality semantics and typed fast paths
+  (spec 020 §6.4; follow-up to #1431).
+
 - **Markdown `LinkBuilder` now receives a `MarkdownLink`** (#1436). Breaking: the
   callback's type changes from `Func<Element[], Uri, Element>` to
   `Func<MarkdownLink, Element>`. `MarkdownLink` carries the label as plain `Text`
@@ -439,11 +443,16 @@ Conventions for contributors:
   context and theme, so a failing row shows its own error and a failing boundary only
   rolls back its own subtree. (Window hooks in such rows are covered by the
   window-owner fix below.)
+- On initial use, `UseDataSource` uses one page size for data-source requests, offset cursors,
+  and resource row positions, preventing missing or misplaced rows when options
+  are omitted or specify a different size (#1453; part of #1452).
+
 - **Border theme-background precedence.** An unset background now releases local
   values on pooled controls and direct-to-themed updates so a `ThemeRef` style
   can supply the brush. Removing a record background preserves a still-present
-  concrete `.Background(brush)` modifier. Explicit brushes and native setters
-  retain precedence (spec 050 §6.3).
+  concrete `.Background(brush)` modifier, and removing that modifier restores a
+  still-set record background. Explicit brushes and native setters retain
+  precedence (spec 050 §6.3).
 
 - **Disposing a host retires its ContentDialogs.** `ReactorHostControl.Dispose()`,
   `ReactorHost.Dispose()`, and standalone reconciler disposal cancel deferred opens
