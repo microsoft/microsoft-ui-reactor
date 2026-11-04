@@ -4535,18 +4535,27 @@ public partial record RichEditBoxElement(
     internal override bool HasCallbacks => OnTextChanged is not null;
 
     // Text round-trips through the RichEditBox document (not a Text DP): the set
-    // writes Document.SetText (guarded on non-empty, manual BeginSuppress because
-    // SetText fires TextChanged asynchronously), readBack/trampoline read
-    // Document.GetText trimming a trailing \r. Reused verbatim from the hand-written
-    // descriptor so the deferred suppress-counter echo behaviour is identical.
+    // writes Document.SetText (skipped for an empty value), readBack/trampoline read
+    // Document.GetText trimming trailing \r.
+    //
+    // Echo suppression uses the spec 047 §8 value-diff arm, not the suppress counter.
+    // SetText raises TextChanged asynchronously, so the arm is consumed by the next
+    // TextChanged after the write; it only drops that event when its readback equals
+    // the written text, so a write whose echo never comes (or is merged) can't
+    // swallow a real edit. The set lambda arms too, because the engine writes bare
+    // at Mount and that write echoes after the trampoline is wired. On Update the
+    // engine arms the same predicate before calling set, and clears it when set
+    // skipped the write. (The counter took one token from the engine's Update
+    // wrapper and a second one here for a single TextChanged, so the user's next
+    // edit after every state write was dropped.)
     private static readonly global::Microsoft.UI.Xaml.RoutedEventHandler __TextChangedTrampoline = (s, _) =>
     {
         var r = (WinUI.RichEditBox)s!;
         if (!global::Microsoft.UI.Reactor.Core.Reconciler.TryGetReactorState(r, out var state)) return;
-        if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppress(state)) return;
-        r.Document.GetText(global::Microsoft.UI.Text.TextGetOptions.None, out var text);
-        (state.Element as RichEditBoxElement)
-            ?.OnTextChanged?.Invoke(text?.TrimEnd('\r') ?? "");
+        r.Document.GetText(global::Microsoft.UI.Text.TextGetOptions.None, out var raw);
+        var text = raw?.TrimEnd('\r') ?? "";
+        if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppressEcho(state, text)) return;
+        (state.Element as RichEditBoxElement)?.OnTextChanged?.Invoke(text);
     };
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<RichEditBoxElement, WinUI.RichEditBox> Customize(
@@ -4557,7 +4566,8 @@ public partial record RichEditBoxElement(
             {
                 if (!string.IsNullOrEmpty(v))
                 {
-                    global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.BeginSuppress(c);
+                    global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ArmExpectedEcho(
+                        c, rb => DocumentTextComparer.Instance.Equals(rb as string, v));
                     c.Document.SetText(global::Microsoft.UI.Text.TextSetOptions.None, v);
                 }
             },
@@ -4570,7 +4580,28 @@ public partial record RichEditBoxElement(
             callback:    static e => e.OnTextChanged,
             trampoline:  __TextChangedTrampoline,
             slotIsNull:  static p => p.TextChangedTrampoline is null,
-            setSlot:     static (p, h) => p.TextChangedTrampoline = h);
+            setSlot:     static (p, h) => p.TextChangedTrampoline = h,
+            comparer:    DocumentTextComparer.Instance,
+            valueDiffEcho: true);
+
+    // The document stores every line break as \r, so "a\nb" reads back as "a\rb".
+    // Compare with line breaks normalized (and trailing ones trimmed, like readBack),
+    // so a multi-line write matches its own echo and isn't rewritten on every render.
+    private sealed class DocumentTextComparer : global::System.Collections.Generic.IEqualityComparer<string>
+    {
+        internal static readonly DocumentTextComparer Instance = new();
+
+        public bool Equals(string? x, string? y) =>
+            string.Equals(Normalize(x), Normalize(y), global::System.StringComparison.Ordinal);
+
+        public int GetHashCode(string obj) =>
+            global::System.StringComparer.Ordinal.GetHashCode(Normalize(obj));
+
+        private static string Normalize(string? s) =>
+            (s ?? "").Replace("\r\n", "\r", global::System.StringComparison.Ordinal)
+                .Replace('\n', '\r')
+                .TrimEnd('\r');
+    }
 }
 
 // ════════════════════════════════════════════════════════════════════════
