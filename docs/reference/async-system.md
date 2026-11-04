@@ -732,7 +732,7 @@ page slots, so a later write can replace an earlier query's pages even within
 
 ### 5.9 `IDataSource<T>` adapter
 
-`DataSourceResourceExtensions.UseDataSource` (`DataSourceResourceExtensions.cs:18-49`)
+`DataSourceResourceExtensions.UseDataSource` (`DataSourceResourceExtensions.cs:22-53`)
 is a thin hook that projects any `IDataSource<T>` into `UseInfiniteResource`:
 
 ```csharp

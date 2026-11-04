@@ -15,6 +15,10 @@ public static class DataSourceResourceExtensions
     /// on <paramref name="source"/> and value-based on the request descriptors, so a new
     /// sort/filter/search restarts the pagination cleanly.
     /// </summary>
+    /// <remarks>
+    /// When <paramref name="options"/> is non-null, its PageSize (default 50) takes precedence.
+    /// Otherwise, <c>request.PageSize</c> is used. The effective page size is at least 1.
+    /// </remarks>
     public static InfiniteResource<T> UseDataSource<T>(
         this RenderContext ctx,
         IDataSource<T> source,
@@ -55,6 +59,10 @@ public static class DataSourceResourceExtensions
     /// process-wide default cache at startup; tests or subtrees may override it via
     /// <c>.Provide(AppContexts.QueryCache, customCache)</c>.
     /// </summary>
+    /// <remarks>
+    /// When <paramref name="options"/> is non-null, its PageSize (default 50) takes precedence.
+    /// Otherwise, <c>request.PageSize</c> is used. The effective page size is at least 1.
+    /// </remarks>
     public static InfiniteResource<T> UseDataSource<T>(
         this RenderContext ctx,
         IDataSource<T> source,

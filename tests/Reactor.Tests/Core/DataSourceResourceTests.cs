@@ -115,12 +115,42 @@ public class DataSourceResourceTests
             Assert.Equal(rows[i], resource.Items[i]);
     }
 
+    [Fact]
+    public void UseDataSource_Uses_Default_Options_PageSize_When_Only_StaleTime_Is_Set()
+    {
+        using var cache = new QueryCache();
+        var rows = Enumerable.Range(0, 101).Select(id => new Row(id)).ToArray();
+        var source = new ListDataSource<Row>(rows, row => row.Id);
+        var options = new InfiniteResourceOptions(StaleTime: TimeSpan.FromMinutes(2));
+        var ctx = new RenderContext();
+        string? latestKey = null;
+        cache.EntryChanged += key => latestKey = key;
+        ctx.BeginRender(() => { });
+
+        try
+        {
+            var resource = ctx.UseDataSource(source, new DataRequest { PageSize = 200 }, cache,
+                options, new InlineDispatcher());
+            ctx.FlushEffects();
+
+            Assert.Equal(50, resource.Items.TakeWhile(row => row is not null).Count());
+            Assert.True(cache.TryGet<Page<Row, string>>(latestKey!, out var entry));
+            Assert.Equal(options.StaleTime, entry.StaleTime);
+            resource.EnsureRange(0, rows.Length - 1);
+            Assert.Equal(rows.Length, resource.Items.Count);
+            for (int i = 0; i < rows.Length; i++)
+                Assert.Equal(rows[i], resource.Items[i]);
+        }
+        finally { ctx.RunCleanups(); }
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(10)]
     public void UseDataSource_Preserves_Options_Across_Renders_And_Prefix_Changes(int pageSize)
     {
-        using var cache = new QueryCache();
+        var now = DateTime.UtcNow;
+        using var cache = new QueryCache { UtcNow = () => now };
         var rows = Enumerable.Range(0, 21).Select(id => new Row(id)).ToArray();
         var source = new ListDataSource<Row>(rows, row => row.Id);
         var ctx = new RenderContext();
@@ -152,7 +182,17 @@ public class DataSourceResourceTests
             Assert.StartsWith("second/", latestKey!);
             Assert.True(cache.TryGet<Page<Row, string>>(latestKey!, out var entry));
             Assert.Equal(options.StaleTime, entry.StaleTime);
-            Assert.Equal(pageSize, options.PageSize);
+
+            // Verify that the adapter preserves CacheTime: after unsubscribing, the page
+            // remains cached until just before expiry and is evicted when that time is reached.
+            var pageKey = latestKey!;
+            ctx.RunCleanups(); // CacheTime starts when the last subscriber leaves.
+            now += options.CacheTime!.Value - TimeSpan.FromTicks(1);
+            cache.EvictNow();
+            Assert.True(cache.TryGet<Page<Row, string>>(pageKey, out _));
+            now += TimeSpan.FromTicks(1);
+            cache.EvictNow();
+            Assert.False(cache.TryGet<Page<Row, string>>(pageKey, out _));
         }
         finally { ctx.RunCleanups(); }
     }
