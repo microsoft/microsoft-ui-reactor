@@ -650,6 +650,13 @@ a real edit. The descriptor also arms at Mount, since that write's echo arrives
 after the trampoline is wired, and compares with line breaks normalized because
 the document reads `\n` back as `\r`.
 
+`AutoSuggestBox.Text` moved over for the same symptom. Its trampoline returned on
+a non-`UserInput` reason before taking the counter token, so the write's own
+`ProgrammaticChange` echo never spent it and the user's next keystroke did. The
+echo is also debounced (about 150 ms, merging several writes), so a count could
+not match it anyway. The trampoline now consumes the arm on every `TextChanged`
+and only then filters on the reason.
+
 **Retained on the counter** (with rationale):
 
 | Site | Why value-diff is unsafe |
@@ -657,7 +664,7 @@ the document reads `\n` back as `\r`.
 | `Slider.Value`, `NumberBox.Value` | `double` snapping / precision — exact readback comparison leaks echoes |
 | `NumberBox` Min/Max coercion (`CoercingOneWayPropEntry`) | post-write coerced value is not known a-priori at arm time |
 | `CalendarView.SelectedDates` (`CollectionDiffControlledPropEntry`) | collection batch — no single expected value |
-| `AutoSuggestBox.Text`, `PasswordBox` | string + deferred/coercion semantics |
+| `PasswordBox` | string + deferred/coercion semantics |
 | `Expander` (`Expanding`/`Collapsed`) | `IsExpanded` readback timing at event uncertain |
 | `CheckBox` path-B legacy trampoline | retained legacy path |
 | `ApplySetters` scope | engine cannot predict which DPs `.Set(...)` writes — no expected value |

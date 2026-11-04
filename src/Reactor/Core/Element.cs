@@ -3777,13 +3777,20 @@ public partial record AutoSuggestBoxElement(
     internal Action<WinUI.AutoSuggestBox>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnTextChanged is not null || OnQuerySubmitted is not null || OnSuggestionChosen is not null;
 
+    // Echo suppression uses the spec 047 §8 value-diff arm, not the suppress counter.
+    // A programmatic Text write raises TextChanged with Reason=ProgrammaticChange, about
+    // 150 ms later and debounced (several writes can merge into one event). Every
+    // TextChanged, whatever its reason, consumes the pending arm, so the write's own echo
+    // spends it even though that echo never reaches the callback. (On the counter, the
+    // reason filter returned before the token was taken, so it stayed reserved and
+    // swallowed the user's next keystroke after every state write.)
     private static readonly global::Windows.Foundation.TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs>
         __TextChangedTrampoline = (s, args) =>
         {
-            if (args.Reason != WinUI.AutoSuggestionBoxTextChangeReason.UserInput) return;
             var asb = (WinUI.AutoSuggestBox)s!;
             if (!global::Microsoft.UI.Reactor.Core.Reconciler.TryGetReactorState(asb, out var state)) return;
-            if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppress(state)) return;
+            if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppressEcho(state, asb.Text)) return;
+            if (args.Reason != WinUI.AutoSuggestionBoxTextChangeReason.UserInput) return;
             (state.Element as AutoSuggestBoxElement)?.OnTextChanged?.Invoke(asb.Text);
         };
 
@@ -3891,7 +3898,8 @@ public partial record AutoSuggestBoxElement(
                 callback:    static e => e.OnTextChanged,
                 trampoline:  __TextChangedTrampoline,
                 slotIsNull:  static p => p.TextChangedTrampoline is null,
-                setSlot:     static (p, h) => p.TextChangedTrampoline = h)
+                setSlot:     static (p, h) => p.TextChangedTrampoline = h,
+                valueDiffEcho: true)
             .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.AutoSuggestBoxEventPayload,
                 global::Windows.Foundation.TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxQuerySubmittedEventArgs>>(
                 subscribe:        static (c, h) => c.QuerySubmitted += h,
