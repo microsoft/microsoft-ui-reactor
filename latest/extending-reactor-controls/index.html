@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.16/extending-reactor-controls/">
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/extending-reactor-controls/">
       
       
         <link rel="prev" href="../control-reconciler-protocol/">
@@ -3595,7 +3595,7 @@ with the global <a href="../control-reconciler-protocol/#registration"><code>Con
 the same lifecycle, the same diff-and-write efficiency, the same pool
 reuse, and the same echo-safe two-way binding as <code>Button</code>,
 <a href="../forms/"><code>TextBox</code></a>, and <code>TabView</code>. The factory holder pattern is
-<a href="#step-3--wrap-the-constructor-in-a-factory-holder">trim-clean by construction</a>:
+<a href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">trim-clean by construction</a>:
 if the app never calls the factory, the handler and the underlying
 WinUI control type are unreachable and NativeAOT publishing drops both.
 This page is the cookbook for that flow. By the end you will have
@@ -3662,7 +3662,7 @@ similar family.</p>
 <code>static</code> keyword on the lambda in Step 3 is mandatory, and the
 holder's class-init being the registration trigger is what makes the
 control trim-clean under NativeAOT publishing (see
-<a href="#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6 — Wrap the constructor in a factory holder, then use it</a>).
+<a href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6 — Wrap the constructor in a factory holder, then use it</a>).
 If no component ever calls <code>StarMeter.Of(...)</code>, the holder is
 unreachable; the trimmer follows that unreachability through the
 cctor to the handler class and the WinUI control type, and removes
@@ -3715,7 +3715,7 @@ custom controls are well-served by the default sealed-record shape.</p>
 <code>new StarMeterElement(...)</code> from outside the assembly that owns the
 element, leaving <code>StarMeter.Of(...)</code> (Step 6) as the sole external
 construction path. That is the <em>construction discipline</em> spec 048 §6
-requires for the <a href="#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it">factory-holder trim story</a>
+requires for the <a href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">factory-holder trim story</a>
 to hold — if external callers could bypass <code>Of</code>, the holder's class-
 init would not be guaranteed to run and the global registration could
 be missing when the element reached the reconciler. Init properties
@@ -3773,7 +3773,7 @@ at the field. The
 shape; keeping the demo focused, the cookbook below omits it.</p>
 <h2 id="step-2-choose-a-shape-descriptor-vs-hand-coded">Step 2 — Choose a shape (descriptor vs hand-coded)<a class="headerlink" href="#step-2-choose-a-shape-descriptor-vs-hand-coded" title="Permanent link">&para;</a></h2>
 <p>Reactor's handler protocol has two surfaces — declarative
-(<a href="../control-reconciler-protocol/#descriptors--declarative-handlers"><code>ControlDescriptor</code></a>)
+(<a href="../control-reconciler-protocol/#descriptors-declarative-handlers"><code>ControlDescriptor</code></a>)
 and imperative
 (<a href="../control-reconciler-protocol/#the-handler-contract"><code>IElementHandler</code></a>) — that
 land on the same dispatch table. New controls should default to a
@@ -3859,7 +3859,7 @@ the bar for "complicated enough to write by hand."</p>
 <a id="__codelineno-1-45" name="__codelineno-1-45" href="#__codelineno-1-45"></a><span class="p">}</span>
 </code></pre></div>
 <p>Each fluent builder call adds one
-<a href="../control-reconciler-protocol/#propentry-shapes--the-prop-binding-vocabulary"><code>PropEntry</code></a>
+<a href="../control-reconciler-protocol/#propentry-shapes-the-prop-binding-vocabulary"><code>PropEntry</code></a>
 to the descriptor. The interpreter iterates them in declaration order
 during Mount and Update. The descriptor above uses three of the
 common shapes:</p>
@@ -4152,6 +4152,18 @@ contract:</p>
 </tr>
 </tbody>
 </table>
+<p>For a writable managed <code>IList&lt;object&gt; Items</code> sink, also supply
+<code>ItemsHost.SetCollection = static (c, items) =&gt; c.Items = items</code> so a
+non-notifying list becomes an observable collection at mount. Generated
+wrappers provide this automatically. Element items reconcile incrementally
+and preserve keyed control identity; see
+<a href="../control-reconciler-protocol/#dynamic-flat-items">Dynamic flat items</a>.
+Secondary Element slots can own their teardown through
+<code>.ImperativeBridged(mount, update, unmount)</code>; <code>[WrapElementSlot]</code> generates
+that binding automatically. Unmount the owned child while it is still
+parented, then detach it. Property teardown runs before the descriptor's
+own <code>OnUnmount</code>; an undeclared generated slot leaves the control's
+constructor default untouched.</p>
 <p>The standard strategies cover everything in the built-in catalog. The
 <code>Imperative&lt;TElement, TControl&gt;</code> escape hatch exists for the case
 where none of them fit — for example, a control whose children live
@@ -4370,10 +4382,57 @@ callback that runs before the first render:</p>
 <p><code>RegisterType</code> takes <strong>inline</strong> mount/update/unmount delegates, so a
 one-off control needs no <code>IElementHandler</code> class at all; <code>unmount</code> is
 optional. Returning <code>null</code> from <code>update</code> means "I patched the existing
-control" — return a different <code>UIElement</code> only when you genuinely
-replaced it. If you <em>do</em> have a handler class, <code>RegisterHandler</code> takes
-an <strong>instance</strong> of it instead. This is the shape Reactor's own docking
-natives and the Monaco sample use.</p>
+control", and so does returning the control you were handed — return a
+different <code>UIElement</code> only when you genuinely replaced it. If you <em>do</em>
+have a handler class, <code>RegisterHandler</code> takes an <strong>instance</strong> of it
+instead. This is the shape Reactor's own docking natives and the Monaco
+sample use.</p>
+<p>Reactor records the element on the control that <code>mount</code> or <code>update</code>
+returns wherever Reactor itself reads it back — keyed reordering, the
+<code>unmount</code> lookup and <code>.Ref(...)</code> cleanup — so the delegates don't call
+<code>Reconciler.SetElementTag</code> for those. If your own code reads the element
+back with <code>Reconciler.GetElementTag</code>, from an event handler for example,
+keep tagging the control yourself. Return a control your registration
+owns: a control Reactor already mounted for another kind of element
+keeps that element's identity, so to wrap built-in elements write a
+component instead. <code>unmount</code> runs when Reactor unmounts the control,
+<em>instead of</em> Reactor's own walk over the control's children. If your
+delegates mount child elements through the reconciler, unmount them
+there too (<code>r.UnmountChild(child)</code>); without an <code>unmount</code> delegate,
+Reactor walks the children itself. A control your <code>update</code> replaced is
+unmounted, and gets <code>unmount</code>, wherever Reactor reconciles the slot that
+holds it: a panel, a <code>Border</code>, a named slot such as <code>SplitView.Pane</code>, a
+tab's content. A few slots that a control fills by hand still swap it out
+without <code>unmount</code>, so don't rely on <code>unmount</code> for a control your <code>update</code>
+replaces inside one of them: <code>CommandBar</code> content, <code>Expander</code> content and
+header template, <code>ContentDialog</code>, <code>Flyout</code> and <code>Popup</code> content, content
+attached with <code>.WithFlyout</code>, <code>.WithContextFlyout</code> or
+<code>.WithToolTip(element)</code>, and the realized item content of <code>ListView</code>,
+<code>GridView</code>, <code>TreeView&lt;T&gt;</code> and templated <code>FlipView</code>.</p>
+<p>To update a child your delegates mounted, pass it to <code>r.Reconcile</code> and
+put what it returns in the slot when it differs:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">reconciler</span><span class="p">.</span><span class="n">RegisterType</span><span class="o">&lt;</span><span class="n">FramedElement</span><span class="p">,</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">Border</span><span class="o">&gt;</span><span class="p">(</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">    </span><span class="n">mount</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">r</span><span class="p">,</span><span class="w"> </span><span class="n">el</span><span class="p">,</span><span class="w"> </span><span class="n">requestRerender</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">        </span><span class="k">new</span><span class="w"> </span><span class="n">WinUI</span><span class="p">.</span><span class="n">Border</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Child</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">Mount</span><span class="p">(</span><span class="n">el</span><span class="p">.</span><span class="n">Content</span><span class="p">,</span><span class="w"> </span><span class="n">requestRerender</span><span class="p">)</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="n">update</span><span class="p">:</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="p">(</span><span class="n">r</span><span class="p">,</span><span class="w"> </span><span class="n">oldEl</span><span class="p">,</span><span class="w"> </span><span class="n">newEl</span><span class="p">,</span><span class="w"> </span><span class="n">frame</span><span class="p">,</span><span class="w"> </span><span class="n">requestRerender</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">        </span><span class="c1">// Patches the child in place, or unmounts it and mounts the new element.</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">next</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">Reconcile</span><span class="p">(</span><span class="n">oldEl</span><span class="p">.</span><span class="n">Content</span><span class="p">,</span><span class="w"> </span><span class="n">newEl</span><span class="p">.</span><span class="n">Content</span><span class="p">,</span><span class="w"> </span><span class="n">frame</span><span class="p">.</span><span class="n">Child</span><span class="p">,</span><span class="w"> </span><span class="n">requestRerender</span><span class="p">);</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">ReferenceEquals</span><span class="p">(</span><span class="n">next</span><span class="p">,</span><span class="w"> </span><span class="n">frame</span><span class="p">.</span><span class="n">Child</span><span class="p">))</span><span class="w"> </span><span class="n">frame</span><span class="p">.</span><span class="n">Child</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">next</span><span class="p">;</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="k">null</span><span class="p">;</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">    </span><span class="p">});</span>
+</code></pre></div>
+<p>When the new element has the same type and key, <code>Reconcile</code> updates the
+child, usually in place. If that update builds a new control instead (a
+<code>ValidationVisualizer</code> remounts on every update, and a <code>RegisterType</code>
+<code>update</code> can return a new control), or the type or key changed,
+<code>Reconcile</code> unmounts the old control and returns the new one. It returns
+<code>null</code> when the new child is empty. A handler class gets the same from
+<code>ctx.ReconcileChild(oldChild, newChild, existing)</code>. Don't use
+<code>r.UpdateChild</code> here. It skips the type check, so a child that changes
+type throws <code>InvalidCastException</code> for a built-in control, and it leaves
+a control it replaced mounted. <code>REACTOR_LIFECYCLE_003</code> flags the call
+and offers to switch it to <code>Reconcile</code>.</p>
 <p>A library that wants eager setup ships an ordinary
 <code>public static void UseAcme(Reconciler reconciler)</code> over one of these —
 Reactor deliberately adds no <code>IReactorLibrary</code> interface or
@@ -4394,7 +4453,7 @@ opt-ins.</p>
 exposes <code>(Color, IsOn) → Background</code> is one entry, not two — the
 <code>get</code> returns a tuple and the <code>set</code> reads both fields. The diff fires
 exactly when either input changes. This is how the LED indicator in
-<a href="../control-reconciler-protocol/#descriptors--declarative-handlers">the Control Reconciler Protocol reference</a>
+<a href="../control-reconciler-protocol/#descriptors-declarative-handlers">the Control Reconciler Protocol reference</a>
 collapses two element fields into one WinUI write.</p>
 <p><strong>Layer in a Reactor-friendly default for an awkward control.</strong> Many
 WinUI controls require an initial property write to "behave"
@@ -4456,7 +4515,7 @@ reset contract clears both on <code>ReturnControl</code>; descriptor-level state
 survives pool rent and corrupts the next mount.</p>
 <p><strong>Passing a non-<code>static</code> lambda to <code>ControlRegistry.Register</code>.</strong> The
 <code>static</code> keyword on the factory lambda is mandatory (see
-<a href="#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6</a>).
+<a href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6</a>).
 Writing
 <code>ControlRegistry.Register&lt;MyElement, MyControl&gt;(() =&gt; new MyHandler())</code>
 without the <code>static</code> modifier compiles, but allocates a closure object

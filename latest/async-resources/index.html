@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.16/async-resources/">
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/async-resources/">
       
       
         <link rel="prev" href="../docking/">
@@ -3561,7 +3561,9 @@ mechanical steps:</p>
 <li><strong>Swap the cache field for a hook call.</strong> Replace the long-lived
    <code>DataPageCache&lt;T&gt;</code> instance with <code>var resource = UseDataSource(source, request, options);</code>.
    <code>UseDataSource</code> bridges any <code>IDataSource&lt;T&gt;</code> onto <code>UseInfiniteResource</code>
-   using <code>request.ContinuationToken</code> as the cursor.</li>
+   using <code>request.ContinuationToken</code> as the cursor. On the initial call,
+   <code>options.PageSize</code> takes precedence over <code>request.PageSize</code>; the size is
+   clamped to at least 1 and used for requests, cursors, and row positions.</li>
 <li><strong>Read from <code>resource.Items[i]</code>.</strong> The sparse <code>IReadOnlyList&lt;T?&gt;</code> has
    null placeholders for in-flight slots. This replaces <code>cache.PeekItem(i)</code>
    plus the <code>LoadingBlock</code> sentinel.</li>

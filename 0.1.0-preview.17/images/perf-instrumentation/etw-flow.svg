@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 540" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .group { fill: none; stroke: #afb8c1; stroke-width: 1.25; stroke-dasharray: 5 4; }
+    .group-label { font-size: 12px; font-weight: 600; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-drop { fill: #f6f8fa; stroke: #8c959f; stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .diamond { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .edge-dashed { stroke: #57606a; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .group { stroke: #6e7681; }
+      .group-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-drop { fill: #1c2129; stroke: #6e7681; }
+      .diamond { fill: #341a00; stroke: #d29922; }
+      .edge { stroke: #8b949e; }
+      .edge-dashed { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Hot paths group -->
+  <rect class="group" x="20" y="30" width="280" height="430" rx="8"/>
+  <text class="group-label" x="40" y="50">Hot paths (in-process)</text>
+
+  <rect class="box" x="40" y="70" width="240" height="50" rx="6"/>
+  <text class="label" x="160" y="92" text-anchor="middle">Reconciler.Reconcile</text>
+  <text class="sub" x="160" y="108" text-anchor="middle">Reconcile / ChildReconcile · Start/Stop</text>
+
+  <rect class="box" x="40" y="140" width="240" height="50" rx="6"/>
+  <text class="label" x="160" y="162" text-anchor="middle">Component.Render</text>
+  <text class="sub" x="160" y="178" text-anchor="middle">ComponentRender · Start/Stop</text>
+
+  <rect class="box" x="40" y="210" width="240" height="50" rx="6"/>
+  <text class="label" x="160" y="232" text-anchor="middle">FlushEffects</text>
+  <text class="sub" x="160" y="248" text-anchor="middle">EffectsFlush · Start/Stop</text>
+
+  <rect class="box" x="40" y="280" width="240" height="50" rx="6"/>
+  <text class="label" x="160" y="302" text-anchor="middle">SetState write</text>
+  <text class="sub" x="160" y="318" text-anchor="middle">StateChange</text>
+
+  <rect class="box" x="40" y="350" width="240" height="50" rx="6"/>
+  <text class="label" x="160" y="372" text-anchor="middle">MCP dispatch</text>
+  <text class="sub" x="160" y="388" text-anchor="middle">McpCall · Start/Stop</text>
+
+  <!-- Event source -->
+  <rect class="box-accent" x="370" y="180" width="200" height="74" rx="6"/>
+  <text class="label" x="470" y="202" text-anchor="middle">ReactorEventSource</text>
+  <text class="sub" x="470" y="220" text-anchor="middle">[EventSource</text>
+  <text class="sub" x="470" y="236" text-anchor="middle">Microsoft-UI-Reactor]</text>
+
+  <!-- Gate diamond -->
+  <polygon class="diamond" points="630,210 720,180 810,210 720,240"/>
+  <text class="label" x="720" y="206" text-anchor="middle">IsEnabled</text>
+  <text class="sub" x="720" y="222" text-anchor="middle">(level, keyword)?</text>
+
+  <!-- Drop -->
+  <rect class="box-drop" x="660" y="90" width="200" height="44" rx="6"/>
+  <text class="label" x="760" y="112" text-anchor="middle">Skip payload alloc</text>
+  <text class="sub" x="760" y="126" text-anchor="middle">no consumer</text>
+
+  <!-- Write -->
+  <rect class="box-accent" x="870" y="180" width="180" height="74" rx="6"/>
+  <text class="label" x="960" y="204" text-anchor="middle">WriteEvent(id, args)</text>
+  <text class="sub" x="960" y="222" text-anchor="middle">batched payload</text>
+  <text class="sub" x="960" y="238" text-anchor="middle">to providers</text>
+
+  <!-- Pipe / ETW -->
+  <rect class="box" x="870" y="320" width="180" height="60" rx="6"/>
+  <text class="label" x="960" y="342" text-anchor="middle">EventPipe</text>
+  <text class="sub" x="960" y="360" text-anchor="middle">session-scoped</text>
+  <text class="sub" x="960" y="374" text-anchor="middle">AOT-friendly</text>
+
+  <rect class="box" x="1060" y="320" width="120" height="60" rx="6"/>
+  <text class="label" x="1120" y="342" text-anchor="middle">ETW</text>
+  <text class="sub" x="1120" y="360" text-anchor="middle">Microsoft-UI-</text>
+  <text class="sub" x="1120" y="374" text-anchor="middle">Reactor</text>
+
+  <rect class="box-drop" x="20" y="500" width="320" height="32" rx="6"/>
+  <text class="sub" x="180" y="520" text-anchor="middle">ETW Microsoft-Windows-XAML (native, ETW-only)</text>
+
+  <!-- Consumers -->
+  <rect class="box" x="870" y="440" width="180" height="50" rx="6"/>
+  <text class="label" x="960" y="462" text-anchor="middle">dotnet-trace</text>
+  <text class="sub" x="960" y="478" text-anchor="middle">cross-platform</text>
+
+  <rect class="box" x="1060" y="440" width="120" height="50" rx="6"/>
+  <text class="label" x="1120" y="462" text-anchor="middle">PerfView</text>
+  <text class="sub" x="1120" y="478" text-anchor="middle">/ xperf / WPA</text>
+
+  <!-- Edges hot paths → source -->
+  <path class="edge" d="M280 95 L375 195" marker-end="url(#arr)"/>
+  <path class="edge" d="M280 165 L370 205" marker-end="url(#arr)"/>
+  <path class="edge" d="M280 235 L370 220" marker-end="url(#arr)"/>
+  <path class="edge" d="M280 305 L370 235" marker-end="url(#arr)"/>
+  <path class="edge" d="M280 375 L375 250" marker-end="url(#arr)"/>
+
+  <path class="edge" d="M570 217 L630 217" marker-end="url(#arr)"/>
+  <path class="edge" d="M720 180 L760 134" marker-end="url(#arr)"/>
+  <text class="edge-label" x="730" y="155">keyword off</text>
+  <path class="edge" d="M810 210 L870 210" marker-end="url(#arr)"/>
+  <text class="edge-label" x="840" y="200">keyword on</text>
+
+  <path class="edge" d="M960 254 L960 320" marker-end="url(#arr)"/>
+  <path class="edge" d="M1000 254 L1120 320" marker-end="url(#arr)"/>
+
+  <path class="edge" d="M960 380 L960 440" marker-end="url(#arr)"/>
+  <path class="edge" d="M1120 380 L1120 440" marker-end="url(#arr)"/>
+
+  <path class="edge-dashed" d="M340 510 L1120 490" marker-end="url(#arr)"/>
+  <text class="edge-label" x="700" y="505" text-anchor="middle">merged timeline (Reactor + XAML)</text>
+</svg>

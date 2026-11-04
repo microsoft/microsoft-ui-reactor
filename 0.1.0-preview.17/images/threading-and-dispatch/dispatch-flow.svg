@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 540" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 11px; fill: #1f2328; }
+    .lifeline { stroke: #afb8c1; stroke-width: 1.25; stroke-dasharray: 4 3; }
+    .actor-rect { fill: #f6f8fa; stroke: #57606a; stroke-width: 1.5; }
+    .msg { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .note { fill: #fff8c5; stroke: #9a6700; stroke-width: 1; }
+    .marker-fill { fill: #57606a; }
+    .step-num { font-size: 10.5px; fill: #57606a; font-weight: 600; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #e6edf3; }
+      .lifeline { stroke: #6e7681; }
+      .actor-rect { fill: #21262d; stroke: #8b949e; }
+      .msg { stroke: #8b949e; }
+      .note { fill: #341a00; stroke: #d29922; }
+      .marker-fill { fill: #8b949e; }
+      .step-num { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Actors -->
+  <rect class="actor-rect" x="40" y="20" width="140" height="44" rx="6"/>
+  <text class="label" x="110" y="40" text-anchor="middle">Background task</text>
+  <text class="sub" x="110" y="56" text-anchor="middle">ThreadPool / Task</text>
+
+  <rect class="actor-rect" x="220" y="20" width="140" height="44" rx="6"/>
+  <text class="label" x="290" y="40" text-anchor="middle">setX(value)</text>
+  <text class="sub" x="290" y="56" text-anchor="middle">UseState setter</text>
+
+  <rect class="actor-rect" x="400" y="20" width="160" height="44" rx="6"/>
+  <text class="label" x="480" y="40" text-anchor="middle">UI dispatcher</text>
+  <text class="sub" x="480" y="56" text-anchor="middle">DispatcherQueue</text>
+
+  <rect class="actor-rect" x="600" y="20" width="160" height="44" rx="6"/>
+  <text class="label" x="680" y="40" text-anchor="middle">RenderContext</text>
+  <text class="sub" x="680" y="56" text-anchor="middle">hook slot owner</text>
+
+  <rect class="actor-rect" x="800" y="20" width="160" height="44" rx="6"/>
+  <text class="label" x="880" y="40" text-anchor="middle">Reconciler</text>
+  <text class="sub" x="880" y="56" text-anchor="middle">diff + flush</text>
+
+  <!-- Lifelines -->
+  <line class="lifeline" x1="110" y1="64" x2="110" y2="520"/>
+  <line class="lifeline" x1="290" y1="64" x2="290" y2="520"/>
+  <line class="lifeline" x1="480" y1="64" x2="480" y2="520"/>
+  <line class="lifeline" x1="680" y1="64" x2="680" y2="520"/>
+  <line class="lifeline" x1="880" y1="64" x2="880" y2="520"/>
+
+  <!-- Messages -->
+  <text class="step-num" x="20" y="106">1</text>
+  <path class="msg" d="M110 110 L290 110" marker-end="url(#arr)"/>
+  <text class="edge-label" x="200" y="100" text-anchor="middle">setSeconds(s =&gt; s + 1)</text>
+
+  <text class="step-num" x="20" y="166">2</text>
+  <path class="msg" d="M290 170 C 250 185 250 185 290 200" marker-end="url(#arr)"/>
+  <text class="edge-label" x="220" y="183" text-anchor="end">MarshalIfOffUIThread</text>
+  <text class="sub" x="220" y="198" text-anchor="end">_uiThreadId mismatch</text>
+
+  <text class="step-num" x="20" y="246">3</text>
+  <path class="msg" d="M290 250 L480 250" marker-end="url(#arr)"/>
+  <text class="edge-label" x="385" y="240" text-anchor="middle">TryEnqueue(() =&gt; Setter(value))</text>
+
+  <rect class="note" x="410" y="265" width="140" height="36" rx="4"/>
+  <text class="sub" x="480" y="288" text-anchor="middle">queued on UI thread</text>
+
+  <text class="step-num" x="20" y="346">4</text>
+  <path class="msg" d="M480 350 L290 350" marker-end="url(#arr)"/>
+  <text class="edge-label" x="385" y="340" text-anchor="middle">invokes lambda on UI thread</text>
+
+  <text class="step-num" x="20" y="396">5</text>
+  <path class="msg" d="M290 400 L680 400" marker-end="url(#arr)"/>
+  <text class="edge-label" x="485" y="390" text-anchor="middle">write hook slot · setter takes UI-thread path</text>
+
+  <text class="step-num" x="20" y="446">6</text>
+  <path class="msg" d="M680 450 L880 450" marker-end="url(#arr)"/>
+  <text class="edge-label" x="780" y="440" text-anchor="middle">requestRerender()</text>
+
+  <text class="step-num" x="20" y="496">7</text>
+  <path class="msg" d="M880 500 C 840 512 840 512 880 520" marker-end="url(#arr)"/>
+  <text class="edge-label" x="820" y="515" text-anchor="end">reconcile + flush effects</text>
+</svg>

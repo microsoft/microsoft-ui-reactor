@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 460" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-out { fill: #d1f4d6; stroke: #1a7f37; stroke-width: 1.5; }
+    .box-aot { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .diamond { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .edge-dashed { stroke: #57606a; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-out { fill: #033a16; stroke: #3fb950; }
+      .box-aot { fill: #341a00; stroke: #d29922; }
+      .diamond { fill: #341a00; stroke: #d29922; }
+      .edge { stroke: #8b949e; }
+      .edge-dashed { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Sources -->
+  <rect class="box-accent" x="20" y="180" width="180" height="64" rx="6"/>
+  <text class="label" x="110" y="204" text-anchor="middle">C# sources</text>
+  <text class="sub" x="110" y="222" text-anchor="middle">+ Reactor element</text>
+  <text class="sub" x="110" y="236" text-anchor="middle">factories</text>
+
+  <!-- csproj -->
+  <rect class="box" x="240" y="180" width="200" height="64" rx="6"/>
+  <text class="label" x="340" y="200" text-anchor="middle">MyApp.csproj</text>
+  <text class="sub" x="340" y="218" text-anchor="middle">UseWinUI=true</text>
+  <text class="sub" x="340" y="234" text-anchor="middle">WindowsPackageType=None|MSIX</text>
+
+  <!-- dotnet publish diamond -->
+  <polygon class="diamond" points="480,212 570,180 660,212 570,244"/>
+  <text class="label" x="570" y="208" text-anchor="middle">dotnet publish</text>
+  <text class="sub" x="570" y="224" text-anchor="middle">-r win-x64</text>
+  <text class="sub" x="570" y="238" text-anchor="middle">| win-arm64</text>
+
+  <!-- Three outputs -->
+  <rect class="box-out" x="710" y="40" width="280" height="74" rx="6"/>
+  <text class="label" x="850" y="62" text-anchor="middle">Unpackaged folder</text>
+  <text class="sub" x="850" y="80" text-anchor="middle">MyApp.exe + WindowsAppSDK runtime</text>
+  <text class="sub" x="850" y="96" text-anchor="middle">sibling folder, easy bin-deploy</text>
+
+  <rect class="box-out" x="710" y="175" width="280" height="74" rx="6"/>
+  <text class="label" x="850" y="197" text-anchor="middle">Single-file bundle</text>
+  <text class="sub" x="850" y="215" text-anchor="middle">PublishSingleFile=true</text>
+  <text class="sub" x="850" y="231" text-anchor="middle">+IncludeNativeLibrariesForSelfExtract</text>
+
+  <rect class="box-out" x="710" y="310" width="280" height="74" rx="6"/>
+  <text class="label" x="850" y="332" text-anchor="middle">Signed MSIX</text>
+  <text class="sub" x="850" y="350" text-anchor="middle">WindowsPackageType=MSIX</text>
+  <text class="sub" x="850" y="366" text-anchor="middle">GenerateAppxPackageOnBuild</text>
+
+  <!-- AOT overlay -->
+  <rect class="box-aot" x="380" y="370" width="260" height="74" rx="6"/>
+  <text class="label" x="510" y="392" text-anchor="middle">Native AOT</text>
+  <text class="sub" x="510" y="410" text-anchor="middle">PublishAot=true</text>
+  <text class="sub" x="510" y="426" text-anchor="middle">InvariantGlobalization=true</text>
+
+  <!-- Edges -->
+  <path class="edge" d="M200 212 L240 212" marker-end="url(#arr)"/>
+  <path class="edge" d="M440 212 L480 212" marker-end="url(#arr)"/>
+
+  <path class="edge" d="M660 200 Q 685 130 710 80" marker-end="url(#arr)"/>
+  <path class="edge" d="M660 212 L710 212" marker-end="url(#arr)"/>
+  <path class="edge" d="M660 225 Q 685 290 710 345" marker-end="url(#arr)"/>
+
+  <path class="edge-dashed" d="M850 114 L 640 380" marker-end="url(#arr)"/>
+  <text class="edge-label" x="780" y="280" text-anchor="end">AOT layered on top</text>
+
+  <path class="edge-dashed" d="M850 384 L 640 410" marker-end="url(#arr)"/>
+</svg>

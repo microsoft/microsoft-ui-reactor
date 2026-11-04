@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.16/">
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/">
       
       
       
@@ -761,6 +761,17 @@
     <span class="md-ellipsis">
       
         Tips
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prefer-rust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prefer Rust?
       
     </span>
   </a>
@@ -3576,6 +3587,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#prefer-rust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prefer Rust?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3776,7 +3798,7 @@ first; everyone else can follow the order.</p>
 <h3 id="7-tooling-process">7. Tooling &amp; process<a class="headerlink" href="#7-tooling-process" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong><a href="dev-tooling/">Dev Tooling</a></strong> — <code>mur</code> CLI, MCP server, VS Code panel, dotnet watch, in-app dev menu</li>
-<li><strong><a href="vs-extension/">VS Extension</a></strong> — Rough experimental embedded preview for Visual Studio 2022 (17.8+) and 2026 (18.x)</li>
+<li><strong><a href="vs-extension/">VS Extension</a></strong> — Rough experimental embedded preview for Visual Studio 2022 (17.14+) and 2026 (18.x)</li>
 <li><strong><a href="testing/">Testing</a></strong> — Headless renderer, structural assertions, async test patterns</li>
 <li><strong><a href="performance/">Performance</a></strong> — ETW, EventDispatch, flame graphs</li>
 <li><strong><a href="packaging/">Packaging</a></strong> — MSIX, single-file, ARM64, AOT considerations</li>
@@ -3820,7 +3842,7 @@ uniform Summary / Parameters / Returns / Discussion / Examples / See Also page.<
 <li><strong>System</strong> — App, Window, Navigation, Context, Command (coming soon)</li>
 </ul>
 <h2 id="minimal-project-setup">Minimal Project Setup<a class="headerlink" href="#minimal-project-setup" title="Permanent link">&para;</a></h2>
-<p>The fastest path is <a href="getting-started/"><code>dotnet new reactorapp</code></a>, which
+<p>The fastest path is <a href="getting-started/"><code>dotnet new reactor</code></a>, which
 scaffolds all of this for you. To wire it up by hand instead, create a console
 project and edit the <code>.csproj</code>:</p>
 <!-- ai:lock -->
@@ -3836,7 +3858,7 @@ project and edit the <code>.csproj</code>:</p>
 <a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">    </span><span class="nt">&lt;RuntimeIdentifier</span><span class="w"> </span><span class="na">Condition=</span><span class="s">&quot;&#39;$(RuntimeIdentifier)&#39; == &#39;&#39; And (&#39;$(Platform)&#39; == &#39;&#39; Or &#39;$(Platform)&#39; == &#39;AnyCPU&#39;)&quot;</span><span class="nt">&gt;</span>$(NETCoreSdkPortableRuntimeIdentifier)<span class="nt">&lt;/RuntimeIdentifier&gt;</span>
 <a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">  </span><span class="nt">&lt;/PropertyGroup&gt;</span>
 <a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">  </span><span class="nt">&lt;ItemGroup&gt;</span>
-<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">    </span><span class="nt">&lt;PackageReference</span><span class="w"> </span><span class="na">Include=</span><span class="s">&quot;Microsoft.UI.Reactor&quot;</span><span class="w"> </span><span class="na">Version=</span><span class="s">&quot;0.1.0-preview.16&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">    </span><span class="nt">&lt;PackageReference</span><span class="w"> </span><span class="na">Include=</span><span class="s">&quot;Microsoft.UI.Reactor&quot;</span><span class="w"> </span><span class="na">Version=</span><span class="s">&quot;0.1.0-preview.17&quot;</span><span class="w"> </span><span class="nt">/&gt;</span>
 <a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="w">  </span><span class="nt">&lt;/ItemGroup&gt;</span>
 <a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="nt">&lt;/Project&gt;</span>
 </code></pre></div>
@@ -3845,7 +3867,9 @@ project and edit the <code>.csproj</code>:</p>
 <p>One package reference is enough — <code>Microsoft.UI.Reactor</code> brings the Windows App
 SDK in transitively, so you only add <code>Microsoft.WindowsAppSDK</code> yourself when you
 want to pin a specific WinUI patch or bundle the runtime with
-<code>WindowsAppSDKSelfContained</code>. See <a href="packaging/">Packaging</a> for the
+<code>WindowsAppSDKSelfContained</code>. Pin WinUI through that full package, not
+<code>Microsoft.WindowsAppSDK.WinUI</code> on its own, which fails the Windows App SDK's
+version check. See <a href="packaging/">Packaging</a> for the
 <code>&lt;Platforms&gt;</code>, ARM64, and self-contained shapes the project template uses.</p>
 <p>Replace <code>App.cs</code> with a component and a <code>ReactorApp.Run&lt;T&gt;()</code> call, and run with
 <code>dotnet run</code>. That's your first Reactor app.</p>
@@ -3856,6 +3880,15 @@ want to pin a specific WinUI patch or bundle the runtime with
 and <code>UseEffect</code> unlocks everything else.</p>
 <p><strong>Keep components small.</strong> Extract pieces into their own components early.
 Composition is always easier to reason about than a single giant <code>Render()</code>.</p>
+<h2 id="prefer-rust">Prefer Rust?<a class="headerlink" href="#prefer-rust" title="Permanent link">&para;</a></h2>
+<p>The idea isn't tied to C#. Over in <a href="https://github.com/microsoft/windows-rs">windows-rs</a>,
+the Rust for Windows project, the same experiment is running in Rust:
+<a href="https://github.com/microsoft/windows-rs/blob/HEAD/docs/crates/windows-reactor.md"><strong>windows-reactor</strong></a>
+is a declarative WinUI library where components own their state, controls send
+typed messages back, and only the WinUI controls that changed get updated. It's a
+separate library with its own model, available on
+<a href="https://crates.io/crates/windows-reactor">crates.io</a>. Different language, same
+native controls underneath.</p>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong><a href="getting-started/">Getting Started</a></strong> — Build your first app, manage state, ship a todo list.</li>

@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.16/source-mapping/">
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/source-mapping/">
       
       
         <link rel="prev" href="../threading-and-dispatch/">
@@ -2974,6 +2974,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#declared-names-and-hook-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Declared names and hook names
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#helper-methods-and-reactorsourcetransparent" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2996,6 +3007,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#roots-hosts-and-component-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roots, hosts and component boundaries
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#known-limitations" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3008,6 +3030,17 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inspecting-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inspecting components
+      
+    </span>
+  </a>
   
 </li>
       
@@ -3358,6 +3391,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#declared-names-and-hook-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Declared names and hook names
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#helper-methods-and-reactorsourcetransparent" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3380,6 +3424,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#roots-hosts-and-component-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roots, hosts and component boundaries
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#known-limitations" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3392,6 +3447,17 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inspecting-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inspecting components
+      
+    </span>
+  </a>
   
 </li>
       
@@ -3448,7 +3514,7 @@ an ETW event, a <code>--preview</code> overlay highlight, a thrown exception —
 back to the C# source that produced it. Two granularities ship today:
 <em>component</em> attribution, where every render emits an ETW event carrying
 the component's type name, and <em>per-element</em> attribution, where each DSL
-call site carries the file and line that produced it. This page covers
+call site carries the file, line and column that produced it. This page covers
 both.</p>
 <blockquote>
 <p><strong>Status.</strong> Per-element source tagging ships as <code>Element.CallSite</code> plus
@@ -3492,16 +3558,22 @@ consumers can subscribe to just the render channel:</p>
 <a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">Theme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x800</span><span class="p">;</span><span class="w">        </span><span class="c1">// theme apply, bindings</span>
 <a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">Shell</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x1000</span><span class="p">;</span><span class="w">       </span><span class="c1">// JumpList/Tray/ThumbnailToolbar</span>
 <a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">HotReload</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x2000</span><span class="p">;</span><span class="w">   </span><span class="c1">// spec 049 — state migration across edits</span>
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="p">}</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">EventKeywords</span><span class="w"> </span><span class="n">RenderDetail</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">EventKeywords</span><span class="p">)</span><span class="mh">0x4000</span><span class="p">;</span><span class="w"> </span><span class="c1">// per-component ComponentRendered (reason + instance id) for inspectors</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="p">}</span>
 </code></pre></div>
-<p><code>ComponentRenderStart</code> / <code>ComponentRenderStop</code> fire with
-<code>componentName = node.Component?.GetType().Name</code>. That string is the
+<p><code>ComponentRenderStart</code> / <code>ComponentRenderStop</code> fire with the component's
+type name — <code>Counter</code> for a <code>Counter : Component&lt;CounterProps&gt;</code>, whichever
+factory created it. That string is the
 attribution token that flows into PerfView / <code>dotnet-trace</code> /
 <code>xperf</code>, and it is the same string <a href="../devtools-internals/"><code>devtools-internals</code></a>
 uses to label overlay frames. Per-component, not per-element — but
 sufficient for the common question "which component is re-rendering
-on every tick".</p>
-<p><img alt="Source attribution: component-name attribution flows Component.GetType().Name into ETW, while per-element attribution stamps each DSL call site with file and line via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource." src="../images/source-mapping/attribution.svg" /></p>
+on every tick". <code>RenderError</code>, <code>EffectsFlushStart</code> / <code>Stop</code> and
+<code>ComponentUnmount</code> use the same name. A generic component reports its type
+arguments in C# form (<code>ItemList&lt;Int32&gt;</code>, not <code>ItemList`1</code>); function and memo
+components, which have no type of their own, report <code>FuncElement</code> and
+<code>MemoElement</code>.</p>
+<p><img alt="Source attribution: component-name attribution flows the component's type name, formatted by ComponentNames (generic components in C# form), into ETW, while per-element attribution stamps each DSL call site with file, line and column via the interceptor generator, readable from any realized control through ReactorSourceMap.GetSource." src="../images/source-mapping/attribution.svg" /></p>
 <h2 id="reconcile-pass-attribution">Reconcile-pass attribution<a class="headerlink" href="#reconcile-pass-attribution" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -3516,6 +3588,11 @@ on every tick".</p>
 <td><code>ComponentRenderStart</code> / <code>Stop</code></td>
 <td>Component CLR type name</td>
 <td>ETW <code>Render</code> keyword</td>
+</tr>
+<tr>
+<td><code>ComponentRendered</code></td>
+<td>Component type name + instance id + render reason</td>
+<td>ETW <code>RenderDetail</code> keyword (Verbose); id resolves to a control via <code>ReactorTrace.GetComponentControl</code></td>
 </tr>
 <tr>
 <td><code>ReconcileStart</code> / <code>Stop</code></td>
@@ -3534,11 +3611,11 @@ on every tick".</p>
 </tr>
 <tr>
 <td><code>RenderError</code></td>
-<td>Component name + exception type only (message redacted)</td>
+<td>Component name + exception type only (message redacted); emitted when a component's <code>Render()</code> or effect flush throws — on mount, update and at the host root — including errors an <code>ErrorBoundary</code> catches (named at the throw site, once)</td>
 <td>ETW <code>Errors</code> keyword</td>
 </tr>
 <tr>
-<td>Per-element file:line</td>
+<td>Per-element file:line:column</td>
 <td>Element call site</td>
 <td><code>Element.CallSite</code> / <code>ReactorSourceMap.GetSource</code> (when source mapping is enabled at build time)</td>
 </tr>
@@ -3599,8 +3676,8 @@ and is added to your compilation only when <code>ReactorSourceMap</code> is true
 is loaded into every build: this generator inspects every invocation in your
 project, so a Release build should not load it at all.) For each DSL factory
 call site in <em>your</em> project it
-emits an interceptor that calls the real factory and stamps the file and
-line onto the returned element. No factory signature changes and no call
+emits an interceptor that calls the real factory and stamps the file,
+line and column onto the returned element. No factory signature changes and no call
 site is edited, which is what lets it cover the <code>params Element?[]
 children</code> family (<code>VStack</code>, <code>HStack</code>, <code>Grid</code>, …) that <code>[CallerFilePath]</code>
 structurally cannot reach.</p>
@@ -3661,6 +3738,31 @@ so this is the cheaper of the two.</p>
 already stores -&gt; <code>Element.CallSite</code>. It returns <code>null</code> when the control
 was not produced by Reactor, when the assembly was built without source
 mapping, or when nothing stamped that element.</p>
+<p>A Native AOT app in diagnostics mode (<code>REACTOR_DIAGNOSTICS=1</code>) does not give an
+element a back-pointer just for its call site: no managed inspector can load into
+the process to read it, and it costs about 1 KB per control. <code>GetSource</code> then reads
+the location from the control's published <code>ReactorSource</code> value and returns the same
+<code>SourceLocation</code>. <code>Reconciler.GetElementTag</code> returns <code>null</code> for those controls, as it
+does for any untagged display leaf.</p>
+<p><code>SourceLocation.ColumnNumber</code> is the 1-based column of the factory's name
+(the <code>B</code> of <code>Button</code> in <code>Row(Button("a"), Button("b"))</code>), which is what tells
+several calls on one line apart; <code>0</code> means the provider did not record one.
+<code>ToString()</code> keeps the <code>file:line</code> shape,
+so read the column from the property.</p>
+<h3 id="declared-names-and-hook-names">Declared names and hook names<a class="headerlink" href="#declared-names-and-hook-names" title="Permanent link">&para;</a></h3>
+<p>The generator also records two static facts that an inspector cannot recover at runtime:</p>
+<ul>
+<li><strong>Declared name.</strong> <code>SourceLocation.DeclaredName</code> gives the identifier an element was assigned to, much like XAML's <code>x:Name</code>. It is the local, field or property for an initializer (<code>var title = TextBlock("x").Bold()</code> → <code>title</code>), the target of a simple assignment, or the member / local-function name of an expression body. Fluent modifier chains, parentheses, casts and both arms of a <code>?:</code> are looked through. Inline elements (arguments, collection items, a <code>return</code>) and a component's <code>Render() =&gt;</code> body have no name.</li>
+<li><strong>Hook names.</strong> For each class component's <code>Render()</code> and each render function (<code>Memo(ctx =&gt; …)</code>, <code>RenderEachTime(ctx =&gt; …)</code>, a root <code>Mount(ctx =&gt; …)</code>), the generator records the hooks in call order. Each entry has the variable the hook's result went into (<code>var (count, setCount) = UseState(0)</code> → <code>count</code>) and its line. An unstored hook such as <code>UseEffect(...)</code> is listed under its method name. Inspectors read this as the <code>hooks=</code> field of <code>ReactorDiagnostics.SourceProperty</code>.</li>
+</ul>
+<p>Hook indices are <code>RenderContext</code> slots, which is what an inspector matches against at runtime. They are exact as long as every hook so far has a statically known slot count:</p>
+<ul>
+<li><code>UseState</code>, <code>UseReducer</code>, <code>UseRef</code>, <code>UseEffect</code>, <code>UseMemo</code>, <code>UseCallback</code> and <code>UseContext</code> take one slot each.</li>
+<li>A custom hook written in the same project takes the slots of the hooks its straight-line body calls.</li>
+<li>After a composite built-in (<code>UseCommand</code>, <code>UseResource</code>, the window hooks, component-extension hooks such as <code>this.UseElementFocus()</code>), a custom hook from another assembly, an abstract or overridable (<code>virtual</code>) custom hook, or a hook inside a branch or loop (a rules-of-hooks violation), the following indices are reported as <code>?</code>.</li>
+<li>A component that inherits <code>Render()</code> reports the hooks of the base class that declares it.</li>
+</ul>
+<p>Both tables describe the compiled build. Registering them costs one delegate per assembly at startup; they are built on first use. After a hot-reload update every name and hook list is reported as unknown rather than wrong, because an edit can move a call onto a location the table gives another element. Each assembly also records a fingerprint of every source file's facts, absent names and hooks included (a root mount site with no hooks, such as <code>host.Mount(...)</code> building its output with constructors, counts too). If two source-mapped assemblies stamp the same path (both mapping their roots to <code>/_/</code>) with different fingerprints, that file's names and render-function hooks are unknown. The same file compiled into both keeps them. When either happens after values were published (a hot-reload update, or a source-mapped assembly loaded later), each host drops the stale <code>name=</code> / <code>hooks=</code> fields from its controls on its next render.</p>
 <h3 id="helper-methods-and-reactorsourcetransparent">Helper methods and <code>[ReactorSourceTransparent]</code><a class="headerlink" href="#helper-methods-and-reactorsourcetransparent" title="Permanent link">&para;</a></h3>
 <p>By default a helper is attributed to <em>itself</em>. In</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">static</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">MyHeader</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;header&quot;</span><span class="p">);</span>
@@ -3771,6 +3873,47 @@ your own types declare — not just <code>string</code>. Two limits are worth kn
   an array you own, whose elements were converted where the array was built, so
   nothing is stamped and your array is never written to.</li>
 </ul>
+<h3 id="roots-hosts-and-component-boundaries">Roots, hosts and component boundaries<a class="headerlink" href="#roots-hosts-and-component-boundaries" title="Permanent link">&para;</a></h3>
+<p>An inspector needs more than per-control locations: it has to know which Reactor
+trees exist and where each one starts. Three pieces cover that.</p>
+<p><strong>Every live host is enumerable.</strong> <code>ReactorDiagnostics.GetHosts()</code>
+(<code>Microsoft.UI.Reactor.Core.Diagnostics</code>) returns a snapshot of each live host —
+windows opened through <code>ReactorApp.Run</code> / <code>ReactorApp.OpenWindow</code>, a
+<code>new ReactorHost(window)</code> on any window, and every <code>ReactorHostControl</code> island:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">foreach</span><span class="w"> </span><span class="p">(</span><span class="kt">var</span><span class="w"> </span><span class="n">host</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">ReactorDiagnostics</span><span class="p">.</span><span class="n">GetHosts</span><span class="p">())</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="p">{</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="kt">var</span><span class="w"> </span><span class="n">root</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">host</span><span class="p">.</span><span class="n">RootComponentName</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="n">host</span><span class="p">.</span><span class="n">RootRenderFunctionName</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="s">&quot;(not mounted)&quot;</span><span class="p">;</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="n">lines</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="s">$&quot;{host.Kind} {host.ReactorWindow?.Key} &lt;{root}&gt; at {host.MountSite}&quot;</span><span class="p">);</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="p">}</span>
+</code></pre></div>
+<p>Each <code>ReactorHostInfo</code> carries the owning <code>Window</code> (window hosts), the host element
+(the <code>ReactorHostControl</code>, or a window host's <code>ContentTarget</code>), the control the root
+currently renders as (<code>RootControl</code>), the root's name — <code>RootComponentName</code> for a
+component root, <code>RootRenderFunctionName</code> (for example <code>MyApp.Program.Main (lambda)</code>)
+for a render function — and <code>MountSite</code>. It deliberately exposes no reconciler
+internals or live component instances: an inspector reaches the tree on screen through
+<code>RootControl</code>. The registry holds hosts weakly and drops them on dispose, so it never
+keeps a window alive; it costs one small allocation per host and nothing per render.</p>
+<p><strong>Root mount sites.</strong> A root is not an element, so it has no <code>CallSite</code>. When
+source mapping is on, the generator also intercepts <code>ReactorApp.Run</code>,
+<code>ReactorApp.OpenWindow</code>, <code>ReactorWindow.Mount</code>, <code>ReactorHost.Mount</code> and
+<code>ReactorHostControl.Mount</code> and records the line and column that called them (the
+column of the method name, as for element call sites). Each of those
+methods claims its own line first thing and hands it to the host it mounts, which
+reports it as <code>ReactorHostInfo.MountSite</code>. Anything else that mounts while that
+call is running — a host created in a <code>configure</code> callback, a window the framework
+opens itself — reports <code>null</code> rather than the outer call's line.
+<code>Run(Action&lt;ReactorAppContext&gt;)</code> is left alone: it mounts no root itself, and each
+<code>OpenWindow</code> in its startup callback reports its own line. A root created from
+<code>ReactorHostControl.ComponentFactory</code> or <code>ComponentType</code> (set in XAML) has no call
+site and reports <code>null</code>.</p>
+<p><strong>Component boundaries are always tagged while mapping is on.</strong> Every
+<code>Component&lt;T&gt;()</code>, <code>Func(...)</code> and <code>Memo(...)</code> mounts behind a <code>Border</code> wrapper. With
+<code>ReactorSourceMap.Enabled</code> true, that wrapper always carries the element
+back-pointer — even when the element has no location — so
+<code>Reconciler.GetElementTag(wrapper)</code> names the component (<code>ComponentElement.ComponentType</code>,
+or the render function) and an inspector can find every boundary. This adds one
+small allocation per <em>component</em>, never per leaf, and nothing while the flag is off.</p>
 <h3 id="known-limitations">Known limitations<a class="headerlink" href="#known-limitations" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Unannotated helper methods attribute to themselves.</strong> A helper <code>MyHeader()</code>
@@ -3778,14 +3921,25 @@ your own types declare — not just <code>string</code>. Two limits are worth kn
   that called it — interceptors replace the call site, and that <em>is</em> the call
   site. Mark a thin forwarder <code>[ReactorSourceTransparent]</code> (above) to defer to
   the caller, or wrap reusable UI in a named component.</li>
-<li><strong>Wrapped third-party controls are not stamped.</strong> A factory generated by
-  <code>[GenerateReactorWrapper]</code> lives on the element type
-  (<code>MyControlElement.MyControl(...)</code>), not on <code>Factories</code>, and is invisible
-  to the source-map generator: Roslyn runs every source generator against
-  the same input compilation, so one generator cannot see another's output.
-  Those elements report <code>null</code> rather than a wrong line. If you need a
-  location for a wrapped control, call it from a named component and use
-  the component's identity.</li>
+<li><strong>Wrapped third-party controls are stamped by the wrapper generator.</strong> A factory
+  generated by <code>[GenerateReactorWrapper]</code> lives on the element type
+  (<code>MyControlElement.MyControl(...)</code>) and is invisible to the source-map generator:
+  Roslyn runs every source generator against the same input compilation, so one
+  generator cannot see another's output. The wrapper generator, which wrote the
+  factory, intercepts calls to it instead (same line and column rules, the same own-position
+  stamp for an argument implicitly converted to an <code>Element</code> such as a string label, same
+  <code>ReactorSourceMap.Enabled</code> switch), and the source-map generator re-binds a DSL call
+  that takes one as an argument — <code>VStack(8, MyControl(...))</code>, or any value of the
+  wrapper's element type such as a local, a field or a helper's result — as if the
+  wrapper element were already an <code>Element</code>, so the container keeps its location too.
+  Where a call's overload could change once the wrapper records are complete (for
+  example <code>Show(card)</code> with both <code>Show(Element)</code> and <code>Show(MyControlElement)</code> overloads,
+  or an overload taking an interface the record implements), the call is left unstamped
+  rather than guessed, because an interceptor for the wrong overload
+  would fail the build. Code that never touches a wrapper record is unaffected. The
+  wrapper generator only emits interceptors when <code>ReactorSourceMap</code> is true and the
+  build lists <code>Microsoft.UI.Reactor.Generated</code> in <code>InterceptorsNamespaces</code>, which
+  <code>Microsoft.UI.Reactor.targets</code> does for you.</li>
 <li><strong>Unannotated entry points outside <code>Factories</code> are not stamped.</strong> A few
   element-producing APIs live elsewhere — <code>PropertyGridDefaults</code>'s templates and
   <code>intl.RichMessage(...)</code> (<code>IntlAccessor</code>) are built-in examples. They build their
@@ -3796,6 +3950,75 @@ your own types declare — not just <code>string</code>. Two limits are worth kn
   <code>[ReactorSourceTransparent]</code>, which is what <code>Pending(fallback, child)</code> does;
   <code>intl.RichMessage</code> cannot, because it is an instance method.</li>
 </ul>
+<h2 id="inspecting-components">Inspecting components<a class="headerlink" href="#inspecting-components" title="Permanent link">&para;</a></h2>
+<p><code>ReactorDiagnostics</code> (namespace <code>Microsoft.UI.Reactor.Core.Diagnostics</code>) lets an
+inspector go from a realized control to the component behind it and make
+development-time edits. It is a provisional surface for devtools. These inspection
+members must be called on the UI thread that owns the element (<code>GetHosts()</code> is the
+exception: it is safe from any thread). A <code>ComponentSnapshot</code> and the property lists are
+plain text: they hold no reference into the component, so they can be kept or
+sent across a process boundary. The one live object is a resolved reference
+edge's <code>Target</code>, the mounted control it points at.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1">// The Border wrapper every Component&lt;T&gt;() / RenderEachTime / Memo mounts into,</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="c1">// or a host&#39;s root content (window.Content, a ReactorHostControl).</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ReactorDiagnostics</span><span class="p">.</span><span class="n">DescribeComponent</span><span class="p">(</span><span class="n">wrapper</span><span class="p">)</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="n">component</span><span class="p">)</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="p">{</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="c1">// component.Name: &quot;Counter&quot;, &quot;Memo in MainPage.Render&quot;, &quot;render in App.Main&quot;</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">    </span><span class="k">foreach</span><span class="w"> </span><span class="p">(</span><span class="kt">var</span><span class="w"> </span><span class="n">hook</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">component</span><span class="p">.</span><span class="n">State</span><span class="p">)</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">        </span><span class="n">Console</span><span class="p">.</span><span class="n">WriteLine</span><span class="p">(</span><span class="s">$&quot;{hook.Index} {hook.Kind} {hook.Type} = {hook.Value}&quot;</span><span class="p">);</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">    </span><span class="c1">// Parsed to the hook&#39;s type; same semantics as calling the UseState setter.</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">ReactorDiagnostics</span><span class="p">.</span><span class="n">TrySetState</span><span class="p">(</span><span class="n">wrapper</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;42&quot;</span><span class="p">,</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">var</span><span class="w"> </span><span class="n">error</span><span class="p">))</span>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="w">        </span><span class="n">Console</span><span class="p">.</span><span class="n">WriteLine</span><span class="p">(</span><span class="n">error</span><span class="p">);</span><span class="w">   </span><span class="c1">// &quot;&#39;abc&#39; is not a valid int&quot;, &quot;... has kind &#39;ref&#39;; ...&quot;</span>
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>
+<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="w">    </span><span class="n">ReactorDiagnostics</span><span class="p">.</span><span class="n">Rerender</span><span class="p">(</span><span class="n">wrapper</span><span class="p">);</span><span class="w">   </span><span class="c1">// bypasses memoization, like a state change</span>
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="p">}</span>
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>
+<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="c1">// Which WinUI properties this control&#39;s common modifiers set (.Width, .Margin, ...).</span>
+<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a><span class="kt">var</span><span class="w"> </span><span class="n">owned</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ReactorDiagnostics</span><span class="p">.</span><span class="n">GetAppliedProperties</span><span class="p">(</span><span class="n">control</span><span class="p">);</span>
+</code></pre></div>
+<p>Values are formatted for display: strings are quoted, collections are summarised
+as <code>List&lt;T&gt; (n items)</code> from the count they advertise (a lazy sequence is never
+enumerated and shows <code>(count unknown)</code>), and long values are cut at 200 characters.
+Values are not redacted: like other in-process inspectors, Reactor reports what
+the app holds, and an inspector that shows or forwards values where a secret must
+not appear (a log, a recording, an AI agent) decides what to hide.
+<code>TrySetState</code> accepts numbers, single characters, <code>true</code>/<code>false</code>, enum member
+names (a <code>[Flags]</code> combination only of declared bits), dates, time spans, GUIDs,
+plain text and their nullables (<code>null</code> clears a
+string or nullable); it refuses any other type with a reason rather than guessing.
+Hook names are not recorded, so <code>State</code> rows have an empty <code>Name</code> and are
+identified by call-order index and kind. Props are read by reflection: under
+NativeAOT or trimming a props type's members can be trimmed away, and <code>Props</code> then
+holds a single <code>&lt;Type&gt; (members unavailable)</code> row instead.</p>
+<p>Component lookup does not depend on source mapping. When a root renders a component
+directly (<code>Render() =&gt; Component&lt;Shell&gt;()</code>), its rendered control is also <code>Shell</code>'s
+wrapper; that element describes <code>Shell</code>, and the root is reached through its
+<code>ContentTarget</code>, its <code>ReactorHostControl</code> or the dev-overlay wrapper instead. A host
+that installs straight into <code>Window.Content</code> has no such anchor, so in that shape its
+root is not reachable. <code>GetAppliedProperties</code> reads
+the element back-pointer, so it needs the control to be tagged — turn source
+mapping on for full coverage. It covers common modifiers only; a property set by
+the control's own element record (<code>TextBlock("hi")</code> → <code>Text</code>) is not listed. The
+one exception is the <code>AutomationProperties.Name</code> Reactor derives from a captioned
+control (<code>Button("Save")</code>) when you set none: it is reported as
+<code>"DefaultAutomationName"</code> while the live name still equals it.</p>
+<p>An open <code>ContentDialog</code> is hosted in its own popup, out of reach of an ancestor
+walk from the dialog's buttons, so with source mapping on the realized dialog is
+tagged with its <code>ContentDialog(...)</code> element too: <code>ReactorSourceMap.GetSource(dialog)</code>
+names the call site. That tag is for attribution only — the element's modifiers
+apply to the collapsed placeholder — so <code>GetAppliedProperties</code> and
+<code>GetReferenceEdges</code> report nothing for the dialog itself, and the tag is cleared
+when the dialog closes.</p>
+<p>A re-render diffs element against element, not against the live control, so it
+does not undo a property you edited directly on the control unless the element's
+value for that property changed.</p>
+<p><code>ReactorDiagnostics.GetReferenceEdges(control)</code> lists the references a control
+declares (<code>.LabeledBy(ref)</code>, <code>.XYFocusRight(ref)</code>, <code>.DescribedBy(...)</code>, a
+descriptor's <code>.Reference(...)</code>, …): the property, the AutomationId or expected
+target type you passed, and whether it has resolved. A pending edge is the case
+WinUI cannot show you: until the target mounts, the property itself
+(<code>XYFocusRight</code>, <code>AutomationProperties.LabeledBy</code>) reads null.</p>
 <h2 id="tips">Tips<a class="headerlink" href="#tips" title="Permanent link">&para;</a></h2>
 <p><strong>For now, lean on the component name.</strong> Wrap chunks of UI in
 purpose-named components — <code>&lt;UserCard&gt;</code>, <code>&lt;RegisterForm&gt;</code>,

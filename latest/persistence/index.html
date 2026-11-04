@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.16/persistence/">
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/persistence/">
       
       
         <link rel="prev" href="../async-resources/">
@@ -3418,12 +3418,13 @@ restart"; that one needs a disk bridge in <code>UseEffect</code>, covered below.
 <a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="p">}</span>
 </code></pre></div>
 <p><img alt="Notes editor — UsePersisted demo" src="../images/persistence/notes-editor.png" /></p>
-<p>The lookup happens once per mount: the hook checks the named scope
-for <code>"notes/body"</code>, returns the cached value if present (otherwise
-the supplied <code>initialValue</code>), and writes the latest value back into
-the scope on every state update. When the component unmounts and
-later remounts, the second mount finds the stored value and skips the
-default.</p>
+<p>The hook reads the scope once per mount, using <code>initialValue</code> when no
+compatible cached value is available. State updates change the hook's
+current value; the latest value is saved to the scope when the component
+unmounts.</p>
+<p>For nullable state, setting the value to <code>null</code> is preserved across an
+unmount/remount. A stored null is a cached value; it does not cause the next
+mount to fall back to <code>initialValue</code>.</p>
 <h2 id="reference">Reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h2>
 <table>
 <thead>

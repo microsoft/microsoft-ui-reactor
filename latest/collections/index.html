@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.16/collections/">
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/collections/">
       
       
         <link rel="prev" href="../forms/">
@@ -3922,7 +3922,9 @@ You get this for free as long as <code>keySelector</code> returns a value that i
   having no key.</li>
 <li><strong>Unique</strong> within the list — duplicate keys trigger a bulk-replace
   bailout and a one-shot diagnostic in the dev log.</li>
-<li><strong>Non-null</strong> — null keys bail out the diff for the affected list.</li>
+<li><strong>Non-null</strong> — a null key is reported as a diagnostic and that item is
+  matched by its position, so its row state follows the index rather than
+  the item.</li>
 </ul>
 <h3 id="ireactorkeyed-identity-on-the-data"><code>IReactorKeyed</code> — identity on the data<a class="headerlink" href="#ireactorkeyed-identity-on-the-data" title="Permanent link">&para;</a></h3>
 <p>When a model type owns its identity, implement <code>IReactorKeyed</code> (its single
@@ -4270,9 +4272,11 @@ instance the old one built.</p>
 <p><strong>Outside a virtualized list,</strong> <code>Memo(key, factory)</code> is a transparent but <em>keyed</em>
 wrapper: a re-render with the same key is a no-op (the factory is not re-invoked
 and the subtree is not diffed), and a changed key replaces the inner (unmount +
-fresh mount of a new <code>factory()</code> result). The cross-recycle cache only happens
-when a virtualized list's factory owns the cache; as a plain child (say, a
-<code>VStack</code> child) it is a safe, keyed no-op.</p>
+fresh mount of a new <code>factory()</code> result). The one exception is a component
+inside the subtree that updates its own state: the factory runs again so the
+reconciler can walk down to that component, which is why it has to stay pure.
+The cross-recycle cache only happens when a virtualized list's factory owns the
+cache; as a plain child (say, a <code>VStack</code> child) it is a safe, keyed no-op.</p>
 <h3 id="escape-hatch-without-the-api">Escape hatch without the API<a class="headerlink" href="#escape-hatch-without-the-api" title="Permanent link">&para;</a></h3>
 <p><code>Memo&lt;TKey&gt;</code> is the supported path, but the same idea works today with a plain
 dictionary you own — handy on a Reactor build without the API, or when you
@@ -4455,7 +4459,7 @@ that carry no identity, or when you want a key other than <code>item.Key</code>.
 <li><strong>Keys must be unique</strong> within their sibling list. Duplicates cause
   undefined reconciliation behavior.</li>
 <li><strong>Keys should be strings.</strong> <code>WithKey(string)</code> is the base modifier. For
-  types that implement <a href="#ireactorkeyed--identity-on-the-data"><code>IReactorKeyed</code></a>
+  types that implement <a href="#ireactorkeyed-identity-on-the-data"><code>IReactorKeyed</code></a>
   there is also <code>WithKey&lt;TKey&gt;(TKey item)</code>, which reads <code>item.Key</code> for you.</li>
 </ul>
 <h2 id="grouping">Grouping<a class="headerlink" href="#grouping" title="Permanent link">&para;</a></h2>

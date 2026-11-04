@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.16/reference/hooks/ResourceOptions/">
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/ResourceOptions/">
       
       
       
@@ -3160,6 +3160,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameters
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -3193,8 +3204,20 @@
 </blockquote>
 <h2 id="summary">Summary<a class="headerlink" href="#summary" title="Permanent link">&para;</a></h2>
 <p>Tuning for the <code>UseResource</code> hook. Defaults mirror
-TanStack Query — zero <a href="./">StaleTime</a> (always refetch-on-mount but dedup
-concurrent requests), five-minute <a href="./">CacheTime</a>.</p>
+TanStack Query — zero <a href="../StaleTime/">StaleTime</a> (<a href="../../../hooks/">guide</a>) (always refetch-on-mount but dedup
+concurrent requests), five-minute <a href="../CacheTime/">CacheTime</a> (<a href="../../../hooks/">guide</a>).</p>
+<h2 id="parameters">Parameters<a class="headerlink" href="#parameters" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>StaleTime</strong> — Freshness interval; null uses zero.</li>
+<li><strong>CacheTime</strong> — Retention after the last subscriber leaves; null uses five minutes.</li>
+<li><strong>RetryCount</strong> — Number of retries after a failed fetch.</li>
+<li><strong>RefetchOnMount</strong> — Whether to fetch on a cache miss.</li>
+<li><strong>CacheKey</strong> — Overrides the generated cache key; null uses a key derived from deps.
+When set, the key identifies the query; deps changes alone do not cancel
+an in-flight request or start a new fetch. Include values that select
+different data in the key, for example <code>$"user:{userId}"</code>.</li>
+<li><strong>RefetchOnWindowFocus</strong> — Whether to opt into window-focus revalidation.</li>
+</ul>
 
 
 
