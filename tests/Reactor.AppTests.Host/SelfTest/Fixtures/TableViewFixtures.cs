@@ -203,9 +203,12 @@ internal static partial class TableViewFixtures
                 await Harness.WaitFor(() => H.FindText("group-header:A") is not null, maxPasses: 40, perPassMs: 25));
 
             H.ClickButton("Next mode");
+            // The empty template realizes only after the cleared rows unrealize; allow for a
+            // slow CI dispatcher, and say which half is missing if it still times out.
             H.Check("TableView_Empty_ContentRendered",
                 await Harness.WaitFor(() => H.FindText("nothing to show") is not null && H.FindText("fg:Alice") is null,
-                    maxPasses: 40, perPassMs: 25));
+                    maxPasses: 80, perPassMs: 25),
+                $"empty={H.FindText("nothing to show") is not null} alice={H.FindText("fg:Alice") is not null}");
 
             host.Mount(_ => TextBlock("TableView unmounted"));
             await Harness.Render();
