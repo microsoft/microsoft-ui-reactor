@@ -25,6 +25,19 @@ internal static class ControlledOptionalTextInputFamilyFixture
             await ControlledOptionalSelfTestHelpers.RunUnsetSurvivesSiblingRerenderAsync(H, fixture, scenario);
             await ControlledOptionalSelfTestHelpers.RunBoundUpdatesControlAsync(H, fixture, scenario);
             await ControlledOptionalSelfTestHelpers.RunSnapBackAsync(H, fixture, scenario);
+            await ControlledOptionalSelfTestHelpers.RunUserEditAfterStateWriteAsync(
+                H, fixture, scenario, "EditAfterWrite", scenario.SecondValue);
+            // RichEditBox skips writing an empty value; a skipped write must not
+            // reserve an echo either.
+            await ControlledOptionalSelfTestHelpers.RunUserEditAfterStateWriteAsync(
+                H, fixture, scenario, "EditAfterEmptyWrite", "");
+            if (scenario.Name is "RichEditBox")
+            {
+                // The document reads "\n" back as "\r": the write must still
+                // recognise its own echo.
+                await ControlledOptionalSelfTestHelpers.RunUserEditAfterStateWriteAsync(
+                    H, fixture, scenario, "EditAfterMultilineWrite", "rich-line-one\nrich-line-two");
+            }
         }
     }
 

@@ -639,6 +639,17 @@ single controlled value): `ComboBox`, `FlipView`, `GridView`, `ListBox`,
 `valueDiffEcho: true`), plus `ToggleSwitchHandler` and the live `TextBoxHandler`
 (`ControlledPropEntry` was already value-diff from the PoC).
 
+`RichEditBox.Text` moved over later, although its echo is deferred:
+`Document.SetText` raises `TextChanged` asynchronously. On the counter it lost
+the user's first edit after every state write, because the entry's
+`WriteSuppressed` and the descriptor's own Mount-time `BeginSuppress` both
+reserved a token for the one event, and a skipped empty write reserved one with
+no event at all. The arm stays set until the next `TextChanged`, which drops it
+only when the document text matches, so a missing or merged echo cannot swallow
+a real edit. The descriptor also arms at Mount, since that write's echo arrives
+after the trampoline is wired, and compares with line breaks normalized because
+the document reads `\n` back as `\r`.
+
 **Retained on the counter** (with rationale):
 
 | Site | Why value-diff is unsafe |
@@ -646,7 +657,7 @@ single controlled value): `ComboBox`, `FlipView`, `GridView`, `ListBox`,
 | `Slider.Value`, `NumberBox.Value` | `double` snapping / precision — exact readback comparison leaks echoes |
 | `NumberBox` Min/Max coercion (`CoercingOneWayPropEntry`) | post-write coerced value is not known a-priori at arm time |
 | `CalendarView.SelectedDates` (`CollectionDiffControlledPropEntry`) | collection batch — no single expected value |
-| `AutoSuggestBox.Text`, `PasswordBox`, `RichEditBox` | string + deferred/coercion semantics |
+| `AutoSuggestBox.Text`, `PasswordBox` | string + deferred/coercion semantics |
 | `Expander` (`Expanding`/`Collapsed`) | `IsExpanded` readback timing at event uncertain |
 | `CheckBox` path-B legacy trampoline | retained legacy path |
 | `ApplySetters` scope | engine cannot predict which DPs `.Set(...)` writes — no expected value |
