@@ -163,8 +163,9 @@ internal static class ChangeEchoSuppressor
             // echo to leak. Clear it unconditionally so a coincident later real
             // event whose readback happens to match cannot be swallowed.
             // (ControlledPropEntry keeps its own per-payload arm with
-            // drain-on-match semantics. RichEditBox's deferred echo does use
-            // this arm; if a counter token lands on it first, the arm is cleared
+            // drain-on-match semantics. The deferred echoes of RichEditBox and
+            // AutoSuggestBox do use this arm; if a counter token lands on one
+            // first, the arm is cleared
             // here and the echo reaches the callback carrying the value Reactor
             // just wrote, which is harmless.)
             state.PendingEchoMatch = null;
