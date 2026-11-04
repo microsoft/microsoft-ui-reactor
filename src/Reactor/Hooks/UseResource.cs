@@ -155,7 +155,7 @@ public static class UseResourceExtensions
         string newKey = options.CacheKey ?? $"{hookIdRef.Current}/{DepsHash(deps)}";
         bool firstRender = state.LastDeps is null;
         bool depsChanged = !firstRender && (!string.Equals(state.CacheKey, newKey, StringComparison.Ordinal)
-            || (state.CheckDependencies && !ResourceDependencies.DepsEqual(state.LastDeps, deps)));
+            || (state.CheckDependencies && !RenderContext.DepsEqual(state.LastDeps, deps)));
 
         if (firstRender || depsChanged)
         {

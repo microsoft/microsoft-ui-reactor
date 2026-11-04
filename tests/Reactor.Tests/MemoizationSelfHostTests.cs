@@ -129,7 +129,7 @@ public class MemoizationSelfHostTests
         else if (oldDeps is null || newDeps is null)
             depsChanged = true;
         else
-            depsChanged = !DepsEqual(oldDeps, newDeps);
+            depsChanged = !RenderContext.DepsEqual(oldDeps, newDeps);
 
         bool contextChanged = false;
         foreach (var ctxHook in renderCtx.ContextHooks)
@@ -143,16 +143,6 @@ public class MemoizationSelfHostTests
         }
 
         return depsChanged || contextChanged;
-    }
-
-    private static bool DepsEqual(object?[] prev, object?[] next)
-    {
-        if (prev.Length != next.Length) return false;
-        for (int i = 0; i < prev.Length; i++)
-        {
-            if (!Equals(prev[i], next[i])) return false;
-        }
-        return true;
     }
 
     // ── Test components ──────────────────────────────────────────

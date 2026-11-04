@@ -75,7 +75,7 @@ public static class UseInfiniteResourceExtensions
         // Deps-change restart.
         string newKeyPrefix = BuildKeyPrefix(hookIdRef.Current!, deps, options);
         if (!string.Equals(state.KeyPrefix, newKeyPrefix, StringComparison.Ordinal)
-            || !ResourceDependencies.DepsEqual(state.LastDeps, deps))
+            || !RenderContext.DepsEqual(state.LastDeps, deps))
         {
             state.TransitionToDeps(newKeyPrefix, deps);
             state.KickOffFirstPage();
