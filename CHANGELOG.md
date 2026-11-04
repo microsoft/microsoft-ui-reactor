@@ -28,6 +28,20 @@ Conventions for contributors:
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.1.0-preview.17] — 2026-11-04
+
+### Added
+
 - `JumpList.GetRemovedArgumentsAsync()` reads user removals without updating the list.
   `UpdateAsync` and `ClearAsync` now return the removals observed in their own transaction,
   allowing apps to retain the feedback before Windows clears it. Await-only callers
@@ -70,11 +84,22 @@ Conventions for contributors:
   or a font name passed to `ResourceBuilder.Set(key, string)` under a `*FontFamily` key. It covers
   `BrushHelper.Parse`, `ResourceBuilder.Set(string, string)` and the `string` overloads of
   `Background` / `Foreground` / `BorderBrush` / `WithBorder`, suggests the exact hex (or
-  `new FontFamily(...)` once that `Set` overload exists), and ships a code fix; `mur check`'s new
+  `new FontFamily(...)` for a `*FontFamily` key), and ships a code fix; `mur check`'s new
   `ColorStringLiteralRule` repeats the rewrite as a `→ try:` hint. Unlike `REACTOR_DYM_001`–`005`
   it fires on code that compiles, so a project with `TreatWarningsAsErrors` can stop building on
   an existing gray color. Fix the value, or adjust the severity with
   `dotnet_diagnostic.REACTOR_DYM_006.severity` in `.editorconfig`.
+
+- **Typed `ResourceBuilder` overloads for non-brush styling values** (issue #1369, spec 015
+  Proposal 2). `.Resources(r => r.Set(key, value))` previously accepted only color strings,
+  `Brush`, `ThemeRef`, `double` and `CornerRadius`, so lightweight-styling keys of any other
+  type — 362 `Thickness` keys alone in WinUI's `generic.xaml` — needed a
+  `.Set(control => control.Resources[...] = ...)` callback on the native control instead.
+  `Set` now also takes `Thickness`, `FontWeight`, `FontFamily`, `bool` and `GridLength`, and
+  the new `SetColor(key, Color)` writes a literal `Color` resource. It is deliberately not a
+  `Set` overload: `Set("ButtonBackground", Colors.Red)` stays a compile error, because a raw
+  `Color` stored under a brush-typed key silently changes nothing. Existing calls bind
+  as before: integer arguments still select `double`, and strings still create brushes.
 
 - **Inspector diagnostics: call-site column and a per-component render event**
   (issue #1326, spec 010 §1.1):
@@ -180,7 +205,8 @@ Conventions for contributors:
   - `FormField` marks its field touched when the editor loses focus, so the
     default `ShowWhen.WhenTouched` reveals errors on blur as the guide describes.
     Nothing in the framework called `MarkTouched` before, leaving that default
-    unreachable unless the app marked fields by hand (spec 011 §1E.1).
+    unreachable unless the app marked fields by hand (forms-validation tasks §1E.1,
+    `docs/specs/tasks/forms-validation-implementation.md`).
   - `ValidationContext.SubmitAttempted`, recorded by `MarkAllTouched()` and
     cleared by `ResetAll()`. This is what `ShowWhen.AfterFirstSubmit` waits for;
     the framework had no notion of a submit before, so that policy could never
@@ -281,28 +307,26 @@ Conventions for contributors:
 
 - **Markdown `LinkBuilder` now receives a `MarkdownLink`** (#1436). Breaking: the
   callback's type changes from `Func<Element[], Uri, Element>` to
-  `Func<MarkdownLink, Element>`. `MarkdownLink` carries the label as plain `Text`
+  `Func<MarkdownLink, Element>`, so existing `(label, uri) => ...` callbacks no longer
+  compile; rewrite them as `link => ...`. `MarkdownLink` carries the label as plain `Text`
   (image alt text in place of images, entities decoded, line breaks as spaces), the
-  formatted `Label` (`RichTextBlockElement`, `null` when empty, where the old
-  callback got a 0- or 1-element array), and the validated `Uri`, so setting an
-  accessible name or tooltip no longer means walking the label's inlines. Existing
-  `(label, uri) => ...` callbacks no longer compile; rewrite them as
-  `link => ...` using `link.Label` and `link.Uri`. The URI policy, nesting rules,
-  label styling and null-result error are unchanged.
+  formatted `Label` (`RichTextBlockElement`, `null` when empty) and the validated `Uri`,
+  so setting an accessible name or tooltip no longer means walking the label's inlines.
+  In 0.1.0-preview.16 the callback was declared but never called — see Fixed.
 
-- **Picker helpers moved to `Microsoft.Windows.Storage.Pickers` and renamed as non-hooks**
-  (issue #1374, spec 054 §8.3). Breaking: `UseFilePickerAsync` / `UseMultipleFilesPickerAsync`
-  / `UseFolderPickerAsync` / `UseSaveFilePickerAsync` are now `PickFileAsync` /
-  `PickMultipleFilesAsync` / `PickFolderAsync` / `PickSaveFileAsync` (plus the new
-  `PickMultipleFoldersAsync`) on `RenderContext` and `Component`, and return path-based
-  `PickFileResult` / `PickFolderResult` instead of `StorageFile` / `StorageFolder`. Call them
-  directly from event handlers; the hook-rules analyzer no longer flags them. Option enums
-  come from `Microsoft.Windows.Storage.Pickers`; `SaveFilePickerOptions.FileTypeChoices` is an
-  ordered `IReadOnlyList<FileTypeChoice>` (order sets the default entry); `Title`,
-  `SuggestedFolder`, `SuggestedStartFolder`, `InitialFileTypeIndex`, open-picker
-  `FileTypeChoices`, `DefaultFileExtension` and `ShowOverwritePrompt` are new;
-  `FolderPickerOptions.FileTypeFilter` and `SaveFilePickerOptions.SuggestedSaveFile` are
-  removed. The dialog is owned by the window whose host rendered the component (previously
+- **Picker helpers moved to `Microsoft.Windows.Storage.Pickers`, renamed as non-hooks, and
+  completed** (issues #1371, #1374, spec 054 §8.3). Breaking: `UseFilePickerAsync` /
+  `UseFolderPickerAsync` are now `PickFileAsync` / `PickFolderAsync` on `RenderContext` and
+  `Component`, and return path-based `PickFileResult` / `PickFolderResult` instead of
+  `StorageFile` / `StorageFolder`. New beside them: `PickMultipleFilesAsync`,
+  `PickMultipleFoldersAsync`, and `PickSaveFileAsync` with `SaveFilePickerOptions`, whose
+  `FileTypeChoices` is an ordered `IReadOnlyList<FileTypeChoice>` (order sets the default
+  entry). Call them directly from event handlers; the hook-rules analyzer no longer flags
+  them. Option enums such as `PickerLocationId` now come from
+  `Microsoft.Windows.Storage.Pickers`; `ViewMode`, `SettingsIdentifier`, `Title`,
+  `SuggestedFolder`, `SuggestedStartFolder`, open-picker `FileTypeChoices` and
+  `InitialFileTypeIndex` are new init-only options. The dialog is owned by the window whose
+  host rendered the component (previously
   whichever window was most recently active, which with several windows picked the wrong one
   and threw after any window closed), and the pickers now work in elevated apps. They also
   work in content hosted by `ReactorHostControl` (owned by the window the control is loaded
@@ -337,23 +361,29 @@ Conventions for contributors:
   `FormField`, the visualizers and nested components no longer need an explicit
   `.Provide(ValidationContexts.Current, ctx)`; an explicit provide still takes
   precedence. The validator-only `.Validate(fieldName, validators…)` overload is
-  unchanged and still attach-only. (spec 011 §1A.5, issue #1262)
+  unchanged and still attach-only. (forms-validation tasks §1A.5,
+  `docs/specs/tasks/forms-validation-implementation.md`; issue #1262)
 
 - **The search index emits every clean `SampleCard` on a page, not just the first
   (spec 064 §3.2, issue #1275).** Regenerate after changing *any* card on a
   gallery page, not only the opening one.
 
-- A push to `main` and the release tag's own run both deploy the docs, as before. Standing
-  one of them down was tried and removed: every version of that check has to predict that
-  the other run will deploy, and each way the prediction fails (an evicted pending run, a
-  stale or deleted local tag, an unreachable `origin`, or the two runs entering the
-  concurrency group out of event order) skips the deployment *and* its verification, which
-  is worse than a duplicate the new `verify` job catches. (issue #1268)
 - The `Publish docs` concurrency group now sets `queue: max`. The Actions default keeps at
   most one *pending* run per group and cancels the previous one when a new run queues, so a
   docs push landing while a release tag's run waited behind `main` would evict the tag run
   before it started — leaving the release unpublished. Runs now wait in FIFO order.
   (issue #1268)
+
+- **`bootstrap.ps1` and `mur upgrade` set up the Windows App SDK template pack through
+  `winapp`** (PR #1277). With Reactor's own `reactorapp` template removed (see Removed),
+  bootstrap no longer `dotnet new install`s a Reactor templates nupkg; it runs
+  `winapp new --list`, which installs `Microsoft.WindowsAppSDK.WinUI.CSharp.Templates` (the
+  pack behind `dotnet new reactor`) on demand, and `mur upgrade` reports on that pack instead
+  of installing templates. `winapp` rather than `dotnet new install`, because the pack is
+  prerelease-only and `dotnet new install` has no `--prerelease` switch, so it resolves
+  stable versions and fails outright. The new `-WinAppSdkTemplatesVersion` bootstrap
+  parameter pins the pack and maps to `winapp new --template-version`; `mur templates status`
+  (see Added) backs `mur doctor` and bootstrap's verification.
 
 ### Deprecated
 
@@ -395,22 +425,6 @@ Conventions for contributors:
   `mur pack-local` no longer produces a templates nupkg and its `--framework-version` flag is
   gone; the release workflow no longer packs or publishes the package.
 
-- **Removed `mur templates install`.** Installing the Windows App SDK template pack is the
-  Windows App SDK CLI's job: `winapp new -t reactor -n MyApp` installs the pack on demand and
-  scaffolds in one step, and `winapp new --list` installs it without scaffolding. `bootstrap.ps1`
-  now drives that command, and `mur upgrade` reports on the templates instead of installing them.
-  `mur templates status` (see Added) still backs `mur doctor` and bootstrap's verification.
-
-  Reactor carried its own installer because `dotnet new install` has no `--prerelease` switch and
-  resolves stable-only, which fails outright while the pack is prerelease-only; working around
-  that meant resolving versions off the NuGet flat container and tiptoeing around
-  `dotnet new install --force`, which uninstalls the existing pack *before* downloading the
-  replacement. `winapp` handles all of it, so roughly 700 lines of that machinery are gone.
-
-  The `-WinAppSdkTemplatesSource` bootstrap parameter is removed with it — `winapp` has no
-  local-folder equivalent. `-WinAppSdkTemplatesVersion` still works and now maps to
-  `winapp new --template-version`.
-
 ### Fixed
 
 - **Virtualized list rows now see their ancestors' `Context`** (issue #1386). Rows of
@@ -432,17 +446,11 @@ Conventions for contributors:
   (issue #1386). WinUI can ask a virtualized list for rows synchronously while Reactor is
   still applying an unrelated update, for example when an effect or a control's own
   property setter calls `UpdateLayout()`. Such rows used to join that update's
-  bookkeeping:
-  - If the update was mounting an `ErrorBoundary` whose child then failed, the boundary's
-    rollback tore down those rows too: they stayed on screen with their effects cleaned
-    up, so they stopped updating.
-  - A row that threw was reported to that unrelated boundary, which then showed its
-    fallback.
-
-  Row building now sets the surrounding update's state aside and restores the list's own
-  context and theme, so a failing row shows its own error and a failing boundary only
-  rolls back its own subtree. (Window hooks in such rows are covered by the
-  window-owner fix below.)
+  bookkeeping, so a row that threw was reported to that unrelated update's
+  `ErrorBoundary`, which then showed its fallback. Row building now sets the surrounding
+  update's state aside and restores the list's own context and theme, so a failing row
+  shows its own error. (Window hooks in such rows are covered by the window-owner fix
+  below.)
 - On initial use, `UseDataSource` uses one page size for data-source requests, offset cursors,
   and resource row positions, preventing missing or misplaced rows when options
   are omitted or specify a different size (#1453; part of #1452).
@@ -473,7 +481,7 @@ Conventions for contributors:
 - `UsePersisted` restores saved null values for reference and nullable value
   types instead of falling back to `initialValue` after remount
   ([issue #1442](https://github.com/microsoft/microsoft-ui-reactor/issues/1442),
-  spec 033 §2).
+  spec 033 §2 in `033-winui-xaml-reviewer-feedback.md`).
 
 - **Unmount callbacks survive managed-wrapper collection** (spec 047 §3).
   `.OnUnmount(...)` now lives in native attached state rather than a weak table
@@ -497,11 +505,6 @@ Conventions for contributors:
   Fading controls retained from an earlier render no longer shift keyed prefix, suffix,
   removal or reorder updates onto another child's control. Live controls keep their
   identity and the final child order remains correct when the exits complete.
-  Null-mounted Memo slots remain absent from the physical map and insertion
-  anchors, including when exits occur in the same panel or another panel sharing
-  the reconciler. Retained exits and null-mounted slots no longer add control reads to
-  keyed updates that keep the children's order, and an exit playing in one panel no longer
-  adds a read per child to other keyed panels (up to 64 concurrent exits).
 
 - **Wrapped third-party controls now get source-map call sites** (spec 010). A factory
   emitted by `[GenerateReactorWrapper]` (`SettingsCard(...)`, `RadialGauge(...)`) is
@@ -548,10 +551,8 @@ Conventions for contributors:
     exception type). Before, nothing was raised while the window showed the error.
   - `ReactorEventSource.WindowOpened` / `WindowClosed` were declared but never raised; windows
     opened through `ReactorApp.OpenWindow` / `Run` now report both (root component type, HWND).
-  - `UseElementRef<T>()` is counted as the single hook slot it is, so the source map's
-    `hooks=` list keeps the ref's name and the indices of every later hook.
   - Templated `ListView<T>` / `GridView<T>` / `FlipView<T>` rows carry their `KeySelector` key
-    on the realized element (its element tag and published `key=`), as `LazyVStack` /
+    on the realized element (as its element tag), as `LazyVStack` /
     `VirtualList` rows already did. FlipView pages are still matched by position.
   - A list born with a null or duplicated key (including `LazyVStack`, which used to swap a
     null key for `__null_N` silently) is reported at mount, and a null key met during an update
@@ -562,19 +563,18 @@ Conventions for contributors:
     attached) and `CallSite`, and the logged warning names both.
   - `MenuItem(…)` / `AppBarButton(…)` and the other menu and command-bar item factories are
     source-mapped (new `CallSite` on `MenuFlyoutItemBase` / `AppBarItemBase`, excluded from
-    equality), and the items a `MenuFlyout`, `CommandBarFlyout`, `MenuBar` or `CommandBar`
-    builds publish their `ReactorSource` value, so `ReactorSourceMap.GetSource` and inspectors
-    map them back to C# and their owning component.
+    equality), so inspectors map the items a `MenuFlyout`, `CommandBarFlyout`, `MenuBar` or
+    `CommandBar` builds back to C# and their owning component.
   - `TabView`, `Pivot`, `ListView`, `GridView` and `FlipView` accept a plain `int` selected
     index (it was ambiguous between `int?` and `Optional<int>`, CS0121), and new `XamlHost(…)` /
     `XamlPage(…)` factories record a call site for `XamlHostElement` / `XamlPageElement`.
 
-- **Markdown `LinkBuilder` is now invoked** (#1401). Previously the callback was
+- **Markdown `LinkBuilder` is now invoked** (#1401, #1436). Previously the callback was
   ignored and every link rendered as a default hyperlink. Each link whose target
-  passes the URI policy now calls it with that URI and the formatted label, and
-  the returned element renders inline. Links nested in a label stay part of the
-  outer link. If the outer target is rejected, the whole label renders as plain
-  text, and a URL inside it does not become a separate link. Links render as
+  passes the URI policy now calls it with a `MarkdownLink` (see Changed), and
+  the returned element renders inline; returning `null` throws. Links nested in a label
+  stay part of the outer link. If the outer target is rejected, the whole label renders
+  as plain text, and a URL inside it does not become a separate link. Links render as
   before when no callback is set.
 - **Markdown numeric character references are decoded** (#1436). `&#65;` and
   `&#x42;` used to render as literal text; they now render as `A` and `B`, like
@@ -615,19 +615,18 @@ Conventions for contributors:
 - **`ListView<T>` / `GridView<T>` rows are unmounted when WinUI drops their container
   without recycling it** (issues #1423, #1440). Under fast insert / remove / move churn WinUI
   could park a container offscreen, unlinked from any item, without raising the recycle
-  `ContainerContentChanging`, so the row's components stayed mounted: their effects never
-  cleaned up, and a `ReactorDiagnostics.TrySetState` on one was accepted but never rendered.
+  `ContainerContentChanging`, so the row's components stayed mounted and their effects never
+  cleaned up.
   The update-time sweep also handles an unlinked container whose item was already cleared while
   its template still holds a live view; its visuals remain available for the native delete
   transition. WinUI parks it in the layout pass after the update (a row moved twice, or moved
   out of the realized range, is enough), so after a structural change the reconciler now checks
-  the containers once that layout pass completes. A throwing cleanup no longer stops that sweep:
-  every parked row is torn down and the failure goes to the `RenderErrorHandler` as
-  `Cleanup`. Teardowns that finish regardless of cleanup failures (issue #1291) now also
-  collect a throwing control handler, descriptor `OnUnmount` hook or property unmount callback,
-  decorator or `RegisterType` unmount callback rather than stopping at it: each failure is
-  reported once, in order, the children it did not reach are torn down (once each), and the
-  half-torn-down control is never pooled.
+  the containers once that layout pass completes. Unmounting also no longer stops at a
+  throwing cleanup (with issue #1291): every parked row is torn down, and a throwing control
+  handler, descriptor `OnUnmount` hook, property unmount callback, or decorator or
+  `RegisterType` unmount callback is collected rather than ending the teardown. Each failure
+  is reported once, in order (to the `RenderErrorHandler` as `Cleanup`), the children it did
+  not reach are torn down (once each), and the half-torn-down control is never pooled.
 
 - **`REACTOR_A11Y_001` no longer flags text buttons with a non-literal string label**
   (spec 006 §6.3). `Button(S("Usage_Refresh"), onClick)` — a localized resource lookup,
@@ -649,15 +648,6 @@ Conventions for contributors:
   still reports.
 
 - Flat `ItemsHost` children reconcile incrementally, same-instance Element item sources honor dirty-state/context/theme/forced-render invalidation instead of skipping unconditionally, and generated Element slots receive terminal teardown while still parented ([control reconciler guide](docs/guide/control-reconciler-protocol.md)).
-
-- **Source-map generator no longer fails under `dotnet watch`** (issue #1404, spec 010).
-  When Reactor is a project reference, Hot Reload's workspace compilation sees Reactor's
-  symbols with their source, so a component calling a hook that is not on `Component`
-  (`this.UseElementRef<T>()`, `this.UseElementFocus()`) made `SourceMapInterceptorGenerator`
-  read a syntax tree outside the app's compilation and throw `CS8785`, dropping every call
-  site in the edited project until restart. Hooks declared in Reactor are now recognised by
-  assembly, and a custom hook declared in another project's source counts as an unknown
-  number of slots — what a command-line build already reported.
 
 - **Window hooks resolve the window that renders the component, not the most recently
   active host** (issue #1396, spec 036 §7.1). `UseWindow`, the parameterless
@@ -739,9 +729,7 @@ Conventions for contributors:
   leaked another set. The boundary now rolls the failed child back — the controls
   that did finish are unmounted (so their interaction states, animations and
   `.OnUnmount(...)` actions go too), and the components that did not still have their
-  effect cleanups run — both when it first mounts and on each retry. The same applies to the internal boundary
-  around a `RenderErrorHandler` fallback, and when a host replaces or releases its tree
-  for a render-error outcome every cleanup runs even if one of them throws.
+  effect cleanups run — both when it first mounts and on each retry.
 
 - **Dropping an `AutoSuggestBox` right after its text changed can no longer crash
   the app** (PR #1302, supersedes #559). WinUI raises the box's `TextChanged` from
@@ -790,20 +778,16 @@ Conventions for contributors:
   itself from `unmount` walks its children once rather than calling `unmount` again.
 
 - **A docking host's floating windows close when the host unmounts, whichever
-  `DockManager` they were opened under** (spec 045 §2.25, PR #1305). Apps build a new
+  `DockManager` they were opened under** (spec 045 §8.10, PR #1305). Apps build a new
   `DockManager` in their render, and every state change renders again, so a host
   sees a new element instance on almost every render. The per-host tables
   (floating windows, `DockHostRegistry`, and the chord, live-announcer, model and
-  drag-gate bridges) were keyed by that instance, and unmount cleaned up only the
-  last one. A pane floated under an earlier instance kept its window open after the
-  host was gone: in the Reactor IDE sample, View ▸ Reset Layout left the floated
-  pane open next to its re-docked copy, and devtools still listed the old host. The
-  tables are now keyed by the host, so unmount closes every window the host opened
-  and clears every table, including the model and drag-gate bridges it never
-  cleared before. Unmount goes through the host itself rather than the element it
-  rendered last, so when an app hands one `DockManager` instance to a new host (a
-  type change mounts the new host first), the old host no longer clears the new
-  host's entries or unlists it. While the host is mounted, `DockHostModel.Floating`
+  drag-gate bridges) were keyed by that instance, so a pane floated under an earlier
+  instance kept its window open after the host was gone: in the Reactor IDE sample,
+  View ▸ Reset Layout left the floated pane open next to its re-docked copy, and
+  devtools still listed the old host. The tables are now keyed by the host, so unmount
+  closes every window the host opened and clears every table. While the host is
+  mounted, `DockHostModel.Floating`
   no longer drops a floating pane on the next render, and `docking.list` shows the
   host once, under an id that stays stable, instead of once per render.
 
@@ -847,9 +831,8 @@ Conventions for contributors:
   child of a `Border`, a named slot such as `SplitView.Pane`, a tab's content, a
   generated element slot such as `TabView.TabStripHeader`, or a `RichTextBlock`
   `InlineUI(...)` child, Reactor swapped the new control in but, unlike a panel,
-  never unmounted the old one. The old subtree's effect cleanups, `.OnUnmount`
-  actions and `RegisterType` `unmount` callbacks never ran, a `ValidationRule`
-  in it kept its message, and a ref to a control in it kept pointing at the
+  never unmounted the old one. The old subtree's effect cleanups and `.OnUnmount`
+  actions never ran, and a ref to a control in it kept pointing at the
   detached control. A `ValidationVisualizer` in such a slot did this on every
   re-render, because its update remounts it, and so did a `RegisterType`
   `update` that returns a new control. Slots that a control fills by hand still
@@ -864,8 +847,8 @@ Conventions for contributors:
   A `Flyout`, `MenuFlyout` or `CommandBarFlyout` that wraps a Target unmounts
   the old Target itself when the Target's element type changes. The reconcile
   path behind component roots, `ErrorBoundary`, the app root and the public
-  `Reconciler.Reconcile` then unmounted it again, so the old subtree's
-  `RegisterType` `unmount` callbacks and handler unmounts ran twice. That path
+  `Reconciler.Reconcile` then unmounted it again, so the old subtree's handler
+  unmounts ran twice. That path
   now notices the update already unmounted it, as single-child slots do. A
   panel still unmounts such a Target twice.
 
@@ -875,64 +858,30 @@ Conventions for contributors:
   outside `FormField`, the context was never provided to the subtree, reading it
   in `Render()` was always a pass stale, mutating it scheduled no re-render, and
   `ShowWhen.WhenTouched` was unreachable because nothing ever called
-  `MarkTouched`. Making that path work surfaced a long tail of validation bugs,
-  all fixed here:
+  `MarkTouched`. Making that path work surfaced further validation bugs, all fixed
+  here:
   - **Verdicts outliving their control.** A validated control behind a condition,
     a whole `FormField`, or a child removed from a parent left its message in the
     context, so a form stayed invalid over a field with no control — permanently,
     with no way to clear it short of `ClearAll()`. The same happened when a field
-    name changed, when a rule moved to another context, and when a render threw
-    after validating.
-  - **Repaint loops.** Chaining two value overloads on one field rewrote the same
-    state every pass and announced a change each time; a failing `ValidationRule`
-    cleared and re-added its message on every reconcile, driving the reconciler
-    into its re-entrancy limit. A pass that ends where it started is now silent —
-    including for `Version`, so a `UseMemo` or `UseEffect` keyed on it no longer
-    re-runs forever.
+    name changed and when a rule moved to another context.
   - **Async rules that silently passed.** A rule built with `ValidationRuleAsync`
     never ran its predicate when placed in the element tree, and recorded a
     passing verdict when evaluated synchronously — reporting an invalid field as
     valid. Mounted rules now dispatch asynchronously; the synchronous paths throw
     instead.
-  - **Async ordering and lifetime.** Overlapping checks applied in completion
-    order, so a slow failing check could reinstate an error a newer run had
-    cleared; a verdict about a replaced value survived the change; and a
-    predicate that never completed held its rule and its `ValidationContext`
-    alive forever, with another added on every re-render. Passes are now ordered
-    per producer and cancellable.
-  - **Rule identity.** Rules were identified by their message text, so an
-    interpolated message such as `$"Must be after {start}"` orphaned the previous
-    verdict on every change and errors accumulated; two rules sharing a predicate
-    retracted each other. Identity is now the field plus the predicate's call
-    site and position.
+  - **Async ordering.** Overlapping checks applied in completion order, so a slow
+    failing check could reinstate an error a newer run had cleared, and a verdict
+    about a replaced value survived the change. Passes are now ordered per producer
+    and cancellable.
   - **Fields that were never registered.** A field validated only through
     `ValidateFieldAsync`, the rule batches, or `.ValidateAsync(…)` on an element
     built outside a render pass was skipped by `MarkAllTouched()` and the
     validity summary.
   - **Wrong verdicts.** A validator-only attachment inside a `FormField` was
     validated against `null`, reporting a required-field error for a control that
-    plainly had text; `NotifyValueChanged` discarded `AddExternal` messages on
-    every call rather than only when the value actually moved; a rule batch
-    containing an async rule installed part of itself before throwing; and
-    retiring one producer removed another's message whenever both held the same
-    immutable `ValidationMessage` instance, which a caching validator or a direct
-    `Add(...)` makes reachable — leaving the field spuriously valid.
-  - **Missed repaints.** A change raised while a render was in flight was
-    announced inline, in the middle of the pass that caused it; deferring it
-    then dropped it when no subscriber existed yet, because a host flushes root
-    effects only after reconciliation. A parent rendering `ctx.IsValid()` could
-    therefore never learn that a child had invalidated the shared context.
-    Notifications are now held for the pass and delivered afterwards, to
-    whichever subscribers exist by then.
-  - **Leaks.** A `FormField` that swapped its content control left the displaced
-    editor's blur binding live, so a pooled control kept marking the old field
-    and kept its `ValidationContext` alive; and a long-lived context grew one
-    bookkeeping entry per mounted rule without bound, or per cleared field when
-    fields are named dynamically.
-  - **Registration was invisible.** `RegisteredFields` is public and
-    `MarkAllTouched()` iterates it, but registering a field raised no
-    notification, so a subscriber rendering the field set could stay stale.
-    Registration now counts as a change in every path that performs one.
+    plainly had text, and `NotifyValueChanged` discarded `AddExternal` messages on
+    every call rather than only when the value actually moved.
   - **Display policies that could never fire.** `FormField`'s default
     `ShowWhen.WhenTouched` showed nothing because nothing called `MarkTouched`,
     and `ShowWhen.AfterFirstSubmit` showed nothing because no caller supplied the
@@ -964,7 +913,7 @@ Conventions for contributors:
   moves that focus out of the grid.
 
 - **Compact docking tool tabs are no longer blank, and every docking tab has a UI
-  Automation name (spec 045 §2.2, §2.8, PR #1295).** A `DockTabGroup` with
+  Automation name (spec 045 §5.1, §5.3.1, PR #1295).** A `DockTabGroup` with
   `CompactTabs: true`, or one made up only of `ToolWindow`s (compact by default), used
   WinUI's `TabViewWidthMode.Compact`, which shows only the icon of an unselected tab.
   Docking panes have no icon, so every unselected tab rendered as an empty stub with no
@@ -979,31 +928,21 @@ Conventions for contributors:
   to keep it there. The VSIX's advertised minimum host moves to Visual Studio 17.14 to
   match that baseline. (PR #1282)
 
-- **The Visual Studio preview now supports packaged (MSIX) apps.** `dotnet new reactor`
-  generates a packaged app, and previewing one previously failed. It now works with no
-  project changes. (PR #1282)
+- **The Visual Studio preview now supports packaged (MSIX) apps.** Previewing a packaged
+  app failed, because the preview never launched it through its execution alias. It now
+  works with no project changes, which matters more now that `dotnet new reactor` scaffolds a
+  packaged app (see Removed). (PR #1282)
 
-- **Wrong code and guidance in the shipped agent-kit skills (spec 064 §4, issue
-  #1275).** Three gesture snippets in `reactor-input` used WinUI's nested
-  `ManipulationDelta` shape rather than Reactor's flat gesture structs, and the
-  60Hz pan pattern bound a `UseRef` box into `.Ref(...)`, which takes an
-  `ElementRef` — all four shipped as copy-ready code that would not compile. The
-  hook-dependency gotcha in `reactor-getting-started` also misattributed the
-  tuple and array rules to the runtime rather than to `REACTOR_HOOKS_004`, which
-  is what actually rejects them. Found by requiring a compiled gallery card for
-  every API the skills demonstrate.
-- The E2E suite's `winapp ui yield` capability probe measures something again. It ran
-  `winapp ui yield --help` and checked for exit `0`, but an unrecognized verb is not rejected —
-  `ui bogusverbxyz --help` also exits `0` and prints the parent help — so the probe reported
-  every verb as present, invented ones included. It now reads the command set from
-  `winapp ui --cli-schema`, falling back to parsing `winapp ui --help` on builds predating that
-  flag, and distinguishes a command set it could not read from one that genuinely lacks the verb.
-  With winapp v0.7.0 shipping winappCli#767, the E2E job sets `REACTOR_E2E_REQUIRE_UI_YIELD=1`,
-  so the UI-turn continuity tests are enforced rather than skipped — they previously reported
-  `Assert.Inconclusive`, which Microsoft.Testing.Platform prints as "passed, zero skipped"
-  (PR #1272).
+- **Wrong code and guidance in the agent skills (spec 064 §4, issue #1275).** Three
+  gesture snippets — in the skill kit's `skills/input.md` and the plugin's `reactor-input`
+  skill — used WinUI's nested `ManipulationDelta` shape rather than Reactor's flat gesture
+  structs, and the 60Hz pan pattern bound a `UseRef` box into `.Ref(...)`, which takes an
+  `ElementRef` — all four shipped as copy-ready code that would not compile. The plugin's
+  `reactor-getting-started` hook-dependency gotcha also misattributed the tuple and array
+  rules to the runtime rather than to `REACTOR_HOOKS_004`, which is what actually rejects
+  them. Found by requiring a compiled gallery card for every API the skills demonstrate.
 - **The framework package attached to GitHub Releases bundled an ARM64-only
-  `Reactor.Wrappers.Abstractions.dll`** (spec 022 §3, spec 058 §15.7). The Package workflow packed
+  `Reactor.Wrappers.Abstractions.dll`** (spec 022 §5, spec 058 §15.7). The Package workflow packed
   `Microsoft.UI.Reactor` after a whole-solution build, and the nupkg it attaches to each GitHub
   Release carried an ARM64 copy of that `lib/` DLL, which an x64 process refuses to load. The
   `0.1.0-preview.15` and `0.1.0-preview.16` attachments are affected. The packages on NuGet feeds
@@ -1057,6 +996,12 @@ Conventions for contributors:
 - **The `Microsoft.UI.Reactor` package has a single `lib/` folder and always contains
   `ReactorApplication.xbf`.** A second `lib/` folder used to hold only that file, and packing
   from a clean tree left it out.
+
+- **`mur check` prints error messages in full** (issue #1273, spec 038 §9). Every
+  diagnostic's message was cut to 97 characters plus `...`, which on long-path build errors
+  hid the very file names needed to fix them. Errors now keep their complete message in all
+  four modes; warnings and info diagnostics keep the compact 100-character form, and every
+  diagnostic is still a single line.
 
 ### Security
 
