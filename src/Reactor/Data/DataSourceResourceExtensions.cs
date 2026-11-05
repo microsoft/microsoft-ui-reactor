@@ -16,8 +16,10 @@ public static class DataSourceResourceExtensions
     /// sort/filter/search restarts the pagination cleanly.
     /// </summary>
     /// <remarks>
-    /// When <paramref name="options"/> is non-null, its PageSize (default 50) takes precedence.
+    /// On first use, when <paramref name="options"/> is non-null, its PageSize (default 50) takes precedence.
     /// Otherwise, <c>request.PageSize</c> is used. The effective page size is at least 1.
+    /// This size is retained for the hook's lifetime, including query restarts.
+    /// Remount the component to use a different page size.
     /// </remarks>
     public static InfiniteResource<T> UseDataSource<T>(
         this RenderContext ctx,
@@ -33,13 +35,20 @@ public static class DataSourceResourceExtensions
         // "wait for page N-1" constraint baked into generic cursor paging — deep
         // scrolls can fetch pages in parallel this way, which matters for DataGrid
         // workflows that jump from row 0 to row 50 000 in a single scroll gesture.
-        int pageSize = Math.Max(1, options?.PageSize ?? request.PageSize);
+        // The resource retains its initial options, so requests and cursors must retain its page size.
+        var sizeRef = ctx.UseRef((PageSize: 0, Initialized: false));
+        var (pageSize, initialized) = sizeRef.Current;
+        if (pageSize == 0)
+        {
+            pageSize = Math.Max(1, options?.PageSize ?? request.PageSize);
+            sizeRef.Current = (pageSize, false);
+        }
         // Use the same size for request batches, offset cursors, and resource row positions.
         options ??= InfiniteResourceOptions.Default;
-        if (options.PageSize != pageSize)
+        if (!initialized && options.PageSize != pageSize)
             options = options with { PageSize = pageSize };
 
-        return ctx.UseInfiniteResource<T, string>(
+        var resource = ctx.UseInfiniteResource<T, string>(
             fetchPage: async (cursor, ct) =>
             {
                 var req = request with { PageSize = pageSize, ContinuationToken = cursor };
@@ -51,6 +60,9 @@ public static class DataSourceResourceExtensions
             options: options,
             dispatcher: dispatcher,
             cursorFromPageIndex: pageIndex => pageIndex == 0 ? null : (pageIndex * pageSize).ToString(global::System.Globalization.CultureInfo.InvariantCulture));
+        // Retry normalization if the hook throws before its state is initialized.
+        if (!initialized) sizeRef.Current = (pageSize, true);
+        return resource;
     }
 
     /// <summary>
@@ -60,8 +72,10 @@ public static class DataSourceResourceExtensions
     /// <c>.Provide(AppContexts.QueryCache, customCache)</c>.
     /// </summary>
     /// <remarks>
-    /// When <paramref name="options"/> is non-null, its PageSize (default 50) takes precedence.
+    /// On first use, when <paramref name="options"/> is non-null, its PageSize (default 50) takes precedence.
     /// Otherwise, <c>request.PageSize</c> is used. The effective page size is at least 1.
+    /// This size is retained for the hook's lifetime, including query restarts.
+    /// Remount the component to use a different page size.
     /// </remarks>
     public static InfiniteResource<T> UseDataSource<T>(
         this RenderContext ctx,

@@ -325,8 +325,10 @@ public abstract class Component
 
     /// <summary>Projects a data source into a paged resource using the ambient query cache.</summary>
     /// <remarks>
-    /// When <paramref name="options"/> is non-null, its PageSize (default 50) takes precedence.
+    /// On first use, when <paramref name="options"/> is non-null, its PageSize (default 50) takes precedence.
     /// Otherwise, <c>request.PageSize</c> is used. The effective page size is at least 1.
+    /// This size is retained for the hook's lifetime, including query restarts.
+    /// Remount the component to use a different page size.
     /// </remarks>
     protected InfiniteResource<TItem> UseDataSource<TItem>(
         Data.IDataSource<TItem> source,

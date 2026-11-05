@@ -36,6 +36,11 @@ Conventions for contributors:
 
 ### Fixed
 
+- `UseDataSource` retains its initial normalized page size across rerenders and
+  query restarts, keeping requests and cursor offsets aligned with resource row
+  positions, without repeatedly copying options after initialization
+  (part of #1452, case 2).
+
 ### Security
 
 ## [0.1.0-preview.17] — 2026-11-04
