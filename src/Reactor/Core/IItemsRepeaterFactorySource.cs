@@ -69,7 +69,7 @@ internal interface IItemsRepeaterFactorySource
 }
 
 /// <summary>
-/// An <see cref="IElementFactory"/> that replays its host's provider stack while
+/// An <see cref="WinUI.IElementFactory"/> that replays its host's provider stack while
 /// realizing rows (see <see cref="ContextCapture"/>). Hosts assign the capture via
 /// <see cref="Reconciler.AttachContextCapture"/> whenever they install a factory.
 /// </summary>
