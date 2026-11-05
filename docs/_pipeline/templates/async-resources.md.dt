@@ -88,7 +88,9 @@ mechanical steps:
 1. **Swap the cache field for a hook call.** Replace the long-lived
    `DataPageCache<T>` instance with `var resource = UseDataSource(source, request, options);`.
    `UseDataSource` bridges any `IDataSource<T>` onto `UseInfiniteResource`
-   using `request.ContinuationToken` as the cursor.
+   using `request.ContinuationToken` as the cursor. On the initial call,
+   `options.PageSize` takes precedence over `request.PageSize`; the size is
+   clamped to at least 1 and used for requests, cursors, and row positions.
 2. **Read from `resource.Items[i]`.** The sparse `IReadOnlyList<T?>` has
    null placeholders for in-flight slots. This replaces `cache.PeekItem(i)`
    plus the `LoadingBlock` sentinel.

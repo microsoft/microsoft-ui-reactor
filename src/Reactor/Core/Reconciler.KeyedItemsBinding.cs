@@ -180,6 +180,7 @@ public sealed partial class Reconciler
             ir.ItemsSource = state.Source;
             var factory = factorySource.CreateFactory(this, requestRerender, _pool);
             factorySource.AttachListStateToFactory(factory, state);
+            AttachContextCapture(factory, ir);
             ir.ItemTemplate = factory;
             return;
         }
@@ -203,6 +204,7 @@ public sealed partial class Reconciler
             ir.ItemsSource = fresh.Source;
             var factory = factorySource.CreateFactory(this, requestRerender, _pool);
             factorySource.AttachListStateToFactory(factory, fresh);
+            AttachContextCapture(factory, ir);
             ir.ItemTemplate = factory;
         }
     }
@@ -267,6 +269,7 @@ public sealed partial class Reconciler
             iv.ItemsSource = state.Source;
             var factory = itemsViewSource.CreateFactory(this, requestRerender, _pool);
             itemsViewSource.AttachListStateToFactory(factory, state);
+            AttachContextCapture(factory, iv);
             iv.ItemTemplate = factory;
             return;
         }
@@ -286,6 +289,7 @@ public sealed partial class Reconciler
         iv.ItemsSource = fresh.Source;
         var replacementFactory = itemsViewSource.CreateFactory(this, requestRerender, _pool);
         itemsViewSource.AttachListStateToFactory(replacementFactory, fresh);
+        AttachContextCapture(replacementFactory, iv);
         iv.ItemTemplate = replacementFactory;
     }
 
@@ -331,6 +335,7 @@ public sealed partial class Reconciler
     {
         if (isMount)
         {
+            CaptureContextForHost(lvb);
             lvb.ItemTemplate = SharedContentControlTemplate.Value;
             lvb.ContainerContentChanging += (sender, args) =>
                 HandleTemplatedContainerContentChanging(sender, args, requestRerender);
@@ -478,6 +483,7 @@ public sealed partial class Reconciler
             // body is shared 1:1 with the legacy path so existing CCC
             // semantics (recycle teardown, attached-tag bookkeeping,
             // ambient-enter animation) come for free.
+            CaptureContextForHost(lvb);
             lvb.ItemTemplate = SharedContentControlTemplate.Value;
             lvb.ContainerContentChanging += (sender, args) =>
                 HandleTemplatedContainerContentChanging(sender, args, requestRerender);

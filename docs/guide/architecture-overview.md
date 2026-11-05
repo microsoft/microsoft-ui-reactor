@@ -155,6 +155,8 @@ public UIElement GetElement(ElementFactoryGetArgs args)
     if (index < 0 || index >= _items.Count)
         return new TextBlock { Text = "" };
 
+    using var restoreContext = _reconciler.EnterRealization(_hostCapture ?? _ownCapture, args.Parent);
+
     var item = _items[index];
     var element = BuildOrCache(key, item, index, keyed);
     TryTakeCompatibleFromPool(element, out var reused, out var oldElement, out var parkedVisibility);

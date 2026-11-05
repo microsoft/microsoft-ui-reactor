@@ -77,8 +77,12 @@ public sealed partial class Reconciler
         bool pushedStagger = element.StaggerConfig is not null;
         if (pushedStagger)
             PushStaggerScope(element.StaggerConfig!.Delay);
+        var prevReconcilingElement = _reconcilingElement;
         try
         {
+        // The innermost element being mounted owns any virtualized-host context capture
+        // its handler registers (see CaptureContextForHost).
+        _reconcilingElement = element;
         // Publish the effective theme for the subtree — INSIDE the try so the finally
         // restores it on every exit (including an exception during child mount below).
         // Children mounted inside MountXxx and this element's own ApplyResourceOverrides
@@ -251,6 +255,7 @@ public sealed partial class Reconciler
         }
         finally
         {
+            _reconcilingElement = prevReconcilingElement;
             if (pushedStagger)
                 PopStaggerScope();
             if (ctxCount > 0)
@@ -711,6 +716,9 @@ public sealed partial class Reconciler
         if (viewSource is not null && args.ItemIndex >= 0 && args.ItemIndex < viewSource.ItemCount
             && args.ItemContainer.ContentTemplateRoot is ContentControl cc)
         {
+            // Realization runs from layout, outside the traversal — replay the
+            // host's provider stack so the row sees its ancestors' context.
+            using var realization = EnterRealization((UIElement)sender!);
             using var realizationTheme = EnterRealizationTheme(args.ItemContainer);
             // WinUI can re-realize a container without first raising the recycle event
             // for its previous row; unmount that row's view or its components leak.
