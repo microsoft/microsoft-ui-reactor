@@ -241,13 +241,21 @@ public sealed class GenerationPipeline(IModelClient client, WidgetWorkspace work
         for (var attempt = 1; ; attempt++)
         {
             OnPhase?.Invoke(attempt == 1 ? "Self-testing (headless --selftest)…" : $"Re-self-testing (attempt {attempt})…");
-            var (passed, report) = await RunSelfTestAsync(build, ct).ConfigureAwait(false);
-            SessionLog.Write($"[Pipeline] selftest attempt {attempt}: {(passed ? "PASS" : "FAIL")} — {OneLine(report)}");
+            var (passed, report, launchFailed) = await RunSelfTestAsync(build, ct).ConfigureAwait(false);
+            SessionLog.Write($"[Pipeline] selftest attempt {attempt}: {(passed ? "PASS" : launchFailed ? "LAUNCH FAILED" : "FAIL")} — {OneLine(report)}");
 
             if (passed)
             {
                 OnLog?.Invoke($"# Self-test PASSED on attempt {attempt}.");
                 return (true, report, source, project, build);
+            }
+
+            // A sandbox/host failure says nothing about the widget's code, so it
+            // must never be sent to Copilot for repair.
+            if (launchFailed)
+            {
+                OnLog?.Invoke("# Self-test could not run — MXC sandbox/host problem, not a widget bug; not sent for repair.");
+                return (false, report, source, project, build);
             }
 
             if (attempt > MaxSelfTestAttempts)
@@ -275,7 +283,7 @@ public sealed class GenerationPipeline(IModelClient client, WidgetWorkspace work
     }
 
     /// <summary>Run the built widget once with <c>--selftest</c> and interpret its markers.</summary>
-    async Task<(bool Passed, string Report)> RunSelfTestAsync(BuildResult build, CancellationToken ct)
+    async Task<(bool Passed, string Report, bool LaunchFailed)> RunSelfTestAsync(BuildResult build, CancellationToken ct)
     {
         OnLog?.Invoke("# Running headless --selftest in the sandbox…");
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -290,10 +298,14 @@ public sealed class GenerationPipeline(IModelClient client, WidgetWorkspace work
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return (false, "WIDGET_SELFTEST_FAIL: the --selftest run timed out (it likely opened a window or hung instead of running headless checks and exiting).");
+            return (false, "WIDGET_SELFTEST_FAIL: the --selftest run timed out (it likely opened a window or hung instead of running headless checks and exiting).", false);
         }
 
-        return ParseSelfTest(result.Output);
+        if (result.LaunchFailed)
+            return (false, $"WIDGET_SELFTEST_FAIL: the sandbox could not run the self-test — {result.LaunchErrorMessage}", true);
+
+        var (passed, report) = ParseSelfTest(result.Output);
+        return (passed, report, false);
     }
 
     /// <summary>
@@ -316,7 +328,7 @@ public sealed class GenerationPipeline(IModelClient client, WidgetWorkspace work
                 fails.AppendLine(line[line.IndexOf(SelfTestFailMarker, StringComparison.Ordinal)..]);
             else if (line.Contains(SelfTestPassMarker, StringComparison.Ordinal))
                 sawPass = true;
-            else if (line.Contains("WIDGET_SANDBOX_TIMEOUT", StringComparison.Ordinal))
+            else if (line.Contains(MxcSandbox.TimeoutMarker, StringComparison.Ordinal))
                 sawTimeout = true;
         }
 

@@ -1,17 +1,22 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Mxc.Sdk.V1;
 
 namespace WidgetCreator.Services;
 
 /// <summary>Friendly network choices surfaced in the permissions dialog.</summary>
 public enum NetworkAccess
 {
-    /// <summary>No outbound network (no <c>internetClient</c> capability, default-block).</summary>
+    /// <summary>No outbound network (<c>network.egress.default = "deny"</c>).</summary>
     None,
-    /// <summary>Outbound internet allowed (today's default).</summary>
+    /// <summary>Outbound internet allowed (<c>network.egress.default = "allow"</c>).</summary>
     Internet,
+    /// <summary>Egress defaults to deny, but advanced <c>network.egress.allow</c>
+    /// rules permit specific destinations (edit them in Advanced).</summary>
+    Custom,
 }
 
 /// <summary>
@@ -30,53 +35,60 @@ public enum PathAccess
 }
 
 /// <summary>
-/// Helpers for a widget's MXC permission policy. The policy is a JSON "template"
-/// (a partial <c>ContainerConfig</c>) that <see cref="MxcSandbox"/> merges with
-/// the computed run fields (process command line/cwd + the app-dir grant) at
-/// launch. A widget with no stored policy uses <see cref="DefaultJson"/> — a
-/// least-privilege baseline: a visible window with <b>no</b> outbound network, no
-/// clipboard access, and no input injection. Network (and any other capability) is
-/// opt-in per widget via the Permissions dialog.
+/// A widget's MXC permission policy. The policy is a small JSON document that
+/// mirrors the field names of the stable MXC 1.0 containment contract — the
+/// cross-backend <c>filesystem</c>, <c>network</c>, and <c>ui</c> sections plus
+/// <c>processContainer.capabilities</c>:
+/// <code>
+/// {
+///   "filesystem": { "readonlyPaths": [], "readwritePaths": [], "deniedPaths": [] },
+///   "network": {
+///     "egress": { "default": "deny", "allow": [], "deny": [] },
+///     "ingress": { "default": "deny", "hostLoopback": "deny" }
+///   },
+///   "ui": { "disable": false, "clipboard": "none", "injection": false },
+///   "processContainer": { "capabilities": [] }
+/// }
+/// </code>
+/// <see cref="ToContainerRequest"/> maps it onto the typed
+/// <c>Microsoft.Mxc.Sdk.V1</c> request at launch (the SDK owns the wire schema
+/// version; we never hand MXC raw JSON). A widget with no stored policy uses
+/// <see cref="DefaultJson"/> — a least-privilege baseline: a visible window with
+/// <b>no</b> network, no clipboard access, and no input injection. Network (and
+/// any other capability) is opt-in per widget via the Permissions dialog.
 ///
 /// <para>The JSON string is the single source of truth. The dialog's friendly
-/// controls are typed accessors over it, and advanced mode edits it directly, so
-/// arbitrary <c>ContainerConfig</c> fields (hosts, proxy, capabilities, env, …)
-/// survive a round-trip even if the friendly form does not surface them.</para>
+/// controls are typed accessors over it, and advanced mode edits it directly.
+/// Like the MXC 1.0 contract, the document is closed: unknown fields are
+/// rejected rather than silently ignored. Policies saved by older builds (the
+/// pre-1.0 wxc-exec <c>ContainerConfig</c> shape) are migrated on read.</para>
 /// </summary>
 public static class MxcPolicy
 {
-    public const string InternetCapability = "internetClient";
-
     const string ReadWriteKind = "readwritePaths";
     const string ReadOnlyKind = "readonlyPaths";
     const string DeniedKind = "deniedPaths";
     static readonly string[] PathKinds = [ReadWriteKind, ReadOnlyKind, DeniedKind];
+
+    /// <summary>Clipboard levels accepted by MXC 1.0 (<c>ui.clipboard</c>).</summary>
+    public static readonly string[] ClipboardLevels = ["none", "read", "write", "all"];
 
     static readonly JsonSerializerOptions Pretty = new() { WriteIndented = true };
 
     /// <summary>The default policy (least privilege) as a mutable JSON object.</summary>
     public static JsonObject DefaultTemplate() => new()
     {
-        ["version"] = MxcSandbox.SchemaVersion,
-        ["containment"] = "processcontainer",
-        ["appContainer"] = new JsonObject
-        {
-            // H-2: no capabilities by default (no outbound network) until the user
-            // grants them per-widget in the Permissions dialog. leastPrivilege stays
-            // FALSE on purpose — the stricter AppContainer breaks WinUI window
-            // creation (managed exception at MountAndActivate); turning off network
-            // already removes the main default exfiltration channel.
-            ["leastPrivilege"] = false,
-            ["capabilities"] = new JsonArray(),
-        },
         ["network"] = new JsonObject
         {
-            // H-2: outbound network is opt-in, not on by default.
-            ["defaultPolicy"] = "block",
-            ["enforcementMode"] = "capabilities",
+            // H-2: outbound network is opt-in, not on by default. MXC derives the
+            // AppContainer network capabilities (internetClient /
+            // privateNetworkClientServer) from these directional actions.
+            ["egress"] = new JsonObject { ["default"] = "deny" },
+            ["ingress"] = new JsonObject { ["default"] = "deny", ["hostLoopback"] = "deny" },
         },
         ["ui"] = new JsonObject
         {
+            // MXC disables UI by default; widgets are windowed apps.
             ["disable"] = false,
             ["clipboard"] = "none",
             ["injection"] = false,
@@ -86,55 +98,184 @@ public static class MxcPolicy
     /// <summary>Pretty-printed default policy JSON.</summary>
     public static string DefaultJson => DefaultTemplate().ToJsonString(Pretty);
 
-    /// <summary>Parse a policy JSON document into a mutable object.</summary>
+    /// <summary>
+    /// Parse, migrate (legacy pre-1.0 documents), and validate a policy JSON
+    /// document. Blank input yields the default policy.
+    /// </summary>
     public static bool TryParse(string? json, out JsonObject obj, out string? error)
     {
-        obj = new JsonObject();
+        obj = DefaultTemplate();
         error = null;
         if (string.IsNullOrWhiteSpace(json))
-        {
-            obj = DefaultTemplate();
             return true;
-        }
+
+        JsonObject parsed;
         try
         {
-            if (JsonNode.Parse(json) is JsonObject parsed)
+            if (JsonNode.Parse(json) is not JsonObject o)
             {
-                obj = parsed;
-                return true;
+                error = "Policy must be a JSON object.";
+                return false;
             }
-            error = "Policy must be a JSON object.";
-            return false;
+            parsed = o;
         }
         catch (JsonException ex)
         {
             error = ex.Message;
             return false;
         }
+
+        try
+        {
+            if (IsLegacy(parsed))
+                parsed = MigrateLegacy(parsed);
+
+            error = Validate(parsed);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or FormatException or JsonException)
+        {
+            error = $"Policy could not be read: {ex.Message}";
+        }
+        if (error is not null)
+            return false;
+
+        obj = parsed;
+        return true;
     }
 
     public static string Prettify(JsonObject obj) => obj.ToJsonString(Pretty);
 
+    // ── mapping to the MXC SDK ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Build the typed MXC request for <paramref name="commandLine"/> from a
+    /// validated policy, always adding a read grant on <paramref name="appDir"/>
+    /// so the widget can launch regardless of the chosen policy.
+    /// </summary>
+    public static ContainerRequest ToContainerRequest(
+        JsonObject policy, string commandLine, string appDir, uint timeoutMs)
+    {
+        var filesystem = new FilesystemPolicy();
+        filesystem.ReadwritePaths.AddRange(GetPaths(policy, ReadWriteKind));
+        filesystem.ReadonlyPaths.AddRange(GetPaths(policy, ReadOnlyKind));
+        filesystem.DeniedPaths.AddRange(GetPaths(policy, DeniedKind));
+        if (!filesystem.ReadonlyPaths.Concat(filesystem.ReadwritePaths)
+                .Any(p => string.Equals(p, appDir, StringComparison.OrdinalIgnoreCase)))
+            filesystem.ReadonlyPaths.Add(appDir);
+
+        var egress = Section(policy, "network", "egress");
+        var ingress = Section(policy, "network", "ingress");
+
+        var capabilities = (Section(policy, "processContainer")?["capabilities"] as JsonArray)?
+            .Select(n => (string?)n ?? "").Where(s => s.Length > 0).ToList() ?? new List<string>();
+
+        return new ContainerRequest(commandLine)
+        {
+            WorkingDirectory = appDir,
+            TimeoutMs = timeoutMs == 0 ? null : timeoutMs,
+            Filesystem = filesystem,
+            // Always send an explicit network section so the default-deny posture
+            // is stated rather than inferred.
+            Network = new NetworkPolicy
+            {
+                Egress = new NetworkEgressPolicy
+                {
+                    Default = ParseAction(GetString(egress, "default")),
+                    Allow = ParseRules(egress?["allow"] as JsonArray),
+                    Deny = ParseRules(egress?["deny"] as JsonArray),
+                },
+                Ingress = new NetworkIngressPolicy
+                {
+                    Default = ParseAction(GetString(ingress, "default")),
+                    HostLoopback = ParseAction(GetString(ingress, "hostLoopback")),
+                },
+            },
+            Ui = new UiPolicy
+            {
+                Disable = !GetShowWindow(policy),
+                Clipboard = GetClipboard(policy) switch
+                {
+                    "read" => ClipboardPolicy.Read,
+                    "write" => ClipboardPolicy.Write,
+                    "all" => ClipboardPolicy.All,
+                    _ => ClipboardPolicy.None,
+                },
+                AllowInputInjection = GetInjection(policy),
+            },
+            Containment = new Containment.ProcessContainer { Capabilities = capabilities },
+        };
+    }
+
+    static NetworkAction ParseAction(string? value) =>
+        string.Equals(value, "allow", StringComparison.OrdinalIgnoreCase) ? NetworkAction.Allow : NetworkAction.Deny;
+
+    static List<NetworkRulePolicy>? ParseRules(JsonArray? rules)
+    {
+        if (rules is null || rules.Count == 0) return null;
+        var result = new List<NetworkRulePolicy>();
+        foreach (var rule in rules.OfType<JsonObject>())
+        {
+            var r = new NetworkRulePolicy();
+            if (rule["to"] is JsonArray to)
+            {
+                r.To = to.OfType<JsonObject>().Select(peer => new NetworkPeerPolicy(GetString(peer, "cidr") ?? "")
+                {
+                    Except = (peer["except"] as JsonArray)?.Select(e => (string?)e ?? "").ToList(),
+                }).ToList();
+            }
+            if (rule["ports"] is JsonArray ports)
+            {
+                r.Ports = ports.OfType<JsonObject>().Select(p => new NetworkPortPolicy
+                {
+                    Protocol = GetString(p, "protocol") switch
+                    {
+                        "tcp" => NetworkProtocol.Tcp,
+                        "udp" => NetworkProtocol.Udp,
+                        "icmp" => NetworkProtocol.Icmp,
+                        "any" => NetworkProtocol.Any,
+                        _ => null,
+                    },
+                    Port = GetUShort(p, "port"),
+                    EndPort = GetUShort(p, "endPort"),
+                }).ToList();
+            }
+            result.Add(r);
+        }
+        return result;
+    }
+
     // ── friendly getters (read from a parsed, valid policy object) ──────────
 
-    public static bool GetShowWindow(JsonObject o) => !GetBool(o, "ui", "disable", false);
-    public static bool GetInjection(JsonObject o) => GetBool(o, "ui", "injection", false);
-    public static string GetClipboard(JsonObject o) => GetString(o, "ui", "clipboard") ?? "none";
-    public static bool GetLeastPrivilege(JsonObject o) => GetBool(o, "appContainer", "leastPrivilege", false);
-    public static bool GetAllowLocalNetwork(JsonObject o) => GetBool(o, "network", "allowLocalNetwork", false);
+    public static bool GetShowWindow(JsonObject o) => !GetBool(Section(o, "ui"), "disable", false);
+    public static bool GetInjection(JsonObject o) => GetBool(Section(o, "ui"), "injection", false);
+    public static string GetClipboard(JsonObject o) => GetString(Section(o, "ui"), "clipboard") ?? "none";
 
+    /// <summary>
+    /// Inbound/private-network access (MXC grants <c>privateNetworkClientServer</c>
+    /// for <c>ingress.default: allow</c>); host-loopback access counts too.
+    /// </summary>
+    public static bool GetAllowLocalNetwork(JsonObject o)
+    {
+        var ingress = Section(o, "network", "ingress");
+        return string.Equals(GetString(ingress, "default"), "allow", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(GetString(ingress, "hostLoopback"), "allow", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Outbound access: <see cref="NetworkAccess.Internet"/> when egress defaults to
+    /// allow, <see cref="NetworkAccess.Custom"/> when it defaults to deny but
+    /// advanced <c>egress.allow</c> rules still permit some destinations.
+    /// </summary>
     public static NetworkAccess GetNetwork(JsonObject o)
     {
-        var hasInternet = (o["appContainer"] as JsonObject)?["capabilities"] is JsonArray caps &&
-            caps.Any(n => string.Equals((string?)n, InternetCapability, StringComparison.OrdinalIgnoreCase));
-        var defaultPolicy = GetString(o, "network", "defaultPolicy") ?? "block";
-        return hasInternet && string.Equals(defaultPolicy, "allow", StringComparison.OrdinalIgnoreCase)
-            ? NetworkAccess.Internet
-            : NetworkAccess.None;
+        var egress = Section(o, "network", "egress");
+        if (string.Equals(GetString(egress, "default"), "allow", StringComparison.OrdinalIgnoreCase))
+            return NetworkAccess.Internet;
+        return egress?["allow"] is JsonArray { Count: > 0 } ? NetworkAccess.Custom : NetworkAccess.None;
     }
 
     public static string[] GetPaths(JsonObject o, string kind) =>
-        (o["filesystem"] as JsonObject)?[kind] is JsonArray arr
+        Section(o, "filesystem")?[kind] is JsonArray arr
             ? arr.Select(n => (string?)n ?? "").Where(s => s.Length > 0).ToArray()
             : Array.Empty<string>();
 
@@ -170,31 +311,31 @@ public static class MxcPolicy
     public static string WithClipboard(string json, string level) =>
         Mutate(json, o => Obj(o, "ui")["clipboard"] = level);
 
-    public static string WithLeastPrivilege(string json, bool on) =>
-        Mutate(json, o => Obj(o, "appContainer")["leastPrivilege"] = on);
-
-    public static string WithAllowLocalNetwork(string json, bool on) =>
-        Mutate(json, o => Obj(o, "network")["allowLocalNetwork"] = on);
-
-    public static string WithNetwork(string json, NetworkAccess access) => Mutate(json, o =>
+    /// <summary>Turning local network off also closes host loopback.</summary>
+    public static string WithAllowLocalNetwork(string json, bool on) => Mutate(json, o =>
     {
-        var caps = Arr(Obj(o, "appContainer"), "capabilities");
-        var net = Obj(o, "network");
-        var existing = caps.Any(n => string.Equals((string?)n, InternetCapability, StringComparison.OrdinalIgnoreCase));
-        if (access == NetworkAccess.Internet)
-        {
-            if (!existing) caps.Add((JsonNode?)JsonValue.Create(InternetCapability));
-            net["defaultPolicy"] = "allow";
-            net["enforcementMode"] ??= "capabilities";
-        }
-        else
-        {
-            for (var i = caps.Count - 1; i >= 0; i--)
-                if (string.Equals((string?)caps[i], InternetCapability, StringComparison.OrdinalIgnoreCase))
-                    caps.RemoveAt(i);
-            net["defaultPolicy"] = "block";
-        }
+        var ingress = Obj(Obj(o, "network"), "ingress");
+        ingress["default"] = on ? "allow" : "deny";
+        if (!on)
+            ingress["hostLoopback"] = "deny";
     });
+
+    /// <summary>
+    /// <see cref="NetworkAccess.None"/> also drops advanced <c>egress.allow</c>
+    /// rules so "no network" really means no outbound access.
+    /// <see cref="NetworkAccess.Custom"/> is not a settable choice and is ignored.
+    /// </summary>
+    public static string WithNetwork(string json, NetworkAccess access) => access switch
+    {
+        NetworkAccess.Internet => Mutate(json, o => Obj(Obj(o, "network"), "egress")["default"] = "allow"),
+        NetworkAccess.None => Mutate(json, o =>
+        {
+            var egress = Obj(Obj(o, "network"), "egress");
+            egress["default"] = "deny";
+            egress.Remove("allow");
+        }),
+        _ => json,
+    };
 
     public static string WithPaths(string json, string kind, string[] paths) => Mutate(json, o =>
     {
@@ -202,6 +343,7 @@ public static class MxcPolicy
         if (paths.Length == 0)
         {
             fs.Remove(kind);
+            PruneFilesystem(o);
             return;
         }
         var arr = new JsonArray();
@@ -247,10 +389,232 @@ public static class MxcPolicy
     static void PruneFilesystem(JsonObject o)
     {
         if (o["filesystem"] is not JsonObject fs) return;
-        foreach (var kind in PathKinds.Where(k => fs[k] is JsonArray { Count: 0 }))
+        foreach (var kind in PathKinds.Where(k => fs[k] is JsonArray { Count: 0 }).ToArray())
             fs.Remove(kind);
         if (fs.Count == 0)
             o.Remove("filesystem");
+    }
+
+    // ── validation (closed schema, mirroring MXC 1.0) ───────────────────────
+
+    static readonly Dictionary<string, string[]> AllowedKeys = new()
+    {
+        [""] = ["_comment", "filesystem", "network", "ui", "processContainer"],
+        ["filesystem"] = [ReadWriteKind, ReadOnlyKind, DeniedKind],
+        ["network"] = ["egress", "ingress"],
+        ["network.egress"] = ["default", "allow", "deny"],
+        ["network.ingress"] = ["default", "hostLoopback"],
+        ["ui"] = ["disable", "clipboard", "injection"],
+        ["processContainer"] = ["capabilities"],
+    };
+
+    static string? Validate(JsonObject o)
+    {
+        var errors = new List<string>();
+        CheckKeys(o, "", errors);
+
+        if (o["filesystem"] is { } fsNode)
+        {
+            if (fsNode is not JsonObject fs) errors.Add("'filesystem' must be an object.");
+            else
+            {
+                CheckKeys(fs, "filesystem", errors);
+                foreach (var kind in PathKinds)
+                    CheckStringArray(fs[kind], $"filesystem.{kind}", errors);
+            }
+        }
+
+        if (o["network"] is { } netNode)
+        {
+            if (netNode is not JsonObject net) errors.Add("'network' must be an object.");
+            else
+            {
+                CheckKeys(net, "network", errors);
+                if (net["egress"] is { } egNode)
+                {
+                    if (egNode is not JsonObject eg) errors.Add("'network.egress' must be an object.");
+                    else
+                    {
+                        CheckKeys(eg, "network.egress", errors);
+                        CheckAction(eg["default"], "network.egress.default", errors);
+                        CheckRules(eg["allow"], "network.egress.allow", errors);
+                        CheckRules(eg["deny"], "network.egress.deny", errors);
+                    }
+                }
+                if (net["ingress"] is { } inNode)
+                {
+                    if (inNode is not JsonObject ing) errors.Add("'network.ingress' must be an object.");
+                    else
+                    {
+                        CheckKeys(ing, "network.ingress", errors);
+                        CheckAction(ing["default"], "network.ingress.default", errors);
+                        CheckAction(ing["hostLoopback"], "network.ingress.hostLoopback", errors);
+                    }
+                }
+            }
+        }
+
+        if (o["ui"] is { } uiNode)
+        {
+            if (uiNode is not JsonObject ui) errors.Add("'ui' must be an object.");
+            else
+            {
+                CheckKeys(ui, "ui", errors);
+                CheckBool(ui["disable"], "ui.disable", errors);
+                CheckBool(ui["injection"], "ui.injection", errors);
+                if (ui["clipboard"] is { } clip &&
+                    (!TryGetString(clip, out var level) || !ClipboardLevels.Contains(level)))
+                    errors.Add($"'ui.clipboard' must be one of: {string.Join(", ", ClipboardLevels)}.");
+            }
+        }
+
+        if (o["processContainer"] is { } pcNode)
+        {
+            if (pcNode is not JsonObject pc) errors.Add("'processContainer' must be an object.");
+            else
+            {
+                CheckKeys(pc, "processContainer", errors);
+                CheckStringArray(pc["capabilities"], "processContainer.capabilities", errors);
+                if (pc["capabilities"] is JsonArray caps &&
+                    caps.Any(c => TryGetString(c, out var s) && s.Contains(',')))
+                    errors.Add("'processContainer.capabilities' entries must be single names (no commas).");
+            }
+        }
+
+        return errors.Count == 0 ? null : string.Join(" ", errors);
+    }
+
+    static void CheckKeys(JsonObject o, string path, List<string> errors)
+    {
+        var allowed = AllowedKeys[path];
+        foreach (var key in o.Select(kv => kv.Key).Where(k => !allowed.Contains(k)))
+            errors.Add($"Unknown field '{(path.Length == 0 ? key : path + "." + key)}'.");
+    }
+
+    static void CheckStringArray(JsonNode? node, string path, List<string> errors)
+    {
+        if (node is null) return;
+        if (node is not JsonArray arr || arr.Any(n => !TryGetString(n, out _)))
+            errors.Add($"'{path}' must be an array of strings.");
+    }
+
+    static void CheckAction(JsonNode? node, string path, List<string> errors)
+    {
+        if (node is null) return;
+        if (!TryGetString(node, out var s) || (s != "allow" && s != "deny"))
+            errors.Add($"'{path}' must be \"allow\" or \"deny\".");
+    }
+
+    static void CheckBool(JsonNode? node, string path, List<string> errors)
+    {
+        if (node is null) return;
+        if (node is not JsonValue v || !v.TryGetValue<bool>(out _))
+            errors.Add($"'{path}' must be true or false.");
+    }
+
+    static void CheckRules(JsonNode? node, string path, List<string> errors)
+    {
+        if (node is null) return;
+        if (node is not JsonArray rules)
+        {
+            errors.Add($"'{path}' must be an array of rules.");
+            return;
+        }
+        foreach (var rule in rules)
+        {
+            if (rule is not JsonObject r)
+            {
+                errors.Add($"'{path}' entries must be objects.");
+                continue;
+            }
+            foreach (var key in r.Select(kv => kv.Key).Where(k => k is not ("to" or "ports")))
+                errors.Add($"Unknown field '{path}[].{key}'.");
+            if (r["to"] is { } to && (to is not JsonArray peers || peers.Any(p => p is not JsonObject po || !IsValidPeer(po))))
+                errors.Add($"'{path}[].to' must be an array of {{ \"cidr\": \"...\", \"except\": [\"...\"] }} entries.");
+            if (r["ports"] is { } ports && (ports is not JsonArray portList ||
+                portList.Any(p => p is not JsonObject po || !IsValidPort(po))))
+                errors.Add($"'{path}[].ports' must be an array of {{ \"protocol\": tcp|udp|icmp|any, "
+                    + "\"port\": 1-65535, \"endPort\": 1-65535 } entries.");
+        }
+    }
+
+    static bool IsValidPeer(JsonObject p) =>
+        p.All(kv => kv.Key is "cidr" or "except")
+        && TryGetString(p["cidr"], out _)
+        && (p["except"] is null || (p["except"] is JsonArray ex && ex.All(e => TryGetString(e, out _))));
+
+    static bool IsValidPort(JsonObject p)
+    {
+        if (p.Any(kv => kv.Key is not ("protocol" or "port" or "endPort"))) return false;
+        if (p["protocol"] is { } proto &&
+            (!TryGetString(proto, out var s) || s is not ("tcp" or "udp" or "icmp" or "any")))
+            return false;
+        foreach (var key in new[] { "port", "endPort" })
+            if (p[key] is { } n && (n is not JsonValue v || !v.TryGetValue<int>(out var i) || i is < 1 or > 65535))
+                return false;
+        return true;
+    }
+
+    // ── legacy (pre-1.0 wxc-exec ContainerConfig) migration ─────────────────
+
+    /// <summary>A pre-1.0 document carries schema/backends fields the 1.0 shape doesn't.</summary>
+    static bool IsLegacy(JsonObject o) =>
+        o.ContainsKey("version") || o.ContainsKey("containment") || o.ContainsKey("appContainer")
+        || (o["network"] is JsonObject n && (n.ContainsKey("defaultPolicy") || n.ContainsKey("allowLocalNetwork")
+            || n.ContainsKey("enforcementMode")));
+
+    /// <summary>
+    /// Translate a legacy policy (schema 0.6.0-alpha <c>ContainerConfig</c>) into
+    /// the MXC 1.0 shape. Filesystem and UI settings carry over; legacy internet
+    /// access (<c>internetClient</c> + <c>defaultPolicy: allow</c>) becomes
+    /// <c>egress.default: allow</c>, and <c>allowLocalNetwork</c> becomes
+    /// <c>ingress.default: allow</c>. Non-network AppContainer capabilities move
+    /// to <c>processContainer.capabilities</c>. Fields with no 1.0 equivalent
+    /// (<c>version</c>, <c>containment</c>, <c>leastPrivilege</c>, …) are dropped.
+    /// </summary>
+    static JsonObject MigrateLegacy(JsonObject legacy)
+    {
+        var result = DefaultTemplate();
+
+        if (legacy["filesystem"] is JsonObject fs)
+        {
+            var newFs = new JsonObject();
+            foreach (var kind in PathKinds)
+                if (fs[kind] is JsonArray arr && arr.Count > 0)
+                    newFs[kind] = arr.DeepClone();
+            if (newFs.Count > 0)
+                result["filesystem"] = newFs;
+        }
+
+        if (legacy["ui"] is JsonObject ui)
+        {
+            var newUi = (JsonObject)result["ui"]!;
+            if (ui["disable"] is JsonValue d && d.TryGetValue<bool>(out var disable)) newUi["disable"] = disable;
+            if (ui["injection"] is JsonValue inj && inj.TryGetValue<bool>(out var injection)) newUi["injection"] = injection;
+            if (TryGetString(ui["clipboard"], out var clip))
+                newUi["clipboard"] = clip == "readwrite" ? "all" : ClipboardLevels.Contains(clip) ? clip : "none";
+        }
+
+        var legacyCaps = (Section(legacy, "appContainer")?["capabilities"] as JsonArray)?
+            .Select(n => TryGetString(n, out var s) ? s : "").Where(s => s.Length > 0).ToList() ?? new List<string>();
+        var legacyNet = Section(legacy, "network");
+        var internet = legacyCaps.Any(c => c.Equals("internetClient", StringComparison.OrdinalIgnoreCase))
+            && string.Equals(GetString(legacyNet, "defaultPolicy"), "allow", StringComparison.OrdinalIgnoreCase);
+        var local = GetBool(legacyNet, "allowLocalNetwork", false);
+        var network = (JsonObject)result["network"]!;
+        ((JsonObject)network["egress"]!)["default"] = internet ? "allow" : "deny";
+        ((JsonObject)network["ingress"]!)["default"] = local ? "allow" : "deny";
+
+        string[] networkCaps = ["internetClient", "internetClientServer", "privateNetworkClientServer", "networkLoopback"];
+        var otherCaps = legacyCaps.Where(c => !networkCaps.Contains(c, StringComparer.OrdinalIgnoreCase)).ToList();
+        if (otherCaps.Count > 0)
+        {
+            var caps = new JsonArray();
+            foreach (var c in otherCaps) caps.Add((JsonNode?)JsonValue.Create(c));
+            result["processContainer"] = new JsonObject { ["capabilities"] = caps };
+        }
+
+        return result;
     }
 
     // ── internals ───────────────────────────────────────────────────────────
@@ -262,6 +626,10 @@ public static class MxcPolicy
         change(o);
         return o.ToJsonString(Pretty);
     }
+
+    static JsonObject? Section(JsonObject o, string key) => o[key] as JsonObject;
+
+    static JsonObject? Section(JsonObject o, string key, string child) => Section(o, key)?[child] as JsonObject;
 
     /// <summary>Get-or-create a child object under <paramref name="key"/>.</summary>
     static JsonObject Obj(JsonObject parent, string key)
@@ -281,15 +649,23 @@ public static class MxcPolicy
         return created;
     }
 
-    static bool GetBool(JsonObject o, string section, string key, bool fallback)
+    static bool TryGetString(JsonNode? node, out string value)
     {
-        try { return (o[section] as JsonObject)?[key]?.GetValue<bool>() ?? fallback; }
-        catch { return fallback; }
+        value = "";
+        if (node is JsonValue v && v.TryGetValue<string>(out var s))
+        {
+            value = s;
+            return true;
+        }
+        return false;
     }
 
-    static string? GetString(JsonObject o, string section, string key)
-    {
-        try { return (o[section] as JsonObject)?[key]?.GetValue<string>(); }
-        catch { return null; }
-    }
+    static bool GetBool(JsonObject? o, string key, bool fallback) =>
+        o?[key] is JsonValue v && v.TryGetValue<bool>(out var b) ? b : fallback;
+
+    static string? GetString(JsonObject? o, string key) =>
+        TryGetString(o?[key], out var s) ? s : null;
+
+    static ushort? GetUShort(JsonObject o, string key) =>
+        o[key] is JsonValue v && v.TryGetValue<int>(out var i) && i is >= 0 and <= ushort.MaxValue ? (ushort)i : null;
 }
