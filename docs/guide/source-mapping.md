@@ -17,9 +17,9 @@ both.
 > embeds source paths — see below), mirroring how WPF gates XAML source
 > info behind `XamlDebuggingInformation`. The **runtime** gate,
 > `ReactorSourceMap.Enabled`, decides whether those interceptors actually
-> stamp anything, and it defaults to **false even in Debug** — the
-> devtools verb turns it on (`winapp run . --devtools` sets
-> `REACTOR_SOURCEMAP=1` for you), and a host can set it directly or start the
+> stamp anything, and it defaults to **false even in Debug** —
+> `winapp run . --devtools` turns it on (it launches the app with
+> `REACTOR_SOURCEMAP=1`), and a host can set it directly or start the
 > process with `REACTOR_SOURCEMAP=1`. So a plain Debug build generates
 > interceptors but stamps no elements until something enables it. The
 > design reference is

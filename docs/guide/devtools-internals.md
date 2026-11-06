@@ -59,6 +59,9 @@ if (!string.IsNullOrEmpty(options.RemovedSubverbError ?? options.EmbedValidation
 
 if (options.Subverb is null) return false;
 
+if (DevtoolsCliParser.RemovedFlagsNotice(args) is { } ignored)
+    Console.Error.WriteLine($"[reactor] {ignored}");
+
 if (ReactorFeatures.IsDevtoolsSupported && ReactorDevtoolsBootstrap.Current is { } host)
 {
     var request = new ReactorDevtoolsBootRequest(
@@ -220,8 +223,9 @@ properties, state, handlers and UI automation are the WinUI DevTools:
 
 ### Shipping the switch in Release
 
-`Reactor.DevtoolsSupport` keeps the preview host in the binary. Scope it to Debug
-builds so Release/AOT binaries trim it.
+`Reactor.DevtoolsSupport`, with the package referenced, keeps the preview host in the
+binary. Reference the package in Debug only so Release/AOT binaries trim it; a
+reference outside Debug gets build warning `REACTOR_DEVTOOLS_001`.
 
 ## Tips
 

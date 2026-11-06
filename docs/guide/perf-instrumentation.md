@@ -1,10 +1,10 @@
 
 Microsoft.UI.Reactor (Reactor) publishes a structured account of its internal work — every
-reconcile pass, every component render, every state write, every MCP
-tool call, every effect flush — through one managed
+reconcile pass, every component render, every state write, every
+effect flush — through one managed
 `EventSource` named `Microsoft-UI-Reactor`. Consumers can subscribe to
 the full firehose or to a subset by keyword (just reconcile events,
-just render events, just MCP traffic), and the emission path is
+just render events, just state writes), and the emission path is
 keyword-gated so retail with no consumer attached pays one branch
 and zero allocations per event site. The provider flows through both
 EventPipe (cross-platform, what `dotnet-trace` consumes) and classic
@@ -83,8 +83,9 @@ exactly the events it wants. The original seven cover the render loop:
 `Reconcile` (0x1) covers the reconciler pass
 boundaries and the child-list diff; `Render` (0x2) covers per-component
 render timing and the effect-flush boundary; `State` (0x4) covers
-[`UseState`](hooks-internals.md) writes; `Mcp` (0x8) covers
-[devtools](devtools-internals.md) tool dispatch; `Lifecycle` (0x10) covers
+[`UseState`](hooks-internals.md) writes; `Mcp` (0x8) is reserved — its
+`McpCallStart` / `McpCallStop` events (ids 7/8) are still declared but no longer
+emitted, since the in-app MCP server was removed; `Lifecycle` (0x10) covers
 mount and unmount; `Errors` (0x20) is severity-Error events;
 `EventDispatch` (0x40)
 covers the trampoline that fans WinUI routed events out to the
