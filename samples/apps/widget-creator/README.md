@@ -220,8 +220,11 @@ app never edits ACLs.
   nuget.org; NuGet verifies both on restore). Package signing doesn't cover the
   deployed files at run time, and the SDK would otherwise also honor an
   `MXC_FFI_DIR` override, so at startup — before any MXC call — the host claims
-  the SDK's native-library resolver, opens the packaged `mxc_ffi.dll` and its
-  companion natives read-share-only (they can't be swapped afterwards), requires a
+  the SDK's native-library resolver, requires `mxc_ffi.dll` and all its packaged
+  companion natives to be present as regular files in the app (a symbolic link,
+  junction or redirected path is rejected — so the app must not be launched
+  through one), opens them read-share-only (they, and the folders above them,
+  can't be swapped afterwards), requires a
   valid Authenticode signature from Microsoft Corporation whose chain ends in a
   genuine Microsoft root — checked by public key with the Windows Microsoft-root
   chain policy, so a look-alike CA in a user root store can't pass — and loads

@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Mxc.Sdk.V1;
+using Microsoft.Win32.SafeHandles;
 
 namespace WidgetCreator.Services;
 
@@ -25,9 +26,11 @@ namespace WidgetCreator.Services;
 /// slot first (the SDK tolerates losing that race: it writes a one-line
 /// "could not register the native library resolver" note to stderr and defers
 /// to ours), resolves
-/// <c>mxc_ffi</c> only from the app's own packaged native assets, holds every
-/// MXC native file open read-share-only (so it can't be swapped after the
-/// check), requires a valid Authenticode signature from Microsoft Corporation
+/// <c>mxc_ffi</c> only from the app's own packaged native assets, requires every
+/// MXC native file to be present as a regular file at that path (no symbolic
+/// link, junction or other redirection), holds each open read-share-only (so it
+/// — and the directories above it — can't be swapped, renamed or deleted after
+/// the check), requires a valid Authenticode signature from Microsoft Corporation
 /// whose chain ends in a genuine Microsoft root (by public key, via the Windows
 /// Microsoft-root chain policy), and loads that exact file. Any failure leaves
 /// the sandbox unavailable — fail closed, never fall back to an unverified load.
@@ -38,7 +41,8 @@ internal static class MxcNativeRuntime
     const string LibraryName = "mxc_ffi";
     const string LibraryFile = "mxc_ffi.dll";
 
-    // Other natives the MXC runtime loads or launches from its own directory.
+    // Other natives the MXC runtime loads or launches by full path from its own
+    // directory. The package ships all of them, so a missing one fails closed.
     static readonly string[] CompanionFiles = ["plm.exe", "wslcsdk.dll", "wxc-wslc-daemon.exe"];
 
     static readonly System.Threading.Lock Gate = new();
@@ -78,7 +82,9 @@ internal static class MxcNativeRuntime
 
         var libraryPath = Path.Join(dir, LibraryFile);
         var files = new List<string> { libraryPath };
-        files.AddRange(CompanionFiles.Select(companion => Path.Join(dir, companion)).Where(File.Exists));
+        files.AddRange(CompanionFiles.Select(companion => Path.Join(dir, companion)));
+        if (files.FirstOrDefault(f => !File.Exists(f)) is { } missing)
+            return $"{Path.GetFileName(missing)} is missing from the app's packaged native assets.";
 
         foreach (var path in files)
         {
@@ -94,6 +100,16 @@ internal static class MxcNativeRuntime
                 return $"could not open {Path.GetFileName(path)} for verification ({ex.Message}).";
             }
             Pinned.Add(pin);
+
+            // What we pinned must physically live at the path that will be loaded or
+            // launched: a link/junction anywhere in the path resolves elsewhere and
+            // could be retargeted after the check. Pinned, the file and its parent
+            // directories can't be renamed or deleted, so the path stays bound to it.
+            var expected = Path.GetFullPath(path);
+            var actual = FinalPath(pin.SafeFileHandle);
+            if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
+                return $"{Path.GetFileName(path)} is not a regular file at '{expected}' (it resolves to "
+                    + $"'{actual ?? "?"}'); symbolic links, junctions and redirected paths are not trusted.";
 
             if (VerifyMicrosoftSignature(pin, path) is { } signatureError)
                 return $"{Path.GetFileName(path)} failed signature verification: {signatureError}";
@@ -150,6 +166,19 @@ internal static class MxcNativeRuntime
         foreach (var pin in Pinned)
             pin.Dispose();
         Pinned.Clear();
+    }
+
+    /// <summary>The canonical DOS path of an open file (links and junctions resolved).</summary>
+    static string? FinalPath(SafeFileHandle handle)
+    {
+        var buffer = new char[32768];
+        var length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Length, 0);
+        if (length == 0 || length >= buffer.Length)
+            return null;
+        var path = new string(buffer, 0, (int)length);
+        if (path.StartsWith(@"\\?\UNC\", StringComparison.Ordinal))
+            return @"\\" + path[8..];
+        return path.StartsWith(@"\\?\", StringComparison.Ordinal) ? path[4..] : path;
     }
 
     // ── Authenticode ─────────────────────────────────────────────────────────
@@ -313,6 +342,9 @@ internal static class MxcNativeRuntime
         public int lElementIndex;
         public IntPtr pvExtraPolicyStatus;
     }
+
+    [DllImport("kernel32.dll", ExactSpelling = true, CharSet = CharSet.Unicode)]
+    static extern uint GetFinalPathNameByHandleW(SafeFileHandle file, [Out] char[] path, uint pathLength, uint flags);
 
     [DllImport("crypt32.dll", ExactSpelling = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
