@@ -41,8 +41,12 @@ public class DataGridState<T>
     private SelectionMode _selectionMode;
     private readonly int _blockSize;
 
-    /// <summary>Mount-time page/block size passed to the constructor (0 = cache default).</summary>
-    internal int BlockSize => _blockSize;
+    /// <summary>
+    /// Effective mount-time page/block size: the constructor's <c>blockSize</c>, or the
+    /// <see cref="DataPageCache{T}"/> default (50) when it was 0. Shared by the legacy cache
+    /// and the hook-paging path so both use the same size.
+    /// </summary>
+    internal int BlockSize => _blockSize > 0 ? _blockSize : 50;
 
     // ── Sort state ────────────────────────────────────────────────
 

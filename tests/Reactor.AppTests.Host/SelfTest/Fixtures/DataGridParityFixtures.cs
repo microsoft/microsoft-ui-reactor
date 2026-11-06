@@ -477,7 +477,7 @@ internal static class DataGridParityFixtures
                 ).Height(500);
                 grid = grid with { Props = grid.Props with { OnStateReadyInternal = s => state = s } };
 
-                return VStack(TextBlock($"RowHeight: {rowHeight}"), grid);
+                return grid;
             });
 
             H.Check("HookPaging_RowHeight_Loaded",
@@ -504,11 +504,28 @@ internal static class DataGridParityFixtures
             var sortedCalls = source.CallCount;
             var warningsBefore = Volatile.Read(ref pageSizeWarnings);
 
+            // Probe the grid's own row height (not the host's label), so the no-restart checks
+            // below cannot pass just because the grid skipped the re-render. Positive control:
+            // the same probe must first read the mounted 36px rows.
+            double? RowHeightOf(string text)
+            {
+                DependencyObject? node = H.FindTextContaining(text);
+                for (var depth = 0; node is not null && depth < 8; depth++)
+                {
+                    if (node is FrameworkElement fe && !double.IsNaN(fe.Height)) return fe.Height;
+                    node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node);
+                }
+                return null;
+            }
+            H.Check($"HookPaging_RowHeight_ProbeReadsMountedRows (height={RowHeightOf("Emp-000000")})",
+                RowHeightOf("Emp-000000") == 36.0);
+
             // 36px → 24px: a re-derived page size would move 60 → 90.
             setRowHeight(24.0);
-            H.Check("HookPaging_RowHeight_ReRendered",
-                await Harness.WaitFor(() => H.FindTextContaining("RowHeight: 24") is not null,
-                    maxPasses: 25, perPassMs: 20));
+            var appliedNewHeight = await Harness.WaitFor(() => RowHeightOf("Emp-000000") == 24.0,
+                maxPasses: 25, perPassMs: 20);
+            H.Check($"HookPaging_RowHeight_GridAppliedNewRowHeight (height={RowHeightOf("Emp-000000")})",
+                appliedNewHeight);
             await Harness.Render(400);
 
             H.Check("HookPaging_RowHeight_ResourceNotRestarted",
