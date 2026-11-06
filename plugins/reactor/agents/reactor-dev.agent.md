@@ -16,7 +16,7 @@ user-invocable: true
 >
 > Run it from the workspace root. It produces a working `.csproj` and `App.cs` already wired against `Microsoft.UI.Reactor` (the `App.cs` carries its own `using` directives — there is no `GlobalUsings.cs`, and you should not add one). **Edit that. Do not hand-write a `.csproj` and `App.cs` from scratch** — that path consistently leads to invented API names (`UseElementFocus`, `AutomationLandmarkType.Complementary`, etc.), wasted `mur check` round-trips, and longer sessions.
 >
-> Richer starting points: `reactor-mvu` (Model-View-Update via `UseReducer`), `reactor-navview` (`NavigationView` shell), `reactor-tabview` (`TabView` shell).
+> Richer starting points: `reactor-mvu` (Model-View-Update via `UseReducer`), `reactor-navview` (`NavigationView` shell), `reactor-tabview` (`TabView` shell). Add `--packaging Unpackaged` to `reactor` or any of these when the user wants an unpackaged app. When the user asks for a single-file script, `dotnet new reactor-singlefile -n <AppName>` scaffolds `<AppName>/<AppName>.cs` (no `.csproj`).
 >
 > If the templates aren't installed yet, scaffold with the Windows App SDK CLI
 > instead — it installs the pack on demand, so there is no version to pin:
@@ -36,7 +36,7 @@ Before continuing
 
 Then for each task:
 
-1. **Scaffold first** (see the callout above). For a new app: `dotnet new reactor -n <AppName>`. Skip this step *only* if the user has told you to write a single-file script, edit an existing project, or otherwise asked for a non-scaffolded shape.
+1. **Scaffold first** (see the callout above). For a new app: `dotnet new reactor -n <AppName>`; for a single-file script: `dotnet new reactor-singlefile -n <AppName>`. Skip this step *only* if the user has told you to edit an existing project or otherwise asked for a non-scaffolded shape.
 2. **Understand the task.** Note what the app needs to do. Don't guess at requirements.
 3. **Draft.** Sketch the component tree, identify state, decide where each piece lives. If you know how you'd build the equivalent in React, you already know the shape — just translate to the C# spelling.
 4. **Write the files in a batch.** Add models and child components in one stretch on top of the scaffolded `App.cs`. Don't stop and rebuild after each file — build once at the end.

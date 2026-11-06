@@ -227,7 +227,10 @@ jobs:
           # Case-sensitive on purpose: the Template Name column carries the
           # capitalised prose word ("Reactor MVU App"), which is a standalone
           # token and would satisfy a case-insensitive match on its own.
-          foreach ($shortName in @('reactor', 'reactor-mvu', 'reactor-navview', 'reactor-tabview')) {
+          # `reactor-singlefile` needs pack 0.0.8-alpha or later; bootstrap
+          # installs the newest pack on a fresh runner, so its absence means the
+          # docs' five-template claim no longer matches what users get.
+          foreach ($shortName in @('reactor', 'reactor-mvu', 'reactor-navview', 'reactor-tabview', 'reactor-singlefile')) {
               $token = '(?<![^\s,])' + [regex]::Escape($shortName) + '(?![^\s,])'
               if (-not [regex]::IsMatch($joined, $token)) {
                   throw "$shortName template not found in ``dotnet new list reactor`` output"

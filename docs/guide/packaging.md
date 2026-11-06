@@ -22,10 +22,12 @@ INPC walker).
 | Single-file | `PublishSingleFile=true`, `IncludeNativeLibrariesForSelfExtract=true` | `win-x64` / `win-arm64` (must be set) | One `.exe` that self-extracts the WinUI runtime to `%TEMP%/.net/` on first launch. |
 | Native AOT | `PublishAot=true`, `InvariantGlobalization=true` (recommended) | `win-x64` / `win-arm64` (required) | A native binary with no JIT, no `Assembly.GetTypes()`, no `Reflection.Emit`. Fastest cold start; trim-only. |
 
-A scaffolded app starts out **packaged**: `dotnet new reactor` emits a
+A scaffolded app starts out **packaged** by default: `dotnet new reactor` emits a
 `Package.appxmanifest` and sets `EnableMsixTooling`, so `dotnet run`
 registers a loose-layout package and the app has identity from the
-first launch. The properties in the MSIX row above are the *publish*
+first launch (`--packaging Unpackaged` scaffolds the
+[unpackaged shape](#the-unpackaged-shape) instead). The properties in the
+MSIX row above are the *publish*
 knobs for producing and signing a redistributable `.msix` — a separate
 concern the scaffold deliberately leaves off, since a fresh clone
 should build without a developer certificate.
@@ -39,8 +41,13 @@ folder or an MSIX. The decision is usually distribution-channel-first
 
 ## The unpackaged shape
 
-Prefer a zip-and-go folder over an MSIX? Set `WindowsPackageType=None`
-on a scaffolded project — the shape every sample in this repo uses:
+Prefer a zip-and-go folder over an MSIX? Scaffold with
+`dotnet new reactor --packaging Unpackaged` (the MVU, NavigationView and TabView
+templates take the option too): it sets `WindowsPackageType=None`, turns
+`EnableMsixTooling` off, and leaves out `Package.appxmanifest` and the package
+logo assets. An already-packaged project switches with `WindowsPackageType=None`
+alone, which overrides `EnableMsixTooling`. This is
+the shape every sample in this repo uses:
 
 ```xml
 <PropertyGroup>
@@ -67,14 +74,14 @@ build/props/targets — while the native WinUI runtime is supplied by the
 machine-wide Windows App Runtime install (or bundled into the publish output
 when `WindowsAppSDKSelfContained=true`). That sub-package, together with
 `Microsoft.WindowsAppSDK.Runtime` (which keeps the app framework-dependent), is
-what a consumer gets transitively from `Microsoft.UI.Reactor`; the scaffolded
-template adds the full
+what a consumer gets transitively from `Microsoft.UI.Reactor` — and all a
+scaffolded project gets, because the templates add no Windows App SDK reference
+of their own. The self-contained shape needs the Runtime redist the full
 [`Microsoft.WindowsAppSDK`](https://www.nuget.org/packages/Microsoft.WindowsAppSDK)
-metapackage on top at scaffold time (see below), because the self-contained
-shape needs the Runtime redist the metapackage carries. Inside this repo the
-correct reference is injected centrally from `Directory.Build.targets` and
-versioned by `WindowsAppSDKWinUIVersion` / `WindowsAppSDKVersion` in
-`Directory.Build.props`.
+metapackage carries, so add that reference yourself before you turn it on (see
+below). Inside this repo the correct reference is injected centrally from
+`Directory.Build.targets` and versioned by `WindowsAppSDKWinUIVersion` /
+`WindowsAppSDKVersion` in `Directory.Build.props`.
 
 `WindowsAppSDKSelfContained=true` is the other load-bearing piece —
 it bundles the WinUI runtime alongside the published exe so the app
@@ -305,24 +312,23 @@ source-built smoke packages still use `0.0.0-local` via `mur pack-local`.
 Trim-friendly deployments don't get any framework-side magic; the same trimmer
 configuration that works for any WinUI 3 app works here.
 
-**`Microsoft.WindowsAppSDK` is added by the template at scaffold time,
-not pinned in the checked-in CSPROJ.** The template file itself carries
-only `Microsoft.UI.Reactor`; a `dotnet new` post-action then runs the
-equivalent of `dotnet add package Microsoft.WindowsAppSDK`, so a freshly
-scaffolded project gets the **latest stable** SDK rather than a version
-frozen when the template shipped. The two references then sit
-side-by-side in your CSPROJ, so the SDK version stays an obvious knob —
-edit it there when you need a specific WinUI patch. If you skip the
-template and reference `Microsoft.UI.Reactor` by hand, the SDK still
-arrives transitively as `Microsoft.WindowsAppSDK.WinUI` plus
-`Microsoft.WindowsAppSDK.Runtime`, so the app builds framework-dependent; add the full
-metapackage yourself when you want `WindowsAppSDKSelfContained=true` or
-an MSIX, both of which need the Runtime redist. The metapackage is also
-how you move to a newer WinUI, because it moves Runtime with it: a newer
+**Scaffolded projects don't reference `Microsoft.WindowsAppSDK`.** The
+Windows App SDK arrives transitively through `Microsoft.UI.Reactor`, as
+`Microsoft.WindowsAppSDK.WinUI` plus `Microsoft.WindowsAppSDK.Runtime`, so a
+fresh scaffold gets the SDK version Reactor depends on rather than the newest
+release, and builds framework-dependent. That covers both shapes the templates
+produce: a packaged app's manifest declares a dependency on the
+`Microsoft.WindowsAppRuntime.2` framework package, and an unpackaged app loads
+the machine-wide runtime at startup. Add the full metapackage yourself for
+`WindowsAppSDKSelfContained=true`, which needs the Runtime redist it carries, or
+to move to a newer WinUI, because the metapackage moves Runtime with it: a newer
 `Microsoft.WindowsAppSDK.WinUI` on its own leaves Runtime behind, and the
 build fails with *"One or more referenced Windows App SDK components are
 newer than the versions expected by the Microsoft.WindowsAppSDK.Runtime
-package"*. The repo-internal
+package"*. Adding it has a cost: it also pulls in the SDK's machine-learning
+runtime, whose native DLLs (`onnxruntime.dll` and `DirectML.dll`, close to
+40 MB on x64) ship in your publish output, where trimming and Native AOT can't
+remove them. The repo-internal
 `WindowsAppSDKVersion` MSBuild property only governs projects under this
 clone (`Directory.Build.props`); consumer projects pick their version
 directly.
@@ -351,7 +357,7 @@ in Release too.
 ## Next Steps
 
 - **[Dev Tooling](dev-tooling.md)** — Previous: the inner-loop side of the build pipeline (`mur pack-local`, `dotnet watch`, hot reload).
-- **[Getting Started](getting-started.md)** — Where the `dotnet new reactor` templates that produce the packaged shape come from.
+- **[Getting Started](getting-started.md)** — Where the `dotnet new reactor` templates that produce the packaged and unpackaged shapes come from.
 - **[Performance](performance.md)** — When you should reach for AOT (cold-start budgets, startup-perf benchmarks).
 - **[Perf Instrumentation](perf-instrumentation.md)** — The ETW / EventPipe pipeline that survives AOT publish unchanged.
 - **[Dev Tooling](dev-tooling.md)** — How the `Reactor.DevtoolsSupport` capability switch combines with `--devtools` activation.
