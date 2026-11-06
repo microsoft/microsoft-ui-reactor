@@ -190,7 +190,7 @@ public class DataSourceResourceTests
     [Theory]
     [InlineData(10)]
     [InlineData(0)]
-    public void UseDataSource_Normalizes_Options_When_Initialization_Is_Retried(int initialPageSize)
+    public void UseDataSource_Keeps_Initial_PageSize_After_First_Render_Throws(int initialPageSize)
     {
         using var cache = new QueryCache();
         var rows = Enumerable.Range(0, 101).Select(id => new Row(id)).ToArray();
@@ -214,8 +214,11 @@ public class DataSourceResourceTests
 
         try
         {
-            // Register notifies the scope before the hook stores its newly created state.
-            Assert.Same(failure, Assert.Throws<InvalidOperationException>(() => Render(initialPageSize)));
+            // This retry scenario requires Register to notify synchronously during state construction.
+            var exception = Record.Exception(() => Render(initialPageSize));
+            Assert.True(pending.Count == 1,
+                "The first render must synchronously register the hook with PendingScope before notifying.");
+            Assert.Same(failure, exception);
             pending.Changed -= FailInitialization;
 
             var resource = Render(20);

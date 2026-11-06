@@ -16,10 +16,13 @@ public static class DataSourceResourceExtensions
     /// sort/filter/search restarts the pagination cleanly.
     /// </summary>
     /// <remarks>
-    /// On first use, when <paramref name="options"/> is non-null, its PageSize (default 50) takes precedence.
-    /// Otherwise, <c>request.PageSize</c> is used. The effective page size is at least 1.
-    /// This size is retained for the hook's lifetime, including query restarts.
-    /// Remount the component to use a different page size.
+    /// The initial page size comes from <c>options.PageSize</c> (default 50) when
+    /// <paramref name="options"/> is supplied, or <c>request.PageSize</c> otherwise,
+    /// and is clamped to at least 1.
+    /// This size stays fixed across renders and query restarts. To change it,
+    /// have the parent remount the calling component with a different key,
+    /// e.g. <c>.WithKey($"tasks:{pageSize}")</c>, or increment a parent-owned
+    /// reset version used by <c>.WithKey($"tasks:{resetVersion}")</c>.
     /// </remarks>
     public static InfiniteResource<T> UseDataSource<T>(
         this RenderContext ctx,
@@ -36,19 +39,24 @@ public static class DataSourceResourceExtensions
         // scrolls can fetch pages in parallel this way, which matters for DataGrid
         // workflows that jump from row 0 to row 50 000 in a single scroll gesture.
         // The resource retains its initial options, so requests and cursors must retain its page size.
-        var sizeRef = ctx.UseRef((PageSize: 0, Initialized: false));
-        var (pageSize, initialized) = sizeRef.Current;
-        if (pageSize == 0)
+        var sizeRef = ctx.UseRef<int?>(null);
+        int pageSize = sizeRef.Current ??= Math.Max(1, options?.PageSize ?? request.PageSize);
+#if DEBUG
+        var warnedRef = ctx.UseRef(false);
+        if (!warnedRef.Current && Math.Max(1, options?.PageSize ?? request.PageSize) != pageSize)
         {
-            pageSize = Math.Max(1, options?.PageSize ?? request.PageSize);
-            sizeRef.Current = (pageSize, false);
+            warnedRef.Current = true;
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[Reactor.UseDataSource] PageSize changes are ignored; this hook retains {pageSize}. " +
+                "To use a different size, remount the calling component by changing its key from the parent.");
         }
+#endif
         // Use the same size for request batches, offset cursors, and resource row positions.
         options ??= InfiniteResourceOptions.Default;
-        if (!initialized && options.PageSize != pageSize)
+        if (options.PageSize != pageSize)
             options = options with { PageSize = pageSize };
 
-        var resource = ctx.UseInfiniteResource<T, string>(
+        return ctx.UseInfiniteResource<T, string>(
             fetchPage: async (cursor, ct) =>
             {
                 var req = request with { PageSize = pageSize, ContinuationToken = cursor };
@@ -60,9 +68,6 @@ public static class DataSourceResourceExtensions
             options: options,
             dispatcher: dispatcher,
             cursorFromPageIndex: pageIndex => pageIndex == 0 ? null : (pageIndex * pageSize).ToString(global::System.Globalization.CultureInfo.InvariantCulture));
-        // Retry normalization if the hook throws before its state is initialized.
-        if (!initialized) sizeRef.Current = (pageSize, true);
-        return resource;
     }
 
     /// <summary>
@@ -72,10 +77,13 @@ public static class DataSourceResourceExtensions
     /// <c>.Provide(AppContexts.QueryCache, customCache)</c>.
     /// </summary>
     /// <remarks>
-    /// On first use, when <paramref name="options"/> is non-null, its PageSize (default 50) takes precedence.
-    /// Otherwise, <c>request.PageSize</c> is used. The effective page size is at least 1.
-    /// This size is retained for the hook's lifetime, including query restarts.
-    /// Remount the component to use a different page size.
+    /// The initial page size comes from <c>options.PageSize</c> (default 50) when
+    /// <paramref name="options"/> is supplied, or <c>request.PageSize</c> otherwise,
+    /// and is clamped to at least 1.
+    /// This size stays fixed across renders and query restarts. To change it,
+    /// have the parent remount the calling component with a different key,
+    /// e.g. <c>.WithKey($"tasks:{pageSize}")</c>, or increment a parent-owned
+    /// reset version used by <c>.WithKey($"tasks:{resetVersion}")</c>.
     /// </remarks>
     public static InfiniteResource<T> UseDataSource<T>(
         this RenderContext ctx,

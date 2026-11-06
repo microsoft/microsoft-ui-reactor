@@ -734,22 +734,17 @@ page slots, so a later write can replace an earlier query's pages even within
 
 ### 5.9 `IDataSource<T>` adapter
 
-`DataSourceResourceExtensions.UseDataSource` (`DataSourceResourceExtensions.cs:24-66`)
+`DataSourceResourceExtensions.UseDataSource` (`DataSourceResourceExtensions.cs:27-71`)
 is a thin hook that projects any `IDataSource<T>` into `UseInfiniteResource`:
 
 ```csharp
-var sizeRef = ctx.UseRef((PageSize: 0, Initialized: false));
-var (pageSize, initialized) = sizeRef.Current;
-if (pageSize == 0)
-{
-    pageSize = Math.Max(1, options?.PageSize ?? request.PageSize);
-    sizeRef.Current = (pageSize, false);
-}
+var sizeRef = ctx.UseRef<int?>(null);
+int pageSize = sizeRef.Current ??= Math.Max(1, options?.PageSize ?? request.PageSize);
 options ??= InfiniteResourceOptions.Default;
-if (!initialized && options.PageSize != pageSize)
+if (options.PageSize != pageSize)
     options = options with { PageSize = pageSize };
 
-var resource = ctx.UseInfiniteResource<T, string>(
+return ctx.UseInfiniteResource<T, string>(
     fetchPage: async (cursor, ct) =>
     {
         var req = request with { PageSize = pageSize, ContinuationToken = cursor };
@@ -760,20 +755,20 @@ var resource = ctx.UseInfiniteResource<T, string>(
     deps: new object[] { source, request.Sort ?? (object)"", request.Filters ?? (object)"", request.SearchQuery ?? "" },
     options: options, dispatcher: dispatcher,
     cursorFromPageIndex: pageIndex => pageIndex == 0 ? null : (pageIndex * pageSize).ToString(global::System.Globalization.CultureInfo.InvariantCulture));
-if (!initialized) sizeRef.Current = (pageSize, true);
-return resource;
 ```
 
 On the initial call, `options.PageSize` takes precedence over `request.PageSize`,
 clamped to at least 1. Requests, offset cursors, and resource row positions all
-use this size. During initialization, the adapter copies options only when their
-page size differs; the caller's options and all other settings are preserved.
-After successful initialization, normalization is skipped, while the current
-`CacheKeyPrefix` still participates in query restarts. Failed initialization
-leaves normalization enabled for the next attempt.
+use this size. The adapter copies options only when their page size differs;
+the caller's options and all other settings are preserved. The current
+`CacheKeyPrefix` still participates in query restarts.
 The initial size is retained for the hook's lifetime, including query restarts.
 Later PageSize changes do not change the request size, cursor offsets, or row
-positions; remount the component to use a different size.
+positions. To use a different size, remount the calling component by changing
+its key from the parent, e.g. `.WithKey($"tasks:{pageSize}")`. Alternatively,
+increment a parent-owned reset version used by `.WithKey($"tasks:{resetVersion}")`.
+A Debug-only diagnostic, omitted from the example above, reports an ignored
+size change once per hook.
 
 Deps include the source *identity* plus the request's sort/filter/search —
 any change restarts pagination, which is the correct behavior for an

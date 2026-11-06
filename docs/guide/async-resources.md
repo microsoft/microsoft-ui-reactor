@@ -180,7 +180,10 @@ mechanical steps:
    `options.PageSize` takes precedence over `request.PageSize`; the size is
    clamped to at least 1 and used for requests, cursors, and row positions.
    This initial size is retained for the hook's lifetime, including query
-   restarts. Remount the component to use a different page size.
+   restarts. To use a different size, remount the calling component by changing
+   its key from the parent, e.g. `.WithKey($"tasks:{pageSize}")`.
+   Alternatively, increment a parent-owned reset version used by
+   `.WithKey($"tasks:{resetVersion}")`.
 2. **Read from `resource.Items[i]`.** The sparse `IReadOnlyList<T?>` has
    null placeholders for in-flight slots. This replaces `cache.PeekItem(i)`
    plus the `LoadingBlock` sentinel.
