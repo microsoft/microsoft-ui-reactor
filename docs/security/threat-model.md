@@ -225,7 +225,7 @@ Same shape as Boundary A: loopback-only HTTP (`http://127.0.0.1:<port>/mcp`) wit
 **Residual risk:**
 
 - A logic defect in the URL sanitizer (e.g., scheme-confusion via tab/newline) could let through a dangerous URL. Mitigation: `MarkdownBuilderTests` covers the native `IsSafeUri` allow-list (javascript/relative/data scheme blocking) and `SanitizeUrlTests` covers the OWASP XSS filter-evasion cheat-sheet entries that apply to URL parsing.
-- A logic defect in `Md4cParser` could cause infinite loop / OOM on adversarial input. Mitigation today: ~2,200 xUnit tests including 590 Yoga-style fixture cases and the upstream md4c spec tests. Mitigation in flight: a SharpFuzz harness (`tests/Reactor.Fuzz/`) covers `MarkdownHtml.Render` on every PR via the `fuzz-smoke` CI job and is being onboarded for continuous fuzzing.
+- A logic defect in `Md4cParser` could cause infinite loop / OOM on adversarial input. Mitigation today: ~2,200 xUnit tests including 543 Yoga-style fixture cases and the upstream md4c spec tests. Mitigation in flight: a SharpFuzz harness (`tests/Reactor.Fuzz/`) covers `MarkdownHtml.Render` on every PR via the `fuzz-smoke` CI job and is being onboarded for continuous fuzzing.
 - Markdown is rendered into the consuming-app's tree; the consuming app decides whether to display attacker-influenced markdown at all. **The threat is the consuming app's choice to render untrusted markdown, not the framework's. Reactor's job is to make the default rendering safe.**
 
 ### 7.5 SVG path data parser

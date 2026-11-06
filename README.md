@@ -135,7 +135,7 @@ Reactor spans a core framework and a set of higher-level features. Each area bel
 | **Core reconciler** | Virtual element tree, keyed diffing, element pooling, render coalescing, skip-unchanged optimization | Preview |
 | **DSL & elements** | Factory methods covering WinUI controls, fluent modifier chains, attached properties | Preview |
 | **Hooks & state** | UseState, UseReducer, UseEffect, UseMemo, UseRef, UseCallback, UseContext, UseObservable, UseCollection | Preview |
-| **Flex layout** | C# port of facebook/yoga with FlexPanel, 590 ported test fixtures | Preview |
+| **Flex layout** | C# port of facebook/yoga with FlexPanel, 543 ported test fixtures | Preview |
 | **Commanding** | Command records bundling label, icon, shortcut, and action; 16 standard commands; focus-scoped accelerators | Preview |
 | **Charting (D3)** | Full D3 algorithm port plus declarative chart DSL — line, bar, area, pie, tree, force-directed graphs | Preview |
 | **Markdown** | Native md4c parser with `Markdown()` element builder | Preview |
@@ -277,7 +277,7 @@ src/Reactor/                Core framework
 src/Reactor.Cli/            CLI scaffolding tool
 src/vscode-reactor/         VS Code extension — live preview panel
 tests/
-  Reactor.Tests/            xUnit unit tests — 2,200+ tests incl. 590 Yoga fixtures
+  Reactor.Tests/            xUnit unit tests — 2,200+ tests incl. 543 Yoga fixtures
   Reactor.AppTests/         MSTest runner — orchestrates selfhost + winapp ui
   Reactor.AppTests.Host/    Selfhost test app — 60+ in-process fixtures
   stress_perf/              Performance benchmarks

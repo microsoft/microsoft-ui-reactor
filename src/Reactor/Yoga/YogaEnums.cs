@@ -57,6 +57,8 @@ internal enum YogaErrata : uint
     StretchFlexBasis = 1,
     AbsolutePositionWithoutInsetsExcludesPadding = 2,
     AbsolutePercentAgainstInnerSize = 4,
+    MinSizeUndefinedInsteadOfAuto = 8,
+    FlexFirstPassUsesRunningTotals = 16,
     All = 2147483647,
     Classic = 2147483646,
 }
