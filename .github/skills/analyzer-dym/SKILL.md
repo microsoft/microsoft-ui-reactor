@@ -13,6 +13,11 @@ Read `AGENTS.md` first, then the governing spec `docs/specs/061-in-build-did-you
 and the **closest existing analyzer** in `src/Reactor.Analyzers/` plus its CLI mirror
 under `src/Reactor.Cli/Check/`. Copy the nearest working pattern instead of inventing one.
 
+Follow the shared [model-selection policy](../README.md#model-selection).
+Semantic-model and false-positive reasoning fit the deep-review workload;
+ordinary implementation stays in the current session rather than spawning
+extra agents or overriding the user's selected model.
+
 ## When to activate
 
 Trigger phrases: "add a `REACTOR_*` diagnostic", "did-you-mean for <mistake>", "add/remove

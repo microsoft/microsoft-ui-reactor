@@ -20,6 +20,10 @@ You **drive the committed orchestrator script** — do not reimplement the
 measurement. Everything you need is in `tests/stress_perf/ci/Run-PerfBenchmark.ps1`
 and `PerfLib.ps1`. Run it with your `powershell` tool (`pwsh`).
 
+Under the shared [model-selection policy](../README.md#model-selection), this
+is a mechanical workflow: inherit the configured model. Do not add a model
+fan-out or substitute an LLM's performance estimate for harness measurements.
+
 ## When to activate
 
 Trigger phrases include:

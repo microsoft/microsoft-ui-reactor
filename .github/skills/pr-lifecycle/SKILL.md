@@ -14,6 +14,12 @@ This is different from [`pr-review`](../pr-review/SKILL.md). `pr-review` is a on
 report-only review across several dimensions. `pr-lifecycle` runs `pr-review` exactly once,
 applies the fixes, and then repeats GitHub-side review rounds until they converge.
 
+Use the shared [model-selection policy](../README.md#model-selection) for the
+local `pr-review` pass and any nontrivial fixes. Keep lifecycle bookkeeping on
+the configured model. This policy does **not** select the model behind GitHub's
+hosted Copilot reviewer; do not pass local model IDs to review-request APIs or
+claim that the hosted review used a particular model without service evidence.
+
 ## Authority
 
 - "Get this PR ready" or "run the lifecycle" allows the following, **for this PR only**:

@@ -1,6 +1,6 @@
 ---
 name: coverage-uplift
-description: Raise test coverage for the microsoft/microsoft-ui-reactor repo with non-vacuous tests, picking the right tier (headless unit / selftest / E2E). Activate when a contributor asks to "improve test coverage", "add tests for X", "raise coverage", "cover the uncovered lines", "write selftests / e2e for this", "close coverage gaps", or "add unit tests". Baselines with tools/coverage, classifies each gap by tier, writes narrowly-scoped tests whose assertions fail if the target code is deleted, mutation-checks the key oracles, and runs the pr-review multi-model cross-check on the final commit. Applies changes (adds tests); does NOT change product code to chase coverage.
+description: Raise test coverage for the microsoft/microsoft-ui-reactor repo with non-vacuous tests, picking the right tier (headless unit / selftest / E2E). Activate when a contributor asks to "improve test coverage", "add tests for X", "raise coverage", "cover the uncovered lines", "write selftests / e2e for this", "close coverage gaps", or "add unit tests". Baselines with tools/coverage, classifies each gap by tier, writes narrowly-scoped tests whose assertions fail if the target code is deleted, mutation-checks the key oracles, and requests a cross-family test-oracle review of the final changes when available and permitted. Applies changes (adds tests); does NOT change product code to chase coverage.
 infer: true
 ---
 
@@ -12,6 +12,10 @@ Reactor is a declarative C#/WinUI 3 framework: a reconciler diffs immutable `Ele
 records and patches real WinUI controls. Read `AGENTS.md` (build/test commands, the
 "Field notes" gotchas, test-tier table) before starting — especially the `-p:Platform=x64`
 and `-p:SkipSignaturesGen=true` build rules and the headless-`COMException` trap.
+
+Use the shared [model-selection policy](../README.md#model-selection): oracle
+design is deep-review work. Keep the user's configured model unless a change is
+authorized; model choice never replaces executing the tests and mutations.
 
 ## When to activate
 
@@ -25,7 +29,8 @@ test, or review an existing PR (that is `pr-review`).
 
 **Every assertion must fail if the code path it targets is deleted, no-op'd, or returns
 default.** Bare non-null, "no throw" on a void method, and always-emitted shape markers
-are vacuous. Copilot review does **not** catch vacuous assertions — you must.
+are vacuous. A reviewer's agreement does not prove an oracle is non-vacuous;
+demonstrate the failure yourself.
 Non-vacuous oracle patterns that survive review here:
 - **Throw-position / arity oracle** — a malformed token in operand slot *N* throws iff the
   right count was consumed (wrong arity re-dispatches → no throw).
@@ -150,12 +155,28 @@ or drop it. Prefer dropping a vacuous test (and the coverage it bought) over kee
 pwsh tools/coverage/run-coverage.ps1 -UnitOnly -SkipBuild
 ```
 
-Then run the `pr-review` skill's **multi-model** dimension on the **final** commit with a
-different model family (e.g. a GPT model at high reasoning) against
-`git --no-pager diff origin/main...HEAD`. It reliably finds vacuous/wrong-reason
-assertions that every Copilot round misses. Fix findings; re-run until zero.
+Then request a **cross-family test-oracle review** of the final changes using
+the shared [cross-family policy](../README.md#cross-family-checks), relative to
+the model that authored the tests. Capture the appropriate diff with `pr-review`'s
+scope rules; include uncommitted tests when present instead of reviewing only
+`origin/main...HEAD`.
+
+Pass the reviewer the diff, target implementation, test-author model provenance,
+mutation results, and the `pr-review` fragments
+[`_shared-contract.md`](../pr-review/dimensions/_shared-contract.md) and
+[`test-coverage.md`](../pr-review/dimensions/test-coverage.md). Ask specifically
+whether each key oracle fails for the intended defect, could pass for the wrong
+reason, or misses a relevant branch. Keep all actionable severities; the general
+`multi-model.md` pass's critical/high cutoff would miss useful oracle findings.
+
+Fix evidence-backed findings and rerun the affected tests/mutations. Repeat the
+review only when changed tests or new evidence warrant it, not to manufacture a
+zero-finding verdict. If no permitted different-family reviewer is available,
+report the cross-check as incomplete; never present it as a pass. Review is
+additional evidence, not a substitute for step 5.
 
 ## Report
 
 To stdout: coverage delta (before → after, line & branch), the tests added per tier, any
 targets dropped as untestable (with the reason), and any oracle you mutation-verified.
+Include the cross-family review's model provenance, result, and any coverage limits.
