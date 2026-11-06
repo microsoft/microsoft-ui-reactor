@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -87,7 +88,8 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
     static string? ResolveCliPath()
     {
         var rid = "win-" + (RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64");
-        var bundled = Path.Combine(AppContext.BaseDirectory, "runtimes", rid, "native", "copilot.exe");
+        // Path.Join never discards earlier segments (unlike Path.Combine with a rooted segment).
+        var bundled = Path.Join(AppContext.BaseDirectory, "runtimes", rid, "native", "copilot.exe");
         if (File.Exists(bundled))
             return null; // SDK's default resolution works.
 
@@ -95,11 +97,7 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
         if (!string.IsNullOrWhiteSpace(env) && File.Exists(env))
             return env;
 
-        foreach (var candidate in EnumerateInstalledCliPaths())
-            if (File.Exists(candidate))
-                return candidate;
-
-        return null;
+        return EnumerateInstalledCliPaths().FirstOrDefault(File.Exists);
     }
 
     static IEnumerable<string> EnumerateInstalledCliPaths()
@@ -109,7 +107,7 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
         // scan, so an unrelated copilot.exe on PATH can't be picked up and run.
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (!string.IsNullOrEmpty(localAppData))
-            yield return Path.Combine(localAppData, "GitHub CLI", "copilot", "copilot.exe");
+            yield return Path.Join(localAppData, "GitHub CLI", "copilot", "copilot.exe");
     }
 
     public async Task<IModelConversation> StartConversationAsync(string systemPrompt, CancellationToken ct)

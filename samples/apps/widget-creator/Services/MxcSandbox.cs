@@ -90,8 +90,13 @@ public sealed class MxcSandbox
     static string SafeNativeVersion()
     {
         try { return MxcPlatform.NativeVersion; }
-        catch (Exception) { return "unknown"; }
+        catch (Exception ex) when (IsNativeRuntimeFailure(ex)) { return "unknown"; }
     }
+
+    /// <summary>Failures that mean the MXC native runtime (mxc_ffi) can't be loaded or queried.</summary>
+    static bool IsNativeRuntimeFailure(Exception ex) =>
+        ex is MxcException or DllNotFoundException or EntryPointNotFoundException
+            or BadImageFormatException or TypeInitializationException or FileLoadException;
 
     static string? ComputeUnavailableReason()
     {
@@ -107,7 +112,7 @@ public sealed class MxcSandbox
                 return "the MXC ProcessContainer backend is not available on this host.";
             return null;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsNativeRuntimeFailure(ex))
         {
             SessionLog.Write($"[Sandbox] MXC native runtime failed to load: {ex}");
             return $"the MXC native runtime could not be loaded ({ex.Message}).";
@@ -277,13 +282,15 @@ public sealed class MxcSandbox
                 verifyCts.Cancel();
                 await DrainAsync(proc, stdout, stderr).ConfigureAwait(false);
                 Sink(TimeoutMarker);
-                try { await verifyTask.ConfigureAwait(false); } catch { /* best-effort */ }
+                try { await verifyTask.ConfigureAwait(false); }
+                catch (OperationCanceledException) { /* verifyCts was cancelled before the check ran */ }
                 return new SandboxResult(unchecked((int)0xC000013A), Captured());
             }
 
             // Make sure any containment-failure line is recorded before we classify.
             verifyCts.Cancel();
-            try { await verifyTask.ConfigureAwait(false); } catch { /* best-effort */ }
+            try { await verifyTask.ConfigureAwait(false); }
+            catch (OperationCanceledException) { /* verifyCts was cancelled before the check ran */ }
             await DrainAsync(proc, stdout, stderr).ConfigureAwait(false);
 
             if (wait.TimedOut)
@@ -330,8 +337,10 @@ public sealed class MxcSandbox
         var pumps = Task.WhenAll(stdout, stderr);
         if (await Task.WhenAny(pumps, Task.Delay(TimeSpan.FromSeconds(3))).ConfigureAwait(false) != pumps)
         {
-            try { proc.StandardOutputCloser?.Close(); } catch { /* best-effort */ }
-            try { proc.StandardErrorCloser?.Close(); } catch { /* best-effort */ }
+            try { proc.StandardOutputCloser?.Close(); }
+            catch (Exception ex) when (ex is MxcException or IOException or ObjectDisposedException) { /* already closed */ }
+            try { proc.StandardErrorCloser?.Close(); }
+            catch (Exception ex) when (ex is MxcException or IOException or ObjectDisposedException) { /* already closed */ }
             await Task.WhenAny(pumps, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false);
         }
     }

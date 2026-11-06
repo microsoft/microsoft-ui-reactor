@@ -579,9 +579,8 @@ public static class MxcPolicy
         if (legacy["filesystem"] is JsonObject fs)
         {
             var newFs = new JsonObject();
-            foreach (var kind in PathKinds)
-                if (fs[kind] is JsonArray arr && arr.Count > 0)
-                    newFs[kind] = arr.DeepClone();
+            foreach (var kind in PathKinds.Where(k => fs[k] is JsonArray { Count: > 0 }))
+                newFs[kind] = fs[kind]!.DeepClone();
             if (newFs.Count > 0)
                 result["filesystem"] = newFs;
         }
