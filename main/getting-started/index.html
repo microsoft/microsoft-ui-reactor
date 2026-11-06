@@ -4691,16 +4691,20 @@ configurations along with the <code>Microsoft.UI.Reactor.Devtools</code> package
 session opt-in on the command line:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="n">dotnet</span> <span class="n">run</span> <span class="p">--</span> <span class="p">-</span><span class="n">-devtools</span> <span class="n">app</span>
 </code></pre></div>
-<p>The scaffolded <code>Properties/launchSettings.json</code> ships a second
-<code>"&lt;AppName&gt; Devtools"</code> profile that passes that flag for you, so pick that
-profile in Visual Studio or use
-<code>dotnet run --launch-profile "&lt;AppName&gt; Devtools"</code>. The default profile
-deliberately passes no arguments — a plain <code>dotnet run -c Debug</code> starts the app
-with <strong>no</strong> dev menu.</p>
+<p><code>dotnet run</code> hands everything after <code>--</code> to the app, and a packaged scaffold
+still receives it when it launches with package identity. The default profile in
+the scaffolded <code>Properties/launchSettings.json</code> deliberately passes no
+arguments — a plain <code>dotnet run -c Debug</code> starts the app with <strong>no</strong> dev menu.
+Keep the <code>app</code>, too: a bare <code>--devtools</code>, whether typed or passed by a launch
+profile, is read as <code>--devtools run</code>, the heavier session behind
+<a href="../dev-tooling/#mcp-server"><code>mur devtools</code></a> that also starts an MCP endpoint.</p>
 <p><code>UseDevtools()</code> returns <code>true</code> only when both signals are present, which is what
-gates the reconcile-highlight overlay and the rest of the menu. Release builds
-drop the package and the switch, so the devtools code trims away entirely. The
-<a href="../dev-tooling/">dev tooling</a> page covers the full menu.</p>
+gates the reconcile-highlight overlay and the rest of the menu. The signals
+don't draw anything themselves: the menu is the <code>DevtoolsMenu(...)</code> element, so
+it appears only if your tree renders one. If yours doesn't yet, add it to the
+title bar as shown in <a href="../dev-tooling/#in-app-dev-menu">In-App Dev Menu</a>. Release
+builds drop the package and the switch, so the devtools code trims away
+entirely. The <a href="../dev-tooling/">dev tooling</a> page covers the full menu.</p>
 <h2 id="common-mistakes">Common Mistakes<a class="headerlink" href="#common-mistakes" title="Permanent link">&para;</a></h2>
 <h3 id="editing-bin-artifacts-to-see-your-change">Editing <code>bin/</code> artifacts to "see your change"<a class="headerlink" href="#editing-bin-artifacts-to-see-your-change" title="Permanent link">&para;</a></h3>
 <p>Reactor doesn't watch the build output. Edit the source files under

@@ -3702,11 +3702,11 @@ directly.</p>
 <code>Microsoft.UI.Reactor.Devtools</code> package</strong> (gated by a
 <code>Condition="'$(Configuration)' == 'Debug'"</code> ItemGroup that adds both
 the package and <code>RuntimeHostConfigurationOption
-Reactor.DevtoolsSupport=true</code>). The scaffolded
-<code>Properties/launchSettings.json</code> ships a second
-<code>"&lt;AppName&gt; Devtools"</code> profile that passes <code>--devtools</code>; select it in
-Visual Studio or VS Code — the default profile passes no arguments — to
-light up the right-click devtools menu and the docked devtools window.
+Reactor.DevtoolsSupport=true</code>). That makes devtools available without
+turning them on: the default launch profile passes no arguments, so launch
+with <code>dotnet run -- --devtools app</code> and render <code>DevtoolsMenu(...)</code> to get the
+<a href="../dev-tooling/#in-app-dev-menu">in-app dev menu</a> (see
+<a href="../getting-started/#running-with-devtools">Running with devtools</a>).
 The Reactor Visual
 Studio embedded-preview extension (spec 056) also relies on this
 Debug wiring — its <code>dotnet watch run -- --devtools run --embed
