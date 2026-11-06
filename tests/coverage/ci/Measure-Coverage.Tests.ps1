@@ -2,16 +2,18 @@
 .SYNOPSIS
     Dependency-free unit tests for the testable parts of Measure-Coverage.ps1 (the
     merged-coverage orchestrator): the Invoke-Checked exit-code guard, the
-    cobertura-report reading path, and the JSON contract with the poster.
+    cobertura-report reading path, the lane merge (-Part Merge and Merge-Cobertura.ps1),
+    and the JSON contract with the poster.
 
 .DESCRIPTION
     Measure-Coverage.ps1 isn't dot-sourceable (it has a param block + a main run
     flow that shells out to `dotnet` / `dotnet-coverage`), so Invoke-Checked is
-    extracted via the PowerShell AST and defined in isolation. The heavy build +
+    extracted via the PowerShell AST and defined in isolation. -Part Merge needs
+    neither tool, so it runs end to end here on small lane reports. The heavy build +
     instrument + collect path is validated by the live Coverage run, not here; this
-    covers the pure guard + the numbers contract so a regression in the JSON shape
-    (which the trusted poster reads) is caught headless on the cheap Linux runner in
-    .github/workflows/coverage-lib-tests.yml. Exits non-zero on any failure.
+    covers the pure guard, the merge, and the numbers contract so a regression in the
+    JSON shape (which the trusted poster reads) is caught headless on the cheap Linux
+    runner in .github/workflows/coverage-lib-tests.yml. Exits non-zero on any failure.
 
     Run locally:  pwsh tests/coverage/ci/Measure-Coverage.Tests.ps1
 #>
@@ -147,6 +149,75 @@ try {
     Assert-Null $malformed.BranchesCovered 'malformed report -> null covered'
     Assert-Null $malformed.BranchesTotal   'malformed report -> null total'
 
+    # --- Merge-Cobertura.ps1: the file wrapper that -Part Merge and the local recipe call. ---
+    # Lane A covers line 1, lane B covers line 2 and one of its two branches.
+    $mergeScript = Join-Path $PSScriptRoot 'Merge-Cobertura.ps1'
+    $laneA = Join-Path $tmp 'unit.cobertura.xml'
+    $laneB = Join-Path $tmp 'selftest-1.cobertura.xml'
+    Set-Content -LiteralPath $laneA -Encoding UTF8 -Value '<coverage timestamp="1"><packages><package name="P"><classes><class name="C" filename="c.cs"><methods /><lines><line number="1" hits="1" branch="False" /><line number="2" hits="0" branch="True" condition-coverage="0% (0/2)" /></lines></class></classes></package></packages></coverage>'
+    Set-Content -LiteralPath $laneB -Encoding UTF8 -Value '<coverage timestamp="2"><packages><package name="P"><classes><class name="C" filename="c.cs"><methods /><lines><line number="1" hits="0" branch="False" /><line number="2" hits="1" branch="True" condition-coverage="50% (1/2)" /></lines></class></classes></package></packages></coverage>'
+    $scriptOut = Join-Path $tmp 'nested/dir/merged.cobertura.xml'
+    & $mergeScript -OutFile $scriptOut $laneA $laneB 6>$null
+    $fromScript = Get-CoberturaRates -Path $scriptOut
+    Assert-Equal 100 $fromScript.Line            'Merge-Cobertura.ps1: a line either lane covers is covered'
+    Assert-Equal 50  $fromScript.Branch          'Merge-Cobertura.ps1: branch rate of the union'
+    Assert-Equal 1   $fromScript.BranchesCovered 'Merge-Cobertura.ps1: branches covered'
+    Assert-Equal 2   $fromScript.BranchesTotal   'Merge-Cobertura.ps1: branches total'
+    $scriptAgain = Join-Path $tmp 'merged-again.cobertura.xml'
+    & $mergeScript -OutFile $scriptAgain -Path $laneA, $laneB 6>$null
+    Assert-Equal (Get-FileHash -LiteralPath $scriptOut).Hash (Get-FileHash -LiteralPath $scriptAgain).Hash 'Merge-Cobertura.ps1 writes the same bytes for the same inputs'
+
+    $emptyLane = Join-Path $tmp 'empty.cobertura.xml'
+    Set-Content -LiteralPath $emptyLane -Encoding UTF8 -Value '<coverage><packages /></coverage>'
+    Assert-Throws { & $mergeScript -OutFile (Join-Path $tmp 'empty-merged.xml') $emptyLane 6>$null } '*no coverage to merge*' 'Merge-Cobertura.ps1 refuses inputs with no lines rather than scoring them'
+
+    # A relative -OutFile resolves against the PowerShell location, as the TESTING.md
+    # commands rely on, not the process working directory (which `cd` does not move).
+    Push-Location -LiteralPath $tmp
+    try { & $mergeScript -OutFile 'relative.cobertura.xml' $laneA $laneB 6>$null }
+    finally { Pop-Location }
+    Assert-True (Test-Path -LiteralPath (Join-Path $tmp 'relative.cobertura.xml')) 'Merge-Cobertura.ps1 writes a relative -OutFile under the current location'
+
+    # Reports that list different lines are refused, naming the report that lacks lines;
+    # -AllowDifferentLines merges them anyway.
+    $laneOther = Join-Path $tmp 'other.cobertura.xml'
+    Set-Content -LiteralPath $laneOther -Encoding UTF8 -Value '<coverage timestamp="3"><packages><package name="P"><classes><class name="C" filename="c.cs"><methods /><lines><line number="1" hits="0" branch="False" /></lines></class></classes></package></packages></coverage>'
+    $differingOut = Join-Path $tmp 'differing.cobertura.xml'
+    Assert-Throws { & $mergeScript -OutFile $differingOut $laneA $laneOther 6>$null } '*input 2 (other.cobertura.xml) lacks 1.*' 'Merge-Cobertura.ps1 refuses reports that list different lines, naming the report'
+    Assert-True (-not (Test-Path -LiteralPath $differingOut)) 'a refused merge writes no report'
+    & $mergeScript -OutFile $differingOut -AllowDifferentLines $laneA $laneOther 6>$null
+    Assert-Equal '2' ([xml](Get-Content -LiteralPath $differingOut -Raw)).DocumentElement.GetAttribute('lines-valid') 'Merge-Cobertura.ps1 -AllowDifferentLines merges them anyway'
+
+    # --- -Part Merge end to end: the lane artifacts in, the union's numbers out. ---
+    $partsDir = Join-Path $tmp 'parts'
+    foreach ($lane in 'unit', 'selftest-1') {
+        $laneDir = Join-Path $partsDir "coverage-part-$lane"
+        New-Item -ItemType Directory -Force -Path $laneDir | Out-Null
+        Copy-Item -LiteralPath (Join-Path $tmp "$lane.cobertura.xml") -Destination $laneDir
+    }
+    $jsonOut = Join-Path $tmp 'coverage.json'
+    $reportsDir = Join-Path $tmp 'reports'
+    & $scriptPath -Root $tmp -Part Merge -PartsDir $partsDir -ExpectedParts unit, selftest-1 -OutFile $jsonOut -WorkDir $reportsDir 6>$null
+    $measured = Get-Content -LiteralPath $jsonOut -Raw | ConvertFrom-Json
+    Assert-Equal 100 $measured.line            '-Part Merge scores the union of the lanes (line)'
+    Assert-Equal 50  $measured.branch          '-Part Merge scores the union of the lanes (branch)'
+    Assert-Equal 1   $measured.branchesCovered '-Part Merge reports the branches covered'
+    Assert-Equal 2   $measured.branchesTotal   '-Part Merge reports the branch total'
+    $measuredScoring = if ($measured.PSObject.Properties['scoringVersion']) { $measured.scoringVersion } else { $null }
+    Assert-Equal (Get-CoverageScoringVersion) $measuredScoring '-Part Merge records the scoring version, so the poster compares like with like'
+    Assert-True (Test-Path -LiteralPath (Join-Path $reportsDir 'merged.cobertura.xml')) '-Part Merge keeps the merged report for the artifact'
+
+    # -Part Merge holds the lanes to the same lines too, so CI fails instead of mis-scoring.
+    $mismatchDir = Join-Path $tmp 'parts-mismatch'
+    $laneSources = [ordered]@{ 'unit' = $laneA; 'selftest-1' = $laneOther }
+    foreach ($lane in $laneSources.Keys) {
+        $laneDir = Join-Path $mismatchDir "coverage-part-$lane"
+        New-Item -ItemType Directory -Force -Path $laneDir | Out-Null
+        Copy-Item -LiteralPath $laneSources[$lane] -Destination (Join-Path $laneDir "$lane.cobertura.xml")
+    }
+    Assert-Throws { & $scriptPath -Root $tmp -Part Merge -PartsDir $mismatchDir -ExpectedParts unit, selftest-1 -OutFile (Join-Path $tmp 'mismatch.json') -WorkDir (Join-Path $tmp 'reports-mismatch') 6>$null } '*input 1 (selftest-1.cobertura.xml) lacks 1.*' '-Part Merge refuses lanes that list different lines'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $tmp 'mismatch.json'))) '-Part Merge writes no numbers for lanes it refused'
+
     # --- JSON contract: what Measure-Coverage writes, the poster must read back. ---
     # Mirrors the [ordered] payload the orchestrator emits, round-tripped through the
     # poster's security-boundary projection.
@@ -155,6 +226,7 @@ try {
         branch          = $rates.Branch
         branchesCovered = $rates.BranchesCovered
         branchesTotal   = $rates.BranchesTotal
+        scoringVersion  = Get-CoverageScoringVersion
         outcome         = 'success'
     }
     $roundTrip = $payload | ConvertTo-Json -Depth 3 | ConvertFrom-Json
@@ -163,6 +235,7 @@ try {
     Assert-Equal 75    $metrics.Branch          'poster reads branch from the emitted JSON'
     Assert-Equal 3     $metrics.BranchesCovered 'poster reads covered from the emitted JSON'
     Assert-Equal 4     $metrics.BranchesTotal   'poster reads total from the emitted JSON'
+    Assert-Equal (Get-CoverageScoringVersion) $metrics.ScoringVersion 'poster reads the scoring version from the emitted JSON'
     Assert-Equal 'success' $roundTrip.outcome   'outcome survives the round trip'
     Assert-True (Test-CoverageMetricsPresent $metrics) 'round-tripped metrics are present'
 

@@ -2226,6 +2226,16 @@ public static partial class ElementExtensions
     public static PersonPictureElement Initials(this PersonPictureElement el, string initials) =>
         el with { Initials = initials };
 
+    /// <summary>
+    /// Sets the avatar image from an absolute URI string, such as an <c>https://</c>
+    /// address or an <c>ms-appx:///</c> asset path. A <see langword="null"/>, empty,
+    /// malformed, or relative value shows no picture, so the control falls back to its
+    /// initials or the generic person glyph; removing the picture on a later render
+    /// clears the previous image.
+    /// </summary>
+    public static PersonPictureElement ProfilePicture(this PersonPictureElement el, string? uri) =>
+        el with { ProfilePicture = uri };
+
     // ── ListView / GridView sugar ───────────────────────────────────
 
     public static ListViewElement SelectionMode(this ListViewElement el, ListViewSelectionMode mode) =>

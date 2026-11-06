@@ -865,17 +865,21 @@ session opt-in on the command line:
 dotnet run -- --devtools app
 ```
 
-The scaffolded `Properties/launchSettings.json` ships a second
-`"<AppName> Devtools"` profile that passes that flag for you, so pick that
-profile in Visual Studio or use
-`dotnet run --launch-profile "<AppName> Devtools"`. The default profile
-deliberately passes no arguments — a plain `dotnet run -c Debug` starts the app
-with **no** dev menu.
+`dotnet run` hands everything after `--` to the app, and a packaged scaffold
+still receives it when it launches with package identity. The default profile in
+the scaffolded `Properties/launchSettings.json` deliberately passes no
+arguments — a plain `dotnet run -c Debug` starts the app with **no** dev menu.
+Keep the `app`, too: a bare `--devtools`, whether typed or passed by a launch
+profile, is read as `--devtools run`, the heavier session behind
+[`mur devtools`](dev-tooling.md#mcp-server) that also starts an MCP endpoint.
 
 `UseDevtools()` returns `true` only when both signals are present, which is what
-gates the reconcile-highlight overlay and the rest of the menu. Release builds
-drop the package and the switch, so the devtools code trims away entirely. The
-[dev tooling](dev-tooling.md) page covers the full menu.
+gates the reconcile-highlight overlay and the rest of the menu. The signals
+don't draw anything themselves: the menu is the `DevtoolsMenu(...)` element, so
+it appears only if your tree renders one. If yours doesn't yet, add it to the
+title bar as shown in [In-App Dev Menu](dev-tooling.md#in-app-dev-menu). Release
+builds drop the package and the switch, so the devtools code trims away
+entirely. The [dev tooling](dev-tooling.md) page covers the full menu.
 
 ## Common Mistakes
 

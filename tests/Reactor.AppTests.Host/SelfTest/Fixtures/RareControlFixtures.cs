@@ -198,6 +198,66 @@ internal static class RareControlFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════
+    //  PersonPicture ProfilePicture set / change / clear / bad input (issue #1460)
+    // ════════════════════════════════════════════════════════════════════
+
+    internal class PersonPictureProfilePicture(Harness h) : SelfTestFixtureBase(h)
+    {
+        const string UriA = "https://example.com/avatar-a.png";
+        const string UriB = "https://example.com/avatar-b.png";
+
+        public override async Task RunAsync()
+        {
+            // Phases: 0 = A, 1 = B, 2 = removed, 3 = A again, 4 = malformed, 5 = A, 6 = relative.
+            string?[] values = [UriA, UriB, null, UriA, "http://[not a uri", UriA, "avatar.png"];
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                var value = values[phase];
+                var pp = PersonPicture().DisplayName("Jane Doe").Width(64).Height(64);
+                return VStack(
+                    Button("NextPPPic", () => set(Math.Min(phase + 1, values.Length - 1))),
+                    value is null ? pp : pp.ProfilePicture(value)
+                );
+            });
+
+            await Harness.Render();
+            H.Check("PersonPicPic_MountSetsUri", SourceOf() == UriA);
+
+            await Next();
+            H.Check("PersonPicPic_ChangeUpdatesUri", SourceOf() == UriB);
+
+            await Next();
+            H.Check("PersonPicPic_RemovedClearsImage", Picture() is not null && Picture()!.ProfilePicture is null);
+
+            await Next();
+            H.Check("PersonPicPic_ReaddSetsUri", SourceOf() == UriA);
+
+            await Next();
+            H.Check("PersonPicPic_MalformedClearsWithoutThrowing", Picture() is not null && Picture()!.ProfilePicture is null);
+
+            await Next();
+            H.Check("PersonPicPic_RecoversAfterMalformed", SourceOf() == UriA);
+
+            await Next();
+            H.Check("PersonPicPic_RelativeClearsWithoutThrowing", Picture() is not null && Picture()!.ProfilePicture is null);
+        }
+
+        async Task Next()
+        {
+            H.ClickButton("NextPPPic");
+            await Harness.Render();
+        }
+
+        Microsoft.UI.Xaml.Controls.PersonPicture? Picture() =>
+            H.FindControl<Microsoft.UI.Xaml.Controls.PersonPicture>(_ => true);
+
+        string? SourceOf() =>
+            (Picture()?.ProfilePicture as Microsoft.UI.Xaml.Media.Imaging.BitmapImage)?.UriSource?.OriginalString;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     //  RelativePanel mount (~20 lines)
     // ════════════════════════════════════════════════════════════════════
 

@@ -1063,10 +1063,13 @@ dotnet-coverage collect -s coverage.settings.xml \
 dotnet build src/Reactor                      -c Debug -p:Optimize=false -p:DebugType=portable --no-incremental
 dotnet build tests/Reactor.AppTests.Host      -c Debug -p:Optimize=false -p:DebugType=portable --no-incremental
 
-# Step 2: Instrument Reactor.dll statically
+# Step 2: Instrument the product DLLs statically
 #         (dynamic instrumentation skips referenced assemblies)
 dotnet-coverage instrument \
   "tests/Reactor.AppTests.Host/bin/$(RuntimeIdentifier)/Debug/net10.0-windows10.0.22621.0/Reactor.dll" \
+  -s coverage.settings.xml
+dotnet-coverage instrument \
+  "tests/Reactor.AppTests.Host/bin/$(RuntimeIdentifier)/Debug/net10.0-windows10.0.22621.0/Reactor.Advanced.dll" \
   -s coverage.settings.xml
 
 # Step 3: Collect
@@ -1075,8 +1078,12 @@ dotnet-coverage collect -s coverage.settings.xml \
   -- dotnet run --project tests/Reactor.AppTests.Host --no-build -- --self-test
 
 # --- Merge ---
-dotnet-coverage merge unit.cobertura.xml selftest.cobertura.xml \
-  --output merged.cobertura.xml --output-format cobertura
+# The exact union of covered lines. Not `dotnet-coverage merge`: it drops covered lines
+# from these reports (tests/coverage/ci/README.md explains why). It refuses reports that
+# do not list the same lines, such as a selftest report whose Reactor.Advanced.dll was
+# not instrumented in Step 2.
+pwsh tests/coverage/ci/Merge-Cobertura.ps1 -OutFile merged.cobertura.xml \
+  unit.cobertura.xml selftest.cobertura.xml
 ```
 
 Replace `$(RuntimeIdentifier)` with `ARM64` or `x64`, or omit the platform segment if you used the default platform from `Directory.Build.props`. The `coverage.settings.xml` file in the repo root controls which modules are included and excludes generated code (`obj/`, `*.g.cs`) and test-host scaffolding exercised only by the winapp/E2E runner.
@@ -1089,7 +1096,7 @@ red selftest fixture — the `CenterOnCurrent` pair in §2 above is the usual on
 both legs collected and no merged file. Merge them by hand:
 
 ```powershell
-dotnet-coverage merge coverage\unit.cobertura.xml coverage\selftest.cobertura.xml --output coverage\merged.cobertura.xml --output-format cobertura
+pwsh tests/coverage/ci/Merge-Cobertura.ps1 -OutFile coverage\merged.cobertura.xml coverage\unit.cobertura.xml coverage\selftest.cobertura.xml
 ```
 
 ### Running coverage in CI

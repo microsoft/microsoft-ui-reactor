@@ -25,25 +25,55 @@ head; the **base** is a cached baseline measured on push to `main` (see
 
 | Metric | What | Source |
 |---|---|---|
-| **Line** | merged line coverage | the cobertura root `line-rate` |
-| **Branch** | merged conditional-branch coverage, with the covered/total counts | summed from the per-line `condition-coverage="P% (c/t)"` attributes |
+| **Line** | merged line coverage | the merged report's root `line-rate` |
+| **Branch** | merged conditional-branch coverage, with the covered/total counts | summed from the class-level lines' `condition-coverage="P% (c/t)"` attributes |
 
-`dotnet-coverage`'s cobertura output records per-line branch data but does **not**
-aggregate it (its root/class `branch-rate` is hard-coded to `1`), so the branch
-rate is summed from the per-line numerators/denominators in `Get-CoberturaRates`.
+The lane reports are merged by `Merge-Cobertura.ps1`, which takes the **exact union** of
+their covered lines: a line is covered when any lane covers it. Lines are matched on
+package, class, file and line number. `dotnet-coverage merge` is not used. It matches lines
+through their *method*, and the lanes name methods differently: the dynamically
+instrumented unit lane names constructors `.ctor` / `.cctor`, while the statically
+instrumented selftest lanes name both after the type. So the tool dropped covered lines,
+and it dropped different ones from run to run. On #1464 it lost 62 `FlexPanel.cs` lines
+that both selftest lanes covered, which showed up as a spurious -0.10 pp. It also threw
+away the unit lane's class-level branch data, so the branch row was summed from about 4%
+of the branches.
+
+The merge also refuses lane reports that do not list the same lines, naming the lane and
+the first lines it lacks. Every lane of one run measures the same build, so their lines
+match. When they don't, a lane did not measure what the others did, for example an
+assembly that only one lane instruments. A union would then lose that lane's coverage, or
+count a class twice if one lane named it differently, without any error. Pass
+`-AllowDifferentLines` to `Merge-Cobertura.ps1` to merge reports of different builds anyway.
+
+The branch rate is summed from the class-level lines (`Get-CoberturaRates`) rather than read
+from the root, because the selftest lanes' reports write `branch-rate="1"` with no branch
+data at all. Only the unit lane records branches, so the branch row is the unit lane's
+branch coverage. The selftests cannot raise it. Where several lanes do record a line's
+branches, the merge keeps the lane with the most covered conditions: cobertura counts a
+line's conditions without saying which ones ran, so that is a lower bound.
 
 Δ is reported in **percentage points** (`pp`). Higher coverage is the improvement
 direction, so a rise clears as ✅, a fall as ⚠️, and a move below the noise floor
 (0.1 pp) as ≈.
 
+`coverage.json` also records a `scoringVersion`, and the comment shows a Δ only when the
+PR and the baseline carry the same one. Numbers without one count as version 1: the
+`dotnet-coverage merge`, whose branch row was about 66% because it counted only the 4% of
+branches that survived the merge. Version 2 is the exact union, which moved the branch row
+to about 46.5%. Comparing across versions would report that move as a regression or an
+improvement. **Bump `$script:CoverageScoringVersion` in `CoverageLib.ps1`** whenever a
+change to the merge or to `Get-CoberturaRates` changes what the numbers mean.
+
 ## Files
 
 | File | Role |
 |---|---|
-| `CoverageLib.ps1` | **Pure** helpers (no filesystem side effects): the cobertura parser (`Get-CoberturaRates` / `Get-CoberturaRatesFromXml`), percent/delta formatting, `Get-CoverageDelta`, the sticky-comment renderer (`Format-CoverageComment`) + the render-mode selector (`Format-CoverageCommentFromMetrics`), and the render-time security boundary (`ConvertTo-SafeCoverageMetrics`). Unit-testable headless. |
-| `CoverageLib.Tests.ps1` | Dependency-free assertions for the pure lib (parser, delta math, formatting, render-mode selection, sanitizer). Exits non-zero on failure. |
-| `Measure-Coverage.ps1` | Orchestrator: build + instrument + collect (unit + selftest) + merge in one source tree, then aggregate the merged report into a `coverage.json` of numbers. `-Part Unit` / `-Part SelfTest [-Shard k/n]` run one CI lane each, and `-Part Merge` unions the lane reports (refusing a missing or unexpected one). The default, `-Part All`, is the local one-tree run. |
-| `Measure-Coverage.Tests.ps1` | AST-extracted tests for the orchestrator's `Invoke-Checked` guard, the lane plan (`Resolve-CoveragePlan`) and lane-set check (`Assert-ExpectedParts`), the report-reading path, and the JSON contract the poster reads. |
+| `CoverageLib.ps1` | **Pure** helpers (no filesystem side effects): the cobertura parser (`Get-CoberturaRates` / `Get-CoberturaRatesFromXml`), the lane merge (`Merge-CoberturaDocuments`), percent/delta formatting, `Get-CoverageDelta`, the sticky-comment renderer (`Format-CoverageComment`) + the render-mode selector (`Format-CoverageCommentFromMetrics`), and the render-time security boundary (`ConvertTo-SafeCoverageMetrics`). Unit-testable headless. |
+| `CoverageLib.Tests.ps1` | Dependency-free assertions for the pure lib (parser, merge, delta math, formatting, render-mode selection, sanitizer). Exits non-zero on failure. |
+| `Merge-Cobertura.ps1` | Merges cobertura report files into their exact union (`Merge-CoberturaDocuments`), refusing reports that list different lines unless given `-AllowDifferentLines`. Use it in place of `dotnet-coverage merge`: `pwsh tests/coverage/ci/Merge-Cobertura.ps1 -OutFile merged.cobertura.xml unit.cobertura.xml selftest.cobertura.xml`. |
+| `Measure-Coverage.ps1` | Orchestrator: build + instrument + collect (unit + selftest) + merge in one source tree, then aggregate the merged report into a `coverage.json` of numbers and its `scoringVersion`. `-Part Unit` / `-Part SelfTest [-Shard k/n]` run one CI lane each, and `-Part Merge` unions the lane reports (refusing a missing or unexpected one, or lanes that list different lines). The default, `-Part All`, is the local one-tree run. |
+| `Measure-Coverage.Tests.ps1` | AST-extracted tests for the orchestrator's `Invoke-Checked` guard, the lane plan (`Resolve-CoveragePlan`) and lane-set check (`Assert-ExpectedParts`), the report-reading path, `Merge-Cobertura.ps1`, an end-to-end `-Part Merge`, and the JSON contract the poster reads. |
 
 ## Baseline model
 
@@ -96,6 +126,11 @@ inject markdown into the bot-authored comment.
   delta and a "baseline unavailable" note. The PR's coverage **check stays green**.
 - **Head measurement fails** → a `> [!CAUTION]` "run failed" comment, and the
   measure job is a **red check**.
+- **Base and PR scored by different versions of these scripts** (different
+  `scoringVersion`) → the PR's absolute coverage, an em-dash delta, and a warning that
+  says which side is older. A PR older than its base is told to update from the base
+  branch; a baseline older than the PR gets compared again once `main` is re-measured.
+  The check stays green.
 - **Base = head (no change)** → a "No coverage change beyond the noise floor" note.
 
 The sticky comment is found + updated in place via a hidden marker
