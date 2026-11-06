@@ -128,7 +128,17 @@ public static class MxcPolicy
         try
         {
             if (IsLegacy(parsed))
+            {
+                if (UnsupportedLegacyFields(parsed) is { Count: > 0 } unsupported)
+                {
+                    // Fail closed: dropping these would silently widen access.
+                    error = "This policy was saved by an older Widget Creator and uses settings MXC 1.0 can't "
+                        + $"express ({string.Join(", ", unsupported)}). Review and save it again (or reset it); "
+                        + "until then the widget runs with the default least-privilege policy.";
+                    return false;
+                }
                 parsed = MigrateLegacy(parsed);
+            }
 
             error = Validate(parsed);
         }
@@ -330,9 +340,15 @@ public static class MxcPolicy
         NetworkAccess.Internet => Mutate(json, o => Obj(Obj(o, "network"), "egress")["default"] = "allow"),
         NetworkAccess.None => Mutate(json, o =>
         {
-            var egress = Obj(Obj(o, "network"), "egress");
+            var network = Obj(o, "network");
+            var egress = Obj(network, "egress");
             egress["default"] = "deny";
             egress.Remove("allow");
+            // Inbound/LAN access without outbound access is a combination MXC's
+            // AppContainer fallback tier rejects, so "no network" closes it too.
+            var ingress = Obj(network, "ingress");
+            ingress["default"] = "deny";
+            ingress["hostLoopback"] = "deny";
         }),
         _ => json,
     };
@@ -540,8 +556,9 @@ public static class MxcPolicy
 
     static bool IsValidPeer(JsonObject p) =>
         p.All(kv => kv.Key is "cidr" or "except")
-        && TryGetString(p["cidr"], out _)
-        && (p["except"] is null || (p["except"] is JsonArray ex && ex.All(e => TryGetString(e, out _))));
+        && TryGetString(p["cidr"], out var cidr) && !string.IsNullOrWhiteSpace(cidr)
+        && (p["except"] is null || (p["except"] is JsonArray ex
+            && ex.All(e => TryGetString(e, out var s) && !string.IsNullOrWhiteSpace(s))));
 
     static bool IsValidPort(JsonObject p)
     {
@@ -564,13 +581,38 @@ public static class MxcPolicy
             || n.ContainsKey("enforcementMode")));
 
     /// <summary>
+    /// Legacy fields that MXC 1.0 (and this policy shape) cannot express. Several
+    /// of them were restrictions (e.g. <c>network.blockedHosts</c>, a proxy,
+    /// <c>leastPrivilege: true</c>), so migration refuses rather than drops them.
+    /// </summary>
+    static List<string> UnsupportedLegacyFields(JsonObject legacy)
+    {
+        var supported = new Dictionary<string, string[]>
+        {
+            [""] = ["version", "containment", "appContainer", "network", "ui", "filesystem", "process"],
+            ["appContainer"] = ["capabilities", "leastPrivilege"],
+            ["network"] = ["defaultPolicy", "enforcementMode", "allowLocalNetwork"],
+            ["ui"] = ["disable", "clipboard", "injection"],
+            ["filesystem"] = [ReadWriteKind, ReadOnlyKind, DeniedKind],
+        };
+        var result = legacy.Select(kv => kv.Key).Where(k => !supported[""].Contains(k)).ToList();
+        foreach (var section in supported.Keys.Where(k => k.Length > 0))
+            if (legacy[section] is JsonObject o)
+                result.AddRange(o.Select(kv => kv.Key).Where(k => !supported[section].Contains(k)).Select(k => $"{section}.{k}"));
+        if (GetBool(Section(legacy, "appContainer"), "leastPrivilege", false))
+            result.Add("appContainer.leastPrivilege");
+        return result;
+    }
+
+    /// <summary>
     /// Translate a legacy policy (schema 0.6.0-alpha <c>ContainerConfig</c>) into
     /// the MXC 1.0 shape. Filesystem and UI settings carry over; legacy internet
     /// access (<c>internetClient</c> + <c>defaultPolicy: allow</c>) becomes
-    /// <c>egress.default: allow</c>, and <c>allowLocalNetwork</c> becomes
-    /// <c>ingress.default: allow</c>. Non-network AppContainer capabilities move
-    /// to <c>processContainer.capabilities</c>. Fields with no 1.0 equivalent
-    /// (<c>version</c>, <c>containment</c>, <c>leastPrivilege</c>, …) are dropped.
+    /// <c>egress.default: allow</c>, and <c>allowLocalNetwork</c> (only together
+    /// with internet access) becomes <c>ingress.default: allow</c>. Non-network
+    /// AppContainer capabilities move to <c>processContainer.capabilities</c>.
+    /// Callers must first reject <see cref="UnsupportedLegacyFields"/>; the
+    /// remaining schema-only fields (<c>version</c>, <c>containment</c>, …) are dropped.
     /// </summary>
     static JsonObject MigrateLegacy(JsonObject legacy)
     {
@@ -599,7 +641,7 @@ public static class MxcPolicy
         var legacyNet = Section(legacy, "network");
         var internet = legacyCaps.Any(c => c.Equals("internetClient", StringComparison.OrdinalIgnoreCase))
             && string.Equals(GetString(legacyNet, "defaultPolicy"), "allow", StringComparison.OrdinalIgnoreCase);
-        var local = GetBool(legacyNet, "allowLocalNetwork", false);
+        var local = internet && GetBool(legacyNet, "allowLocalNetwork", false);
         var network = (JsonObject)result["network"]!;
         ((JsonObject)network["egress"]!)["default"] = internet ? "allow" : "deny";
         ((JsonObject)network["ingress"]!)["default"] = local ? "allow" : "deny";

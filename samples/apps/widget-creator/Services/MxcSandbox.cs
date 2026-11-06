@@ -190,7 +190,17 @@ public sealed class MxcSandbox
         if (UnavailableReason is { } unavailable)
             return LaunchFailure($"MXC sandbox unavailable — {unavailable}");
 
-        var (request, policyJson) = BuildRequest(exePath, appDir, extraArgs, timeoutSeconds, policyTemplateJson);
+        ContainerRequest request;
+        string policyJson;
+        try
+        {
+            (request, policyJson) = BuildRequest(exePath, appDir, extraArgs, timeoutSeconds, policyTemplateJson);
+        }
+        catch (ArgumentException ex)
+        {
+            // The SDK's request types validate their arguments (e.g. a blank CIDR).
+            return LaunchFailure($"the sandbox policy is invalid: {ex.Message}");
+        }
         SessionLog.Write($"[Sandbox] spawn '{request.Command}' cwd='{appDir}' timeoutMs={request.TimeoutMs?.ToString() ?? "none"}");
         SessionLog.Write($"[Sandbox] policy: {policyJson}");
         Sink($"$ mxc processcontainer {request.Command}");

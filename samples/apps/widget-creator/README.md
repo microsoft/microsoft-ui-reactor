@@ -104,27 +104,21 @@ dotnet run --project samples/apps/widget-creator/widget-creator.csproj -p:Platfo
    `Directory.Build.props`, because a widget that pins a different version fails
    its build in `Microsoft.WindowsAppSDK.ComponentReference.targets`.
 
-### The Copilot CLI at build time (internal vs external)
+### The Copilot CLI
 
-The `GitHub.Copilot.SDK` bundles a native `copilot.exe` that it downloads at
-**build** time from an npm registry. The repo makes this resilient for everyone
-(`build/Reactor.CopilotCli.targets`), so `dotnet build` / `dotnet run` never
-hard-fails on a restricted network:
+`GitHub.Copilot.SDK` downloads its native Copilot CLI at **build** time from the
+`github/copilot-cli` releases and verifies it against the release's
+`SHA256SUMS.txt`. On a restricted network, use the SDK's own hooks: point
+`CopilotCliReleaseBaseUrl` (or the `COPILOT_CLI_DOWNLOAD_BASE_URL` environment
+variable) at a mirror, or supply a pre-downloaded binary with
+`CopilotCliBinaryPath` (see the repo `README.md` and `Directory.Build.props`).
 
-- **External / OSS** — the committed `nuget.config` + `.npmrc` stay on public
-  `nuget.org` / `registry.npmjs.org`; the CLI downloads directly. Nothing to set up.
-- **Internal (Microsoft)** — point npm at the internal Azure Artifacts feed
-  (`https://pkgs.dev.azure.com/github-private/microsoft/_packaging/microsoft-ui-reactor/npm/registry/`)
-  via an authenticated `.npmrc` (CI does this automatically; locally use
-  `az artifacts` or the feed's *Connect to feed* → npm instructions). The build then
-  acquires the CLI through that feed with `npm pack`, since Azure Artifacts feeds
-  require auth that the SDK's raw download can't provide.
-- **Offline / no feed** — the build still succeeds *without* a bundled CLI (a
-  `REACTORCLI001` warning is emitted). To run generation you then need a Copilot
-  CLI binary available at run time: set `COPILOT_CLI_PATH` to a local `copilot.exe`
-  (or install the standalone Copilot CLI in its default per-user location). Note
-  `gh auth` only supplies Copilot credentials — it is not itself a runnable
-  `copilot.exe`.
+If Widget Creator was built without a bundled CLI (for example with
+`-p:CopilotSkipCliDownload=true`), it resolves one at **run** time instead: set
+`COPILOT_CLI_PATH` to a local `copilot.exe`, or install the standalone Copilot CLI
+in its default per-user location. It deliberately never searches `PATH`. Note that
+`gh auth` only supplies Copilot credentials — it is not itself a runnable
+`copilot.exe`.
 
 Type a prompt, click **Generate & Run**. The generated source streams into the
 right panel; the build + sandbox log streams below it. The widget window opens
@@ -186,12 +180,18 @@ the log. The default policy:
 | Clipboard / input | `ui.clipboard = none`, `ui.injection = false` | no clipboard, no synthetic input |
 
 MXC derives the AppContainer network capabilities from the directional policy:
-`egress` allow ⇒ `internetClient`, `ingress.default` allow ("Allow local network")
-⇒ `privateNetworkClientServer`. Other capabilities can be listed under
+`egress` allow ⇒ `internetClient`, `ingress.default` allow ("Also allow the local
+network") ⇒ `privateNetworkClientServer`. The dialog only offers local-network
+access together with internet access: MXC's AppContainer fallback tier rejects
+inbound/private-network access while outbound is denied, because that capability
+is bidirectional there. Other capabilities can be listed under
 `processContainer.capabilities` in the Advanced editor. The policy document is
 closed like the MXC contract — unknown fields are rejected — and policies saved by
 older Widget Creator builds (the pre-1.0 `wxc-exec` `ContainerConfig` shape) are
-migrated automatically when read.
+migrated automatically when read. A legacy policy that uses settings MXC 1.0
+can't express (for example `network.blockedHosts` or `leastPrivilege: true`) is
+not migrated — it is reported as invalid and the widget runs with the default
+least-privilege policy until you review and save it again.
 
 MXC picks the strongest isolation tier the host supports (BaseContainer, then
 AppContainer + BFS, then AppContainer + DACL) and enforces the grants itself. The

@@ -246,6 +246,19 @@ public sealed class WidgetCreatorShell : Component
                         await _library.SaveAsync(app).ConfigureAwait(false);
                         RefreshApps(app.Id);
                         setEditingId(app.Id);
+                        if (result.SelfTestLaunchFailed)
+                        {
+                            // The sandbox couldn't run (or contain) the self-test: don't
+                            // launch the same build again — that is a host problem, and if
+                            // containment was the failure, relaunching would re-run
+                            // untrusted code that was just found uncontained.
+                            setStatus($"'{app.Title}' was saved but not launched — sandbox problem.");
+                            setBanner($"'{app.Title}' was saved but NOT launched: the MXC sandbox could not run its "
+                                + "self-test. This is a sandbox/host problem, not an app bug, so it was not sent for "
+                                + "repair. See the log for details; fix the sandbox issue, then run it from the library.");
+                            AppendLog($"# Saved '{app.Title}' — NOT launched (sandbox could not run the self-test):{Environment.NewLine}{result.SelfTestReport}", setLog);
+                            return;
+                        }
                         if (result.SelfTestPassed)
                         {
                             setStatus($"Self-test passed — launching '{app.Title}'...");
@@ -886,7 +899,8 @@ public sealed class WidgetCreatorShell : Component
                             })),
                         CheckBox(allowLocal,
                             v => setPolicyJson(MxcPolicy.WithAllowLocalNetwork(policyJson, v)),
-                            "Allow local network (inbound and LAN)")),
+                            "Also allow the local network (LAN, including incoming connections)")
+                            .IsEnabled(network == NetworkAccess.Internet || allowLocal)),
 
                     PermSection("File access",
                         Caption("The app can always read its own folder. Add folders below and choose each "

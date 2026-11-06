@@ -52,10 +52,9 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
             var options = new CopilotClientOptions();
             // The SDK's default stdio transport looks ONLY for a CLI bundled next to
             // the app (runtimes/<rid>/native/copilot.exe) and does not consult
-            // COPILOT_CLI_PATH. On builds where the CLI could not be bundled at build
-            // time (offline / restricted-network / authenticated-feed environments —
-            // see build/Reactor.CopilotCli.targets), resolve one at run time and pass
-            // it explicitly so generation still works.
+            // COPILOT_CLI_PATH. When the app was built without a bundled CLI (e.g.
+            // CopilotSkipCliDownload=true on a restricted network), resolve one at
+            // run time and pass it explicitly so generation still works.
             var cliPath = ResolveCliPath();
             if (cliPath is not null)
             {
