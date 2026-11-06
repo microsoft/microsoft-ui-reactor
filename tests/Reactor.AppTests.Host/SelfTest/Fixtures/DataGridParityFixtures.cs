@@ -1,7 +1,10 @@
+using System.Diagnostics.Tracing;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Data;
 using Microsoft.UI.Reactor.Data.Providers;
+using Microsoft.UI.Reactor.Diagnostics;
 using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
@@ -418,6 +421,112 @@ internal static class DataGridParityFixtures
             //    UseMutation dispatcher wiring.
             H.Check($"HookPaging_Edit_NoSpuriousCommit (calls={commitCalls})",
                 commitCalls == 0);
+        }
+    }
+
+    // ── Runtime RowHeight change keeps loaded pages ─────────────────────
+
+    /// <summary>
+    /// A runtime <c>RowHeight</c> change (e.g. a density toggle) on the hook path must not
+    /// restart pagination. <c>UseDataSource</c> latches its first page size for the hook's
+    /// lifetime (#1458), so the grid's page size is the mount-time value shared with the
+    /// legacy path's <c>DataPageCache</c> block size.
+    /// </summary>
+    /// <remarks>
+    /// Non-vacuous: before the fix the grid re-derived the page size from <c>RowHeight</c>
+    /// every render (36px → 60 rows, 24px → 90 rows) and keyed its <c>DataRequest</c> memo on
+    /// it. With a sort active the rebuilt request carried a new <c>Sort</c> list reference — a
+    /// <c>UseDataSource</c> dep — so the hook restarted (new resource, page 0 re-fetched) and
+    /// <c>UseDataSource.PageSize</c> warned about a size it then ignored. The sort step is the
+    /// positive control: it proves this same probe observes a restart when one happens.
+    /// </remarks>
+    internal class HookPagingRowHeightChangeKeepsPages(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithHookPaging(true, RunInner);
+
+        private async Task RunInner()
+        {
+            var pageSizeWarnings = 0;
+            using var subscription = ReactorTrace.Subscribe(
+                e =>
+                {
+                    if (e.EventName == nameof(ReactorEventSource.Warning)
+                        && e.Payload.Count > 1 && e.Payload[1] as string == "UseDataSource.PageSize")
+                        Interlocked.Increment(ref pageSizeWarnings);
+                },
+                EventLevel.Warning,
+                ReactorEventSource.Keywords.Errors);
+            var warningsObservable =
+                ReactorEventSource.Log.IsEnabled(EventLevel.Warning, ReactorEventSource.Keywords.Errors);
+
+            CountingSource? source = null;
+            DataGridState<ParityItem>? state = null;
+            Action<double>? setRowHeight = null;
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                source = ctx.UseMemo(() => CreateSource(30));
+                var (rowHeight, setRh) = ctx.UseState(36.0);
+                setRowHeight = setRh;
+
+                var grid = DataGrid(
+                    source: source!,
+                    columns: CreateColumns(),
+                    rowHeight: rowHeight
+                ).Height(500);
+                grid = grid with { Props = grid.Props with { OnStateReadyInternal = s => state = s } };
+
+                return VStack(TextBlock($"RowHeight: {rowHeight}"), grid);
+            });
+
+            H.Check("HookPaging_RowHeight_Loaded",
+                await Harness.WaitFor(
+                    () => state?.HookResource is not null && H.FindTextContaining("Emp-000000") is not null,
+                    maxPasses: 25, perPassMs: 20));
+            if (state is null || source is null || setRowHeight is null) return;
+
+            H.Check($"HookPaging_RowHeight_MountTimePageSize (blockSize={state.BlockSize})",
+                state.BlockSize == 60);
+
+            // Positive control: an actual sort change restarts the hook — a new resource and a
+            // re-fetch of page 0. Proves the probes below can see a restart.
+            var mountResource = state.HookResource;
+            var mountCalls = source.CallCount;
+            state.ToggleSort("Name");
+            H.Check("HookPaging_RowHeight_SortRestartsHook",
+                await Harness.WaitFor(
+                    () => !ReferenceEquals(state.HookResource, mountResource) && source.CallCount > mountCalls,
+                    maxPasses: 25, perPassMs: 20));
+            await Harness.Render(200);
+
+            var sortedResource = state.HookResource;
+            var sortedCalls = source.CallCount;
+            var warningsBefore = Volatile.Read(ref pageSizeWarnings);
+
+            // 36px → 24px: a re-derived page size would move 60 → 90.
+            setRowHeight(24.0);
+            H.Check("HookPaging_RowHeight_ReRendered",
+                await Harness.WaitFor(() => H.FindTextContaining("RowHeight: 24") is not null,
+                    maxPasses: 25, perPassMs: 20));
+            await Harness.Render(400);
+
+            H.Check("HookPaging_RowHeight_ResourceNotRestarted",
+                ReferenceEquals(state.HookResource, sortedResource));
+            H.Check($"HookPaging_RowHeight_NoRefetch (before={sortedCalls}, after={source.CallCount})",
+                source.CallCount == sortedCalls);
+            H.Check("HookPaging_RowHeight_SortedRowsStillVisible",
+                H.FindTextContaining("Emp-000000") is not null);
+
+            if (warningsObservable)
+            {
+                var added = Volatile.Read(ref pageSizeWarnings) - warningsBefore;
+                H.Check($"HookPaging_RowHeight_NoPageSizeWarning (warnings={added})", added == 0);
+            }
+            else
+            {
+                H.Skip("HookPaging_RowHeight_NoPageSizeWarning", "EventSource disabled (NativeAOT)");
+            }
         }
     }
 }

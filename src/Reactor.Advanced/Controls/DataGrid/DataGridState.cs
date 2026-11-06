@@ -28,6 +28,8 @@ public class DataGridState<T>
     //  • _selectionMode — reactive: reconciled from the prop each render via SetSelectionMode.
     //  • _blockSize — captured once by design: it only sizes the initial DataPageCache; re-deriving
     //                 it (from RowHeight) would rebuild the cache and discard already-loaded rows.
+    //                 The hook-paging path (UseHookBasedPaging) reads the same value via BlockSize
+    //                 for its UseDataSource page size, which UseDataSource latches for its lifetime.
     //  • _columns   — the visible grid (header/layout/cells) consumes the component's fresh columns
     //                 arg each render, so what is on screen reacts to prop column changes. The
     //                 internal _columns list below (and _columnIndexByName) additionally backs
@@ -38,6 +40,9 @@ public class DataGridState<T>
     private readonly IDataSource<T> _source;
     private SelectionMode _selectionMode;
     private readonly int _blockSize;
+
+    /// <summary>Mount-time page/block size passed to the constructor (0 = cache default).</summary>
+    internal int BlockSize => _blockSize;
 
     // ── Sort state ────────────────────────────────────────────────
 
