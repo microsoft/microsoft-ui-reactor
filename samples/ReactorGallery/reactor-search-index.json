@@ -1998,6 +1998,11 @@
       "galleryRoute": "person-picture",
       "samples": [
         {
+          "header": "Profile Picture",
+          "language": "csharp",
+          "code": "PersonPicture()\n    .ProfilePicture(\"https://learn.microsoft.com/windows/uwp/contacts-and-calendar/images/shoulder-tap-static-payload.png\")\n    .Width(96).Height(96)"
+        },
+        {
           "header": "Display Name",
           "language": "csharp",
           "code": "PersonPicture().DisplayName(\"Jane Doe\").Width(64).Height(64)"
