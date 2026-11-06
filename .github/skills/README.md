@@ -26,8 +26,7 @@ before push.
 
 Evidence refreshed **2026-11-05**. Keep model IDs and selection rationale here,
 not in individual prompt fragments. These are task-fit candidates, not validated
-per-dimension defaults. The [first Reactor pilot](../../tools/review-eval/results/2026-11-05.md)
-and [five uncapped repeats per model](../../tools/review-eval/results/2026-11-05-repeats.md)
+per-dimension defaults. The [local pilot and five-repeat comparison](model-evaluation.md)
 favored GPT-6.1 Sol on one snapshot: mean known runtime defects found per review
 were 1.4 for Sol, 1.0 for Astra, 0.2 for Opus, and 0 for Sonnet, out of three.
 Sol also used fewer credits. Keep it as the correctness-review evaluation
@@ -114,8 +113,9 @@ Before promoting a future default, refresh the availability and source dates.
 For a Reactor-specific ranking, compare candidates on the same fixed diffs,
 context, tools, and budget, covering all seven review dimensions and clean
 negative cases. Have maintainers adjudicate confirmed defects, false positives,
-missed defects, severity, latency, and actual cost. The first local calibration
-and repeated study are linked above; they measure within-case repeatability,
+missed defects, severity, latency, and actual cost. The
+[evaluation notes and procedure](model-evaluation.md) describe the local evidence
+and how to repeat a comparison with existing host tools. They measure within-case repeatability,
 not corpus-wide reliability, the dimension mappings, or the end-to-end routing
 policy. Do not run a paid evaluation or add models to every review merely to
 refresh this document.
