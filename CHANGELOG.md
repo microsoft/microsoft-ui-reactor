@@ -50,8 +50,10 @@ Conventions for contributors:
   panels). Ported from upstream Yoga (facebook/yoga#1665, facebook/yoga#2038).
 - **`FlexPanel` sizes now land exactly on the device-pixel grid.** Rounded widths and heights
   are computed in double precision, so far from the origin a child no longer comes out one
-  float step short (e.g. 43.9998 instead of 44) of its measured size. Changes are sub-pixel.
-  Ported from upstream Yoga (facebook/yoga#2037).
+  float step short (e.g. 43.9998 instead of 44) of its measured size, and a measured child
+  whose size is a whole number of device pixels keeps exactly that size instead of gaining
+  or losing a pixel (which could wrap or truncate its text). Ported from upstream Yoga
+  (facebook/yoga#2037, facebook/yoga#2040).
 - **Wrapping `FlexPanel` rows no longer break a line on float rounding noise** when arranged
   at exactly their content-sized width (facebook/yoga#2022).
 

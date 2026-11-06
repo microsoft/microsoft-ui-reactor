@@ -287,13 +287,21 @@ internal static class PixelGridHelper
             // pixel, so a float difference could come out one float step short
             // of the measured size (e.g. 43.9998779 instead of 44). The edges are
             // bounded by this node's float size, so the difference stays finite.
-            node.Layout.SetDimension(YogaDimension.Width, (float)(
-                RoundValueToPixelGridDouble(absoluteNodeRight, pointScaleFactor, textRounding && hasFractionalWidth, textRounding && !hasFractionalWidth)
-                - RoundValueToPixelGridDouble(absoluteNodeLeft, pointScaleFactor, false, textRounding)));
+            // Upstream facebook/yoga#2040: a text node whose scaled size is already
+            // a whole number of pixels keeps that pixel count; rounding its two edges
+            // independently could snap one and floor the other, losing a pixel and
+            // truncating the text.
+            node.Layout.SetDimension(YogaDimension.Width, textRounding && !hasFractionalWidth
+                ? (float)(Math.Round(scaledNodeWidth) / pointScaleFactor)
+                : (float)(
+                    RoundValueToPixelGridDouble(absoluteNodeRight, pointScaleFactor, textRounding, false)
+                    - RoundValueToPixelGridDouble(absoluteNodeLeft, pointScaleFactor, false, textRounding)));
 
-            node.Layout.SetDimension(YogaDimension.Height, (float)(
-                RoundValueToPixelGridDouble(absoluteNodeBottom, pointScaleFactor, textRounding && hasFractionalHeight, textRounding && !hasFractionalHeight)
-                - RoundValueToPixelGridDouble(absoluteNodeTop, pointScaleFactor, false, textRounding)));
+            node.Layout.SetDimension(YogaDimension.Height, textRounding && !hasFractionalHeight
+                ? (float)(Math.Round(scaledNodeHeight) / pointScaleFactor)
+                : (float)(
+                    RoundValueToPixelGridDouble(absoluteNodeBottom, pointScaleFactor, textRounding, false)
+                    - RoundValueToPixelGridDouble(absoluteNodeTop, pointScaleFactor, false, textRounding)));
         }
 
         // #145: iterate by index via ChildCount/GetChild instead of foreach over
