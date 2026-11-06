@@ -43,6 +43,17 @@ Conventions for contributors:
 - `PersonPicture`'s `ProfilePicture` no longer throws during reconciliation for empty,
   relative, or malformed URIs; it shows no picture instead. Removing `ProfilePicture` on
   a later render now clears the previous image rather than leaving it on screen (issue #1460).
+- **`FlexPanel` no longer gives shrinking children astronomically large sizes.** When every
+  shrinkable item in a line froze at its minimum size, the remaining shrink total could be a
+  float residual instead of exactly 0, and dividing by it produced sizes around 10⁹–10¹¹ px
+  (or, once clamped, children squeezed to their minimum and text wrapped into very tall
+  panels). Ported from upstream Yoga (facebook/yoga#1665, facebook/yoga#2038).
+- **`FlexPanel` sizes now land exactly on the device-pixel grid.** Rounded widths and heights
+  are computed in double precision, so far from the origin a child no longer comes out one
+  float step short (e.g. 43.9998 instead of 44) of its measured size. Changes are sub-pixel.
+  Ported from upstream Yoga (facebook/yoga#2037).
+- **Wrapping `FlexPanel` rows no longer break a line on float rounding noise** when arranged
+  at exactly their content-sized width (facebook/yoga#2022).
 
 ### Security
 

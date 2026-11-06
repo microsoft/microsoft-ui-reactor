@@ -1521,8 +1521,15 @@ internal static class YogaAlgorithm
                 if (flexShrinkScaledFactor != 0)
                 {
                     float childSize;
+                    // Upstream facebook/yoga#1665: after the first pass freezes items,
+                    // the shrink total can cancel to a near-zero residual rather than
+                    // exactly 0; dividing by it produces astronomically large sizes.
+                    // Upstream facebook/yoga#2038: a positive total is always such a
+                    // residual, since non-negative flexShrink makes a real total <= 0.
+                    float shrinkFactorMagnitude = MathF.Abs(flexLine.Layout.TotalFlexShrinkScaledFactors);
                     if (YogaFloat.IsDefined(flexLine.Layout.TotalFlexShrinkScaledFactors) &&
-                        flexLine.Layout.TotalFlexShrinkScaledFactors == 0)
+                        (shrinkFactorMagnitude < 1e-6f ||
+                         flexLine.Layout.TotalFlexShrinkScaledFactors > 0))
                     {
                         childSize = childFlexBasis + flexShrinkScaledFactor;
                     }

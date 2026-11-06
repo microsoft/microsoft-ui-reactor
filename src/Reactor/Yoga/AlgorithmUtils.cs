@@ -214,6 +214,22 @@ internal static class PixelGridHelper
 {
     public static float RoundValueToPixelGrid(double value, double pointScaleFactor, bool forceCeil, bool forceFloor)
     {
+        double rounded = RoundValueToPixelGridDouble(value, pointScaleFactor, forceCeil, forceFloor);
+        if (double.IsNaN(rounded))
+            return float.NaN;
+        var result = (float)rounded;
+        // SECURITY (TASK-083): clamp +∞/-∞ to a large finite value before
+        // returning. Apps with `MaxWidth = ∞` (the standard "unconstrained"
+        // idiom) used to hit `Arrange` with +Infinity and crash WinUI.
+        // Clamp at float.MaxValue so layout finalizes; downstream Arrange
+        // can still handle huge but finite numbers.
+        if (float.IsPositiveInfinity(result)) return float.MaxValue;
+        if (float.IsNegativeInfinity(result)) return float.MinValue;
+        return result;
+    }
+
+    private static double RoundValueToPixelGridDouble(double value, double pointScaleFactor, bool forceCeil, bool forceFloor)
+    {
         double scaledValue = value * pointScaleFactor;
         double fractial = scaledValue % 1.0;
         if (fractial < 0) fractial += 1.0;
@@ -231,16 +247,8 @@ internal static class PixelGridHelper
                 (!double.IsNaN(fractial) && (fractial > 0.5 || InexactEquals(fractial, 0.5)) ? 1.0 : 0.0);
 
         if (double.IsNaN(scaledValue) || double.IsNaN(pointScaleFactor))
-            return float.NaN;
-        var result = (float)(scaledValue / pointScaleFactor);
-        // SECURITY (TASK-083): clamp +∞/-∞ to a large finite value before
-        // returning. Apps with `MaxWidth = ∞` (the standard "unconstrained"
-        // idiom) used to hit `Arrange` with +Infinity and crash WinUI.
-        // Clamp at float.MaxValue so layout finalizes; downstream Arrange
-        // can still handle huge but finite numbers.
-        if (float.IsPositiveInfinity(result)) return float.MaxValue;
-        if (float.IsNegativeInfinity(result)) return float.MinValue;
-        return result;
+            return double.NaN;
+        return scaledValue / pointScaleFactor;
     }
 
     public static void RoundLayoutResultsToPixelGrid(YogaNode node, double absoluteLeft, double absoluteTop)
@@ -274,13 +282,18 @@ internal static class PixelGridHelper
             double scaledNodeHeight = nodeHeight * pointScaleFactor;
             bool hasFractionalHeight = !InexactEquals(Math.Round(scaledNodeHeight), scaledNodeHeight);
 
-            node.Layout.SetDimension(YogaDimension.Width,
-                RoundValueToPixelGrid(absoluteNodeRight, pointScaleFactor, textRounding && hasFractionalWidth, textRounding && !hasFractionalWidth)
-                - RoundValueToPixelGrid(absoluteNodeLeft, pointScaleFactor, false, textRounding));
+            // Upstream facebook/yoga#2037: take the difference of the two rounded
+            // edges in double. Far from the origin a float has fewer bits than a
+            // pixel, so a float difference could come out one float step short
+            // of the measured size (e.g. 43.9998779 instead of 44). The edges are
+            // bounded by this node's float size, so the difference stays finite.
+            node.Layout.SetDimension(YogaDimension.Width, (float)(
+                RoundValueToPixelGridDouble(absoluteNodeRight, pointScaleFactor, textRounding && hasFractionalWidth, textRounding && !hasFractionalWidth)
+                - RoundValueToPixelGridDouble(absoluteNodeLeft, pointScaleFactor, false, textRounding)));
 
-            node.Layout.SetDimension(YogaDimension.Height,
-                RoundValueToPixelGrid(absoluteNodeBottom, pointScaleFactor, textRounding && hasFractionalHeight, textRounding && !hasFractionalHeight)
-                - RoundValueToPixelGrid(absoluteNodeTop, pointScaleFactor, false, textRounding));
+            node.Layout.SetDimension(YogaDimension.Height, (float)(
+                RoundValueToPixelGridDouble(absoluteNodeBottom, pointScaleFactor, textRounding && hasFractionalHeight, textRounding && !hasFractionalHeight)
+                - RoundValueToPixelGridDouble(absoluteNodeTop, pointScaleFactor, false, textRounding)));
         }
 
         // #145: iterate by index via ChildCount/GetChild instead of foreach over
@@ -478,8 +491,16 @@ internal static class FlexLineHelper
             if (YogaFloat.IsUndefined(flexBasisWithMinAndMaxConstraints))
                 flexBasisWithMinAndMaxConstraints = 0;
 
-            if (sizeConsumedIncludingMinConstraint + flexBasisWithMinAndMaxConstraints +
-                    childMarginMainAxis + childLeadingGapMainAxis > availableInnerMainDim &&
+            float requiredMainDim = sizeConsumedIncludingMinConstraint + flexBasisWithMinAndMaxConstraints +
+                childMarginMainAxis + childLeadingGapMainAxis;
+
+            // Upstream facebook/yoga#2022: tolerate the same epsilon the measurement
+            // cache uses when it decides a cached measurement still fits. A
+            // content-sized wrap container adds padding and border to the
+            // max-content sum and subtracts them again; in float32 that round-trip
+            // can land a few ulps low, which would otherwise break the line.
+            if (requiredMainDim > availableInnerMainDim &&
+                !YogaFloat.InexactEquals(requiredMainDim, availableInnerMainDim) &&
                 isNodeFlexWrap && itemsInFlow.Count > 0)
             {
                 break;
