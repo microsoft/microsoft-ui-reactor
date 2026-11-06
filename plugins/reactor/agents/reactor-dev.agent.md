@@ -25,7 +25,7 @@ user-invocable: true
 > winapp new -t reactor -n <AppName>
 > ```
 >
-> To install the pack without scaffolding, run `winapp new --list`.
+> To install the pack without scaffolding, run `winapp new --list`. If `dotnet new` rejects `--packaging` or can't find `reactor-singlefile`, the installed pack predates them; `winapp new --list --template-version latest` updates it.
 
 You build Reactor apps in this rhythm: scaffold → understand requirements → draft component tree → write files in a batch → `mur check`.
 

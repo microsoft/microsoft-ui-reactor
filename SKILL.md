@@ -236,7 +236,9 @@ default, so `dotnet run` launches them with package identity and needs
 Developer Mode on; `--packaging Unpackaged` scaffolds an unpackaged app instead.
 The other short names are `reactor-mvu`, `reactor-navview`, `reactor-tabview`,
 and `reactor-singlefile` (one `.cs` file, no `.csproj` — see *Single-file apps
-with `dotnet run`* below).
+with `dotnet run`* below). If `dotnet new` rejects `--packaging` or can't find
+`reactor-singlefile`, the installed pack predates them;
+`winapp new --list --template-version latest` updates it.
 
 **Verify your edits with `mur check`** before declaring done. From the
 project directory: `mur check` (no arguments) runs `dotnet build` and

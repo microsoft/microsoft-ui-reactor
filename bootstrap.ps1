@@ -956,8 +956,17 @@ if ($SkipTemplates) {
     # machine's pack provides it — the same false-promise rule as above. Same
     # whole-token, case-sensitive match as step 5 and bootstrap.yml: a plain
     # substring also hits `winui-reactor-singlefile` and the no-match hint.
+    #
+    # With no match, `dotnet new list` writes to stderr and exits 103. Windows
+    # PowerShell 5.1 turns redirected native stderr into error records, which
+    # the script-wide 'Stop' makes terminating: bootstrap would die after
+    # printing "Bootstrap complete." So the probe runs under 'Continue', scoped
+    # to its own script block.
     $otherTemplates = @('reactor-mvu', 'reactor-navview', 'reactor-tabview')
-    $singleFileListing = (& dotnet new list reactor-singlefile 2>&1 | Out-String)
+    $singleFileListing = & {
+        $ErrorActionPreference = 'Continue'
+        & dotnet new list reactor-singlefile 2>&1 | Out-String
+    }
     if ($LASTEXITCODE -eq 0 -and
         $singleFileListing -notmatch 'No templates found' -and
         $singleFileListing -cmatch '(?<![^\s,])reactor-singlefile(?![^\s,])') {

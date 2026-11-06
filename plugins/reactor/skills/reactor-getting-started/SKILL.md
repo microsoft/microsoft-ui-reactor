@@ -54,6 +54,8 @@ description: "Reactor essentials in one place — React-to-Reactor mental model,
 
 For a single-file `dotnet run App.cs` demo (no `.csproj`), `dotnet new reactor-singlefile -n <Name>` scaffolds `<Name>/<Name>.cs` with the file-level `#:package` / `#:property` header already in place. To add the header to an existing file instead, see `reactor-build-and-check`'s single-file-scripts section.
 
+If `dotnet new` rejects `--packaging` or can't find `reactor-singlefile`, the installed pack predates them; `winapp new --list --template-version latest` updates it.
+
 ## Use a `.csproj` when you need …
 
 … multiple files, **analyzers** (single-file `.cs` builds don't load them), or shared project references. `dotnet new reactor` scaffolds the canonical csproj — you don't need to author one from scratch.
