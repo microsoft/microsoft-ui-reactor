@@ -5,25 +5,27 @@ namespace Microsoft.UI.Reactor.Tests;
 
 /// <summary>
 /// Hand-ported regression tests for upstream facebook/yoga fixes taken after the
-/// original port base (facebook/yoga@dc6d185, pinned in cgmanifest.json). Each test
-/// is the upstream regression test for that fix, restricted to the default-errata
-/// configuration (the upstream <c>withoutErrata</c> variants depend on the CSS §4.5
-/// automatic-minimum-size feature, which this port does not carry).
+/// original port base (facebook/yoga@dc6d185). Each test is the upstream regression test
+/// for that fix in the default-errata configuration; the errata-cleared variants and the
+/// remaining upstream tests from the sync live in the other <c>Yoga*</c> test classes.
 /// </summary>
 /// <remarks>
-/// Upstream provenance beyond the base commit (keep in sync when syncing again):
+/// The engine in <c>src/Reactor/Yoga/</c> is synced to upstream facebook/yoga@41118bd3
+/// (pinned in cgmanifest.json): every engine change between dc6d185 and 41118bd3 is ported,
+/// except for code this port does not have (node cloning, StyleValuePool, Grid, Style
+/// equality, the event publisher, YGNodeFree, the cached display:contents child count).
+/// Local divergences from upstream (keep them when syncing again):
 /// <list type="bullet">
-/// <item>Applied: aa6ede70 (#2038, positive shrink-total residual), 4a4e7810 (#2022,
-/// wrap-line rounding tolerance), 98806ccf (#2037, double-precision edge
-/// difference), 6ac92f4c (#2040, whole-pixel text size).</item>
-/// <item>Applied in part: 433d4634 (#1665) — only its positive-residual case, via #2038.
-/// Its |total| &lt; 1e-6 arm is not taken: a negative residual is already clamped by
-/// min/padding, so the arm only changed layouts with genuinely tiny shrink factors,
-/// against CSS (see <see cref="Shrink_GenuinelyTinyTotal_StillAbsorbsOverflow"/>).</item>
-/// <item>Declined: 8c5ea16 (#1905; unreachable from FlexPanel's depth-2 trees and turned a
-/// hidden node's layout into NaN in a nested tree), 52f6d0bd (#2041; bit-identical
-/// perf change), b7ff95d2 (#1976; unreachable: the root always runs a layout pass and
-/// nothing reads HasNewLayout).</item>
+/// <item>Second-pass shrink takes the <c>total &gt;= 0</c> arm of 433d4634 (#1665) /
+/// aa6ede70 (#2038) but not upstream's <c>|total| &lt; 1e-6</c> arm: a negative residual is
+/// already clamped by min/padding, so that arm only changed layouts with genuinely tiny
+/// shrink factors, against CSS (see <see cref="Shrink_GenuinelyTinyTotal_StillAbsorbsOverflow"/>).</item>
+/// <item>The wrap-reverse pass skips display:none children, as STEP 10 does; upstream gives
+/// them NaN positions (see <see cref="WrapReverse_HiddenChild_KeepsZeroLayout"/>).</item>
+/// <item>Pixel rounding clamps ±∞ to ±float.MaxValue (TASK-083), and the skipped-flex
+/// main-axis sum of #1905 treats an undefined flex basis as 0.</item>
+/// <item>The node's MinContentWidth/MinContentHeight/MinContentMeasureFunction setters
+/// mark the node dirty.</item>
 /// </list>
 /// </remarks>
 public class YogaUpstreamFixTests
@@ -455,5 +457,30 @@ public class YogaUpstreamFixTests
         root.CalculateLayout(float.NaN, float.NaN, FlexLayoutDirection.LTR);
 
         Assert.Equal(164f / 3f, text.LayoutHeight, 1e-5f);
+    }
+
+    // Local fix (not upstream): the wrap-reverse pass mirrored display:none children using
+    // their undefined measured size, giving FlexPanel's Collapsed children a NaN rect.
+    [Theory]
+    [InlineData(1f)]
+    [InlineData(1.5f)]
+    public void WrapReverse_HiddenChild_KeepsZeroLayout(float scale)
+    {
+        var config = new YogaConfig { PointScaleFactor = scale };
+        var root = new YogaNode(config) { FlexDirection = FlexDirection.Row, FlexWrap = FlexWrap.WrapReverse };
+        var visible = MeasuredLeaf(config, 50f, 20f);
+        var hidden = MeasuredLeaf(config, 50f, 20f);
+        hidden.Display = YogaDisplay.None;
+        root.InsertChild(visible, 0);
+        root.InsertChild(hidden, 1);
+
+        root.CalculateLayout(200f, 100f, FlexLayoutDirection.LTR);
+
+        Assert.Equal(0f, hidden.LayoutX);
+        Assert.Equal(0f, hidden.LayoutY);
+        Assert.Equal(0f, hidden.LayoutWidth);
+        Assert.Equal(0f, hidden.LayoutHeight);
+        // Positive control: the visible child is still mirrored to the cross end.
+        Assert.Equal(80f, visible.LayoutY);
     }
 }

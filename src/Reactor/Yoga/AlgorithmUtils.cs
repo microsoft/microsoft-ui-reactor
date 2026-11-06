@@ -231,20 +231,22 @@ internal static class PixelGridHelper
     private static double RoundValueToPixelGridDouble(double value, double pointScaleFactor, bool forceCeil, bool forceFloor)
     {
         double scaledValue = value * pointScaleFactor;
-        double fractial = scaledValue % 1.0;
-        if (fractial < 0) fractial += 1.0;
+        // Upstream facebook/yoga#2041: bit-identical to fmod(x, 1.0) for every
+        // double (including -0.0, infinities and NaN).
+        double fractional = Math.CopySign(scaledValue - Math.Truncate(scaledValue), scaledValue);
+        if (fractional < 0) fractional += 1.0;
 
-        if (InexactEquals(fractial, 0))
-            scaledValue -= fractial;
-        else if (InexactEquals(fractial, 1.0))
-            scaledValue = scaledValue - fractial + 1.0;
+        if (InexactEquals(fractional, 0))
+            scaledValue -= fractional;
+        else if (InexactEquals(fractional, 1.0))
+            scaledValue = scaledValue - fractional + 1.0;
         else if (forceCeil)
-            scaledValue = scaledValue - fractial + 1.0;
+            scaledValue = scaledValue - fractional + 1.0;
         else if (forceFloor)
-            scaledValue -= fractial;
+            scaledValue -= fractional;
         else
-            scaledValue = scaledValue - fractial +
-                (!double.IsNaN(fractial) && (fractial > 0.5 || InexactEquals(fractial, 0.5)) ? 1.0 : 0.0);
+            scaledValue = scaledValue - fractional +
+                (!double.IsNaN(fractional) && (fractional > 0.5 || InexactEquals(fractional, 0.5)) ? 1.0 : 0.0);
 
         if (double.IsNaN(scaledValue) || double.IsNaN(pointScaleFactor))
             return double.NaN;
@@ -310,7 +312,11 @@ internal static class PixelGridHelper
         // the original traversal.
         for (int i = 0; i < node.ChildCount; i++)
         {
-            RoundLayoutResultsToPixelGrid(node.GetChild(i), absoluteNodeLeft, absoluteNodeTop);
+            var child = node.GetChild(i);
+            // Upstream facebook/yoga#2015: skip children shared with another owner.
+            if (!ReferenceEquals(child.Owner, node))
+                continue;
+            RoundLayoutResultsToPixelGrid(child, absoluteNodeLeft, absoluteNodeTop);
         }
     }
 

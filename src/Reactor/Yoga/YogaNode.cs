@@ -41,6 +41,14 @@ internal delegate YogaSize YogaMeasureFunc(
 internal delegate float YogaBaselineFunc(YogaNode node, float width, float height);
 
 /// <summary>
+/// Min-content measure delegate (upstream YGMinContentMeasureFunc). Answers the
+/// CSS Flexbox §4.5 min-content probe for leaves whose min-content depends on state.
+/// </summary>
+internal delegate YogaSize YogaMinContentMeasureFunc(
+    YogaNode node, float availableWidth, YogaMeasureMode widthMode,
+    float availableHeight, YogaMeasureMode heightMode);
+
+/// <summary>
 /// Called when a node is marked dirty.
 /// </summary>
 internal delegate void YogaDirtiedFunc(YogaNode node);
@@ -58,6 +66,9 @@ internal sealed class YogaNode
     private YogaMeasureFunc? _measureFunc;
     private YogaBaselineFunc? _baselineFunc;
     private YogaDirtiedFunc? _dirtiedFunc;
+    private YogaMinContentMeasureFunc? _minContentMeasureFunc;
+    private float _minContentWidth = float.NaN;
+    private float _minContentHeight = float.NaN;
 
     private YogaNode? _owner;
     private bool _hasNewLayout = true;
@@ -399,6 +410,43 @@ internal sealed class YogaNode
     }
 
     internal float Baseline(float width, float height) => _baselineFunc!(this, width, height);
+
+    // ── CSS Flexbox §4.5 min-content (upstream facebook/yoga#1968) ──
+    // Only consulted when the config does not carry
+    // YogaErrata.MinSizeUndefinedInsteadOfAuto. Unlike upstream, the setters
+    // mark the node dirty so a change relayouts like any other input.
+
+    public YogaMinContentMeasureFunc? MinContentMeasureFunction
+    {
+        get => _minContentMeasureFunc;
+        set { _minContentMeasureFunc = value; MarkDirtyAndPropagate(); }
+    }
+
+    public bool HasMinContentMeasureFunc => _minContentMeasureFunc != null;
+
+    /// <summary>Static min-content width (NaN = none); wins over any measurement.</summary>
+    public float MinContentWidth
+    {
+        get => _minContentWidth;
+        set { _minContentWidth = value; MarkDirtyAndPropagate(); }
+    }
+
+    /// <summary>Static min-content height (NaN = none); wins over any measurement.</summary>
+    public float MinContentHeight
+    {
+        get => _minContentHeight;
+        set { _minContentHeight = value; MarkDirtyAndPropagate(); }
+    }
+
+    internal YogaSize MeasureMinContent(float availableWidth, YogaMeasureMode widthMode, float availableHeight, YogaMeasureMode heightMode)
+    {
+        var size = _minContentMeasureFunc!(this, availableWidth, widthMode, availableHeight, heightMode);
+        if (YogaFloat.IsUndefined(size.Width) || size.Width < 0)
+            size.Width = YogaFloat.MaxOrDefined(0, size.Width);
+        if (YogaFloat.IsUndefined(size.Height) || size.Height < 0)
+            size.Height = YogaFloat.MaxOrDefined(0, size.Height);
+        return size;
+    }
 
     // ── Layout results (read after CalculateLayout) ──
 

@@ -34,6 +34,10 @@ Conventions for contributors:
 
 ### Changed
 
+- The internal Yoga layout engine behind `FlexPanel` is synced to upstream
+  facebook/yoga@41118bd (pinned in `cgmanifest.json`), with a few documented local
+  divergences. `FlexPanel` layouts are unchanged apart from the fixes listed under Fixed.
+
 ### Deprecated
 
 ### Removed
@@ -56,6 +60,10 @@ Conventions for contributors:
   (facebook/yoga#2037, facebook/yoga#2040).
 - **Wrapping `FlexPanel` rows no longer break a line on float rounding noise** when arranged
   at exactly their content-sized width (facebook/yoga#2022).
+- **`Collapsed` children of a `FlexPanel` with `Wrap = WrapReverse` are no longer arranged
+  with a NaN rect.** The wrap-reverse pass mirrored hidden children too, using their
+  undefined measured size; they now keep the zero layout Yoga gives `display: none` nodes.
+  This bug is also present in upstream Yoga.
 
 ### Security
 
