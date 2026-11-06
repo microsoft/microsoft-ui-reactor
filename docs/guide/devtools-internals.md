@@ -70,7 +70,10 @@ if (ReactorFeatures.IsDevtoolsSupported && ReactorDevtoolsBootstrap.Current is {
         hostRoot,
         hostRootFactory,
         rootRenderFunc,
-        configure);
+        configure)
+    {
+        RootMountSite = rootMountSite,
+    };
     return host.TryHandleCommandLine(request);
 }
 
