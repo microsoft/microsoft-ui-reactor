@@ -1768,10 +1768,10 @@ internal static class YogaAlgorithm
             if (YogaFloat.IsUndefined(floor) || specifiedMain < floor)
                 floor = specifiedMain;
         }
-        else if (YogaFloat.IsDefined(transferredMain))
+        else if (YogaFloat.IsDefined(transferredMain) &&
+                 (YogaFloat.IsUndefined(floor) || transferredMain < floor))
         {
-            if (YogaFloat.IsUndefined(floor) || transferredMain < floor)
-                floor = transferredMain;
+            floor = transferredMain;
         }
 
         float maxMain = child.Style.ResolvedMaxDimension(direction, mainDim, ownerMainAxisSize, ownerWidth);
@@ -1928,7 +1928,14 @@ internal static class YogaAlgorithm
                     if (YogaFloat.IsDefined(flexLine.Layout.TotalFlexShrinkScaledFactors) &&
                         flexLine.Layout.TotalFlexShrinkScaledFactors >= 0)
                     {
-                        childSize = childFlexBasis + flexShrinkScaledFactor;
+                        // Local divergence from upstream, which uses basis × (1 − shrink)
+                        // here. That is the frozen size only when shrink is 1. With no
+                        // shrink capacity left, every shrinkable item froze at its lower
+                        // bound in the first pass, so keep it there: from 0, the bound
+                        // below yields exactly that min / padding / auto-min floor.
+                        childSize = flexShrinkScaledFactor < 0
+                            ? 0.0f
+                            : childFlexBasis + flexShrinkScaledFactor;
                     }
                     else
                     {

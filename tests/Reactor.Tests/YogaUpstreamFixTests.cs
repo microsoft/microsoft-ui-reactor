@@ -19,7 +19,10 @@ namespace Microsoft.UI.Reactor.Tests;
 /// <item>Second-pass shrink takes the <c>total &gt;= 0</c> arm of 433d4634 (#1665) /
 /// aa6ede70 (#2038) but not upstream's <c>|total| &lt; 1e-6</c> arm: a negative residual is
 /// already clamped by min/padding, so that arm only changed layouts with genuinely tiny
-/// shrink factors, against CSS (see <see cref="Shrink_GenuinelyTinyTotal_StillAbsorbsOverflow"/>).</item>
+/// shrink factors, against CSS (see <see cref="Shrink_GenuinelyTinyTotal_StillAbsorbsOverflow"/>).
+/// In that <c>total &gt;= 0</c> arm, items with a positive shrink keep their first-pass
+/// frozen lower bound instead of upstream's basis × (1 − shrink), which only equals it
+/// when shrink is 1 (see <see cref="Shrink_AllItemsFrozenAtMinWidth"/>).</item>
 /// <item>The wrap-reverse pass skips display:none children, as STEP 10 does; upstream gives
 /// them NaN positions (see <see cref="WrapReverse_HiddenChild_KeepsZeroLayout"/>).</item>
 /// <item>Pixel rounding clamps ±∞ to ±float.MaxValue (TASK-083), and the skipped-flex
@@ -99,10 +102,17 @@ public class YogaUpstreamFixTests
 
     // ── facebook/yoga#2038 / #1651 (aa6ede70): positive shrink-total residual ──
 
-    [Fact]
-    public void Shrink_AllItemsFrozenAtMinWidth()
+    // Upstream's positive-residual branch sizes every item as basis × (1 − shrink),
+    // which is the frozen minimum only when shrink is 1. With a fractional shrink, an
+    // item frozen at its minimum in the first pass grew back to e.g. 90.09 (local fix).
+    [Theory]
+    [InlineData(1f)]
+    [InlineData(0.5f)]
+    [InlineData(0.1f)]
+    public void Shrink_AllItemsFrozenAtMinWidth(float shrink)
     {
-        var config = new YogaConfig();
+        // Rounding off, so a sub-pixel regrowth (90.09) can't snap back to 90.
+        var config = new YogaConfig { PointScaleFactor = 0f };
         var root = new YogaNode(config);
         root.FlexDirection = FlexDirection.Row;
         root.Width = YogaValue.Point(350f);
@@ -115,7 +125,7 @@ public class YogaUpstreamFixTests
             var child = new YogaNode(config);
             child.Width = YogaValue.Point(widths[i]);
             child.MinWidth = YogaValue.Point(minWidths[i]);
-            child.FlexShrink = 1f;
+            child.FlexShrink = shrink;
             root.InsertChild(child, i);
         }
 
