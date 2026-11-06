@@ -37,6 +37,15 @@ Conventions for contributors:
 - The internal Yoga layout engine behind `FlexPanel` is synced to upstream
   facebook/yoga@41118bd (pinned in `cgmanifest.json`), with a few documented local
   divergences. `FlexPanel` layouts are unchanged apart from the fixes listed under Fixed.
+- **The guide, README, agent kit and `bootstrap.ps1` now describe Windows App SDK template pack
+  `0.0.8-alpha`** (microsoft/WindowsAppSDK#6845; spec 022). That pack adds `reactor-singlefile`, a
+  one-file app with no `.csproj`, and a `--packaging Packaged|Unpackaged` option on the four project
+  templates, so the unpackaged shape no longer needs a hand edit after scaffolding. Its scaffolds no
+  longer reference the `Microsoft.WindowsAppSDK` metapackage and the `--wasdk-version` option is
+  gone: the Windows App SDK arrives through `Microsoft.UI.Reactor` at the version Reactor depends on.
+  Add the metapackage yourself for a self-contained app or a newer WinUI. An older installed pack
+  rejects `--packaging` and lacks `reactor-singlefile`; update it with
+  `winapp new --list --template-version latest`.
 
 ### Deprecated
 
