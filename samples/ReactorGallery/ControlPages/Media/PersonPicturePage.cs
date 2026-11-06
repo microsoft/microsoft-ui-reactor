@@ -18,6 +18,16 @@ class PersonPicturePage : Component
                 PageHeader("PersonPicture",
                     "A control that displays a circular avatar for a person."),
 
+                SampleCard("Profile Picture",
+                    HStack(
+                        PersonPicture()
+                            .ProfilePicture("https://learn.microsoft.com/windows/uwp/contacts-and-calendar/images/shoulder-tap-static-payload.png")
+                            .Width(96).Height(96)
+                    ),
+                    @"PersonPicture()
+    .ProfilePicture(""https://learn.microsoft.com/windows/uwp/contacts-and-calendar/images/shoulder-tap-static-payload.png"")
+    .Width(96).Height(96)"),
+
                 SampleCard("Display Name",
                     HStack(16,
                         PersonPicture().DisplayName("Jane Doe").Width(64).Height(64),

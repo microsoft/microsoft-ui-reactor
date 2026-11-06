@@ -157,8 +157,8 @@ WinUI design page: [Pips pager](https://learn.microsoft.com/en-us/windows/apps/d
 
 `PersonPicture` is the contact avatar. It accepts a display name (uses
 the first letter of each word as initials), explicit initials, or a
-profile image through `.Set(p => p.ProfilePicture = ...)`. Without any
-of those, it falls back to a generic person glyph:
+profile image through `.ProfilePicture(uri)`. Without any of those, it
+falls back to a generic person glyph:
 
 ```csharp snippet="status-and-info/person-picture"
 ```
@@ -167,7 +167,7 @@ of those, it falls back to a generic person glyph:
 |---|---|
 | `.DisplayName(string)` | Auto-derives initials. |
 | `.Initials(string)` | Override the derived initials. |
-| `.Set(p => p.ProfilePicture = ...)` | Provide a `BitmapImage`. |
+| `.ProfilePicture(string?)` | Load a photo from an absolute URI (`https://…`, `ms-appx:///…`). `null`, empty, relative, or malformed values show no photo, so the initials or glyph appear instead. |
 
 Pair `PersonPicture` with `InfoBadge` for a "user with notification"
 chrome — set `BadgeNumber` / `BadgeGlyph` on the underlying control

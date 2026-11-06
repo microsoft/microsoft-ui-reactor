@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hooks;
+using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -79,6 +80,31 @@ public class DevtoolsUseAndMenuTests : IDisposable
 
         Assert.False(global::Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled);
         Assert.False(ReactorApp.DevtoolsEnabled);
+    }
+
+    // The guides tell users to launch with `--devtools app`. That only works because
+    // the App branch flips the flag and returns false, so ReactorApp.Run carries on
+    // into the app's own window; returning true would make Run exit straight after
+    // parsing while every parse-only test stayed green.
+    [Fact]
+    public void DevtoolsAppSubverb_EnablesDevtools_AndLetsRunContinue()
+    {
+        Assert.False(ReactorApp.DevtoolsEnabled);
+        var options = DevtoolsCliParser.Parse(["app.exe", "--devtools", "app"]);
+
+        var handled = new DevtoolsHost().TryHandleCommandLine(new ReactorDevtoolsBootRequest(
+            options,
+            Title: "App",
+            Width: 800,
+            Height: 600,
+            FullScreen: false,
+            HostRoot: null,
+            HostRootFactory: null,
+            RootRenderFunc: null,
+            Configure: null));
+
+        Assert.False(handled);
+        Assert.True(ReactorApp.DevtoolsEnabled);
     }
 
     [Fact]

@@ -28,6 +28,10 @@ Conventions for contributors:
 
 ### Added
 
+- `PersonPictureElement.ProfilePicture(string? uri)` fluent modifier, matching the existing
+  `DisplayName` / `Initials` sugar. ReactorGallery's PersonPicture page uses it to show an
+  avatar loaded over HTTPS (issue #1460).
+
 ### Changed
 
 ### Deprecated
@@ -40,6 +44,10 @@ Conventions for contributors:
   query restarts, keeping requests and cursor offsets aligned with resource row
   positions, without repeatedly copying options after initialization
   (part of #1452, case 2).
+
+- `PersonPicture`'s `ProfilePicture` no longer throws during reconciliation for empty,
+  relative, or malformed URIs; it shows no picture instead. Removing `ProfilePicture` on
+  a later render now clears the previous image rather than leaving it on screen (issue #1460).
 
 ### Security
 
