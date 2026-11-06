@@ -11,6 +11,8 @@
       Get-CoberturaRatesFromXml   sum a merged cobertura document into line %,
                                   branch %, and the branch covered/total counts.
       Get-CoberturaRates          same, from a file path.
+      Merge-CoberturaDocuments    union cobertura documents line by line (the lane
+                                  merge; Merge-Cobertura.ps1 is its file wrapper).
       ConvertTo-SafePercent       gate an artifact-supplied percentage (0..100).
       ConvertTo-SafeCount         gate an artifact-supplied non-negative integer.
       ConvertTo-SafeCoverageMetrics  project raw (untrusted) numbers onto a
@@ -66,11 +68,13 @@ function Get-CoberturaRatesFromXml {
         Aggregate a merged cobertura document into line % + branch % (+ the branch
         covered/total counts).
     .DESCRIPTION
-        dotnet-coverage's cobertura output records per-line branch data in
-        `condition-coverage="P% (covered/total)"` attributes but does NOT aggregate
-        them: the root/class `branch-rate` attributes are hard-coded to 1. So the
-        line rate is read from the root `line-rate` (0..1, scaled to a percent) and
-        the branch rate is summed from the per-line numerators/denominators here.
+        The line rate is read from the root `line-rate` (0..1, scaled to a percent).
+        The branch rate is summed here from the class-level lines'
+        `condition-coverage="P% (covered/total)"` attributes. It is not read from the
+        root because not every report fills it in: the statically instrumented
+        selftest reports carry no branch data yet write `branch-rate="1"`. Method lines
+        are skipped because they repeat their class's lines, so counting both would
+        count every branch twice.
         Returns a metrics object; Branch/counts are $null when the document has no
         conditional branches at all.
     #>
@@ -92,7 +96,7 @@ function Get-CoberturaRatesFromXml {
 
     $covered = 0
     $total = 0
-    foreach ($l in $Doc.SelectNodes('//line[@condition-coverage]')) {
+    foreach ($l in $Doc.SelectNodes('/coverage/packages/package/classes/class/lines/line[@condition-coverage]')) {
         $cc = [string]$l.GetAttribute('condition-coverage')
         if ($cc -match '\((\d+)/(\d+)\)') {
             $covered += [int]$Matches[1]
@@ -135,6 +139,211 @@ function Get-CoberturaRates {
         return [pscustomobject]@{ Line = $null; Branch = $null; BranchesCovered = $null; BranchesTotal = $null }
     }
     return Get-CoberturaRatesFromXml -Doc $doc
+}
+
+function Merge-CoberturaDocuments {
+    <#
+    .SYNOPSIS
+        Merge cobertura documents so that a line is covered when any input covers it.
+        Returns a new document; the inputs are not modified.
+    .DESCRIPTION
+        Lines are matched on package, class, file name and line number, the identity
+        that every lane report agrees on. Methods are not a reliable identity, and
+        `dotnet-coverage merge` matches lines through their method, so it does not union
+        these reports. The unit lane is instrumented dynamically and names constructors
+        `.ctor` / `.cctor`. The selftest lanes are instrumented statically and name both
+        constructors after the type, so one of their reports can hold two methods with
+        the same name and signature. The tool keeps or drops lines like these
+        differently from one run to the next. On PR #1464 it dropped 62 FlexPanel.cs
+        lines that both selftest lanes covered. It also discards the unit lane's
+        class-level branch data.
+
+        Each merged line records:
+          hits      the largest count any input recorded, so a line is covered exactly
+                    when some input covered it. (dotnet-coverage records 0 or 1, so a
+                    sum would add nothing.)
+          branches  the most covered conditions any input recorded, out of the most
+                    conditions any input counted. Cobertura counts a line's conditions
+                    but does not say which ones ran. So this is exact when one input
+                    carries branch data for the line (today only the unit lane records
+                    any), and a lower bound when several do.
+
+        Each class keeps its element from the first input that contains it: its methods,
+        their names and its complexity. Each method line takes its class's merged line.
+        Every line-rate and branch-rate is recomputed from the merged lines, and the root
+        gets lines-covered, lines-valid, branches-covered and branches-valid. Its timestamp
+        is the newest input's, so the same inputs always give the same document.
+    #>
+    param([Parameter(Mandatory)][xml[]]$Documents)
+
+    $inv = [System.Globalization.CultureInfo]::InvariantCulture
+    $ordinal = [System.StringComparer]::Ordinal
+
+    function Get-ClassKey([string]$Package, [System.Xml.XmlElement]$Class) {
+        return "$Package`0$($Class.GetAttribute('name'))`0$($Class.GetAttribute('filename'))"
+    }
+    function Format-Rate([long]$Covered, [long]$Valid) {
+        # Nothing to cover counts as fully covered, as dotnet-coverage writes it.
+        if ($Valid -le 0) { return '1' }
+        return ([double]$Covered / $Valid).ToString('R', $inv)
+    }
+
+    # Pass 1: the union. Key -> line number -> [hits, covered conditions, conditions, branch flag].
+    # Hashtables, not generic dictionaries: PowerShell indexes them natively and a miss is
+    # $null, which keeps the per-line cost of these ~200k lines low.
+    $union = [hashtable]::new($ordinal)
+    $timestamp = $null
+    for ($i = 0; $i -lt $Documents.Count; $i++) {
+        $root = $Documents[$i].DocumentElement
+        if ($null -eq $root -or $root.LocalName -ne 'coverage') {
+            throw "Input $($i + 1) is not a cobertura report: it has no <coverage> root."
+        }
+        $ts = [long]0
+        if ([long]::TryParse($root.GetAttribute('timestamp'), [ref]$ts) -and ($null -eq $timestamp -or $ts -gt $timestamp)) {
+            $timestamp = $ts
+        }
+        $seen = [System.Collections.Generic.HashSet[string]]::new($ordinal)
+        foreach ($pkg in $root.SelectNodes('packages/package')) {
+            $pkgName = $pkg.GetAttribute('name')
+            foreach ($cls in $pkg.SelectNodes('classes/class')) {
+                $key = Get-ClassKey $pkgName $cls
+                # Two elements for one class would each be scored with the class's merged lines.
+                if (-not $seen.Add($key)) {
+                    throw "Input $($i + 1) lists class '$($cls.GetAttribute('name'))' ($($cls.GetAttribute('filename'))) more than once."
+                }
+                $lines = $union[$key]
+                if ($null -eq $lines) {
+                    $lines = @{}
+                    $union[$key] = $lines
+                }
+                foreach ($line in $cls.SelectNodes('lines/line')) {
+                    $number = [int]::Parse($line.GetAttribute('number'), $inv)
+                    $hits = [long]::Parse($line.GetAttribute('hits'), $inv)
+                    $entry = $lines[$number]
+                    if ($null -eq $entry) {
+                        $entry = [long[]]::new(4)
+                        $lines[$number] = $entry
+                    }
+                    if ($hits -gt $entry[0]) { $entry[0] = $hits }
+                    if ($line.GetAttribute('branch') -eq 'True') { $entry[3] = 1 }
+                    $cc = $line.GetAttribute('condition-coverage')
+                    if ($cc) {
+                        if ($cc -notmatch '\((\d+)/(\d+)\)') {
+                            throw "Input $($i + 1) has an unreadable condition-coverage '$cc' on line $number of '$($cls.GetAttribute('name'))'."
+                        }
+                        $c = [long]$Matches[1]
+                        $t = [long]$Matches[2]
+                        if ($c -gt $entry[1]) { $entry[1] = $c }
+                        if ($t -gt $entry[2]) { $entry[2] = $t }
+                    }
+                }
+            }
+        }
+    }
+
+    # Pass 2: the structure. A copy of the first input, plus every package and class that
+    # only a later input has.
+    $out = [xml]$Documents[0].CloneNode($true)
+    $outRoot = $out.DocumentElement
+    $packagesEl = $outRoot.SelectSingleNode('packages')
+    if ($null -eq $packagesEl) { $packagesEl = $outRoot.AppendChild($out.CreateElement('packages')) }
+    $pkgEls = [System.Collections.Generic.Dictionary[string, System.Xml.XmlElement]]::new($ordinal)
+    $classKeys = [System.Collections.Generic.HashSet[string]]::new($ordinal)
+    foreach ($pkg in $packagesEl.SelectNodes('package')) {
+        $pkgName = $pkg.GetAttribute('name')
+        if (-not $pkgEls.ContainsKey($pkgName)) { $pkgEls[$pkgName] = $pkg }
+        foreach ($cls in $pkg.SelectNodes('classes/class')) { $null = $classKeys.Add((Get-ClassKey $pkgName $cls)) }
+    }
+    for ($i = 1; $i -lt $Documents.Count; $i++) {
+        foreach ($pkg in $Documents[$i].DocumentElement.SelectNodes('packages/package')) {
+            $pkgName = $pkg.GetAttribute('name')
+            $target = $null
+            if (-not $pkgEls.TryGetValue($pkgName, [ref]$target)) {
+                $target = $packagesEl.AppendChild($out.ImportNode($pkg, $true))
+                $pkgEls[$pkgName] = $target
+                foreach ($cls in $target.SelectNodes('classes/class')) { $null = $classKeys.Add((Get-ClassKey $pkgName $cls)) }
+                continue
+            }
+            foreach ($cls in $pkg.SelectNodes('classes/class')) {
+                if ($classKeys.Add((Get-ClassKey $pkgName $cls))) {
+                    $classesEl = $target.SelectSingleNode('classes')
+                    if ($null -eq $classesEl) { $classesEl = $target.AppendChild($out.CreateElement('classes')) }
+                    $null = $classesEl.AppendChild($out.ImportNode($cls, $true))
+                }
+            }
+        }
+    }
+
+    # Pass 3: write the union into the structure and recompute every rate from it.
+    $rootCov = [long]0; $rootVal = [long]0; $rootBc = [long]0; $rootBt = [long]0
+    foreach ($pkg in $packagesEl.SelectNodes('package')) {
+        $pkgName = $pkg.GetAttribute('name')
+        $pkgCov = [long]0; $pkgVal = [long]0; $pkgBc = [long]0; $pkgBt = [long]0
+        foreach ($cls in $pkg.SelectNodes('classes/class')) {
+            $lines = $union[(Get-ClassKey $pkgName $cls)]
+            $linesEl = $cls.SelectSingleNode('lines')
+            if ($null -eq $linesEl) { $linesEl = $cls.AppendChild($out.CreateElement('lines')) }
+            while ($linesEl.HasChildNodes) { $null = $linesEl.RemoveChild($linesEl.FirstChild) }
+            $clsCov = [long]0; $clsBc = [long]0; $clsBt = [long]0
+            [int[]]$numbers = @($lines.Keys)
+            [System.Array]::Sort($numbers)
+            foreach ($number in $numbers) {
+                $entry = $lines[$number]
+                $el = $out.CreateElement('line')
+                $el.SetAttribute('number', $number.ToString($inv))
+                $el.SetAttribute('hits', $entry[0].ToString($inv))
+                $el.SetAttribute('branch', $(if ($entry[3] -eq 1 -or $entry[2] -gt 0) { 'True' } else { 'False' }))
+                if ($entry[2] -gt 0) {
+                    $c = [math]::Min($entry[1], $entry[2])
+                    $pct = [math]::Round(100.0 * $c / $entry[2], 2).ToString($inv)
+                    $el.SetAttribute('condition-coverage', "$pct% ($c/$($entry[2]))")
+                    $clsBc += $c
+                    $clsBt += $entry[2]
+                }
+                if ($entry[0] -gt 0) { $clsCov++ }
+                $null = $linesEl.AppendChild($el)
+            }
+            foreach ($method in $cls.SelectNodes('methods/method')) {
+                $mCov = [long]0; $mVal = [long]0; $mBc = [long]0; $mBt = [long]0
+                foreach ($ml in $method.SelectNodes('lines/line')) {
+                    $number = [int]::Parse($ml.GetAttribute('number'), $inv)
+                    $entry = $lines[$number]
+                    if ($null -eq $entry) {
+                        throw "Method '$($method.GetAttribute('name'))' of '$($cls.GetAttribute('name'))' lists line $number, which its class's lines do not."
+                    }
+                    $ml.SetAttribute('hits', $entry[0].ToString($inv))
+                    $ml.SetAttribute('branch', $(if ($entry[3] -eq 1 -or $entry[2] -gt 0) { 'True' } else { 'False' }))
+                    if ($entry[2] -gt 0) {
+                        $c = [math]::Min($entry[1], $entry[2])
+                        $pct = [math]::Round(100.0 * $c / $entry[2], 2).ToString($inv)
+                        $ml.SetAttribute('condition-coverage', "$pct% ($c/$($entry[2]))")
+                        $mBc += $c
+                        $mBt += $entry[2]
+                    } else {
+                        $ml.RemoveAttribute('condition-coverage')
+                    }
+                    $mVal++
+                    if ($entry[0] -gt 0) { $mCov++ }
+                }
+                $method.SetAttribute('line-rate', (Format-Rate $mCov $mVal))
+                $method.SetAttribute('branch-rate', (Format-Rate $mBc $mBt))
+            }
+            $cls.SetAttribute('line-rate', (Format-Rate $clsCov $lines.Count))
+            $cls.SetAttribute('branch-rate', (Format-Rate $clsBc $clsBt))
+            $pkgCov += $clsCov; $pkgVal += $lines.Count; $pkgBc += $clsBc; $pkgBt += $clsBt
+        }
+        $pkg.SetAttribute('line-rate', (Format-Rate $pkgCov $pkgVal))
+        $pkg.SetAttribute('branch-rate', (Format-Rate $pkgBc $pkgBt))
+        $rootCov += $pkgCov; $rootVal += $pkgVal; $rootBc += $pkgBc; $rootBt += $pkgBt
+    }
+    $outRoot.SetAttribute('line-rate', (Format-Rate $rootCov $rootVal))
+    $outRoot.SetAttribute('branch-rate', (Format-Rate $rootBc $rootBt))
+    if ($null -ne $timestamp) { $outRoot.SetAttribute('timestamp', $timestamp.ToString($inv)) }
+    $outRoot.SetAttribute('lines-covered', $rootCov.ToString($inv))
+    $outRoot.SetAttribute('lines-valid', $rootVal.ToString($inv))
+    $outRoot.SetAttribute('branches-covered', $rootBc.ToString($inv))
+    $outRoot.SetAttribute('branches-valid', $rootBt.ToString($inv))
+    return $out
 }
 
 function ConvertTo-SafePercent {

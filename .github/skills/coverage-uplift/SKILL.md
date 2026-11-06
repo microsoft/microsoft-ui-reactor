@@ -54,11 +54,12 @@ Output is `coverage/merged.cobertura.xml` (git-ignored). Parse it directly for p
 line% and the exact uncovered line numbers rather than eyeballing `report-gaps.ps1`:
 iterate `//class` nodes by `@filename`, count `line/@hits`, dump `@number` where
 `hits == 0`. **The script aborts before the merge step if any leg fails** — if a known
-flake trips it, collect the legs and merge manually:
+flake trips it, collect the legs and merge manually (not with `dotnet-coverage merge`,
+which drops covered lines from these reports):
 
 ```powershell
-dotnet-coverage merge coverage\unit.cobertura.xml coverage\selftest.cobertura.xml `
-  --output coverage\merged.cobertura.xml --output-format cobertura
+pwsh tests/coverage/ci/Merge-Cobertura.ps1 -OutFile coverage\merged.cobertura.xml `
+  coverage\unit.cobertura.xml coverage\selftest.cobertura.xml
 ```
 
 Known flakes to ignore (not your regression) — note they are **not unit tests**:

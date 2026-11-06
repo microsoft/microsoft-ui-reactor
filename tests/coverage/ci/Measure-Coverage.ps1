@@ -26,9 +26,11 @@
                 report that must be there (for example unit, selftest-1, selftest-2), and a
                 missing or unexpected one fails the merge rather than skewing the numbers.
 
-    Coverage is combined by `dotnet-coverage merge`, which takes the union of covered lines
-    across reports. Averaging per-lane percentages would be wrong, because the lanes cover
-    overlapping code.
+    Coverage is combined by Merge-Cobertura.ps1, which takes the exact union of covered
+    lines across reports: a line is covered when any report covers it. `dotnet-coverage
+    merge` is not used, because it drops covered lines from these reports (see
+    Merge-CoberturaDocuments in CoverageLib.ps1). Averaging per-lane percentages would be
+    wrong too, because the lanes cover overlapping code.
 
     The output JSON (All and Merge) is consumed by CoverageLib.ps1's Format-CoverageComment:
       { "line": <num|null>, "branch": <num|null>,
@@ -264,9 +266,8 @@ try {
         } else {
             @($unitReport, $selftestReport)
         }
-        Invoke-Checked "Merge cobertura reports ($($inputs.Count))" {
-            dotnet-coverage merge @inputs --output $mergedReport --output-format cobertura
-        }.GetNewClosure()
+        Write-Host "==> Merge cobertura reports ($($inputs.Count))"
+        & (Join-Path $PSScriptRoot 'Merge-Cobertura.ps1') -OutFile $mergedReport -Path $inputs
     }
 }
 finally {

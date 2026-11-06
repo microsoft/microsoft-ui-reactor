@@ -70,9 +70,11 @@ concurrency:
 # The measurement used to be one serial job: build Reactor.Tests, build the Host, run the
 # unit leg, then the ~6-minute selftest leg. The legs are independent until the final
 # merge, so they now run on separate runners, and the selftest leg is split in two with
-# the Host's --shard partition (tests/_shared/SelfTestShard.cs). `dotnet-coverage merge`
-# unions the lane reports exactly as it used to union the two legs, and the merge
-# refuses to run unless it received every expected lane report and nothing else.
+# the Host's --shard partition (tests/_shared/SelfTestShard.cs). The merge
+# (tests/coverage/ci/Merge-Cobertura.ps1) takes the exact union of the lane reports: a line
+# is covered when any lane covers it. It refuses to run unless it received every expected
+# lane report and nothing else. `dotnet-coverage merge` is not used because it drops lines
+# from these reports: the lanes name methods differently (see Merge-CoberturaDocuments).
 jobs:
   target:
     name: Resolve coverage target
@@ -198,7 +200,8 @@ jobs:
     # Runs when a lane failed, too, so the poster still gets a (failed) coverage-data and
     # renders CAUTION instead of saying nothing. Not when the run was cancelled (superseded).
     if: ${{ !cancelled() && needs.target.result == 'success' }}
-    # The merge is text processing, so it runs on the runner that starts fastest.
+    # The merge is text processing, so it runs on the runner that starts fastest. It needs
+    # only pwsh, which the runner image provides: no .NET SDK and no dotnet-coverage.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -207,14 +210,6 @@ jobs:
         with:
           ref: ${{ needs.target.outputs.ref }}
           persist-credentials: false
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Install dotnet-coverage
-        run: dotnet tool install -g dotnet-coverage
 
       # Cheap guard: run the pure parser + delta-math tests before trusting the merge.
       # Also runs standalone in coverage-lib-tests.yml on PRs.

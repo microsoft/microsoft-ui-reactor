@@ -1075,8 +1075,10 @@ dotnet-coverage collect -s coverage.settings.xml \
   -- dotnet run --project tests/Reactor.AppTests.Host --no-build -- --self-test
 
 # --- Merge ---
-dotnet-coverage merge unit.cobertura.xml selftest.cobertura.xml \
-  --output merged.cobertura.xml --output-format cobertura
+# The exact union of covered lines. Not `dotnet-coverage merge`: it drops covered lines
+# from these reports (tests/coverage/ci/README.md explains why).
+pwsh tests/coverage/ci/Merge-Cobertura.ps1 -OutFile merged.cobertura.xml \
+  unit.cobertura.xml selftest.cobertura.xml
 ```
 
 Replace `$(RuntimeIdentifier)` with `ARM64` or `x64`, or omit the platform segment if you used the default platform from `Directory.Build.props`. The `coverage.settings.xml` file in the repo root controls which modules are included and excludes generated code (`obj/`, `*.g.cs`) and test-host scaffolding exercised only by the winapp/E2E runner.
@@ -1089,7 +1091,7 @@ red selftest fixture — the `CenterOnCurrent` pair in §2 above is the usual on
 both legs collected and no merged file. Merge them by hand:
 
 ```powershell
-dotnet-coverage merge coverage\unit.cobertura.xml coverage\selftest.cobertura.xml --output coverage\merged.cobertura.xml --output-format cobertura
+pwsh tests/coverage/ci/Merge-Cobertura.ps1 -OutFile coverage\merged.cobertura.xml coverage\unit.cobertura.xml coverage\selftest.cobertura.xml
 ```
 
 ### Running coverage in CI
