@@ -641,9 +641,8 @@ public static class MxcPolicy
             (!TryGetString(proto, out protocol) || protocol is not ("tcp" or "udp" or "icmp" or "any")))
             return false;
         int? port = null, endPort = null;
-        foreach (var key in new[] { "port", "endPort" })
+        foreach (var (key, n) in new[] { "port", "endPort" }.Select(k => (k, p[k])).Where(e => e.Item2 is not null))
         {
-            if (p[key] is not { } n) continue;
             if (n is not JsonValue v || !v.TryGetValue<int>(out var i) || i is < 1 or > 65535)
                 return false;
             if (key == "port") port = i; else endPort = i;

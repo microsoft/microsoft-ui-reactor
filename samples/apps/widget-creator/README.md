@@ -116,7 +116,9 @@ variable) at a mirror, or supply a pre-downloaded binary with
 If Widget Creator was built without a bundled CLI (for example with
 `-p:CopilotSkipCliDownload=true`), it resolves one at **run** time instead: set
 `COPILOT_CLI_PATH` to a local `copilot.exe`, or install the standalone Copilot CLI
-in its default per-user location. It deliberately never searches `PATH`. Note that
+(`winget install GitHub.Copilot`, user or machine scope, or the `gh`-managed copy
+under `%LOCALAPPDATA%\GitHub CLI\copilot`); those fixed install locations are
+checked. It deliberately never searches `PATH`. Note that
 `gh auth` only supplies Copilot credentials — it is not itself a runnable
 `copilot.exe`.
 

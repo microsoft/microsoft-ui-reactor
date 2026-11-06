@@ -79,7 +79,7 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
     /// Returns <c>null</c> when the bundled CLI is present (let the SDK use it) or
     /// when nothing could be found (let the SDK throw its descriptive error).
     /// Order: bundled next to the app → <c>COPILOT_CLI_PATH</c> → a locally
-    /// installed Copilot CLI in its well-known per-user location. We deliberately
+    /// installed Copilot CLI in its well-known install locations. We deliberately
     /// do NOT probe <c>PATH</c> for <c>copilot.exe</c> — that would let any
     /// unrelated (or malicious) binary earlier on <c>PATH</c> be launched. To use
     /// a CLI in a non-standard location, set <c>COPILOT_CLI_PATH</c> explicitly.
@@ -101,12 +101,19 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
 
     static IEnumerable<string> EnumerateInstalledCliPaths()
     {
-        // Standalone GitHub Copilot CLI install (winget / gh), in its well-known
-        // per-user location. Intentionally a fixed, trusted path — never a PATH
-        // scan, so an unrelated copilot.exe on PATH can't be picked up and run.
+        // Standalone GitHub Copilot CLI installs in their well-known locations:
+        // the gh-managed copy, then the WinGet `GitHub.Copilot` command links
+        // (user scope, then machine scope). Intentionally fixed paths — never a
+        // PATH scan, so an unrelated copilot.exe on PATH can't be picked up and run.
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (!string.IsNullOrEmpty(localAppData))
+        {
             yield return Path.Join(localAppData, "GitHub CLI", "copilot", "copilot.exe");
+            yield return Path.Join(localAppData, "Microsoft", "WinGet", "Links", "copilot.exe");
+        }
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        if (!string.IsNullOrEmpty(programFiles))
+            yield return Path.Join(programFiles, "WinGet", "Links", "copilot.exe");
     }
 
     public async Task<IModelConversation> StartConversationAsync(string systemPrompt, CancellationToken ct)

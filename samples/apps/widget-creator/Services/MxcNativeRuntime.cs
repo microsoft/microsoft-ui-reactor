@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
@@ -76,12 +77,7 @@ internal static class MxcNativeRuntime
 
         var libraryPath = Path.Join(dir, LibraryFile);
         var files = new List<string> { libraryPath };
-        foreach (var companion in CompanionFiles)
-        {
-            var path = Path.Join(dir, companion);
-            if (File.Exists(path))
-                files.Add(path);
-        }
+        files.AddRange(CompanionFiles.Select(companion => Path.Join(dir, companion)).Where(File.Exists));
 
         foreach (var path in files)
         {
@@ -138,10 +134,7 @@ internal static class MxcNativeRuntime
             Path.Join(baseDir, "runtimes", RuntimeInformation.RuntimeIdentifier, "native"),
             Path.Join(baseDir, "runtimes", ProcessRid(), "native"),
         ];
-        foreach (var dir in candidates)
-            if (File.Exists(Path.Join(dir, LibraryFile)))
-                return dir;
-        return null;
+        return candidates.FirstOrDefault(dir => File.Exists(Path.Join(dir, LibraryFile)));
     }
 
     static string ProcessRid() => RuntimeInformation.ProcessArchitecture switch
@@ -278,16 +271,16 @@ internal static class MxcNativeRuntime
         public IntPtr pSignatureSettings;
     }
 
-    [DllImport("wintrust.dll")]
+    [DllImport("wintrust.dll", ExactSpelling = true)]
     static extern int WinVerifyTrust(IntPtr hwnd, ref Guid actionId, ref WINTRUST_DATA data);
 
-    [DllImport("wintrust.dll")]
+    [DllImport("wintrust.dll", ExactSpelling = true)]
     static extern IntPtr WTHelperProvDataFromStateData(IntPtr stateData);
 
-    [DllImport("wintrust.dll")]
+    [DllImport("wintrust.dll", ExactSpelling = true)]
     static extern IntPtr WTHelperGetProvSignerFromChain(
         IntPtr provData, uint signerIndex, [MarshalAs(UnmanagedType.Bool)] bool counterSigner, uint counterSignerIndex);
 
-    [DllImport("wintrust.dll")]
+    [DllImport("wintrust.dll", ExactSpelling = true)]
     static extern IntPtr WTHelperGetProvCertFromChain(IntPtr signer, uint certIndex);
 }

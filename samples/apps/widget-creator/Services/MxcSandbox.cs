@@ -247,11 +247,19 @@ public sealed class MxcSandbox
 
         using (proc)
         {
-            foreach (var warning in proc.Warnings)
+            // MXC appends to Warnings during the terminal wait/finalization too, so
+            // log the spawn warnings now and any later ones once the wait completes.
+            var warningsSeen = 0;
+            void EmitNewWarnings()
             {
-                SessionLog.Write($"[Sandbox] MXC warning: {warning}");
-                Sink($"warning: {warning}");
+                var warnings = proc.Warnings;
+                for (; warningsSeen < warnings.Count; warningsSeen++)
+                {
+                    SessionLog.Write($"[Sandbox] MXC warning: {warnings[warningsSeen]}");
+                    Sink($"warning: {warnings[warningsSeen]}");
+                }
             }
+            EmitNewWarnings();
 
             var pumps = new OutputPumps(proc, Sink);
 
@@ -304,6 +312,7 @@ public sealed class MxcSandbox
                 SessionLog.Write("[Sandbox] run cancelled/timed out — killed process tree");
                 verifyCts.Cancel();
                 await pumps.DrainAsync().ConfigureAwait(false);
+                EmitNewWarnings();
                 Sink(TimeoutMarker);
                 try { await verifyTask.ConfigureAwait(false); }
                 catch (OperationCanceledException) { /* verifyCts was cancelled before the check ran */ }
@@ -315,6 +324,7 @@ public sealed class MxcSandbox
             try { await verifyTask.ConfigureAwait(false); }
             catch (OperationCanceledException) { /* verifyCts was cancelled before the check ran */ }
             var streamError = await pumps.DrainAsync().ConfigureAwait(false);
+            EmitNewWarnings();
 
             if (wait.TimedOut)
             {
