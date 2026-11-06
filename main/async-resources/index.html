@@ -3563,7 +3563,12 @@ mechanical steps:</p>
    <code>UseDataSource</code> bridges any <code>IDataSource&lt;T&gt;</code> onto <code>UseInfiniteResource</code>
    using <code>request.ContinuationToken</code> as the cursor. On the initial call,
    <code>options.PageSize</code> takes precedence over <code>request.PageSize</code>; the size is
-   clamped to at least 1 and used for requests, cursors, and row positions.</li>
+   clamped to at least 1 and used for requests, cursors, and row positions.
+   This initial size is retained for the hook's lifetime, including query
+   restarts. To use a different size, remount the calling component by changing
+   its key from the parent, e.g. <code>.WithKey($"tasks:{pageSize}")</code>.
+   Alternatively, increment a parent-owned reset version used by
+   <code>.WithKey($"tasks:{resetVersion}")</code>.</li>
 <li><strong>Read from <code>resource.Items[i]</code>.</strong> The sparse <code>IReadOnlyList&lt;T?&gt;</code> has
    null placeholders for in-flight slots. This replaces <code>cache.PeekItem(i)</code>
    plus the <code>LoadingBlock</code> sentinel.</li>
