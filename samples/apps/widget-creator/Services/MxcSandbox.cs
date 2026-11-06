@@ -100,6 +100,11 @@ public sealed class MxcSandbox
 
     static string? ComputeUnavailableReason()
     {
+        // C-3: bind the SDK to the verified, Microsoft-signed native runtime before
+        // any MXC call can load mxc_ffi into this host.
+        if (MxcNativeRuntime.EnsureVerified() is { } untrusted)
+            return $"the MXC native runtime failed verification ({untrusted})";
+
         try
         {
             var support = MxcPlatform.GetPlatformSupport();
@@ -125,8 +130,10 @@ public sealed class MxcSandbox
     /// null/blank/invalid), then adds the run-specific fields: the command line,
     /// working directory, timeout, and a guaranteed read grant on the app's own
     /// directory so the widget can always launch regardless of the chosen policy.
+    /// <c>PolicyWarning</c> is set when the stored policy could not be applied
+    /// and the default policy replaced it — callers must surface it to the user.
     /// </summary>
-    public static (ContainerRequest Request, string PolicyJson) BuildRequest(
+    public static (ContainerRequest Request, string PolicyJson, string? PolicyWarning) BuildRequest(
         string exePath, string appDir, string? extraArgs = null, int timeoutSeconds = 0,
         string? policyJson = null)
     {
@@ -134,14 +141,16 @@ public sealed class MxcSandbox
         if (!string.IsNullOrWhiteSpace(extraArgs))
             commandLine += " " + extraArgs;
 
+        string? warning = null;
         if (!MxcPolicy.TryParse(policyJson, out var policy, out var error))
         {
+            warning = $"this widget's saved permissions were NOT applied — {error} Running with the default policy below.";
             SessionLog.Write($"[Sandbox] stored policy is invalid ({error}); using the default policy.");
             policy = MxcPolicy.DefaultTemplate();
         }
 
         var timeoutMs = timeoutSeconds <= 0 ? 0u : (uint)timeoutSeconds * 1000; // 0 = run until the window closes
-        return (MxcPolicy.ToContainerRequest(policy, commandLine, appDir, timeoutMs), MxcPolicy.Prettify(policy));
+        return (MxcPolicy.ToContainerRequest(policy, commandLine, appDir, timeoutMs), MxcPolicy.Prettify(policy), warning);
     }
 
     static string Quote(string p) => p.Contains(' ') ? $"\"{p}\"" : p;
@@ -192,9 +201,10 @@ public sealed class MxcSandbox
 
         ContainerRequest request;
         string policyJson;
+        string? policyWarning;
         try
         {
-            (request, policyJson) = BuildRequest(exePath, appDir, extraArgs, timeoutSeconds, policyTemplateJson);
+            (request, policyJson, policyWarning) = BuildRequest(exePath, appDir, extraArgs, timeoutSeconds, policyTemplateJson);
         }
         catch (ArgumentException ex)
         {
@@ -204,6 +214,8 @@ public sealed class MxcSandbox
         SessionLog.Write($"[Sandbox] spawn '{request.Command}' cwd='{appDir}' timeoutMs={request.TimeoutMs?.ToString() ?? "none"}");
         SessionLog.Write($"[Sandbox] policy: {policyJson}");
         Sink($"$ mxc processcontainer {request.Command}");
+        if (policyWarning is not null)
+            Sink($"warning: {policyWarning}");
         Sink(policyJson);
 
         // C-2 (fail closed, opt-in): when the deployment requires the strong
@@ -241,8 +253,7 @@ public sealed class MxcSandbox
                 Sink($"warning: {warning}");
             }
 
-            var stdout = PumpAsync(proc.StandardOutput, Sink);
-            var stderr = PumpAsync(proc.StandardError, Sink);
+            var pumps = new OutputPumps(proc, Sink);
 
             // C-2 (out-of-band verification): independently confirm the widget
             // really is contained. Inspect the contained process's token from the
@@ -267,6 +278,7 @@ public sealed class MxcSandbox
                             + $"({tok.Detail}) and was terminated. This is a sandbox/host problem, not a widget bug.";
                         SessionLog.Write($"[Sandbox] CONTAINMENT FAILURE — widget uncontained ({tok.Detail}); killing process tree.");
                         Sink($"error: {containmentError}");
+                        pumps.MarkInterrupted();
                         TryKill(proc);
                     }
                     else if (tok.ConfirmedContained)
@@ -287,10 +299,11 @@ public sealed class MxcSandbox
             }
             catch (OperationCanceledException)
             {
+                pumps.MarkInterrupted();
                 TryKill(proc);
                 SessionLog.Write("[Sandbox] run cancelled/timed out — killed process tree");
                 verifyCts.Cancel();
-                await DrainAsync(proc, stdout, stderr).ConfigureAwait(false);
+                await pumps.DrainAsync().ConfigureAwait(false);
                 Sink(TimeoutMarker);
                 try { await verifyTask.ConfigureAwait(false); }
                 catch (OperationCanceledException) { /* verifyCts was cancelled before the check ran */ }
@@ -301,7 +314,7 @@ public sealed class MxcSandbox
             verifyCts.Cancel();
             try { await verifyTask.ConfigureAwait(false); }
             catch (OperationCanceledException) { /* verifyCts was cancelled before the check ran */ }
-            await DrainAsync(proc, stdout, stderr).ConfigureAwait(false);
+            var streamError = await pumps.DrainAsync().ConfigureAwait(false);
 
             if (wait.TimedOut)
             {
@@ -310,9 +323,20 @@ public sealed class MxcSandbox
             }
 
             SessionLog.Write($"[Sandbox] contained process exited code={wait.ExitCode} timedOut={wait.TimedOut}");
-            return new SandboxResult(wait.ExitCode, Captured(),
-                LaunchError: containmentFailed ? containmentError : null,
-                ContainmentFailed: containmentFailed);
+            if (containmentFailed)
+                return new SandboxResult(wait.ExitCode, Captured(), LaunchError: containmentError, ContainmentFailed: true);
+
+            // The widget's output was cut short by a host-side reader failure: the log
+            // is incomplete, so report a sandbox error instead of judging the widget.
+            if (streamError is not null)
+            {
+                var message = $"MXC failed while reading the widget's output ({streamError}); the log is incomplete.";
+                SessionLog.Write($"[Sandbox] {message}");
+                Sink($"error: {message}");
+                return new SandboxResult(wait.ExitCode, Captured(), LaunchError: message);
+            }
+
+            return new SandboxResult(wait.ExitCode, Captured());
         }
     }
 
@@ -322,36 +346,79 @@ public sealed class MxcSandbox
         catch (Exception ex) when (ex is MxcException or ObjectDisposedException) { /* already gone */ }
     }
 
-    static async Task PumpAsync(Stream? stream, Action<string> sink)
-    {
-        if (stream is null) return;
-        try
-        {
-            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-            while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
-                sink(line);
-        }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
-        {
-            // Stream closed (process gone or reader interrupted) — nothing more to read.
-        }
-    }
-
     /// <summary>
-    /// Let the output pumps finish after exit. A grandchild that inherited the
-    /// pipes can keep them open, so stop waiting after a short grace period and
-    /// interrupt the readers.
+    /// Streams the contained process's stdout/stderr to the log. Reader errors
+    /// caused by teardown (pipe closed at exit, our closers, kill/timeout) are
+    /// expected; any other reader failure is reported by <see cref="DrainAsync"/>.
     /// </summary>
-    static async Task DrainAsync(MxcProcess proc, Task stdout, Task stderr)
+    sealed class OutputPumps
     {
-        var pumps = Task.WhenAll(stdout, stderr);
-        if (await Task.WhenAny(pumps, Task.Delay(TimeSpan.FromSeconds(3))).ConfigureAwait(false) != pumps)
+        readonly MxcProcess _proc;
+        readonly Task<string?> _stdout;
+        readonly Task<string?> _stderr;
+        volatile bool _interrupted;
+
+        public OutputPumps(MxcProcess proc, Action<string> sink)
         {
-            try { proc.StandardOutputCloser?.Close(); }
-            catch (Exception ex) when (ex is MxcException or IOException or ObjectDisposedException) { /* already closed */ }
-            try { proc.StandardErrorCloser?.Close(); }
-            catch (Exception ex) when (ex is MxcException or IOException or ObjectDisposedException) { /* already closed */ }
-            await Task.WhenAny(pumps, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false);
+            _proc = proc;
+            _stdout = PumpAsync(proc.StandardOutput, sink);
+            _stderr = PumpAsync(proc.StandardError, sink);
+        }
+
+        /// <summary>The host is tearing the process down; reader errors from here on are expected.</summary>
+        public void MarkInterrupted() => _interrupted = true;
+
+        async Task<string?> PumpAsync(Stream? stream, Action<string> sink)
+        {
+            if (stream is null) return null;
+            try
+            {
+                using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
+                    sink(line);
+                return null;
+            }
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or OperationCanceledException)
+            {
+                return null; // pipe closed (process gone) or reader interrupted
+            }
+            catch (MxcException ex) when (!_interrupted)
+            {
+                return Describe(ex);
+            }
+            catch (MxcException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Let the pumps finish after exit. A grandchild that inherited the pipes
+        /// can keep them open, so stop waiting after a short grace period and
+        /// interrupt the readers. Returns an unexpected reader failure, if any.
+        /// </summary>
+        public async Task<string?> DrainAsync()
+        {
+            var pumps = Task.WhenAll(_stdout, _stderr);
+            if (await Task.WhenAny(pumps, Task.Delay(TimeSpan.FromSeconds(3))).ConfigureAwait(false) != pumps)
+            {
+                _interrupted = true;
+                try { _proc.StandardOutputCloser?.Close(); }
+                catch (Exception ex) when (ex is MxcException or IOException or ObjectDisposedException) { /* already closed */ }
+                try { _proc.StandardErrorCloser?.Close(); }
+                catch (Exception ex) when (ex is MxcException or IOException or ObjectDisposedException) { /* already closed */ }
+                await Task.WhenAny(pumps, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false);
+            }
+
+            var errors = new List<string>();
+            foreach (var pump in new[] { _stdout, _stderr })
+            {
+                if (pump.IsFaulted && !_interrupted)
+                    errors.Add(pump.Exception!.GetBaseException().Message);
+                else if (pump.IsCompletedSuccessfully && pump.Result is { } error)
+                    errors.Add(error);
+            }
+            return errors.Count == 0 ? null : string.Join("; ", errors);
         }
     }
 }

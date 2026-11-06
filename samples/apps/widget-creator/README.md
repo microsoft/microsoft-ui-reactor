@@ -190,8 +190,13 @@ closed like the MXC contract — unknown fields are rejected — and policies sa
 older Widget Creator builds (the pre-1.0 `wxc-exec` `ContainerConfig` shape) are
 migrated automatically when read. A legacy policy that uses settings MXC 1.0
 can't express (for example `network.blockedHosts` or `leastPrivilege: true`) is
-not migrated — it is reported as invalid and the widget runs with the default
-least-privilege policy until you review and save it again.
+not migrated — it is reported as invalid, the run log warns that the saved
+permissions were not applied, and the widget runs with the default policy until
+you review and save it again. Advanced network rules are validated with MXC 1.0's
+syntax before they can be saved: CIDRs must parse (host bits zero, each `except`
+inside its `cidr`), `endPort` needs a `port` no larger than it, and ICMP
+selectors take no ports. Choosing **No network access** also clears any
+`egress.allow` / `egress.deny` rules, which MXC's AppContainer fallback rejects.
 
 MXC picks the strongest isolation tier the host supports (BaseContainer, then
 AppContainer + BFS, then AppContainer + DACL) and enforces the grants itself. The
@@ -206,11 +211,17 @@ app never edits ACLs.
 - **Strict mode** — set `WIDGET_CREATOR_REQUIRE_BASE_CONTAINER=1` to refuse to
   launch unless `MxcContainer.Probe` confirms the strong **BaseContainer** tier for
   the request, instead of accepting the AppContainer fallback.
-- **Runtime integrity** — the MXC runtime ships in the Microsoft-signed
+- **Runtime integrity (C-3)** — the MXC runtime ships in the Microsoft-signed
   `Microsoft.Mxc.Sdk` package (author-signed by Microsoft and countersigned by
-  nuget.org; NuGet verifies both on restore), so there are no vendored binaries
-  or hash pins to maintain. The native runtime version is logged at startup and
-  shown in the title bar.
+  nuget.org; NuGet verifies both on restore). Package signing doesn't cover the
+  deployed files at run time, and the SDK would otherwise also honor an
+  `MXC_FFI_DIR` override, so at startup — before any MXC call — the host claims
+  the SDK's native-library resolver, opens the packaged `mxc_ffi.dll` and its
+  companion natives read-share-only (they can't be swapped afterwards), requires a
+  valid Authenticode signature from Microsoft Corporation chaining to a Microsoft
+  root, and loads exactly that file. Any failure leaves the sandbox unavailable;
+  there are no vendored binaries or hash pins to maintain. The native runtime
+  version is logged at startup and shown in the title bar.
 
 ## Layout
 

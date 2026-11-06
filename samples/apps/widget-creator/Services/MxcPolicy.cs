@@ -134,7 +134,8 @@ public static class MxcPolicy
                     // Fail closed: dropping these would silently widen access.
                     error = "This policy was saved by an older Widget Creator and uses settings MXC 1.0 can't "
                         + $"express ({string.Join(", ", unsupported)}). Review and save it again (or reset it); "
-                        + "until then the widget runs with the default least-privilege policy.";
+                        + "until then the widget runs with the default policy instead (no network, no file "
+                        + "access beyond its own folder) and these settings are NOT applied.";
                     return false;
                 }
                 parsed = MigrateLegacy(parsed);
@@ -332,7 +333,9 @@ public static class MxcPolicy
 
     /// <summary>
     /// <see cref="NetworkAccess.None"/> also drops advanced <c>egress.allow</c>
-    /// rules so "no network" really means no outbound access.
+    /// and <c>egress.deny</c> rules: "no network" then really means no outbound
+    /// access, a deny list is redundant once the default is deny, and MXC's
+    /// AppContainer fallback tier rejects any explicit egress rule.
     /// <see cref="NetworkAccess.Custom"/> is not a settable choice and is ignored.
     /// </summary>
     public static string WithNetwork(string json, NetworkAccess access) => access switch
@@ -344,6 +347,7 @@ public static class MxcPolicy
             var egress = Obj(network, "egress");
             egress["default"] = "deny";
             egress.Remove("allow");
+            egress.Remove("deny");
             // Inbound/LAN access without outbound access is a combination MXC's
             // AppContainer fallback tier rejects, so "no network" closes it too.
             var ingress = Obj(network, "ingress");
@@ -546,29 +550,106 @@ public static class MxcPolicy
             foreach (var key in r.Select(kv => kv.Key).Where(k => k is not ("to" or "ports")))
                 errors.Add($"Unknown field '{path}[].{key}'.");
             if (r["to"] is { } to && (to is not JsonArray peers || peers.Any(p => p is not JsonObject po || !IsValidPeer(po))))
-                errors.Add($"'{path}[].to' must be an array of {{ \"cidr\": \"...\", \"except\": [\"...\"] }} entries.");
+                errors.Add($"'{path}[].to' must be an array of {{ \"cidr\": \"...\", \"except\": [\"...\"] }} entries "
+                    + "with valid CIDRs (e.g. \"203.0.113.0/24\"; host bits zero), each 'except' inside its 'cidr'.");
             if (r["ports"] is { } ports && (ports is not JsonArray portList ||
                 portList.Any(p => p is not JsonObject po || !IsValidPort(po))))
                 errors.Add($"'{path}[].ports' must be an array of {{ \"protocol\": tcp|udp|icmp|any, "
-                    + "\"port\": 1-65535, \"endPort\": 1-65535 } entries.");
+                    + "\"port\": 1-65535, \"endPort\": port-65535 } entries (endPort needs port; icmp takes no ports).");
         }
     }
 
-    static bool IsValidPeer(JsonObject p) =>
-        p.All(kv => kv.Key is "cidr" or "except")
-        && TryGetString(p["cidr"], out var cidr) && !string.IsNullOrWhiteSpace(cidr)
-        && (p["except"] is null || (p["except"] is JsonArray ex
-            && ex.All(e => TryGetString(e, out var s) && !string.IsNullOrWhiteSpace(s))));
+    static bool IsValidPeer(JsonObject p)
+    {
+        if (!p.All(kv => kv.Key is "cidr" or "except")) return false;
+        if (!TryGetString(p["cidr"], out var cidrText) || !TryParseCidr(cidrText, out var cidr)) return false;
+        if (p["except"] is null) return true;
+        return p["except"] is JsonArray ex
+            && ex.All(e => TryGetString(e, out var s) && TryParseCidr(s, out var excluded) && Contains(cidr, excluded));
+    }
 
+    /// <summary>
+    /// Parse a CIDR the way MXC 1.0 does (Rust <c>cidr::IpCidr</c>): a strict
+    /// dotted-quad IPv4 or an IPv6 address, an optional <c>/prefix</c> within the
+    /// family's width (a bare address is a single host), and no host bits set.
+    /// </summary>
+    internal static bool TryParseCidr(string text, out (byte[] Network, int Prefix) cidr)
+    {
+        cidr = default;
+        var slash = text.IndexOf('/');
+        if (!TryParseAddress(slash < 0 ? text : text[..slash], out var bytes)) return false;
+        var width = bytes.Length * 8;
+        var prefix = width;
+        if (slash >= 0)
+        {
+            var prefixText = text.AsSpan(slash + 1);
+            if (prefixText.Length is 0 or > 3 || !int.TryParse(prefixText, System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out prefix) || prefix > width)
+                return false;
+        }
+        for (var bit = prefix; bit < width; bit++)
+            if ((bytes[bit / 8] & (0x80 >> (bit % 8))) != 0)
+                return false;
+        cidr = (bytes, prefix);
+        return true;
+    }
+
+    static bool TryParseAddress(string text, out byte[] bytes)
+    {
+        bytes = [];
+        if (text.Contains(':'))
+        {
+            if (text.Contains('%') || !System.Net.IPAddress.TryParse(text, out var v6)
+                || v6.AddressFamily != System.Net.Sockets.AddressFamily.InterNetworkV6)
+                return false;
+            bytes = v6.GetAddressBytes();
+            return true;
+        }
+        var octets = text.Split('.');
+        if (octets.Length != 4) return false;
+        var result = new byte[4];
+        for (var i = 0; i < 4; i++)
+        {
+            var o = octets[i];
+            if (o.Length is 0 or > 3 || !o.All(char.IsAsciiDigit) || (o.Length > 1 && o[0] == '0')) return false;
+            var value = int.Parse(o, System.Globalization.CultureInfo.InvariantCulture);
+            if (value > 255) return false;
+            result[i] = (byte)value;
+        }
+        bytes = result;
+        return true;
+    }
+
+    static bool Contains((byte[] Network, int Prefix) outer, (byte[] Network, int Prefix) inner)
+    {
+        if (outer.Network.Length != inner.Network.Length || inner.Prefix < outer.Prefix) return false;
+        for (var bit = 0; bit < outer.Prefix; bit++)
+        {
+            var mask = 0x80 >> (bit % 8);
+            if ((outer.Network[bit / 8] & mask) != (inner.Network[bit / 8] & mask)) return false;
+        }
+        return true;
+    }
+
+    /// <summary>MXC 1.0 port selector rules: ports 1-65535, <c>endPort</c> needs and
+    /// is ≥ <c>port</c>, and ICMP selectors carry no ports.</summary>
     static bool IsValidPort(JsonObject p)
     {
         if (p.Any(kv => kv.Key is not ("protocol" or "port" or "endPort"))) return false;
+        var protocol = "any";
         if (p["protocol"] is { } proto &&
-            (!TryGetString(proto, out var s) || s is not ("tcp" or "udp" or "icmp" or "any")))
+            (!TryGetString(proto, out protocol) || protocol is not ("tcp" or "udp" or "icmp" or "any")))
             return false;
+        int? port = null, endPort = null;
         foreach (var key in new[] { "port", "endPort" })
-            if (p[key] is { } n && (n is not JsonValue v || !v.TryGetValue<int>(out var i) || i is < 1 or > 65535))
+        {
+            if (p[key] is not { } n) continue;
+            if (n is not JsonValue v || !v.TryGetValue<int>(out var i) || i is < 1 or > 65535)
                 return false;
+            if (key == "port") port = i; else endPort = i;
+        }
+        if (protocol == "icmp" && (port is not null || endPort is not null)) return false;
+        if (endPort is not null && (port is null || endPort < port)) return false;
         return true;
     }
 
@@ -596,9 +677,9 @@ public static class MxcPolicy
             ["filesystem"] = [ReadWriteKind, ReadOnlyKind, DeniedKind],
         };
         var result = legacy.Select(kv => kv.Key).Where(k => !supported[""].Contains(k)).ToList();
-        foreach (var section in supported.Keys.Where(k => k.Length > 0))
-            if (legacy[section] is JsonObject o)
-                result.AddRange(o.Select(kv => kv.Key).Where(k => !supported[section].Contains(k)).Select(k => $"{section}.{k}"));
+        foreach (var section in supported.Keys.Where(k => k.Length > 0 && legacy[k] is JsonObject))
+            result.AddRange(legacy[section]!.AsObject().Select(kv => kv.Key)
+                .Where(k => !supported[section].Contains(k)).Select(k => $"{section}.{k}"));
         if (GetBool(Section(legacy, "appContainer"), "leastPrivilege", false))
             result.Add("appContainer.leastPrivilege");
         return result;
