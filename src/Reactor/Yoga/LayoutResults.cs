@@ -16,6 +16,10 @@ internal struct CachedMeasurement
     public SizingMode HeightSizingMode = SizingMode.MaxContent;
     public float ComputedWidth = -1;
     public float ComputedHeight = -1;
+    // Upstream facebook/yoga#2042: the owner size the entry was computed against,
+    // for nodes whose percentages resolve against it.
+    public float OwnerWidth = -1;
+    public float OwnerHeight = -1;
 
     public CachedMeasurement() { }
 
@@ -32,6 +36,10 @@ internal struct CachedMeasurement
             isEqual = isEqual && ComputedWidth == other.ComputedWidth;
         if (!YogaFloat.IsUndefined(ComputedHeight) || !YogaFloat.IsUndefined(other.ComputedHeight))
             isEqual = isEqual && ComputedHeight == other.ComputedHeight;
+        if (!YogaFloat.IsUndefined(OwnerWidth) || !YogaFloat.IsUndefined(other.OwnerWidth))
+            isEqual = isEqual && OwnerWidth == other.OwnerWidth;
+        if (!YogaFloat.IsUndefined(OwnerHeight) || !YogaFloat.IsUndefined(other.OwnerHeight))
+            isEqual = isEqual && OwnerHeight == other.OwnerHeight;
 
         return isEqual;
     }
@@ -46,6 +54,19 @@ internal sealed class LayoutResults
 
     public uint ComputedFlexBasisGeneration;
     public float ComputedFlexBasis = float.NaN;
+
+    // Upstream CSS Flexbox §4.5 automatic minimum sizing (facebook/yoga#1968):
+    // per-item main-axis floor set by ResolveFlexibleLength when the config does
+    // not carry MinSizeUndefinedInsteadOfAuto; NaN means "no auto-min applies".
+    public float ComputedAutoMinMainSize = float.NaN;
+
+    // Memoized §4.5 min-content sizes per dimension (facebook/yoga#2036), valid
+    // only during layout generation MinContentGeneration[axis]. A leaf stores its
+    // measured min-content without padding and border; a container stores its
+    // full min-content, which depends on MinContentOwnerWidth[axis].
+    public UInt2 MinContentGeneration;
+    public Float2 MinContentOwnerWidth;
+    public Float2 MinContent;
 
     // Cache invalidation tracking
     public uint GenerationCount;
@@ -93,6 +114,8 @@ internal sealed class LayoutResults
         _dimensions[0] = float.NaN; _dimensions[1] = float.NaN;
         _measuredDimensions[0] = float.NaN; _measuredDimensions[1] = float.NaN;
         _rawDimensions[0] = float.NaN; _rawDimensions[1] = float.NaN;
+        MinContentOwnerWidth[0] = float.NaN; MinContentOwnerWidth[1] = float.NaN;
+        MinContent[0] = float.NaN; MinContent[1] = float.NaN;
     }
 
     public FlexLayoutDirection Direction
@@ -178,6 +201,13 @@ internal struct Float2
 internal struct Float4
 {
     private float _element0;
+}
+
+/// <summary>Inline buffer of 2 uints (YogaDimension: Width=0, Height=1).</summary>
+[global::System.Runtime.CompilerServices.InlineArray(2)]
+internal struct UInt2
+{
+    private uint _element0;
 }
 
 /// <summary>Inline buffer of <see cref="LayoutResults.MaxCachedMeasurements"/> (8) cached measurements.</summary>
