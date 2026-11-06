@@ -1,11 +1,15 @@
+using System.Diagnostics.Tracing;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Data;
 using Microsoft.UI.Reactor.Data.Providers;
 using Microsoft.UI.Reactor.Hooks;
+using Microsoft.UI.Reactor.Tests.Diagnostics;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.Core;
 
+[Collection("DataSourceDiagnostics")]
 public class DataSourceResourceTests
 {
     private sealed record Row(int Id);
@@ -284,6 +288,54 @@ public class DataSourceResourceTests
             now += TimeSpan.FromTicks(1);
             cache.EvictNow();
             Assert.False(cache.TryGet<Page<Row, string>>(pageKey, out _));
+        }
+        finally { ctx.RunCleanups(); }
+    }
+
+    [Theory]
+    [InlineData(true)]
+#if !DEBUG
+    // The Debug mirror keeps warnings enabled even without an event listener.
+    [InlineData(false)]
+#endif
+    public void UseDataSource_Reports_PageSize_Changes_Once(bool listenInitially)
+    {
+        using var cache = new QueryCache();
+        var source = new ListDataSource<Row>(Enumerable.Range(0, 40).Select(id => new Row(id)), row => row.Id);
+        var ctx = new RenderContext();
+
+        void Render(int pageSize, string prefix = "first")
+        {
+            ctx.BeginRender(() => { });
+            ctx.UseDataSource(source, new DataRequest { PageSize = pageSize }, cache,
+                new InfiniteResourceOptions(PageSize: pageSize, CacheKeyPrefix: prefix), new InlineDispatcher());
+            ctx.FlushEffects();
+        }
+
+        using var initialCapture = listenInitially
+            ? ReactorTraceCollector.Capture(EventLevel.Warning, ReactorEventSource.Keywords.Errors) : null;
+        if (!listenInitially)
+            Assert.False(DiagnosticLog.IsWarningEnabled, "The delayed-listener test requires warnings to be disabled initially.");
+
+        try
+        {
+            Render(10);
+            if (initialCapture is not null)
+                Assert.DoesNotContain(initialCapture.ByName(nameof(ReactorEventSource.Warning)),
+                    e => (e.Payload[1] as string) == "UseDataSource.PageSize");
+            Render(20);
+
+            using var lateCapture = listenInitially ? null
+                : ReactorTraceCollector.Capture(EventLevel.Warning, ReactorEventSource.Keywords.Errors);
+            Render(20);
+            Render(30);
+            Render(30, "second");
+
+            var warning = Assert.Single((initialCapture ?? lateCapture!).ByName(nameof(ReactorEventSource.Warning)),
+                e => (e.Payload[1] as string) == "UseDataSource.PageSize");
+            Assert.Equal(LogCategory.Reactor.ToString(), warning.Payload[0]);
+            Assert.Equal(EventLevel.Warning, warning.Level);
+            Assert.Contains("retains 10", Assert.IsType<string>(warning.Payload[2]));
         }
         finally { ctx.RunCleanups(); }
     }

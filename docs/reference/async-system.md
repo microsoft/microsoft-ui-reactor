@@ -734,7 +734,7 @@ page slots, so a later write can replace an earlier query's pages even within
 
 ### 5.9 `IDataSource<T>` adapter
 
-`DataSourceResourceExtensions.UseDataSource` (`DataSourceResourceExtensions.cs:27-71`)
+`DataSourceResourceExtensions.UseDataSource` (`DataSourceResourceExtensions.cs:28-73`)
 is a thin hook that projects any `IDataSource<T>` into `UseInfiniteResource`:
 
 ```csharp
@@ -767,8 +767,11 @@ Later PageSize changes do not change the request size, cursor offsets, or row
 positions. To use a different size, remount the calling component by changing
 its key from the parent, e.g. `.WithKey($"tasks:{pageSize}")`. Alternatively,
 increment a parent-owned reset version used by `.WithKey($"tasks:{resetVersion}")`.
-A Debug-only diagnostic, omitted from the example above, reports an ignored
-size change once per hook.
+The diagnostic code is omitted above. When warning diagnostics are enabled,
+an ignored size change emits a `ReactorEventSource.Warning` event under
+`Keywords.Errors`, with operation `UseDataSource.PageSize`, once per hook.
+The event is available in Release builds of Reactor. Debug builds of Reactor
+also mirror the warning to `Debug.WriteLine`.
 
 Deps include the source *identity* plus the request's sort/filter/search —
 any change restarts pagination, which is the correct behavior for an

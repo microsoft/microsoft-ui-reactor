@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Hooks;
 
 namespace Microsoft.UI.Reactor.Data;
@@ -41,16 +42,17 @@ public static class DataSourceResourceExtensions
         // The resource retains its initial options, so requests and cursors must retain its page size.
         var sizeRef = ctx.UseRef<int?>(null);
         int pageSize = sizeRef.Current ??= Math.Max(1, options?.PageSize ?? request.PageSize);
-#if DEBUG
         var warnedRef = ctx.UseRef(false);
-        if (!warnedRef.Current && Math.Max(1, options?.PageSize ?? request.PageSize) != pageSize)
+        // Keep the warning available if a diagnostic consumer is enabled on a later render.
+        if (!warnedRef.Current
+            && Math.Max(1, options?.PageSize ?? request.PageSize) != pageSize
+            && DiagnosticLog.IsWarningEnabled)
         {
             warnedRef.Current = true;
-            global::System.Diagnostics.Debug.WriteLine(
-                $"[Reactor.UseDataSource] PageSize changes are ignored; this hook retains {pageSize}. " +
+            DiagnosticLog.Warning(LogCategory.Reactor, "UseDataSource.PageSize",
+                $"PageSize changes are ignored; this hook retains {pageSize}. " +
                 "To use a different size, remount the calling component by changing its key from the parent.");
         }
-#endif
         // Use the same size for request batches, offset cursors, and resource row positions.
         options ??= InfiniteResourceOptions.Default;
         if (options.PageSize != pageSize)
