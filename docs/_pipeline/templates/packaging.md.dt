@@ -314,8 +314,8 @@ directly.
 `Condition="'$(Configuration)' == 'Debug'"` ItemGroup that adds both
 the package and `RuntimeHostConfigurationOption
 Reactor.DevtoolsSupport=true`). That makes devtools available without
-turning them on: the default launch profile passes no arguments, so run
-`dotnet run -- --devtools app` to light up the
+turning them on: the default launch profile passes no arguments, so launch
+with `dotnet run -- --devtools app` and render `DevtoolsMenu(...)` to get the
 [in-app dev menu](dev-tooling.md#in-app-dev-menu) (see
 [Running with devtools](getting-started.md#running-with-devtools)).
 The Reactor Visual
