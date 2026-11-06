@@ -132,8 +132,8 @@ public static class MxcPolicy
                 if (UnsupportedLegacyFields(parsed) is { Count: > 0 } unsupported)
                 {
                     // Fail closed: dropping these would silently widen access.
-                    error = "This policy was saved by an older Widget Creator and uses settings MXC 1.0 can't "
-                        + $"express ({string.Join(", ", unsupported)}). Review and save it again (or reset it); "
+                    error = "This policy was saved by an older Widget Creator and has settings that can't be "
+                        + $"migrated to MXC 1.0 ({string.Join(", ", unsupported)}). Review and save it again (or reset it); "
                         + "until then the widget runs with the default policy instead (no network, no file "
                         + "access beyond its own folder) and these settings are NOT applied.";
                     return false;
@@ -686,8 +686,35 @@ public static class MxcPolicy
                 .Where(k => !supported[section].Contains(k)).Select(k => $"{section}.{k}"));
         if (GetBool(Section(legacy, "appContainer"), "leastPrivilege", false))
             result.Add("appContainer.leastPrivilege");
+
+        // Supported but malformed fields can't be migrated faithfully either:
+        // skipping e.g. a malformed deniedPaths or ui.disable would keep the
+        // grants while silently losing the denial, so they fail closed too.
+        result.AddRange(supported.Keys.Where(k => k.Length > 0 && legacy.ContainsKey(k) && legacy[k] is not JsonObject)
+            .Select(k => $"{k} (not an object)"));
+        (string Section, string Key, Func<JsonNode?, bool> IsValid)[] shapes =
+        [
+            ("filesystem", ReadWriteKind, IsStringArray),
+            ("filesystem", ReadOnlyKind, IsStringArray),
+            ("filesystem", DeniedKind, IsStringArray),
+            ("ui", "disable", IsBoolValue),
+            ("ui", "injection", IsBoolValue),
+            ("ui", "clipboard", n => TryGetString(n, out var c) && c is "none" or "read" or "write" or "readwrite" or "all"),
+            ("appContainer", "capabilities", IsStringArray),
+            ("appContainer", "leastPrivilege", IsBoolValue),
+            ("network", "defaultPolicy", n => TryGetString(n, out _)),
+            ("network", "enforcementMode", n => TryGetString(n, out _)),
+            ("network", "allowLocalNetwork", IsBoolValue),
+        ];
+        result.AddRange(shapes
+            .Where(f => Section(legacy, f.Section) is { } section && section.ContainsKey(f.Key) && !f.IsValid(section[f.Key]))
+            .Select(f => $"{f.Section}.{f.Key} (unexpected value)"));
         return result;
     }
+
+    static bool IsStringArray(JsonNode? node) => node is JsonArray a && a.All(e => TryGetString(e, out _));
+
+    static bool IsBoolValue(JsonNode? node) => node is JsonValue v && v.TryGetValue<bool>(out _);
 
     /// <summary>
     /// Translate a legacy policy (schema 0.6.0-alpha <c>ContainerConfig</c>) into

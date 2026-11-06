@@ -294,8 +294,10 @@ public sealed class MxcSandbox
                     else
                         SessionLog.Write($"[Sandbox] containment not verified (best-effort) — {tok.Detail}");
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
+                    // Best-effort check: an error means "not verified" (logged), never
+                    // "uncontained", and must not abort the run. Cancellation propagates.
                     SessionLog.Write($"[Sandbox] containment verification error: {ex.Message}");
                 }
             }, verifyCts.Token);

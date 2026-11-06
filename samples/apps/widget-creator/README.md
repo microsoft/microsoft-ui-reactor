@@ -191,8 +191,9 @@ is bidirectional there. Other capabilities can be listed under
 closed like the MXC contract — unknown fields are rejected — and policies saved by
 older Widget Creator builds (the pre-1.0 `wxc-exec` `ContainerConfig` shape) are
 migrated automatically when read. A legacy policy that uses settings MXC 1.0
-can't express (for example `network.blockedHosts` or `leastPrivilege: true`) is
-not migrated — it is reported as invalid, the run log warns that the saved
+can't express (for example `network.blockedHosts` or `leastPrivilege: true`), or
+whose known fields have unexpected values (so a denial such as `deniedPaths` can't
+be silently dropped while its grants carry over), is not migrated — it is reported as invalid, the run log warns that the saved
 permissions were not applied, and the widget runs with the default policy until
 you review and save it again. Advanced network rules are validated with MXC 1.0's
 syntax before they can be saved: CIDRs must parse (host bits zero, each `except`
