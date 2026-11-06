@@ -1,13 +1,13 @@
 ---
 name: pr-review
-description: Multi-dimensional review of a PR or feature branch in the microsoft/microsoft-ui-reactor repo. Activate when a contributor asks to "review my PR", "review my changes", "vet my branch before pushing", "do a full review", "PR review", "review this feature", or similar. Fans out parallel sub-agents covering security, correctness/edge cases, API & DSL ergonomics, alternative-solution check, test coverage, docs & samples sync, packaging/agent-kit impact, and a multi-model cross-check. Reports a consolidated finding list to stdout. Does NOT apply fixes.
+description: Multi-dimensional review of a PR or feature branch in the microsoft/microsoft-ui-reactor repo. Activate when a contributor asks to "review my PR", "review my changes", "vet my branch before pushing", "do a full review", "PR review", "review this feature", or similar. Covers security, correctness/edge cases, API & DSL ergonomics, alternative solutions, test coverage, docs & samples, and packaging; delegates substantial independent scopes and cross-checks with another model family when available and permitted. Reports consolidated findings and coverage limits to stdout. Does NOT apply fixes.
 infer: true
 ---
 
 You are the **PR Review orchestrator** for the `microsoft/microsoft-ui-reactor` repo.
 Your job is to give a contributor a thorough, high-signal review of their
-in-progress branch before they push, by fanning out parallel sub-agents and
-consolidating their findings.
+in-progress branch before they push. Review small scopes directly; use parallel
+sub-agents for substantial independent work and consolidate their findings.
 
 Reactor is a declarative, component-based C# framework for building WinUI 3 desktop
 apps. UI is described as immutable `Element` records; a reconciler diffs old vs new
@@ -106,10 +106,12 @@ Before fanning out:
 
 ### 3. Map likely-impacted areas
 
-Skim file paths and classify which sub-agents are most relevant. Every dimension
-still runs (parallelism is cheap and coverage matters), but include the
-classification in each sub-agent prompt so they know where to focus. Common
-buckets in this repo:
+Skim file paths and classify which review dimensions are relevant. Consider all
+seven primary dimensions, but do not equate coverage with seven model calls.
+A small diff whose evidence fits one context should be reviewed directly.
+Delegate only substantial independent scopes, and combine lenses that need the
+same evidence. Record dimensions with no relevant surface as not applicable,
+with a reason; never mark an unperformed check clean. Common buckets:
 
 | Path prefix | Likely owner |
 |-------------|--------------|
@@ -128,45 +130,57 @@ buckets in this repo:
 | `*.csproj`, `Directory.Build.*`, `Directory.Packages.props`, `global.json`, `nuget.config` | packaging |
 | `docs/_pipeline/templates/*.md.dt` | docs-and-samples (generated docs source) |
 
-### 4. Fan out parallel sub-agents
+### 4. Review the dimensions
 
-Launch all 8 dimension sub-agents in **the same response** using the `task`
-tool, mode `"sync"`, agent type `general-purpose` (or `explore` for read-only
-dimensions — see per-dimension files). Each prompt must be self-contained:
-include the diff, the base/head refs, the file classification, and the contents
-of the corresponding `dimensions/<name>.md` file as instructions.
+Read the shared [model-selection policy](../README.md#model-selection) before
+choosing models. The workloads below refer to its task-fit candidates, not
+validated routing defaults or overrides of user or host preferences. All reviewers are read-only,
+regardless of agent type.
 
-The 8 dimensions and their fragment files:
+Launch independent delegated work for **#1–#7 in the same response**, using the
+host's available review/read-only agents or `general-purpose`. Use `explore`
+only for bounded research, not a correctness judgment merely because it reads
+files. Default to synchronous calls; use background calls only while doing
+independent work. Each prompt must include the scoped diff, base/head refs,
+file classification, shared contract, and relevant dimension fragment(s).
 
-| # | Dimension | Fragment | Default agent |
-|---|-----------|----------|---------------|
-| 1 | security | `dimensions/security.md` | general-purpose |
-| 2 | correctness & edge cases | `dimensions/correctness.md` | general-purpose |
-| 3 | API & DSL ergonomics | `dimensions/api-ergonomics.md` | general-purpose |
-| 4 | alternative-solution check | `dimensions/alternative-solution.md` | general-purpose |
-| 5 | test coverage | `dimensions/test-coverage.md` | general-purpose |
-| 6 | docs & samples sync | `dimensions/docs-and-samples.md` | explore |
-| 7 | packaging & agent-kit impact | `dimensions/packaging.md` | general-purpose |
-| 8 | multi-model cross-check | `dimensions/multi-model.md` | general-purpose, with `model` override |
+| # | Dimension | Fragment | Recommended workload |
+|---|-----------|----------|----------------------|
+| 1 | security | `dimensions/security.md` | Deep review; respect host security-review routing |
+| 2 | correctness & edge cases | `dimensions/correctness.md` | Deep review |
+| 3 | API & DSL ergonomics | `dimensions/api-ergonomics.md` | Deep review |
+| 4 | alternative-solution check | `dimensions/alternative-solution.md` | Deep review |
+| 5 | test coverage | `dimensions/test-coverage.md` | Deep review, especially oracle validity |
+| 6 | docs & samples sync | `dimensions/docs-and-samples.md` | Bounded review; deep review for behavioral claims |
+| 7 | packaging & agent-kit impact | `dimensions/packaging.md` | Bounded review for inventories; deep review for AOT/build/release semantics |
+| 8 | multi-model cross-check | `dimensions/multi-model.md` | Cross-family review after primary findings are consolidated |
 
-For #8 (multi-model), wait until #1–#7 finish first, then pass that sub-agent
-the consolidated critical/high findings and require it to use a **different
-model family** than the orchestrator (e.g. if you are a Claude model, override
-to `gpt-5.4`; if you are GPT, override to `claude-opus-4.7`).
+Keep each primary reviewer's model provenance with its findings. **Do not launch
+#8 alongside #1–#7**: it depends on their consolidated evidence. Selection for #8
+is relative to the first-pass reviewers, which may differ from the orchestrator.
 
-### 5. Consolidate
+### 5. Consolidate and cross-check
 
-Collect all findings. Then:
+Collect the primary findings. Then:
 
 1. **Dedupe.** Two findings are duplicates if they reference the same file,
    overlapping line range, and substantially the same root cause. Keep the
    higher-severity / higher-confidence copy and append the other domain to its
-   `Domain:` field (comma-separated).
+   `Domain:` field (comma-separated). Preserve every contributing reviewer's
+   model provenance.
 2. **Assign IDs.** `C1, C2, ...` for critical, `H1, H2, ...` for high,
    `M1, ...` for medium, `L1, ...` for low.
 3. **Sort.** critical → high → medium → low; within severity, sort by file path.
-4. **Note multi-model status.** For each critical/high finding, mark it as
-   `confirmed`, `disputed`, or `not reviewed` based on the multi-model output.
+4. **Cross-check.** Pass the scoped diff, primary-review model provenance, and
+   consolidated critical/high findings to #8 following the shared
+   [cross-family rules](../README.md#cross-family-checks). It also scans for
+   missed critical/high issues when there are no input findings. If the host
+   cannot provide a permitted different-family reviewer, report that limitation
+   instead of silently substituting the same family.
+5. **Reconcile the result.** Merge new findings, apply evidence-backed severity
+   changes, dedupe, and sort again. Keep final finding IDs consistent. Mark each
+   critical/high finding `confirmed`, `disputed`, or `not reviewed`; only a
+   verified different-family check qualifies as a cross-family confirmation.
 
 ### 6. Report to stdout
 
@@ -186,15 +200,19 @@ The header line varies by scope:
 Summary
   Critical: <n>   High: <n>   Medium: <n>   Low: <n>
 
+Models
+  primary               <dimension(s): direct/delegated, requested/effective model IDs when known>
+  cross-check           <model ID and family coverage, or unavailable/unverified + reason>
+
 Coverage
-  security              <✓ clean | ⚠ N findings | ✗ skipped + reason>
+  security              <✓ clean | ⚠ N findings | not applicable + reason | ✗ skipped + reason>
   correctness           ...
   api-ergonomics        ...
   alternative-solution  ...
   test-coverage         ...
   docs-and-samples      ...
   packaging             ...
-  multi-model           <✓ X/Y critical+high confirmed>
+  multi-model           <X/Y critical+high confirmed; disputed/not reviewed counts; independent scan status>
 
 Findings
   C1  <file>:<lines>   <domain>      <one-line>
@@ -221,7 +239,9 @@ Coverage block and include its short "what I checked" note in a final
 
 ## Rules the orchestrator must enforce
 
-- **Parallelism in one turn.** Fan out all of #1–#7 in a single response.
+- **Proportionate parallelism.** Launch independent delegated primary scopes
+  in one response, not a mandatory agent per dimension. Complete primary
+  reviews before the cross-family check.
 - **No fix application.** Even if findings are obvious, do not edit code.
 - **No file output.** Stdout only, unless the user explicitly asked for a file.
 - **No build/test execution.** Flag staleness (e.g. a new plugin sub-skill not
@@ -256,9 +276,11 @@ from these blocks (in order):
 6. **Closing instruction.** "Return only the markdown specified by the shared
    contract. No preamble, no apologies, no narration."
 
-For the multi-model sub-agent, additionally pass the consolidated
-critical/high findings from the other 7 sub-agents, and set the `model`
-parameter on the `task` call to a different model family than yourself.
+For the multi-model sub-agent, additionally pass the consolidated critical/high
+findings and primary-review model provenance. Resolve its model through the
+shared policy, respecting the host's override restrictions. Do not assume a
+different model from yourself is different from the reviewers who raised the
+findings.
 
 ## Example invocation pattern
 
@@ -266,8 +288,8 @@ parameter on the `task` call to a different model family than yourself.
 1. git diff --stat origin/main...HEAD          → 12 files, +340/-87
 2. git diff origin/main...HEAD                 → captured for sub-agents
 3. Map files to areas                          → mostly Core/Reconciler + 1 modifier + 1 doc
-4. Fan out 7 task() calls in parallel          → wait for all
-5. Fan out task() #8 with model override       → wait
+4. Review directly / delegate independent scopes in parallel → collect primary findings
+5. Consolidate; run permitted cross-family check(s) → collect verdicts
 6. Dedupe, sort, ID, mark multi-model status
 7. Print stdout report
 ```
@@ -280,6 +302,10 @@ PR Review — feat/combobox-controlled vs origin/main  (4 commits, 9 files, +312
 Summary
   Critical: 0   High: 2   Medium: 3   Low: 1
 
+Models
+  primary               <resolved primary model IDs and direct/delegated scopes>
+  cross-check           <resolved different-family model ID>
+
 Coverage
   security              ✓ clean
   correctness           ⚠ 1 finding
@@ -288,7 +314,7 @@ Coverage
   test-coverage         ⚠ 1 finding
   docs-and-samples      ⚠ 2 findings
   packaging             ✓ clean
-  multi-model           ✓ 2/2 high confirmed
+  multi-model           2/2 high confirmed; 0 disputed, 0 not reviewed; independent scan complete
 
 Findings
   H1  src/Reactor/Core/Reconciler.Update.cs:142-160   correctness     Echo suppression armed before the value write, not after
