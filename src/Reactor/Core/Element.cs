@@ -4377,12 +4377,31 @@ public partial record PersonPictureElement() : Element
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("ProfilePicture")]
 public partial record PersonPictureElement
 {
+    // Issue #1460: a null, empty, malformed, or relative value (WinRT image sources need
+    // an absolute URI) clears the picture so the control falls back to initials/glyph,
+    // instead of throwing mid-reconcile or leaving a stale image from a prior render.
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<PersonPictureElement, WinUI.PersonPicture> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<PersonPictureElement, WinUI.PersonPicture> d)
-        => d.OneWayConditional<string>(
-            static e => e.ProfilePicture!,
-            static (c, v) => c.ProfilePicture = new global::Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new global::System.Uri(v, global::System.UriKind.RelativeOrAbsolute)),
-            static e => e.ProfilePicture is not null);
+        => d.OneWay<string?>(
+            static e => e.ProfilePicture,
+            static (c, v) =>
+            {
+                if (TryParseProfilePictureUri(v, out var uri))
+                {
+                    c.ProfilePicture = new global::Microsoft.UI.Xaml.Media.Imaging.BitmapImage(uri);
+                }
+                else if (!ReferenceEquals(c.ReadLocalValue(WinUI.PersonPicture.ProfilePictureProperty), DependencyProperty.UnsetValue))
+                {
+                    // Only clear an existing local value — a fresh control has nothing to reset.
+                    c.ClearValue(WinUI.PersonPicture.ProfilePictureProperty);
+                }
+            });
+
+    internal static bool TryParseProfilePictureUri(string? value, [NotNullWhen(true)] out Uri? uri)
+    {
+        uri = null;
+        return !string.IsNullOrWhiteSpace(value) && Uri.TryCreate(value, UriKind.Absolute, out uri);
+    }
 }
 
 // Spec 058 §15 (P5.16) — Source auto-maps but all 4 events are bespoke typed-arg

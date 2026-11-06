@@ -456,6 +456,7 @@ PathElement.StrokeStartLineCap(PenLineCap cap) → PathElement
 PathElement.StrokeThickness(double thickness) → PathElement
 PersonPictureElement.DisplayName(string name) → PersonPictureElement
 PersonPictureElement.Initials(string initials) → PersonPictureElement
+PersonPictureElement.ProfilePicture(string uri) → PersonPictureElement
 PersonPictureElement.Set(Action<PersonPicture> configure) → PersonPictureElement
 PipsPagerElement.MaxVisiblePips(int max) → PipsPagerElement
 PipsPagerElement.NextButtonVisibility(PipsPagerButtonVisibility visibility) → PipsPagerElement

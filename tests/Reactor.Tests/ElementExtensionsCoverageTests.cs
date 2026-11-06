@@ -464,6 +464,37 @@ public class ElementExtensionsCoverageTests
     }
 
     [Fact]
+    public void PersonPicture_ProfilePicture()
+    {
+        const string uri = "https://learn.microsoft.com/windows/uwp/contacts-and-calendar/images/shoulder-tap-static-payload.png";
+        var el = PersonPicture().DisplayName("Jane Doe").ProfilePicture(uri);
+        Assert.Equal(uri, el.ProfilePicture);
+        Assert.Equal("Jane Doe", el.DisplayName);
+        Assert.Null(el.ProfilePicture(null).ProfilePicture);
+    }
+
+    [Theory]
+    [InlineData("https://example.com/avatar.png")]
+    [InlineData("ms-appx:///Assets/avatar.png")]
+    public void PersonPicture_ProfilePictureUri_AcceptsAbsolute(string value)
+    {
+        Assert.True(PersonPictureElement.TryParseProfilePictureUri(value, out var uri));
+        Assert.Equal(new global::System.Uri(value), uri);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("avatar.png")]
+    [InlineData("http://[not a uri")]
+    public void PersonPicture_ProfilePictureUri_RejectsMissingRelativeOrMalformed(string? value)
+    {
+        Assert.False(PersonPictureElement.TryParseProfilePictureUri(value, out var uri));
+        Assert.Null(uri);
+    }
+
+    [Fact]
     public void ListView_GridView_SelectionMode()
     {
         var lv = ListView().SelectionMode(ListViewSelectionMode.Multiple);
