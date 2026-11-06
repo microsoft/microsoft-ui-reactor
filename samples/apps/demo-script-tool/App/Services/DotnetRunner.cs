@@ -69,9 +69,9 @@ public sealed class DotnetRunner
         try
         {
             string args, workdir;
-            // Forward `--devtools` to the spawned step so any Reactor devtools
-            // overlay / debug menu in the generated app is reachable from the
-            // demo. Everything after `--` is passed verbatim to the program,
+            // Forward `--devtools` to the spawned step so a generated app that
+            // references the (deprecated) Devtools package starts under its in-app
+            // preview host. Everything after `--` is passed verbatim to the program,
             // not consumed by `dotnet run`.
             if (multiFile)
             {

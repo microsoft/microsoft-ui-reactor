@@ -36,16 +36,19 @@ Conventions for contributors:
 
 ### Deprecated
 
-- **The `Microsoft.UI.Reactor.Devtools` package and the `Reactor.DevtoolsSupport` switch are
-  deprecated** in favour of the WinUI DevTools in the winapp CLI (`winapp run . --devtools`), which
-  need nothing in the project. A project that references the package gets build warning
-  `REACTOR_DEVTOOLS_001` (suppress with `NoWarn` or
+- **The `Microsoft.UI.Reactor.Devtools` package is deprecated** in favour of the WinUI DevTools in
+  the winapp CLI (`winapp run . --devtools`), which need no package. A project that references it
+  outside Debug gets build warning `REACTOR_DEVTOOLS_001` (suppress with
+  `<NoWarn>$(NoWarn);REACTOR_DEVTOOLS_001</NoWarn>` or
   `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`).
   The package still works and **stays until winapp has its own previewer**: its in-app component
   preview host (`winapp run . --devtools -- --preview <Name>`) and capture server run the VS Code live
   preview panel and the Visual Studio embedded preview, which have no winapp equivalent yet. Keep it
-  (Debug-only) if you use either preview. Reactor keeps its library diagnostics: source
-  mapping, `ReactorTrace` / the `Microsoft-UI-Reactor` EventSource, and hot reload.
+  Debug-only (which does not warn) if you use either preview. The `Reactor.DevtoolsSupport` switch
+  is **not** deprecated: `ReactorDiagnostics` (on by default in Debug) turns it on, and the WinUI
+  DevTools need it to read C# call sites (`ReactorSource`), so a project no longer has to declare it
+  itself. Reactor keeps its library diagnostics: source mapping, `ReactorTrace` / the
+  `Microsoft-UI-Reactor` EventSource, and hot reload.
 
 ### Removed
 
@@ -81,7 +84,8 @@ Conventions for contributors:
 
   **Migrating off the dev menu:** use the DevTools overlay toolbar for inspection. For
   app-specific switches, build an ordinary menu (`DropDownButton("Dev", MenuItems(...))`) inside
-  `#if DEBUG`; turn on the reconcile-highlight overlay with
+  `#if DEBUG`; replace `ctx.UseDevtools()` with `#if DEBUG` (or `ReactorApp.DevtoolsEnabled`, which
+  is now true only under the in-app preview host); turn on the reconcile-highlight overlay with
   `ReactorFeatureFlags.HighlightReconcileChanges = true`; read keyed-list warnings from
   `ReactorDiagnostics.RecentKeyedListWarnings`. **What stays:** the component preview host, the
   preview capture server (`/frame`, `/status`, `/focus`, `/components`, `/preview`,

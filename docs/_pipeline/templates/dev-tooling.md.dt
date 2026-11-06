@@ -32,11 +32,12 @@ intend to ship.
 > your project: `winapp run . --devtools`. Every `mur devtools` command now only
 > prints its winapp equivalent and exits `1`. The in-app MCP server and the in-app
 > dev menu (`DevtoolsMenu`, `UseDevtools`) have been removed too. The
-> `Microsoft.UI.Reactor.Devtools` package and the `Reactor.DevtoolsSupport` switch
-> remain, deprecated, only for the in-app preview host that has no winapp
-> equivalent yet — it powers the component preview (`--preview <Name>`), the VS Code
-> live preview panel and the Visual Studio embedded preview — and stay until winapp
-> has its own previewer. The rest of this page — `dotnet watch`, hot reload, the
+> `Microsoft.UI.Reactor.Devtools` package remains, deprecated, only for the in-app
+> preview host that has no winapp equivalent yet — it powers the component preview
+> (`--preview <Name>`), the VS Code live preview panel and the Visual Studio embedded
+> preview — and stays until winapp has its own previewer. The
+> `Reactor.DevtoolsSupport` switch is not deprecated: `ReactorDiagnostics` turns it
+> on in Debug, and the WinUI DevTools need it for C# call sites. The rest of this page — `dotnet watch`, hot reload, the
 > other `mur` commands — is unaffected.
 
 Reactor's inner loop centers on `dotnet watch` and preview mode: you edit
@@ -158,8 +159,8 @@ examples that fit this shape.
 ## The `mur` CLI
 
 `mur` is Reactor's repo-aware command-line tool. It is the canonical
-entry point for the localization workflow, the devtools server, and a
-handful of repo-maintenance utilities. The subcommands map one-to-one to
+entry point for the localization workflow and a handful of
+repo-maintenance utilities. The subcommands map one-to-one to
 the workflows below.
 
 | Subcommand | Purpose | Common invocation |
@@ -357,9 +358,13 @@ hand.
 
 ### Shipping the devtools switch in Release
 
-`Reactor.DevtoolsSupport` keeps the in-app preview host in the binary. Enable it
-for Debug builds only, so Release/AOT binaries keep the devtools code trimmed.
-The WinUI DevTools need neither the switch nor the package.
+Reference the deprecated `Microsoft.UI.Reactor.Devtools` package in Debug only, so
+Release/AOT binaries keep the preview host trimmed; a reference outside Debug gets
+build warning `REACTOR_DEVTOOLS_001`. The `Reactor.DevtoolsSupport` switch follows
+`ReactorDiagnostics`: on in Debug, and in Release only with
+`-p:ReactorDiagnostics=true`, which embeds diagnostics you should not distribute.
+The WinUI DevTools need no package.
+
 ### Wiring real app state through `UseState` during inner-loop work
 
 `UseState` resets on every hot reload. If your loop depends on a

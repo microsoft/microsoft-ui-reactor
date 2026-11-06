@@ -577,10 +577,11 @@ winapp run . --devtools
 Then inspect the component tree, edit properties and state, or drive the UI with
 `winapp devtools inspect` and `winapp ui ...`; add `--watch` for hot reload with
 automatic re-attach. `dotnet new reactor` also references the deprecated
-`Microsoft.UI.Reactor.Devtools` package and sets the `Reactor.DevtoolsSupport`
-switch in Debug. They keep the in-app preview host that the Visual Studio embedded
-preview and the VS Code live preview use; Release builds drop both, so that code
-trims away. The template's `"<AppName> (Unpackaged, Devtools)"` launch profile
+`Microsoft.UI.Reactor.Devtools` package in Debug. It keeps the in-app preview host
+that the Visual Studio embedded preview and the VS Code live preview use; Release
+builds drop it, so that code trims away. The `Reactor.DevtoolsSupport` switch the
+template also sets is on in Debug anyway (through `ReactorDiagnostics`), and the
+WinUI DevTools need it for C# call sites. The template's `"<AppName> (Unpackaged, Devtools)"` launch profile
 starts the app under that preview host. The in-app dev menu it used to show
 (`DevtoolsMenu`, `UseDevtools`) has been removed. The
 [dev tooling](dev-tooling.md) page covers the full inner loop.

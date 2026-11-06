@@ -14,7 +14,8 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// from the per-control <c>ReferenceEdgeBag</c> state of a <em>live</em> WinUI tree.
 /// The headless <c>ReferenceOverlayTests</c> pin the serialization shape and the
 /// cycle/unresolved logic on hand-built edge lists; these fixtures close the loop
-/// by walking real reconciled controls the way the <c>references</c> MCP tool does.
+/// by walking real reconciled controls the way the preview capture server's <c>/references</c>
+/// endpoint does.
 /// </summary>
 internal static class ReferenceOverlaySelfHostFixtures
 {
@@ -22,7 +23,7 @@ internal static class ReferenceOverlaySelfHostFixtures
         h.FindControl<WinUI.Button>(b => b.Content is string s && s == content);
 
     /// <summary>
-    /// Walks the live window content exactly like the <c>references</c> MCP tool and
+    /// Walks the live window content exactly like the <c>/references</c> endpoint and
     /// returns both the overlay result and the walker (so callers can map a live
     /// control back to the node id the walker assigned it).
     /// </summary>
@@ -139,6 +140,35 @@ internal static class ReferenceOverlaySelfHostFixtures
                     && cycle.NodeIds.Contains(aId)
                     && cycle.NodeIds.Contains(bId);
             }));
+        }
+    }
+
+    /// <summary>
+    /// The overlay's edges are keyed by the walker's node ids, so two controls must never share
+    /// one. Same-typed siblings at the same index under different parents (each VStack's
+    /// TextBlock and TextBox, and their template parts) only differ through the ancestor chain
+    /// <see cref="TreeWalker"/> threads down; dropping it makes them collide.
+    /// </summary>
+    internal sealed class NodeIdsUniqueAcrossSiblingsWithDifferentParents(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(_ => VStack(
+                VStack(TextBlock("Ovl_Ids_Name"), TextBox("a", _ => { })),
+                VStack(TextBlock("Ovl_Ids_Email"), TextBox("b", _ => { }))));
+
+            await Harness.Render();
+            var rendered = await Harness.WaitFor(() =>
+                H.FindControl<WinUI.TextBlock>(t => t.Text == "Ovl_Ids_Email") is not null);
+
+            var walker = new TreeWalker("main", new NodeRegistry());
+            walker.Walk(H.Window.Content);
+            var ids = walker.ElementIds.Values.ToList();
+            var textBoxes = walker.ElementIds.Keys.OfType<WinUI.TextBox>().ToList();
+
+            H.Check("ReferenceOverlay_NodeIds_WalkCoversBothTextBoxes", rendered && textBoxes.Count == 2);
+            H.Check("ReferenceOverlay_NodeIds_AllUnique", ids.Count > 2 && ids.Distinct(StringComparer.Ordinal).Count() == ids.Count);
         }
     }
 }

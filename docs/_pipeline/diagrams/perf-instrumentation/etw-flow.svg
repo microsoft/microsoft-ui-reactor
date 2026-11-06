@@ -56,8 +56,8 @@
   <text class="sub" x="160" y="318" text-anchor="middle">StateChange</text>
 
   <rect class="box" x="40" y="350" width="240" height="50" rx="6"/>
-  <text class="label" x="160" y="372" text-anchor="middle">MCP dispatch</text>
-  <text class="sub" x="160" y="388" text-anchor="middle">McpCall · Start/Stop</text>
+  <text class="label" x="160" y="372" text-anchor="middle">MCP dispatch (removed)</text>
+  <text class="sub" x="160" y="388" text-anchor="middle">McpCall · reserved, not emitted</text>
 
   <!-- Event source -->
   <rect class="box-accent" x="370" y="180" width="200" height="74" rx="6"/>

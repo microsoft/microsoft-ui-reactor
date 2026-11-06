@@ -41,5 +41,7 @@ and `winapp ui`: `"<Counter>"`, `"<Counter>/Button"`, `key=t1`, `App.cs:67`.
 
 `mur devtools --help` prints the same table. The `Microsoft.UI.Reactor.Devtools`
 package (now only the component preview host, its capture server and the `--embed` handshake) still exists but is
-deprecated (build warning `REACTOR_DEVTOOLS_001`). It stays until winapp has its own
-previewer, because the VS Code live preview and the Visual Studio embedded preview run on it.
+deprecated (build warning `REACTOR_DEVTOOLS_001` when it is referenced outside Debug). It stays
+until winapp has its own previewer, because the VS Code live preview and the Visual Studio
+embedded preview run on it. The `Reactor.DevtoolsSupport` switch is not deprecated: it is on in
+Debug through `ReactorDiagnostics`, and the WinUI DevTools need it for C# call sites.

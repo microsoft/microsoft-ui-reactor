@@ -44,8 +44,8 @@ whatever account `gh auth` currently considers active, so:
 
 The default model is `claude-sonnet-4.5`; change it by passing a different
 id to the `CopilotSdkClient` constructor in `DemoScriptShell`. Use the
-**⚡ Devtools → Log available Copilot models…** menu item to see what model
-ids your account can use.
+**Dev → Log available Copilot models…** menu item (Debug builds) to see what
+model ids your account can use.
 
 If a generation call hits an authentication failure mid-stream, the pipeline
 runs `gh auth login` (in a spawned console) and resets the cached Copilot

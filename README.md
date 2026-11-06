@@ -147,7 +147,7 @@ Reactor spans a core framework and a set of higher-level features. Each area bel
 | **Input & gestures** | Pan / pinch / rotate / long-press gesture recognizers, drag-and-drop with typed data transfer, pointer and focus management | Draft |
 | **Docking & windows** | Visual Studio-style docking — tab tear-off, cross-window dock-in, floating panes, splitters, reserved document area, layout serialization and migration | Draft |
 | **WinForms interop** | Simple hosting of WinUI content inside WinForms apps | Draft |
-| **DevTools & diagnostics** | WinUI DevTools in the winapp CLI (`winapp run . --devtools`: component tree, C# call sites, state, live edits, UI automation), source mapping, ETW events. Reactor's own `mur devtools` CLI has been removed and its in-app MCP host package is deprecated | Draft |
+| **DevTools & diagnostics** | WinUI DevTools in the winapp CLI (`winapp run . --devtools`: component tree, C# call sites, state, live edits, UI automation), source mapping, ETW events. Reactor's own `mur devtools` CLI and in-app MCP server have been removed; the `Microsoft.UI.Reactor.Devtools` preview-host package is deprecated | Draft |
 | **`mur` CLI & analyzers** | App scaffolding, `mur check` did-you-mean linter, localization tooling, `mur doctor` / `mur upgrade`, 40+ Roslyn analyzers (hooks, commanding, accessibility, theming, pooling, forms) | Draft |
 | **Localization** | ICU message format, source generator, CLI tooling (extract, translate, validate), RTL/BiDi | Early |
 | **Data system** | `DataGrid`, `PropertyGrid`, `FormField`, metadata model, async validation, inline editing | Early |

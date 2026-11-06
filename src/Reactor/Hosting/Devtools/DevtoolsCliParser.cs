@@ -293,6 +293,30 @@ internal static class DevtoolsCliParser
     }
     // </snippet:removed-subverbs>
 
+    /// <summary>The flags that went with the in-app MCP server and its log capture.</summary>
+    internal static readonly string[] RemovedFlags =
+    [
+        "--mcp-port",
+        "--mcp-transport",
+        "--devtools-log-level",
+        "--devtools-logs",
+        "--devtools-logs-capacity",
+        "--devtools-project",
+    ];
+
+    /// <summary>
+    /// A one-line notice naming the removed MCP / log flags in <paramref name="args"/>, or null.
+    /// The flags are ignored so old launch profiles keep previewing, but a caller that relied on
+    /// them (an MCP client on stdio, say) needs to hear why nothing answers.
+    /// </summary>
+    internal static string? RemovedFlagsNotice(string[] args)
+    {
+        var found = RemovedFlags.Where(f => args.Contains(f, StringComparer.Ordinal)).ToArray();
+        return found.Length == 0
+            ? null
+            : $"Ignoring {string.Join(", ", found)}: the in-app MCP server was removed. Inspect the app with the WinUI DevTools: winapp run . --devtools";
+    }
+
     private static bool IsExplicitDevtoolsRun(string[] args, int devtoolsIdx)
     {
         return devtoolsIdx >= 0

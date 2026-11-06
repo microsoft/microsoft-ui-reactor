@@ -309,26 +309,23 @@ package"*. The repo-internal
 clone (`Directory.Build.props`); consumer projects pick their version
 directly.
 
-**Debug builds of the scaffolded template auto-include the
+**Debug builds of the scaffolded template auto-include the deprecated
 `Microsoft.UI.Reactor.Devtools` package** (gated by a
 `Condition="'$(Configuration)' == 'Debug'"` ItemGroup that adds both
 the package and `RuntimeHostConfigurationOption
-Reactor.DevtoolsSupport=true`). The scaffolded
-`Properties/launchSettings.json` ships a second
-`"<AppName> Devtools"` profile that passes `--devtools`; select it in
-Visual Studio or VS Code — the default profile passes no arguments — to
-light up the right-click devtools menu and the docked devtools window.
-The Reactor Visual
-Studio embedded-preview extension (spec 056) also relies on this
-Debug wiring — its `dotnet watch run -- --devtools run --embed
---embed-host-pid <pid>` activation needs the devtools assembly
-loadable in the user's process. That VSIX is the roughest and most
-experimental consumer of this wiring today; keep the Debug-only
-boundary in place unless you are deliberately testing the embedded
-preview. Release builds drop both the package
-and the host-config switch so the trim / AOT analyzers stay quiet;
-move the ItemGroup out of the Debug condition if you want devtools
-in Release too.
+Reactor.DevtoolsSupport=true`). The package now only hosts the in-app
+component preview that the VS Code live preview and the Reactor Visual
+Studio embedded-preview extension (spec 056) use: the VSIX's
+`dotnet watch run -- --devtools run --embed --embed-host-pid <pid>`
+activation needs the devtools assembly loadable in the user's process.
+The scaffolded `Properties/launchSettings.json` ships a
+`"<AppName> (Unpackaged, Devtools)"` profile that passes `--devtools`,
+which starts that preview host; there is no in-app dev menu any more.
+To inspect or drive a running app, use the WinUI DevTools in the winapp
+CLI (`winapp run . --devtools`), which need no package. Keep the
+Debug-only boundary in place: Release builds drop the package so the
+trim / AOT analyzers stay quiet, and a reference outside Debug gets
+build warning `REACTOR_DEVTOOLS_001`.
 
 ## Next Steps
 

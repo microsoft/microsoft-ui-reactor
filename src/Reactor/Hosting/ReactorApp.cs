@@ -487,11 +487,11 @@ public static partial class ReactorApp
     /// <summary>
     /// Launches the app. <paramref name="width"/> / <paramref name="height"/> are
     /// DIPs; leave them <c>null</c> (the default) to let the OS pick the initial
-    /// window size, exactly as a plain XAML <c>Window</c> does. Enable the
-    /// <c>Reactor.DevtoolsSupport</c> runtime host
-    /// configuration switch in DEBUG builds (with the deprecated Microsoft.UI.Reactor.Devtools
-    /// package) to allow the <c>--devtools</c> surface: component switching via VS Code, MCP
-    /// agent tools, and component listing. To inspect a running app, prefer the WinUI DevTools:
+    /// window size, exactly as a plain XAML <c>Window</c> does. With the
+    /// <c>Reactor.DevtoolsSupport</c> runtime host configuration switch on (the Debug default)
+    /// and the deprecated Microsoft.UI.Reactor.Devtools package referenced, <c>--devtools run</c>
+    /// starts the in-app preview host that the VS Code and Visual Studio previews use
+    /// (component switching and listing). To inspect a running app, use the WinUI DevTools:
     /// <c>winapp run . --devtools</c>.
     /// </summary>
     /// <param name="title">Window caption text.</param>
@@ -1318,6 +1318,9 @@ public static partial class ReactorApp
 
         if (options.Subverb is null) return false;
 
+        if (DevtoolsCliParser.RemovedFlagsNotice(args) is { } ignored)
+            Console.Error.WriteLine($"[reactor] {ignored}");
+
         if (ReactorFeatures.IsDevtoolsSupported && ReactorDevtoolsBootstrap.Current is { } host)
         {
             var request = new ReactorDevtoolsBootRequest(
@@ -1351,7 +1354,7 @@ public static partial class ReactorApp
         Console.Error.WriteLine(
             "  <RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\" Value=\"true\" Trim=\"true\" />");
         Console.Error.WriteLine(
-            "[reactor] The in-app preview host is deprecated and kept only for the VS Code and Visual Studio previews. To inspect a running app, launch it with `winapp run . --devtools`; that needs no package or switch.");
+            "[reactor] The in-app preview host is deprecated and kept only for the VS Code and Visual Studio previews. To inspect a running app, launch it with `winapp run . --devtools`; that needs no package.");
     }
 
     internal static void ResetDevtoolsEnabledForTests()

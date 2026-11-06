@@ -227,6 +227,33 @@ public class CliFlagParsingTests
         Assert.Null(opts.RemovedSubverbError);
         Assert.Null(opts.EmbedValidationError);
     }
+
+    [Theory]
+    [InlineData("--mcp-port")]
+    [InlineData("--mcp-transport")]
+    [InlineData("--devtools-log-level")]
+    [InlineData("--devtools-logs")]
+    [InlineData("--devtools-logs-capacity")]
+    [InlineData("--devtools-project")]
+    public void RemovedMcpFlags_AreNamedInTheNotice(string flag)
+    {
+        var notice = DevtoolsCliParser.RemovedFlagsNotice(["app.exe", "--devtools", "run", flag, "x"]);
+
+        Assert.NotNull(notice);
+        Assert.StartsWith($"Ignoring {flag}:", notice);
+        Assert.Contains("winapp run . --devtools", notice);
+    }
+
+    [Fact]
+    public void RemovedFlagsNotice_ListsEveryRemovedFlag_AndIsNullWithoutThem()
+    {
+        Assert.Equal(
+            "Ignoring --mcp-port, --mcp-transport: the in-app MCP server was removed. Inspect the app with the WinUI DevTools: winapp run . --devtools",
+            DevtoolsCliParser.RemovedFlagsNotice(["app.exe", "--devtools", "run", "--mcp-transport", "stdio", "--mcp-port", "1"]));
+        // Lookalikes and surviving flags are not removed flags.
+        Assert.Null(DevtoolsCliParser.RemovedFlagsNotice(["app.exe", "--devtools", "run", "--vscode", "--fps", "5", "--mcp-portx", "1"]));
+    }
+
     [Fact]
     public void RemovedSubverbName_AsAComponentNameAfterRun_StillRuns()
     {
@@ -494,6 +521,73 @@ public class DevtoolsHostCliTests
         }
 
         Assert.Contains("[reactor] --embed requires '--devtools run'", stderr.ToString());
+    }
+
+    [Theory]
+    [InlineData("app", "winapp run . --devtools")]
+    [InlineData("screenshot", "winapp ui screenshot")]
+    [InlineData("tree", "winapp devtools inspect")]
+    public void TryRunDevtoolsForTest_RemovedSubverb_PrintsTheWinappCommandAndExits2_BeforeTheSupportGate(string verb, string winapp)
+    {
+        const string switchName = "Reactor.DevtoolsSupport";
+        using var stderr = new StringWriter();
+        var originalError = Console.Error;
+        var originalExitCode = Environment.ExitCode;
+
+        bool handled;
+        try
+        {
+            // Switch off: the removed-verb message must win over "enable Reactor.DevtoolsSupport".
+            AppContext.SetSwitch(switchName, false);
+            Environment.ExitCode = 0;
+            Console.SetError(stderr);
+
+            handled = ReactorApp.TryRunDevtoolsForTest(["app.exe", "--devtools", verb], title: "App", width: 800, height: 600);
+
+            Assert.Equal(2, Environment.ExitCode);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            Environment.ExitCode = originalExitCode;
+            AppContext.SetSwitch(switchName, TestSetup.ConfiguredDevtoolsSupport);
+        }
+
+        var text = stderr.ToString();
+        Assert.True(handled);
+        Assert.Contains($"[reactor] '--devtools {verb}' was removed", text);
+        Assert.Contains(winapp, text);
+        Assert.DoesNotContain("RuntimeHostConfigurationOption", text);
+    }
+
+    [Theory]
+    [InlineData(new[] { "app.exe", "--devtools", "run", "--mcp-transport", "stdio" }, true)]
+    [InlineData(new[] { "app.exe", "--devtools", "run", "--mcp-port", "1234" }, true)]
+    [InlineData(new[] { "app.exe", "--devtools", "run" }, false)]
+    public void TryRunDevtools_RemovedMcpFlags_PrintANotice_AndStillRunThePreview(string[] args, bool expectNotice)
+    {
+        const string switchName = "Reactor.DevtoolsSupport";
+        var host = new CapturingDevtoolsHost();
+        var previous = ReactorDevtoolsBootstrap.CurrentForTests;
+        using var stderr = new StringWriter();
+        var originalError = Console.Error;
+        ReactorDevtoolsBootstrap.Register(host);
+        try
+        {
+            AppContext.SetSwitch(switchName, true);
+            Console.SetError(stderr);
+
+            Assert.True(ReactorApp.TryRunDevtoolsForTest(args, title: "Preview", width: 800, height: 600));
+            Assert.NotNull(host.Captured);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            AppContext.SetSwitch(switchName, TestSetup.ConfiguredDevtoolsSupport);
+            ReactorDevtoolsBootstrap.RestoreForTests(previous);
+        }
+
+        Assert.Equal(expectNotice, stderr.ToString().Contains("[reactor] Ignoring --mcp-", StringComparison.Ordinal));
     }
 
     // The whole manifest-driven capture size rests on one expression in

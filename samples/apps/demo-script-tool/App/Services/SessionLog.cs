@@ -22,7 +22,7 @@ namespace DemoScriptTool.App.Services;
 ///
 /// <para>
 /// Logs are intentionally outside the project root — accidental commits of
-/// debug spew aren't a risk, and the "Reveal log folder" devtools menu item
+/// debug spew aren't a risk, and the "Reveal log folder" item in the Debug-only Dev menu
 /// gives a one-click route to share a session log when something goes wrong.
 /// </para>
 /// </summary>

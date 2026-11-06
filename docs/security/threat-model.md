@@ -138,8 +138,8 @@ The in-app MCP server, its stdio variant and its per-project lockfile have been 
 
 ### 7.1 Preview capture server
 
-**File:** `src/Reactor/Hosting/PreviewCaptureServer.cs`
-**Activation:** opt-in via `--preview` flag on the consuming app or via `mur preview`.
+**File:** `src/Reactor.Devtools/PreviewCaptureServer.cs` (the deprecated `Microsoft.UI.Reactor.Devtools` package)
+**Activation:** opt-in: the app references the package, has the `Reactor.DevtoolsSupport` switch on, and is launched with `--devtools run` / `--preview` plus `--vscode` or `--embed` (the VS Code live preview and the Visual Studio embedded preview do this).
 **Surface:** loopback HTTP listener at `http://127.0.0.1:<random port>`.
 
 **Endpoints:**
@@ -147,32 +147,35 @@ The in-app MCP server, its stdio variant and its per-project lockfile have been 
 - `GET /frame` — returns the latest JPEG-encoded screenshot of the WinUI window (captured via `PrintWindow`).
 - `GET /status` — fps/port introspection.
 - `GET /components` — list of registered preview components.
+- `GET /references` — the reference-graph overlay of the live tree (node ids, edges, diagnostics).
 - `POST /focus` — brings the developer's app window to foreground.
-- `POST /preview` — switches the previewed component by name.
+- `POST /preview` — switches the previewed component by name (allow-listed against the discovered components).
+- Only with `--embed` (`EmbedMode`; otherwise 404): `/hwnd` (the window handle), `/embed/ack` (reparents the window under the Visual Studio placeholder HWND the caller names), `/embed/resize`, `/embed/move`, and `/embed/release` (detaches the window and exits the process).
 
 **Mitigations implemented:**
 
 | Threat | Mitigation | Source |
 |---|---|---|
-| Remote attacker reaches the port | Listener binds to `127.0.0.1` only; loopback is not reachable off-box on default Windows network configurations | `PreviewCaptureServer.cs:75` |
-| Same-machine other-user attack | Loopback is per-machine; segregation between user accounts on Windows means another local user could reach it but lacks the bearer token (token never written outside the process owner's stdout) | `PreviewCaptureServer.cs:64`, `GenerateToken` |
-| Token brute-force | 256-bit random from `RandomNumberGenerator.Fill`; constant-time compare; per-launch (no replay across runs) | `PreviewCaptureServer.cs:82`, `BearerMatches` lines 303–314 |
-| DNS rebinding (web-page tricks browser into requesting a `127.0.0.1` URL with attacker-controlled Host) | Host header allow-list enforced before auth: rejects with 421 anything other than `127.0.0.1:<port>` / `localhost:<port>` | `IsAllowedHost` line 316 |
-| Cross-origin browser CSRF | (a) Origin allow-list parsed via `Uri` (not `StartsWith`); (b) state-mutating endpoints require POST + `Content-Type: application/json` (not a CORS "simple request") | `IsAllowedOrigin` line 324, `HandleSwitchComponent` line 432 |
-| Reflected XSS via `<img src=…/focus>` | `/focus` is POST-only (returns 405 for GET) | `HandleFocus` line 392 |
-| Slow-loris / connection exhaustion | `HeaderWait`, `EntityBody`, `IdleConnection`, `RequestQueue` all bounded at 10–15 s | `Start` lines 95–103 |
-| Threadpool exhaustion | 16-way dispatch gate; over-quota requests get HTTP 503 with `Retry-After: 1` | `_dispatchGate` line 34, `ListenAsync` lines 203–215 |
-| Body-bomb | 4 MiB hard cap; over-cap requests get HTTP 413 before the body is read fully | `MaxBodyBytes` line 38, `HandleSwitchComponent` lines 451–456 |
+| Remote attacker reaches the port | Listener binds to `127.0.0.1` only; loopback is not reachable off-box on default Windows network configurations | `LoopbackHttpListener.Prefix` |
+| Same-machine other-user attack | Loopback is per-machine; segregation between user accounts on Windows means another local user could reach it but lacks the bearer token (token never written outside the process owner's stdout) | `GenerateToken` |
+| Token brute-force | 256-bit random from `RandomNumberGenerator.Fill`; constant-time compare; per-launch (no replay across runs) | `GenerateToken`, `BearerMatches` |
+| DNS rebinding (web-page tricks browser into requesting a `127.0.0.1` URL with attacker-controlled Host) | Host header allow-list enforced before auth: rejects with 421 anything other than `127.0.0.1:<port>` / `localhost:<port>` | `IsAllowedHost` |
+| Cross-origin browser CSRF | (a) Origin allow-list parsed via `Uri` (not `StartsWith`); (b) state-mutating endpoints require POST + `Content-Type: application/json` (not a CORS "simple request") | `IsAllowedOrigin`, `HandleSwitchComponent` |
+| Reflected XSS via `<img src=…/focus>` | `/focus` is POST-only (returns 405 for GET) | `HandleFocus` |
+| Slow-loris / connection exhaustion | `HeaderWait`, `EntityBody`, `IdleConnection`, `RequestQueue` all bounded at 10–15 s | `Start` |
+| Threadpool exhaustion | 16-way dispatch gate; over-quota requests get HTTP 503 with `Retry-After: 1` | `_dispatchGate`, `ListenAsync` |
+| Body-bomb | 4 MiB hard cap; over-cap requests get HTTP 413 before the body is read fully | `MaxBodyBytes`, `HandleSwitchComponent` |
 | Port TOCTOU steal between probing a free port and `HttpListener.Start` | Bind-and-retry: a placeholder socket can't be held across the bind (HTTP.sys refuses a port any other socket owns), so if another process takes the probed port first, `Start` probes a new one and binds again (bounded). `CAPTURE_PORT` is announced only after the bind succeeds | `LoopbackHttpListener.Start`, `PreviewCaptureServer.Start` |
 
 **Residual risk:**
 
 - **Same-user same-machine compromise.** If another process is already running as the developer's user, it can read stdout and obtain the bearer token. This is consistent with the Windows trust model — that attacker already has read access to the developer's process memory, browser cookies, SSH keys, etc., so this surface adds no meaningful privilege. The dev server is not a security boundary against a co-resident-same-user attacker.
 - **Frame capture as side channel.** The capture is a screenshot of the developer's preview window; any other process running as the developer can already screenshot the same window via the same Win32 APIs. No new disclosure.
+- **Embed mode.** With `--embed`, a token holder can reparent, resize or move the app window (`/embed/ack`, `/embed/resize`, `/embed/move`) and end the process (`/embed/release`). That is the same same-user attacker as above, who could already do all of it through Win32; the endpoints are 404 without `--embed`.
 
 ### 7.2 Devtools MCP server (removed)
 
-The in-app MCP server (`DevtoolsMcpServer`, HTTP at `/mcp` and stdio), its per-project lockfile, its call log and the `--mcp-port` / `--mcp-transport` / `--devtools-log*` / `--devtools-project` flags have been removed from `Microsoft.UI.Reactor.Devtools`. The flags are now ignored; `--devtools app|screenshot|tree` print the winapp command to use instead and exit 2. This removes the surface's highest-impact residual risk — a token holder could drive the dev app's UI thread through MCP tools. The `McpCallStart` / `McpCallStop` ETW events remain declared but are no longer emitted.
+The in-app MCP server (`DevtoolsMcpServer`, HTTP at `/mcp` and stdio), its per-project lockfile, its call log and the `--mcp-port` / `--mcp-transport` / `--devtools-log*` / `--devtools-project` flags have been removed from `Microsoft.UI.Reactor.Devtools`. The flags are now ignored; `--devtools app|screenshot|tree` print the winapp command to use instead and exit 2. This removes the MCP tools a token holder could use to read and change the dev app's tree, properties and state and to drive its UI; the preview server (§7.1) remains. The `McpCallStart` / `McpCallStop` ETW events remain declared but are no longer emitted.
 
 ### 7.3 Skill-kit installer
 
@@ -312,7 +315,7 @@ Microsoft's internal Security Assessment policy lists six trust-boundary trigger
 - [`AGENTS.md`](../../AGENTS.md) — repo conventions, test tiers, AOT posture
 - [`SECURITY.md`](../../SECURITY.md) — Microsoft vulnerability reporting policy
 - [`ThirdPartyNoticeText.txt`](../../ThirdPartyNoticeText.txt) — OSS attributions for Yoga / md4c / D3 and NuGet deps
-- [`src/Reactor/Hosting/PreviewCaptureServer.cs`](../../src/Reactor/Hosting/PreviewCaptureServer.cs) — dev preview server
+- [`src/Reactor.Devtools/PreviewCaptureServer.cs`](../../src/Reactor.Devtools/PreviewCaptureServer.cs) — dev preview server
 - [`src/Reactor.Advanced/Markdown/MarkdownBuilder.cs`](../../src/Reactor.Advanced/Markdown/MarkdownBuilder.cs) — native `Markdown()` renderer + URL allow-list (`IsSafeUri`)
 - [`tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs`](../../tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs) — test-only CommonMark/spec HTML renderer + URL sanitizer
 - [`tools/install-skill-kit.ps1`](../../tools/install-skill-kit.ps1) — installer with guard-rails

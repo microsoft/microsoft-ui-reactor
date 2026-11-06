@@ -55,7 +55,7 @@
     <None Include="..\..\assets\Icon.png" Pack="true" PackagePath="" Visible="false" />
     <None Include="README.md" Pack="true" PackagePath="" Visible="false" />
     <!-- Deprecation warning REACTOR_DEVTOOLS_001 for projects that reference the
-         package directly. build\ only: transitive consumers are not warned. -->
+         package directly outside Debug. build\ only: transitive consumers are not warned. -->
     <None Remove="build\Microsoft.UI.Reactor.Devtools.targets" />
     <None Include="build\Microsoft.UI.Reactor.Devtools.targets" Pack="true" PackagePath="build\" />
   </ItemGroup>

@@ -1,7 +1,6 @@
 // Reactor Test App — A WinUI 3 application using the Microsoft.UI.Reactor functional projection.
 // No XAML. No data binding. No resources. No templates. Just C#.
 
-using System.Diagnostics;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Navigation;
@@ -22,8 +21,8 @@ ReactorApp.Run<DemoApp>("Reactor Demo", width: 1200, height: 800
 
 // ─── Global dev flags ──────────────────────────────────────────────────────────
 // Declared as static Observable<T> cells so any component can read/write without
-// prop-drilling. Toggled from the Dev menu in the titlebar when the app is
-// launched with `--devtools app` (and built with Reactor.DevtoolsSupport enabled).
+// prop-drilling. Toggled from the Dev menu in the titlebar, which exists only in
+// Debug builds.
 static class AppFlags
 {
     public static readonly Observable<bool> DebugUI = new(false);
@@ -93,6 +92,23 @@ class DemoApp : Component
         var debugUI = UseObservable(AppFlags.DebugUI).Value;
         var outline = UseObservable(AppFlags.OutlineLayout).Value;
 
+        // App-specific dev switches, Debug builds only.
+        Element? devMenu = null;
+#if DEBUG
+        devMenu = DropDownButton("Dev", MenuItems(new MenuFlyoutItemBase[]
+        {
+            ToggleMenuItem("Debug UI",
+                debugUI,
+                v => AppFlags.DebugUI.Value = v),
+            ToggleMenuItem("Outline layout",
+                outline,
+                v => AppFlags.OutlineLayout.Value = v),
+            MenuSeparator(),
+            MenuItem("Log tab change",
+                () => global::System.Diagnostics.Debug.WriteLine($"[dev] current tab = {currentTab}")),
+        }));
+#endif
+
         // The shared WinUI logo .ico is bundled at samples/Assets/WinUI.ico
         // and is also wired into the EXE PE resources via the
         // samples/Directory.Build.props default <ApplicationIcon>. Surfacing
@@ -106,18 +122,7 @@ class DemoApp : Component
                 Content = HStack(8,
                     ComboBox(TabElements, (int)currentTab, i => setTab((Tab)i)).Width(240),
                     ComboBox(Languages, langIndex, setLangIndex),
-                    DropDownButton("Dev", MenuItems(new MenuFlyoutItemBase[]
-                    {
-                        ToggleMenuItem("Debug UI",
-                            debugUI,
-                            v => AppFlags.DebugUI.Value = v),
-                        ToggleMenuItem("Outline layout",
-                            outline,
-                            v => AppFlags.OutlineLayout.Value = v),
-                        MenuSeparator(),
-                        MenuItem("Log tab change",
-                            () => Debug.WriteLine($"[dev] current tab = {currentTab}")),
-                    }))
+                    devMenu
                 ),
             }).Flex(shrink: 0),
 
@@ -164,8 +169,8 @@ class DemoApp : Component
             .Flex(grow: 1),
 
             // Debug strip — only constructed when the Debug UI flag is on.
-            // The flag can only be toggled from the Dev menu above. Retail cost
-            // is one bool check.
+            // The flag can only be toggled from the Debug-only Dev menu above.
+            // Retail cost is one bool check.
             debugUI ? DebugStrip(currentTab) : null
         )
         // Spec 033 §6 — Mica window backdrop on the demo shell.
