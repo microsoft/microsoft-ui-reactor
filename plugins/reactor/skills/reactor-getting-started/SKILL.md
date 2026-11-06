@@ -52,7 +52,7 @@ description: "Reactor essentials in one place — React-to-Reactor mental model,
 
 `dotnet new reactor -n <Name>` scaffolds the canonical shape: `App.cs` (entry point + initial component, with the `using` block at the top) plus `<Name>.csproj`. Richer shells: `reactor-mvu`, `reactor-navview`, `reactor-tabview`. See the anti-probe + `mur check` notes under "Use a `.csproj` …" below for what comes out of the scaffold.
 
-For a single-file `dotnet run App.cs` demo (no `.csproj`), `dotnet new reactor-singlefile -n <Name>` scaffolds `<Name>/<Name>.cs` with the file-level `#:package` / `#:property` header already in place. To add the header to an existing file instead, see `reactor-build-and-check`'s single-file-scripts section.
+For a single-file `dotnet run App.cs` demo (no `.csproj`), `dotnet new reactor-singlefile -n <Name>` scaffolds `<Name>/<Name>.cs` with the file-level `#:package` / `#:property` header already in place. Keep all the code in that file, because a file-based app compiles only that one file. Check it with `mur check <Name>.cs` from its folder; a bare `mur check` builds the current directory, which needs a project file. To add the header to an existing file instead, see `reactor-build-and-check`'s single-file-scripts section.
 
 If `dotnet new` rejects `--packaging` or can't find `reactor-singlefile`, the installed pack predates them; `winapp new --list --template-version latest` updates it.
 
