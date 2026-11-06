@@ -196,8 +196,9 @@ not migrated — it is reported as invalid, the run log warns that the saved
 permissions were not applied, and the widget runs with the default policy until
 you review and save it again. Advanced network rules are validated with MXC 1.0's
 syntax before they can be saved: CIDRs must parse (host bits zero, each `except`
-inside its `cidr`), `endPort` needs a `port` no larger than it, and ICMP
-selectors take no ports. Choosing **No network access** also clears any
+inside its `cidr`), `to` / `ports` lists can't be empty (omit them to match
+everything), `endPort` needs a `port` no larger than it, and ICMP selectors take
+no ports. Choosing **No network access** also clears any
 `egress.allow` / `egress.deny` rules, which MXC's AppContainer fallback rejects.
 
 MXC picks the strongest isolation tier the host supports (BaseContainer, then
@@ -220,8 +221,10 @@ app never edits ACLs.
   `MXC_FFI_DIR` override, so at startup — before any MXC call — the host claims
   the SDK's native-library resolver, opens the packaged `mxc_ffi.dll` and its
   companion natives read-share-only (they can't be swapped afterwards), requires a
-  valid Authenticode signature from Microsoft Corporation chaining to a Microsoft
-  root, and loads exactly that file. Any failure leaves the sandbox unavailable;
+  valid Authenticode signature from Microsoft Corporation whose chain ends in a
+  genuine Microsoft root — checked by public key with the Windows Microsoft-root
+  chain policy, so a look-alike CA in a user root store can't pass — and loads
+  exactly that file. Any failure leaves the sandbox unavailable;
   there are no vendored binaries or hash pins to maintain. The native runtime
   version is logged at startup and shown in the title bar.
 

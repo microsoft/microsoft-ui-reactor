@@ -549,6 +549,11 @@ public static class MxcPolicy
             }
             foreach (var key in r.Select(kv => kv.Key).Where(k => k is not ("to" or "ports")))
                 errors.Add($"Unknown field '{path}[].{key}'.");
+            // MXC 1.0 rejects explicit empty selectors; omit the field to match everything.
+            if (r["to"] is JsonArray { Count: 0 })
+                errors.Add($"'{path}[].to' must list at least one destination when specified (omit it to match all).");
+            if (r["ports"] is JsonArray { Count: 0 })
+                errors.Add($"'{path}[].ports' must list at least one selector when specified (omit it to match all).");
             if (r["to"] is { } to && (to is not JsonArray peers || peers.Any(p => p is not JsonObject po || !IsValidPeer(po))))
                 errors.Add($"'{path}[].to' must be an array of {{ \"cidr\": \"...\", \"except\": [\"...\"] }} entries "
                     + "with valid CIDRs (e.g. \"203.0.113.0/24\"; host bits zero), each 'except' inside its 'cidr'.");

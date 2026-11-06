@@ -318,6 +318,22 @@ public sealed class MxcSandbox
                 catch (OperationCanceledException) { /* verifyCts was cancelled before the check ran */ }
                 return new SandboxResult(unchecked((int)0xC000013A), Captured());
             }
+            catch (MxcException ex)
+            {
+                // A host-side wait/finalization failure, not a widget bug: tear the
+                // process down, clean up the verifier and pumps, and report it as a
+                // sandbox error so the caller still saves the widget (no repair loop).
+                pumps.MarkInterrupted();
+                TryKill(proc);
+                verifyCts.Cancel();
+                await pumps.DrainAsync().ConfigureAwait(false);
+                try { await verifyTask.ConfigureAwait(false); }
+                catch (OperationCanceledException) { /* verifyCts was cancelled before the check ran */ }
+                EmitNewWarnings();
+                if (containmentFailed)
+                    return new SandboxResult(-1, Captured(), LaunchError: containmentError, ContainmentFailed: true);
+                return LaunchFailure($"MXC failed while waiting for the widget to exit: {Describe(ex)}");
+            }
 
             // Make sure any containment-failure line is recorded before we classify.
             verifyCts.Cancel();

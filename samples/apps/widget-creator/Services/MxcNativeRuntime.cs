@@ -28,7 +28,8 @@ namespace WidgetCreator.Services;
 /// <c>mxc_ffi</c> only from the app's own packaged native assets, holds every
 /// MXC native file open read-share-only (so it can't be swapped after the
 /// check), requires a valid Authenticode signature from Microsoft Corporation
-/// chained to a Microsoft root, and loads that exact file. Any failure leaves
+/// whose chain ends in a genuine Microsoft root (by public key, via the Windows
+/// Microsoft-root chain policy), and loads that exact file. Any failure leaves
 /// the sandbox unavailable — fail closed, never fall back to an unverified load.
 /// </para>
 /// </summary>
@@ -154,10 +155,12 @@ internal static class MxcNativeRuntime
     // ── Authenticode ─────────────────────────────────────────────────────────
 
     /// <summary>
-    /// WinVerifyTrust (Authenticode, read through the pinned handle) plus a signer
-    /// check: leaf <c>O=Microsoft Corporation</c>, chain root a Microsoft root CA.
-    /// Revocation isn't checked (offline-friendly); trust still requires a valid
-    /// chain to a trusted root. Returns <c>null</c> when trusted.
+    /// WinVerifyTrust (Authenticode, read through the pinned handle), then checks
+    /// on the exact signer chain it validated: the root must be a Microsoft root
+    /// by public key (<c>CERT_CHAIN_POLICY_MICROSOFT_ROOT</c>, including the 2011
+    /// application root, never test roots) — so a look-alike CA added to a user
+    /// root store can't pass — and the leaf must be <c>O=Microsoft Corporation</c>.
+    /// Revocation isn't checked (offline-friendly). Returns <c>null</c> when trusted.
     /// </summary>
     static string? VerifyMicrosoftSignature(FileStream pinned, string path)
     {
@@ -191,21 +194,25 @@ internal static class MxcNativeRuntime
             if (signer == IntPtr.Zero)
                 return "no signer information.";
 
-            // CRYPT_PROVIDER_SGNR: DWORD cbStruct; FILETIME sftVerifyAsOf; DWORD csCertChain; ...
-            var chainLength = Marshal.ReadInt32(signer, 12);
-            if (chainLength < 2)
+            var signerInfo = Marshal.PtrToStructure<CRYPT_PROVIDER_SGNR>(signer);
+            if (signerInfo.pChainContext == IntPtr.Zero || signerInfo.csCertChain < 2)
                 return "the signing certificate chain is incomplete.";
 
-            using var leaf = ProviderCert(signer, 0);
-            using var root = ProviderCert(signer, (uint)chainLength - 1);
-            if (leaf is null || root is null)
-                return "could not read the signing certificate chain.";
+            var policy = new CERT_CHAIN_POLICY_PARA
+            {
+                cbSize = (uint)Marshal.SizeOf<CERT_CHAIN_POLICY_PARA>(),
+                dwFlags = MICROSOFT_ROOT_CERT_CHAIN_POLICY_CHECK_APPLICATION_ROOT_FLAG,
+            };
+            var policyStatus = new CERT_CHAIN_POLICY_STATUS { cbSize = (uint)Marshal.SizeOf<CERT_CHAIN_POLICY_STATUS>() };
+            if (!CertVerifyCertificateChainPolicy(CERT_CHAIN_POLICY_MICROSOFT_ROOT, signerInfo.pChainContext, ref policy, ref policyStatus)
+                || policyStatus.dwError != 0)
+                return $"the signature does not chain to a Microsoft root (0x{policyStatus.dwError:X8}).";
 
+            using var leaf = ProviderCert(signer, 0);
+            if (leaf is null)
+                return "could not read the signing certificate.";
             if (!HasOrganization(leaf, "Microsoft Corporation"))
                 return $"signed by '{leaf.Subject}', not Microsoft Corporation.";
-            if (!root.GetNameInfo(X509NameType.SimpleName, forIssuer: false)
-                    .StartsWith("Microsoft Root Certificate Authority", StringComparison.Ordinal))
-                return $"the signature chains to '{root.Subject}', not a Microsoft root.";
             return null;
         }
         finally
@@ -243,6 +250,8 @@ internal static class MxcNativeRuntime
     const uint WTD_STATEACTION_VERIFY = 1;
     const uint WTD_STATEACTION_CLOSE = 2;
     const uint WTD_CACHE_ONLY_URL_RETRIEVAL = 0x1000;
+    static readonly IntPtr CERT_CHAIN_POLICY_MICROSOFT_ROOT = 7;
+    const uint MICROSOFT_ROOT_CERT_CHAIN_POLICY_CHECK_APPLICATION_ROOT_FLAG = 0x00020000;
 
     [StructLayout(LayoutKind.Sequential)]
     struct WINTRUST_FILE_INFO
@@ -270,6 +279,45 @@ internal static class MxcNativeRuntime
         public uint dwUIContext;
         public IntPtr pSignatureSettings;
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct CRYPT_PROVIDER_SGNR
+    {
+        public uint cbStruct;
+        public uint sftVerifyAsOfLow;
+        public uint sftVerifyAsOfHigh;
+        public uint csCertChain;
+        public IntPtr pasCertChain;
+        public uint dwSignerType;
+        public IntPtr psSigner;
+        public uint dwError;
+        public uint csCounterSigners;
+        public IntPtr pasCounterSigners;
+        public IntPtr pChainContext;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct CERT_CHAIN_POLICY_PARA
+    {
+        public uint cbSize;
+        public uint dwFlags;
+        public IntPtr pvExtraPolicyPara;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct CERT_CHAIN_POLICY_STATUS
+    {
+        public uint cbSize;
+        public uint dwError;
+        public int lChainIndex;
+        public int lElementIndex;
+        public IntPtr pvExtraPolicyStatus;
+    }
+
+    [DllImport("crypt32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    static extern bool CertVerifyCertificateChainPolicy(
+        IntPtr policyOid, IntPtr chainContext, ref CERT_CHAIN_POLICY_PARA policyPara, ref CERT_CHAIN_POLICY_STATUS policyStatus);
 
     [DllImport("wintrust.dll", ExactSpelling = true)]
     static extern int WinVerifyTrust(IntPtr hwnd, ref Guid actionId, ref WINTRUST_DATA data);
