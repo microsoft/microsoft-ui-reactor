@@ -211,12 +211,14 @@ jobs:
           ref: ${{ needs.target.outputs.ref }}
           persist-credentials: false
 
-      # Cheap guard: run the pure parser + delta-math tests before trusting the merge.
-      # Also runs standalone in coverage-lib-tests.yml on PRs.
+      # Cheap guard: run the pure parser, merge and delta-math tests before trusting the
+      # merge. Also runs standalone in coverage-lib-tests.yml on PRs. Each script reports
+      # failure through its exit code, which only ends that script, so check it in between.
       - name: Test coverage scripts
         shell: pwsh
         run: |
           ./tests/coverage/ci/CoverageLib.Tests.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./tests/coverage/ci/Measure-Coverage.Tests.ps1
 
       - name: Download lane reports

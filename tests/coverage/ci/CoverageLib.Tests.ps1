@@ -117,7 +117,9 @@ Assert-Equal 2 $r4.BranchesTotal   'a branch repeated on a method line is counte
 # selftest lane is instrumented statically: it covers FlexPanel's static constructor
 # (lines 53-54) and names both constructors `FlexPanel()`, and it has no branch data.
 # The unit lane is instrumented dynamically: it names them `.ctor` / `.cctor`, covers
-# neither, carries the branch data, and has a class and a package the selftest lane lacks.
+# neither, and carries the branch data. It also has a class and a package the selftest
+# lane lacks, so these union tests opt in with -AllowDifferentLines; the default refusal
+# is tested further down.
 [xml]$selftestLane = @'
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <coverage line-rate="0.6" branch-rate="1" complexity="1" version="1.9" timestamp="100" lines-covered="3" lines-valid="5">
@@ -221,7 +223,7 @@ function Format-ClassLineMap($Map) { ($Map.GetEnumerator() | ForEach-Object { "$
 
 $selftestBefore = $selftestLane.OuterXml
 $unitBefore = $unitLane.OuterXml
-$merged = Merge-CoberturaDocuments -Documents $selftestLane, $unitLane
+$merged = Merge-CoberturaDocuments -Documents $selftestLane, $unitLane -AllowDifferentLines
 
 $flex = 'Reactor|Microsoft.UI.Reactor.Layout.FlexPanel|/_/src/Reactor/Yoga/FlexPanel.cs'
 $expectedUnion = [System.Collections.Generic.SortedDictionary[string, string]]::new([System.StringComparer]::Ordinal)
@@ -265,9 +267,9 @@ Assert-Equal 4  $mergedRates.BranchesTotal   'merge -> rates: branches total, no
 
 Assert-Equal $selftestBefore $selftestLane.OuterXml 'merge leaves the first input untouched'
 Assert-Equal $unitBefore $unitLane.OuterXml 'merge leaves the second input untouched'
-Assert-Equal $merged.OuterXml (Merge-CoberturaDocuments -Documents $selftestLane, $unitLane).OuterXml 'merge is deterministic'
+Assert-Equal $merged.OuterXml (Merge-CoberturaDocuments -Documents $selftestLane, $unitLane -AllowDifferentLines).OuterXml 'merge is deterministic'
 
-$reversed = Merge-CoberturaDocuments -Documents $unitLane, $selftestLane
+$reversed = Merge-CoberturaDocuments -Documents $unitLane, $selftestLane -AllowDifferentLines
 Assert-Equal (Format-ClassLineMap $mergedMap) (Format-ClassLineMap (Get-ClassLineMap $reversed)) 'merge: input order does not change any class line'
 Assert-Equal '0.75' $reversed.DocumentElement.GetAttribute('line-rate') 'merge: input order does not change the line rate'
 Assert-Equal '.ctor' $reversed.SelectSingleNode("//class[@name='Microsoft.UI.Reactor.Layout.FlexPanel']/methods/method").GetAttribute('name') 'merge: reversed, the methods come from the unit lane'
@@ -278,6 +280,21 @@ Assert-Equal '.ctor' $reversed.SelectSingleNode("//class[@name='Microsoft.UI.Rea
 $branchMap = Get-ClassLineMap (Merge-CoberturaDocuments -Documents $branchA, $branchB)
 Assert-Equal '3|True|100% (2/2)' $branchMap['P|C|c.cs|1'] 'merge: highest hit count, most covered conditions'
 Assert-Equal '1|True|50% (1/2)'  $branchMap['P|C|c.cs|2'] 'merge: a lane with fewer covered conditions does not lower the line'
+
+# By default the inputs must list the same lines. The unit lane above has a class and a
+# package the selftest lane lacks, as when one lane measured fewer assemblies.
+Assert-Throws { Merge-CoberturaDocuments -Documents $selftestLane, $unitLane } '*do not list the same lines*3 line(s) are not in every report: input 1 lacks 3.*' 'merge refuses lanes that list different lines by default'
+Assert-Throws { Merge-CoberturaDocuments -Documents $selftestLane, $unitLane -Names 'selftest-1.cobertura.xml', 'unit.cobertura.xml' } '*input 1 (selftest-1.cobertura.xml) lacks 3. For example, line 5 of Microsoft.UI.Reactor.UnitOnly (/_/src/Reactor/UnitOnly.cs) is missing from input 1 (selftest-1.cobertura.xml);*' 'merge names the report that lacks lines and the first line it lacks'
+Assert-Throws { Merge-CoberturaDocuments -Documents $unitLane, $selftestLane } '*input 2 lacks 3.*' 'merge reports the lacking input whatever its position'
+Assert-Throws { Merge-CoberturaDocuments -Documents $selftestLane, $unitLane } '*For example, line 5 of Microsoft.UI.Reactor.UnitOnly (/_/src/Reactor/UnitOnly.cs) is missing from input 1; line 9 of Microsoft.UI.Reactor.Charting.Axis (*' 'merge gives one example per class, not every line of the first class'
+# A class one lane names differently would otherwise count its lines twice.
+[xml]$namedOneWay = '<coverage><packages><package name="P"><classes><class name="N.Widget" filename="w.cs"><lines><line number="1" hits="1" /><line number="2" hits="0" /></lines></class></classes></package></packages></coverage>'
+[xml]$namedOtherWay = '<coverage><packages><package name="P"><classes><class name="N.Widget`1" filename="w.cs"><lines><line number="1" hits="0" /><line number="2" hits="1" /></lines></class></classes></package></packages></coverage>'
+Assert-Throws { Merge-CoberturaDocuments -Documents $namedOneWay, $namedOtherWay } '*4 line(s) are not in every report: input 1 lacks 2; input 2 lacks 2.*' 'merge refuses a class that one lane names differently'
+Assert-Equal '4' (Merge-CoberturaDocuments -Documents $namedOneWay, $namedOtherWay -AllowDifferentLines).DocumentElement.GetAttribute('lines-valid') '-AllowDifferentLines merges them anyway, counting each name''s lines'
+$manyReports = @(1..63 | ForEach-Object { [xml]'<coverage><packages /></coverage>' })
+Assert-Throws { Merge-CoberturaDocuments -Documents $manyReports } '*more than 62 reports*' 'merge says when it cannot compare that many reports'
+Assert-Equal '0' (Merge-CoberturaDocuments -Documents $manyReports -AllowDifferentLines).DocumentElement.GetAttribute('lines-valid') '-AllowDifferentLines merges more than 62 reports'
 
 [xml]$dupClass = '<coverage><packages><package name="P"><classes><class name="C" filename="c.cs"><lines /></class><class name="C" filename="c.cs"><lines /></class></classes></package></packages></coverage>'
 Assert-Throws { Merge-CoberturaDocuments -Documents $dupClass } "*lists class 'C' (c.cs) more than once*" 'merge rejects an input that lists a class twice'
@@ -315,6 +332,17 @@ Assert-Equal 87.3 $safe.Line            'safe metrics keep valid line'
 Assert-Equal 75.2 $safe.Branch          'safe metrics keep valid branch'
 Assert-Equal 510  $safe.BranchesCovered 'safe metrics keep valid covered'
 Assert-Equal 678  $safe.BranchesTotal   'safe metrics keep valid total'
+
+# The scoring version: optional, validated like a count, absent meaning version 1.
+Assert-Null $safe.ScoringVersion 'a record without scoringVersion carries none'
+$versioned = ConvertTo-SafeCoverageMetrics ([pscustomobject]@{ line = '87.3'; scoringVersion = 2 })
+Assert-Equal 2 $versioned.ScoringVersion 'safe metrics keep a valid scoring version'
+Assert-Null (ConvertTo-SafeCoverageMetrics ([pscustomobject]@{ line = '87.3'; scoringVersion = '2|<b>' })).ScoringVersion 'an injected scoring version is dropped'
+Assert-Equal 1 (Get-CoverageMetricsScoringVersion $safe) 'metrics without a scoring version count as version 1'
+Assert-Equal 1 (Get-CoverageMetricsScoringVersion ([pscustomobject]@{ Line = 1 })) 'metrics without the property at all count as version 1'
+Assert-Equal 1 (Get-CoverageMetricsScoringVersion $null) 'absent metrics count as version 1'
+Assert-Equal 2 (Get-CoverageMetricsScoringVersion $versioned) 'metrics report the scoring version they carry'
+Assert-True ((Get-CoverageScoringVersion) -gt 1) 'the current scoring version differs from the unversioned numbers of the dotnet-coverage merge'
 
 $evil = ConvertTo-SafeCoverageMetrics ([pscustomobject]@{ line = '99|<script>alert(1)</script>'; branch = '-5'; branchesCovered = '1e9'; branchesTotal = 'DROP TABLE' })
 Assert-Null $evil.Line            'injected line dropped'
@@ -426,6 +454,25 @@ Assert-Match    $baseGone "| Line   | n/a | 87.30% | $([char]0x2014) |" 'baselin
 Assert-NotMatch $baseGone 'No coverage change beyond'  'baseline-unavailable suppresses the no-change note'
 Assert-NotMatch $baseGone '+0.00 pp'                   'baseline-unavailable shows no signed delta'
 
+# Scoring versions: numbers the scripts scored differently are not compared.
+$headV2 = [pscustomobject]@{ Line = 88.29; Branch = 46.55; BranchesCovered = 17242; BranchesTotal = 37038; ScoringVersion = 2 }
+$baseV1 = [pscustomobject]@{ Line = 88.29; Branch = 66.33; BranchesCovered = 1044; BranchesTotal = 1574 }
+$baseV2 = [pscustomobject]@{ Line = 88.20; Branch = 46.50; BranchesCovered = 17220; BranchesTotal = 37038; ScoringVersion = 2 }
+$newHeadOldBase = Format-CoverageComment -BaseMetrics $baseV1 -HeadMetrics $headV2 -HeadSha 'aaa' -BaseSha 'bbbbbbbbb'
+Assert-Match    $newHeadOldBase '[!WARNING]'                              'a base scored by older scripts emits a warning'
+Assert-Match    $newHeadOldBase 'until the base branch is measured again' 'the warning says when the comparison returns'
+Assert-Match    $newHeadOldBase "| Line   | n/a | 88.29% | $([char]0x2014) |" 'no line delta across scoring versions'
+Assert-Match    $newHeadOldBase "| Branch | n/a | 46.55% (17242/37038) | $([char]0x2014) |" 'no branch delta across scoring versions'
+Assert-NotMatch $newHeadOldBase '66.33%'                                  'the differently scored base number is not shown'
+Assert-NotMatch $newHeadOldBase '(`bbbbbbb`)'                             'the header cites no base it does not compare against'
+Assert-NotMatch $newHeadOldBase 'No coverage change beyond'               'no no-change note without a comparison'
+$oldHeadNewBase = Format-CoverageComment -BaseMetrics $baseV2 -HeadMetrics ([pscustomobject]@{ Line = 88.19; Branch = 66.39; BranchesCovered = 1045; BranchesTotal = 1574 }) -HeadSha 'aaa' -BaseSha 'bbb'
+Assert-Match    $oldHeadNewBase 'Update this PR from the base branch'     'a PR scored by older scripts is told to update from the base branch'
+Assert-Match    $oldHeadNewBase "| Line   | n/a | 88.19% | $([char]0x2014) |" 'no delta for a PR scored by older scripts'
+$sameScoring = Format-CoverageComment -BaseMetrics $baseV2 -HeadMetrics $headV2 -HeadSha 'aaa' -BaseSha 'bbb'
+Assert-Match    $sameScoring '| Line   | 88.20% | 88.29% | +0.09 pp |'  'numbers of one scoring version are compared'
+Assert-NotMatch $sameScoring '[!WARNING]'                                 'one scoring version: no warning'
+
 # Security end-to-end: an injected value in the raw record never reaches markdown.
 $evilRaw = ConvertTo-SafeCoverageMetrics ([pscustomobject]@{ line = '<img src=x onerror=alert(1)>'; branch = '75.2'; branchesCovered = '510'; branchesTotal = '678' })
 $evilComment = Format-CoverageComment -BaseMetrics $base -HeadMetrics $evilRaw -HeadSha 'aaa' -BaseSha 'bbb'
@@ -462,6 +509,12 @@ Assert-NotMatch $selCompare '[!WARNING]'         'selector: comparison has no wa
 $selUnavail = Format-CoverageCommentFromMetrics -HeadMetrics $present -BaseMetrics $absent -HasBase $true -HeadSha 'aaa' -BaseSha 'bbb'
 Assert-Match    $selUnavail '[!WARNING]'          'selector: missing base -> baseline-unavailable'
 Assert-Match    $selUnavail '87.30%'              'selector: baseline-unavailable still shows head'
+
+# head + base present but scored differently -> the PR's absolute numbers and a warning.
+$presentV2 = ConvertTo-SafeCoverageMetrics ([pscustomobject]@{ line = '87.3'; branch = '75.2'; branchesCovered = '510'; branchesTotal = '678'; scoringVersion = '2' })
+$selScoring = Format-CoverageCommentFromMetrics -HeadMetrics $presentV2 -BaseMetrics $basePresent -HasBase $true -HeadSha 'aaa' -BaseSha 'bbb'
+Assert-Match    $selScoring 'scored by an older version' 'selector: head and base scored differently -> warning'
+Assert-NotMatch $selScoring '+1.20 pp'                   'selector: head and base scored differently -> no delta'
 
 # head present, HasBase false -> no-baseline absolute (branch dispatch).
 $selNoBase = Format-CoverageCommentFromMetrics -HeadMetrics $present -BaseMetrics $absent -HasBase $false -HeadSha 'aaa'

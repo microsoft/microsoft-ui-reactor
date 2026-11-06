@@ -70,7 +70,7 @@ re-do the same work.
 
 ## Reference: the coverage recipe
 
-Verbatim from `CONTRIBUTING.md`, captured here so this doc is self-contained.
+From `TESTING.md § Code coverage`, captured here so this doc is self-contained.
 
 ```pwsh
 # (install once: dotnet tool install -g dotnet-coverage)
@@ -86,10 +86,13 @@ dotnet-coverage collect -s coverage.settings.xml `
 dotnet build src/Reactor                 -c Debug -p:Optimize=false -p:DebugType=portable --no-incremental
 dotnet build tests/Reactor.AppTests.Host -c Debug -p:Optimize=false -p:DebugType=portable --no-incremental
 
-# 2. Statically instrument Reactor.dll inside the host bin folder.
-#    Dynamic instrumentation skips referenced assemblies.
+# 2. Statically instrument Reactor.dll and Reactor.Advanced.dll inside the host bin
+#    folder. Dynamic instrumentation skips referenced assemblies.
 dotnet-coverage instrument `
   "tests/Reactor.AppTests.Host/bin/<RID>/Debug/net10.0-windows10.0.22621.0/Reactor.dll" `
+  -s coverage.settings.xml
+dotnet-coverage instrument `
+  "tests/Reactor.AppTests.Host/bin/<RID>/Debug/net10.0-windows10.0.22621.0/Reactor.Advanced.dll" `
   -s coverage.settings.xml
 
 # 3. Collect
@@ -98,12 +101,13 @@ dotnet-coverage collect -s coverage.settings.xml `
   -- dotnet run --project tests/Reactor.AppTests.Host --no-build -- --self-test
 
 # --- Merge ---
-dotnet-coverage merge unit.cobertura.xml selftest.cobertura.xml `
-  --output merged.cobertura.xml --output-format cobertura
+# Not `dotnet-coverage merge`: it drops covered lines from these reports.
+pwsh tests/coverage/ci/Merge-Cobertura.ps1 -OutFile merged.cobertura.xml `
+  unit.cobertura.xml selftest.cobertura.xml
 ```
 
-`coverage.settings.xml` already restricts the measurement to `Reactor.dll`
-and excludes generated code (`obj/`, `*.g.cs`) and
+`coverage.settings.xml` already restricts the measurement to `Reactor.dll` and
+`Reactor.Advanced.dll` and excludes generated code (`obj/`, `*.g.cs`) and
 `[ExcludeFromCodeCoverage]` members.
 
 ### Why the line% may differ from branch%

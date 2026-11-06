@@ -35,7 +35,9 @@
     The output JSON (All and Merge) is consumed by CoverageLib.ps1's Format-CoverageComment:
       { "line": <num|null>, "branch": <num|null>,
         "branchesCovered": <int|null>, "branchesTotal": <int|null>,
-        "outcome": "success" }
+        "scoringVersion": <int>, "outcome": "success" }
+    scoringVersion is Get-CoverageScoringVersion; the poster shows a delta only between
+    numbers that carry the same one.
 
     Intermediate + merged cobertura reports are written to -WorkDir so the workflow
     can upload them as debugging artifacts. The script throws on any build/collect
@@ -291,6 +293,7 @@ $payload = [ordered]@{
     branch          = $rates.Branch
     branchesCovered = $rates.BranchesCovered
     branchesTotal   = $rates.BranchesTotal
+    scoringVersion  = Get-CoverageScoringVersion
     outcome         = 'success'
 }
 $json = ConvertTo-Json -InputObject $payload -Depth 3

@@ -9,8 +9,10 @@
     lines through their method and the unit and selftest reports name methods
     differently. Merge-CoberturaDocuments in CoverageLib.ps1 documents the full rules.
 
-    Fails when the inputs contain no lines at all, so an empty measurement cannot be
-    scored as full coverage.
+    Fails when the reports do not list the same lines (for example, one measured fewer
+    assemblies), because their union would mis-score coverage. Pass -AllowDifferentLines
+    to merge reports of different builds anyway. Also fails when the reports contain no
+    lines at all, so an empty measurement cannot be scored as full coverage.
 
     Merge a unit and a selftest report:
       pwsh tests/coverage/ci/Merge-Cobertura.ps1 -OutFile merged.cobertura.xml unit.cobertura.xml selftest.cobertura.xml
@@ -18,7 +20,8 @@
 [CmdletBinding(PositionalBinding = $false)]
 param(
     [Parameter(Mandatory)][string]$OutFile,
-    [Parameter(Mandatory, ValueFromRemainingArguments)][string[]]$Path
+    [Parameter(Mandatory, ValueFromRemainingArguments)][string[]]$Path,
+    [switch]$AllowDifferentLines
 )
 
 Set-StrictMode -Version Latest
@@ -31,7 +34,8 @@ $docs = foreach ($p in $Path) {
     $doc.Load((Resolve-Path -LiteralPath $p).Path)
     $doc
 }
-$merged = Merge-CoberturaDocuments -Documents $docs
+$names = @($Path | ForEach-Object { Split-Path -Leaf $_ })
+$merged = Merge-CoberturaDocuments -Documents $docs -Names $names -AllowDifferentLines:$AllowDifferentLines
 $root = $merged.DocumentElement
 if ($root.GetAttribute('lines-valid') -eq '0') {
     throw "None of the $(@($Path).Count) input report(s) lists a single line, so there is no coverage to merge."
