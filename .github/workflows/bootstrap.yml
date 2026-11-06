@@ -227,12 +227,30 @@ jobs:
           # Case-sensitive on purpose: the Template Name column carries the
           # capitalised prose word ("Reactor MVU App"), which is a standalone
           # token and would satisfy a case-insensitive match on its own.
-          # `reactor-singlefile` needs pack 0.0.8-alpha or later; bootstrap
-          # installs the newest pack on a fresh runner, so its absence means the
-          # docs' five-template claim no longer matches what users get.
+          #
+          # `reactor-singlefile` first ships in pack 0.0.8-alpha, which the docs
+          # already describe. Until that is the newest pack on NuGet.org,
+          # bootstrap correctly installs an older one, so a pack below 0.0.8 only
+          # gets a warning: this step checks what bootstrap installed, not when
+          # the next pack ships. From 0.0.8 on, a missing template fails, and a
+          # version this step can't read fails closed.
+          $packageLines = (dotnet new uninstall 2>&1 | Out-String) -split "`r?`n" | ForEach-Object { $_.Trim() }
+          $packVersion = $null
+          for ($i = 0; $i -lt $packageLines.Count - 1; $i++) {
+              if ($packageLines[$i] -eq 'Microsoft.WindowsAppSDK.WinUI.CSharp.Templates' -and
+                  $packageLines[$i + 1] -match '^Version:\s*(?<full>(?<core>\d+\.\d+\.\d+)\S*)') {
+                  $packVersion = [version]$Matches.core
+                  $packVersionText = $Matches.full
+                  break
+              }
+          }
           foreach ($shortName in @('reactor', 'reactor-mvu', 'reactor-navview', 'reactor-tabview', 'reactor-singlefile')) {
               $token = '(?<![^\s,])' + [regex]::Escape($shortName) + '(?![^\s,])'
               if (-not [regex]::IsMatch($joined, $token)) {
+                  if ($shortName -eq 'reactor-singlefile' -and $packVersion -and $packVersion -lt [version]'0.0.8') {
+                      Write-Host "::warning::reactor-singlefile is not in template pack $packVersionText; it first ships in 0.0.8-alpha, which the docs already describe."
+                      continue
+                  }
                   throw "$shortName template not found in ``dotnet new list reactor`` output"
               }
               Write-Host "  [ok] $shortName"
@@ -242,7 +260,6 @@ jobs:
           # (`...CSharp.Templates.Extras`) would otherwise satisfy this while the
           # required pack is absent — the same prefix false-positive
           # WinAppSdkTemplates.InterpretPackageInstalledOutput guards against.
-          $packageLines = (dotnet new uninstall 2>&1 | Out-String) -split "`r?`n" | ForEach-Object { $_.Trim() }
           if ($packageLines -notcontains 'Microsoft.WindowsAppSDK.WinUI.CSharp.Templates') {
               throw "Microsoft.WindowsAppSDK.WinUI.CSharp.Templates is not installed"
           }
