@@ -162,8 +162,12 @@ internal static class ChangeEchoSuppressor
             // guarded/no-op write that will never echo — so there is no future
             // echo to leak. Clear it unconditionally so a coincident later real
             // event whose readback happens to match cannot be swallowed.
-            // (Deferred-echo controls do NOT use this arm — ControlledPropEntry
-            // keeps its own per-payload arm with drain-on-match semantics.)
+            // (ControlledPropEntry keeps its own per-payload arm with
+            // drain-on-match semantics. The deferred echoes of RichEditBox and
+            // AutoSuggestBox do use this arm; if a counter token lands on one
+            // first, the arm is cleared
+            // here and the echo reaches the callback carrying the value Reactor
+            // just wrote, which is harmless.)
             state.PendingEchoMatch = null;
             // Mirror ShouldSuppress: scope is non-consuming; a counter token is.
             if (state.EchoSuppressScopeDepth == 0)

@@ -212,6 +212,93 @@ internal static class ControlledOptionalSelfTestHelpers
             callbackObserved);
     }
 
+    // A state write that CHANGES the controlled value, followed by a user edit.
+    // The engine's echo suppression for that write must be spent by the write's
+    // own echo (or never reserved, when the write is skipped); a leftover
+    // suppress-counter token would swallow the user's next real edit.
+    // RunEchoNoStrandAsync only covers a write equal to the current value, and
+    // RunBoundUpdatesControlAsync stops before any user edit.
+    internal static async Task RunUserEditAfterStateWriteAsync<TControl, TValue>(
+        Harness h,
+        string fixtureName,
+        Scenario<TControl, TValue> scenario,
+        string caseName,
+        TValue writtenValue)
+        where TControl : DependencyObject
+    {
+        var callbacks = new List<TValue>();
+        using var host = h.CreateHost();
+        var prefix = $"{fixtureName}_{scenario.Name}_{caseName}";
+        var writeLabel = $"{prefix}_Write";
+        host.Mount(ctx =>
+        {
+            var (value, setValue) = ctx.UseState(scenario.FirstValue);
+            return VStack(
+                Button(writeLabel, () => setValue(writtenValue)),
+                scenario.CreateElement(
+                    Optional<TValue>.Of(value),
+                    v =>
+                    {
+                        callbacks.Add(v);
+                        setValue(v);
+                    }));
+        });
+
+        await Harness.Render();
+        var control = scenario.FindControl(h);
+        h.Check($"{prefix}_ControlFound", control is not null);
+        if (control is null) return;
+        await Harness.Render(50);
+        callbacks.Clear();
+
+        h.ClickButton(writeLabel);
+        await Harness.Render();
+
+        // Let the write's echo land (some controls raise it asynchronously):
+        // wait until no counter token and no value-diff arm is pending. After
+        // that nothing may be left reserved to suppress a later event.
+        var tokens = -1;
+        var armPending = false;
+        await Harness.WaitFor(
+            () =>
+            {
+                var state = control is FrameworkElement fe && Reconciler.TryGetReactorState(fe, out var s) ? s : null;
+                tokens = state?.EchoSuppressCount ?? 0;
+                armPending = state?.PendingEchoMatch is not null;
+                return tokens == 0 && !armPending;
+            },
+            maxPasses: 25,
+            perPassMs: 20);
+        await Harness.Render();
+        h.Check(
+            $"{prefix}_NoEchoSuppressionLeftAfterWrite",
+            tokens == 0 && !armPending,
+            $"EchoSuppressCount={tokens}, valueDiffArmPending={armPending}");
+        h.Check(
+            $"{prefix}_WriteEchoSuppressed",
+            callbacks.Count == 0,
+            $"callbacks=[{string.Join(", ", callbacks)}]");
+
+        callbacks.Clear();
+        scenario.SetValue(control, scenario.UserValue);
+        var callbackObserved = await Harness.WaitFor(
+            () => callbacks.Count > 0 && ValuesEqual(callbacks[^1], scenario.UserValue),
+            maxPasses: 10,
+            perPassMs: 20);
+        if (!callbackObserved && scenario.Name is "AutoSuggestBox")
+        {
+            h.Skip(
+                $"{prefix}_UserEditReachesCallback",
+                "WinUI programmatic selftest path does not synthesize the user-only change event for this control");
+            return;
+        }
+
+        h.Check(
+            $"{prefix}_UserEditReachesCallback",
+            callbackObserved,
+            $"callbacks=[{string.Join(", ", callbacks)}]");
+    }
+
     internal static async Task RunForceClearSentinelAsync<TControl>(
         Harness h,
         string fixtureName,
