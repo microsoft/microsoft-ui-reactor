@@ -192,7 +192,7 @@ public class YogaBoxSizingTest
     }
 
     [Fact]
-    public void Box_Sizing_Content_Box_Comtaining_Block()
+    public void Box_Sizing_Content_Box_Containing_Block()
     {
         var config = new YogaConfig();
         var root = new YogaNode(config);
@@ -239,7 +239,7 @@ public class YogaBoxSizingTest
     }
 
     [Fact]
-    public void Box_Sizing_Border_Box_Comtaining_Block()
+    public void Box_Sizing_Border_Box_Containing_Block()
     {
         var config = new YogaConfig();
         var root = new YogaNode(config);
@@ -1495,43 +1495,6 @@ public class YogaBoxSizingTest
         Assert.Equal(9f, root_child0_child0_child0.LayoutHeight);
     }
 
-    [Fact(Skip = "Skipped in upstream Yoga (GTEST_SKIP)")]
-    public void Box_Sizing_Content_Box_Flex_Basis_Row()
-    {
-        // TODO: GTEST_SKIP();
-        var config = new YogaConfig();
-        var root = new YogaNode(config);
-        root.PositionType = FlexPositionType.Absolute;
-        root.Width = YogaValue.Point(100f);
-        root.Height = YogaValue.Point(100f);
-        root.FlexDirection = FlexDirection.Row;
-        var root_child0 = new YogaNode(config);
-        root_child0.FlexBasis = YogaValue.Point(50f);
-        root_child0.Height = YogaValue.Point(25f);
-        root_child0.SetPadding(YogaEdge.All, YogaValue.Point(5f));
-        root_child0.SetBorder(YogaEdge.All, 10f);
-        root_child0.Style.BoxSizing = YogaBoxSizing.ContentBox;
-        root.InsertChild(root_child0, 0);
-        root.CalculateLayout(float.NaN, float.NaN, FlexLayoutDirection.LTR);
-        Assert.Equal(0f, root.LayoutX);
-        Assert.Equal(0f, root.LayoutY);
-        Assert.Equal(100f, root.LayoutWidth);
-        Assert.Equal(100f, root.LayoutHeight);
-        Assert.Equal(0f, root_child0.LayoutX);
-        Assert.Equal(0f, root_child0.LayoutY);
-        Assert.Equal(80f, root_child0.LayoutWidth);
-        Assert.Equal(55f, root_child0.LayoutHeight);
-        root.CalculateLayout(float.NaN, float.NaN, FlexLayoutDirection.RTL);
-        Assert.Equal(0f, root.LayoutX);
-        Assert.Equal(0f, root.LayoutY);
-        Assert.Equal(100f, root.LayoutWidth);
-        Assert.Equal(100f, root.LayoutHeight);
-        Assert.Equal(20f, root_child0.LayoutX);
-        Assert.Equal(0f, root_child0.LayoutY);
-        Assert.Equal(80f, root_child0.LayoutWidth);
-        Assert.Equal(55f, root_child0.LayoutHeight);
-    }
-
     [Fact]
     public void Box_Sizing_Border_Box_Flex_Basis_Row()
     {
@@ -1565,42 +1528,6 @@ public class YogaBoxSizingTest
         Assert.Equal(0f, root_child0.LayoutY);
         Assert.Equal(50f, root_child0.LayoutWidth);
         Assert.Equal(30f, root_child0.LayoutHeight);
-    }
-
-    [Fact(Skip = "Skipped in upstream Yoga (GTEST_SKIP)")]
-    public void Box_Sizing_Content_Box_Flex_Basis_Column()
-    {
-        // TODO: GTEST_SKIP();
-        var config = new YogaConfig();
-        var root = new YogaNode(config);
-        root.PositionType = FlexPositionType.Absolute;
-        root.Width = YogaValue.Point(100f);
-        root.Height = YogaValue.Point(100f);
-        var root_child0 = new YogaNode(config);
-        root_child0.FlexBasis = YogaValue.Point(50f);
-        root_child0.Height = YogaValue.Point(25f);
-        root_child0.SetPadding(YogaEdge.All, YogaValue.Point(5f));
-        root_child0.SetBorder(YogaEdge.All, 10f);
-        root_child0.Style.BoxSizing = YogaBoxSizing.ContentBox;
-        root.InsertChild(root_child0, 0);
-        root.CalculateLayout(float.NaN, float.NaN, FlexLayoutDirection.LTR);
-        Assert.Equal(0f, root.LayoutX);
-        Assert.Equal(0f, root.LayoutY);
-        Assert.Equal(100f, root.LayoutWidth);
-        Assert.Equal(100f, root.LayoutHeight);
-        Assert.Equal(0f, root_child0.LayoutX);
-        Assert.Equal(0f, root_child0.LayoutY);
-        Assert.Equal(100f, root_child0.LayoutWidth);
-        Assert.Equal(80f, root_child0.LayoutHeight);
-        root.CalculateLayout(float.NaN, float.NaN, FlexLayoutDirection.RTL);
-        Assert.Equal(0f, root.LayoutX);
-        Assert.Equal(0f, root.LayoutY);
-        Assert.Equal(100f, root.LayoutWidth);
-        Assert.Equal(100f, root.LayoutHeight);
-        Assert.Equal(0f, root_child0.LayoutX);
-        Assert.Equal(0f, root_child0.LayoutY);
-        Assert.Equal(100f, root_child0.LayoutWidth);
-        Assert.Equal(80f, root_child0.LayoutHeight);
     }
 
     [Fact]

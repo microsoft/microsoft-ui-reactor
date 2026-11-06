@@ -43,8 +43,20 @@ public class YogaEdgeCaseTests
     public void Config_SetErrata_SameValueDoesNotIncrementVersion()
     {
         var config = new YogaConfig();
-        config.SetErrata(YogaErrata.None); // same as default
+        config.SetErrata(config.Errata); // same as default
         Assert.Equal(0u, config.Version);
+    }
+
+    [Fact]
+    public void Config_DefaultErrata_MatchesUpstream()
+    {
+        // Upstream facebook/yoga keeps §4.5 auto-min-size (#1968) and the
+        // original-totals first flex pass (#2021) opt-in via these default bits.
+        var config = new YogaConfig();
+        Assert.Equal(
+            YogaErrata.MinSizeUndefinedInsteadOfAuto | YogaErrata.FlexFirstPassUsesRunningTotals,
+            config.Errata);
+        Assert.Equal(config.Errata, YogaConfig.Default.Errata);
     }
 
     [Fact]

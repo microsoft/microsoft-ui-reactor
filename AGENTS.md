@@ -8,7 +8,7 @@ Reactor is a declarative, component-based C# framework for building WinUI 3 desk
 # Build (platform defaults to machine arch for apps; libraries are AnyCPU)
 dotnet build Reactor.slnx
 
-# Unit tests — xUnit, headless, fast (13,000+ tests incl. 590 Yoga fixtures)
+# Unit tests — xUnit, headless, fast (13,000+ tests incl. 543 Yoga fixtures)
 dotnet test tests/Reactor.Tests
 
 # Single test class (xUnit suites use the MTP filter flags, not `--filter`)

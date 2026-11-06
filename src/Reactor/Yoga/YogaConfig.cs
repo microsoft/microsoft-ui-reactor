@@ -13,7 +13,11 @@ namespace Microsoft.UI.Reactor.Layout;
 internal sealed class YogaConfig
 {
     private bool _useWebDefaults;
-    private YogaErrata _errata = YogaErrata.None;
+    // Upstream facebook/yoga defaults new configs to these two errata so §4.5
+    // automatic minimum sizing (#1968) and the original-totals first flex pass
+    // (#2021) stay opt-in and existing layouts are unchanged.
+    private YogaErrata _errata =
+        YogaErrata.MinSizeUndefinedInsteadOfAuto | YogaErrata.FlexFirstPassUsesRunningTotals;
     private float _pointScaleFactor = 1.0f;
     private uint _version;
     private readonly bool[] _experimentalFeatures = new bool[2]; // ExperimentalFeature count

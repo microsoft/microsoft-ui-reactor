@@ -870,10 +870,14 @@ automatic re-attach. `dotnet new reactor` also references the deprecated
 that the Visual Studio embedded preview and the VS Code live preview use; Release
 builds drop it, so that code trims away. The `Reactor.DevtoolsSupport` switch the
 template also sets is on in Debug anyway (through `ReactorDiagnostics`), and the
-WinUI DevTools need it for C# call sites. The template's `"<AppName> (Unpackaged, Devtools)"` launch profile
-starts the app under that preview host. The in-app dev menu it used to show
-(`DevtoolsMenu`, `UseDevtools`) has been removed. The
+WinUI DevTools need it for C# call sites. The default launch profile passes no
+arguments. If your template pack also has an `"<AppName> (Unpackaged, Devtools)"`
+profile, what it does depends on its argument: a bare `--devtools` starts the app
+under that preview host, while `--devtools app` (the in-app dev menu session) now
+prints the winapp command to use and exits `2` — use `winapp run . --devtools`
+instead. The in-app dev menu (`DevtoolsMenu`, `UseDevtools`) has been removed. The
 [dev tooling](dev-tooling.md) page covers the full inner loop.
+
 ## Common Mistakes
 
 ### Editing `bin/` artifacts to "see your change"

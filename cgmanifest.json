@@ -7,7 +7,7 @@
         "Type": "git",
         "Git": {
           "RepositoryUrl": "https://github.com/facebook/yoga",
-          "CommitHash": "dc6d185262e53a4385f2ce13af428548ef91a884"
+          "CommitHash": "41118bd3a86c637fdb43a90fd596e78375137d0f"
         }
       },
       "Path": "src/Reactor/Yoga/",

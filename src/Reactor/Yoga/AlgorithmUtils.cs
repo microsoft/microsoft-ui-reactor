@@ -214,25 +214,10 @@ internal static class PixelGridHelper
 {
     public static float RoundValueToPixelGrid(double value, double pointScaleFactor, bool forceCeil, bool forceFloor)
     {
-        double scaledValue = value * pointScaleFactor;
-        double fractial = scaledValue % 1.0;
-        if (fractial < 0) fractial += 1.0;
-
-        if (InexactEquals(fractial, 0))
-            scaledValue -= fractial;
-        else if (InexactEquals(fractial, 1.0))
-            scaledValue = scaledValue - fractial + 1.0;
-        else if (forceCeil)
-            scaledValue = scaledValue - fractial + 1.0;
-        else if (forceFloor)
-            scaledValue -= fractial;
-        else
-            scaledValue = scaledValue - fractial +
-                (!double.IsNaN(fractial) && (fractial > 0.5 || InexactEquals(fractial, 0.5)) ? 1.0 : 0.0);
-
-        if (double.IsNaN(scaledValue) || double.IsNaN(pointScaleFactor))
+        double rounded = RoundValueToPixelGridDouble(value, pointScaleFactor, forceCeil, forceFloor);
+        if (double.IsNaN(rounded))
             return float.NaN;
-        var result = (float)(scaledValue / pointScaleFactor);
+        var result = (float)rounded;
         // SECURITY (TASK-083): clamp +∞/-∞ to a large finite value before
         // returning. Apps with `MaxWidth = ∞` (the standard "unconstrained"
         // idiom) used to hit `Arrange` with +Infinity and crash WinUI.
@@ -241,6 +226,31 @@ internal static class PixelGridHelper
         if (float.IsPositiveInfinity(result)) return float.MaxValue;
         if (float.IsNegativeInfinity(result)) return float.MinValue;
         return result;
+    }
+
+    private static double RoundValueToPixelGridDouble(double value, double pointScaleFactor, bool forceCeil, bool forceFloor)
+    {
+        double scaledValue = value * pointScaleFactor;
+        // Upstream facebook/yoga#2041: bit-identical to fmod(x, 1.0) for every
+        // double (including -0.0, infinities and NaN).
+        double fractional = Math.CopySign(scaledValue - Math.Truncate(scaledValue), scaledValue);
+        if (fractional < 0) fractional += 1.0;
+
+        if (InexactEquals(fractional, 0))
+            scaledValue -= fractional;
+        else if (InexactEquals(fractional, 1.0))
+            scaledValue = scaledValue - fractional + 1.0;
+        else if (forceCeil)
+            scaledValue = scaledValue - fractional + 1.0;
+        else if (forceFloor)
+            scaledValue -= fractional;
+        else
+            scaledValue = scaledValue - fractional +
+                (!double.IsNaN(fractional) && (fractional > 0.5 || InexactEquals(fractional, 0.5)) ? 1.0 : 0.0);
+
+        if (double.IsNaN(scaledValue) || double.IsNaN(pointScaleFactor))
+            return double.NaN;
+        return scaledValue / pointScaleFactor;
     }
 
     public static void RoundLayoutResultsToPixelGrid(YogaNode node, double absoluteLeft, double absoluteTop)
@@ -274,13 +284,26 @@ internal static class PixelGridHelper
             double scaledNodeHeight = nodeHeight * pointScaleFactor;
             bool hasFractionalHeight = !InexactEquals(Math.Round(scaledNodeHeight), scaledNodeHeight);
 
-            node.Layout.SetDimension(YogaDimension.Width,
-                RoundValueToPixelGrid(absoluteNodeRight, pointScaleFactor, textRounding && hasFractionalWidth, textRounding && !hasFractionalWidth)
-                - RoundValueToPixelGrid(absoluteNodeLeft, pointScaleFactor, false, textRounding));
+            // Upstream facebook/yoga#2037: take the difference of the two rounded
+            // edges in double. Far from the origin a float has fewer bits than a
+            // pixel, so a float difference could come out one float step short
+            // of the measured size (e.g. 43.9998779 instead of 44). The edges are
+            // bounded by this node's float size, so the difference stays finite.
+            // Upstream facebook/yoga#2040: a text node whose scaled size is already
+            // a whole number of pixels keeps that pixel count; rounding its two edges
+            // independently could snap one and floor the other, losing a pixel and
+            // truncating the text.
+            node.Layout.SetDimension(YogaDimension.Width, textRounding && !hasFractionalWidth
+                ? (float)(Math.Round(scaledNodeWidth) / pointScaleFactor)
+                : (float)(
+                    RoundValueToPixelGridDouble(absoluteNodeRight, pointScaleFactor, textRounding, false)
+                    - RoundValueToPixelGridDouble(absoluteNodeLeft, pointScaleFactor, false, textRounding)));
 
-            node.Layout.SetDimension(YogaDimension.Height,
-                RoundValueToPixelGrid(absoluteNodeBottom, pointScaleFactor, textRounding && hasFractionalHeight, textRounding && !hasFractionalHeight)
-                - RoundValueToPixelGrid(absoluteNodeTop, pointScaleFactor, false, textRounding));
+            node.Layout.SetDimension(YogaDimension.Height, textRounding && !hasFractionalHeight
+                ? (float)(Math.Round(scaledNodeHeight) / pointScaleFactor)
+                : (float)(
+                    RoundValueToPixelGridDouble(absoluteNodeBottom, pointScaleFactor, textRounding, false)
+                    - RoundValueToPixelGridDouble(absoluteNodeTop, pointScaleFactor, false, textRounding)));
         }
 
         // #145: iterate by index via ChildCount/GetChild instead of foreach over
@@ -289,7 +312,11 @@ internal static class PixelGridHelper
         // the original traversal.
         for (int i = 0; i < node.ChildCount; i++)
         {
-            RoundLayoutResultsToPixelGrid(node.GetChild(i), absoluteNodeLeft, absoluteNodeTop);
+            var child = node.GetChild(i);
+            // Upstream facebook/yoga#2015: skip children shared with another owner.
+            if (!ReferenceEquals(child.Owner, node))
+                continue;
+            RoundLayoutResultsToPixelGrid(child, absoluteNodeLeft, absoluteNodeTop);
         }
     }
 
@@ -478,8 +505,16 @@ internal static class FlexLineHelper
             if (YogaFloat.IsUndefined(flexBasisWithMinAndMaxConstraints))
                 flexBasisWithMinAndMaxConstraints = 0;
 
-            if (sizeConsumedIncludingMinConstraint + flexBasisWithMinAndMaxConstraints +
-                    childMarginMainAxis + childLeadingGapMainAxis > availableInnerMainDim &&
+            float requiredMainDim = sizeConsumedIncludingMinConstraint + flexBasisWithMinAndMaxConstraints +
+                childMarginMainAxis + childLeadingGapMainAxis;
+
+            // Upstream facebook/yoga#2022: tolerate the same epsilon the measurement
+            // cache uses when it decides a cached measurement still fits. A
+            // content-sized wrap container adds padding and border to the
+            // max-content sum and subtracts them again; in float32 that round-trip
+            // can land a few ulps low, which would otherwise break the line.
+            if (requiredMainDim > availableInnerMainDim &&
+                !YogaFloat.InexactEquals(requiredMainDim, availableInnerMainDim) &&
                 isNodeFlexWrap && itemsInFlow.Count > 0)
             {
                 break;

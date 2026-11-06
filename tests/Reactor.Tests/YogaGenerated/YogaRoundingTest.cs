@@ -251,7 +251,7 @@ public class YogaRoundingTest
     }
 
     [Fact]
-    public void Rounding_Total_Fractial()
+    public void Rounding_Total_Fractional()
     {
         var config = new YogaConfig();
         var root = new YogaNode(config);
@@ -308,7 +308,7 @@ public class YogaRoundingTest
     }
 
     [Fact]
-    public void Rounding_Total_Fractial_Nested()
+    public void Rounding_Total_Fractional_Nested()
     {
         var config = new YogaConfig();
         var root = new YogaNode(config);
@@ -393,7 +393,7 @@ public class YogaRoundingTest
     }
 
     [Fact]
-    public void Rounding_Fractial_Input_1()
+    public void Rounding_Fractional_Input_1()
     {
         var config = new YogaConfig();
         var root = new YogaNode(config);
@@ -450,7 +450,7 @@ public class YogaRoundingTest
     }
 
     [Fact]
-    public void Rounding_Fractial_Input_2()
+    public void Rounding_Fractional_Input_2()
     {
         var config = new YogaConfig();
         var root = new YogaNode(config);
@@ -507,7 +507,7 @@ public class YogaRoundingTest
     }
 
     [Fact]
-    public void Rounding_Fractial_Input_3()
+    public void Rounding_Fractional_Input_3()
     {
         var config = new YogaConfig();
         var root = new YogaNode(config);
@@ -565,7 +565,7 @@ public class YogaRoundingTest
     }
 
     [Fact]
-    public void Rounding_Fractial_Input_4()
+    public void Rounding_Fractional_Input_4()
     {
         var config = new YogaConfig();
         var root = new YogaNode(config);

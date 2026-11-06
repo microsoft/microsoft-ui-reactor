@@ -29,7 +29,7 @@ namespace Microsoft.UI.Reactor.Diagnostics;
 /// <para><b>When the flag is read.</b> The scope opens whatever
 /// <see cref="Enabled"/> says at call time, and the host decides at mount time
 /// (<see cref="KeepIfEnabled"/>). That ordering matters for <c>ReactorApp.Run</c>: under
-/// <c>--devtools app</c> the flag is switched on by the devtools bootstrap inside Run,
+/// <c>--devtools run</c> the flag is switched on by the devtools bootstrap inside Run,
 /// after Run's own call site has already been taken, and the primary window mounts later
 /// still. Gating the capture on the flag would lose exactly the site an inspector came
 /// for; gating the store keeps an ordinary launch from recording anything.</para>

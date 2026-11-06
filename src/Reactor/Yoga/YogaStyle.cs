@@ -94,6 +94,26 @@ internal sealed class YogaStyle
         _maxDimensions[1] = YogaValue.Undefined;
     }
 
+    // Upstream facebook/yoga#2042: percentage margins and paddings resolve
+    // against the owner's width on both axes, and a percentage size or size
+    // bound against the owner's size on its own axis.
+    public bool ResolvesAgainstOwnerWidth()
+    {
+        for (int i = 0; i < 9; i++)
+        {
+            if (_margin[i].IsPercent || _padding[i].IsPercent)
+                return true;
+        }
+        return _dimensions[(int)YogaDimension.Width].IsPercent ||
+               _minDimensions[(int)YogaDimension.Width].IsPercent ||
+               _maxDimensions[(int)YogaDimension.Width].IsPercent;
+    }
+
+    public bool ResolvesAgainstOwnerHeight() =>
+        _dimensions[(int)YogaDimension.Height].IsPercent ||
+        _minDimensions[(int)YogaDimension.Height].IsPercent ||
+        _maxDimensions[(int)YogaDimension.Height].IsPercent;
+
     // Aspect ratio (NaN = undefined)
     private float _aspectRatio = float.NaN;
     public float AspectRatio
