@@ -576,12 +576,13 @@ session opt-in on the command line:
 dotnet run -- --devtools app
 ```
 
-The scaffolded `Properties/launchSettings.json` ships a second
-`"<AppName> Devtools"` profile that passes that flag for you, so pick that
-profile in Visual Studio or use
-`dotnet run --launch-profile "<AppName> Devtools"`. The default profile
-deliberately passes no arguments — a plain `dotnet run -c Debug` starts the app
-with **no** dev menu.
+`dotnet run` hands everything after `--` to the app, and a packaged scaffold
+still receives it when it launches with package identity. The default profile in
+the scaffolded `Properties/launchSettings.json` deliberately passes no
+arguments — a plain `dotnet run -c Debug` starts the app with **no** dev menu.
+Keep the `app`, too: a bare `--devtools` is read as `--devtools run`, the
+heavier session behind [`mur devtools`](dev-tooling.md#mcp-server) that also
+starts an MCP endpoint.
 
 `UseDevtools()` returns `true` only when both signals are present, which is what
 gates the reconcile-highlight overlay and the rest of the menu. Release builds
