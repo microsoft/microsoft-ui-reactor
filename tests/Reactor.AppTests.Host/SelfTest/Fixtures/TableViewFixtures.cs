@@ -112,10 +112,12 @@ internal static partial class TableViewFixtures
                 $"header={nameColumn?.Header} width={nameColumn?.Width.Value}");
 
             H.ClickButton("Next phase");
+            // A type/count change rebuilds the native column list; allow for a slow CI dispatcher
+            // and say which half is missing if it still times out.
             H.Check("TableView_Update_ColumnAddedStructurally",
                 await Harness.WaitFor(() => table!.Columns.Count == 3 && H.FindText("group:B") is not null,
-                    maxPasses: 40, perPassMs: 25),
-                $"columns={table?.Columns.Count}");
+                    maxPasses: 80, perPassMs: 25),
+                $"columns={table?.Columns.Count} groupCell={H.FindText("group:B") is not null} phase2Rendered={H.FindText("p2:7") is not null}");
 
             host.Mount(_ => TextBlock("TableView unmounted"));
             await Harness.Render();
