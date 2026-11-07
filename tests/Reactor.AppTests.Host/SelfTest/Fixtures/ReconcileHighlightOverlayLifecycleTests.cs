@@ -124,10 +124,14 @@ internal static class ReconcileHighlightOverlayLifecycleTests
                 H.Check("OverlayLifecycle_Refresh_AliveAfterRefresh",
                     overlay.LiveSpriteCount == 1);
 
-                // Wait past the new window — should expire.
+                // Wait past the new window — should expire. Poll after the wait: the reset itself
+                // is proven by AliveAfterRefresh above, and a single sample 100ms past the hold
+                // is the margin that misses when the expiry timer ticks late under load.
                 await Task.Delay(500);
+                var expired = await Harness.WaitFor(() => overlay.LiveSpriteCount == 0 && overlay.ActiveTargetCount == 0,
+                    maxPasses: 40, perPassMs: 25);
                 H.Check("OverlayLifecycle_Refresh_ExpiresAfterFinalWindow",
-                    overlay.LiveSpriteCount == 0 && overlay.ActiveTargetCount == 0);
+                    expired, $"live={overlay.LiveSpriteCount} active={overlay.ActiveTargetCount}");
             }
             finally { Teardown(overlay); }
         }

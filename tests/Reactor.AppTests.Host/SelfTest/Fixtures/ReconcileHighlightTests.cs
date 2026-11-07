@@ -341,15 +341,19 @@ internal static class ReconcileHighlightTests
                 var overlay = host.OverlayWiring?.HighlightOverlay;
                 H.Check("RapidClearWait_OverlayConstructed", overlay is not null);
 
-                // Wait past hold duration plus generous slack for timer dispatch.
+                // Wait past hold duration plus generous slack for timer dispatch, then poll:
+                // a single sample at 400ms missed on the coverage-instrumented CI lane, where
+                // the expiry timers tick late. Sprites that never clear still fail.
                 await Task.Delay(400);
 
                 if (overlay is not null)
                 {
+                    var cleared = await Harness.WaitFor(() => overlay.LiveSpriteCount == 0 && overlay.ActiveTargetCount == 0,
+                        maxPasses: 40, perPassMs: 25);
                     H.Check("RapidClearWait_AllSpritesGone",
-                        overlay.LiveSpriteCount == 0);
+                        overlay.LiveSpriteCount == 0, $"cleared={cleared} live={overlay.LiveSpriteCount}");
                     H.Check("RapidClearWait_ActiveDictDrained",
-                        overlay.ActiveTargetCount == 0);
+                        overlay.ActiveTargetCount == 0, $"active={overlay.ActiveTargetCount}");
                 }
             }
             finally
