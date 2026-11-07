@@ -76,8 +76,16 @@ public class WinUiNavigationMotionParityTests
     /// files). Note that the 2.5.4-experimental tag is rooted at the repository root, NOT under
     /// <c>src/</c> like the 2.x stable tags, so its paths are
     /// <c>dxaml/phone/lib/…</c> — see step 2 of the guard message.</para>
+    /// <para>Re-verified for the 2.5.4-experimental → 2.6.6-experimental bump. When it was
+    /// made, no <c>winui3/release/2.6.6-experimental</c> tag existed yet, so this is a
+    /// bracketing check rather than a tag-exact one: the same four blob SHAs are present at
+    /// <c>winui3/release/2.5.4-experimental</c>, at <c>winui3/release/2.6.4</c>
+    /// (<c>c29edd64ae…</c>, the newest stable tag published; 2.6.6-experimental builds on
+    /// 2.6.5 stable, which has no tag either), and at
+    /// <c>main</c> (<c>78c72df1a5…</c>). Positive control: 2.5.4-experimental → main changes
+    /// 300 files. Re-run the tag-exact comparison once the tag is published.</para>
     /// </remarks>
-    private const string VerifiedAgainstWindowsAppSdkVersion = "2.5.4-experimental";
+    private const string VerifiedAgainstWindowsAppSdkVersion = "2.6.6-experimental";
 
     // ════════════════════════════════════════════════════════════════
     //  Entrance — ThemeTransitions.cpp,
