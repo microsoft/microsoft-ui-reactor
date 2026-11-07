@@ -80,6 +80,7 @@ internal static partial class TableViewFixtures
         {
             var first = Rows();
             var second = new Row[] { new(4, "Dave", "B", 7) };
+            var clicks = new List<int>();
             var host = H.CreateHost();
             host.Mount(ctx =>
             {
@@ -92,7 +93,7 @@ internal static partial class TableViewFixtures
                 if (phase == 2)
                     columns.Add(TemplateColumn<Row>("Group", r => TextBlock($"group:{r.Group}")));
                 return VStack(8,
-                    Button("Next phase", () => setPhase(phase + 1)),
+                    Button("Next phase", () => { clicks.Add(phase); setPhase(phase + 1); }),
                     TextBlock($"phase:{phase}"),
                     TableView(phase == 0 ? first : second, [.. columns]).Width(480).Height(240));
             });
@@ -118,7 +119,7 @@ internal static partial class TableViewFixtures
             H.Check("TableView_Update_ColumnAddedStructurally",
                 await Harness.WaitFor(() => table!.Columns.Count == 3 && H.FindText("group:B") is not null,
                     maxPasses: 80, perPassMs: 25),
-                $"columns={table?.Columns.Count} groupCell={H.FindText("group:B") is not null} phase2Rendered={H.FindText("p2:7") is not null} componentAtPhase2={H.FindText("phase:2") is not null}");
+                $"columns={table?.Columns.Count} groupCell={H.FindText("group:B") is not null} phase2Rendered={H.FindText("p2:7") is not null} shownPhase={(H.FindText("phase:2") is not null ? 2 : H.FindText("phase:1") is not null ? 1 : H.FindText("phase:0") is not null ? 0 : -1)} clicksSeenAtPhase=[{string.Join(",", clicks)}]");
 
             host.Mount(_ => TextBlock("TableView unmounted"));
             await Harness.Render();
