@@ -702,6 +702,8 @@ public class ModifierUnsetClearValueTests
         "Control.BorderBrush",
         "Control.Background",
         "Control.IsEnabled",
+        "Control.HorizontalContentAlignment",
+        "Control.VerticalContentAlignment",
         "Border.Padding",
         "Border.CornerRadius",
         "Border.BorderThickness",

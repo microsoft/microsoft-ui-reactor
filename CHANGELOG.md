@@ -44,6 +44,10 @@ Conventions for contributors:
 
 ### Fixed
 
+- Pooled controls release `HorizontalContentAlignment` and `VerticalContentAlignment`
+  on return, preventing content alignment from leaking into the next element that
+  reuses the control ([issue #1013](https://github.com/microsoft/microsoft-ui-reactor/issues/1013)).
+
 - `UseDataSource` retains its initial normalized page size across rerenders and
   query restarts, keeping requests and cursor offsets aligned with resource row
   positions. To use a different size, remount the calling component by changing
