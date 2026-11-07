@@ -435,10 +435,20 @@ public sealed class MxcSandbox
             if (await Task.WhenAny(pumps, Task.Delay(TimeSpan.FromSeconds(3))).ConfigureAwait(false) != pumps)
             {
                 _interrupted = true;
-                try { _proc.StandardOutputCloser?.Close(); }
-                catch (Exception ex) when (ex is MxcException or IOException or ObjectDisposedException) { /* already closed */ }
-                try { _proc.StandardErrorCloser?.Close(); }
-                catch (Exception ex) when (ex is MxcException or IOException or ObjectDisposedException) { /* already closed */ }
+                // Each closer property access returns an independent native handle,
+                // so dispose it after use.
+                try
+                {
+                    using var closer = _proc.StandardOutputCloser;
+                    closer?.Close();
+                }
+                catch (Exception ex) when (ex is MxcException or IOException or ObjectDisposedException or InvalidOperationException) { /* already closed */ }
+                try
+                {
+                    using var closer = _proc.StandardErrorCloser;
+                    closer?.Close();
+                }
+                catch (Exception ex) when (ex is MxcException or IOException or ObjectDisposedException or InvalidOperationException) { /* already closed */ }
                 await Task.WhenAny(pumps, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false);
             }
 
