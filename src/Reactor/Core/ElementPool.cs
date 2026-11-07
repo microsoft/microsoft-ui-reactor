@@ -314,9 +314,9 @@ public sealed class ElementPool : IDisposable
         //
         // The chain mirrors ApplyModifiers' receiver types for the receivers that are actually
         // pooled (Reconciler.cs): Padding → Control | Border | Grid | StackPanel | TextBlock,
-        // CornerRadius → Control | Border | Grid | StackPanel, BorderBrush/BorderThickness →
-        // Control | Border, Background → Panel | Control | Border, IsEnabled → Control.
-        // The Padding and CornerRadius gates also admit RelativePanel, which gets no clear
+        // CornerRadius / BorderBrush / BorderThickness → Control | Border | Grid | StackPanel,
+        // Background → Panel | Control | Border, IsEnabled → Control.
+        // These border-box modifier gates also admit RelativePanel, which gets no clear
         // here because RelativePanel is not in PoolableTypes — it is never returned to the
         // pool, so there is no local value for a later renter to inherit. Canvas is the
         // opposite case and is covered: it is poolable, and the only gate that admits it is
@@ -369,11 +369,15 @@ public sealed class ElementPool : IDisposable
             {
                 resetGrid.ClearValue(WinUI.Grid.PaddingProperty);
                 resetGrid.ClearValue(WinUI.Grid.CornerRadiusProperty);
+                resetGrid.ClearValue(WinUI.Grid.BorderThicknessProperty);
+                resetGrid.ClearValue(WinUI.Grid.BorderBrushProperty);
             }
             else if (resetPanel is WinUI.StackPanel resetStack)
             {
                 resetStack.ClearValue(WinUI.StackPanel.PaddingProperty);
                 resetStack.ClearValue(WinUI.StackPanel.CornerRadiusProperty);
+                resetStack.ClearValue(WinUI.StackPanel.BorderThicknessProperty);
+                resetStack.ClearValue(WinUI.StackPanel.BorderBrushProperty);
             }
         }
         else if (fe is TextBlock resetText)

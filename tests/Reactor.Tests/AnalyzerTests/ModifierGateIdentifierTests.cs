@@ -195,9 +195,9 @@ public class ModifierGateIdentifierTests
     [Fact]
     public void Substring_Matching_Accepts_A_Wider_Gate_Where_Boundary_Matching_Does_Not()
     {
-        var identifiers = ModifierGateSource.GateSlots
-            .Select(slot => slot.Identifier)
-            .Distinct(StringComparer.Ordinal)
+        // Include declared groups that no property currently uses: asking for such
+        // a gate must still not match a wider identifier containing its name.
+        var identifiers = ModifierGateSource.DeclaredGroups.Keys
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
 

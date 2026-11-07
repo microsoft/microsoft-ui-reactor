@@ -69,12 +69,13 @@ namespace Microsoft.UI.Xaml.Controls
         public Brush Background { get; set; }
     }
 
-    // Grid is a Panel: Background, Padding, and CornerRadius apply; Border* do not.
+    // Concrete panels declare their own border-box properties.
     public class Grid : Panel
     {
         public Thickness Padding { get; set; }
         public CornerRadius CornerRadius { get; set; }
         public Thickness BorderThickness { get; set; }
+        public Brush BorderBrush { get; set; }
     }
 
     // StackPanel is in both Padding's and CornerRadius's allow-lists.
@@ -82,17 +83,27 @@ namespace Microsoft.UI.Xaml.Controls
     {
         public Thickness Padding { get; set; }
         public CornerRadius CornerRadius { get; set; }
+        public Thickness BorderThickness { get; set; }
+        public Brush BorderBrush { get; set; }
     }
 
     public class RelativePanel : Panel
     {
         public Thickness Padding { get; set; }
         public CornerRadius CornerRadius { get; set; }
+        public Thickness BorderThickness { get; set; }
+        public Brush BorderBrush { get; set; }
     }
 
     // TextBlock is not a Control, but ApplyModifiers grew its own Padding arm for issue #950.
     public class TextBlock : FrameworkElement
     {
+        public Thickness Padding { get; set; }
+    }
+
+    public class RichTextBlock : FrameworkElement
+    {
+        public bool IsTabStop { get; set; }
         public Thickness Padding { get; set; }
     }
 
@@ -116,6 +127,7 @@ namespace Microsoft.UI.Reactor
     public record RelativePanelElement;
     public record BorderElement;
     public record TextBlockElement;
+    public record RichTextBlockElement;
 
     public static class Ext
     {
@@ -126,6 +138,7 @@ namespace Microsoft.UI.Reactor
         public static RelativePanelElement Set(this RelativePanelElement el, Action<RelativePanel> configure) => el;
         public static BorderElement Set(this BorderElement el, Action<Border> configure) => el;
         public static TextBlockElement Set(this TextBlockElement el, Action<TextBlock> configure) => el;
+        public static RichTextBlockElement Set(this RichTextBlockElement el, Action<RichTextBlock> configure) => el;
 
         // Modifier stubs so the code-fix tests' FixedCode compiles.
         public static T IsEnabled<T>(this T el, bool enabled = true) => el;
@@ -262,14 +275,19 @@ class C
         }.RunAsync(TestContext.Current.CancellationToken);
     }
 
-    [Fact]
-    public async Task Does_Not_Fire_For_BorderThickness_On_Grid()
+    [Theory]
+    [InlineData("GridElement", "REACTOR_POOL_001")]
+    [InlineData("StackElement", "REACTOR_POOL_001")]
+    [InlineData("RelativePanelElement", "REACTOR_MOD_002")]
+    public async Task Fires_For_Panel_Border_Properties(string elementType, string diagnosticId)
     {
-        var source = Stubs + @"
+        var source = Stubs + $$"""
 class C
 {
-    GridElement M(GridElement g) => g.Set(x => x.BorderThickness = new Thickness(1));
-}";
+    {{elementType}} M({{elementType}} p, Microsoft.UI.Xaml.Media.Brush brush)
+        => {|{{diagnosticId}}:{|{{diagnosticId}}:p.Set(x => { x.BorderThickness = new Thickness(1); x.BorderBrush = brush; })|}|};
+}
+""";
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {
             TestCode = source,
@@ -1086,17 +1104,13 @@ class C
     [Fact]
     public async Task CodeFix_Declines_Mixed_Block_With_A_Gated_Out_Statement()
     {
-        // The subtle one. Both properties are in the modifier table, but the receiver is a
-        // Grid: Background applies to a Panel, BorderThickness does not. Only Background is
-        // reported. The fix must not "helpfully" convert the BorderThickness write as well —
-        // that is precisely the silent no-op the gating exists to prevent, and it is why the
-        // analyzer passes the reported property names through Diagnostic.Properties rather
-        // than letting the fix re-derive candidates from the table.
+        // RichTextBlock supports IsTabStop, but its Padding is still outside the
+        // modifier's receiver gate. A partial rewrite must leave the block alone.
         var source = Stubs + @"
 class C
 {
-    GridElement M(GridElement g, Microsoft.UI.Xaml.Media.Brush brush)
-        => {|REACTOR_POOL_001:g.Set(x => { x.Background = brush; x.BorderThickness = new Thickness(4); })|};
+    RichTextBlockElement M(RichTextBlockElement r)
+        => {|REACTOR_POOL_001:r.Set(x => { x.IsTabStop = false; x.Padding = new Thickness(4); })|};
 }";
         await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
         {

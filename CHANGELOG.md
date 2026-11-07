@@ -34,6 +34,11 @@ Conventions for contributors:
 
 ### Changed
 
+- `.Set` writes to `BorderThickness` or `BorderBrush` on `Grid` and `StackPanel`
+  now report `REACTOR_POOL_001` (Warning). Builds using `TreatWarningsAsErrors`
+  may need to use the corresponding fluent modifiers instead. `RelativePanel`
+  remains `REACTOR_MOD_002` because it is not pooled (issue #1039).
+
 - The internal Yoga layout engine behind `FlexPanel` is synced to upstream
   facebook/yoga@41118bd (pinned in `cgmanifest.json`), with a few documented local
   divergences. `FlexPanel` layouts are unchanged apart from the fixes listed under Fixed.
@@ -43,6 +48,11 @@ Conventions for contributors:
 ### Removed
 
 ### Fixed
+
+- `BorderBrush`, `BorderThickness`, and `BorderInlineStart` now apply to `Grid`,
+  `StackPanel`, and `RelativePanel`, including themed border brushes. Pooled grids
+  and stack panels release their border values before reuse. The Regedit example
+  uses the supported fluent modifiers (issue #1039).
 
 - `UseDataSource` retains its initial normalized page size across rerenders and
   query restarts, keeping requests and cursor offsets aligned with resource row
