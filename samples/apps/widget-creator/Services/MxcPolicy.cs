@@ -112,7 +112,10 @@ public static class MxcPolicy
         JsonObject parsed;
         try
         {
-            if (JsonNode.Parse(json) is not JsonObject o)
+            // Duplicate keys are rejected up front: JsonObject would otherwise throw
+            // when the duplicate is first touched, outside this parse.
+            if (JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { AllowDuplicateProperties = false })
+                is not JsonObject o)
             {
                 error = "Policy must be a JSON object.";
                 return false;
@@ -143,7 +146,7 @@ public static class MxcPolicy
 
             error = Validate(parsed);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or FormatException or JsonException)
+        catch (Exception ex) when (ex is InvalidOperationException or FormatException or JsonException or ArgumentException)
         {
             error = $"Policy could not be read: {ex.Message}";
         }
