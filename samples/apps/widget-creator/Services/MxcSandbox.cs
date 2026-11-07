@@ -315,9 +315,13 @@ public sealed class MxcSandbox
                 verifyCts.Cancel();
                 await pumps.DrainAsync().ConfigureAwait(false);
                 EmitNewWarnings();
-                Sink(TimeoutMarker);
                 try { await verifyTask.ConfigureAwait(false); }
                 catch (OperationCanceledException) { /* verifyCts was cancelled before the check ran */ }
+                // A containment failure the verifier confirmed before cancellation won
+                // still decides the outcome: a sandbox failure, never a repairable timeout.
+                if (containmentFailed)
+                    return new SandboxResult(unchecked((int)0xC000013A), Captured(), LaunchError: containmentError, ContainmentFailed: true);
+                Sink(TimeoutMarker);
                 return new SandboxResult(unchecked((int)0xC000013A), Captured());
             }
             catch (MxcException ex)
