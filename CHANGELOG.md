@@ -44,6 +44,10 @@ Conventions for contributors:
 
 ### Fixed
 
+- `UseInfiniteResource` and `UseDataSource` isolate cached pages by the hook's initial
+  page size. Hooks with different sizes no longer reuse incompatible pages, while
+  hooks with matching sizes and query dependencies can still share them
+  (spec 020 §7.2–7.3; #1452, case 3).
 - `UseDataSource` retains its initial normalized page size across rerenders and
   query restarts, keeping requests and cursor offsets aligned with resource row
   positions. To use a different size, remount the calling component by changing

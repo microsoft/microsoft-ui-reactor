@@ -522,11 +522,17 @@ Pages are cached in two places:
    hot-path accessor for `ItemAt`. Subject to LRU eviction when
    `InfiniteResourceOptions.MaxLoadedPages` is set. Each `PageSlot` holds the
    items and that page's `NextCursor`; `null` items means in-flight placeholder.
-2. **`QueryCache` under `{keyPrefix}/page:{n}`** — the warm-path. Survives
+2. **`QueryCache` under `{keyPrefix}/size:{pageSize}/page:{n}`** — the warm-path. Survives
    LRU eviction from `_pages`; survives unmount-and-remount inside `CacheTime`.
    `InfiniteHookState.SubscribeKey` (`UseInfiniteResource.cs:407-411`) ref-counts every page key that
    this hook has ever loaded or started loading, so the cache retains them
    until unmount.
+
+`CacheKeyFor` (`UseInfiniteResource.cs:231`) includes the state's initial
+`_options.PageSize`, which also determines row positions. Hooks with the same
+prefix and equal deps can reuse pages when their initial page sizes match;
+different sizes use separate cache entries. Later PageSize options do not change
+the size segment, including after a query or prefix restart.
 
 On `RequestPage`, the hook checks `QueryCache` first
 (`UseInfiniteResource.cs:242`), validating the entry's dependency snapshot.
