@@ -35,6 +35,15 @@ namespace WidgetCreator.Services;
 /// Microsoft-root chain policy), and loads that exact file. Any failure leaves
 /// the sandbox unavailable — fail closed, never fall back to an unverified load.
 /// </para>
+/// <para>
+/// Trust boundary: the app's own directory must not be writable by untrusted
+/// users. Anyone who can write there can replace this assembly, and the .NET
+/// runtime itself probes the app directory for bare-named native libraries
+/// before honoring <see cref="DefaultDllImportSearchPathsAttribute"/>, so no
+/// in-app check can defend against a planted system DLL. This gate covers
+/// substitution from outside that directory and tampering with, linking, or
+/// removing the shipped MXC files.
+/// </para>
 /// </summary>
 internal static class MxcNativeRuntime
 {

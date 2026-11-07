@@ -232,6 +232,14 @@ app never edits ACLs.
   exactly that file. Any failure leaves the sandbox unavailable;
   there are no vendored binaries or hash pins to maintain. The native runtime
   version is logged at startup and shown in the title bar.
+- **Trust boundary** — the app's own folder (including `runtimes\`) must not be
+  writable by untrusted users, as for any .NET app. Someone who can write there can
+  replace `WidgetCreator.dll` itself, and the .NET runtime probes the app folder
+  for bare-named native libraries (`crypt32.dll`, `advapi32.dll`, …) before any app
+  code runs, so no in-app check can defend against it. The C-3 gate covers
+  substitution from *outside* that folder (the `MXC_FFI_DIR` override and
+  developer build paths) and tampering with, linking, or removing the shipped MXC
+  files.
 
 ## Layout
 
