@@ -67,8 +67,25 @@ public class WinUiNavigationMotionParityTests
     /// ContentPresenter, and x:Bind/Setter markup codegen) and touches no animation code —
     /// that non-empty diff is the positive control proving the comparison can detect a
     /// change, so "no change here" is a measurement rather than a broken query.</para>
+    /// <para>Re-verified for the 2.2.0 → 2.5.4-experimental bump (Windows App SDK experimental
+    /// channel, needed for the code-based <c>DataTemplate</c> constructor). The same four files
+    /// are byte-identical between <c>winui3/release/2.2.0</c>
+    /// (<c>fb389b88af6d358f09d0adb614f941b64a82515d</c>) and
+    /// <c>winui3/release/2.5.4-experimental</c> (<c>7b12709347527238494ca28cb9fed326d513e779</c>):
+    /// the same four blob SHAs. Positive control: the tag-to-tag compare is non-empty (300
+    /// files). Note that the 2.5.4-experimental tag is rooted at the repository root, NOT under
+    /// <c>src/</c> like the 2.x stable tags, so its paths are
+    /// <c>dxaml/phone/lib/…</c> — see step 2 of the guard message.</para>
+    /// <para>Re-verified for the 2.5.4-experimental → 2.6.6-experimental bump. When it was
+    /// made, no <c>winui3/release/2.6.6-experimental</c> tag existed yet, so this is a
+    /// bracketing check rather than a tag-exact one: the same four blob SHAs are present at
+    /// <c>winui3/release/2.5.4-experimental</c>, at <c>winui3/release/2.6.4</c>
+    /// (<c>c29edd64ae…</c>, the newest stable tag published; 2.6.6-experimental builds on
+    /// 2.6.5 stable, which has no tag either), and at
+    /// <c>main</c> (<c>78c72df1a5…</c>). Positive control: 2.5.4-experimental → main changes
+    /// 300 files. Re-run the tag-exact comparison once the tag is published.</para>
     /// </remarks>
-    private const string VerifiedAgainstWindowsAppSdkVersion = "2.2.0";
+    private const string VerifiedAgainstWindowsAppSdkVersion = "2.6.6-experimental";
 
     // ════════════════════════════════════════════════════════════════
     //  Entrance — ThemeTransitions.cpp,
@@ -248,13 +265,15 @@ public class WinUiNavigationMotionParityTests
                version ({actual}), NOT to the Microsoft.WindowsAppSDK.WinUI sub-package
                version. There is no `winui3/release/<winui-subpackage-version>` tag.
 
-            2. ⚠ PATH PREFIX — this is the trap. At a release tag the tree is rooted under
-               `src/`, but on `winui3/main` it is NOT. Querying the main-branch path against
-               a release tag returns 404 for every file, which reads exactly like "this tree
-               isn't published at tags" and makes the guard look impossible to discharge.
-               It is published; the prefix just differs.
-                 at a tag:          src/dxaml/phone/lib/ThemeTransitions.cpp   ✓
-                 on winui3/main:        dxaml/phone/lib/ThemeTransitions.cpp   ✓
+            2. ⚠ PATH PREFIX — this is the trap. Some release tags root the tree under
+               `src/` and some do not, so the prefix must be probed per tag, never assumed.
+               The 2.x stable tags (e.g. 2.2.0) use `src/`; winui3/main and the
+               2.5.4-experimental tag do not. Querying the wrong prefix returns 404 for every
+               file, which reads exactly like "this tree isn't published at tags" and makes
+               the guard look impossible to discharge. It is published; the prefix differs.
+                 at winui3/release/2.2.0:              src/dxaml/phone/lib/ThemeTransitions.cpp   ✓
+                 at winui3/release/2.5.4-experimental:     dxaml/phone/lib/ThemeTransitions.cpp   ✓
+                 on winui3/main:                           dxaml/phone/lib/ThemeTransitions.cpp   ✓
 
             3. Compare blob SHAs, not file contents. A blob SHA is content identity, so equal
                SHAs prove no line-level drift is possible — and it cannot be fooled by two
