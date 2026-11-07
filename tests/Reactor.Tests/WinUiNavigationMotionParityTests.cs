@@ -74,8 +74,17 @@ public class WinUiNavigationMotionParityTests
     /// blob SHAs are unchanged: <c>ade27cbf…</c>, <c>2c9bb435…</c>, <c>8761d909…</c>,
     /// <c>bf82d5cd…</c>. The tag-to-tag diff touches 300 files (positive control), none of
     /// them these four.</para>
+    /// <para>Re-verified for the 2.5.4-experimental → 2.6.6-experimental bump (WinUI
+    /// 2.6.6-experimental). No <c>winui3/release/2.6.6-experimental</c> tag had been published
+    /// when the SDK shipped, so the files were read at the two nearest public points: the
+    /// <c>winui3/release/2.6.4</c> tag (<c>c29edd64ae8b4412d772c5768d835ebfd19b438e</c>,
+    /// whose changes the experimental release carries; back under <c>src/dxaml/phone/lib/…</c>)
+    /// and <c>main</c> at <c>78c72df1a5e6df181ce2d86a8a8cdff53be5ef22</c>. Both hold the same
+    /// four blob SHAs: <c>ade27cbf…</c>, <c>2c9bb435…</c>, <c>8761d909…</c>, <c>bf82d5cd…</c>.
+    /// The 2.5.4-experimental-tag-to-<c>main</c> diff is 524 commits touching 300+ files
+    /// (positive control), none of them these four.</para>
     /// </remarks>
-    private const string VerifiedAgainstWindowsAppSdkVersion = "2.5.4-experimental";
+    private const string VerifiedAgainstWindowsAppSdkVersion = "2.6.6-experimental";
 
     // ════════════════════════════════════════════════════════════════
     //  Entrance — ThemeTransitions.cpp,
