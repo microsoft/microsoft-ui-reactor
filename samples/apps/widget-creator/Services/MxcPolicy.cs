@@ -690,7 +690,7 @@ public static class MxcPolicy
         // Supported but malformed fields can't be migrated faithfully either:
         // skipping e.g. a malformed deniedPaths or ui.disable would keep the
         // grants while silently losing the denial, so they fail closed too.
-        result.AddRange(supported.Keys.Where(k => k.Length > 0 && legacy.ContainsKey(k) && legacy[k] is not JsonObject)
+        result.AddRange(supported.Keys.Where(k => k.Length > 0 && legacy.TryGetPropertyValue(k, out var node) && node is not JsonObject)
             .Select(k => $"{k} (not an object)"));
         (string Section, string Key, Func<JsonNode?, bool> IsValid)[] shapes =
         [
@@ -707,7 +707,7 @@ public static class MxcPolicy
             ("network", "allowLocalNetwork", IsBoolValue),
         ];
         result.AddRange(shapes
-            .Where(f => Section(legacy, f.Section) is { } section && section.ContainsKey(f.Key) && !f.IsValid(section[f.Key]))
+            .Where(f => Section(legacy, f.Section) is { } section && section.TryGetPropertyValue(f.Key, out var value) && !f.IsValid(value))
             .Select(f => $"{f.Section}.{f.Key} (unexpected value)"));
         return result;
     }
