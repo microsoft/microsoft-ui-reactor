@@ -166,8 +166,14 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
             var ticksBefore = Volatile.Read(ref _ticks);
             var host = await ArmAsync(H, arm, static () => { }, countTick, orphan: false);
             // A fixed window rather than a wait, because one of the two claims is that nothing
-            // happens.
+            // happens. The in-tree control may then poll for a late tick (slow CI hosts), and the
+            // out-of-tree window is at least as long as the control's longest wait, so a
+            // negative there still means "would have been counted".
             await Harness.Render(400);
+            if (arm == Arm.TextSetInTree)
+                await Harness.WaitFor(() => Volatile.Read(ref _ticks) > ticksBefore, maxPasses: 60, perPassMs: 25);
+            else
+                await Harness.Render(1500);
             var ticks = Volatile.Read(ref _ticks) - ticksBefore;
             await DisposeHostAsync(host);
             return ticks;
@@ -196,8 +202,13 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
                 await Harness.Render();
                 GC.Collect();
 
-                // Outlast the 150 ms timer.
+                // Outlast the 150 ms timer, then give a tick that is late on a slow host (seen on
+                // the MSIX and AOT CI lanes on 2.6.6-experimental) up to 1.5 s more. A tick that
+                // never arrives still fails the per-arm check, and a longer window only gives a
+                // collected-state tick more room to crash.
                 await Harness.Render(250);
+                var expected = attempt + 1;
+                await Harness.WaitFor(() => Volatile.Read(ref _ticks) - ticksBefore >= expected, maxPasses: 60, perPassMs: 25);
             }
             return Volatile.Read(ref _ticks) - ticksBefore;
         }
