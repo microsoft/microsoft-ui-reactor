@@ -44,7 +44,7 @@ public abstract record LoadState
 /// <param name="CacheTime">Retention after the last subscriber leaves; null uses five minutes.</param>
 /// <param name="CacheKeyPrefix">
 /// Overrides the prefix for page cache keys; null uses a prefix unique to this hook.
-/// Page keys still include the dependency hash and page index. Changing deps
+/// Page keys still include the dependency hash, initial page size, and page index. Changing deps
 /// cancels in-flight page requests, resets the page set, and loads the first page
 /// for the new deps, even if the prefix is unchanged.
 /// </param>
