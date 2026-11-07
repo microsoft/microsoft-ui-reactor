@@ -45,6 +45,8 @@ internal interface IV1HandlerEntry
     /// engine continue the default traversal into wrapped children.</summary>
     V1Protocol.V1UnmountDisposition Unmount(UIElement control, Reconciler reconciler);
     bool HasUnmount { get; }
+    // Built-in flyouts share their target's control but keep a separate event identity.
+    bool PreservesTargetTag => false;
 }
 
 /// <summary>

@@ -29,9 +29,12 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
     public V1DecoratorHandlerAdapter(IDecoratorElementHandler<TElement> handler)
     {
         _handler = handler;
+        PreservesTargetTag = handler is Handlers.FlyoutHandler
+            or Handlers.MenuFlyoutHandler or Handlers.CommandBarFlyoutHandler;
     }
 
     public bool HasUnmount => true;
+    public bool PreservesTargetTag { get; }
 
     public UIElement Mount(Element element, Action requestRerender, Reconciler reconciler)
     {
@@ -40,10 +43,10 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
         var control = _handler.Mount(ctx, typedEl);
 
         // Anchor element identity on the returned control via the
-        // attached state DP so event trampolines + the unmount
-        // disposition path can re-fetch the live element on each fire.
+        // attached state DP. Target-wrapping flyouts use a separate slot so
+        // their target's events and the decorator's teardown resolve their own identities.
         if (control is FrameworkElement fe)
-            Reconciler.SetElementTag(fe, typedEl);
+            TagControl(fe, typedEl);
 
         return control;
     }
@@ -59,9 +62,17 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
         // may equal `control` (in-place update) or be a different
         // instance (decorator target swap).
         if (next is FrameworkElement nextFe)
-            Reconciler.SetElementTag(nextFe, typedNew);
+            TagControl(nextFe, typedNew);
 
         return next;
+    }
+
+    private void TagControl(FrameworkElement control, TElement element)
+    {
+        if (PreservesTargetTag)
+            Reconciler.SetDecoratorElementTag(control, element);
+        else
+            Reconciler.SetElementTag(control, element);
     }
 
     public V1UnmountDisposition Unmount(UIElement control, Reconciler reconciler)
@@ -70,7 +81,7 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
         // the tag was already detached (defensive). Decorator handlers
         // are expected to tolerate the null case.
         TElement? typedEl = null;
-        if (control is FrameworkElement fe && Reconciler.GetElementTag(fe) is TElement attached)
+        if (control is FrameworkElement fe && Reconciler.GetMountedElement(fe) is TElement attached)
             typedEl = attached;
 
         var ctx = new UnmountContext(reconciler);

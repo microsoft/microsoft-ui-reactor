@@ -113,9 +113,9 @@ public sealed partial class Reconciler
             // the DependencyProperty write entirely for leaves with no handlers
             // (TextBlock, Image, Border, etc.) — which is most of them.
             if (newEl.HasCallbacks && control is FrameworkElement tagFeSE)
-                SetElementTag(tagFeSE, newEl);
+                RefreshElementTagOnSkip(tagFeSE, newEl);
             else if (CallSiteChangedOnSkip(oldEl, newEl) && control is FrameworkElement srcFeSE)
-                RefreshCallSiteTagOnSkip(srcFeSE, newEl);   // spec 010 — keep the reported line live
+                RefreshElementTagOnSkip(srcFeSE, newEl);   // spec 010 — keep the reported line live
             if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
                 && CallSiteChangedOnSkip(oldEl, newEl))
                 PublishSourceOnSkip(control, newEl);
@@ -1318,7 +1318,7 @@ public sealed partial class Reconciler
             }
             if (index >= viewSource.ItemCount) continue;
 
-            var oldItemElement = GetElementTag(cc);
+            var oldItemElement = GetMountedElement(cc);
             var newItemElement = BuildKeyedItemView(viewSource, index);
 
             // ReconcileV1Child updates in place when it can and remounts otherwise, and either way
@@ -1326,7 +1326,7 @@ public sealed partial class Reconciler
             // during a resource refresh), so the old item's effects and refs are cleaned up.
             // Untagged content was already unmounted by an orphan or parked-container sweep: replace it,
             // never unmount it again.
-            var priorKey = cc.Content is FrameworkElement priorFe ? GetElementTag(priorFe)?.Key : null;
+            var priorKey = cc.Content is FrameworkElement priorFe ? GetMountedElement(priorFe)?.Key : null;
             var next = ReconcileV1Child(oldItemElement, newItemElement,
                 oldItemElement is null ? null : cc.Content as UIElement, requestRerender);
             EnsureItemIdentity(next, newItemElement, priorKey, updated: true);
@@ -1486,7 +1486,7 @@ public sealed partial class Reconciler
     /// </summary>
     internal void UnmountOrphanedContainer(WinUI.ListViewBase listViewBase, WinPrim.SelectorItem container, ContentControl cc)
     {
-        if (GetElementTag(cc) is null) return;
+        if (GetMountedElement(cc) is null) return;
         if (container.Content is ReactorRow row)
         {
             bool inList = GetListState(listViewBase) is { } state

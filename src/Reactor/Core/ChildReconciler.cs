@@ -566,7 +566,7 @@ internal static class ChildReconciler
                 if (_physical >= count) continue;
                 if (control is FrameworkElement fe)
                 {
-                    var controlKey = Reconciler.GetElementTag(fe)?.Key;
+                    var controlKey = Reconciler.GetMountedElement(fe)?.Key;
                     // An unkeyed Memo must not claim a keyed sibling, but its own
                     // realized output can carry a key that is not a sibling key.
                     if (oldChildren[logical].Key is { } key

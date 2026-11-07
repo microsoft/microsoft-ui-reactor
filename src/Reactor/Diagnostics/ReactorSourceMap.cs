@@ -132,7 +132,7 @@ public static partial class ReactorSourceMap
     /// </summary>
     public static SourceLocation? GetSource(UIElement control)
     {
-        var element = Reconciler.GetElementTag(control);
+        var element = Reconciler.GetMountedElement(control);
         if (element is not null)
         {
             // Native AOT diagnostics mode: a forwarding RegisterType registration that needs a

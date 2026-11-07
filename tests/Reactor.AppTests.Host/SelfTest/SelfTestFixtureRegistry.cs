@@ -2161,6 +2161,12 @@ internal static class SelfTestFixtureRegistry
         "CmdBarFlyout_UnmountDetachesFlyout",
         "CmdBarFlyout_KeyedReorderKeepsSiblingFlyouts",
         "CmdBarFlyout_TargetKeepsItsOwnCallbacks",
+        "FlyoutTarget_FlyoutCallbacksAcrossUpdates",
+        "FlyoutTarget_MenuFlyoutCallbacksAcrossUpdates",
+        "FlyoutTarget_CommandBarFlyoutCallbacksAcrossUpdates",
+        "FlyoutTarget_NestedCallbacksAcrossUpdates",
+        "FlyoutTarget_MenuFlyoutTargetCallbacks",
+        "FlyoutTarget_TeardownAndPlainPoolReuse",
 
         // Flyout IsOpen driven by state (FlyoutIsOpenStateFixtures).
         "FlyoutIsOpen_ButtonTargetFromState",
@@ -4404,6 +4410,12 @@ internal static class SelfTestFixtureRegistry
         "CmdBarFlyout_UnmountDetachesFlyout" => new CommandBarFlyoutWiringFixtures.UnmountDetachesFlyout(harness),
         "CmdBarFlyout_KeyedReorderKeepsSiblingFlyouts" => new CommandBarFlyoutWiringFixtures.KeyedReorderKeepsSiblingFlyouts(harness),
         "CmdBarFlyout_TargetKeepsItsOwnCallbacks" => new CommandBarFlyoutWiringFixtures.TargetKeepsItsOwnCallbacks(harness),
+        "FlyoutTarget_FlyoutCallbacksAcrossUpdates" => new FlyoutTargetCallbacksFixtures.CallbacksAcrossUpdates(harness, 0),
+        "FlyoutTarget_MenuFlyoutCallbacksAcrossUpdates" => new FlyoutTargetCallbacksFixtures.CallbacksAcrossUpdates(harness, 1),
+        "FlyoutTarget_CommandBarFlyoutCallbacksAcrossUpdates" => new FlyoutTargetCallbacksFixtures.CallbacksAcrossUpdates(harness, 2),
+        "FlyoutTarget_NestedCallbacksAcrossUpdates" => new FlyoutTargetCallbacksFixtures.NestedCallbacksAcrossUpdates(harness),
+        "FlyoutTarget_MenuFlyoutTargetCallbacks" => new FlyoutTargetCallbacksFixtures.MenuFlyoutTargetCallbacks(harness),
+        "FlyoutTarget_TeardownAndPlainPoolReuse" => new FlyoutTargetCallbacksFixtures.TeardownAndPlainPoolReuse(harness),
 
         "FlyoutIsOpen_ButtonTargetFromState" => new FlyoutIsOpenStateFixtures.ButtonTargetOpensFromState(harness),
         "FlyoutIsOpen_ButtonTargetOnMount" => new FlyoutIsOpenStateFixtures.ButtonTargetOpensOnMount(harness),

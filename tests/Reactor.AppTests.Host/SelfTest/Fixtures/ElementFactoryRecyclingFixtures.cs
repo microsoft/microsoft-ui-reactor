@@ -1207,7 +1207,7 @@ internal static class ElementFactoryRecyclingFixtures
             // flyout's Opened/Closed handlers dereference at click time. A silent
             // adopt leaves the pre-flip element here.
             var realizedAfter = repeater.TryGetElement(0);
-            var tag = realizedAfter is null ? null : Reconciler.GetElementTag(realizedAfter);
+            var tag = realizedAfter is null ? null : Reconciler.GetMountedElement(realizedAfter);
             var targetType = (tag as FlyoutElement)?.Target as ComponentElement;
             H.Check($"EFR919_Decorator_RealizedCarriesCurrentTag_target={targetType?.ComponentType?.Name ?? "<null>"}",
                 targetType is not null && targetType.ComponentType == typeof(FlyoutRowB));
@@ -1416,7 +1416,7 @@ internal static class ElementFactoryRecyclingFixtures
             var ifactory = (IElementFactory)factory;
 
             var firstControl = ifactory.GetElement(MakeRowGetArgs(0, "dk0"));
-            var tagBefore = Reconciler.GetElementTag(firstControl) as FlyoutElement;
+            var tagBefore = Reconciler.GetMountedElement(firstControl) as FlyoutElement;
             H.Check($"EFR919_PoolDecorator_InitialTargetIsA_target={(tagBefore?.Target as ComponentElement)?.ComponentType?.Name ?? "<null>"}",
                 (tagBefore?.Target as ComponentElement)?.ComponentType == typeof(FlyoutRowA));
 
@@ -1451,7 +1451,7 @@ internal static class ElementFactoryRecyclingFixtures
             // The oracle. Whatever control ends up in the slot must carry the
             // CURRENT FlyoutElement as its tag. A silent adopt returns the
             // pooled container, whose tag still names FlyoutRowA.
-            var tagAfter = Reconciler.GetElementTag(secondControl) as FlyoutElement;
+            var tagAfter = Reconciler.GetMountedElement(secondControl) as FlyoutElement;
             var afterTarget = (tagAfter?.Target as ComponentElement)?.ComponentType;
             H.Check($"EFR919_PoolDecorator_SlotCarriesCurrentTag_target={afterTarget?.Name ?? "<null>"}",
                 afterTarget == typeof(FlyoutRowB));

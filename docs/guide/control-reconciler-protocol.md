@@ -648,6 +648,13 @@ that need to read the tag (e.g. `ButtonElement`'s static
 `__ClickTrampoline`) call `GetElementTag` and pattern-match
 on the expected element type.
 
+The built-in `Flyout`, `MenuFlyout`, and `CommandBarFlyout` decorators share
+their target's native control. They keep their current element separately in
+`ReactorState.DecoratorElement`, leaving the target's `Element` available to
+its own event trampolines. Decorator lifecycle callbacks and engine teardown
+resolve the mounted decorator; pool return clears both identities. Other
+decorators retain their existing tag behavior.
+
 ## Descriptors — declarative handlers
 
 `IElementHandler` is the imperative shape; `ControlDescriptor` is the
