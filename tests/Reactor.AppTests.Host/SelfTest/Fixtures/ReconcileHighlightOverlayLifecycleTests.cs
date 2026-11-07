@@ -145,11 +145,16 @@ internal static class ReconcileHighlightOverlayLifecycleTests
                 H.Check("OverlayLifecycle_Expire_AliveImmediately",
                     overlay.LiveSpriteCount == 1);
 
+                // The sprite must expire on its own (no refresh). Poll rather than sample once at
+                // a fixed 180ms: an 80ms margin over the 100ms hold missed under load on the
+                // coverage-instrumented and MSIX CI hosts, while "never expires" still fails.
                 await Task.Delay(180);
+                var expired = await Harness.WaitFor(() => overlay.LiveSpriteCount == 0 && overlay.ActiveTargetCount == 0,
+                    maxPasses: 40, perPassMs: 25);
                 H.Check("OverlayLifecycle_Expire_GoneAfterHold",
-                    overlay.LiveSpriteCount == 0);
+                    overlay.LiveSpriteCount == 0, $"expired={expired} live={overlay.LiveSpriteCount}");
                 H.Check("OverlayLifecycle_Expire_DictDrained",
-                    overlay.ActiveTargetCount == 0);
+                    overlay.ActiveTargetCount == 0, $"active={overlay.ActiveTargetCount}");
             }
             finally { Teardown(overlay); }
         }
