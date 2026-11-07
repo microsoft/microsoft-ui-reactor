@@ -93,6 +93,7 @@ internal static partial class TableViewFixtures
                     columns.Add(TemplateColumn<Row>("Group", r => TextBlock($"group:{r.Group}")));
                 return VStack(8,
                     Button("Next phase", () => setPhase(phase + 1)),
+                    TextBlock($"phase:{phase}"),
                     TableView(phase == 0 ? first : second, [.. columns]).Width(480).Height(240));
             });
 
@@ -117,7 +118,7 @@ internal static partial class TableViewFixtures
             H.Check("TableView_Update_ColumnAddedStructurally",
                 await Harness.WaitFor(() => table!.Columns.Count == 3 && H.FindText("group:B") is not null,
                     maxPasses: 80, perPassMs: 25),
-                $"columns={table?.Columns.Count} groupCell={H.FindText("group:B") is not null} phase2Rendered={H.FindText("p2:7") is not null}");
+                $"columns={table?.Columns.Count} groupCell={H.FindText("group:B") is not null} phase2Rendered={H.FindText("p2:7") is not null} componentAtPhase2={H.FindText("phase:2") is not null}");
 
             host.Mount(_ => TextBlock("TableView unmounted"));
             await Harness.Render();
