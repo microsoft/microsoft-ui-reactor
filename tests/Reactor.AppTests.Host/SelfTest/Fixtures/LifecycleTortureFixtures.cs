@@ -69,10 +69,67 @@ internal sealed class LT_OnMountUnmountBalanced(Harness h) : SelfTestFixtureBase
         // passes and the Check below reports the real number.
         await Harness.WaitFor(() => mounts == 30 && unmounts == 30);
 
-        H.Check("LT_Mounts_Exactly_30", mounts == 30);
-        H.Check("LT_Unmounts_Exactly_30", unmounts == 30);
-        H.Check("LT_OnMount_Received_Control", gotControl == mounts);
-        H.Check("LT_NoLeak_MountsEqualUnmounts", mounts == unmounts);
+        var counts = $"mounts={mounts} unmounts={unmounts} gotControl={gotControl}";
+        H.Check("LT_Mounts_Exactly_30", mounts == 30, counts);
+        H.Check("LT_Unmounts_Exactly_30", unmounts == 30, counts);
+        H.Check("LT_OnMount_Received_Control", gotControl == mounts, counts);
+        H.Check("LT_NoLeak_MountsEqualUnmounts", mounts == unmounts, counts);
+    }
+}
+
+/// <summary>
+/// .OnUnmount still fires when the controls' managed wrappers were collected between mount
+/// and unmount. Nothing keeps a plain TextBlock's RCW alive, so after a GC the unmount walk
+/// sees a fresh wrapper over the same native control; per-element state keyed by wrapper
+/// identity silently misses it. This is the deterministic form of the intermittent CI
+/// failure of <see cref="LT_OnMountUnmountBalanced"/> (exactly the last batch's unmounts
+/// missing).
+/// </summary>
+internal sealed class LT_OnUnmountSurvivesWrapperCollection(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        int mounts = 0, unmounts = 0;
+        Action<bool>? setShown = null;
+
+        var host = H.CreateHost();
+        host.Mount(ctx =>
+        {
+            var (shown, set) = ctx.UseState(false);
+            setShown = set;
+            var children = new List<Element>();
+            if (shown)
+            {
+                for (int i = 0; i < 10; i++)
+                    children.Add(TextBlock($"gc{i}").WithKey($"gc{i}")
+                        .OnMount(_ => mounts++)
+                        .OnUnmount(_ => unmounts++));
+            }
+            else
+            {
+                children.Add(TextBlock("gc-empty").WithKey("gc-empty"));
+            }
+            return VStack(children.ToArray());
+        });
+
+        await Harness.Render();
+        setShown!(true);
+        await Harness.WaitFor(() => H.FindText("gc9") is not null);
+
+        // Drop every managed wrapper this test could still hold, then collect them.
+        for (int i = 0; i < 3; i++)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
+
+        setShown!(false);
+        await Harness.WaitFor(() => H.FindText("gc0") is null);
+        await Harness.WaitFor(() => unmounts == 10);
+
+        var counts = $"mounts={mounts} unmounts={unmounts}";
+        H.Check("LT_GcWrapper_Mounted", mounts == 10, counts);
+        H.Check("LT_GcWrapper_UnmountsFireAfterCollection", unmounts == 10, counts);
     }
 }
 

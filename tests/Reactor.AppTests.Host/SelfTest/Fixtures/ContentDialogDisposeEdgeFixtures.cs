@@ -445,6 +445,8 @@ internal static class ContentDialogDisposeEdgeFixtures
 
             try
             {
+                // The host mounts on Loaded, which can land after a single render pass.
+                H.Check("DialogDispose_MountSiblingHostLoaded", await Harness.WaitFor(() => host.IsLoaded));
                 await Harness.Render();
                 H.Check("DialogDispose_MountSiblingMountedAfterDisposal", probe.Effects == 1);
                 H.Check("DialogDispose_MountSiblingCleanupAfterDisposal", probe.Cleanups == 1);
