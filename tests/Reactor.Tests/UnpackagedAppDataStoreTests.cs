@@ -210,8 +210,9 @@ public sealed class UnpackagedAppDataStoreTests : IDisposable
         // EXPERIMENTAL WINDOWS APP SDK CHANNEL — the spec 063 §6 D1 trigger has FIRED.
         //
         // Measured on this branch's bundled runtime (Microsoft.WindowsAppSDK.Foundation
-        // 2.3.13-experimental, loaded from the test project's own bin\ — so it reflects the
-        // PINNED version, not a machine-wide install): LocalSettings now lands in the
+        // 2.3.13-experimental, and again on 2.6.6-experimental, loaded from the test project's
+        // own bin\ — so it reflects the PINNED version, not a machine-wide install):
+        // LocalSettings now lands in the
         // machine-local hive, and the roaming key is never created. That is case (b) below,
         // confirmed, not a broken probe. Until the D1 follow-up is decided, accept either
         // hive as proof the probe works — it must find the value in EXACTLY one of them —
