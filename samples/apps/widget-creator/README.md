@@ -188,7 +188,8 @@ access together with internet access: MXC's AppContainer fallback tier rejects
 inbound/private-network access while outbound is denied, because that capability
 is bidirectional there. Other capabilities can be listed under
 `processContainer.capabilities` in the Advanced editor. The policy document is
-closed like the MXC contract — unknown fields are rejected — and policies saved by
+closed like the MXC contract — unknown fields and explicit `null` values are
+rejected (a `null` would read as "unset" and silently widen access) — and policies saved by
 older Widget Creator builds (the pre-1.0 `wxc-exec` `ContainerConfig` shape) are
 migrated automatically when read. A legacy policy that uses settings MXC 1.0
 can't express (for example `network.blockedHosts` or `leastPrivilege: true`), or

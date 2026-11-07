@@ -431,6 +431,7 @@ public static class MxcPolicy
     static string? Validate(JsonObject o)
     {
         var errors = new List<string>();
+        CheckNoNulls(o, "", errors);
         CheckKeys(o, "", errors);
 
         if (o["filesystem"] is { } fsNode)
@@ -523,6 +524,34 @@ public static class MxcPolicy
         if (node is null) return;
         if (!TryGetString(node, out var s) || (s != "allow" && s != "deny"))
             errors.Add($"'{path}' must be \"allow\" or \"deny\".");
+    }
+
+    /// <summary>
+    /// Explicit JSON nulls are rejected everywhere. The mapping treats a missing
+    /// value as its default, so a null would silently widen access — e.g. an allow
+    /// rule's <c>"to": null</c> matches every destination, and a null
+    /// <c>except</c> or <c>deniedPaths</c> drops a restriction. Omit a field instead.
+    /// </summary>
+    static void CheckNoNulls(JsonNode? node, string path, List<string> errors)
+    {
+        if (node is JsonObject obj)
+        {
+            foreach (var (key, value) in obj)
+            {
+                var child = path.Length == 0 ? key : $"{path}.{key}";
+                if (value is null)
+                    errors.Add($"'{child}' must not be null (omit it instead).");
+                else
+                    CheckNoNulls(value, child, errors);
+            }
+        }
+        else if (node is JsonArray array)
+        {
+            if (array.Any(item => item is null))
+                errors.Add($"'{path}' must not contain null entries.");
+            foreach (var item in array.OfType<JsonNode>())
+                CheckNoNulls(item, $"{path}[]", errors);
+        }
     }
 
     static void CheckBool(JsonNode? node, string path, List<string> errors)
