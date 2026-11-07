@@ -76,8 +76,15 @@ public class WinUiNavigationMotionParityTests
     /// files). Note that the 2.5.4-experimental tag is rooted at the repository root, NOT under
     /// <c>src/</c> like the 2.x stable tags, so its paths are
     /// <c>dxaml/phone/lib/…</c> — see step 2 of the guard message.</para>
+    /// <para>Re-verified tag-exact for the 2.5.4-experimental → 2.6.6-experimental bump. The
+    /// same four blob SHAs are present at <c>winui3/release/2.6.6-experimental</c>
+    /// (<c>55b3fb8f0f6227fb3b3c595563f714d8cb74ed08</c>), and also at
+    /// <c>winui3/release/2.6.5</c> (<c>c29edd64ae8b4412d772c5768d835ebfd19b438e</c>), the
+    /// stable release it builds on. Positive control: the 2.5.4-experimental →
+    /// 2.6.6-experimental compare is non-empty (300 files). Unlike 2.5.4-experimental, the
+    /// 2.6.6-experimental tag IS rooted under <c>src/</c>.</para>
     /// </remarks>
-    private const string VerifiedAgainstWindowsAppSdkVersion = "2.5.4-experimental";
+    private const string VerifiedAgainstWindowsAppSdkVersion = "2.6.6-experimental";
 
     // ════════════════════════════════════════════════════════════════
     //  Entrance — ThemeTransitions.cpp,
@@ -259,12 +266,13 @@ public class WinUiNavigationMotionParityTests
 
             2. ⚠ PATH PREFIX — this is the trap. Some release tags root the tree under
                `src/` and some do not, so the prefix must be probed per tag, never assumed.
-               The 2.x stable tags (e.g. 2.2.0) use `src/`; winui3/main and the
-               2.5.4-experimental tag do not. Querying the wrong prefix returns 404 for every
+               The 2.x stable tags (e.g. 2.2.0) and 2.6.6-experimental use `src/`; winui3/main
+               and the 2.5.4-experimental tag do not. Querying the wrong prefix returns 404 for every
                file, which reads exactly like "this tree isn't published at tags" and makes
                the guard look impossible to discharge. It is published; the prefix differs.
                  at winui3/release/2.2.0:              src/dxaml/phone/lib/ThemeTransitions.cpp   ✓
                  at winui3/release/2.5.4-experimental:     dxaml/phone/lib/ThemeTransitions.cpp   ✓
+                 at winui3/release/2.6.6-experimental: src/dxaml/phone/lib/ThemeTransitions.cpp   ✓
                  on winui3/main:                           dxaml/phone/lib/ThemeTransitions.cpp   ✓
 
             3. Compare blob SHAs, not file contents. A blob SHA is content identity, so equal
