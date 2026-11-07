@@ -33,8 +33,9 @@
          handling is the JsonNode DOM (policy engine), which is already AOT-safe.
 
          A REAL NativeAOT publish is available behind an opt-in property so the normal
-         framework-dependent build/publish (which the vendored MXC binaries + Copilot SDK
-         demo path rely on) stays unchanged:
+         framework-dependent build/publish (which the Copilot SDK demo path relies on)
+         stays unchanged. Microsoft.Mxc.Sdk is IsAotCompatible (source-generated JSON,
+         P/Invoke into its bundled native mxc_ffi), so the sandbox works under AOT too:
              dotnet publish samples/apps/widget-creator/widget-creator.csproj `
                -c Release -p:Platform=x64 -r win-x64 -p:PublishAotInternal=true `
                -p:IlcTreatWarningsAsErrors=false
@@ -42,7 +43,7 @@
          other AOT samples/hosts use — kept opt-in so an ordinary `dotnet build` / `dotnet
          run` doesn't pay the AOT compile cost. IlcTreatWarningsAsErrors=false only relaxes
          ILC warnings from third-party dependencies we don't own — the Copilot SDK /
-         WindowsAppSDK — not this project's own code, which stays analyzed-as-errors at
+         WindowsAppSDK / MXC SDK — not this project's own code, which stays analyzed-as-errors at
          build time.) -->
   </PropertyGroup>
 
@@ -67,6 +68,10 @@
          metapackage directly is forbidden by WinAppSDKReferenceGuardTests. -->
     <!-- Managed DPAPI (per-user) for the H-3 artifact-integrity key. -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+    <!-- MXC sandbox: in-process SDK (Microsoft.Mxc.Sdk.V1). The package carries the
+         native mxc_ffi runtime for win-x64 and win-arm64, so no MXC executable has to
+         be vendored or launched. -->
+    <PackageReference Include="Microsoft.Mxc.Sdk" />
   </ItemGroup>
 
   <ItemGroup>
@@ -130,18 +135,5 @@
       <FileWrites Include="$(_WidgetSdkVersionsFile)" />
     </ItemGroup>
   </Target>
-
-  <!-- Vendored MXC sandbox runtime (no NuGet exists for it). These prebuilt
-       wxc-exec binaries + helpers are copied next to the app under mxc/<rid>/ so
-       Widget Creator runs sandboxed straight after `git clone` + `dotnet run`,
-       with no external mxc checkout. MxcSandbox.ResolveWxcExec() looks here
-       first (after env overrides). Refresh by re-copying mxc/sdk/bin/<arch>/.
-       Only win-arm64 is vendored today; add tools/mxc/win-x64/ for x64 hosts. -->
-  <ItemGroup>
-    <None Include="tools\mxc\**\*.exe">
-      <Link>mxc\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
 
 </Project>

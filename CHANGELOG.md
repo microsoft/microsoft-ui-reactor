@@ -44,6 +44,16 @@ Conventions for contributors:
 
 ### Fixed
 
+- `UseDataSource` retains its initial normalized page size across rerenders and
+  query restarts, keeping requests and cursor offsets aligned with resource row
+  positions. To use a different size, remount the calling component by changing
+  its key from the parent (part of #1452, case 2).
+- `DataGrid` under `ReactorFeatureFlags.UseHookBasedPaging` now keeps its mount-time page
+  size, matching the legacy paging path. Changing `RowHeight` or `EstimatedRowHeight` at
+  runtime no longer restarts pagination or discards loaded rows when a sort or filter is
+  active. It also no longer emits the `UseDataSource.PageSize` warning (follow-up to #1458,
+  part of #1452).
+
 - `PersonPicture`'s `ProfilePicture` no longer throws during reconciliation for empty,
   relative, or malformed URIs; it shows no picture instead. Removing `ProfilePicture` on
   a later render now clears the previous image rather than leaving it on screen (issue #1460).

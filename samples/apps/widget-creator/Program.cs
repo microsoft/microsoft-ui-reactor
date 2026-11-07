@@ -16,6 +16,9 @@ using static Microsoft.UI.Reactor.Factories;
 SessionLog.Init();
 SessionLog.Write($"[Program] launched args={string.Join(' ', System.Environment.GetCommandLineArgs())}");
 
+// Verify and bind the MXC native runtime before anything can touch the SDK (C-3).
+MxcNativeRuntime.EnsureVerified();
+
 // Headless diagnostic: report whether the machine-wide Windows App Runtime that
 // generated widgets bind at launch is installed, then exit. Useful from a
 // terminal or CI without opening the window, and it exercises exactly the same

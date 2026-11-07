@@ -261,13 +261,15 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // The hook owns fetch lifecycle, cache subscriptions, and deps-change restart.
         if (useHookPaging)
         {
-            // DataRequest is rebuilt each render so sort/filter/search changes flow into
-            // the hook's deps and restart pagination cleanly.
-            var rowH = el.RowHeight ?? el.EstimatedRowHeight;
-            var pageSize = Math.Max(50, (int)Math.Ceiling(2160.0 / rowH));
+            // Page size is the same mount-time value the legacy path sizes its cache with
+            // (derived once from RowHeight when the state was created). UseDataSource latches
+            // its first page size for the hook's lifetime anyway, so re-deriving it from a
+            // runtime RowHeight change could never take effect — it would only trip the
+            // UseDataSource.PageSize warning and, via the memo below, restart pagination.
+            var pageSize = state.BlockSize;
 
-            // Memoize the DataRequest on the sort/filter/search/pageSize identity. Rebuilding it
-            // every render allocated two fresh List copies (Sort/Filters) whose references then
+            // Memoize the DataRequest on the sort/filter/search identity. Rebuilding it every
+            // render allocated two fresh List copies (Sort/Filters) whose references then
             // changed UseDataSource's deps every render, restarting pagination. Keyed on the
             // version counters, the request and its list references stay stable until the
             // underlying sort/filter/search actually change.
@@ -277,7 +279,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                 Sort = state.Sorts.Count > 0 ? state.Sorts.ToList() : null,
                 Filters = state.Filters.Count > 0 ? state.Filters.ToList() : null,
                 SearchQuery = state.SearchQuery,
-            }, state.SortVersion, state.FilterVersion, state.SearchQuery ?? string.Empty, pageSize);
+            }, state.SortVersion, state.FilterVersion, state.SearchQuery ?? string.Empty);
 
             var resource = UseDataSource(
                 source,

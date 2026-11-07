@@ -1,11 +1,15 @@
+using System.Diagnostics.Tracing;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Data;
 using Microsoft.UI.Reactor.Data.Providers;
 using Microsoft.UI.Reactor.Hooks;
+using Microsoft.UI.Reactor.Tests.Diagnostics;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.Core;
 
+[Collection("DataSourceDiagnostics")]
 public class DataSourceResourceTests
 {
     private sealed record Row(int Id);
@@ -145,6 +149,96 @@ public class DataSourceResourceTests
     }
 
     [Theory]
+    [InlineData(10, 20, true)]
+    [InlineData(20, 10, true)]
+    [InlineData(10, 20, false)]
+    [InlineData(0, 20, true)]
+    public void UseDataSource_Keeps_Initial_PageSize_Across_Renders_And_Query_Restarts(
+        int initialPageSize, int nextPageSize, bool includeOptions)
+    {
+        using var cache = new QueryCache();
+        var rows = Enumerable.Range(0, 101).Select(id => new Row(id)).ToArray();
+        var source = new ListDataSource<Row>(rows, row => row.Id);
+        var ctx = new RenderContext();
+        int expectedPageSize = Math.Max(1, initialPageSize);
+
+        InfiniteResource<Row> Render(IDataSource<Row> currentSource, int pageSize)
+        {
+            ctx.BeginRender(() => { });
+            var resource = ctx.UseDataSource(currentSource, new DataRequest { PageSize = pageSize }, cache,
+                includeOptions ? new InfiniteResourceOptions(PageSize: pageSize) : null,
+                new InlineDispatcher());
+            ctx.FlushEffects();
+            return resource;
+        }
+
+        try
+        {
+            var resource = Render(source, initialPageSize);
+            Assert.Equal(expectedPageSize, resource.Items.TakeWhile(row => row is not null).Count());
+            Assert.Same(resource, Render(source, nextPageSize));
+            resource.EnsureRange(0, rows.Length - 1);
+            for (int i = 0; i < rows.Length; i++)
+                Assert.Equal(rows[i], resource.Items[i]);
+
+            var restarted = Render(new ListDataSource<Row>(rows, row => row.Id), nextPageSize);
+            Assert.NotSame(resource, restarted);
+            Assert.Equal(expectedPageSize, restarted.Items.TakeWhile(row => row is not null).Count());
+            restarted.EnsureRange(0, rows.Length - 1);
+            for (int i = 0; i < rows.Length; i++)
+                Assert.Equal(rows[i], restarted.Items[i]);
+        }
+        finally { ctx.RunCleanups(); }
+    }
+
+    [Theory]
+    [InlineData(10)]
+    [InlineData(0)]
+    public void UseDataSource_Keeps_Initial_PageSize_After_First_Render_Throws(int initialPageSize)
+    {
+        using var cache = new QueryCache();
+        var rows = Enumerable.Range(0, 101).Select(id => new Row(id)).ToArray();
+        var source = new ListDataSource<Row>(rows, row => row.Id);
+        var ctx = new RenderContext();
+        var pending = new PendingScope();
+        var contextScope = new ContextScope();
+        contextScope.Push(new Dictionary<ContextBase, object?> { [AppContexts.PendingScope] = pending });
+        var failure = new InvalidOperationException("Pending notification failed during initialization.");
+        void FailInitialization() => throw failure;
+        pending.Changed += FailInitialization;
+
+        InfiniteResource<Row> Render(int pageSize)
+        {
+            ctx.BeginRender(() => { }, contextScope);
+            var resource = ctx.UseDataSource(source, new DataRequest { PageSize = pageSize }, cache,
+                new InfiniteResourceOptions(PageSize: pageSize), new InlineDispatcher());
+            ctx.FlushEffects();
+            return resource;
+        }
+
+        try
+        {
+            // This retry scenario requires Register to notify synchronously during state construction.
+            var exception = Record.Exception(() => Render(initialPageSize));
+            Assert.True(pending.Count == 1,
+                "The first render must synchronously register the hook with PendingScope before notifying.");
+            Assert.Same(failure, exception);
+            pending.Changed -= FailInitialization;
+
+            var resource = Render(20);
+            Assert.Equal(Math.Max(1, initialPageSize), resource.Items.TakeWhile(row => row is not null).Count());
+            resource.EnsureRange(0, rows.Length - 1);
+            for (int i = 0; i < rows.Length; i++)
+                Assert.Equal(rows[i], resource.Items[i]);
+        }
+        finally
+        {
+            pending.Changed -= FailInitialization;
+            ctx.RunCleanups();
+        }
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(10)]
     public void UseDataSource_Preserves_Options_Across_Renders_And_Prefix_Changes(int pageSize)
@@ -176,8 +270,9 @@ public class DataSourceResourceTests
             Assert.Equal(rows[Math.Max(1, pageSize)], resource.Items[Math.Max(1, pageSize)]);
             Assert.Null(resource.Items[0]); // MaxLoadedPages still evicts the first page.
 
-            var restarted = Render(options with { CacheKeyPrefix = "second" });
+            var restarted = Render(options with { PageSize = 20, CacheKeyPrefix = "second" });
             Assert.NotSame(resource, restarted);
+            Assert.Equal(Math.Max(1, pageSize), restarted.Items.TakeWhile(row => row is not null).Count());
             Assert.Equal(rows[0], restarted.Items[0]);
             Assert.StartsWith("second/", latestKey!);
             Assert.True(cache.TryGet<Page<Row, string>>(latestKey!, out var entry));
@@ -193,6 +288,54 @@ public class DataSourceResourceTests
             now += TimeSpan.FromTicks(1);
             cache.EvictNow();
             Assert.False(cache.TryGet<Page<Row, string>>(pageKey, out _));
+        }
+        finally { ctx.RunCleanups(); }
+    }
+
+    [Theory]
+    [InlineData(true)]
+#if !DEBUG
+    // The Debug mirror keeps warnings enabled even without an event listener.
+    [InlineData(false)]
+#endif
+    public void UseDataSource_Reports_PageSize_Changes_Once(bool listenInitially)
+    {
+        using var cache = new QueryCache();
+        var source = new ListDataSource<Row>(Enumerable.Range(0, 40).Select(id => new Row(id)), row => row.Id);
+        var ctx = new RenderContext();
+
+        void Render(int pageSize, string prefix = "first")
+        {
+            ctx.BeginRender(() => { });
+            ctx.UseDataSource(source, new DataRequest { PageSize = pageSize }, cache,
+                new InfiniteResourceOptions(PageSize: pageSize, CacheKeyPrefix: prefix), new InlineDispatcher());
+            ctx.FlushEffects();
+        }
+
+        using var initialCapture = listenInitially
+            ? ReactorTraceCollector.Capture(EventLevel.Warning, ReactorEventSource.Keywords.Errors) : null;
+        if (!listenInitially)
+            Assert.False(DiagnosticLog.IsWarningEnabled, "The delayed-listener test requires warnings to be disabled initially.");
+
+        try
+        {
+            Render(10);
+            if (initialCapture is not null)
+                Assert.DoesNotContain(initialCapture.ByName(nameof(ReactorEventSource.Warning)),
+                    e => (e.Payload[1] as string) == "UseDataSource.PageSize");
+            Render(20);
+
+            using var lateCapture = listenInitially ? null
+                : ReactorTraceCollector.Capture(EventLevel.Warning, ReactorEventSource.Keywords.Errors);
+            Render(20);
+            Render(30);
+            Render(30, "second");
+
+            var warning = Assert.Single((initialCapture ?? lateCapture!).ByName(nameof(ReactorEventSource.Warning)),
+                e => (e.Payload[1] as string) == "UseDataSource.PageSize");
+            Assert.Equal(LogCategory.Reactor.ToString(), warning.Payload[0]);
+            Assert.Equal(EventLevel.Warning, warning.Level);
+            Assert.Contains("retains 10", Assert.IsType<string>(warning.Payload[2]));
         }
         finally { ctx.RunCleanups(); }
     }
