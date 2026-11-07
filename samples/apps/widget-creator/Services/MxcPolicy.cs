@@ -634,14 +634,28 @@ public static class MxcPolicy
     static bool TryParseAddress(string text, out byte[] bytes)
     {
         bytes = [];
-        if (text.Contains(':'))
-        {
-            if (text.Contains('%') || !System.Net.IPAddress.TryParse(text, out var v6)
-                || v6.AddressFamily != System.Net.Sockets.AddressFamily.InterNetworkV6)
-                return false;
-            bytes = v6.GetAddressBytes();
-            return true;
-        }
+        if (!text.Contains(':'))
+            return TryParseIPv4(text, out bytes);
+
+        // IPv6, as strict as Rust's parser: hex groups and ':' only (no brackets,
+        // zone IDs or ports, which IPAddress.TryParse tolerates), plus an optional
+        // trailing strict dotted-quad.
+        if (text.Any(c => !(char.IsAsciiHexDigit(c) || c is ':' or '.')))
+            return false;
+        var lastColon = text.LastIndexOf(':');
+        var firstDot = text.IndexOf('.');
+        if (firstDot >= 0 && (firstDot < lastColon || !TryParseIPv4(text[(lastColon + 1)..], out _)))
+            return false;
+        if (!System.Net.IPAddress.TryParse(text, out var v6)
+            || v6.AddressFamily != System.Net.Sockets.AddressFamily.InterNetworkV6)
+            return false;
+        bytes = v6.GetAddressBytes();
+        return true;
+    }
+
+    static bool TryParseIPv4(string text, out byte[] bytes)
+    {
+        bytes = [];
         var octets = text.Split('.');
         if (octets.Length != 4) return false;
         var result = new byte[4];
