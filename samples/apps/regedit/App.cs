@@ -46,7 +46,6 @@ internal enum Pane { Tree, Values }
 
 internal sealed record InfoMessage(int Id, InfoBarSeverity Severity, string Message, string? ActionText = null, Action? OnAction = null);
 
-internal sealed record Favorite(string Name, string Path);
 
 internal sealed record DialogSlot(int Id, Element Element);
 
@@ -85,6 +84,14 @@ internal sealed class RegeditApp : Component
 
         var dispatcher = DispatcherQueue.GetForCurrentThread();
 
+        // ── Favorites: shared with classic regedit, reloaded when either editor changes them ─
+        UseEffect(() =>
+        {
+            setFavorites(FavoritesStore.Load());
+            var watch = FavoritesStore.Watch(() => dispatcher.TryEnqueue(() => setFavorites(FavoritesStore.Load())));
+            return watch.Dispose;
+        }, "favorites");
+
         // ── Value loading (re-runs on key change or explicit reload) ─
         UseEffect(() =>
         {
@@ -108,7 +115,10 @@ internal sealed class RegeditApp : Component
                     {
                         if (cancelled) return;
                         setLoaded(new LoadedValues(path, []));
-                        ShowError(ErrorText(ex));
+                        if (ex is RegistryOperationException { IsNotFound: true } && treeRef.Current is { } t)
+                            _ = t.HandleVanishedAsync(path);
+                        else
+                            ShowError(ErrorText(ex));
                     });
                 }
             });
@@ -427,20 +437,28 @@ internal sealed class RegeditApp : Component
             else StartSearch(findText, findFlags);
         }
 
-        // ── Favorites (baseline: in-memory; F09 persists them) ────────
+        // ── Favorites (persisted in Applets\Regedit\Favorites, shared with classic regedit) ─
         void AddFavorite()
         {
             var path = currentPathRef.Current;
             if (path.Length == 0) return;
             ShowDialog(close => Component<AddFavoriteDialog, AddFavoriteProps>(new AddFavoriteProps(
                 RegPath.Leaf(path),
-                name => setFavorites([.. favorites.Where(f => !f.Name.Equals(name, StringComparison.OrdinalIgnoreCase)), new Favorite(name, path)]),
+                async name =>
+                {
+                    var (ok, _) = await TryRun(() => { FavoritesStore.Add(name, path); return true; });
+                    if (ok) setFavorites(FavoritesStore.Load());
+                },
                 close)));
         }
 
         void RemoveFavorite() => ShowDialog(close => Component<RemoveFavoriteDialog, RemoveFavoriteProps>(new RemoveFavoriteProps(
             favorites.Select(f => f.Name).ToArray(),
-            name => setFavorites(favorites.Where(f => f.Name != name).ToArray()),
+            async name =>
+            {
+                var (ok, _) = await TryRun(() => { FavoritesStore.Remove(name); return true; });
+                if (ok) setFavorites(FavoritesStore.Load());
+            },
             close)));
 
         // ── Export (.reg file) ───────────────────────────────────────

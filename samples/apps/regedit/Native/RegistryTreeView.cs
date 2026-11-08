@@ -298,7 +298,8 @@ internal sealed partial class RegistryTreeView : Grid
             node.Children = [];
             node.HasChildren = false;
             node.IsExpanded = false;
-            if (reportErrors) Handlers.Error?.Invoke(ex.Message);
+            if (reportErrors && ex.IsNotFound && node.Kind == TreeNodeKind.Key) await HandleVanishedAsync(node.Path);
+            else if (reportErrors) Handlers.Error?.Invoke(ex.Message);
             return false;
         }
     }
@@ -408,6 +409,25 @@ internal sealed partial class RegistryTreeView : Grid
     }
 
     private void ScrollToCenter(TreeNode node) => ListHelpers.ScrollRowIntoView(_list, node, RowHeight);
+
+    /// <summary>
+    /// A key was found to be gone (deleted outside the app): report it, drop it (and any
+    /// vanished ancestors) from the tree and select the nearest key that still exists.
+    /// </summary>
+    public async Task HandleVanishedAsync(string path)
+    {
+        Handlers.Error?.Invoke($"Cannot find the key {RegPath.ToDisplay(path)}. It may have been deleted.");
+        string ancestorPath = RegPath.Parent(path);
+        while (ancestorPath.Length > 0 && !RegPath.IsHive(ancestorPath) &&
+               !await Task.Run(() => RegistryService.KeyExists(ancestorPath)))
+            ancestorPath = RegPath.Parent(ancestorPath);
+        var anchor = FindLoaded(ancestorPath) ?? _computer;
+        if (anchor.Kind != TreeNodeKind.Computer) await LoadChildrenAsync(anchor, reportErrors: false);
+        RefreshRowVisual(anchor);
+        SyncRows();
+        if (!ReferenceEquals(_list.SelectedItem, anchor)) Select(anchor);
+        else Handlers.SelectionChanged?.Invoke(anchor.Path);
+    }
 
     private static TreeNode? FindChild(TreeNode parent, string path) =>
         parent.Children?.FirstOrDefault(c => c.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
@@ -559,6 +579,18 @@ internal sealed partial class RegistryTreeView : Grid
                 else if (node.HasChildren)
                 {
                     await ExpandAsync(node);
+                }
+                else if (node.Kind == TreeNodeKind.Key)
+                {
+                    // A leaf: nothing to expand, but make sure it still exists (classic regedit
+                    // re-enumerates here too) and pick up subkeys created since we looked.
+                    var p = node.Path;
+                    if (!await Task.Run(() => RegistryService.KeyExists(p))) await HandleVanishedAsync(p);
+                    else if (await Task.Run(() => RegistryService.HasSubKeys(p)))
+                    {
+                        node.HasChildren = true;
+                        await ExpandAsync(node);
+                    }
                 }
                 break;
             case VirtualKey.Left:
