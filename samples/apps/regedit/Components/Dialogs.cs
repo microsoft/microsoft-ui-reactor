@@ -122,18 +122,26 @@ internal sealed class EditNumberDialog : Component<EditNumberProps>
     {
         var (hex, setHex) = UseState(true);
         var (text, setText) = UseState(Props.IsQword ? Props.Value.ToString("x") : ((uint)Props.Value).ToString("x"));
+        // Text that was invalid when the base was switched stays invalid until edited, so an
+        // out-of-range hex string can't silently turn into a different, valid decimal number.
+        var (carriedInvalid, setCarriedInvalid) = UseState(false);
 
         bool valid;
         ulong parsed;
         if (Props.IsQword) valid = ValueFormat.TryParseQword(text, hex, out parsed);
         else { valid = ValueFormat.TryParseDword(text, hex, out var d); parsed = d; }
+        valid &= !carriedInvalid;
 
         void SwitchBase(bool toHex)
         {
             if (toHex == hex) return;
             if (valid) setText(toHex ? parsed.ToString("x") : parsed.ToString());
+            else setCarriedInvalid(true);
             setHex(toHex);
         }
+
+        // Classic regedit caps the field at the widest valid value for the base.
+        var maxLength = Props.IsQword ? (hex ? 16 : 20) : (hex ? 8 : 10);
 
         return DialogChrome.Dialog(Props.IsQword ? Strings.EditQwordTitle : Strings.EditDwordTitle,
             VStack(4,
@@ -142,14 +150,15 @@ internal sealed class EditNumberDialog : Component<EditNumberProps>
                 HStack(16,
                     VStack(4,
                         DialogChrome.Label(Strings.ValueData),
-                        TextBox(text, setText).SelectAllOnFirstFocus().Width(200).AutomationName(Strings.ValueData),
+                        TextBox(text, t => { setCarriedInvalid(false); setText(t); }).MaxLength(maxLength)
+                            .SelectAllOnFirstFocus().Width(200).AutomationName(Strings.ValueData),
                         When(!valid, () => TextBlock(hex ? Strings.InvalidHex : Strings.InvalidDecimal)
                             .FontSize(12).Foreground(Theme.SystemCritical))
                     ),
                     VStack(2,
                         DialogChrome.Label(Strings.Base),
-                        RadioButton(Strings.Hexadecimal, hex, on => { if (on) SwitchBase(true); }, "numberBase").MinHeight(24),
-                        RadioButton(Strings.Decimal, !hex, on => { if (on) SwitchBase(false); }, "numberBase").MinHeight(24)
+                        RadioButton(Strings.Hexadecimal, hex, on => { if (on) SwitchBase(true); }, "numberBase").Set(rb => rb.Style = ReactorRegedit.Native.AppTheme.CompactRadioButtonStyle),
+                        RadioButton(Strings.Decimal, !hex, on => { if (on) SwitchBase(false); }, "numberBase").Set(rb => rb.Style = ReactorRegedit.Native.AppTheme.CompactRadioButtonStyle)
                     )
                 ).Margin(0, 6, 0, 0)
             ).Width(420),
@@ -229,8 +238,8 @@ internal sealed class ExportDialog : Component<ExportProps>
         return DialogChrome.Dialog(Strings.ExportTitle,
             VStack(4,
                 DialogChrome.Label(Strings.ExportRange),
-                RadioButton(Strings.All, all, on => { if (on) setAll(true); }, "exportRange").MinHeight(24),
-                RadioButton(Strings.SelectedBranch, !all, on => { if (on) setAll(false); }, "exportRange").MinHeight(24),
+                RadioButton(Strings.All, all, on => { if (on) setAll(true); }, "exportRange").Set(rb => rb.Style = ReactorRegedit.Native.AppTheme.CompactRadioButtonStyle),
+                RadioButton(Strings.SelectedBranch, !all, on => { if (on) setAll(false); }, "exportRange").Set(rb => rb.Style = ReactorRegedit.Native.AppTheme.CompactRadioButtonStyle),
                 TextBox(branch, setBranch).IsEnabled(!all)
                     .AutomationName(Strings.SelectedBranch)
             ).Width(420),
