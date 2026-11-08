@@ -84,6 +84,7 @@ internal sealed class RegeditApp : Component
         currentPathRef.Current = currentPath;
 
         var dispatcher = DispatcherQueue.GetForCurrentThread();
+        var window = UseWindow();
         var settingsRef = UseRef<SessionSettings?>(null);
         var settings = settingsRef.Current ??= SessionSettings.Load();
 
@@ -235,6 +236,16 @@ internal sealed class RegeditApp : Component
             package.SetText(path);
             Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
             ShowMessage(InfoBarSeverity.Informational, $"Copied \"{path}\" to the clipboard.");
+        }
+
+        nint WindowHandle() => window is null ? 0 : Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
+
+        // ── Permissions (native security editor, like classic regedit) ─
+        void EditPermissions(string? keyPath = null)
+        {
+            var path = keyPath ?? currentPathRef.Current;
+            if (path.Length == 0) return;
+            if (KeyPermissions.Edit(WindowHandle(), path) is { } error) ShowError(error);
         }
 
         // ── Values: modify ───────────────────────────────────────────
@@ -712,7 +723,7 @@ internal sealed class RegeditApp : Component
                     new(Strings.Rename, () => treeRef.Current?.BeginRename(path), isKey, KeyText: "F2"),
                     MenuSpec.Separator,
                     new(Strings.Export, () => Export(path)),
-                    new(Strings.Permissions, () => { }, Enabled: false),
+                    new(Strings.Permissions, () => EditPermissions(path), node.Kind != TreeNodeKind.Computer),
                     MenuSpec.Separator,
                     new(Strings.CopyKeyName, () => CopyKeyName(path), node.Kind != TreeNodeKind.Computer),
                 ];
@@ -778,7 +789,7 @@ internal sealed class RegeditApp : Component
                     MenuItem(Strings.NewExpandableStringValue, () => NewValue(RegType.ExpandSz)) with { IsEnabled = hasKey },
                 ]),
                 MenuSeparator(),
-                MenuItem(Strings.Permissions, () => { }) with { IsEnabled = false },
+                MenuItem(Strings.Permissions, () => EditPermissions()) with { IsEnabled = hasKey },
                 MenuSeparator(),
                 MenuItem(Strings.Delete, DeleteCommand) with { IsEnabled = isRegularKey || selectedValueCount > 0 },
                 MenuItem(Strings.Rename, RenameCommand) with { IsEnabled = isRegularKey || selectedValueCount == 1 },

@@ -101,6 +101,75 @@ internal static class RegistryService
         catch (RegistryOperationException ex) { return ex.IsAccessDenied; }
     }
 
+    /// <summary>Opens a key with an explicit access mask (e.g. READ_CONTROL / WRITE_DAC).</summary>
+    public static Microsoft.Win32.SafeHandles.SafeRegistryHandle OpenKeyWithRights(string path, int access)
+    {
+        var root = RootFor(path);
+        var sub = RegPath.SubPath(path);
+        var rc = RegOpenKeyEx(root.Handle, sub.Length == 0 ? null : sub, 0, access, out var handle);
+        if (rc == ERROR_SUCCESS) return handle;
+        handle.Dispose();
+        if (rc == ERROR_FILE_NOT_FOUND) throw NotFound(path);
+        if (rc == ERROR_ACCESS_DENIED)
+            throw new RegistryOperationException($"Cannot open {RegPath.Leaf(path)}: Access is denied.", ERROR_ACCESS_DENIED);
+        throw Win32(rc, $"Cannot open {RegPath.Leaf(path)}");
+    }
+
+    /// <summary>Reads the key's self-relative security descriptor.</summary>
+    public static byte[] GetKeySecurity(string path, uint securityInformation)
+    {
+        using var handle = OpenKeyWithRights(path, 0x00020000 /* READ_CONTROL */);
+        uint size = 0;
+        var rc = RegGetKeySecurity(handle, securityInformation, null, ref size);
+        while (rc == 122 /* ERROR_INSUFFICIENT_BUFFER */)
+        {
+            var buffer = new byte[size];
+            rc = RegGetKeySecurity(handle, securityInformation, buffer, ref size);
+            if (rc == ERROR_SUCCESS) return buffer;
+        }
+        throw rc == ERROR_ACCESS_DENIED
+            ? new RegistryOperationException($"Cannot read the permissions of {RegPath.Leaf(path)}: Access is denied.", ERROR_ACCESS_DENIED)
+            : Win32(rc, $"Cannot read the permissions of {RegPath.Leaf(path)}");
+    }
+
+    /// <summary>
+    /// Writes the parts of <paramref name="descriptor"/> selected by <paramref name="securityInformation"/>.
+    /// The security editor passes only the explicit ACEs plus PROTECTED/UNPROTECTED flags, so this
+    /// goes through SetNamedSecurityInfo, which re-merges the ACEs inherited from the parent key
+    /// (RegSetKeySecurity would write the descriptor verbatim and drop them).
+    /// </summary>
+    public static void SetKeySecurity(string path, uint securityInformation, nint descriptor)
+    {
+        nint owner = 0, group = 0, dacl = 0, sacl = 0;
+        if ((securityInformation & 0x1) != 0) GetSecurityDescriptorOwner(descriptor, out owner, out _);
+        if ((securityInformation & 0x2) != 0) GetSecurityDescriptorGroup(descriptor, out group, out _);
+        if ((securityInformation & 0x4) != 0) GetSecurityDescriptorDacl(descriptor, out _, out dacl, out _);
+        if ((securityInformation & 0x8) != 0) GetSecurityDescriptorSacl(descriptor, out _, out sacl, out _);
+        var rc = SetNamedSecurityInfo(SecurityObjectName(path), 4 /* SE_REGISTRY_KEY */, securityInformation, owner, group, dacl, sacl);
+        if (rc == ERROR_SUCCESS) return;
+        throw rc == ERROR_ACCESS_DENIED
+            ? new RegistryOperationException($"Cannot change the permissions of {RegPath.Leaf(path)}: Access is denied.", ERROR_ACCESS_DENIED)
+            : Win32(rc, $"Cannot change the permissions of {RegPath.Leaf(path)}");
+    }
+
+    /// <summary>"CURRENT_USER\Software\…" — the registry object-name form SetNamedSecurityInfo expects.</summary>
+    internal static string SecurityObjectName(string path)
+    {
+        var (machine, _) = RegPath.SplitMachine(path);
+        var root = RegPath.Hive(path) switch
+        {
+            "HKEY_CLASSES_ROOT" => "CLASSES_ROOT",
+            "HKEY_CURRENT_USER" => "CURRENT_USER",
+            "HKEY_LOCAL_MACHINE" => "MACHINE",
+            "HKEY_USERS" => "USERS",
+            "HKEY_CURRENT_CONFIG" => "CURRENT_CONFIG",
+            var other => other,
+        };
+        var sub = RegPath.SubPath(path);
+        var local = sub.Length == 0 ? root : root + "\\" + sub;
+        return machine is null ? local : $@"\\{machine}\{local}";
+    }
+
     private static RegistryOperationException NotFound(string path) =>
         new($"Cannot find the key {RegPath.ToDisplay(path)}.", ERROR_FILE_NOT_FOUND);
 
