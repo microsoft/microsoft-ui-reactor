@@ -35,7 +35,8 @@ ReactorApplication.OnUnhandledException = ex =>
     return false;
 };
 
-ReactorApp.Run<RegeditApp>("Registry Editor", width: 1280, height: 800,
+ReactorApp.Run<RegeditApp>(
+    new WindowSpec { Title = "Registry Editor", Width = 1280, Height = 800 }.WithPersistence("ReactorRegedit.Main"),
     configure: host =>
     {
         AppTheme.ApplyCompactDensity();
@@ -83,6 +84,35 @@ internal sealed class RegeditApp : Component
         currentPathRef.Current = currentPath;
 
         var dispatcher = DispatcherQueue.GetForCurrentThread();
+        var settingsRef = UseRef<SessionSettings?>(null);
+        var settings = settingsRef.Current ??= SessionSettings.Load();
+
+        // ── Session: restore classic regedit's LastKey on launch, write it back on close ─
+        UseEffect(() =>
+        {
+            var last = SessionSettings.ReadLastKey();
+            if (last is { Length: > 0 })
+                dispatcher.TryEnqueue(DispatcherQueuePriority.Low, async () =>
+                {
+                    if (treeRef.Current is not { } tree) return;
+                    // Like classic regedit, fall back to the deepest ancestor that still exists.
+                    for (var p = last; p.Length > 0; p = RegPath.Parent(p))
+                    {
+                        var resolved = await Task.Run(() =>
+                        {
+                            try { return RegistryService.KeyExists(p) ? RegistryService.ResolveCase(p) : null; }
+                            catch (RegistryOperationException) { return null; }
+                        });
+                        if (resolved is not null && await tree.RevealAsync(resolved, focus: true)) return;
+                    }
+                });
+        }, "restore-last-key");
+        UseClosingGuard(() =>
+        {
+            SessionSettings.WriteLastKey(currentPathRef.Current);
+            settings.Save();
+            return true;
+        });
 
         // ── Favorites: shared with classic regedit, reloaded when either editor changes them ─
         UseEffect(() =>
@@ -673,6 +703,7 @@ internal sealed class RegeditApp : Component
             RenameRequested = RenameValue,
             SelectionChanged = setSelectedValueCount,
             FocusEntered = () => activePane.Current = Pane.Values,
+            ColumnsResized = (name, type) => { settings.NameWidth = name; settings.TypeWidth = type; settings.Save(); },
             BuildItemMenu = sel =>
             [
                 new(Strings.Modify, () => Modify(sel.FirstOrDefault(), false), sel.Count == 1),
@@ -799,7 +830,12 @@ internal sealed class RegeditApp : Component
             typeKey: "registry-tree");
 
         var valueList = XamlHost(
-            () => listRef.Current = new ValueListView(),
+            () =>
+            {
+                var created = new ValueListView();
+                created.SetColumnWidths(settings.NameWidth, settings.TypeWidth);
+                return listRef.Current = created;
+            },
             c =>
             {
                 var list = (ValueListView)c;
@@ -832,7 +868,8 @@ internal sealed class RegeditApp : Component
             menuBar.Grid(row: 0, column: 0).WithKey("menu"),
             addressBar.Grid(row: 1, column: 0).WithKey("address"),
             infoBar.Grid(row: 2, column: 0),
-            Component<SplitPanel, SplitPanelProps>(new SplitPanelProps(Left: tree, Right: valueList)).Grid(row: 3, column: 0).WithKey("panes"),
+            Component<SplitPanel, SplitPanelProps>(new SplitPanelProps(Left: tree, Right: valueList, InitialWidth: settings.TreeWidth,
+                OnWidthChanged: w => { settings.TreeWidth = w; settings.Save(); })).Grid(row: 3, column: 0).WithKey("panes"),
             statusBar.Grid(row: 4, column: 0).WithKey("status"),
             dialogElement.Grid(row: 0, column: 0)
         )

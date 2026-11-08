@@ -68,7 +68,8 @@ internal sealed record SplitPanelProps(
     Element Left,
     Element Right,
     double InitialWidth = 280,
-    double MinWidth = 120
+    double MinWidth = 120,
+    Action<double>? OnWidthChanged = null
 );
 
 internal sealed class SplitPanel : Component<SplitPanelProps>
@@ -120,6 +121,7 @@ internal sealed class SplitPanel : Component<SplitPanelProps>
             {
                 var el = (UIElement)s;
                 el.ReleasePointerCapture(e.Pointer);
+                if (draggingRef.Current) Props.OnWidthChanged?.Invoke(widthRef.Current);
                 draggingRef.Current = false;
                 e.Handled = true;
             });
