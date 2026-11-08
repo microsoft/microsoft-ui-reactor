@@ -420,15 +420,33 @@ internal sealed class RegeditApp : Component
             searchCts.Current = cts;
             var startKey = currentPathRef.Current;
             var startValue = activePane.Current == Pane.Values ? listRef.Current?.PrimarySelection?.Name : null;
-            setInfo(new InfoMessage(++idCounter.Current, InfoBarSeverity.Informational, "Searching the registry…",
-                Strings.Cancel, () => cts.Cancel()));
+            var progressId = ++idCounter.Current;
+            long visited = 0;
+            string currentKey = "";
+            void ShowProgress()
+            {
+                var n = Interlocked.Read(ref visited);
+                setInfo(new InfoMessage(progressId, InfoBarSeverity.Informational,
+                    n == 0 ? "Searching the registry…" : $"Searching the registry… {n:N0} keys  {Volatile.Read(ref currentKey)}",
+                    Strings.Cancel, () => cts.Cancel()));
+            }
+            ShowProgress();
+            var timer = dispatcher.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(250);
+            timer.Tick += (_, _) => { if (ReferenceEquals(searchCts.Current, cts)) ShowProgress(); };
+            timer.Start();
             SearchHit? hit;
-            try { hit = await SearchService.FindNextAsync(startKey, startValue, text, flags, cts.Token); }
+            try
+            {
+                hit = await SearchService.FindNextAsync(startKey, startValue, text, flags, cts.Token,
+                    (n, p) => { Interlocked.Exchange(ref visited, n); Volatile.Write(ref currentKey, p); });
+            }
             catch (OperationCanceledException)
             {
                 if (ReferenceEquals(searchCts.Current, cts)) ShowMessage(InfoBarSeverity.Informational, "Search cancelled.");
                 return;
             }
+            finally { timer.Stop(); }
             if (!ReferenceEquals(searchCts.Current, cts)) return;
             searchCts.Current = null;
             if (hit is null)

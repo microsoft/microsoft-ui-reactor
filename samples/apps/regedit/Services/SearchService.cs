@@ -11,13 +11,13 @@ internal sealed record SearchHit(string KeyPath, string? ValueName);
 /// current position (key + optional value) and returns the first match.
 /// Unreadable keys are skipped silently, like regedit.
 /// </summary>
-internal sealed class SearchService(string text, FindFlags flags, CancellationToken ct, Action<string>? progress = null)
+internal sealed class SearchService(string text, FindFlags flags, CancellationToken ct, Action<long, string>? progress = null)
 {
     private readonly bool _whole = flags.HasFlag(FindFlags.WholeStringOnly);
     private long _visited;
 
     public static Task<SearchHit?> FindNextAsync(string startKey, string? startValue, string text, FindFlags flags,
-        CancellationToken ct, Action<string>? progress = null) =>
+        CancellationToken ct, Action<long, string>? progress = null) =>
         Task.Run(() => new SearchService(text, flags, ct, progress).FindNext(startKey, startValue), ct);
 
     public SearchHit? FindNext(string startKey, string? startValue)
@@ -60,7 +60,7 @@ internal sealed class SearchService(string text, FindFlags flags, CancellationTo
     private SearchHit? Search(string path, bool checkName)
     {
         ct.ThrowIfCancellationRequested();
-        if (++_visited % 200 == 0) progress?.Invoke(path);
+        if (++_visited % 64 == 0) progress?.Invoke(_visited, path);
         if (checkName && flags.HasFlag(FindFlags.Keys) && Matches(RegPath.Leaf(path))) return new SearchHit(path, null);
         return SearchValues(path, null) ?? SearchChildren(path);
     }
