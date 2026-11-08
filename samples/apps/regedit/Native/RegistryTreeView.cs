@@ -231,6 +231,13 @@ internal sealed partial class RegistryTreeView : Grid
             parts.FolderClosed.Visibility = node.Kind == TreeNodeKind.Key && !node.IsExpanded ? Visibility.Visible : Visibility.Collapsed;
             parts.FolderOpen.Visibility = node.Kind == TreeNodeKind.Key && node.IsExpanded ? Visibility.Visible : Visibility.Collapsed;
             parts.Text.Text = node.Name;
+            var oldName = AutomationProperties.GetName(c);
+            if (oldName != node.Name)
+            {
+                AutomationProperties.SetName(c, node.Name);
+                FrameworkElementAutomationPeer.FromElement(c)?.RaisePropertyChangedEvent(
+                    AutomationElementIdentifiers.NameProperty, oldName, node.Name);
+            }
         }
     }
 
@@ -662,6 +669,9 @@ internal sealed partial class RegistryTreeView : Grid
 
         protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.TreeItem;
         protected override string GetClassNameCore() => "RegistryTreeItem";
+
+        // Bound to the node so the announced name can never lag behind the label.
+        protected override string GetNameCore() => _item.Node?.Name ?? base.GetNameCore();
 
         protected override object GetPatternCore(PatternInterface patternInterface) =>
             patternInterface == PatternInterface.ExpandCollapse ? this : base.GetPatternCore(patternInterface);
