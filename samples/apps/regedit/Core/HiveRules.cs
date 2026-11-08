@@ -17,12 +17,13 @@ public static class HiveRules
     }
 
     /// <summary>Null when Unload Hive is allowed for the selected key, else why it isn't.</summary>
-    public static string? UnloadBlockedReason(string selectedPath, bool elevated, IEnumerable<string> loadedHiveRoots)
+    public static string? UnloadBlockedReason(string selectedPath, bool elevated, IEnumerable<string> loadedHiveRoots, string? currentUserSid = null)
     {
         if (RegPath.IsRemote(selectedPath)) return "not available on a remote registry";
         var parent = RegPath.Parent(selectedPath);
         if (!IsHiveParent(parent) || RegPath.IsHive(selectedPath))
             return "select a loaded hive";
+        if (IsSystemHive(selectedPath, currentUserSid)) return "system hives cannot be unloaded";
         if (!loadedHiveRoots.Contains(selectedPath, StringComparer.OrdinalIgnoreCase))
             return "the selected key is not a loaded hive";
         if (!elevated) return "requires administrator";
@@ -34,7 +35,7 @@ public static class HiveRules
     /// ("\REGISTRY\MACHINE\SOFTWARE", "\REGISTRY\USER\S-1-5-…") to key paths.
     /// System hives that can never be unloaded are left out.
     /// </summary>
-    public static IReadOnlyList<string> HiveRootsFromHivelist(IEnumerable<string> names)
+    public static IReadOnlyList<string> HiveRootsFromHivelist(IEnumerable<string> names, string? currentUserSid = null)
     {
         var result = new List<string>();
         foreach (var raw in names)
@@ -48,16 +49,38 @@ public static class HiveRules
                 _ => null,
             };
             if (hive is null) continue;
-            if (hive == "HKEY_LOCAL_MACHINE" && s_systemHives.Contains(parts[2])) continue;
-            result.Add(hive + "\\" + parts[2]);
+            var root = hive + "\\" + parts[2];
+            if (IsSystemHive(root, currentUserSid)) continue;
+            result.Add(root);
         }
         return result;
     }
 
     private static readonly HashSet<string> s_systemHives = new(StringComparer.OrdinalIgnoreCase)
     {
-        "SYSTEM", "SOFTWARE", "SAM", "SECURITY", "HARDWARE", "BCD00000000", "ELAM", "DRIVERS",
+        "SYSTEM", "SOFTWARE", "SAM", "SECURITY", "HARDWARE", "BCD00000000", "ELAM", "DRIVERS", "Schema",
     };
+
+    private static readonly HashSet<string> s_systemUserHives = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".DEFAULT", "S-1-5-18", "S-1-5-19", "S-1-5-20",
+    };
+
+    /// <summary>
+    /// Hives the OS depends on and that must never be unloaded: the HKLM system hives
+    /// (including Schema, which can sit idle yet still be needed by servicing), the default
+    /// and service-account profiles, and the current user's own profile and classes hives.
+    /// </summary>
+    public static bool IsSystemHive(string path, string? currentUserSid)
+    {
+        var parent = RegPath.Parent(path);
+        var leaf = RegPath.Leaf(path);
+        if (parent.Equals("HKEY_LOCAL_MACHINE", StringComparison.OrdinalIgnoreCase)) return s_systemHives.Contains(leaf);
+        if (!parent.Equals("HKEY_USERS", StringComparison.OrdinalIgnoreCase)) return false;
+        if (s_systemUserHives.Contains(leaf)) return true;
+        return currentUserSid is { Length: > 0 } sid &&
+               (leaf.Equals(sid, StringComparison.OrdinalIgnoreCase) || leaf.Equals(sid + "_Classes", StringComparison.OrdinalIgnoreCase));
+    }
 
     private static bool IsHiveParent(string path) =>
         path.Equals("HKEY_LOCAL_MACHINE", StringComparison.OrdinalIgnoreCase) ||

@@ -164,11 +164,13 @@ internal static unsafe partial class KeyPermissions
             _canWriteOwner = canWriteOwner;
             _objectName = Str(RegPath.Leaf(path));
 
-            // The same rights classic regedit lists (KEY_* masks).
+            // The same rights classic regedit lists (KEY_* masks). The general entries carry
+            // CONTAINER_INHERIT_ACE so ACEs added on the basic page apply to "This key and
+            // subkeys", as in classic regedit.
             (uint Mask, string Name, uint Flags)[] rights =
             [
-                (0xF003F, "Full Control", SI_ACCESS_GENERAL | SI_ACCESS_SPECIFIC),
-                (0x20019, "Read", SI_ACCESS_GENERAL),
+                (0xF003F, "Full Control", SI_ACCESS_GENERAL | SI_ACCESS_SPECIFIC | CONTAINER_INHERIT_ACE),
+                (0x20019, "Read", SI_ACCESS_GENERAL | CONTAINER_INHERIT_ACE),
                 (0x0001, "Query Value", SI_ACCESS_SPECIFIC),
                 (0x0002, "Set Value", SI_ACCESS_SPECIFIC),
                 (0x0004, "Create Subkey", SI_ACCESS_SPECIFIC),
@@ -230,6 +232,7 @@ internal static unsafe partial class KeyPermissions
             try
             {
                 var sd = RegistryService.GetKeySecurity(_path, requestedInformation);
+                SecurityDescriptorBytes.MarkDaclAutoInherited(sd);
                 // aclui frees the descriptor with LocalFree.
                 var mem = LocalAlloc(0x0040 /* LPTR */, (nuint)sd.Length);
                 if (mem == 0) return E_FAIL;

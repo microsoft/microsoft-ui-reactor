@@ -127,20 +127,29 @@ internal static class RegistryService
         throw Win32(rc, $"Cannot open {RegPath.Leaf(path)}");
     }
 
-    /// <summary>Reads the key's self-relative security descriptor.</summary>
+    /// <summary>
+    /// Reads the key's self-relative security descriptor through GetNamedSecurityInfo, which
+    /// (unlike RegGetKeySecurity) reports which ACEs are inherited and sets
+    /// SE_DACL_AUTO_INHERITED, so the security editor greys inherited entries and hands back
+    /// only the explicit ones.
+    /// </summary>
     public static byte[] GetKeySecurity(string path, uint securityInformation)
     {
-        using var handle = OpenKeyWithRights(path, 0x00020000 /* READ_CONTROL */);
-        uint size = 0;
-        var rc = RegGetKeySecurity(handle, securityInformation, null, ref size);
-        while (rc == 122 /* ERROR_INSUFFICIENT_BUFFER */)
+        var rc = GetNamedSecurityInfo(SecurityObjectName(path), 4 /* SE_REGISTRY_KEY */, securityInformation,
+            out _, out _, out _, out _, out var sd);
+        if (rc == ERROR_SUCCESS && sd != 0)
         {
-            var buffer = new byte[size];
-            rc = RegGetKeySecurity(handle, securityInformation, buffer, ref size);
-            if (rc == ERROR_SUCCESS) return buffer;
+            try
+            {
+                var bytes = new byte[GetSecurityDescriptorLength(sd)];
+                System.Runtime.InteropServices.Marshal.Copy(sd, bytes, 0, bytes.Length);
+                return bytes;
+            }
+            finally { LocalFree(sd); }
         }
         throw rc == ERROR_ACCESS_DENIED
             ? new RegistryOperationException($"Cannot read the permissions of {RegPath.Leaf(path)}: Access is denied.", ERROR_ACCESS_DENIED)
+            : rc == ERROR_FILE_NOT_FOUND ? NotFound(path)
             : Win32(rc, $"Cannot read the permissions of {RegPath.Leaf(path)}");
     }
 

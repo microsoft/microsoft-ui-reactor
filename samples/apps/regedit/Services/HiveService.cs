@@ -10,13 +10,16 @@ internal static partial class HiveService
 {
     public static bool IsElevated => Environment.IsPrivilegedProcess;
 
+    /// <summary>The current user's SID string (its profile and classes hives must never be unloaded).</summary>
+    public static string? CurrentUserSid { get; } = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value;
+
     /// <summary>Keys under HKLM/HKU that are the roots of loaded (unloadable) hives.</summary>
     public static IReadOnlyList<string> LoadedHiveRoots()
     {
         try
         {
             using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\hivelist");
-            return key is null ? [] : HiveRules.HiveRootsFromHivelist(key.GetValueNames());
+            return key is null ? [] : HiveRules.HiveRootsFromHivelist(key.GetValueNames(), CurrentUserSid);
         }
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
         {
@@ -41,7 +44,7 @@ internal static partial class HiveService
     /// <summary>Unloads the hive rooted at <paramref name="path"/>.</summary>
     public static void Unload(string path)
     {
-        if (HiveRules.UnloadBlockedReason(path, IsElevated, LoadedHiveRoots()) is { } reason)
+        if (HiveRules.UnloadBlockedReason(path, IsElevated, LoadedHiveRoots(), CurrentUserSid) is { } reason)
             throw new RegistryOperationException($"Cannot unload {RegPath.Leaf(path)}: {reason}.");
         EnablePrivileges();
         var root = RegPath.Parent(path) == "HKEY_USERS" ? HKEY_USERS : HKEY_LOCAL_MACHINE;
@@ -51,21 +54,33 @@ internal static partial class HiveService
     }
 
     // RegLoadKey/RegUnLoadKey need SeRestorePrivilege and SeBackupPrivilege enabled.
+    // AdjustTokenPrivileges "succeeds" with ERROR_NOT_ALL_ASSIGNED when the token lacks a
+    // privilege, so check the last error rather than the return value alone.
     private static void EnablePrivileges()
     {
         if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, out var token))
-            throw new RegistryOperationException("Cannot adjust process privileges.", Marshal.GetLastPInvokeError());
+            throw new RegistryOperationException(
+                $"Cannot adjust process privileges: {new Win32Exception(Marshal.GetLastPInvokeError()).Message}", Marshal.GetLastPInvokeError());
         try
         {
             foreach (var name in new[] { "SeRestorePrivilege", "SeBackupPrivilege" })
             {
-                if (!LookupPrivilegeValue(null, name, out var luid)) continue;
+                if (!LookupPrivilegeValue(null, name, out var luid))
+                    throw new RegistryOperationException(
+                        $"Cannot look up {name}: {new Win32Exception(Marshal.GetLastPInvokeError()).Message}", Marshal.GetLastPInvokeError());
                 var tp = new TOKEN_PRIVILEGES { PrivilegeCount = 1, Luid = luid, Attributes = SE_PRIVILEGE_ENABLED };
-                AdjustTokenPrivileges(token, false, ref tp, 0, 0, 0);
+                var ok = AdjustTokenPrivileges(token, false, ref tp, 0, 0, 0);
+                var error = Marshal.GetLastPInvokeError();
+                if (!ok || error == ERROR_NOT_ALL_ASSIGNED)
+                    throw new RegistryOperationException(error == ERROR_NOT_ALL_ASSIGNED
+                        ? $"This account does not hold {name}, which loading and unloading hives requires. Run as administrator."
+                        : $"Cannot enable {name}: {new Win32Exception(error).Message}", error);
             }
         }
         finally { CloseHandle(token); }
     }
+
+    private const int ERROR_NOT_ALL_ASSIGNED = 1300;
 
     private static readonly nint HKEY_LOCAL_MACHINE = unchecked((nint)(int)0x80000002);
     private static readonly nint HKEY_USERS = unchecked((nint)(int)0x80000003);

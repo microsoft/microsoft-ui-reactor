@@ -317,7 +317,7 @@ internal sealed class RegeditApp : Component
         void UnloadHive()
         {
             var path = currentPathRef.Current;
-            if (HiveRules.UnloadBlockedReason(path, HiveService.IsElevated, HiveService.LoadedHiveRoots()) is { } reason)
+            if (HiveRules.UnloadBlockedReason(path, HiveService.IsElevated, HiveService.LoadedHiveRoots(), HiveService.CurrentUserSid) is { } reason)
             {
                 ShowError($"Unload Hive is not available: {reason}.");
                 return;
@@ -919,7 +919,7 @@ internal sealed class RegeditApp : Component
         var hasKey = currentPath.Length > 0;
         var loadHiveReason = HiveRules.LoadBlockedReason(currentPath, HiveService.IsElevated);
         var unloadHiveReason = UseMemo(() => HiveRules.UnloadBlockedReason(currentPath, HiveService.IsElevated,
-            RegPath.Parent(currentPath) is "HKEY_LOCAL_MACHINE" or "HKEY_USERS" ? HiveService.LoadedHiveRoots() : []), currentPath, valuesVersion);
+            RegPath.Parent(currentPath) is "HKEY_LOCAL_MACHINE" or "HKEY_USERS" ? HiveService.LoadedHiveRoots() : [], HiveService.CurrentUserSid), currentPath, valuesVersion);
         var isRegularKey = hasKey && !RegPath.IsHive(currentPath);
         // F16: grey out writes the user can't do here (probed when the key's values load).
         var accessKnown = string.Equals(loaded.Path, currentPath, StringComparison.Ordinal);

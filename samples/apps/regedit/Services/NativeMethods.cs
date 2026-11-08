@@ -41,6 +41,16 @@ internal static partial class NativeMethods
     public static partial int SetNamedSecurityInfo(string objectName, int objectType, uint securityInfo,
         nint psidOwner, nint psidGroup, nint pDacl, nint pSacl);
 
+    [LibraryImport("advapi32.dll", EntryPoint = "GetNamedSecurityInfoW", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial int GetNamedSecurityInfo(string objectName, int objectType, uint securityInfo,
+        out nint ppsidOwner, out nint ppsidGroup, out nint ppDacl, out nint ppSacl, out nint ppSecurityDescriptor);
+
+    [LibraryImport("advapi32.dll")]
+    public static partial uint GetSecurityDescriptorLength(nint pSecurityDescriptor);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial nint LocalFree(nint hMem);
+
     [LibraryImport("advapi32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetSecurityDescriptorOwner(nint pSecurityDescriptor, out nint pOwner, [MarshalAs(UnmanagedType.Bool)] out bool ownerDefaulted);
