@@ -36,7 +36,7 @@ ReactorApplication.OnUnhandledException = ex =>
 };
 
 ReactorApp.Run<RegeditApp>(
-    new WindowSpec { Title = "Registry Editor", Width = 1280, Height = 800 }.WithPersistence("ReactorRegedit.Main"),
+    new WindowSpec { Title = HiveService.IsElevated ? Strings.AppTitle + " (Administrator)" : Strings.AppTitle, Width = 1280, Height = 800 }.WithPersistence("ReactorRegedit.Main"),
     configure: host =>
     {
         AppTheme.ApplyCompactDensity();
@@ -50,7 +50,7 @@ internal sealed record InfoMessage(int Id, InfoBarSeverity Severity, string Mess
 
 internal sealed record DialogSlot(int Id, Element Element);
 
-internal sealed record LoadedValues(string Path, RegValue[] Values);
+internal sealed record LoadedValues(string Path, RegValue[] Values, bool CanSetValue = true, bool CanCreateSubKey = true);
 
 // ─── Root component ───────────────────────────────────────────────────────────
 
@@ -91,7 +91,8 @@ internal sealed class RegeditApp : Component
         // ── Session: restore classic regedit's LastKey on launch, write it back on close ─
         UseEffect(() =>
         {
-            var last = SessionSettings.ReadLastKey();
+            // "Restart as administrator" hands the current key over on the command line.
+            var last = StartupKeyArgument() ?? SessionSettings.ReadLastKey();
             if (last is { Length: > 0 })
                 dispatcher.TryEnqueue(DispatcherQueuePriority.Low, async () =>
                 {
@@ -138,7 +139,8 @@ internal sealed class RegeditApp : Component
                 try
                 {
                     var values = RegistryService.GetValues(path);
-                    dispatcher.TryEnqueue(() => { if (!cancelled) setLoaded(new LoadedValues(path, values)); });
+                    var access = RegistryService.ProbeWriteAccess(path);
+                    dispatcher.TryEnqueue(() => { if (!cancelled) setLoaded(new LoadedValues(path, values, access.SetValue, access.CreateSubKey)); });
                 }
                 catch (Exception ex)
                 {
@@ -239,6 +241,37 @@ internal sealed class RegeditApp : Component
         }
 
         nint WindowHandle() => window is null ? 0 : Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
+        static string? StartupKeyArgument() => CommandLine.KeyArgument(Environment.GetCommandLineArgs());
+
+        // ── Elevation (F16) ──────────────────────────────────────────
+        void RestartAsAdministrator()
+        {
+            var exe = Environment.ProcessPath;
+            if (exe is null) { ShowError("Cannot find the application executable."); return; }
+            var start = new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true, Verb = "runas" };
+            if (currentPathRef.Current.Length > 0)
+            {
+                start.ArgumentList.Add("--key");
+                start.ArgumentList.Add(currentPathRef.Current);
+            }
+            try
+            {
+                System.Diagnostics.Process.Start(start);
+            }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+            {
+                ShowMessage(InfoBarSeverity.Informational, "Restart as administrator was cancelled.");
+                return;
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                ShowError("Cannot restart as administrator: " + ex.Message);
+                return;
+            }
+            SessionSettings.WriteLastKey(currentPathRef.Current);
+            settings.Save();
+            Application.Current.Exit();
+        }
 
         // ── Load / Unload Hive (HKLM / HKU roots, elevated only) ──────
         async void LoadHive()
@@ -748,17 +781,23 @@ internal sealed class RegeditApp : Component
             else treeRef.Current?.BeginRename(currentPathRef.Current);
         }
 
-        MenuSpec[] NewMenuSpecs(bool enabled) =>
+        MenuSpec[] NewMenuSpecs(bool canKey, bool canValue) =>
         [
-            new(Strings.NewKey, NewKey, enabled),
+            new(Strings.NewKey, NewKey, canKey),
             MenuSpec.Separator,
-            new(Strings.NewStringValue, () => NewValue(RegType.Sz), enabled),
-            new(Strings.NewBinaryValue, () => NewValue(RegType.Binary), enabled),
-            new(Strings.NewDwordValue, () => NewValue(RegType.Dword), enabled),
-            new(Strings.NewQwordValue, () => NewValue(RegType.Qword), enabled),
-            new(Strings.NewMultiStringValue, () => NewValue(RegType.MultiSz), enabled),
-            new(Strings.NewExpandableStringValue, () => NewValue(RegType.ExpandSz), enabled),
+            new(Strings.NewStringValue, () => NewValue(RegType.Sz), canValue),
+            new(Strings.NewBinaryValue, () => NewValue(RegType.Binary), canValue),
+            new(Strings.NewDwordValue, () => NewValue(RegType.Dword), canValue),
+            new(Strings.NewQwordValue, () => NewValue(RegType.Qword), canValue),
+            new(Strings.NewMultiStringValue, () => NewValue(RegType.MultiSz), canValue),
+            new(Strings.NewExpandableStringValue, () => NewValue(RegType.ExpandSz), canValue),
         ];
+
+        // Context menus are built on demand for a key that may not be the rendered one yet.
+        (bool SetValue, bool CreateSubKey) LiveAccess(string keyPath) =>
+            string.Equals(loaded.Path, keyPath, StringComparison.Ordinal) && keyPath == currentPathRef.Current
+                ? (loaded.CanSetValue, loaded.CanCreateSubKey)
+                : RegistryService.ProbeWriteAccess(keyPath);
 
         // ── Island handlers ──────────────────────────────────────────
         var treeHandlers = new TreeHandlers
@@ -773,11 +812,13 @@ internal sealed class RegeditApp : Component
                 var isKey = node.Kind == TreeNodeKind.Key;
                 var canHaveNew = node.Kind is TreeNodeKind.Key or TreeNodeKind.Hive;
                 var path = node.Path;
+                var access = canHaveNew ? LiveAccess(path) : (SetValue: false, CreateSubKey: false);
                 return
                 [
                     new(node.IsExpanded ? Strings.Collapse : Strings.Expand,
                         () => treeRef.Current?.Toggle(node), node.HasChildren && node.Kind != TreeNodeKind.Computer),
-                    new(Strings.NewMenu, Children: NewMenuSpecs(canHaveNew), Enabled: canHaveNew),
+                    new(Strings.NewMenu, Children: NewMenuSpecs(access.CreateSubKey, access.SetValue),
+                        Enabled: access.CreateSubKey || access.SetValue),
                     new(Strings.Find, OpenFind, KeyText: "Ctrl+F"),
                     MenuSpec.Separator,
                     new(Strings.Delete, () => DeleteKey(path), isKey, KeyText: "Del"),
@@ -800,19 +841,28 @@ internal sealed class RegeditApp : Component
             FocusEntered = () => activePane.Current = Pane.Values,
             ColumnsResized = (name, type) => { settings.NameWidth = name; settings.TypeWidth = type; settings.Save(); },
             BuildItemMenu = sel =>
-            [
-                new(Strings.Modify, () => Modify(sel.FirstOrDefault(), false), sel.Count == 1),
-                new(Strings.ModifyBinaryData, () => Modify(sel.FirstOrDefault(), true), sel.Count == 1),
-                MenuSpec.Separator,
-                new(Strings.Delete, () => DeleteValues(sel), sel.Any(v => !v.IsUnsetDefault), KeyText: "Del"),
-                new(Strings.Rename, () => listRef.Current?.BeginRename(sel[0].Name),
-                    sel.Count == 1 && !sel[0].IsDefault, KeyText: "F2"),
-            ],
+            {
+                var canSet = currentPathRef.Current.Length > 0 && LiveAccess(currentPathRef.Current).SetValue;
+                return
+                [
+                    new(Strings.Modify, () => Modify(sel.FirstOrDefault(), false), sel.Count == 1 && canSet),
+                    new(Strings.ModifyBinaryData, () => Modify(sel.FirstOrDefault(), true), sel.Count == 1 && canSet),
+                    MenuSpec.Separator,
+                    new(Strings.Delete, () => DeleteValues(sel), canSet && sel.Any(v => !v.IsUnsetDefault), KeyText: "Del"),
+                    new(Strings.Rename, () => listRef.Current?.BeginRename(sel[0].Name),
+                        canSet && sel.Count == 1 && !sel[0].IsDefault, KeyText: "F2"),
+                ];
+            },
             BuildBackgroundMenu = () =>
-            [
-                new(Strings.NewMenu, Children: NewMenuSpecs(currentPathRef.Current.Length > 0),
-                    Enabled: currentPathRef.Current.Length > 0),
-            ],
+            {
+                var path = currentPathRef.Current;
+                var access = path.Length > 0 ? LiveAccess(path) : (SetValue: false, CreateSubKey: false);
+                return
+                [
+                    new(Strings.NewMenu, Children: NewMenuSpecs(access.CreateSubKey, access.SetValue),
+                        Enabled: access.CreateSubKey || access.SetValue),
+                ];
+            },
         };
 
         // ── Menu bar ─────────────────────────────────────────────────
@@ -821,6 +871,11 @@ internal sealed class RegeditApp : Component
         var unloadHiveReason = UseMemo(() => HiveRules.UnloadBlockedReason(currentPath, HiveService.IsElevated,
             RegPath.Parent(currentPath) is "HKEY_LOCAL_MACHINE" or "HKEY_USERS" ? HiveService.LoadedHiveRoots() : []), currentPath, valuesVersion);
         var isRegularKey = hasKey && !RegPath.IsHive(currentPath);
+        // F16: grey out writes the user can't do here (probed when the key's values load).
+        var accessKnown = string.Equals(loaded.Path, currentPath, StringComparison.Ordinal);
+        var canSetValue = hasKey && (!accessKnown || loaded.CanSetValue);
+        var canCreateSubKey = hasKey && (!accessKnown || loaded.CanCreateSubKey);
+        var readOnlyKey = hasKey && accessKnown && !loaded.CanSetValue && !loaded.CanCreateSubKey;
         var menuBar = MenuBar([
             Menu(Strings.FileMenu, [
                 MenuItem(Strings.Import, Import),
@@ -834,6 +889,9 @@ internal sealed class RegeditApp : Component
                 MenuSeparator(),
                 MenuItem(Strings.Print, () => { }) with { IsEnabled = false },
                 MenuSeparator(),
+                .. (HiveService.IsElevated
+                    ? Array.Empty<Microsoft.UI.Reactor.Core.MenuFlyoutItemBase>()
+                    : [MenuItem(Strings.RestartAsAdministrator, RestartAsAdministrator), MenuSeparator()]),
                 MenuItem(Strings.Exit, () => Application.Current.Exit()),
             ]),
             Menu(Strings.EditMenu, [
@@ -842,21 +900,22 @@ internal sealed class RegeditApp : Component
                 MenuItem(Strings.ModifyBinaryData, () => Modify(listRef.Current?.PrimarySelection, true)) with
                     { IsEnabled = selectedValueCount == 1 },
                 MenuSeparator(),
+                // MenuFlyoutSubItemData has no IsEnabled, and swapping it for a disabled leaf isn't reflected in the open menu.
                 MenuSubItem(Strings.NewMenu, [
-                    MenuItem(Strings.NewKey, NewKey) with { IsEnabled = hasKey },
+                    MenuItem(Strings.NewKey, NewKey) with { IsEnabled = canCreateSubKey },
                     MenuSeparator(),
-                    MenuItem(Strings.NewStringValue, () => NewValue(RegType.Sz)) with { IsEnabled = hasKey },
-                    MenuItem(Strings.NewBinaryValue, () => NewValue(RegType.Binary)) with { IsEnabled = hasKey },
-                    MenuItem(Strings.NewDwordValue, () => NewValue(RegType.Dword)) with { IsEnabled = hasKey },
-                    MenuItem(Strings.NewQwordValue, () => NewValue(RegType.Qword)) with { IsEnabled = hasKey },
-                    MenuItem(Strings.NewMultiStringValue, () => NewValue(RegType.MultiSz)) with { IsEnabled = hasKey },
-                    MenuItem(Strings.NewExpandableStringValue, () => NewValue(RegType.ExpandSz)) with { IsEnabled = hasKey },
+                    MenuItem(Strings.NewStringValue, () => NewValue(RegType.Sz)) with { IsEnabled = canSetValue },
+                    MenuItem(Strings.NewBinaryValue, () => NewValue(RegType.Binary)) with { IsEnabled = canSetValue },
+                    MenuItem(Strings.NewDwordValue, () => NewValue(RegType.Dword)) with { IsEnabled = canSetValue },
+                    MenuItem(Strings.NewQwordValue, () => NewValue(RegType.Qword)) with { IsEnabled = canSetValue },
+                    MenuItem(Strings.NewMultiStringValue, () => NewValue(RegType.MultiSz)) with { IsEnabled = canSetValue },
+                    MenuItem(Strings.NewExpandableStringValue, () => NewValue(RegType.ExpandSz)) with { IsEnabled = canSetValue },
                 ]),
                 MenuSeparator(),
                 MenuItem(Strings.Permissions, () => EditPermissions()) with { IsEnabled = hasKey },
                 MenuSeparator(),
-                MenuItem(Strings.Delete, DeleteCommand) with { IsEnabled = isRegularKey || selectedValueCount > 0 },
-                MenuItem(Strings.Rename, RenameCommand) with { IsEnabled = isRegularKey || selectedValueCount == 1 },
+                MenuItem(Strings.Delete, DeleteCommand) with { IsEnabled = isRegularKey || (selectedValueCount > 0 && canSetValue) },
+                MenuItem(Strings.Rename, RenameCommand) with { IsEnabled = isRegularKey || (selectedValueCount == 1 && canSetValue) },
                 MenuSeparator(),
                 MenuItem(Strings.CopyKeyName, () => CopyKeyName()) with { IsEnabled = hasKey },
                 MenuSeparator(),
@@ -949,7 +1008,7 @@ internal sealed class RegeditApp : Component
 
         // ── Status bar ───────────────────────────────────────────────
         var statusBar = When(showStatusBar, () =>
-            TextBlock(RegPath.ToDisplay(currentPath))
+            TextBlock(readOnlyKey ? $"{RegPath.ToDisplay(currentPath)}    (read-only)" : RegPath.ToDisplay(currentPath))
                 .FontSize(12)
                 .TextTrimming(TextTrimming.CharacterEllipsis)
                 .TextWrapping(TextWrapping.NoWrap)

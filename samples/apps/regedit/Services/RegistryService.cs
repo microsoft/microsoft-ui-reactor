@@ -101,6 +101,18 @@ internal static class RegistryService
         catch (RegistryOperationException ex) { return ex.IsAccessDenied; }
     }
 
+    /// <summary>Which writes the current user may do on a key (for disabling commands up front).</summary>
+    public static (bool SetValue, bool CreateSubKey) ProbeWriteAccess(string path)
+    {
+        static bool Can(string p, int access)
+        {
+            try { using var h = OpenKeyWithRights(p, access); return true; }
+            catch (RegistryOperationException) { return false; }
+        }
+        if (path.Length == 0) return (false, false);
+        return (Can(path, 0x0002 /* KEY_SET_VALUE */), Can(path, 0x0004 /* KEY_CREATE_SUB_KEY */));
+    }
+
     /// <summary>Opens a key with an explicit access mask (e.g. READ_CONTROL / WRITE_DAC).</summary>
     public static Microsoft.Win32.SafeHandles.SafeRegistryHandle OpenKeyWithRights(string path, int access)
     {
