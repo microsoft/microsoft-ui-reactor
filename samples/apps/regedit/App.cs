@@ -50,7 +50,7 @@ internal sealed record InfoMessage(int Id, InfoBarSeverity Severity, string Mess
 
 internal sealed record DialogSlot(int Id, Element Element);
 
-internal sealed record LoadedValues(string Path, RegValue[] Values, bool CanSetValue = true, bool CanCreateSubKey = true);
+internal sealed record LoadedValues(string Path, RegValue[] Values, bool CanSetValue = true, bool CanCreateSubKey = true, KeyInfo? Info = null);
 
 // ─── Root component ───────────────────────────────────────────────────────────
 
@@ -140,7 +140,9 @@ internal sealed class RegeditApp : Component
                 {
                     var values = RegistryService.GetValues(path);
                     var access = RegistryService.ProbeWriteAccess(path);
-                    dispatcher.TryEnqueue(() => { if (!cancelled) setLoaded(new LoadedValues(path, values, access.SetValue, access.CreateSubKey)); });
+                    KeyInfo? keyInfo = null;
+                    try { keyInfo = RegistryService.GetKeyInfo(path); } catch (RegistryOperationException) { }
+                    dispatcher.TryEnqueue(() => { if (!cancelled) setLoaded(new LoadedValues(path, values, access.SetValue, access.CreateSubKey, keyInfo)); });
                 }
                 catch (Exception ex)
                 {
@@ -493,6 +495,8 @@ internal sealed class RegeditApp : Component
                         await tree.RefreshKeyAsync(parent);
                         if (ok) await tree.RevealAsync(parent, focus: true);
                     }
+                    if (ok && string.Equals(currentPathRef.Current, parent, StringComparison.Ordinal))
+                        ReloadValues();
                 },
                 close)));
         }
@@ -1007,11 +1011,26 @@ internal sealed class RegeditApp : Component
             typeKey: "value-list");
 
         // ── Status bar ───────────────────────────────────────────────
+        var keyDetails = hasKey && accessKnown && loaded.Info is { } ki
+            ? KeyDetails.Format(ki.SubKeyCount, ki.ValueCount, ki.LastWriteTime)
+            : "";
         var statusBar = When(showStatusBar, () =>
-            TextBlock(readOnlyKey ? $"{RegPath.ToDisplay(currentPath)}    (read-only)" : RegPath.ToDisplay(currentPath))
-                .FontSize(12)
-                .TextTrimming(TextTrimming.CharacterEllipsis)
-                .TextWrapping(TextWrapping.NoWrap)
+            Grid(
+                [GridSize.Star(), GridSize.Auto],
+                [GridSize.Auto],
+                TextBlock(readOnlyKey ? $"{RegPath.ToDisplay(currentPath)}    (read-only)" : RegPath.ToDisplay(currentPath))
+                    .FontSize(12)
+                    .TextTrimming(TextTrimming.CharacterEllipsis)
+                    .TextWrapping(TextWrapping.NoWrap)
+                    .Grid(row: 0, column: 0)
+                    .WithKey("path"),
+                TextBlock(keyDetails)
+                    .AutomationName(keyDetails)
+                    .FontSize(12)
+                    .TextWrapping(TextWrapping.NoWrap)
+                    .Margin(16, 0, 0, 0)
+                    .Grid(row: 0, column: 1)
+                    .WithKey("details"))
                 .Padding(8, 3, 8, 3)
                 .WithBorder(DividerStroke)
         );
