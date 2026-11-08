@@ -283,6 +283,28 @@ internal sealed class RemoveFavoriteDialog : Component<RemoveFavoriteProps>
 
 internal sealed record MessageProps(string Title, string Message, Action OnClose);
 
+// ── Prompt (Load Hive key name) ──────────────────────────────────────
+
+internal sealed record PromptProps(string Title, string Label, string Initial, Func<string, string?> Validate,
+    Action<string> OnOk, Action OnClose);
+
+internal sealed class PromptDialog : Component<PromptProps>
+{
+    public override Element Render()
+    {
+        var (text, setText) = UseState(Props.Initial);
+        var error = text.Length == 0 ? null : Props.Validate(text);
+        return DialogChrome.Dialog(Props.Title,
+            VStack(4,
+                DialogChrome.Label(Props.Label),
+                TextBox(text, setText).SelectAllOnFirstFocus().AutomationName(Props.Label.TrimEnd(':')),
+                When(error is not null, () => TextBlock(error!).FontSize(12).Foreground(Theme.SystemCritical))
+            ).Width(360),
+            Strings.OK, Strings.Cancel, () => Props.OnOk(text.Trim()), Props.OnClose,
+            primaryEnabled: text.Trim().Length > 0 && error is null);
+    }
+}
+
 internal sealed class MessageDialog : Component<MessageProps>
 {
     public override Element Render() =>

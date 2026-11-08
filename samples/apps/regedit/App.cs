@@ -240,6 +240,67 @@ internal sealed class RegeditApp : Component
 
         nint WindowHandle() => window is null ? 0 : Microsoft.UI.Win32Interop.GetWindowFromWindowId(window.AppWindow.Id);
 
+        // ── Load / Unload Hive (HKLM / HKU roots, elevated only) ──────
+        async void LoadHive()
+        {
+            var parent = currentPathRef.Current;
+            if (HiveRules.LoadBlockedReason(parent, HiveService.IsElevated) is { } reason)
+            {
+                ShowError($"Load Hive is not available: {reason}.");
+                return;
+            }
+            Microsoft.Windows.Storage.Pickers.PickFileResult? picked;
+            try
+            {
+                picked = await PickFileAsync(new FilePickerOptions
+                {
+                    Title = Strings.LoadHive.TrimEnd('.'),
+                    SettingsIdentifier = "ReactorRegedit.Hives",
+                    FileTypeChoices = [new FileTypeChoice(Strings.AllFilesFilter, ["*"])],
+                });
+            }
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException or ArgumentException)
+            {
+                ShowError("Cannot open the file dialog: " + ex.Message);
+                return;
+            }
+            if (picked is null) return;
+            var file = picked.Path;
+            ShowDialog(close => Component<PromptDialog, PromptProps>(new PromptProps(
+                Strings.LoadHive.TrimEnd('.'), "Key Name:", "", HiveRules.ValidateHiveName,
+                async name =>
+                {
+                    var (ok, loadedPath) = await TryRun(() => HiveService.Load(parent, name, file));
+                    if (!ok || treeRef.Current is not { } tree) return;
+                    await tree.RefreshKeyAsync(parent);
+                    await tree.RevealAsync(loadedPath, focus: true);
+                    ShowMessage(InfoBarSeverity.Success, $"Loaded {file} as {loadedPath}.");
+                },
+                close)));
+        }
+
+        void UnloadHive()
+        {
+            var path = currentPathRef.Current;
+            if (HiveRules.UnloadBlockedReason(path, HiveService.IsElevated, HiveService.LoadedHiveRoots()) is { } reason)
+            {
+                ShowError($"Unload Hive is not available: {reason}.");
+                return;
+            }
+            ShowDialog(close => Component<ConfirmDialog, ConfirmProps>(new ConfirmProps(
+                "Confirm Unload Hive", "Are you sure you want to unload the current key and all of its subkeys?",
+                async () =>
+                {
+                    var (ok, _) = await TryRun(() => { HiveService.Unload(path); return true; });
+                    if (!ok || treeRef.Current is not { } tree) return;
+                    var parent = RegPath.Parent(path);
+                    await tree.RefreshKeyAsync(parent);
+                    await tree.RevealAsync(parent, focus: true);
+                    ShowMessage(InfoBarSeverity.Success, $"Unloaded {path}.");
+                },
+                close)));
+        }
+
         // ── Permissions (native security editor, like classic regedit) ─
         void EditPermissions(string? keyPath = null)
         {
@@ -756,14 +817,17 @@ internal sealed class RegeditApp : Component
 
         // ── Menu bar ─────────────────────────────────────────────────
         var hasKey = currentPath.Length > 0;
+        var loadHiveReason = HiveRules.LoadBlockedReason(currentPath, HiveService.IsElevated);
+        var unloadHiveReason = UseMemo(() => HiveRules.UnloadBlockedReason(currentPath, HiveService.IsElevated,
+            RegPath.Parent(currentPath) is "HKEY_LOCAL_MACHINE" or "HKEY_USERS" ? HiveService.LoadedHiveRoots() : []), currentPath, valuesVersion);
         var isRegularKey = hasKey && !RegPath.IsHive(currentPath);
         var menuBar = MenuBar([
             Menu(Strings.FileMenu, [
                 MenuItem(Strings.Import, Import),
                 MenuItem(Strings.Export, () => Export()),
                 MenuSeparator(),
-                MenuItem(Strings.LoadHive, () => { }) with { IsEnabled = false },
-                MenuItem(Strings.UnloadHive, () => { }) with { IsEnabled = false },
+                MenuItem(loadHiveReason is null ? Strings.LoadHive : $"{Strings.LoadHive} ({loadHiveReason})", LoadHive) with { IsEnabled = loadHiveReason is null },
+                MenuItem(unloadHiveReason is null ? Strings.UnloadHive : $"{Strings.UnloadHive} ({unloadHiveReason})", UnloadHive) with { IsEnabled = unloadHiveReason is null },
                 MenuSeparator(),
                 MenuItem(Strings.ConnectNetworkRegistry, () => { }) with { IsEnabled = false },
                 MenuItem(Strings.DisconnectNetworkRegistry, () => { }) with { IsEnabled = false },
