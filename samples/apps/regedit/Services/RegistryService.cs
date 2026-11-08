@@ -405,7 +405,13 @@ internal static class RegistryService
         if (sub.Length == 0) return;
         try
         {
-            using var _ = root.CreateSubKey(sub, writable: true)
+            // An existing key only needs to be readable here; value writes check their own access.
+            using (var existing = root.OpenSubKey(sub, writable: false)) { if (existing is not null) return; }
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException) { }
+        try
+        {
+            using var _ = root.CreateSubKey(sub, writable: false)
                 ?? throw new RegistryOperationException($"Cannot create key {path}.");
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException)

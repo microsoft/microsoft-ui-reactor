@@ -94,6 +94,13 @@ internal static class Strings
     // Export dialog
     public const string ExportTitle = "Export Registry File";
     public const string RegFilesFilter = "Registration Files";
+    public const string AllFilesFilter = "All Files";
+    public const string Details = "Details";
+    public const string ImportErrorsTitle = "Import Errors";
+    public const string ConfirmImport =
+        "Adding information can unintentionally change or delete values and cause components to stop working correctly. " +
+        "If you do not trust the source of this information in {0}, do not add it to the registry.\n\n" +
+        "The file changes {1:N0} key(s) and {2:N0} value(s). Are you sure you want to continue?";
     public const string ImportTitle = "Import Registry File";
     public const string ExportRange = "Export range";
     public const string All = "All";

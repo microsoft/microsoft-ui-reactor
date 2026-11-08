@@ -525,41 +525,76 @@ internal sealed class RegeditApp : Component
                 (skipped.Count > 0 ? $" {skipped.Count:N0} key(s) could not be read and were skipped (first: {skipped[0]})." : ""));
         }
 
-        async void ImportFromClipboard()
+        // ── Import (.reg file) ───────────────────────────────────────
+        async void Import()
         {
-            string? text = null;
+            Microsoft.Windows.Storage.Pickers.PickFileResult? picked;
             try
             {
-                var content = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
-                if (content.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
-                    text = await content.GetTextAsync();
+                picked = await PickFileAsync(new FilePickerOptions
+                {
+                    Title = Strings.ImportTitle,
+                    SettingsIdentifier = "ReactorRegedit.RegFiles",
+                    FileTypeChoices =
+                    [
+                        new FileTypeChoice(Strings.RegFilesFilter, [".reg"]),
+                        new FileTypeChoice(Strings.AllFilesFilter, ["*"]),
+                    ],
+                });
             }
-            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException or ArgumentException)
             {
-                ShowError("Cannot read the clipboard: " + ex.Message);
+                ShowError("Cannot open the file dialog: " + ex.Message);
                 return;
             }
-            if (string.IsNullOrWhiteSpace(text))
+            if (picked is null) return;
+            var file = picked.Path;
+            var fileName = System.IO.Path.GetFileName(file);
+
+            RegFileParseResult parsed;
+            try { parsed = await Task.Run(() => RegFileParser.Parse(RegFileParser.Decode(File.ReadAllBytes(file)))); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                ShowError("The clipboard does not contain registry file text.");
+                ShowError($"Cannot import {fileName}: Error opening the file. {ex.Message}");
                 return;
             }
-            var parsed = RegFileParser.Parse(text);
             if (parsed.Ops.Count == 0)
             {
-                ShowError(parsed.Errors.FirstOrDefault() ?? "The clipboard text contains no registry changes.");
+                ShowError($"Cannot import {fileName}: " + (parsed.Errors.FirstOrDefault() ?? "The file contains no registry changes."));
                 return;
             }
+
+            var keyCount = parsed.Ops.Count(o => o is CreateKeyOp or DeleteKeyOp);
+            var valueCount = parsed.Ops.Count(o => o is SetValueOp or DeleteValueOp);
+            ShowDialog(close => Component<ConfirmDialog, ConfirmProps>(new ConfirmProps(
+                Strings.ImportTitle,
+                string.Format(Strings.ConfirmImport, file, keyCount, valueCount),
+                () => ApplyImport(fileName, parsed),
+                close)));
+        }
+
+        async void ApplyImport(string fileName, RegFileParseResult parsed)
+        {
+            setInfo(new InfoMessage(++idCounter.Current, InfoBarSeverity.Informational, $"Importing {fileName}…"));
             var (ok, result) = await TryRun(() => RegFileService.Apply(parsed.Ops));
             if (!ok) return;
             var failures = parsed.Errors.Concat(result.Failures).ToList();
-            if (failures.Count > 0)
-                ShowMessage(InfoBarSeverity.Warning, $"Imported {result.Applied} change(s); {failures.Count} failed. First: {failures[0]}");
+            if (failures.Count == 0)
+            {
+                ShowMessage(InfoBarSeverity.Success,
+                    $"The keys and values contained in {fileName} have been successfully added to the registry ({result.Applied:N0} change(s)).");
+            }
             else
-                ShowMessage(InfoBarSeverity.Success, $"Imported {result.Applied} change(s) from the clipboard.");
+            {
+                var details = string.Join("\n", failures.Take(30)) + (failures.Count > 30 ? $"\n… and {failures.Count - 30:N0} more." : "");
+                setInfo(new InfoMessage(++idCounter.Current, InfoBarSeverity.Warning,
+                    $"Cannot import {fileName}: Not all data was successfully written to the registry. {result.Applied:N0} change(s) applied, {failures.Count:N0} failed. First: {failures[0]}",
+                    Strings.Details,
+                    () => ShowDialog(close => Component<MessageDialog, MessageProps>(new MessageProps(
+                        Strings.ImportErrorsTitle, details, close)))));
+            }
             RefreshAll();
         }
-
         // ── Pane-aware Edit commands ─────────────────────────────────
         void DeleteCommand()
         {
@@ -641,7 +676,7 @@ internal sealed class RegeditApp : Component
         var isRegularKey = hasKey && !RegPath.IsHive(currentPath);
         var menuBar = MenuBar([
             Menu(Strings.FileMenu, [
-                MenuItem(Strings.Import, ImportFromClipboard),
+                MenuItem(Strings.Import, Import),
                 MenuItem(Strings.Export, Export),
                 MenuSeparator(),
                 MenuItem(Strings.LoadHive, () => { }) with { IsEnabled = false },
@@ -776,11 +811,11 @@ internal sealed class RegeditApp : Component
         return Grid(
             [GridSize.Star()],
             [GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto],
-            menuBar.Grid(row: 0, column: 0),
-            addressBar.Grid(row: 1, column: 0),
+            menuBar.Grid(row: 0, column: 0).WithKey("menu"),
+            addressBar.Grid(row: 1, column: 0).WithKey("address"),
             infoBar.Grid(row: 2, column: 0),
-            Component<SplitPanel, SplitPanelProps>(new SplitPanelProps(Left: tree, Right: valueList)).Grid(row: 3, column: 0),
-            statusBar.Grid(row: 4, column: 0),
+            Component<SplitPanel, SplitPanelProps>(new SplitPanelProps(Left: tree, Right: valueList)).Grid(row: 3, column: 0).WithKey("panes"),
+            statusBar.Grid(row: 4, column: 0).WithKey("status"),
             dialogElement.Grid(row: 0, column: 0)
         )
         // Spec 033 §6 — Mica window backdrop on a primary tool surface.
