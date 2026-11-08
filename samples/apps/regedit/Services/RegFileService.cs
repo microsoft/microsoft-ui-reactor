@@ -16,8 +16,20 @@ internal static class RegFileService
     public static string Export(IEnumerable<string> roots, CancellationToken ct, Action<string>? progress = null, List<string>? skipped = null)
     {
         var writer = new RegFileWriter();
-        foreach (var root in roots) ExportKey(writer, root, ct, progress, skipped);
+        Walk(roots, (path, _, values) => writer.WriteKey(path, values), ct, progress, skipped);
         return writer.Text;
+    }
+
+    /// <summary>Receives each key of a walk (pre-order), with its last-write time and raw values.</summary>
+    public delegate void KeySink(string path, DateTime? lastWriteLocal, List<RegValue> values);
+
+    /// <summary>
+    /// Visits <paramref name="roots"/> and their whole subtrees in pre-order. Unreadable keys
+    /// are skipped and reported through <paramref name="skipped"/>.
+    /// </summary>
+    public static void Walk(IEnumerable<string> roots, KeySink sink, CancellationToken ct, Action<string>? progress = null, List<string>? skipped = null)
+    {
+        foreach (var root in roots) WalkKey(sink, root, ct, progress, skipped);
     }
 
     /// <summary>
@@ -25,7 +37,7 @@ internal static class RegFileService
     /// format). Writes to a temporary file first so a cancelled or failed export never
     /// leaves a truncated file behind. Returns the number of keys written.
     /// </summary>
-    public static int ExportToFile(string filePath, IEnumerable<string> roots, CancellationToken ct, Action<int, string>? progress = null, List<string>? skipped = null)
+    public static int ExportToFile(string filePath, IEnumerable<string> roots, CancellationToken ct, Action<int, string>? progress = null, List<string>? skipped = null, bool asText = false)
     {
         var temp = filePath + ".tmp-" + Environment.ProcessId;
         int keys = 0;
@@ -34,9 +46,18 @@ internal static class RegFileService
             using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16))
             using (var text = new StreamWriter(stream, new System.Text.UnicodeEncoding(bigEndian: false, byteOrderMark: true), 1 << 16))
             {
-                var writer = new RegFileWriter(text);
-                foreach (var root in roots)
-                    ExportKey(writer, root, ct, path => progress?.Invoke(++keys, path), skipped);
+                KeySink sink;
+                if (asText)
+                {
+                    var writer = new RegTextWriter(text);
+                    sink = writer.WriteKey;
+                }
+                else
+                {
+                    var writer = new RegFileWriter(text);
+                    sink = (path, _, values) => writer.WriteKey(path, values);
+                }
+                Walk(roots, sink, ct, path => progress?.Invoke(++keys, path), skipped);
             }
             File.Move(temp, filePath, overwrite: true);
             return keys;
@@ -48,7 +69,7 @@ internal static class RegFileService
         }
     }
 
-    private static void ExportKey(RegFileWriter writer, string path, CancellationToken ct, Action<string>? progress, List<string>? skipped)
+    private static void WalkKey(KeySink sink, string path, CancellationToken ct, Action<string>? progress, List<string>? skipped)
     {
         ct.ThrowIfCancellationRequested();
         RegistryKey key;
@@ -69,7 +90,7 @@ internal static class RegFileService
                 skipped?.Add(path);
                 values = [];
             }
-            writer.WriteKey(path, values);
+            sink(path, RegistryService.LastWriteTime(key), values);
             try { subKeys = key.GetSubKeyNames(); }
             catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
             {
@@ -77,7 +98,7 @@ internal static class RegFileService
                 return;
             }
         }
-        foreach (var sub in subKeys) ExportKey(writer, path + "\\" + sub, ct, progress, skipped);
+        foreach (var sub in subKeys) WalkKey(sink, path + "\\" + sub, ct, progress, skipped);
     }
 
     /// <summary>Applies parsed operations; continues past failures and reports them.</summary>

@@ -226,7 +226,8 @@ internal sealed class FindDialog : Component<FindProps>
 
 // ── Export range ─────────────────────────────────────────────────────
 
-internal sealed record ExportProps(string SelectedBranch, Action<bool, string> OnExport, Action OnClose);
+internal sealed record ExportProps(string SelectedBranch, Action<bool, string> OnExport, Action OnClose,
+    string Title = Strings.ExportTitle, string RangeLabel = Strings.ExportRange, string PrimaryText = "Export");
 
 internal sealed class ExportDialog : Component<ExportProps>
 {
@@ -235,15 +236,15 @@ internal sealed class ExportDialog : Component<ExportProps>
         var hasBranch = Props.SelectedBranch.Length > 0;
         var (all, setAll) = UseState(!hasBranch);
         var (branch, setBranch) = UseState(Props.SelectedBranch);
-        return DialogChrome.Dialog(Strings.ExportTitle,
+        return DialogChrome.Dialog(Props.Title,
             VStack(4,
-                DialogChrome.Label(Strings.ExportRange),
+                DialogChrome.Label(Props.RangeLabel),
                 RadioButton(Strings.All, all, on => { if (on) setAll(true); }, "exportRange").Set(rb => rb.Style = ReactorRegedit.Native.AppTheme.CompactRadioButtonStyle),
                 RadioButton(Strings.SelectedBranch, !all, on => { if (on) setAll(false); }, "exportRange").Set(rb => rb.Style = ReactorRegedit.Native.AppTheme.CompactRadioButtonStyle),
                 TextBox(branch, setBranch).IsEnabled(!all)
                     .AutomationName(Strings.SelectedBranch)
             ).Width(420),
-            Strings.Export.TrimEnd('.'), Strings.Cancel, () => Props.OnExport(all, branch), Props.OnClose,
+            Props.PrimaryText, Strings.Cancel, () => Props.OnExport(all, branch), Props.OnClose,
             primaryEnabled: all || branch.Trim().Length > 0);
     }
 }

@@ -94,6 +94,9 @@ internal static class Strings
     // Export dialog
     public const string ExportTitle = "Export Registry File";
     public const string RegFilesFilter = "Registration Files";
+    public const string TextFilesFilter = "Text Files";
+    public const string PrintTitle = "Print";
+    public const string PrintRange = "Print range";
     public const string AppTitle = "Registry Editor";
     public const string RestartAsAdministrator = "Restart as administrator";
     public const string AllFilesFilter = "All Files";

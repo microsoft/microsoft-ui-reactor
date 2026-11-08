@@ -624,32 +624,74 @@ internal sealed class RegeditApp : Component
             ExportToFile,
             close)));
 
+        // Validates the "Selected branch" text of the Export/Print range dialog.
+        string? ResolveBranch(bool all, string branchText, string verb)
+        {
+            if (all) return "";
+            var normalized = RegPath.Normalize(branchText);
+            try
+            {
+                if (normalized is null || normalized.Length == 0) throw new RegistryOperationException("");
+                var branch = RegistryService.ResolveCase(normalized);
+                RegistryService.OpenKey(branch).Dispose();
+                return branch;
+            }
+            catch (RegistryOperationException ex)
+            {
+                ShowError(ex.IsAccessDenied
+                    ? ex.Message
+                    : $"Cannot {verb} {branchText.Trim()}: The key does not exist.");
+                return null;
+            }
+        }
+
+        // Runs a whole-subtree job off the UI thread with a progress InfoBar and Cancel.
+        // Returns the key count, or null when cancelled or failed (already reported).
+        async Task<int?> RunKeyJob(string progressVerb, string cancelledMessage, string errorPrefix,
+            Func<CancellationToken, Action<int, string>, List<string>, int> work, List<string> skipped)
+        {
+            var cts = new CancellationTokenSource();
+            var progressId = ++idCounter.Current;
+            int keyCount = 0;
+            string currentKey = "";
+            void ShowProgress() => setInfo(new InfoMessage(progressId, InfoBarSeverity.Informational,
+                $"{progressVerb}… {Volatile.Read(ref keyCount):N0} keys  {Volatile.Read(ref currentKey)}", Strings.Cancel, () => cts.Cancel()));
+            ShowProgress();
+            var timer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(250);
+            timer.Tick += (_, _) => ShowProgress();
+            timer.Start();
+            try
+            {
+                return await Task.Run(() => work(cts.Token,
+                    (n, p) => { Volatile.Write(ref keyCount, n); Volatile.Write(ref currentKey, p); }, skipped));
+            }
+            catch (OperationCanceledException)
+            {
+                ShowMessage(InfoBarSeverity.Informational, cancelledMessage);
+                return null;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                ShowError($"{errorPrefix}: {ex.Message}");
+                return null;
+            }
+            finally { timer.Stop(); }
+        }
+
+        static string SkippedSuffix(List<string> skipped) => skipped.Count > 0
+            ? $" {skipped.Count:N0} key(s) could not be read and were skipped (first: {skipped[0]})."
+            : "";
+
         async void ExportToFile(bool all, string branchText)
         {
-            string branch = "";
-            if (!all)
-            {
-                var normalized = RegPath.Normalize(branchText);
-                try
-                {
-                    if (normalized is null || normalized.Length == 0) throw new RegistryOperationException("");
-                    branch = RegistryService.ResolveCase(normalized);
-                    RegistryService.OpenKey(branch).Dispose();
-                }
-                catch (RegistryOperationException ex)
-                {
-                    ShowError(ex.IsAccessDenied
-                        ? ex.Message
-                        : $"Cannot export {branchText.Trim()}: The key does not exist.");
-                    return;
-                }
-            }
+            if (ResolveBranch(all, branchText, "export") is not { } branch) return;
 
             Microsoft.Windows.Storage.Pickers.PickFileResult? picked;
             try
             {
                 picked = await PickSaveFileAsync(new SaveFilePickerOptions(
-                    [new FileTypeChoice(Strings.RegFilesFilter, [".reg"])],
+                    [new FileTypeChoice(Strings.RegFilesFilter, [".reg"]), new FileTypeChoice(Strings.TextFilesFilter, [".txt"])],
                     SuggestedFileName: all ? "Registry" : RegPath.Leaf(branch))
                 {
                     Title = Strings.ExportTitle,
@@ -664,40 +706,44 @@ internal sealed class RegeditApp : Component
             }
             if (picked is null) return;
             var file = picked.Path;
+            var asText = string.Equals(Path.GetExtension(file), ".txt", StringComparison.OrdinalIgnoreCase);
 
             var roots = all ? RegPath.RootNames.ToList() : [branch];
-            var cts = new CancellationTokenSource();
-            var progressId = ++idCounter.Current;
-            int keyCount = 0;
-            string currentKey = "";
-            void ShowProgress() => setInfo(new InfoMessage(progressId, InfoBarSeverity.Informational,
-                $"Exporting… {Volatile.Read(ref keyCount):N0} keys  {Volatile.Read(ref currentKey)}", Strings.Cancel, () => cts.Cancel()));
-            ShowProgress();
-            var timer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
-            timer.Interval = TimeSpan.FromMilliseconds(250);
-            timer.Tick += (_, _) => ShowProgress();
-            timer.Start();
             var skipped = new List<string>();
-            int written;
-            try
-            {
-                written = await Task.Run(() => RegFileService.ExportToFile(file, roots, cts.Token,
-                    (n, p) => { Volatile.Write(ref keyCount, n); Volatile.Write(ref currentKey, p); }, skipped));
-            }
-            catch (OperationCanceledException)
-            {
-                ShowMessage(InfoBarSeverity.Informational, "Export cancelled. No file was written.");
-                return;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                ShowError($"Cannot export to {file}: {ex.Message}");
-                return;
-            }
-            finally { timer.Stop(); }
+            var written = await RunKeyJob("Exporting", "Export cancelled. No file was written.", $"Cannot export to {file}",
+                (ct, progress, sk) => RegFileService.ExportToFile(file, roots, ct, progress, sk, asText), skipped);
+            if (written is null) return;
             ShowMessage(skipped.Count > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Success,
-                $"Exported {written:N0} key(s) from {(all ? "the whole registry" : branch)} to {file}." +
-                (skipped.Count > 0 ? $" {skipped.Count:N0} key(s) could not be read and were skipped (first: {skipped[0]})." : ""));
+                $"Exported {written:N0} key(s) from {(all ? "the whole registry" : branch)} to {file}." + SkippedSuffix(skipped));
+        }
+
+        // ── Print ────────────────────────────────────────────────────
+        void Print(string? branch = null) => ShowDialog(close => Component<ExportDialog, ExportProps>(new ExportProps(
+            branch ?? currentPathRef.Current,
+            PrintBranch,
+            close,
+            Strings.PrintTitle, Strings.PrintRange, Strings.PrintTitle)));
+
+        async void PrintBranch(bool all, string branchText)
+        {
+            if (ResolveBranch(all, branchText, "print") is not { } branch) return;
+            PrintService.PrintJob? job;
+            try { job = PrintService.ChoosePrinter(WindowHandle()); }
+            catch (IOException ex) { ShowError("Cannot print: " + ex.Message); return; }
+            if (job is null) return;
+
+            var roots = all ? RegPath.RootNames.ToList() : [branch];
+            var skipped = new List<string>();
+            var docName = Strings.AppTitle + " - " + (all ? "Computer" : branch);
+            int? printed;
+            using (job)
+            {
+                printed = await RunKeyJob("Printing", "Printing cancelled.", "Cannot print",
+                    (ct, progress, sk) => job.Print(docName, roots, ct, progress, sk), skipped);
+            }
+            if (printed is null) return;
+            ShowMessage(skipped.Count > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Success,
+                $"Sent {printed:N0} key(s) from {(all ? "the whole registry" : branch)} to the printer." + SkippedSuffix(skipped));
         }
 
         // ── Import (.reg file) ───────────────────────────────────────
@@ -891,7 +937,7 @@ internal sealed class RegeditApp : Component
                 MenuItem(Strings.ConnectNetworkRegistry, () => { }) with { IsEnabled = false },
                 MenuItem(Strings.DisconnectNetworkRegistry, () => { }) with { IsEnabled = false },
                 MenuSeparator(),
-                MenuItem(Strings.Print, () => { }) with { IsEnabled = false },
+                MenuItem(Strings.Print, () => Print()),
                 MenuSeparator(),
                 .. (HiveService.IsElevated
                     ? Array.Empty<Microsoft.UI.Reactor.Core.MenuFlyoutItemBase>()

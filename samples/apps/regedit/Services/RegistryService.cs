@@ -283,6 +283,12 @@ internal static class RegistryService
         return new KeyInfo((int)subKeys, (int)values, DateTime.FromFileTime(ft));
     }
 
+    /// <summary>Local last-write time of an open key, or null if it can't be queried.</summary>
+    internal static DateTime? LastWriteTime(RegistryKey key) =>
+        RegQueryInfoKey(key.Handle, 0, 0, 0, out _, out _, 0, out _, out _, out _, 0, out var ft) == ERROR_SUCCESS
+            ? DateTime.FromFileTime(ft)
+            : null;
+
     /// <summary>
     /// All values of a key with raw types and bytes, in registry order. A synthetic
     /// "(value not set)" (Default) row is added when the key has no default value.
