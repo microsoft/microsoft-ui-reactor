@@ -202,6 +202,19 @@ internal sealed class RegeditApp : Component
         {
             var path = currentPathRef.Current;
             if (value is null || path.Length == 0) return;
+            {
+                // Edit what is in the registry now, not the cached row (it may have changed or vanished).
+                RegValue? fresh;
+                try { fresh = RegistryService.GetValue(path, value.Name); }
+                catch (RegistryOperationException ex) { ShowError(ex.Message); ReloadValues(); return; }
+                if (fresh is null && !value.IsUnsetDefault)
+                {
+                    ShowError($"Cannot edit {value.DisplayName}: The value no longer exists.");
+                    ReloadValues();
+                    return;
+                }
+                value = fresh ?? value;
+            }
             var name = value.Name;
             var type = value.IsUnsetDefault ? RegType.Sz : value.Type;
 
