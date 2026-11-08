@@ -171,7 +171,7 @@ internal sealed partial class RegistryTreeView : Grid
             FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
             FontSize = 9,
             Glyph = "\uE76C",
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Opacity = 0.75,
         };
         var hit = new Border
         {
@@ -395,10 +395,12 @@ internal sealed partial class RegistryTreeView : Grid
         }
         SyncRows();
         _list.SelectedItem = cur;
-        _list.ScrollIntoView(cur, ScrollIntoViewAlignment.Default);
+        ScrollToCenter(cur);
         if (focus) _dispatcher.TryEnqueue(DispatcherQueuePriority.Low, FocusTree);
         return true;
     }
+
+    private void ScrollToCenter(TreeNode node) => ListHelpers.ScrollRowIntoView(_list, node, RowHeight);
 
     private static TreeNode? FindChild(TreeNode parent, string path) =>
         parent.Children?.FirstOrDefault(c => c.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
@@ -459,7 +461,7 @@ internal sealed partial class RegistryTreeView : Grid
         }
         SyncRows();
         RefreshRowVisual(node);
-        _list.ScrollIntoView(node);
+        ListHelpers.ScrollRowIntoView(_list, node, RowHeight);
     }
 
     private static void RepathSubtree(TreeNode node, string newPath)
@@ -475,7 +477,7 @@ internal sealed partial class RegistryTreeView : Grid
     {
         var node = FindLoaded(path);
         if (node is null || node.Kind != TreeNodeKind.Key || _renaming is not null) return;
-        _list.ScrollIntoView(node);
+        ListHelpers.ScrollRowIntoView(_list, node, RowHeight);
         _list.UpdateLayout();
         await Task.Yield();
         if (_list.ContainerFromItem(node) is not ListViewItem container ||
@@ -583,7 +585,7 @@ internal sealed partial class RegistryTreeView : Grid
     private void Select(TreeNode node)
     {
         _list.SelectedItem = node;
-        _list.ScrollIntoView(node);
+        ListHelpers.ScrollRowIntoView(_list, node, RowHeight);
         _dispatcher.TryEnqueue(DispatcherQueuePriority.Low, FocusTree);
     }
 

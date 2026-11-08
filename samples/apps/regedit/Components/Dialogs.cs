@@ -3,6 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using ReactorRegedit.Core;
+using ReactorRegedit.Models;
 using ReactorRegedit.Native;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -165,6 +166,99 @@ internal sealed class EditBinaryDialog : Component<EditBinaryProps>
                 ).Height(260)
             ).Width(460),
             Strings.OK, Strings.Cancel, () => Props.OnOk(bytesRef.Current), Props.OnClose);
+    }
+}
+
+// ── Find ─────────────────────────────────────────────────────────────
+
+internal sealed record FindProps(string Text, FindFlags Flags, Action<string, FindFlags> OnFind, Action OnClose);
+
+internal sealed class FindDialog : Component<FindProps>
+{
+    public override Element Render()
+    {
+        var (text, setText) = UseState(Props.Text);
+        var (flags, setFlags) = UseState(Props.Flags);
+
+        Element Flag(string label, FindFlags flag) =>
+            CheckBox(flags.HasFlag(flag), on => setFlags(on ? flags | flag : flags & ~flag), label);
+
+        var lookAtAny = (flags & (FindFlags.Keys | FindFlags.Values | FindFlags.Data)) != 0;
+        return DialogChrome.Dialog(Strings.FindTitle,
+            VStack(4,
+                DialogChrome.Label(Strings.FindWhat),
+                TextBox(text, setText).AutomationName(Strings.FindWhat),
+                DialogChrome.Label(Strings.LookAt).Margin(0, 8, 0, 0),
+                HStack(12,
+                    Flag(Strings.FindKeys, FindFlags.Keys),
+                    Flag(Strings.FindValues, FindFlags.Values),
+                    Flag(Strings.FindData, FindFlags.Data)),
+                Flag(Strings.MatchWholeStringOnly, FindFlags.WholeStringOnly)
+            ).Width(380),
+            Strings.FindNext, Strings.Cancel, () => Props.OnFind(text, flags), Props.OnClose,
+            primaryEnabled: text.Length > 0 && lookAtAny);
+    }
+}
+
+// ── Export range ─────────────────────────────────────────────────────
+
+internal sealed record ExportProps(string SelectedBranch, Action<bool> OnExport, Action OnClose);
+
+internal sealed class ExportDialog : Component<ExportProps>
+{
+    public override Element Render()
+    {
+        var hasBranch = Props.SelectedBranch.Length > 0;
+        var (all, setAll) = UseState(!hasBranch);
+        return DialogChrome.Dialog(Strings.ExportTitle,
+            VStack(4,
+                DialogChrome.Label(Strings.ExportRange),
+                RadioButton(Strings.All, all, on => { if (on) setAll(true); }, "exportRange"),
+                RadioButton(Strings.SelectedBranch, !all, on => { if (on) setAll(false); }, "exportRange")
+                    .IsEnabled(hasBranch),
+                TextBox(Props.SelectedBranch, _ => { }).IsReadOnly().IsEnabled(!all)
+                    .AutomationName(Strings.SelectedBranch)
+            ).Width(420),
+            Strings.Export.TrimEnd('.'), Strings.Cancel, () => Props.OnExport(all), Props.OnClose);
+    }
+}
+
+// ── Favorites ────────────────────────────────────────────────────────
+
+internal sealed record AddFavoriteProps(string Name, Action<string> OnOk, Action OnClose);
+
+internal sealed class AddFavoriteDialog : Component<AddFavoriteProps>
+{
+    public override Element Render()
+    {
+        var (name, setName) = UseState(Props.Name);
+        return DialogChrome.Dialog(Strings.AddFavoriteTitle,
+            VStack(4,
+                DialogChrome.Label(Strings.FavoriteName),
+                TextBox(name, setName).AutomationName(Strings.FavoriteName)
+            ).Width(360),
+            Strings.OK, Strings.Cancel, () => Props.OnOk(name.Trim()), Props.OnClose,
+            primaryEnabled: name.Trim().Length > 0);
+    }
+}
+
+internal sealed record RemoveFavoriteProps(string[] Names, Action<string> OnRemove, Action OnClose);
+
+internal sealed class RemoveFavoriteDialog : Component<RemoveFavoriteProps>
+{
+    public override Element Render()
+    {
+        var (index, setIndex) = UseState(Props.Names.Length > 0 ? 0 : -1);
+        return DialogChrome.Dialog(Strings.RemoveFavoriteTitle,
+            VStack(4,
+                DialogChrome.Label(Strings.SelectFavorite),
+                Props.Names.Length == 0
+                    ? TextBlock("There are no favorites.").FontSize(13)
+                    : ListBox(Props.Names, index, setIndex).Height(180).AutomationName(Strings.SelectFavorite)
+            ).Width(360),
+            Strings.OK, Strings.Cancel,
+            () => { if (index >= 0 && index < Props.Names.Length) Props.OnRemove(Props.Names[index]); },
+            Props.OnClose, primaryEnabled: index >= 0);
     }
 }
 

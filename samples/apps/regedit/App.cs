@@ -13,6 +13,7 @@ using Microsoft.UI.Xaml.Controls;
 using ReactorRegedit;
 using ReactorRegedit.Components;
 using ReactorRegedit.Core;
+using ReactorRegedit.Models;
 using ReactorRegedit.Native;
 using ReactorRegedit.Services;
 using Windows.System;
@@ -43,7 +44,9 @@ ReactorApp.Run<RegeditApp>("Registry Editor", width: 1280, height: 800,
 
 internal enum Pane { Tree, Values }
 
-internal sealed record InfoMessage(int Id, InfoBarSeverity Severity, string Message);
+internal sealed record InfoMessage(int Id, InfoBarSeverity Severity, string Message, string? ActionText = null, Action? OnAction = null);
+
+internal sealed record Favorite(string Name, string Path);
 
 internal sealed record DialogSlot(int Id, Element Element);
 
@@ -63,6 +66,10 @@ internal sealed class RegeditApp : Component
         var (info, setInfo) = UseState<InfoMessage?>(null);
         var (dialog, setDialog) = UseState<DialogSlot?>(null);
         var (selectedValueCount, setSelectedValueCount) = UseState(0);
+        var (favorites, setFavorites) = UseState<Favorite[]>([]);
+        var (findText, setFindText) = UseState("");
+        var (findFlags, setFindFlags) = UseState(FindFlags.Keys | FindFlags.Values | FindFlags.Data);
+        var searchCts = UseRef<CancellationTokenSource?>(null);
         var (showAddressBar, setShowAddressBar) = UsePersisted("showAddressBar", true, PersistedScope.Window);
         var (showStatusBar, setShowStatusBar) = UsePersisted("showStatusBar", true, PersistedScope.Window);
 
@@ -352,6 +359,134 @@ internal sealed class RegeditApp : Component
             return newPath;
         }
 
+        // ── Find (baseline: Find dialog + F3; F12 adds progress UI) ──
+        async void StartSearch(string text, FindFlags flags)
+        {
+            searchCts.Current?.Cancel();
+            var cts = new CancellationTokenSource();
+            searchCts.Current = cts;
+            var startKey = currentPathRef.Current;
+            var startValue = activePane.Current == Pane.Values ? listRef.Current?.PrimarySelection?.Name : null;
+            setInfo(new InfoMessage(++idCounter.Current, InfoBarSeverity.Informational, "Searching the registry…",
+                Strings.Cancel, () => cts.Cancel()));
+            SearchHit? hit;
+            try { hit = await SearchService.FindNextAsync(startKey, startValue, text, flags, cts.Token); }
+            catch (OperationCanceledException)
+            {
+                if (ReferenceEquals(searchCts.Current, cts)) ShowMessage(InfoBarSeverity.Informational, "Search cancelled.");
+                return;
+            }
+            if (!ReferenceEquals(searchCts.Current, cts)) return;
+            searchCts.Current = null;
+            if (hit is null)
+            {
+                ShowMessage(InfoBarSeverity.Informational, "Finished searching through the registry.");
+                return;
+            }
+            setInfo(null);
+            if (hit.ValueName is { } valueName)
+            {
+                if (string.Equals(hit.KeyPath, currentPathRef.Current, StringComparison.OrdinalIgnoreCase))
+                    listRef.Current?.SelectByName(valueName, focus: true);
+                else
+                    afterValuesLoaded.Current = l => l.SelectByName(valueName, focus: true);
+                activePane.Current = Pane.Values;
+                if (treeRef.Current is { } t) await t.RevealAsync(hit.KeyPath);
+            }
+            else if (treeRef.Current is { } tree)
+            {
+                activePane.Current = Pane.Tree;
+                await tree.RevealAsync(hit.KeyPath, focus: true);
+            }
+        }
+
+        void OpenFind() => ShowDialog(close => Component<FindDialog, FindProps>(new FindProps(findText, findFlags,
+            (text, flags) =>
+            {
+                setFindText(text);
+                setFindFlags(flags);
+                StartSearch(text, flags);
+            }, close)));
+
+        void FindNext()
+        {
+            if (findText.Length == 0) OpenFind();
+            else StartSearch(findText, findFlags);
+        }
+
+        // ── Favorites (baseline: in-memory; F09 persists them) ────────
+        void AddFavorite()
+        {
+            var path = currentPathRef.Current;
+            if (path.Length == 0) return;
+            ShowDialog(close => Component<AddFavoriteDialog, AddFavoriteProps>(new AddFavoriteProps(
+                RegPath.Leaf(path),
+                name => setFavorites([.. favorites.Where(f => !f.Name.Equals(name, StringComparison.OrdinalIgnoreCase)), new Favorite(name, path)]),
+                close)));
+        }
+
+        void RemoveFavorite() => ShowDialog(close => Component<RemoveFavoriteDialog, RemoveFavoriteProps>(new RemoveFavoriteProps(
+            favorites.Select(f => f.Name).ToArray(),
+            name => setFavorites(favorites.Where(f => f.Name != name).ToArray()),
+            close)));
+
+        // ── Export / Import (baseline: via clipboard; F07/F08 add files) ──
+        void ExportToClipboard() => ShowDialog(close => Component<ExportDialog, ExportProps>(new ExportProps(
+            currentPathRef.Current,
+            async all =>
+            {
+                var roots = all ? RegPath.RootNames.ToList() : [currentPathRef.Current];
+                var cts = new CancellationTokenSource();
+                setInfo(new InfoMessage(++idCounter.Current, InfoBarSeverity.Informational, "Exporting…",
+                    Strings.Cancel, () => cts.Cancel()));
+                var skipped = new List<string>();
+                string text;
+                try { text = await Task.Run(() => RegFileService.Export(roots, cts.Token, skipped: skipped)); }
+                catch (OperationCanceledException) { ShowMessage(InfoBarSeverity.Informational, "Export cancelled."); return; }
+                var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+                package.SetText(text);
+                Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+                ShowMessage(skipped.Count > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Success,
+                    $"Exported {(all ? "the registry" : currentPathRef.Current)} to the clipboard ({text.Length:N0} characters)." +
+                    (skipped.Count > 0 ? $" {skipped.Count} key(s) could not be read and were skipped." : ""));
+            },
+            close)));
+
+        async void ImportFromClipboard()
+        {
+            string? text = null;
+            try
+            {
+                var content = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
+                if (content.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
+                    text = await content.GetTextAsync();
+            }
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or UnauthorizedAccessException)
+            {
+                ShowError("Cannot read the clipboard: " + ex.Message);
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                ShowError("The clipboard does not contain registry file text.");
+                return;
+            }
+            var parsed = RegFileParser.Parse(text);
+            if (parsed.Ops.Count == 0)
+            {
+                ShowError(parsed.Errors.FirstOrDefault() ?? "The clipboard text contains no registry changes.");
+                return;
+            }
+            var (ok, result) = await TryRun(() => RegFileService.Apply(parsed.Ops));
+            if (!ok) return;
+            var failures = parsed.Errors.Concat(result.Failures).ToList();
+            if (failures.Count > 0)
+                ShowMessage(InfoBarSeverity.Warning, $"Imported {result.Applied} change(s); {failures.Count} failed. First: {failures[0]}");
+            else
+                ShowMessage(InfoBarSeverity.Success, $"Imported {result.Applied} change(s) from the clipboard.");
+            RefreshAll();
+        }
+
         // ── Pane-aware Edit commands ─────────────────────────────────
         void DeleteCommand()
         {
@@ -433,8 +568,8 @@ internal sealed class RegeditApp : Component
         var isRegularKey = hasKey && !RegPath.IsHive(currentPath);
         var menuBar = MenuBar([
             Menu(Strings.FileMenu, [
-                MenuItem(Strings.Import, () => { }) with { IsEnabled = false },
-                MenuItem(Strings.Export, () => { }) with { IsEnabled = false },
+                MenuItem(Strings.Import, ImportFromClipboard),
+                MenuItem(Strings.Export, ExportToClipboard),
                 MenuSeparator(),
                 MenuItem(Strings.LoadHive, () => { }) with { IsEnabled = false },
                 MenuItem(Strings.UnloadHive, () => { }) with { IsEnabled = false },
@@ -470,8 +605,10 @@ internal sealed class RegeditApp : Component
                 MenuSeparator(),
                 MenuItem(Strings.CopyKeyName, CopyKeyName) with { IsEnabled = hasKey },
                 MenuSeparator(),
-                MenuItem(Strings.Find, () => { }) with { IsEnabled = false },
-                MenuItem(Strings.FindNext, () => { }) with { IsEnabled = false },
+                MenuItem(Strings.Find, OpenFind) with
+                    { KeyboardAccelerators = [Accelerator(VirtualKey.F, VirtualKeyModifiers.Control)] },
+                MenuItem(Strings.FindNext, FindNext) with
+                    { KeyboardAccelerators = [Accelerator(VirtualKey.F3)] },
             ]),
             Menu(Strings.ViewMenu, [
                 ToggleMenuItem(Strings.AddressBar, showAddressBar, _ => setShowAddressBar(!showAddressBar)),
@@ -483,8 +620,10 @@ internal sealed class RegeditApp : Component
                     { KeyboardAccelerators = [Accelerator(VirtualKey.L, VirtualKeyModifiers.Control)] },
             ]),
             Menu(Strings.FavoritesMenu, [
-                MenuItem(Strings.AddToFavorites, () => { }) with { IsEnabled = false },
-                MenuItem(Strings.RemoveFromFavorites, () => { }) with { IsEnabled = false },
+                MenuItem(Strings.AddToFavorites, AddFavorite) with { IsEnabled = hasKey },
+                MenuItem(Strings.RemoveFromFavorites, RemoveFavorite) with { IsEnabled = favorites.Length > 0 },
+                .. (favorites.Length > 0 ? new Microsoft.UI.Reactor.Core.MenuFlyoutItemBase[] { MenuSeparator() } : []),
+                .. favorites.Select(f => (Microsoft.UI.Reactor.Core.MenuFlyoutItemBase)MenuItem(f.Name, () => NavigateTo(f.Path))),
             ]),
             Menu(Strings.HelpMenu, [
                 MenuItem(Strings.About, () => ShowDialog(close => Component<MessageDialog, MessageProps>(
@@ -522,6 +661,8 @@ internal sealed class RegeditApp : Component
             {
                 Severity = info.Severity,
                 IsOpen = true,
+                ActionButtonContent = info.ActionText,
+                OnActionButtonClick = info.OnAction is { } act ? () => { act(); } : null,
                 OnClosed = () => setInfo(null),
             }).Margin(4, 0, 4, 2).WithKey($"info-{info.Id}");
 

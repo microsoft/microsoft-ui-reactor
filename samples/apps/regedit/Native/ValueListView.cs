@@ -183,7 +183,7 @@ internal sealed partial class ValueListView : Grid
             var target = items.FirstOrDefault(i => i.Value.Name.Equals(focusedName, StringComparison.OrdinalIgnoreCase));
             if (target is not null)
             {
-                _list.ScrollIntoView(target);
+                ListHelpers.ScrollRowIntoView(_list, target, RowHeight);
                 _dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
                 {
                     if (_list.ContainerFromItem(target) is ListViewItem c) c.Focus(FocusState.Programmatic);
@@ -199,7 +199,7 @@ internal sealed partial class ValueListView : Grid
         if (item is null) return;
         _list.SelectedItems.Clear();
         _list.SelectedItem = item;
-        _list.ScrollIntoView(item);
+        ListHelpers.ScrollRowIntoView(_list, item, RowHeight);
         if (focus)
             _dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
             {
@@ -216,7 +216,7 @@ internal sealed partial class ValueListView : Grid
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(_typeWidth) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.BorderThickness = new Thickness(0, 0, 0, 1);
-        header.BorderBrush = (Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"];
+        header.BorderBrush = ListHelpers.DividerBrush();
 
         string[] titles = [Strings.ColumnName, Strings.ColumnType, Strings.ColumnData];
         for (int i = 0; i < 3; i++)
@@ -227,7 +227,7 @@ internal sealed partial class ValueListView : Grid
                 FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
                 FontSize = 8,
                 Margin = new Thickness(6, 0, 0, 0),
-                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                Opacity = 0.75,
             };
             _sortGlyphs[i] = glyph;
             var content = new StackPanel { Orientation = Orientation.Horizontal };
@@ -243,7 +243,7 @@ internal sealed partial class ValueListView : Grid
                 Padding = new Thickness(8, 0, 8, 0),
                 Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
                 BorderThickness = new Thickness(0, 0, 1, 0),
-                BorderBrush = (Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"],
+                BorderBrush = ListHelpers.DividerBrush(),
                 CornerRadius = new CornerRadius(0),
             };
             button.Click += (_, _) => SortBy(col);
@@ -436,7 +436,7 @@ internal sealed partial class ValueListView : Grid
         if (item is null || item.Value.IsDefault || _renaming) return;
         _list.SelectedItems.Clear();
         _list.SelectedItem = item;
-        _list.ScrollIntoView(item);
+        ListHelpers.ScrollRowIntoView(_list, item, RowHeight);
         _list.UpdateLayout();
         await Task.Yield();
         if (_list.ContainerFromItem(item) is not ListViewItem container ||

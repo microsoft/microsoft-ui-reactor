@@ -152,6 +152,10 @@ internal static class RegistryService
         {
             throw new RegistryOperationException($"Cannot enumerate {RegPath.Leaf(path)}: Access is denied.", ERROR_ACCESS_DENIED);
         }
+        catch (IOException)
+        {
+            throw new RegistryOperationException($"The key {RegPath.Leaf(path)} no longer exists.", ERROR_FILE_NOT_FOUND);
+        }
         Array.Sort(names, StringComparer.OrdinalIgnoreCase);
         var result = new KeyEntry[names.Length];
         for (int i = 0; i < names.Length; i++)

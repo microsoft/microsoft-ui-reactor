@@ -32,7 +32,7 @@ internal sealed partial class HexEditorView : Grid
         _offsets = new TextBlock
         {
             FontFamily = mono, FontSize = 13, Padding = new Thickness(0, 4, 10, 4),
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Opacity = 0.7,
             IsTextScaleFactorEnabled = false,
         };
         AutomationProperties.SetAccessibilityView(_offsets, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
@@ -48,7 +48,7 @@ internal sealed partial class HexEditorView : Grid
         _ascii = new TextBlock
         {
             FontFamily = mono, FontSize = 13, Padding = new Thickness(10, 4, 0, 4),
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Opacity = 0.7,
             IsTextScaleFactorEnabled = false,
         };
         AutomationProperties.SetName(_ascii, "ASCII");

@@ -90,6 +90,30 @@ internal static class ListHelpers
         list.Resources.ThemeDictionaries["Default"] = Make(0x66, 0x80);
     }
 
+    /// <summary>A neutral divider that reads on light and dark themes (and follows theme switches).</summary>
+    public static Brush DividerBrush() =>
+        new SolidColorBrush(Windows.UI.Color.FromArgb(0x38, 0x80, 0x80, 0x80));
+
+    /// <summary>
+    /// Scrolls a fixed-row-height list so row <paramref name="index"/> is visible (about a
+    /// third down when it has to move). Computes the offset directly after forcing
+    /// layout, which is more reliable than ScrollIntoView right after an items change.
+    /// </summary>
+    public static void ScrollRowIntoView(ListViewBase list, object item, double rowHeight)
+    {
+        list.UpdateLayout();
+        var index = list.Items.IndexOf(item);
+        var sv = FindScrollViewer(list);
+        if (index < 0 || sv is null || sv.ViewportHeight <= 0)
+        {
+            list.ScrollIntoView(item);
+            return;
+        }
+        var top = index * rowHeight + list.Padding.Top;
+        if (top >= sv.VerticalOffset && top + rowHeight <= sv.VerticalOffset + sv.ViewportHeight) return;
+        sv.ChangeView(null, Math.Max(0, top - sv.ViewportHeight / 3), null, true);
+    }
+
     public static T? FindAncestor<T>(DependencyObject? d) where T : class
     {
         while (d is not null)
