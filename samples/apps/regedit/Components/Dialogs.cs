@@ -36,7 +36,22 @@ internal static class DialogChrome
     public static Element Label(string text) => TextBlock(text).FontSize(13);
 
     public static Element ReadOnlyName(string name) =>
-        TextBox(name, _ => { }).IsReadOnly().AutomationName(Strings.ValueName);
+        TextBox(name, _ => { }).IsReadOnly().IsTabStop(false).AutomationName(Strings.ValueName);
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TextBox, object> s_selected = new();
+
+    /// <summary>
+    /// Classic regedit opens editors with the data selected so typing replaces it. The read-only
+    /// name box isn't a tab stop, so the dialog's initial focus lands here; select all on that
+    /// first focus only.
+    /// </summary>
+    public static TextBoxElement SelectAllOnFirstFocus(this TextBoxElement element) =>
+        element.OnGotFocus((s, args) =>
+        {
+            if (s is not TextBox tb || s_selected.TryGetValue(tb, out _)) return;
+            s_selected.Add(tb, new object());
+            tb.SelectAll();
+        });
 }
 
 // ── Confirm ──────────────────────────────────────────────────────────
@@ -67,7 +82,7 @@ internal sealed class EditStringDialog : Component<EditStringProps>
                 DialogChrome.Label(Strings.ValueName),
                 DialogChrome.ReadOnlyName(Props.Name),
                 DialogChrome.Label(Strings.ValueData).Margin(0, 6, 0, 0),
-                TextBox(text, setText).AutomationName(Strings.ValueData)
+                TextBox(text, setText).SelectAllOnFirstFocus().AutomationName(Strings.ValueData)
             ).Width(420),
             Strings.OK, Strings.Cancel, () => Props.OnOk(text), Props.OnClose);
     }
@@ -87,7 +102,7 @@ internal sealed class EditMultiStringDialog : Component<EditMultiStringProps>
                 DialogChrome.Label(Strings.ValueName),
                 DialogChrome.ReadOnlyName(Props.Name),
                 DialogChrome.Label(Strings.ValueData).Margin(0, 6, 0, 0),
-                TextBox(text, setText)
+                TextBox(text, setText).SelectAllOnFirstFocus()
                     .AcceptsReturn()
                     .TextWrapping(TextWrapping.NoWrap)
                     .Height(220)
@@ -127,7 +142,7 @@ internal sealed class EditNumberDialog : Component<EditNumberProps>
                 HStack(16,
                     VStack(4,
                         DialogChrome.Label(Strings.ValueData),
-                        TextBox(text, setText).Width(200).AutomationName(Strings.ValueData),
+                        TextBox(text, setText).SelectAllOnFirstFocus().Width(200).AutomationName(Strings.ValueData),
                         When(!valid, () => TextBlock(hex ? Strings.InvalidHex : Strings.InvalidDecimal)
                             .FontSize(12).Foreground(Theme.SystemCritical))
                     ),
@@ -187,7 +202,7 @@ internal sealed class FindDialog : Component<FindProps>
         return DialogChrome.Dialog(Strings.FindTitle,
             VStack(4,
                 DialogChrome.Label(Strings.FindWhat),
-                TextBox(text, setText).AutomationName(Strings.FindWhat),
+                TextBox(text, setText).SelectAllOnFirstFocus().AutomationName(Strings.FindWhat),
                 DialogChrome.Label(Strings.LookAt).Margin(0, 8, 0, 0),
                 HStack(12,
                     Flag(Strings.FindKeys, FindFlags.Keys),

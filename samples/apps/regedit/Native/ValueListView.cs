@@ -86,11 +86,29 @@ internal sealed partial class ValueListView : Grid
         _list.RightTapped += OnRightTapped;
         _list.SelectionChanged += (_, _) =>
         {
-            if (_suppressSelection == 0) Handlers.SelectionChanged?.Invoke(_list.SelectedItems.Count);
+            if (_suppressSelection == 0) ReportSelection();
         };
         _list.GotFocus += (_, _) => Handlers.FocusEntered?.Invoke();
         Children.Add(_list);
         UpdateSortGlyphs();
+    }
+
+    private bool _selectionReportPending;
+
+    /// <summary>
+    /// Tells the shell how many values are selected. Deferred and coalesced so it never runs
+    /// inside a render (SetValues is called from the host's updater) and always reports the
+    /// final count after a burst of programmatic selection changes.
+    /// </summary>
+    private void ReportSelection()
+    {
+        if (_selectionReportPending) return;
+        _selectionReportPending = true;
+        _dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            _selectionReportPending = false;
+            Handlers.SelectionChanged?.Invoke(_list.SelectedItems.Count);
+        });
     }
 
     public string KeyPath => _keyPath;
@@ -176,7 +194,7 @@ internal sealed partial class ValueListView : Grid
                 if (keepNames.Contains(item.Value.Name)) _list.SelectedItems.Add(item);
         }
         finally { _suppressSelection--; }
-        Handlers.SelectionChanged?.Invoke(_list.SelectedItems.Count);
+        ReportSelection();
 
         if (focusedName is not null && hadFocus)
         {
