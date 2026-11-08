@@ -268,19 +268,20 @@ internal sealed class AddFavoriteDialog : Component<AddFavoriteProps>
     }
 }
 
-internal sealed record RemoveFavoriteProps(string[] Names, Action<string> OnRemove, Action OnClose);
+internal sealed record RemoveFavoriteProps(string[] Names, Action<string> OnRemove, Action OnClose,
+    string Title = Strings.RemoveFavoriteTitle, string Label = Strings.SelectFavorite, string EmptyText = "There are no favorites.");
 
 internal sealed class RemoveFavoriteDialog : Component<RemoveFavoriteProps>
 {
     public override Element Render()
     {
         var (index, setIndex) = UseState(Props.Names.Length > 0 ? 0 : -1);
-        return DialogChrome.Dialog(Strings.RemoveFavoriteTitle,
+        return DialogChrome.Dialog(Props.Title,
             VStack(4,
-                DialogChrome.Label(Strings.SelectFavorite),
+                DialogChrome.Label(Props.Label),
                 Props.Names.Length == 0
-                    ? TextBlock("There are no favorites.").FontSize(13)
-                    : ListBox(Props.Names, index, setIndex).Height(180).AutomationName(Strings.SelectFavorite)
+                    ? TextBlock(Props.EmptyText).FontSize(13)
+                    : ListBox(Props.Names, index, setIndex).Height(180).AutomationName(Props.Label)
                         .Set(lb => lb.ItemContainerStyle = ReactorRegedit.Native.ListHelpers.CompactListBoxItemStyle())
             ).Width(360),
             Strings.OK, Strings.Cancel,

@@ -72,6 +72,30 @@ internal static class RegistryService
         }
     }
 
+    /// <summary>
+    /// Connect Network Registry: opens HKEY_LOCAL_MACHINE and HKEY_USERS on
+    /// <paramref name="machine"/> (RegConnectRegistry), like classic regedit. Blocking —
+    /// can take a network timeout; call off the UI thread.
+    /// </summary>
+    public static string[] ConnectRemote(string machine)
+    {
+        (string Name, RegistryHive Hive)[] hives = [("HKEY_LOCAL_MACHINE", RegistryHive.LocalMachine), ("HKEY_USERS", RegistryHive.Users)];
+        var opened = new List<(string Name, RegistryKey Key)>();
+        try
+        {
+            foreach (var (name, hive) in hives)
+                opened.Add((name, RegistryKey.OpenRemoteBaseKey(hive, machine)));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException or ArgumentException)
+        {
+            foreach (var (_, key) in opened) key.Dispose();
+            var reason = ex is UnauthorizedAccessException or SecurityException ? "Access is denied." : ex.Message;
+            throw new RegistryOperationException($"Unable to connect to {machine}. {reason}", ex is UnauthorizedAccessException or SecurityException ? ERROR_ACCESS_DENIED : ex.HResult & 0xFFFF);
+        }
+        foreach (var (name, key) in opened) AddRemoteRoot(machine, name, key);
+        return opened.Select(o => o.Name).ToArray();
+    }
+
     /// <summary>Opens a key (always a fresh handle the caller must dispose).</summary>
     public static RegistryKey OpenKey(string path, bool writable = false)
     {

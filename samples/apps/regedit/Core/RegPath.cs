@@ -81,6 +81,22 @@ public static class RegPath
 
     public static bool IsRemote(string path) => path.StartsWith(@"\\", StringComparison.Ordinal);
 
+    /// <summary>True for a hive or key path; false for the Computer root ("") and a bare <c>\\MACHINE</c> node.</summary>
+    public static bool IsKeyPath(string path) => path.Length > 0 && Hive(path).Length > 0;
+
+    /// <summary>
+    /// Normalizes a computer name typed in Connect Network Registry ("\\host", " host ")
+    /// to "HOST", or null when it isn't a plausible name.
+    /// </summary>
+    public static string? NormalizeMachine(string? input)
+    {
+        var s = (input ?? "").Trim();
+        if (s.StartsWith(@"\\", StringComparison.Ordinal)) s = s[2..];
+        s = s.TrimEnd('\\');
+        if (s.Length == 0 || s.Length > 255 || s.IndexOfAny(['\\', '/', ' ', '\t', '"']) >= 0) return null;
+        return s.ToUpperInvariant();
+    }
+
     /// <summary>Splits off a <c>\\MACHINE</c> prefix.</summary>
     public static (string? Machine, string LocalPath) SplitMachine(string path)
     {

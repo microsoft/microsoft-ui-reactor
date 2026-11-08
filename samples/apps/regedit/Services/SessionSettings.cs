@@ -81,7 +81,7 @@ internal sealed class SessionSettings
         try
         {
             using var key = Registry.CurrentUser.CreateSubKey(AppletKey, writable: true);
-            key.SetValue("LastKey", RegPath.ToDisplay(path), RegistryValueKind.String);
+            key.SetValue("LastKey", RegPath.ToDisplay(RegPath.IsRemote(path) ? "" : path), RegistryValueKind.String);
         }
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { }
     }

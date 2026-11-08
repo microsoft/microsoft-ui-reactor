@@ -79,6 +79,8 @@ internal sealed class RegeditApp : Component
         var activePane = UseRef(Pane.Tree);
         var idCounter = UseRef(0);
         var versionCounter = UseRef(0);
+        var machinesRef = UseRef(new List<string>());
+        var (machineCount, setMachineCount) = UseState(0);
         var afterValuesLoaded = UseRef<Action<ValueListView>?>(null);
         var currentPathRef = UseRef("");
         currentPathRef.Current = currentPath;
@@ -129,7 +131,7 @@ internal sealed class RegeditApp : Component
         {
             var path = currentPath;
             var cancelled = false;
-            if (path.Length == 0)
+            if (!RegPath.IsKeyPath(path))
             {
                 setLoaded(new LoadedValues("", []));
                 return () => { };
@@ -235,7 +237,7 @@ internal sealed class RegeditApp : Component
         void CopyKeyName(string? keyPath = null)
         {
             var path = keyPath ?? currentPathRef.Current;
-            if (path.Length == 0) return;
+            if (!RegPath.IsKeyPath(path)) return;
             var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
             package.SetText(path);
             Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
@@ -251,7 +253,7 @@ internal sealed class RegeditApp : Component
             var exe = Environment.ProcessPath;
             if (exe is null) { ShowError("Cannot find the application executable."); return; }
             var start = new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true, Verb = "runas" };
-            if (currentPathRef.Current.Length > 0)
+            if (RegPath.IsKeyPath(currentPathRef.Current) && !RegPath.IsRemote(currentPathRef.Current))
             {
                 start.ArgumentList.Add("--key");
                 start.ArgumentList.Add(currentPathRef.Current);
@@ -340,7 +342,7 @@ internal sealed class RegeditApp : Component
         void EditPermissions(string? keyPath = null)
         {
             var path = keyPath ?? currentPathRef.Current;
-            if (path.Length == 0) return;
+            if (!RegPath.IsKeyPath(path)) return;
             if (KeyPermissions.Edit(WindowHandle(), path) is { } error) ShowError(error);
         }
 
@@ -348,7 +350,7 @@ internal sealed class RegeditApp : Component
         void Modify(RegValue? value, bool binary)
         {
             var path = currentPathRef.Current;
-            if (value is null || path.Length == 0) return;
+            if (value is null || !RegPath.IsKeyPath(path)) return;
             {
                 // Edit what is in the registry now, not the cached row (it may have changed or vanished).
                 RegValue? fresh;
@@ -416,7 +418,7 @@ internal sealed class RegeditApp : Component
         {
             var path = currentPathRef.Current;
             var targets = selection.Where(v => !v.IsUnsetDefault).ToList();
-            if (path.Length == 0 || targets.Count == 0) return;
+            if (!RegPath.IsKeyPath(path) || targets.Count == 0) return;
             ShowDialog(close => Component<ConfirmDialog, ConfirmProps>(new ConfirmProps(
                 Strings.ConfirmValueDeleteTitle,
                 targets.Count == 1 ? Strings.ConfirmDeleteValue : Strings.ConfirmDeleteValues,
@@ -451,7 +453,7 @@ internal sealed class RegeditApp : Component
         async void NewValue(uint type)
         {
             var path = currentPathRef.Current;
-            if (path.Length == 0) return;
+            if (!RegPath.IsKeyPath(path)) return;
             var (ok, name) = await TryRun(() =>
             {
                 var n = RegistryService.UniqueValueName(path);
@@ -465,7 +467,7 @@ internal sealed class RegeditApp : Component
         async void NewKey()
         {
             var parent = currentPathRef.Current;
-            if (parent.Length == 0 || treeRef.Current is not { } tree) return;
+            if (!RegPath.IsKeyPath(parent) || treeRef.Current is not { } tree) return;
             var (ok, created) = await TryRun(() =>
             {
                 var n = RegistryService.UniqueKeyName(parent);
@@ -478,7 +480,7 @@ internal sealed class RegeditApp : Component
 
         void DeleteKey(string path)
         {
-            if (path.Length == 0) return;
+            if (!RegPath.IsKeyPath(path)) return;
             if (RegPath.IsHive(path))
             {
                 ShowError($"Cannot delete {path}: root keys cannot be deleted.");
@@ -598,7 +600,7 @@ internal sealed class RegeditApp : Component
         void AddFavorite()
         {
             var path = currentPathRef.Current;
-            if (path.Length == 0) return;
+            if (!RegPath.IsKeyPath(path)) return;
             ShowDialog(close => Component<AddFavoriteDialog, AddFavoriteProps>(new AddFavoriteProps(
                 RegPath.Leaf(path),
                 async name =>
@@ -746,6 +748,46 @@ internal sealed class RegeditApp : Component
                 $"Sent {printed:N0} key(s) from {(all ? "the whole registry" : branch)} to the printer." + SkippedSuffix(skipped));
         }
 
+        // ── Network registry (F19) ───────────────────────────────────
+        void ConnectNetworkRegistry() => ShowDialog(close => Component<PromptDialog, PromptProps>(new PromptProps(
+            Strings.ConnectTitle, Strings.ComputerName, "",
+            text => RegPath.NormalizeMachine(text) is null ? "Type a computer name, for example SERVER01." : null,
+            async text =>
+            {
+                if (RegPath.NormalizeMachine(text) is not { } machine || treeRef.Current is not { } tree) return;
+                if (machinesRef.Current.Contains(machine, StringComparer.OrdinalIgnoreCase))
+                {
+                    await tree.RevealAsync(@"\\" + machine, focus: true);
+                    return;
+                }
+                setInfo(new InfoMessage(++idCounter.Current, InfoBarSeverity.Informational, $"Connecting to {machine}…"));
+                var (ok, hives) = await TryRun(() => RegistryService.ConnectRemote(machine));
+                if (!ok || hives is null) return;
+                machinesRef.Current.Add(machine);
+                setMachineCount(machinesRef.Current.Count);
+                tree.AddMachine(machine, hives);
+                await tree.RevealAsync(@"\\" + machine, focus: true);
+                ShowMessage(InfoBarSeverity.Success, $"Connected to the registry on {machine}.");
+            },
+            close)));
+
+        void DisconnectNetworkRegistry(string? machine = null)
+        {
+            if (machine is not null) { Disconnect(machine); return; }
+            ShowDialog(close => Component<RemoveFavoriteDialog, RemoveFavoriteProps>(new RemoveFavoriteProps(
+                machinesRef.Current.ToArray(), Disconnect, close,
+                Strings.DisconnectTitle, Strings.SelectComputer, "No computers are connected.")));
+        }
+
+        void Disconnect(string machine)
+        {
+            machinesRef.Current.RemoveAll(m => m.Equals(machine, StringComparison.OrdinalIgnoreCase));
+            setMachineCount(machinesRef.Current.Count);
+            treeRef.Current?.RemoveMachine(machine);
+            RegistryService.RemoveRemoteMachine(machine);
+            ShowMessage(InfoBarSeverity.Informational, $"Disconnected from {machine}.");
+        }
+
         // ── Import (.reg file) ───────────────────────────────────────
         async void Import()
         {
@@ -874,10 +916,13 @@ internal sealed class RegeditApp : Component
                     new(Strings.Delete, () => DeleteKey(path), isKey, KeyText: "Del"),
                     new(Strings.Rename, () => treeRef.Current?.BeginRename(path), isKey, KeyText: "F2"),
                     MenuSpec.Separator,
-                    new(Strings.Export, () => Export(path)),
-                    new(Strings.Permissions, () => EditPermissions(path), node.Kind != TreeNodeKind.Computer),
+                    new(Strings.Export, () => Export(path), RegPath.IsKeyPath(path) || node.Kind == TreeNodeKind.Computer),
+                    new(Strings.Permissions, () => EditPermissions(path), RegPath.IsKeyPath(path)),
                     MenuSpec.Separator,
-                    new(Strings.CopyKeyName, () => CopyKeyName(path), node.Kind != TreeNodeKind.Computer),
+                    new(Strings.CopyKeyName, () => CopyKeyName(path), RegPath.IsKeyPath(path)),
+                    .. (node.Kind == TreeNodeKind.Machine
+                        ? new MenuSpec[] { MenuSpec.Separator, new(Strings.Disconnect, () => DisconnectNetworkRegistry(node.Name)) }
+                        : []),
                 ];
             },
         };
@@ -892,7 +937,7 @@ internal sealed class RegeditApp : Component
             ColumnsResized = (name, type) => { settings.NameWidth = name; settings.TypeWidth = type; settings.Save(); },
             BuildItemMenu = sel =>
             {
-                var canSet = currentPathRef.Current.Length > 0 && LiveAccess(currentPathRef.Current).SetValue;
+                var canSet = RegPath.IsKeyPath(currentPathRef.Current) && LiveAccess(currentPathRef.Current).SetValue;
                 return
                 [
                     new(Strings.Modify, () => Modify(sel.FirstOrDefault(), false), sel.Count == 1 && canSet),
@@ -906,7 +951,7 @@ internal sealed class RegeditApp : Component
             BuildBackgroundMenu = () =>
             {
                 var path = currentPathRef.Current;
-                var access = path.Length > 0 ? LiveAccess(path) : (SetValue: false, CreateSubKey: false);
+                var access = RegPath.IsKeyPath(path) ? LiveAccess(path) : (SetValue: false, CreateSubKey: false);
                 return
                 [
                     new(Strings.NewMenu, Children: NewMenuSpecs(access.CreateSubKey, access.SetValue),
@@ -916,7 +961,7 @@ internal sealed class RegeditApp : Component
         };
 
         // ── Menu bar ─────────────────────────────────────────────────
-        var hasKey = currentPath.Length > 0;
+        var hasKey = RegPath.IsKeyPath(currentPath);
         var loadHiveReason = HiveRules.LoadBlockedReason(currentPath, HiveService.IsElevated);
         var unloadHiveReason = UseMemo(() => HiveRules.UnloadBlockedReason(currentPath, HiveService.IsElevated,
             RegPath.Parent(currentPath) is "HKEY_LOCAL_MACHINE" or "HKEY_USERS" ? HiveService.LoadedHiveRoots() : [], HiveService.CurrentUserSid), currentPath, valuesVersion);
@@ -934,8 +979,8 @@ internal sealed class RegeditApp : Component
                 MenuItem(loadHiveReason is null ? Strings.LoadHive : $"{Strings.LoadHive} ({loadHiveReason})", LoadHive) with { IsEnabled = loadHiveReason is null },
                 MenuItem(unloadHiveReason is null ? Strings.UnloadHive : $"{Strings.UnloadHive} ({unloadHiveReason})", UnloadHive) with { IsEnabled = unloadHiveReason is null },
                 MenuSeparator(),
-                MenuItem(Strings.ConnectNetworkRegistry, () => { }) with { IsEnabled = false },
-                MenuItem(Strings.DisconnectNetworkRegistry, () => { }) with { IsEnabled = false },
+                MenuItem(Strings.ConnectNetworkRegistry, ConnectNetworkRegistry),
+                MenuItem(Strings.DisconnectNetworkRegistry, () => DisconnectNetworkRegistry()) with { IsEnabled = machineCount > 0 },
                 MenuSeparator(),
                 MenuItem(Strings.Print, () => Print()),
                 MenuSeparator(),

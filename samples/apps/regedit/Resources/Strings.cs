@@ -97,6 +97,11 @@ internal static class Strings
     public const string TextFilesFilter = "Text Files";
     public const string PrintTitle = "Print";
     public const string PrintRange = "Print range";
+    public const string ConnectTitle = "Connect Network Registry";
+    public const string ComputerName = "Enter the name of the computer:";
+    public const string DisconnectTitle = "Disconnect Network Registry";
+    public const string SelectComputer = "Select the computer to disconnect:";
+    public const string Disconnect = "Disconnect";
     public const string AppTitle = "Registry Editor";
     public const string RestartAsAdministrator = "Restart as administrator";
     public const string AllFilesFilter = "All Files";

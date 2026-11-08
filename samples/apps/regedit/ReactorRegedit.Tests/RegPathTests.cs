@@ -83,4 +83,27 @@ public class RegPathTests
             RegPath.AncestorsAndSelf("HKEY_CURRENT_USER\\A\\B"));
         Assert.Empty(RegPath.AncestorsAndSelf(""));
     }
+
+    [Theory]
+    [InlineData("", false)]
+    [InlineData(@"\\PC", false)]
+    [InlineData("HKEY_USERS", true)]
+    [InlineData(@"HKEY_USERS\.DEFAULT", true)]
+    [InlineData(@"\\PC\HKEY_LOCAL_MACHINE", true)]
+    [InlineData(@"\\PC\HKEY_LOCAL_MACHINE\SOFTWARE", true)]
+    public void IsKeyPath(string path, bool expected) => Assert.Equal(expected, RegPath.IsKeyPath(path));
+
+    [Theory]
+    [InlineData("server01", "SERVER01")]
+    [InlineData(@"  \\Server01\ ", "SERVER01")]
+    [InlineData("10.0.0.5", "10.0.0.5")]
+    [InlineData("", null)]
+    [InlineData(@"\\", null)]
+    [InlineData(@"a\b", null)]
+    [InlineData("two words", null)]
+    public void NormalizeMachine(string input, string? expected) => Assert.Equal(expected, RegPath.NormalizeMachine(input));
+
+    [Fact]
+    public void RemoteAncestors_StartAtMachine() =>
+        Assert.Equal([@"\\PC", @"\\PC\HKEY_USERS", @"\\PC\HKEY_USERS\X"], RegPath.AncestorsAndSelf(@"\\PC\HKEY_USERS\X"));
 }

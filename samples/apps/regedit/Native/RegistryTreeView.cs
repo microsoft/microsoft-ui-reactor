@@ -23,7 +23,7 @@ internal sealed class TreeNode(string name, string path, TreeNodeKind kind, Tree
     public string Path { get; set; } = path;
     public TreeNodeKind Kind { get; } = kind;
     public TreeNode? Parent { get; } = parent;
-    public int Depth { get; } = parent is null ? 0 : parent.Depth + 1;
+    public int Depth { get; } = parent is null || kind == TreeNodeKind.Machine ? 0 : parent.Depth + 1;
     public List<TreeNode>? Children { get; set; }
     public bool HasChildren { get; set; } = true;
     public bool IsExpanded { get; set; }
@@ -56,6 +56,8 @@ internal sealed partial class RegistryTreeView : Grid
     private readonly TreeListView _list;
     private readonly RowCollection<TreeNode> _rows = [];
     private readonly TreeNode _computer;
+    // Invisible parent of remote machine roots (F19), which show as top-level siblings of Computer.
+    private readonly TreeNode _network = new("", "", TreeNodeKind.Computer, null) { IsExpanded = true, Children = [] };
     private readonly DispatcherQueue _dispatcher;
     private int _suppressSelection;
     private string _typeAhead = "";
@@ -253,6 +255,7 @@ internal sealed partial class RegistryTreeView : Grid
                 foreach (var k in kids) Walk(k);
         }
         Walk(_computer);
+        foreach (var machine in _network.Children!) Walk(machine);
 
         var selected = SelectedNode;
         var sv = ListHelpers.FindScrollViewer(_list);
@@ -283,9 +286,32 @@ internal sealed partial class RegistryTreeView : Grid
         }
     }
 
+    /// <summary>Adds a connected remote computer as a top-level root with its hives (F19).</summary>
+    public void AddMachine(string machine, IEnumerable<string> hives)
+    {
+        var path = @"\\" + machine;
+        if (_network.Children!.Any(m => m.Path.Equals(path, StringComparison.OrdinalIgnoreCase))) return;
+        var node = new TreeNode(machine, path, TreeNodeKind.Machine, _network) { IsExpanded = true };
+        node.Children = hives.Select(h => new TreeNode(h, path + "\\" + h, TreeNodeKind.Hive, node)).ToList();
+        node.HasChildren = node.Children.Count > 0;
+        _network.Children!.Add(node);
+        SyncRows();
+    }
+
+    /// <summary>Removes a remote computer root; a selection inside it moves to Computer.</summary>
+    public void RemoveMachine(string machine)
+    {
+        var node = _network.Children!.FirstOrDefault(m => m.Path.Equals(@"\\" + machine, StringComparison.OrdinalIgnoreCase));
+        if (node is null) return;
+        var selectedInside = SelectedNode is { } s && RegPath.IsSameOrDescendant(s.Path, node.Path) && RegPath.IsRemote(s.Path);
+        _network.Children!.Remove(node);
+        SyncRows();
+        if (selectedInside) _list.SelectedItem = _computer;
+    }
+
     private async Task<bool> LoadChildrenAsync(TreeNode node, bool reportErrors = true)
     {
-        if (node.Kind == TreeNodeKind.Computer) return true;
+        if (node.Kind is TreeNodeKind.Computer or TreeNodeKind.Machine) return true;
         try
         {
             var path = node.Path;
@@ -357,7 +383,7 @@ internal sealed partial class RegistryTreeView : Grid
     private TreeNode? FindLoaded(string path)
     {
         if (path.Length == 0) return _computer;
-        TreeNode cur = _computer;
+        TreeNode cur = RegPath.IsRemote(path) ? _network : _computer;
         foreach (var seg in RegPath.AncestorsAndSelf(path))
         {
             var next = cur.Children?.FirstOrDefault(c => c.Path.Equals(seg, StringComparison.OrdinalIgnoreCase));
@@ -373,7 +399,7 @@ internal sealed partial class RegistryTreeView : Grid
     /// </summary>
     public async Task<bool> RevealAsync(string path, bool focus = false)
     {
-        TreeNode cur = _computer;
+        TreeNode cur = RegPath.IsRemote(path) ? _network : _computer;
         foreach (var seg in RegPath.AncestorsAndSelf(path))
         {
             if (cur.Kind != TreeNodeKind.Computer && cur.Children is null && !await LoadChildrenAsync(cur))
@@ -467,6 +493,7 @@ internal sealed partial class RegistryTreeView : Grid
             }
         }
         Walk(_computer);
+        Walk(_network);
         foreach (var n in expanded)
         {
             if (n.Parent is { } p && p.Children?.Contains(n) == false) continue;
@@ -609,7 +636,7 @@ internal sealed partial class RegistryTreeView : Grid
             case VirtualKey.Left:
                 e.Handled = true;
                 if (node.IsExpanded && node.Kind != TreeNodeKind.Computer) Collapse(node);
-                else if (node.Parent is { } parent) Select(parent);
+                else if (node.Parent is { } parent && !ReferenceEquals(parent, _network)) Select(parent);
                 break;
             case VirtualKey.Add:
                 e.Handled = true;
