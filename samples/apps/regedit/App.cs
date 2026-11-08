@@ -227,9 +227,9 @@ internal sealed class RegeditApp : Component
             ReloadValues();
         }
 
-        void CopyKeyName()
+        void CopyKeyName(string? keyPath = null)
         {
-            var path = currentPathRef.Current;
+            var path = keyPath ?? currentPathRef.Current;
             if (path.Length == 0) return;
             var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
             package.SetText(path);
@@ -510,8 +510,8 @@ internal sealed class RegeditApp : Component
             close)));
 
         // ── Export (.reg file) ───────────────────────────────────────
-        void Export() => ShowDialog(close => Component<ExportDialog, ExportProps>(new ExportProps(
-            currentPathRef.Current,
+        void Export(string? branch = null) => ShowDialog(close => Component<ExportDialog, ExportProps>(new ExportProps(
+            branch ?? currentPathRef.Current,
             ExportToFile,
             close)));
 
@@ -700,16 +700,21 @@ internal sealed class RegeditApp : Component
             {
                 var isKey = node.Kind == TreeNodeKind.Key;
                 var canHaveNew = node.Kind is TreeNodeKind.Key or TreeNodeKind.Hive;
+                var path = node.Path;
                 return
                 [
                     new(node.IsExpanded ? Strings.Collapse : Strings.Expand,
                         () => treeRef.Current?.Toggle(node), node.HasChildren && node.Kind != TreeNodeKind.Computer),
                     new(Strings.NewMenu, Children: NewMenuSpecs(canHaveNew), Enabled: canHaveNew),
+                    new(Strings.Find, OpenFind, KeyText: "Ctrl+F"),
                     MenuSpec.Separator,
-                    new(Strings.Delete, () => DeleteKey(node.Path), isKey, KeyText: "Del"),
-                    new(Strings.Rename, () => treeRef.Current?.BeginRename(node.Path), isKey, KeyText: "F2"),
+                    new(Strings.Delete, () => DeleteKey(path), isKey, KeyText: "Del"),
+                    new(Strings.Rename, () => treeRef.Current?.BeginRename(path), isKey, KeyText: "F2"),
                     MenuSpec.Separator,
-                    new(Strings.CopyKeyName, CopyKeyName, node.Kind != TreeNodeKind.Computer),
+                    new(Strings.Export, () => Export(path)),
+                    new(Strings.Permissions, () => { }, Enabled: false),
+                    MenuSpec.Separator,
+                    new(Strings.CopyKeyName, () => CopyKeyName(path), node.Kind != TreeNodeKind.Computer),
                 ];
             },
         };
@@ -744,7 +749,7 @@ internal sealed class RegeditApp : Component
         var menuBar = MenuBar([
             Menu(Strings.FileMenu, [
                 MenuItem(Strings.Import, Import),
-                MenuItem(Strings.Export, Export),
+                MenuItem(Strings.Export, () => Export()),
                 MenuSeparator(),
                 MenuItem(Strings.LoadHive, () => { }) with { IsEnabled = false },
                 MenuItem(Strings.UnloadHive, () => { }) with { IsEnabled = false },
@@ -778,7 +783,7 @@ internal sealed class RegeditApp : Component
                 MenuItem(Strings.Delete, DeleteCommand) with { IsEnabled = isRegularKey || selectedValueCount > 0 },
                 MenuItem(Strings.Rename, RenameCommand) with { IsEnabled = isRegularKey || selectedValueCount == 1 },
                 MenuSeparator(),
-                MenuItem(Strings.CopyKeyName, CopyKeyName) with { IsEnabled = hasKey },
+                MenuItem(Strings.CopyKeyName, () => CopyKeyName()) with { IsEnabled = hasKey },
                 MenuSeparator(),
                 MenuItem(Strings.Find, OpenFind) with
                     { KeyboardAccelerators = [Accelerator(VirtualKey.F, VirtualKeyModifiers.Control)] },

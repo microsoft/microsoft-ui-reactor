@@ -456,6 +456,7 @@ internal sealed partial class RegistryTreeView : Grid
     /// <summary>F5: re-enumerates every expanded node; vanished keys disappear.</summary>
     public async Task RefreshAllAsync()
     {
+        var selectedBefore = SelectedNode;
         var expanded = new List<TreeNode>();
         void Walk(TreeNode n)
         {
@@ -473,6 +474,18 @@ internal sealed partial class RegistryTreeView : Grid
         }
         SyncRows();
         foreach (var n in expanded) RefreshRowVisual(n);
+
+        // The selected key was deleted elsewhere: SyncRows already moved the selection to the
+        // nearest surviving ancestor; tell the user why, like every other vanished-key path.
+        if (selectedBefore is { Kind: TreeNodeKind.Key } && !IsAttached(selectedBefore))
+            Handlers.Error?.Invoke($"Cannot find the key {RegPath.ToDisplay(selectedBefore.Path)}. It may have been deleted.");
+    }
+
+    private static bool IsAttached(TreeNode node)
+    {
+        for (var n = node; n.Parent is { } parent; n = parent)
+            if (parent.Children?.Contains(n) != true) return false;
+        return true;
     }
 
     /// <summary>Renames a node in place after a successful key rename.</summary>
