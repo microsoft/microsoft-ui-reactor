@@ -20,6 +20,34 @@ internal static class RegFileService
         return writer.Text;
     }
 
+    /// <summary>
+    /// Streams the export to <paramref name="filePath"/> as UTF-16 LE with BOM (regedit's
+    /// format). Writes to a temporary file first so a cancelled or failed export never
+    /// leaves a truncated file behind. Returns the number of keys written.
+    /// </summary>
+    public static int ExportToFile(string filePath, IEnumerable<string> roots, CancellationToken ct, Action<int, string>? progress = null, List<string>? skipped = null)
+    {
+        var temp = filePath + ".tmp-" + Environment.ProcessId;
+        int keys = 0;
+        try
+        {
+            using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16))
+            using (var text = new StreamWriter(stream, new System.Text.UnicodeEncoding(bigEndian: false, byteOrderMark: true), 1 << 16))
+            {
+                var writer = new RegFileWriter(text);
+                foreach (var root in roots)
+                    ExportKey(writer, root, ct, path => progress?.Invoke(++keys, path), skipped);
+            }
+            File.Move(temp, filePath, overwrite: true);
+            return keys;
+        }
+        catch
+        {
+            try { File.Delete(temp); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            throw;
+        }
+    }
+
     private static void ExportKey(RegFileWriter writer, string path, CancellationToken ct, Action<string>? progress, List<string>? skipped)
     {
         ct.ThrowIfCancellationRequested();

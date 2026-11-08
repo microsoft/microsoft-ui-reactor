@@ -93,6 +93,8 @@ internal static class Strings
 
     // Export dialog
     public const string ExportTitle = "Export Registry File";
+    public const string RegFilesFilter = "Registration Files";
+    public const string ImportTitle = "Import Registry File";
     public const string ExportRange = "Export range";
     public const string All = "All";
     public const string SelectedBranch = "Selected branch";

@@ -16,27 +16,32 @@ public sealed class RegFileWriter
     /// <summary>regedit wraps hex data once the line reaches this column.</summary>
     private const int HexLineLength = 77;
 
-    private readonly StringBuilder _sb = new();
+    private readonly TextWriter _out;
 
-    public RegFileWriter()
+    /// <summary>Writes to <paramref name="output"/>, or to an in-memory buffer read through <see cref="Text"/>.</summary>
+    public RegFileWriter(TextWriter? output = null)
     {
-        _sb.Append(Header5).Append("\r\n\r\n");
+        _out = output ?? new StringWriter(CultureInfo.InvariantCulture);
+        _out.Write(Header5);
+        _out.Write("\r\n\r\n");
     }
 
-    public string Text => _sb.ToString();
-
-    public int Length => _sb.Length;
+    /// <summary>The text written so far (in-memory mode only).</summary>
+    public string Text => _out is StringWriter sw ? sw.ToString() : throw new InvalidOperationException("Writer is streaming to an external output.");
 
     /// <summary>Writes one key section (header line, values, trailing blank line).</summary>
     public void WriteKey(string path, IEnumerable<RegValue> values)
     {
-        _sb.Append('[').Append(path).Append("]\r\n");
+        _out.Write('[');
+        _out.Write(path);
+        _out.Write("]\r\n");
         foreach (var v in values)
         {
             if (v.IsUnsetDefault) continue;
-            _sb.Append(FormatValueLine(v)).Append("\r\n");
+            _out.Write(FormatValueLine(v));
+            _out.Write("\r\n");
         }
-        _sb.Append("\r\n");
+        _out.Write("\r\n");
     }
 
     public static string FormatName(string name) => name.Length == 0 ? "@" : "\"" + Escape(name) + "\"";

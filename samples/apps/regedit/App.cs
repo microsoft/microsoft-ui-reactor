@@ -443,27 +443,87 @@ internal sealed class RegeditApp : Component
             name => setFavorites(favorites.Where(f => f.Name != name).ToArray()),
             close)));
 
-        // ── Export / Import (baseline: via clipboard; F07/F08 add files) ──
-        void ExportToClipboard() => ShowDialog(close => Component<ExportDialog, ExportProps>(new ExportProps(
+        // ── Export (.reg file) ───────────────────────────────────────
+        void Export() => ShowDialog(close => Component<ExportDialog, ExportProps>(new ExportProps(
             currentPathRef.Current,
-            async all =>
-            {
-                var roots = all ? RegPath.RootNames.ToList() : [currentPathRef.Current];
-                var cts = new CancellationTokenSource();
-                setInfo(new InfoMessage(++idCounter.Current, InfoBarSeverity.Informational, "Exporting…",
-                    Strings.Cancel, () => cts.Cancel()));
-                var skipped = new List<string>();
-                string text;
-                try { text = await Task.Run(() => RegFileService.Export(roots, cts.Token, skipped: skipped)); }
-                catch (OperationCanceledException) { ShowMessage(InfoBarSeverity.Informational, "Export cancelled."); return; }
-                var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
-                package.SetText(text);
-                Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
-                ShowMessage(skipped.Count > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Success,
-                    $"Exported {(all ? "the registry" : currentPathRef.Current)} to the clipboard ({text.Length:N0} characters)." +
-                    (skipped.Count > 0 ? $" {skipped.Count} key(s) could not be read and were skipped." : ""));
-            },
+            ExportToFile,
             close)));
+
+        async void ExportToFile(bool all, string branchText)
+        {
+            string branch = "";
+            if (!all)
+            {
+                var normalized = RegPath.Normalize(branchText);
+                try
+                {
+                    if (normalized is null || normalized.Length == 0) throw new RegistryOperationException("");
+                    branch = RegistryService.ResolveCase(normalized);
+                    RegistryService.OpenKey(branch).Dispose();
+                }
+                catch (RegistryOperationException ex)
+                {
+                    ShowError(ex.IsAccessDenied
+                        ? ex.Message
+                        : $"Cannot export {branchText.Trim()}: The key does not exist.");
+                    return;
+                }
+            }
+
+            Microsoft.Windows.Storage.Pickers.PickFileResult? picked;
+            try
+            {
+                picked = await PickSaveFileAsync(new SaveFilePickerOptions(
+                    [new FileTypeChoice(Strings.RegFilesFilter, [".reg"])],
+                    SuggestedFileName: all ? "Registry" : RegPath.Leaf(branch))
+                {
+                    Title = Strings.ExportTitle,
+                    DefaultFileExtension = ".reg",
+                    SettingsIdentifier = "ReactorRegedit.RegFiles",
+                });
+            }
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
+            {
+                ShowError("Cannot open the file dialog: " + ex.Message);
+                return;
+            }
+            if (picked is null) return;
+            var file = picked.Path;
+
+            var roots = all ? RegPath.RootNames.ToList() : [branch];
+            var cts = new CancellationTokenSource();
+            var progressId = ++idCounter.Current;
+            int keyCount = 0;
+            string currentKey = "";
+            void ShowProgress() => setInfo(new InfoMessage(progressId, InfoBarSeverity.Informational,
+                $"Exporting… {Volatile.Read(ref keyCount):N0} keys  {Volatile.Read(ref currentKey)}", Strings.Cancel, () => cts.Cancel()));
+            ShowProgress();
+            var timer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(250);
+            timer.Tick += (_, _) => ShowProgress();
+            timer.Start();
+            var skipped = new List<string>();
+            int written;
+            try
+            {
+                written = await Task.Run(() => RegFileService.ExportToFile(file, roots, cts.Token,
+                    (n, p) => { Volatile.Write(ref keyCount, n); Volatile.Write(ref currentKey, p); }, skipped));
+            }
+            catch (OperationCanceledException)
+            {
+                ShowMessage(InfoBarSeverity.Informational, "Export cancelled. No file was written.");
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                ShowError($"Cannot export to {file}: {ex.Message}");
+                return;
+            }
+            finally { timer.Stop(); }
+            ShowMessage(skipped.Count > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Success,
+                $"Exported {written:N0} key(s) from {(all ? "the whole registry" : branch)} to {file}." +
+                (skipped.Count > 0 ? $" {skipped.Count:N0} key(s) could not be read and were skipped (first: {skipped[0]})." : ""));
+        }
 
         async void ImportFromClipboard()
         {
@@ -582,7 +642,7 @@ internal sealed class RegeditApp : Component
         var menuBar = MenuBar([
             Menu(Strings.FileMenu, [
                 MenuItem(Strings.Import, ImportFromClipboard),
-                MenuItem(Strings.Export, ExportToClipboard),
+                MenuItem(Strings.Export, Export),
                 MenuSeparator(),
                 MenuItem(Strings.LoadHive, () => { }) with { IsEnabled = false },
                 MenuItem(Strings.UnloadHive, () => { }) with { IsEnabled = false },

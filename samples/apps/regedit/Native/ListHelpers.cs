@@ -67,6 +67,17 @@ internal static class ListHelpers
         return style;
     }
 
+    /// <summary>Compact rows for dialog <see cref="ListBox"/>es (the default item is 40 epx).</summary>
+    public static Style CompactListBoxItemStyle(double height = 24)
+    {
+        var style = new Style(typeof(ListBoxItem));
+        style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, 0.0));
+        style.Setters.Add(new Setter(FrameworkElement.HeightProperty, height));
+        style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(8, 0, 8, 0)));
+        style.Setters.Add(new Setter(Control.VerticalContentAlignmentProperty, VerticalAlignment.Center));
+        return style;
+    }
+
     /// <summary>An empty Grid template; rows are populated in ContainerContentChanging.</summary>
     public static DataTemplate EmptyGridTemplate() =>
         (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(

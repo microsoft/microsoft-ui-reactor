@@ -133,8 +133,8 @@ internal sealed class EditNumberDialog : Component<EditNumberProps>
                     ),
                     VStack(2,
                         DialogChrome.Label(Strings.Base),
-                        RadioButton(Strings.Hexadecimal, hex, on => { if (on) SwitchBase(true); }, "numberBase"),
-                        RadioButton(Strings.Decimal, !hex, on => { if (on) SwitchBase(false); }, "numberBase")
+                        RadioButton(Strings.Hexadecimal, hex, on => { if (on) SwitchBase(true); }, "numberBase").MinHeight(24),
+                        RadioButton(Strings.Decimal, !hex, on => { if (on) SwitchBase(false); }, "numberBase").MinHeight(24)
                     )
                 ).Margin(0, 6, 0, 0)
             ).Width(420),
@@ -181,7 +181,7 @@ internal sealed class FindDialog : Component<FindProps>
         var (flags, setFlags) = UseState(Props.Flags);
 
         Element Flag(string label, FindFlags flag) =>
-            CheckBox(flags.HasFlag(flag), on => setFlags(on ? flags | flag : flags & ~flag), label);
+            CheckBox(flags.HasFlag(flag), on => setFlags(on ? flags | flag : flags & ~flag), label).MinHeight(24).Padding(8, 2, 0, 0);
 
         var lookAtAny = (flags & (FindFlags.Keys | FindFlags.Values | FindFlags.Data)) != 0;
         return DialogChrome.Dialog(Strings.FindTitle,
@@ -202,7 +202,7 @@ internal sealed class FindDialog : Component<FindProps>
 
 // ── Export range ─────────────────────────────────────────────────────
 
-internal sealed record ExportProps(string SelectedBranch, Action<bool> OnExport, Action OnClose);
+internal sealed record ExportProps(string SelectedBranch, Action<bool, string> OnExport, Action OnClose);
 
 internal sealed class ExportDialog : Component<ExportProps>
 {
@@ -210,16 +210,17 @@ internal sealed class ExportDialog : Component<ExportProps>
     {
         var hasBranch = Props.SelectedBranch.Length > 0;
         var (all, setAll) = UseState(!hasBranch);
+        var (branch, setBranch) = UseState(Props.SelectedBranch);
         return DialogChrome.Dialog(Strings.ExportTitle,
             VStack(4,
                 DialogChrome.Label(Strings.ExportRange),
-                RadioButton(Strings.All, all, on => { if (on) setAll(true); }, "exportRange"),
-                RadioButton(Strings.SelectedBranch, !all, on => { if (on) setAll(false); }, "exportRange")
-                    .IsEnabled(hasBranch),
-                TextBox(Props.SelectedBranch, _ => { }).IsReadOnly().IsEnabled(!all)
+                RadioButton(Strings.All, all, on => { if (on) setAll(true); }, "exportRange").MinHeight(24),
+                RadioButton(Strings.SelectedBranch, !all, on => { if (on) setAll(false); }, "exportRange").MinHeight(24),
+                TextBox(branch, setBranch).IsEnabled(!all)
                     .AutomationName(Strings.SelectedBranch)
             ).Width(420),
-            Strings.Export.TrimEnd('.'), Strings.Cancel, () => Props.OnExport(all), Props.OnClose);
+            Strings.Export.TrimEnd('.'), Strings.Cancel, () => Props.OnExport(all, branch), Props.OnClose,
+            primaryEnabled: all || branch.Trim().Length > 0);
     }
 }
 
@@ -255,6 +256,7 @@ internal sealed class RemoveFavoriteDialog : Component<RemoveFavoriteProps>
                 Props.Names.Length == 0
                     ? TextBlock("There are no favorites.").FontSize(13)
                     : ListBox(Props.Names, index, setIndex).Height(180).AutomationName(Strings.SelectFavorite)
+                        .Set(lb => lb.ItemContainerStyle = ReactorRegedit.Native.ListHelpers.CompactListBoxItemStyle())
             ).Width(360),
             Strings.OK, Strings.Cancel,
             () => { if (index >= 0 && index < Props.Names.Length) Props.OnRemove(Props.Names[index]); },

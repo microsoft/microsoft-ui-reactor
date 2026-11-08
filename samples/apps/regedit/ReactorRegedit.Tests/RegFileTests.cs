@@ -38,6 +38,25 @@ public class RegFileTests
     }
 
     [Fact]
+    public void StreamingWriter_ProducesSameTextAsInMemoryWriter()
+    {
+        RegValue[] values =
+        [
+            new("", RegType.Sz, Encoding.Unicode.GetBytes("d\0")),
+            new("bin", RegType.Binary, Enumerable.Range(0, 100).Select(i => (byte)i).ToArray()),
+            new("dw", RegType.Dword, [1, 0, 0, 0]),
+        ];
+        var memory = new RegFileWriter();
+        memory.WriteKey(@"HKEY_CURRENT_USER\A", values);
+        var sink = new StringWriter();
+        var streaming = new RegFileWriter(sink);
+        streaming.WriteKey(@"HKEY_CURRENT_USER\A", values);
+
+        Assert.Equal(memory.Text, sink.ToString());
+        Assert.StartsWith(RegFileWriter.Header5 + "\r\n\r\n[HKEY_CURRENT_USER\\A]\r\n", sink.ToString());
+    }
+
+    [Fact]
     public void RegExportFixture_RoundTripsByteForByte()
     {
         // Fixture produced by `reg export` (UTF-16 LE + BOM) covering every common type,
