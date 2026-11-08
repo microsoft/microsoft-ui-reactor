@@ -10,7 +10,14 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The headless unit-test project lives beside the app; keep its sources out of the app. -->
+    <Compile Remove="ReactorRegedit.Tests\**" />
+    <None Remove="ReactorRegedit.Tests\**" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />

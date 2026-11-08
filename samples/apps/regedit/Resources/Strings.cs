@@ -118,4 +118,16 @@ internal static class Strings
     public const string RenameKeyTitle = "Rename Key";
     public const string RenameValueTitle = "Rename Value";
     public const string NewKeyName = "New name:";
+
+    public const string EditExpandStringTitle = "Edit Expandable String";
+    public const string InvalidHex = "Enter a hexadecimal number in range.";
+    public const string InvalidDecimal = "Enter a decimal number in range.";
+    public const string ConfirmKeyDeleteTitle = "Confirm Key Delete";
+    public const string ConfirmValueDeleteTitle = "Confirm Value Delete";
+    public const string ConfirmDeleteValues = "Deleting certain registry values could cause system instability. Are you sure you want to permanently delete these values?";
+    public const string MultiStringEmptyRemoved = "Data of type REG_MULTI_SZ cannot contain empty strings. Registry Editor removed all empty strings found.";
+    public const string Expand = "Expand";
+    public const string Collapse = "Collapse";
+    public const string AddressBarName = "Address";
+    public const string GoToAddressBar = "Go to Address Bar";
 }

@@ -1,879 +1,575 @@
-// ReactorRegedit — A registry editor built with Reactor + WinUI 3.
-// Ports the native Win32 regedit.exe to a declarative component model.
+// ReactorRegedit — a registry editor built with Reactor + WinUI 3.
+//
+// Shell (menus, address bar, InfoBar, dialogs, status bar) is declarative Reactor.
+// The two dense panes are native "islands" hosted with XamlHost: a flattened
+// ListView tree (Native/RegistryTreeView) and a multi-select value list
+// (Native/ValueListView). Registry access lives in Services/, pure logic in Core/.
 
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using ReactorRegedit;
 using ReactorRegedit.Components;
-using ReactorRegedit.Components.Dialogs;
-using ReactorRegedit.Models;
+using ReactorRegedit.Core;
+using ReactorRegedit.Native;
 using ReactorRegedit.Services;
-using Microsoft.UI.Xaml;
-using Microsoft.Win32;
+using Windows.System;
+using DispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue;
+using DispatcherQueuePriority = Microsoft.UI.Dispatching.DispatcherQueuePriority;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Core.Theme;
 
-ReactorApp.Run<RegeditApp>("Registry Editor", width: 1000, height: 600,
-    configure: host => CursorBorderRegistration.Register(host.Reconciler));
+// Crash breadcrumbs for testers: %LOCALAPPDATA%\ReactorRegedit\crash.log.
+ReactorApplication.OnUnhandledException = ex =>
+{
+    try
+    {
+        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ReactorRegedit");
+        Directory.CreateDirectory(dir);
+        File.AppendAllText(Path.Combine(dir, "crash.log"), $"[{DateTime.Now:O}] {ex}\r\n\r\n");
+    }
+    catch (IOException) { }
+    return false;
+};
+
+ReactorApp.Run<RegeditApp>("Registry Editor", width: 1280, height: 800,
+    configure: host =>
+    {
+        AppTheme.ApplyCompactDensity();
+        CursorBorderRegistration.Register(host.Reconciler);
+    });
+
+internal enum Pane { Tree, Values }
+
+internal sealed record InfoMessage(int Id, InfoBarSeverity Severity, string Message);
+
+internal sealed record DialogSlot(int Id, Element Element);
+
+internal sealed record LoadedValues(string Path, RegValue[] Values);
 
 // ─── Root component ───────────────────────────────────────────────────────────
 
-class RegeditApp : Component
+internal sealed class RegeditApp : Component
 {
     public override Element Render()
     {
-        // ── Core state ───────────────────────────────────────────────
-        var (currentKeyPath, setCurrentKeyPath) = UseState("");
-        var (values, setValues) = UseState<RegistryValueEntry[]>([]);
-        var (selectedValueIndex, setSelectedValueIndex) = UseState(-1);
+        // ── State ────────────────────────────────────────────────────
+        var (currentPath, setCurrentPath) = UseState("");
+        var (loaded, setLoaded) = UseState(new LoadedValues("", []));
+        var (valuesVersion, setValuesVersion) = UseState(0);
+        var (addressText, setAddressText) = UseState(RegPath.ComputerLabel);
+        var (info, setInfo) = UseState<InfoMessage?>(null);
+        var (dialog, setDialog) = UseState<DialogSlot?>(null);
+        var (selectedValueCount, setSelectedValueCount) = UseState(0);
         var (showAddressBar, setShowAddressBar) = UsePersisted("showAddressBar", true, PersistedScope.Window);
         var (showStatusBar, setShowStatusBar) = UsePersisted("showStatusBar", true, PersistedScope.Window);
-        var (addressBarText, setAddressBarText) = UseState("");
-        var (isLoading, setIsLoading) = UseState(false);
 
-        // Tree state: combined for single-render updates
-        var (treeState, setTreeState) = UseState((
-            Expanded: new HashSet<string>(),
-            Children: new Dictionary<string, RegistryKeyEntry[]>()
-        ));
+        var treeRef = UseRef<RegistryTreeView?>(null);
+        var listRef = UseRef<ValueListView?>(null);
+        var addressRef = UseRef<TextBox?>(null);
+        var activePane = UseRef(Pane.Tree);
+        var idCounter = UseRef(0);
+        var versionCounter = UseRef(0);
+        var afterValuesLoaded = UseRef<Action<ValueListView>?>(null);
+        var currentPathRef = UseRef("");
+        currentPathRef.Current = currentPath;
 
-        // Dialog state
-        var (activeDialog, setActiveDialog) = UseState(ActiveDialog.None);
-        var (editValueName, setEditValueName) = UseState("");
-        var (editValueData, setEditValueData) = UseState("");
-        var (editNumberBase, setEditNumberBase) = UseState(NumberBase.Hexadecimal);
-        var (editValueKind, setEditValueKind) = UseState(RegistryValueKind.String);
+        var dispatcher = DispatcherQueue.GetForCurrentThread();
 
-        // Find state
-        var (searchText, setSearchText) = UseState("");
-        var (findFlags, setFindFlags) = UseState(FindFlags.Keys | FindFlags.Values | FindFlags.Data);
-        var searchCtsRef = UseRef<CancellationTokenSource?>(null);
-
-        // Favorites state
-        var (favorites, setFavorites) = UseState(new Dictionary<string, string>());
-        var (favoriteName, setFavoriteName) = UseState("");
-        var (selectedFavoriteIndex, setSelectedFavoriteIndex) = UseState(-1);
-
-        // Export state
-        var (exportAll, setExportAll) = UseState(false);
-
-        // Status bar
-        var (statusText, setStatusText) = UseState(Strings.Ready);
-
-        // ── Load values on key path change ───────────────────────────
-        UseEffect((Action)(() =>
+        // ── Value loading (re-runs on key change or explicit reload) ─
+        UseEffect(() =>
         {
-            if (string.IsNullOrEmpty(currentKeyPath)) return;
-
-            setAddressBarText(currentKeyPath);
-            setIsLoading(true);
-            var syncContext = SynchronizationContext.Current;
-
-            Task.Run(async () =>
+            var path = currentPath;
+            var cancelled = false;
+            if (path.Length == 0)
             {
-                var result = await RegistryService.GetValuesAsync(currentKeyPath);
-                syncContext?.Post(_ =>
-                {
-                    setValues(result);
-                    setSelectedValueIndex(-1);
-                    setIsLoading(false);
-                }, null);
-            });
-        }), currentKeyPath);
-
-        // ── Handlers ─────────────────────────────────────────────────
-        void NavigateToKey(string path)
-        {
-            setCurrentKeyPath(path);
-        }
-
-        void ExpandTreeNode(string path)
-        {
-            if (treeState.Expanded.Contains(path)) return;
-
-            var syncContext = SynchronizationContext.Current;
-            Task.Run(async () =>
-            {
-                var subkeys = await RegistryService.GetSubKeysAsync(path);
-                syncContext?.Post(_ =>
-                {
-                    var newChildren = new Dictionary<string, RegistryKeyEntry[]>(treeState.Children)
-                    {
-                        [path] = subkeys
-                    };
-                    var newExpanded = new HashSet<string>(treeState.Expanded) { path };
-                    setTreeState((Expanded: newExpanded, Children: newChildren));
-                }, null);
-            });
-        }
-
-        void RefreshCurrentKey()
-        {
-            if (string.IsNullOrEmpty(currentKeyPath)) return;
-
-            var syncContext = SynchronizationContext.Current;
-            setIsLoading(true);
-
-            Task.Run(async () =>
-            {
-                var newValues = await RegistryService.GetValuesAsync(currentKeyPath);
-                // Also refresh subkeys
-                var subkeys = await RegistryService.GetSubKeysAsync(currentKeyPath);
-                syncContext?.Post(_ =>
-                {
-                    setValues(newValues);
-                    var newChildren = new Dictionary<string, RegistryKeyEntry[]>(treeState.Children)
-                    {
-                        [currentKeyPath] = subkeys
-                    };
-                    setTreeState((Expanded: treeState.Expanded, Children: newChildren));
-                    setIsLoading(false);
-                }, null);
-            });
-        }
-
-        void AddressBarSubmit(string path)
-        {
-            if (!string.IsNullOrEmpty(path))
-                NavigateToKey(path);
-        }
-
-        // ── New key/value handlers ───────────────────────────────────
-        void CreateNewKey()
-        {
-            if (string.IsNullOrEmpty(currentKeyPath)) return;
-            var syncContext = SynchronizationContext.Current;
-            Task.Run(async () =>
-            {
-                // Find unique name
-                var baseName = "New Key #";
-                var idx = 1;
-                var name = baseName + idx;
-                using var parent = RegistryService.OpenKey(currentKeyPath);
-                if (parent is not null)
-                {
-                    while (parent.OpenSubKey(name) is not null) { idx++; name = baseName + idx; }
-                }
-                var result = await RegistryService.CreateKeyAsync(currentKeyPath, name);
-                syncContext?.Post(_ => RefreshCurrentKey(), null);
-            });
-        }
-
-        void CreateNewValue(RegistryValueKind kind)
-        {
-            if (string.IsNullOrEmpty(currentKeyPath)) return;
-            var syncContext = SynchronizationContext.Current;
-            Task.Run(async () =>
-            {
-                var baseName = "New Value #";
-                var idx = 1;
-                var name = baseName + idx;
-                using var key = RegistryService.OpenKey(currentKeyPath);
-                if (key is not null)
-                {
-                    var existing = key.GetValueNames();
-                    while (existing.Contains(name)) { idx++; name = baseName + idx; }
-                }
-                await RegistryService.CreateValueAsync(currentKeyPath, name, kind);
-                syncContext?.Post(_ => RefreshCurrentKey(), null);
-            });
-        }
-
-        // ── Edit value handlers ──────────────────────────────────────
-        void OpenEditDialog(RegistryValueEntry value)
-        {
-            setEditValueName(value.DisplayName);
-            setEditValueKind(value.Kind);
-            setEditNumberBase(NumberBase.Hexadecimal);
-
-            switch (value.Kind)
-            {
-                case RegistryValueKind.String:
-                case RegistryValueKind.ExpandString:
-                    setEditValueData(value.Data?.ToString() ?? "");
-                    setActiveDialog(ActiveDialog.EditString);
-                    break;
-                case RegistryValueKind.MultiString:
-                    setEditValueData(string.Join("\r\n", (string[])(value.Data ?? Array.Empty<string>())));
-                    setActiveDialog(ActiveDialog.EditMultiString);
-                    break;
-                case RegistryValueKind.DWord:
-                    setEditValueData(((int)(value.Data ?? 0)).ToString("x"));
-                    setActiveDialog(ActiveDialog.EditDword);
-                    break;
-                case RegistryValueKind.QWord:
-                    setEditValueData(((long)(value.Data ?? 0L)).ToString("x"));
-                    setActiveDialog(ActiveDialog.EditQword);
-                    break;
-                case RegistryValueKind.Binary:
-                default:
-                    setEditValueData(EditBinaryDialog.FormatHexDump(value.Data is byte[] b ? b : []));
-                    setActiveDialog(ActiveDialog.EditBinary);
-                    break;
+                setLoaded(new LoadedValues("", []));
+                return () => { };
             }
-        }
-
-        void OpenBinaryEditDialog(RegistryValueEntry value)
-        {
-            setEditValueName(value.DisplayName);
-            setEditValueKind(value.Kind);
-            byte[] bytes = value.Kind switch
-            {
-                RegistryValueKind.Binary => (byte[])(value.Data ?? Array.Empty<byte>()),
-                RegistryValueKind.DWord => BitConverter.GetBytes((int)(value.Data ?? 0)),
-                RegistryValueKind.QWord => BitConverter.GetBytes((long)(value.Data ?? 0L)),
-                _ => global::System.Text.Encoding.Unicode.GetBytes(value.Data?.ToString() ?? "")
-            };
-            setEditValueData(EditBinaryDialog.FormatHexDump(bytes));
-            setActiveDialog(ActiveDialog.EditBinary);
-        }
-
-        void SaveEditedValue()
-        {
-            if (string.IsNullOrEmpty(currentKeyPath)) return;
-
-            var valueName = editValueName == "(Default)" ? "" : editValueName;
-            var syncContext = SynchronizationContext.Current;
-
-            object? data = null;
-            var kind = editValueKind;
-
-            switch (activeDialog)
-            {
-                case ActiveDialog.EditString:
-                    data = editValueData;
-                    kind = editValueKind == RegistryValueKind.ExpandString
-                        ? RegistryValueKind.ExpandString : RegistryValueKind.String;
-                    break;
-                case ActiveDialog.EditMultiString:
-                    data = editValueData.Split("\r\n");
-                    kind = RegistryValueKind.MultiString;
-                    break;
-                case ActiveDialog.EditDword:
-                    if (editNumberBase == NumberBase.Hexadecimal)
-                    {
-                        if (int.TryParse(editValueData, global::System.Globalization.NumberStyles.HexNumber, null, out var hexVal))
-                            data = hexVal;
-                    }
-                    else
-                    {
-                        if (int.TryParse(editValueData, out var decVal))
-                            data = decVal;
-                    }
-                    kind = RegistryValueKind.DWord;
-                    break;
-                case ActiveDialog.EditQword:
-                    if (editNumberBase == NumberBase.Hexadecimal)
-                    {
-                        if (long.TryParse(editValueData, global::System.Globalization.NumberStyles.HexNumber, null, out var hexVal))
-                            data = hexVal;
-                    }
-                    else
-                    {
-                        if (long.TryParse(editValueData, out var decVal))
-                            data = decVal;
-                    }
-                    kind = RegistryValueKind.QWord;
-                    break;
-                case ActiveDialog.EditBinary:
-                    data = EditBinaryDialog.ParseHexDump(editValueData);
-                    kind = RegistryValueKind.Binary;
-                    break;
-            }
-
-            if (data is not null)
-            {
-                Task.Run(async () =>
-                {
-                    await RegistryService.SetValueAsync(currentKeyPath, valueName, data, kind);
-                    syncContext?.Post(_ =>
-                    {
-                        setActiveDialog(ActiveDialog.None);
-                        RefreshCurrentKey();
-                    }, null);
-                });
-            }
-            else
-            {
-                setActiveDialog(ActiveDialog.None);
-            }
-        }
-
-        // ── Delete handlers ──────────────────────────────────────────
-        void DeleteSelectedValue(RegistryValueEntry value)
-        {
-            if (string.IsNullOrEmpty(currentKeyPath)) return;
-            var syncContext = SynchronizationContext.Current;
-            Task.Run(async () =>
-            {
-                await RegistryService.DeleteValueAsync(currentKeyPath, value.Name);
-                syncContext?.Post(_ => RefreshCurrentKey(), null);
-            });
-        }
-
-        void DeleteCurrentKey()
-        {
-            if (string.IsNullOrEmpty(currentKeyPath)) return;
-            // Don't allow deleting root keys
-            if (!currentKeyPath.Contains('\\')) return;
-
-            var parentPath = currentKeyPath[..currentKeyPath.LastIndexOf('\\')];
-            var syncContext = SynchronizationContext.Current;
-            Task.Run(async () =>
-            {
-                var success = await RegistryService.DeleteKeyAsync(currentKeyPath);
-                syncContext?.Post(_ =>
-                {
-                    if (success)
-                        NavigateToKey(parentPath);
-                }, null);
-            });
-        }
-
-        // ── Rename handlers ─────────────────────────────────────────
-        void StartRenameValue(RegistryValueEntry value)
-        {
-            setEditValueName(value.Name);
-            setEditValueData(value.Name);
-            setActiveDialog(ActiveDialog.RenameValue);
-        }
-
-        void PerformRenameValue()
-        {
-            if (string.IsNullOrEmpty(currentKeyPath)) return;
-            var syncContext = SynchronizationContext.Current;
-            var oldName = editValueName;
-            var newName = editValueData;
-            Task.Run(async () =>
-            {
-                await RegistryService.RenameValueAsync(currentKeyPath, oldName, newName);
-                syncContext?.Post(_ =>
-                {
-                    setActiveDialog(ActiveDialog.None);
-                    RefreshCurrentKey();
-                }, null);
-            });
-        }
-
-        void StartRenameKey()
-        {
-            if (string.IsNullOrEmpty(currentKeyPath) || !currentKeyPath.Contains('\\')) return;
-            var name = currentKeyPath[(currentKeyPath.LastIndexOf('\\') + 1)..];
-            setEditValueName(name);
-            setEditValueData(name);
-            setActiveDialog(ActiveDialog.RenameKey);
-        }
-
-        void PerformRenameKey()
-        {
-            if (string.IsNullOrEmpty(currentKeyPath)) return;
-            var syncContext = SynchronizationContext.Current;
-            var newName = editValueData;
-            var parentPath = currentKeyPath[..currentKeyPath.LastIndexOf('\\')];
-            Task.Run(async () =>
-            {
-                var success = await RegistryService.RenameKeyAsync(currentKeyPath, newName);
-                syncContext?.Post(_ =>
-                {
-                    setActiveDialog(ActiveDialog.None);
-                    if (success)
-                        NavigateToKey($"{parentPath}\\{newName}");
-                }, null);
-            });
-        }
-
-        // ── Find handlers ────────────────────────────────────────────
-        void PerformFind()
-        {
-            if (string.IsNullOrEmpty(searchText)) return;
-            var startPath = string.IsNullOrEmpty(currentKeyPath) ? "HKEY_LOCAL_MACHINE" : currentKeyPath;
-            setActiveDialog(ActiveDialog.None);
-            setStatusText($"Searching...");
-
-            searchCtsRef.Current?.Cancel();
-            var cts = new CancellationTokenSource();
-            searchCtsRef.Current = cts;
-
-            var syncContext = SynchronizationContext.Current;
-            Task.Run(async () =>
+            Task.Run(() =>
             {
                 try
                 {
-                    var result = await SearchService.FindNextAsync(startPath, null, searchText, findFlags, cts.Token);
-                    syncContext?.Post(_ =>
-                    {
-                        // Cancellation alone does not make this callback safe: the
-                        // search can finish just before a newer one calls Cancel,
-                        // in which case nothing throws and this stale result would
-                        // navigate the tree and overwrite the newer search's status.
-                        // Identity is the check that actually holds -- only the
-                        // search that is still current may touch the UI.
-                        if (!ReferenceEquals(searchCtsRef.Current, cts)) return;
-
-                        if (result is not null)
-                        {
-                            NavigateToKey(result.KeyPath);
-                            setStatusText(Strings.Ready);
-                        }
-                        else
-                        {
-                            setStatusText("Finished searching through the registry.");
-                        }
-                    }, null);
+                    var values = RegistryService.GetValues(path);
+                    dispatcher.TryEnqueue(() => { if (!cancelled) setLoaded(new LoadedValues(path, values)); });
                 }
-                // Expected: starting another search cancels the running one (the
-                // only cancellation path here -- there is no unmount cleanup).
-                // The status text now belongs to that newer search, so writing
-                // to it here would clobber the newer search's message.
-                catch (OperationCanceledException) { return; }
+                catch (Exception ex)
+                {
+                    dispatcher.TryEnqueue(() =>
+                    {
+                        if (cancelled) return;
+                        setLoaded(new LoadedValues(path, []));
+                        ShowError(ErrorText(ex));
+                    });
+                }
             });
-        }
+            return () => cancelled = true;
+        }, currentPath, valuesVersion);
 
-        void FindNext()
+        // ── Helpers ──────────────────────────────────────────────────
+        void ShowMessage(InfoBarSeverity severity, string message) =>
+            setInfo(new InfoMessage(++idCounter.Current, severity, message));
+        void ShowError(string message) => ShowMessage(InfoBarSeverity.Error, message);
+
+        static string ErrorText(Exception ex) => ex switch
         {
-            if (string.IsNullOrEmpty(searchText)) { setActiveDialog(ActiveDialog.Find); return; }
-            PerformFind();
+            RegistryOperationException r => r.Message,
+            UnauthorizedAccessException or System.Security.SecurityException => "Access is denied.",
+            _ => ex.Message,
+        };
+
+        async Task<(bool Ok, T Result)> TryRun<T>(Func<T> work)
+        {
+            try { return (true, await Task.Run(work)); }
+            catch (Exception ex) { ShowError(ErrorText(ex)); return (false, default!); }
         }
 
-        // ── Copy key name ────────────────────────────────────────────
+        void ShowDialog(Func<Action, Element> build)
+        {
+            var id = ++idCounter.Current;
+            setDialog(new DialogSlot(id, build(() => setDialog(null))));
+        }
+
+        void ReloadValues(Action<ValueListView>? after = null)
+        {
+            afterValuesLoaded.Current = after;
+            setValuesVersion(++versionCounter.Current);
+        }
+
+        void OnTreeSelection(string path)
+        {
+            if (path == currentPathRef.Current) return;
+            currentPathRef.Current = path;
+            setCurrentPath(path);
+            setAddressText(RegPath.ToDisplay(path));
+        }
+
+        bool ValuesPaneActive() =>
+            activePane.Current == Pane.Values && listRef.Current is { } l && l.SelectedValues.Count > 0;
+
+        // ── Navigation ───────────────────────────────────────────────
+        async void NavigateTo(string input)
+        {
+            var normalized = RegPath.Normalize(input);
+            if (normalized is null)
+            {
+                ShowError($"Cannot find the key \"{input.Trim()}\". Check the hive name (HKLM, HKCU, HKCR, HKU or HKCC).");
+                setAddressText(RegPath.ToDisplay(currentPathRef.Current));
+                return;
+            }
+            var (ok, resolved) = await TryRun(() => RegistryService.ResolveCase(normalized));
+            if (!ok)
+            {
+                setAddressText(RegPath.ToDisplay(currentPathRef.Current));
+                return;
+            }
+            if (treeRef.Current is { } tree && !await tree.RevealAsync(resolved, focus: true))
+            {
+                ShowError($"Cannot find the key {RegPath.ToDisplay(resolved)}.");
+                setAddressText(RegPath.ToDisplay(currentPathRef.Current));
+                return;
+            }
+            setAddressText(RegPath.ToDisplay(resolved));
+        }
+
+        async void RefreshAll()
+        {
+            if (treeRef.Current is { } tree) await tree.RefreshAllAsync();
+            ReloadValues();
+        }
+
         void CopyKeyName()
         {
-            if (string.IsNullOrEmpty(currentKeyPath)) return;
-            var dataPackage = new global::Windows.ApplicationModel.DataTransfer.DataPackage();
-            dataPackage.SetText(currentKeyPath);
-            global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
+            var path = currentPathRef.Current;
+            if (path.Length == 0) return;
+            var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(path);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+            ShowMessage(InfoBarSeverity.Informational, $"Copied \"{path}\" to the clipboard.");
         }
 
-        // ── Export handler ───────────────────────────────────────────
-        void PerformExport()
+        // ── Values: modify ───────────────────────────────────────────
+        void Modify(RegValue? value, bool binary)
         {
-            var exportPath = exportAll ? "HKEY_LOCAL_MACHINE" : currentKeyPath;
-            if (string.IsNullOrEmpty(exportPath)) return;
+            var path = currentPathRef.Current;
+            if (value is null || path.Length == 0) return;
+            var name = value.Name;
+            var type = value.IsUnsetDefault ? RegType.Sz : value.Type;
 
-            var syncContext = SynchronizationContext.Current;
-            setActiveDialog(ActiveDialog.None);
-            setStatusText("Exporting...");
-
-            Task.Run(async () =>
+            async void Save(uint t, byte[] data, string? warning = null)
             {
-                var content = await RegFileService.ExportAsync(exportPath);
-                syncContext?.Post(_ =>
+                var (ok, _) = await TryRun(() =>
                 {
-                    var dataPackage = new global::Windows.ApplicationModel.DataTransfer.DataPackage();
-                    dataPackage.SetText(content);
-                    global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
-                    setStatusText("Exported to clipboard.");
-                }, null);
-            });
-        }
-
-        // ── Favorites handlers ───────────────────────────────────────
-        void AddFavorite()
-        {
-            if (string.IsNullOrEmpty(currentKeyPath)) return;
-            var newFavs = new Dictionary<string, string>(favorites)
-            {
-                [favoriteName] = currentKeyPath
-            };
-            setFavorites(newFavs);
-            setActiveDialog(ActiveDialog.None);
-        }
-
-        void RemoveSelectedFavorite()
-        {
-            var keys = favorites.Keys.ToArray();
-            if (selectedFavoriteIndex < 0 || selectedFavoriteIndex >= keys.Length) return;
-            var newFavs = new Dictionary<string, string>(favorites);
-            newFavs.Remove(keys[selectedFavoriteIndex]);
-            setFavorites(newFavs);
-            setActiveDialog(ActiveDialog.None);
-        }
-
-        // ── Permissions (P/Invoke native security dialog) ────────────
-        void ShowPermissions()
-        {
-            // Out of scope for initial implementation — would require P/Invoke to aclui.dll EditSecurity
-        }
-
-        // ── Number base change handler ───────────────────────────────
-        void OnDwordBaseChanged(NumberBase newBase)
-        {
-            // Convert display value between hex and decimal
-            if (activeDialog == ActiveDialog.EditDword)
-            {
-                if (newBase == NumberBase.Decimal && editNumberBase == NumberBase.Hexadecimal)
-                {
-                    if (int.TryParse(editValueData, global::System.Globalization.NumberStyles.HexNumber, null, out var val))
-                        setEditValueData(val.ToString());
-                }
-                else if (newBase == NumberBase.Hexadecimal && editNumberBase == NumberBase.Decimal)
-                {
-                    if (int.TryParse(editValueData, out var val))
-                        setEditValueData(val.ToString("x"));
-                }
+                    if (value.IsUnsetDefault) RegistryService.SetValue(path, name, t, data);
+                    else RegistryService.ModifyValue(path, name, t, data);
+                    return true;
+                });
+                if (ok && warning is not null) ShowMessage(InfoBarSeverity.Warning, warning);
+                ReloadValues(l => l.SelectByName(name, focus: true));
             }
-            else if (activeDialog == ActiveDialog.EditQword)
-            {
-                if (newBase == NumberBase.Decimal && editNumberBase == NumberBase.Hexadecimal)
-                {
-                    if (long.TryParse(editValueData, global::System.Globalization.NumberStyles.HexNumber, null, out var val))
-                        setEditValueData(val.ToString());
-                }
-                else if (newBase == NumberBase.Hexadecimal && editNumberBase == NumberBase.Decimal)
-                {
-                    if (long.TryParse(editValueData, out var val))
-                        setEditValueData(val.ToString("x"));
-                }
-            }
-            setEditNumberBase(newBase);
-        }
 
-        // ── Build menu bar ───────────────────────────────────────────
-        var menuBar = MenuBar([
-            // File
-            Menu(Strings.FileMenu, [
-                MenuItem(Strings.Import, () =>
-                {
-                    // For now, import from clipboard
-                    var syncContext = SynchronizationContext.Current;
-                    Task.Run(async () =>
-                    {
-                        try
+            if (binary || type is not (RegType.Sz or RegType.ExpandSz or RegType.MultiSz or RegType.Dword or RegType.Qword))
+            {
+                ShowDialog(close => Component<EditBinaryDialog, EditBinaryProps>(new EditBinaryProps(
+                    value.DisplayName, RegType.Name(type), value.Data, bytes => Save(type, bytes), close)));
+                return;
+            }
+
+            switch (type)
+            {
+                case RegType.Sz:
+                case RegType.ExpandSz:
+                    ShowDialog(close => Component<EditStringDialog, EditStringProps>(new EditStringProps(
+                        value.DisplayName, ValueFormat.DecodeString(value.Data), type == RegType.ExpandSz,
+                        text => Save(type, ValueFormat.EncodeString(text)), close)));
+                    break;
+                case RegType.MultiSz:
+                    ShowDialog(close => Component<EditMultiStringDialog, EditMultiStringProps>(new EditMultiStringProps(
+                        value.DisplayName, ValueFormat.DecodeMultiString(value.Data),
+                        text =>
                         {
-                            var content = await global::Windows.ApplicationModel.DataTransfer.Clipboard.GetContent().GetTextAsync();
-                            if (!string.IsNullOrEmpty(content))
-                            {
-                                var count = await RegFileService.ImportAsync(content);
-                                syncContext?.Post(_ =>
-                                {
-                                    setStatusText($"Imported {count} key(s).");
-                                    RefreshCurrentKey();
-                                }, null);
-                            }
+                            var lines = ValueFormat.ParseMultiStringEditor(text, out var removed);
+                            Save(type, ValueFormat.EncodeMultiString(lines), removed ? Strings.MultiStringEmptyRemoved : null);
+                        }, close)));
+                    break;
+                case RegType.Dword:
+                case RegType.Qword:
+                    var isQword = type == RegType.Qword;
+                    ShowDialog(close => Component<EditNumberDialog, EditNumberProps>(new EditNumberProps(
+                        value.DisplayName, isQword, ValueFormat.ReadNumber(value.Data, type),
+                        n => Save(type, isQword ? BitConverter.GetBytes(n) : BitConverter.GetBytes((uint)n)), close)));
+                    break;
+            }
+        }
+
+        // ── Values: delete / rename / new ────────────────────────────
+        void DeleteValues(IReadOnlyList<RegValue> selection)
+        {
+            var path = currentPathRef.Current;
+            var targets = selection.Where(v => !v.IsUnsetDefault).ToList();
+            if (path.Length == 0 || targets.Count == 0) return;
+            ShowDialog(close => Component<ConfirmDialog, ConfirmProps>(new ConfirmProps(
+                Strings.ConfirmValueDeleteTitle,
+                targets.Count == 1 ? Strings.ConfirmDeleteValue : Strings.ConfirmDeleteValues,
+                async () =>
+                {
+                    var (_, failures) = await TryRun(() =>
+                    {
+                        var errors = new List<string>();
+                        foreach (var v in targets)
+                        {
+                            try { RegistryService.DeleteValue(path, v.Name); }
+                            catch (Exception ex) { errors.Add(ErrorText(ex)); }
                         }
-                        catch { }
+                        return errors;
                     });
-                }),
-                MenuItem(Strings.Export, () => setActiveDialog(ActiveDialog.Export)) with
-                    { KeyboardAccelerators = [Accelerator(global::Windows.System.VirtualKey.E, global::Windows.System.VirtualKeyModifiers.Control)] },
+                    if (failures is { Count: > 0 })
+                        ShowError(failures.Count == 1 ? failures[0]
+                            : $"Unable to delete all specified values. {failures.Count} of {targets.Count} failed: {failures[0]}");
+                    ReloadValues(l => l.FocusList());
+                },
+                close)));
+        }
+
+        async Task<bool> RenameValue(string oldName, string newName)
+        {
+            var path = currentPathRef.Current;
+            var (ok, _) = await TryRun(() => { RegistryService.RenameValue(path, oldName, newName); return true; });
+            ReloadValues(l => l.SelectByName(ok ? newName : oldName, focus: true));
+            return ok;
+        }
+
+        async void NewValue(uint type)
+        {
+            var path = currentPathRef.Current;
+            if (path.Length == 0) return;
+            var (ok, name) = await TryRun(() =>
+            {
+                var n = RegistryService.UniqueValueName(path);
+                RegistryService.CreateValue(path, n, type);
+                return n;
+            });
+            if (ok) ReloadValues(l => l.BeginRename(name));
+        }
+
+        // ── Keys: new / delete / rename ──────────────────────────────
+        async void NewKey()
+        {
+            var parent = currentPathRef.Current;
+            if (parent.Length == 0 || treeRef.Current is not { } tree) return;
+            var (ok, created) = await TryRun(() =>
+            {
+                var n = RegistryService.UniqueKeyName(parent);
+                return RegistryService.CreateKey(parent, n);
+            });
+            if (!ok) return;
+            await tree.RefreshKeyAsync(parent);
+            if (await tree.RevealAsync(created)) tree.BeginRename(created);
+        }
+
+        void DeleteKey(string path)
+        {
+            if (path.Length == 0) return;
+            if (RegPath.IsHive(path))
+            {
+                ShowError($"Cannot delete {path}: root keys cannot be deleted.");
+                return;
+            }
+            ShowDialog(close => Component<ConfirmDialog, ConfirmProps>(new ConfirmProps(
+                Strings.ConfirmKeyDeleteTitle, Strings.ConfirmDeleteKey,
+                async () =>
+                {
+                    var (ok, _) = await TryRun(() => { RegistryService.DeleteKey(path); return true; });
+                    var parent = RegPath.Parent(path);
+                    if (treeRef.Current is { } tree)
+                    {
+                        await tree.RefreshKeyAsync(parent);
+                        if (ok) await tree.RevealAsync(parent, focus: true);
+                    }
+                },
+                close)));
+        }
+
+        async Task<string?> RenameKey(string oldPath, string newName)
+        {
+            var (ok, newPath) = await TryRun(() => RegistryService.RenameKey(oldPath, newName));
+            if (!ok)
+            {
+                if (treeRef.Current is { } t) await t.RefreshKeyAsync(RegPath.Parent(oldPath));
+                return null;
+            }
+            treeRef.Current?.RenameNode(oldPath, newPath);
+            var cur = currentPathRef.Current;
+            if (RegPath.IsSameOrDescendant(cur, oldPath))
+            {
+                var moved = newPath + cur[oldPath.Length..];
+                currentPathRef.Current = moved;
+                setCurrentPath(moved);
+                setAddressText(RegPath.ToDisplay(moved));
+            }
+            return newPath;
+        }
+
+        // ── Pane-aware Edit commands ─────────────────────────────────
+        void DeleteCommand()
+        {
+            if (ValuesPaneActive()) DeleteValues(listRef.Current!.SelectedValues);
+            else DeleteKey(currentPathRef.Current);
+        }
+
+        void RenameCommand()
+        {
+            if (ValuesPaneActive() && listRef.Current!.PrimarySelection is { } v) listRef.Current.BeginRename(v.Name);
+            else if (RegPath.IsHive(currentPathRef.Current) || currentPathRef.Current.Length == 0)
+                ShowError("Root keys cannot be renamed.");
+            else treeRef.Current?.BeginRename(currentPathRef.Current);
+        }
+
+        MenuSpec[] NewMenuSpecs(bool enabled) =>
+        [
+            new(Strings.NewKey, NewKey, enabled),
+            MenuSpec.Separator,
+            new(Strings.NewStringValue, () => NewValue(RegType.Sz), enabled),
+            new(Strings.NewBinaryValue, () => NewValue(RegType.Binary), enabled),
+            new(Strings.NewDwordValue, () => NewValue(RegType.Dword), enabled),
+            new(Strings.NewQwordValue, () => NewValue(RegType.Qword), enabled),
+            new(Strings.NewMultiStringValue, () => NewValue(RegType.MultiSz), enabled),
+            new(Strings.NewExpandableStringValue, () => NewValue(RegType.ExpandSz), enabled),
+        ];
+
+        // ── Island handlers ──────────────────────────────────────────
+        var treeHandlers = new TreeHandlers
+        {
+            SelectionChanged = OnTreeSelection,
+            DeleteRequested = node => DeleteKey(node.Path),
+            RenameRequested = RenameKey,
+            Error = ShowError,
+            FocusEntered = () => activePane.Current = Pane.Tree,
+            BuildContextMenu = node =>
+            {
+                var isKey = node.Kind == TreeNodeKind.Key;
+                var canHaveNew = node.Kind is TreeNodeKind.Key or TreeNodeKind.Hive;
+                return
+                [
+                    new(node.IsExpanded ? Strings.Collapse : Strings.Expand,
+                        () => treeRef.Current?.Toggle(node), node.HasChildren && node.Kind != TreeNodeKind.Computer),
+                    new(Strings.NewMenu, Children: NewMenuSpecs(canHaveNew), Enabled: canHaveNew),
+                    MenuSpec.Separator,
+                    new(Strings.Delete, () => DeleteKey(node.Path), isKey, KeyText: "Del"),
+                    new(Strings.Rename, () => treeRef.Current?.BeginRename(node.Path), isKey, KeyText: "F2"),
+                    MenuSpec.Separator,
+                    new(Strings.CopyKeyName, CopyKeyName, node.Kind != TreeNodeKind.Computer),
+                ];
+            },
+        };
+
+        var valueHandlers = new ValueListHandlers
+        {
+            ModifyRequested = Modify,
+            DeleteRequested = DeleteValues,
+            RenameRequested = RenameValue,
+            SelectionChanged = setSelectedValueCount,
+            FocusEntered = () => activePane.Current = Pane.Values,
+            BuildItemMenu = sel =>
+            [
+                new(Strings.Modify, () => Modify(sel.FirstOrDefault(), false), sel.Count == 1),
+                new(Strings.ModifyBinaryData, () => Modify(sel.FirstOrDefault(), true), sel.Count == 1),
+                MenuSpec.Separator,
+                new(Strings.Delete, () => DeleteValues(sel), sel.Any(v => !v.IsUnsetDefault), KeyText: "Del"),
+                new(Strings.Rename, () => listRef.Current?.BeginRename(sel[0].Name),
+                    sel.Count == 1 && !sel[0].IsDefault, KeyText: "F2"),
+            ],
+            BuildBackgroundMenu = () =>
+            [
+                new(Strings.NewMenu, Children: NewMenuSpecs(currentPathRef.Current.Length > 0),
+                    Enabled: currentPathRef.Current.Length > 0),
+            ],
+        };
+
+        // ── Menu bar ─────────────────────────────────────────────────
+        var hasKey = currentPath.Length > 0;
+        var isRegularKey = hasKey && !RegPath.IsHive(currentPath);
+        var menuBar = MenuBar([
+            Menu(Strings.FileMenu, [
+                MenuItem(Strings.Import, () => { }) with { IsEnabled = false },
+                MenuItem(Strings.Export, () => { }) with { IsEnabled = false },
                 MenuSeparator(),
-                MenuItem(Strings.LoadHive, () => { /* requires elevation */ }),
-                MenuItem(Strings.UnloadHive, () => { /* requires elevation */ }),
+                MenuItem(Strings.LoadHive, () => { }) with { IsEnabled = false },
+                MenuItem(Strings.UnloadHive, () => { }) with { IsEnabled = false },
                 MenuSeparator(),
-                MenuItem(Strings.ConnectNetworkRegistry, () => { }),
-                MenuItem(Strings.DisconnectNetworkRegistry, () => { }),
+                MenuItem(Strings.ConnectNetworkRegistry, () => { }) with { IsEnabled = false },
+                MenuItem(Strings.DisconnectNetworkRegistry, () => { }) with { IsEnabled = false },
                 MenuSeparator(),
-                MenuItem(Strings.Print, () => { }) with
-                    { KeyboardAccelerators = [Accelerator(global::Windows.System.VirtualKey.P, global::Windows.System.VirtualKeyModifiers.Control)] },
+                MenuItem(Strings.Print, () => { }) with { IsEnabled = false },
                 MenuSeparator(),
                 MenuItem(Strings.Exit, () => Application.Current.Exit()),
             ]),
-
-            // Edit
             Menu(Strings.EditMenu, [
+                MenuItem(Strings.Modify, () => Modify(listRef.Current?.PrimarySelection, false)) with
+                    { IsEnabled = selectedValueCount == 1 },
+                MenuItem(Strings.ModifyBinaryData, () => Modify(listRef.Current?.PrimarySelection, true)) with
+                    { IsEnabled = selectedValueCount == 1 },
+                MenuSeparator(),
                 MenuSubItem(Strings.NewMenu, [
-                    MenuItem(Strings.NewKey, CreateNewKey),
+                    MenuItem(Strings.NewKey, NewKey) with { IsEnabled = hasKey },
                     MenuSeparator(),
-                    MenuItem(Strings.NewStringValue, () => CreateNewValue(RegistryValueKind.String)),
-                    MenuItem(Strings.NewBinaryValue, () => CreateNewValue(RegistryValueKind.Binary)),
-                    MenuItem(Strings.NewDwordValue, () => CreateNewValue(RegistryValueKind.DWord)),
-                    MenuItem(Strings.NewQwordValue, () => CreateNewValue(RegistryValueKind.QWord)),
-                    MenuItem(Strings.NewMultiStringValue, () => CreateNewValue(RegistryValueKind.MultiString)),
-                    MenuItem(Strings.NewExpandableStringValue, () => CreateNewValue(RegistryValueKind.ExpandString)),
+                    MenuItem(Strings.NewStringValue, () => NewValue(RegType.Sz)) with { IsEnabled = hasKey },
+                    MenuItem(Strings.NewBinaryValue, () => NewValue(RegType.Binary)) with { IsEnabled = hasKey },
+                    MenuItem(Strings.NewDwordValue, () => NewValue(RegType.Dword)) with { IsEnabled = hasKey },
+                    MenuItem(Strings.NewQwordValue, () => NewValue(RegType.Qword)) with { IsEnabled = hasKey },
+                    MenuItem(Strings.NewMultiStringValue, () => NewValue(RegType.MultiSz)) with { IsEnabled = hasKey },
+                    MenuItem(Strings.NewExpandableStringValue, () => NewValue(RegType.ExpandSz)) with { IsEnabled = hasKey },
                 ]),
                 MenuSeparator(),
-                MenuItem(Strings.Permissions, ShowPermissions),
+                MenuItem(Strings.Permissions, () => { }) with { IsEnabled = false },
                 MenuSeparator(),
-                MenuItem(Strings.Delete, DeleteCurrentKey) with
-                    { KeyboardAccelerators = [Accelerator(global::Windows.System.VirtualKey.Delete)] },
-                MenuItem(Strings.Rename, StartRenameKey) with
-                    { KeyboardAccelerators = [Accelerator(global::Windows.System.VirtualKey.F2)] },
+                MenuItem(Strings.Delete, DeleteCommand) with { IsEnabled = isRegularKey || selectedValueCount > 0 },
+                MenuItem(Strings.Rename, RenameCommand) with { IsEnabled = isRegularKey || selectedValueCount == 1 },
                 MenuSeparator(),
-                MenuItem(Strings.CopyKeyName, CopyKeyName),
+                MenuItem(Strings.CopyKeyName, CopyKeyName) with { IsEnabled = hasKey },
                 MenuSeparator(),
-                MenuItem(Strings.Find, () => setActiveDialog(ActiveDialog.Find)) with
-                    { KeyboardAccelerators = [Accelerator(global::Windows.System.VirtualKey.F, global::Windows.System.VirtualKeyModifiers.Control)] },
-                MenuItem(Strings.FindNext, FindNext) with
-                    { KeyboardAccelerators = [Accelerator(global::Windows.System.VirtualKey.F3)] },
+                MenuItem(Strings.Find, () => { }) with { IsEnabled = false },
+                MenuItem(Strings.FindNext, () => { }) with { IsEnabled = false },
             ]),
-
-            // View
             Menu(Strings.ViewMenu, [
                 ToggleMenuItem(Strings.AddressBar, showAddressBar, _ => setShowAddressBar(!showAddressBar)),
                 ToggleMenuItem(Strings.StatusBar, showStatusBar, _ => setShowStatusBar(!showStatusBar)),
                 MenuSeparator(),
-                MenuItem(Strings.Split, () => { }),
-                MenuSeparator(),
-                MenuItem(Strings.Refresh, RefreshCurrentKey) with
-                    { KeyboardAccelerators = [Accelerator(global::Windows.System.VirtualKey.F5)] },
+                MenuItem(Strings.Refresh, RefreshAll) with
+                    { KeyboardAccelerators = [Accelerator(VirtualKey.F5)] },
+                MenuItem(Strings.GoToAddressBar, () => { addressRef.Current?.Focus(FocusState.Keyboard); addressRef.Current?.SelectAll(); }) with
+                    { KeyboardAccelerators = [Accelerator(VirtualKey.L, VirtualKeyModifiers.Control)] },
             ]),
-
-            // Favorites
-            Menu(Strings.FavoritesMenu, BuildFavoritesMenu(favorites, favoriteName, currentKeyPath,
-                setFavoriteName, setActiveDialog, setSelectedFavoriteIndex, NavigateToKey)),
-
-            // Help
+            Menu(Strings.FavoritesMenu, [
+                MenuItem(Strings.AddToFavorites, () => { }) with { IsEnabled = false },
+                MenuItem(Strings.RemoveFromFavorites, () => { }) with { IsEnabled = false },
+            ]),
             Menu(Strings.HelpMenu, [
-                MenuItem(Strings.About, () => setActiveDialog(ActiveDialog.About)),
+                MenuItem(Strings.About, () => ShowDialog(close => Component<MessageDialog, MessageProps>(
+                    new MessageProps(Strings.AboutTitle, Strings.AboutText, close)))),
             ]),
-        ]);
+        ]).MinHeight(0).Height(32);
 
         // ── Address bar ──────────────────────────────────────────────
         var addressBar = When(showAddressBar, () =>
-            HStack(8,
-                TextBlock(Strings.Computer)
-                    .VAlign(VerticalAlignment.Center)
-                    .SemiBold(),
-                AutoSuggestBox(addressBarText, setAddressBarText, text => AddressBarSubmit(text))
-                    .PlaceholderText("HKEY_LOCAL_MACHINE\\SOFTWARE")
-                    .HAlign(HorizontalAlignment.Stretch)
-            ).Margin(4, 2, 4, 2)
+            TextBox(addressText, setAddressText)
+                .AutomationName(Strings.AddressBarName)
+                .FontSize(13)
+                .Margin(4, 0, 4, 2)
+                .Set(tb => addressRef.Current = tb)
+                .OnKeyDown((_, e) =>
+                {
+                    if (e.Key == VirtualKey.Enter)
+                    {
+                        e.Handled = true;
+                        NavigateTo(addressText);
+                    }
+                    else if (e.Key == VirtualKey.Escape)
+                    {
+                        e.Handled = true;
+                        setAddressText(RegPath.ToDisplay(currentPathRef.Current));
+                        treeRef.Current?.FocusTree();
+                    }
+                })
         );
 
-        // ── Tree pane ────────────────────────────────────────────────
-        var tree = Component<RegistryTree, RegistryTreeProps>(new RegistryTreeProps(
-            ExpandedPaths: treeState.Expanded,
-            TreeChildren: treeState.Children,
-            CurrentKeyPath: currentKeyPath,
-            OnNavigate: NavigateToKey,
-            OnExpand: ExpandTreeNode,
-            OnContextMenu: _ => { }
-        ));
+        // ── Info bar (non-modal errors / notices) ────────────────────
+        var infoBar = info is null
+            ? Empty()
+            : (InfoBar(null, info.Message) with
+            {
+                Severity = info.Severity,
+                IsOpen = true,
+                OnClosed = () => setInfo(null),
+            }).Margin(4, 0, 4, 2).WithKey($"info-{info.Id}");
 
-        // ── Value list pane ──────────────────────────────────────────
-        var valueList = Component<ValueList, ValueListProps>(new ValueListProps(
-            Values: values,
-            SelectedIndex: selectedValueIndex,
-            OnSelectionChanged: setSelectedValueIndex,
-            OnModify: OpenEditDialog,
-            OnModifyBinary: OpenBinaryEditDialog,
-            OnDelete: DeleteSelectedValue,
-            OnRename: StartRenameValue
-        ));
+        // ── Panes ────────────────────────────────────────────────────
+        var tree = XamlHost(
+            () => treeRef.Current = new RegistryTreeView(),
+            c => ((RegistryTreeView)c).Handlers = treeHandlers,
+            typeKey: "registry-tree");
+
+        var valueList = XamlHost(
+            () => listRef.Current = new ValueListView(),
+            c =>
+            {
+                var list = (ValueListView)c;
+                list.Handlers = valueHandlers;
+                list.SetValues(loaded.Path, loaded.Values);
+                if (afterValuesLoaded.Current is { } after && string.Equals(list.KeyPath, currentPath, StringComparison.Ordinal))
+                {
+                    afterValuesLoaded.Current = null;
+                    dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () => after(list));
+                }
+            },
+            typeKey: "value-list");
 
         // ── Status bar ───────────────────────────────────────────────
         var statusBar = When(showStatusBar, () =>
-            HStack(8,
-                TextBlock(string.IsNullOrEmpty(currentKeyPath) ? Strings.Computer : currentKeyPath)
-                    .TextTrimming(Microsoft.UI.Xaml.TextTrimming.CharacterEllipsis)
-                    .TextWrapping(Microsoft.UI.Xaml.TextWrapping.NoWrap),
-                When(isLoading, () => ProgressRing().Width(16).Height(16).IsActive(true))
-            )
-            .Padding(8, 4, 8, 4)
-            .WithBorder(DividerStroke)
+            TextBlock(RegPath.ToDisplay(currentPath))
+                .FontSize(12)
+                .TextTrimming(TextTrimming.CharacterEllipsis)
+                .TextWrapping(TextWrapping.NoWrap)
+                .Padding(8, 3, 8, 3)
+                .WithBorder(DividerStroke)
         );
 
-        // ── Dialogs ─────────────────────────────────────────────────
-        var editStringDialog = Component<EditStringDialog, EditStringDialogProps>(new EditStringDialogProps(
-            IsOpen: activeDialog == ActiveDialog.EditString,
-            Title: editValueKind == RegistryValueKind.ExpandString ? "Edit Expandable String" : Strings.EditStringTitle,
-            ValueName: editValueName,
-            ValueData: editValueData,
-            OnValueDataChanged: setEditValueData,
-            OnSave: SaveEditedValue,
-            OnCancel: () => setActiveDialog(ActiveDialog.None)
-        ));
-
-        var editMultiStringDialog = Component<EditMultiStringDialog, EditMultiStringDialogProps>(new EditMultiStringDialogProps(
-            IsOpen: activeDialog == ActiveDialog.EditMultiString,
-            ValueName: editValueName,
-            ValueData: editValueData,
-            OnValueDataChanged: setEditValueData,
-            OnSave: SaveEditedValue,
-            OnCancel: () => setActiveDialog(ActiveDialog.None)
-        ));
-
-        var editDwordDialog = Component<EditDwordDialog, EditDwordDialogProps>(new EditDwordDialogProps(
-            IsOpen: activeDialog == ActiveDialog.EditDword,
-            ValueName: editValueName,
-            ValueData: editValueData,
-            NumberBase: editNumberBase,
-            OnValueDataChanged: setEditValueData,
-            OnBaseChanged: OnDwordBaseChanged,
-            OnSave: SaveEditedValue,
-            OnCancel: () => setActiveDialog(ActiveDialog.None)
-        ));
-
-        var editQwordDialog = Component<EditQwordDialog, EditQwordDialogProps>(new EditQwordDialogProps(
-            IsOpen: activeDialog == ActiveDialog.EditQword,
-            ValueName: editValueName,
-            ValueData: editValueData,
-            NumberBase: editNumberBase,
-            OnValueDataChanged: setEditValueData,
-            OnBaseChanged: OnDwordBaseChanged,
-            OnSave: SaveEditedValue,
-            OnCancel: () => setActiveDialog(ActiveDialog.None)
-        ));
-
-        var editBinaryDialog = Component<EditBinaryDialog, EditBinaryDialogProps>(new EditBinaryDialogProps(
-            IsOpen: activeDialog == ActiveDialog.EditBinary,
-            ValueName: editValueName,
-            ValueData: editValueData,
-            OnValueDataChanged: setEditValueData,
-            OnSave: SaveEditedValue,
-            OnCancel: () => setActiveDialog(ActiveDialog.None)
-        ));
-
-        var findDialog = Component<FindDialog, FindDialogProps>(new FindDialogProps(
-            IsOpen: activeDialog == ActiveDialog.Find,
-            SearchText: searchText,
-            Flags: findFlags,
-            OnSearchTextChanged: setSearchText,
-            OnFlagsChanged: setFindFlags,
-            OnFind: PerformFind,
-            OnCancel: () => setActiveDialog(ActiveDialog.None)
-        ));
-
-        var addFavoriteDialog = Component<AddFavoriteDialog, AddFavoriteDialogProps>(new AddFavoriteDialogProps(
-            IsOpen: activeDialog == ActiveDialog.AddFavorite,
-            FavoriteName: favoriteName,
-            OnNameChanged: setFavoriteName,
-            OnSave: AddFavorite,
-            OnCancel: () => setActiveDialog(ActiveDialog.None)
-        ));
-
-        var removeFavoriteDialog = Component<RemoveFavoriteDialog, RemoveFavoriteDialogProps>(new RemoveFavoriteDialogProps(
-            IsOpen: activeDialog == ActiveDialog.RemoveFavorite,
-            FavoriteNames: favorites.Keys.ToArray(),
-            SelectedIndex: selectedFavoriteIndex,
-            OnSelectionChanged: setSelectedFavoriteIndex,
-            OnRemove: RemoveSelectedFavorite,
-            OnCancel: () => setActiveDialog(ActiveDialog.None)
-        ));
-
-        var exportDialog = Component<ExportDialog, ExportDialogProps>(new ExportDialogProps(
-            IsOpen: activeDialog == ActiveDialog.Export,
-            ExportAll: exportAll,
-            SelectedBranch: currentKeyPath,
-            OnExportAllChanged: setExportAll,
-            OnExport: PerformExport,
-            OnCancel: () => setActiveDialog(ActiveDialog.None)
-        ));
-
-        var renameKeyDialog = ContentDialog(
-            Strings.RenameKeyTitle,
-            VStack(8,
-                TextBlock(Strings.NewKeyName),
-                TextBox(editValueData, setEditValueData)
-            ).Width(350),
-            Strings.OK
-        ) with
-        {
-            IsOpen = activeDialog == ActiveDialog.RenameKey,
-            SecondaryButtonText = Strings.Cancel,
-            DefaultButton = Microsoft.UI.Xaml.Controls.ContentDialogButton.Primary,
-            OnClosed = result =>
-            {
-                if (result == Microsoft.UI.Xaml.Controls.ContentDialogResult.Primary)
-                    PerformRenameKey();
-                else
-                    setActiveDialog(ActiveDialog.None);
-            },
-        };
-
-        var renameValueDialog = ContentDialog(
-            Strings.RenameValueTitle,
-            VStack(8,
-                TextBlock(Strings.NewKeyName),
-                TextBox(editValueData, setEditValueData)
-            ).Width(350),
-            Strings.OK
-        ) with
-        {
-            IsOpen = activeDialog == ActiveDialog.RenameValue,
-            SecondaryButtonText = Strings.Cancel,
-            DefaultButton = Microsoft.UI.Xaml.Controls.ContentDialogButton.Primary,
-            OnClosed = result =>
-            {
-                if (result == Microsoft.UI.Xaml.Controls.ContentDialogResult.Primary)
-                    PerformRenameValue();
-                else
-                    setActiveDialog(ActiveDialog.None);
-            },
-        };
-
-        var aboutDialog = ContentDialog(
-            Strings.AboutTitle,
-            TextBlock(Strings.AboutText),
-            Strings.OK
-        ) with
-        {
-            IsOpen = activeDialog == ActiveDialog.About,
-            OnClosed = _ => setActiveDialog(ActiveDialog.None),
-        };
+        var dialogElement = dialog is null ? Empty() : dialog.Element.WithKey($"dialog-{dialog.Id}");
 
         // ── Layout ───────────────────────────────────────────────────
         return Grid(
             [GridSize.Star()],
-            [GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto],
+            [GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto],
             menuBar.Grid(row: 0, column: 0),
             addressBar.Grid(row: 1, column: 0),
-            Component<SplitPanel, SplitPanelProps>(new SplitPanelProps(
-                Left: tree,
-                Right: VStack(0,
-                    valueList,
-                    // Dialogs rendered here so they're part of the visual tree
-                    editStringDialog,
-                    editMultiStringDialog,
-                    editDwordDialog,
-                    editQwordDialog,
-                    editBinaryDialog,
-                    findDialog,
-                    addFavoriteDialog,
-                    removeFavoriteDialog,
-                    exportDialog,
-                    renameKeyDialog,
-                    renameValueDialog,
-                    aboutDialog
-                )
-            )).Grid(row: 2, column: 0),
-            statusBar.Grid(row: 3, column: 0)
+            infoBar.Grid(row: 2, column: 0),
+            Component<SplitPanel, SplitPanelProps>(new SplitPanelProps(Left: tree, Right: valueList)).Grid(row: 3, column: 0),
+            statusBar.Grid(row: 4, column: 0),
+            dialogElement.Grid(row: 0, column: 0)
         )
         // Spec 033 §6 — Mica window backdrop on a primary tool surface.
         .Backdrop(BackdropKind.Mica);
     }
-
-    /// <summary>
-    /// Builds the dynamic Favorites menu items (Add/Remove + saved favorites).
-    /// </summary>
-    private static MenuFlyoutItemBase[] BuildFavoritesMenu(
-        Dictionary<string, string> favorites,
-        string favoriteName,
-        string currentKeyPath,
-        Action<string> setFavoriteName,
-        Action<ActiveDialog> setActiveDialog,
-        Action<int> setSelectedFavoriteIndex,
-        Action<string> navigateToKey)
-    {
-        var items = new List<MenuFlyoutItemBase>
-        {
-            MenuItem(Strings.AddToFavorites, () =>
-            {
-                // Default favorite name to last segment of current key path
-                var name = string.IsNullOrEmpty(currentKeyPath) ? ""
-                    : currentKeyPath.Contains('\\')
-                        ? currentKeyPath[(currentKeyPath.LastIndexOf('\\') + 1)..]
-                        : currentKeyPath;
-                setFavoriteName(name);
-                setActiveDialog(ActiveDialog.AddFavorite);
-            }),
-            MenuItem(Strings.RemoveFromFavorites, () =>
-            {
-                setSelectedFavoriteIndex(-1);
-                setActiveDialog(ActiveDialog.RemoveFavorite);
-            }),
-        };
-
-        if (favorites.Count > 0)
-        {
-            items.Add(MenuSeparator());
-            foreach (var (name, path) in favorites)
-            {
-                items.Add(MenuItem(name, () => navigateToKey(path)));
-            }
-        }
-
-        return items.ToArray();
-    }
-
 }
