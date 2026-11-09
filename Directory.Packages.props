@@ -47,7 +47,7 @@
          YamlStaticContext for the doc pipeline's YAML DTOs (tools/Reactor.DocPipeline).
          Analyzer-only (PrivateAssets=all). Version tracks YamlDotNet's major (18.x). -->
     <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.1.0" />
-    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.28" />
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.29" />
     <!-- MXC sandbox SDK (in-process mxc_ffi native runtime for win-x64/win-arm64) used by
          samples/apps/widget-creator. Stable releases only. -->
     <PackageVersion Include="Microsoft.Mxc.Sdk" Version="1.0.1" />
@@ -58,7 +58,7 @@
     <!-- Doc pipeline screenshot capture (tools/Reactor.DocPipeline): the library behind
          `winapp ui`, used in-process. Its Windows Graphics Capture build needs a Windows 10
          19041+ TFM. The DI container is how the library hands out IWindowCapture. -->
-    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation" Version="0.7.1" />
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation" Version="0.8.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
   </ItemGroup>
 
@@ -74,7 +74,7 @@
 
   <ItemGroup>
     <!-- Test infrastructure -->
-    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="xunit.v3" Version="4.0.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.5.2" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.5.2" />
