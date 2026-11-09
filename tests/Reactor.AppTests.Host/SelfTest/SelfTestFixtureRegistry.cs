@@ -2232,6 +2232,27 @@ internal static class SelfTestFixtureRegistry
 
         // Guards TierRequirements below against outliving its fixtures (issue #1154).
         TierDeclarationConsistencyFixture.FixtureName,
+
+        // FitParent container-sized rebuild (issue #174, FitParentFixtures).
+        "FitParent_FirstCommitAtHostSize",
+        "FitParent_GrowRebuildsAtFinalSize",
+        "FitParent_ShrinkRebuildsAtFinalSize",
+        "FitParent_AsymmetricResize",
+        "FitParent_TransientTransformThenCleared",
+        "FitParent_JitterDoesNotRebuild",
+        "FitParent_UnmountMidDebounceSafe",
+        "FitParent_RecycledHostHasNoTransform",
+        "FitParent_CallerModifiersOnWrapper",
+        "FitParent_UnsizedParentStaysEmpty",
+        "FitParent_KeyedRemountSameSizeCommits",
+        "FitParent_HotReloadResetCommits",
+        "FitParent_FillingContentGrows",
+        "FitParent_ShrinkInFlexParent",
+        "FitParent_ShrinkInGridStar",
+        "FitParent_PieChart",
+        "FitParent_LineChart",
+        "FitParent_TreeChart",
+        "FitParent_ForceGraphRecenters",
     ];
 
     // ════════════════════════════════════════════════════════════════════
@@ -4522,6 +4543,27 @@ internal static class SelfTestFixtureRegistry
 
         SkipVerdictPositiveControl.FixtureName => new SkipVerdictPositiveControl(harness),
         TierDeclarationConsistencyFixture.FixtureName => new TierDeclarationConsistencyFixture(harness),
+
+        // FitParent container-sized rebuild (issue #174).
+        "FitParent_FirstCommitAtHostSize" => new FitParentFixtures.FirstCommitAtHostSize(harness),
+        "FitParent_GrowRebuildsAtFinalSize" => new FitParentFixtures.GrowRebuildsAtFinalSize(harness),
+        "FitParent_ShrinkRebuildsAtFinalSize" => new FitParentFixtures.ShrinkRebuildsAtFinalSize(harness),
+        "FitParent_AsymmetricResize" => new FitParentFixtures.AsymmetricResize(harness),
+        "FitParent_TransientTransformThenCleared" => new FitParentFixtures.TransientTransformThenCleared(harness),
+        "FitParent_JitterDoesNotRebuild" => new FitParentFixtures.JitterDoesNotRebuild(harness),
+        "FitParent_UnmountMidDebounceSafe" => new FitParentFixtures.UnmountMidDebounceSafe(harness),
+        "FitParent_RecycledHostHasNoTransform" => new FitParentFixtures.RecycledHostHasNoTransform(harness),
+        "FitParent_CallerModifiersOnWrapper" => new FitParentFixtures.CallerModifiersOnWrapper(harness),
+        "FitParent_UnsizedParentStaysEmpty" => new FitParentFixtures.UnsizedParentStaysEmpty(harness),
+        "FitParent_KeyedRemountSameSizeCommits" => new FitParentFixtures.KeyedRemountSameSizeCommits(harness),
+        "FitParent_HotReloadResetCommits" => new FitParentFixtures.HotReloadResetCommits(harness),
+        "FitParent_FillingContentGrows" => new FitParentFixtures.FillingContentGrows(harness),
+        "FitParent_ShrinkInFlexParent" => new FitParentFixtures.ShrinkInFlexParent(harness),
+        "FitParent_ShrinkInGridStar" => new FitParentFixtures.ShrinkInGridStar(harness),
+        "FitParent_PieChart" => new FitParentFixtures.PieChartFits(harness),
+        "FitParent_LineChart" => new FitParentFixtures.LineChartFits(harness),
+        "FitParent_TreeChart" => new FitParentFixtures.TreeChartFits(harness),
+        "FitParent_ForceGraphRecenters" => new FitParentFixtures.ForceGraphRecenters(harness),
 
         _ => null,
     };
