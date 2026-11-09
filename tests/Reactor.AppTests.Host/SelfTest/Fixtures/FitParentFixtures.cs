@@ -497,7 +497,10 @@ internal static class FitParentFixtures
 
     /// <summary>
     /// D-11 / §0.5 — an unsized axis keeps FitParent an empty placeholder (0 renders over 1 s);
-    /// giving that axis a size (.Height(240)) commits exactly once at h = 240.
+    /// giving that axis a size (.Height(240)) commits exactly once at h = 240. A FitParent that is
+    /// the direct content of a <c>ScrollViewer</c> or <c>ScrollView</c> is not unsized: both
+    /// arrange it at the viewport, so it commits exactly once there. Wrapped in a <c>VStack</c>
+    /// inside either scroller, it measures 0 tall and stays empty.
     /// </summary>
     internal sealed class UnsizedParentStaysEmpty(Harness h) : SelfTestFixtureBase(h)
     {
@@ -507,7 +510,10 @@ internal static class FitParentFixtures
         {
             Slice[] data = [new("a", 3), new("b", 5), new("c", 2)];
 
-            await Unsized("ScrollViewer", p => ScrollViewer(FitParent(p.Render(), p.Options(Debounce60))));
+            await CommitsOnceAtViewport("ScrollViewer", p => ScrollViewer(FitParent(p.Render(), p.Options(Debounce60))), 400, 300);
+            await Unsized("ScrollViewerVStack", p => ScrollViewer(VStack(TextBlock("t"), FitParent(p.Render(), p.Options(Debounce60)))));
+            await CommitsOnceAtViewport("ScrollView", p => ScrollView(FitParent(p.Render(), p.Options(Debounce60))), 400, 300);
+            await Unsized("ScrollViewVStack", p => ScrollView(VStack(TextBlock("t"), FitParent(p.Render(), p.Options(Debounce60)))));
             await Unsized("VStack", p => VStack(TextBlock("t"), FitParent(p.Render(), p.Options(Debounce60))));
             await Unsized("PieAlternateView", p => VStack(TextBlock("t"), FitParent(p.Render((w, hh) =>
                 PieChart(data, d => d.V, d => d.L).AlternateView(TextBlock("alt")).Width(w).Height(hh)),
@@ -539,10 +545,47 @@ internal static class FitParentFixtures
             {
                 try { await PumpFor(1000); }
                 catch (Exception ex) { thrown = ex; }
+                Console.WriteLine($"# FitParent_Unsized_{variant}: {Describe(rig.Box, p)}");
                 H.Check($"FitParent_Unsized_{variant}_PositiveControl_Mounted", p.Host is not null);
                 H.Check($"FitParent_Unsized_{variant}_NoRenders", p.Renders == 0, Describe(rig.Box, p));
                 H.Check($"FitParent_Unsized_{variant}_NoException", thrown is null, thrown?.ToString() ?? "");
                 H.Check($"FitParent_Unsized_{variant}_PlaceholderChildNull", p.Host is { Child: null });
+            }
+            finally { await TearDown(H, rig); }
+        }
+
+        /// <summary>
+        /// A scroller that arranges its direct content at the viewport size gives FitParent a
+        /// finite size: it commits once at the viewport and then stays put (no feedback loop).
+        /// </summary>
+        private async Task CommitsOnceAtViewport(string variant, Func<Probe, Element> build, double w, double h)
+        {
+            var p = new Probe();
+            var element = build(p);
+            Exception? thrown = null;
+            var rig = Mount(H, _ => element);
+            try
+            {
+                bool committed = false;
+                int rendersAtCommit = -1;
+                try
+                {
+                    committed = await CommitAt(rig, p, w, h);
+                    rendersAtCommit = p.Renders;
+                    await PumpFor(1000);
+                }
+                catch (Exception ex) { thrown = ex; }
+                Console.WriteLine($"# FitParent_Viewport_{variant}: {Describe(rig.Box, p)}");
+                H.Check($"FitParent_Viewport_{variant}_CommitsAtViewport", committed, Describe(rig.Box, p));
+                H.Check($"FitParent_Viewport_{variant}_ExactlyOneRender",
+                    p.Renders == 1 && p.Sizes[0] == (w, h), Describe(rig.Box, p));
+                H.Check($"FitParent_Viewport_{variant}_NoFurtherRendersAfterSettle",
+                    rendersAtCommit == 1 && p.Renders == rendersAtCommit, $"atCommit={rendersAtCommit} {Describe(rig.Box, p)}");
+                H.Check($"FitParent_Viewport_{variant}_CommittedStable",
+                    p.Boxes.Count == 1 && p.Box is { } b && b.Committed == (w, h) && !b.IsTimerRunning,
+                    $"boxes={p.Boxes.Count} committed={p.Box?.Committed}");
+                H.Check($"FitParent_Viewport_{variant}_StillAtViewport", ProbeIs(rig.Box, w, h), Describe(rig.Box, p));
+                H.Check($"FitParent_Viewport_{variant}_NoException", thrown is null, thrown?.ToString() ?? "");
             }
             finally { await TearDown(H, rig); }
         }
