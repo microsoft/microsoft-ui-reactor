@@ -310,6 +310,11 @@ internal static partial class MarkdownSelectionFixtures
                 document.FindText("disclosure body", false, false).GetChildren().Length == 0);
             H.Check("MdSelection_HeaderExpandedDedup", document.GetChildren().Length == 1);
             var insertion = peer.Range(2, 2);
+            bool unsupported = false;
+            try { _ = insertion.GetAttributeValue(40005); }
+            catch (NotSupportedException e) { unsupported = e.HResult == unchecked((int)0x80131515); }
+            H.Check("MdSelection_UnsupportedAttributeSignalsNativeSentinel", unsupported);
+            H.Check("MdSelection_ReadOnlyAttributeSupported", Equals(insertion.GetAttributeValue(40015), true));
             H.Check("MdSelection_UiaMoveKeepsInsertionPoint",
                 insertion.Move(Microsoft.UI.Xaml.Automation.Text.TextUnit.Character, 1) == 1 &&
                 insertion.GetText(-1) == "" &&

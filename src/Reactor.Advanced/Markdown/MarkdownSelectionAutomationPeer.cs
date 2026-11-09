@@ -40,17 +40,12 @@ internal sealed partial class MarkdownSelectionAutomationPeer(MarkdownSelectionH
     public ITextRangeProvider[] GetVisibleRanges()
     {
         host.Refresh();
-        var viewport = host.Viewport();
-        var result = new List<ITextRangeProvider>();
-        int start = -1;
-        for (int i = 0; i <= host.Document.Text.Length; i++)
-        {
-            var rect = MarkdownSelectionHost.Intersect(host.CharacterBounds(i), viewport);
-            bool visible = i < host.Document.Text.Length && rect.Width > 0 && rect.Height > 0;
-            if (visible && start < 0) start = i;
-            if (!visible && start >= 0) { result.Add(Range(start, i)); start = -1; }
-        }
-        return result.ToArray();
+        var entries = host.Document.Entries;
+        var spans = entries.Select((entry, index) => (entry.Start,
+            End: index + 1 < entries.Count ? entries[index + 1].Start : host.Document.Text.Length,
+            Bounds: host.Bounds((MarkdownSelectionMarker)entry.Identity)));
+        return MarkdownSelectionHost.VisibleRanges(spans, host.Viewport(), host.CharacterBounds)
+            .Select(span => (ITextRangeProvider)Range(span.Start, span.End)).ToArray();
     }
     public ITextRangeProvider RangeFromChild(IRawElementProviderSimple childElement)
     {
@@ -126,7 +121,9 @@ internal sealed partial class MarkdownSelectionRange(
         int found = backward ? content.LastIndexOf(text, comparison) : content.IndexOf(text, comparison);
         return found < 0 ? null! : peer.Range(_start + found, _start + found + text.Length);
     }
-    public object GetAttributeValue(int attributeId) => attributeId == 40015 ? true : null!;
+    // WinUI translates E_NOT_SUPPORTED (NotSupportedException) into UIA's reserved sentinel.
+    public object GetAttributeValue(int attributeId) => attributeId == 40015 ? true
+        : throw new NotSupportedException("The text attribute is not supported.");
 
     public void GetBoundingRectangles(out double[] rectangles)
     {
@@ -184,17 +181,9 @@ internal sealed partial class MarkdownSelectionRange(
     {
         Normalize();
         var boundaries = Boundaries(unit);
-        int current = Endpoint(endpoint), offset = current, moved = 0;
-        for (int i = 0; i < Math.Abs((long)count); i++)
-        {
-            int next = count < 0 ? boundaries.LastOrDefault(p => p < offset, 0)
-                : boundaries.FirstOrDefault(p => p > offset, host.Document.Text.Length);
-            if (next == offset) break;
-            offset = next;
-            moved += Math.Sign(count);
-        }
-        SetEndpoint(endpoint, offset);
-        return moved;
+        var result = MarkdownSelectionRangeMovement.MoveEndpoint(Endpoint(endpoint), boundaries, count);
+        SetEndpoint(endpoint, result.Offset);
+        return result.Moved;
     }
     private void SetEndpoint(TextPatternRangeEndpoint endpoint, int value)
     {
@@ -208,7 +197,7 @@ internal sealed partial class MarkdownSelectionRange(
         if (unit == TextUnit.Character)
             return global::System.Globalization.StringInfo.ParseCombiningCharacters(text).Append(text.Length).ToArray();
         if (unit is TextUnit.Paragraph or TextUnit.Format)
-            return host.Document.Entries.Select(e => e.Start).Append(text.Length).ToArray();
+            return host.Document.Entries.Select(e => e.Start).Append(text.Length).Distinct().ToArray();
         var boundaries = new List<int> { 0 };
         for (int i = 1; i < text.Length; i++)
             if (unit == TextUnit.Line ? text[i - 1] == '\n'

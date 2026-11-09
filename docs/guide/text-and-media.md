@@ -292,22 +292,29 @@ Use **one scope around the complete message**, even when the app renders it
 with several `Markdown(...)` calls:
 
 ```csharp
-var selection = new MarkdownTextSelectionOptions
+class MarkdownSelectionDemo : Component
 {
-    OnCopyResult = (text, succeeded) =>
+    public override Element Render()
     {
-        // Feedback only: Reactor has already attempted the one clipboard write.
-        // Show localized success feedback only when succeeded is true.
+        var (expanded, setExpanded) = UseState(false);
+        var (feedback, setFeedback) = UseState("");
+        var selection = new MarkdownTextSelectionOptions
+        {
+            OnCopyResult = (_, succeeded) => setFeedback(succeeded ? "Copied." : "Copy failed.")
+        };
+        var options = new MarkdownOptions { TextSelection = selection };
+        var message = VStack(
+            Markdown("# Answer\n\nFirst paragraph.", options),
+            MarkdownTextSelection.Surface("Details", TextBlock("Details")),
+            Expander("Show details", MarkdownTextSelection.Visibility(expanded,
+                Markdown("- First item\n- Second item", options)),
+                expanded, setExpanded),
+            Markdown("Final paragraph.", options));
+        return VStack(8,
+            MarkdownTextSelection.Scope(selection, message),
+            TextBlock(feedback)).Padding(24);
     }
-};
-var options = new MarkdownOptions { TextSelection = selection };
-var message = VStack(
-    Markdown("# Answer\n\nFirst paragraph.", options),
-    MarkdownTextSelection.Surface("Details", TextBlock("Details")),
-    MarkdownTextSelection.Visibility(expanded,
-        Markdown("- First item\n- Second item", options)),
-    Markdown("Final paragraph.", options));
-var selectableMessage = MarkdownTextSelection.Scope(selection, message);
+}
 ```
 
 Keep timeline rows, toolbars, and surrounding `ItemsView` chrome **outside**

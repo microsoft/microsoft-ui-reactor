@@ -7880,8 +7880,7 @@ ToString() → string
 
 ### static class MarkdownTextSelection
 Scope(MarkdownTextSelectionOptions options, Element content) → Element
-Surface(string text, Element content, string separatorAfter = "
-") → Element
+Surface(string text, Element content, string separatorAfter = "\n") → Element
 Visibility(bool isVisible, Element content) → Element
 
 ### record MarkdownTextSelectionOptions

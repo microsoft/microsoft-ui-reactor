@@ -536,7 +536,12 @@ public static class ApiIndexGenerator
         }
 
         if (v is bool b) return b ? "true" : "false";
-        if (v is string s) return "\"" + s + "\"";
+        if (v is string s) return "\"" + string.Concat(s.Select(c => c switch
+        {
+            '"' => "\\\"",
+            '\'' => "'",
+            _ => EscapeChar(c),
+        })) + "\"";
         // A char default has to carry its quotes and escapes, or the signature is not
         // pasteable C# (`placeholder = _` instead of `placeholder = '_'`).
         if (v is char c) return "'" + EscapeChar(c) + "'";

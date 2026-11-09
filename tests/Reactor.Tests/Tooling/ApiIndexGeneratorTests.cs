@@ -29,6 +29,7 @@ public sealed class ApiIndexGeneratorTests
         Assert.Contains("Scope(", selection);
         Assert.Contains("Surface(", selection);
         Assert.Contains("Visibility(", selection);
+        Assert.Contains("string separatorAfter = \"\\n\"", selection);
         Assert.Contains("OnCopyResult", TypeBlock(output, "MarkdownTextSelectionOptions"));
         Assert.Contains("TextSelection", TypeBlock(output, "MarkdownOptions"));
         Assert.DoesNotContain("TryCopyText", TypeBlock(output, "MarkdownTextSelectionOptions"));

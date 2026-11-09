@@ -229,23 +229,7 @@ All helpers below ship in Advanced under `Microsoft.UI.Reactor.Markdown`.
 Use **one scope around the complete message**, even when the app renders it
 with several `Markdown(...)` calls:
 
-```csharp
-var selection = new MarkdownTextSelectionOptions
-{
-    OnCopyResult = (text, succeeded) =>
-    {
-        // Feedback only: Reactor has already attempted the one clipboard write.
-        // Show localized success feedback only when succeeded is true.
-    }
-};
-var options = new MarkdownOptions { TextSelection = selection };
-var message = VStack(
-    Markdown("# Answer\n\nFirst paragraph.", options),
-    MarkdownTextSelection.Surface("Details", TextBlock("Details")),
-    MarkdownTextSelection.Visibility(expanded,
-        Markdown("- First item\n- Second item", options)),
-    Markdown("Final paragraph.", options));
-var selectableMessage = MarkdownTextSelection.Scope(selection, message);
+```csharp snippet="text-and-media/markdown-selection"
 ```
 
 Keep timeline rows, toolbars, and surrounding `ItemsView` chrome **outside**

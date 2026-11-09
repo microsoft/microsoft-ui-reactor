@@ -187,6 +187,15 @@ internal readonly record struct SelectionPart(object Identity, string Text, stri
 
 internal static class MarkdownSelectionRangeMovement
 {
+    internal static (int Offset, int Moved) MoveEndpoint(int offset, int[] boundaries, int count)
+    {
+        if (count == 0 || boundaries.Length < 2) return (offset, 0);
+        int index = Array.BinarySearch(boundaries, offset);
+        int origin = index >= 0 ? index : count > 0 ? ~index - 1 : ~index;
+        int target = (int)Math.Clamp((long)origin + count, 0, boundaries.Length - 1);
+        return target == origin ? (offset, 0) : (boundaries[target], target - origin);
+    }
+
     internal static (int Start, int End, int Moved) Move(int start, int end, int[] boundaries, int count)
     {
         if (count == 0 || boundaries.Length < 2 || boundaries[0] == boundaries[^1]) return (start, end, 0);

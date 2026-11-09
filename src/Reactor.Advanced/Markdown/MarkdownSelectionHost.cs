@@ -506,6 +506,33 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         return result;
     }
 
+    internal static List<(int Start, int End)> VisibleRanges(
+        IEnumerable<(int Start, int End, Rect Bounds)> spans, Rect viewport, Func<int, Rect> characterBounds)
+    {
+        var result = new List<(int Start, int End)>();
+        int start = -1, end = 0;
+        foreach (var span in spans)
+        {
+            if (span.Start == span.End) continue;
+            var bounds = Intersect(span.Bounds, viewport);
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+            {
+                if (start >= 0) { result.Add((start, end)); start = -1; }
+                continue;
+            }
+            for (int offset = span.Start; offset < span.End; offset++)
+            {
+                var rect = Intersect(characterBounds(offset), viewport);
+                bool visible = rect.Width > 0 && rect.Height > 0;
+                if (visible && start < 0) start = offset;
+                if (!visible && start >= 0) { result.Add((start, offset)); start = -1; }
+                end = offset + 1;
+            }
+        }
+        if (start >= 0) result.Add((start, end));
+        return result;
+    }
+
     internal Rect GlyphBounds(int offset, int next)
     {
         var start = CharacterBounds(offset);

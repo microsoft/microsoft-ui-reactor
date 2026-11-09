@@ -400,6 +400,37 @@ public class MarkdownTextSelectionTests
         Assert.Equal((0, 0, 0), MarkdownSelectionRangeMovement.Move(0, 0, [0, 0], 1));
     }
 
+    [Theory]
+    [InlineData(1, 1, 2, 1)]
+    [InlineData(1, -1, 0, -1)]
+    [InlineData(6, 1, 6, 0)]
+    [InlineData(0, -1, 0, 0)]
+    [InlineData(1, 0, 1, 0)]
+    [InlineData(1, int.MaxValue, 6, 3)]
+    [InlineData(5, int.MinValue, 0, -3)]
+    public void UiaEndpointMove_ClampsLargeCountsAndInteriorOffsets(
+        int offset, int count, int expectedOffset, int expectedMoved)
+    {
+        Assert.Equal((expectedOffset, expectedMoved),
+            MarkdownSelectionRangeMovement.MoveEndpoint(offset, [0, 2, 4, 6], count));
+    }
+
+    [Fact]
+    public void VisibleRanges_QueriesOnlyIntersectingSurfacesAndKeepsDisjointRanges()
+    {
+        var queried = new List<int>();
+        var viewport = new global::Windows.Foundation.Rect(0, 0, 100, 100);
+        var outside = new global::Windows.Foundation.Rect(0, 200, 100, 20);
+        var spans = new[] { (0, 10000, outside), (10000, 10004, viewport), (10004, 20000, outside) };
+        var ranges = MarkdownSelectionHost.VisibleRanges(spans, viewport, offset =>
+        {
+            queried.Add(offset);
+            return offset == 10002 ? outside : viewport;
+        });
+        Assert.Equal(new[] { 10000, 10001, 10002, 10003 }, queried);
+        Assert.Equal(new[] { (10000, 10002), (10003, 10004) }, ranges);
+    }
+
     [Fact]
     public void Document_EntryLookup_UsesPrecedingSurfaceForSeparatorsAndLastEndpoint()
     {
