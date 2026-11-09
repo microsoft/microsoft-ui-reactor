@@ -15,6 +15,7 @@ internal static partial class MarkdownSelectionFixtures
     private sealed class SelectionWarningListener : global::System.Diagnostics.Tracing.EventListener
     {
         internal bool SawMissingScope;
+        internal bool SawPositiveControl;
         protected override void OnEventSourceCreated(global::System.Diagnostics.Tracing.EventSource source)
         {
             if (source.Name == "Microsoft-UI-Reactor")
@@ -22,9 +23,11 @@ internal static partial class MarkdownSelectionFixtures
         }
         protected override void OnEventWritten(global::System.Diagnostics.Tracing.EventWrittenEventArgs args)
         {
-            if (args.EventName == "Warning" && args.Payload is { Count: >= 3 }
-                && Equals(args.Payload[0], "Markdown") && Equals(args.Payload[1], "TextSelection"))
+            if (args.EventName != "Warning" || args.Payload is not { Count: >= 3 }) return;
+            if (Equals(args.Payload[0], "Markdown") && Equals(args.Payload[1], "TextSelection"))
                 SawMissingScope = true;
+            if (Equals(args.Payload[0], "Markdown") && Equals(args.Payload[1], "WarningPositiveControl"))
+                SawPositiveControl = true;
         }
     }
 
@@ -126,10 +129,19 @@ internal static partial class MarkdownSelectionFixtures
                 !selection.Document.Text.Contains("body", StringComparison.Ordinal)
                 && !selection.Document.Text.Contains("nested", StringComparison.Ordinal));
             using var warning = new SelectionWarningListener();
+            Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.Warning(
+                Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Markdown,
+                "WarningPositiveControl", "Markdown warning delivery positive control.");
             host.Mount(_ => Md("missing scope", markdownOptions));
-            await Harness.Render();
-            H.Check("MdSelection_MissingScopeWarns",
-                warning.SawMissingScope && H.FindControl<MarkdownSelectionMarker>(_ => true) is { HasSelectionScope: false });
+            bool missingScopeLoaded = await Harness.WaitFor(() =>
+                H.FindControl<MarkdownSelectionMarker>(marker => marker.IsLoaded) is { HasSelectionScope: false });
+            H.Check("MdSelection_MissingScopeProductPath", missingScopeLoaded);
+            if (!warning.SawPositiveControl && !global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+                H.Skip("MdSelection_MissingScopeWarns",
+                    "NativeAOT EventSource delivery is disabled: a direct Warning positive control emitted no event. Missing-scope detection was checked; warning delivery runs in JIT lanes.");
+            else
+                H.Check("MdSelection_MissingScopeWarns", warning.SawPositiveControl && warning.SawMissingScope,
+                    $"positiveControl={warning.SawPositiveControl}; missingScope={warning.SawMissingScope}");
         }
     }
 

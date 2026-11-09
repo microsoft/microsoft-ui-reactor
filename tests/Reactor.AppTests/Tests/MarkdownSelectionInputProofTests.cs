@@ -177,10 +177,11 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             var shiftGlyph = Glyph(innerText.DocumentRange, 4);
             Key(0x10, false);
             Click(shiftGlyph[0], shiftGlyph[1] + shiftGlyph[3] / 2);
-            Key(0x10, true);
             Wait(() => innerText.GetSelection().Single().GetText(-1).Length > 0, "Shift+click extends selection");
+            Key(0x10, true);
             Assert.AreEqual(0, innerText.GetSelection().Single().CompareEndpoints(
                 TextPatternRangeEndpoint.Start, shiftAnchor, TextPatternRangeEndpoint.Start), "Shift+click keeps anchor");
+            Console.WriteLine($"Shift+click selected={innerText.GetSelection().Single().GetText(-1)}");
             ((InvokePattern)Find("SelectionStream").GetCurrentPattern(InvokePattern.Pattern)).Invoke();
             Wait(() => innerText.DocumentRange.GetText(-1) == "inner text streamed" &&
                 receivedText.Contains("inner text streamed"), "streaming exact text-change event");

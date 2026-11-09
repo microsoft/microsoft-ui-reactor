@@ -328,7 +328,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
             return;
         }
         Focus(FocusState.Pointer);
-        Document.Select(IsDown(VirtualKey.Shift) ? Document.Anchor : offset, offset);
+        Document.Select(PointerAnchor(Document.Anchor, offset, e.KeyModifiers), offset);
         if (CapturePointer(e.Pointer))
         {
             _pointer = e.Pointer;
@@ -380,6 +380,9 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
 
     internal static bool IsMouseSelection(Microsoft.UI.Input.PointerDeviceType device) =>
         device == Microsoft.UI.Input.PointerDeviceType.Mouse;
+
+    internal static int PointerAnchor(int anchor, int offset, VirtualKeyModifiers modifiers) =>
+        (modifiers & VirtualKeyModifiers.Shift) != 0 ? anchor : offset;
     private void StopDrag()
     {
         _dragTimer.Stop();

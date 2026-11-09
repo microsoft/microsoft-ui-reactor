@@ -10,6 +10,14 @@ namespace Microsoft.UI.Reactor.Tests;
 public class MarkdownTextSelectionTests
 {
     [Theory]
+    [InlineData(global::Windows.System.VirtualKeyModifiers.None, 7)]
+    [InlineData(global::Windows.System.VirtualKeyModifiers.Shift, 2)]
+    [InlineData(global::Windows.System.VirtualKeyModifiers.Shift | global::Windows.System.VirtualKeyModifiers.Control, 2)]
+    [InlineData(global::Windows.System.VirtualKeyModifiers.Control, 7)]
+    public void PointerAnchor_UsesTheEventModifierSnapshot(global::Windows.System.VirtualKeyModifiers modifiers, int expected) =>
+        Assert.Equal(expected, MarkdownSelectionHost.PointerAnchor(2, 7, modifiers));
+
+    [Theory]
     [InlineData(Microsoft.UI.Input.PointerDeviceType.Mouse, true)]
     [InlineData(Microsoft.UI.Input.PointerDeviceType.Touch, false)]
     [InlineData(Microsoft.UI.Input.PointerDeviceType.Pen, false)]
