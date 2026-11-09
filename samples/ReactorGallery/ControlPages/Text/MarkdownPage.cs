@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Markdown;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Advanced.Factories;
 using static WinUIGalleryReactor.SamplePageHost;
@@ -8,6 +9,8 @@ namespace WinUIGalleryReactor.ControlPages.Text;
 
 class MarkdownPage : Component
 {
+    private readonly MarkdownTextSelectionOptions _selection = new();
+
     public override Element Render()
     {
         var introMarkdown = @"# Markdown sample
@@ -44,6 +47,22 @@ Border(Markdown(markdown))
     .Padding(16)
     .Background(Theme.SubtleFill)
     .CornerRadius(8)"),
+
+            SampleCard("Message-wide selection (opt-in)",
+                Border(MarkdownTextSelection.Scope(_selection, VStack(
+                    Markdown("# Select across blocks\n\nDrag from this paragraph into the list and code below.",
+                        new MarkdownOptions { TextSelection = _selection }),
+                    Markdown("- First list item\n- Second list item\n\n```csharp\nvar selected = \"whole message\";\n```",
+                        new MarkdownOptions { TextSelection = _selection }),
+                    MarkdownTextSelection.Surface("Custom visible text", TextBlock("Custom visible text"))
+                ))).Padding(16).Background(Theme.SubtleFill).CornerRadius(8),
+                sourceCode: @"var selection = new MarkdownTextSelectionOptions();
+var options = new MarkdownOptions { TextSelection = selection };
+MarkdownTextSelection.Scope(selection, VStack(
+    Markdown(""# Answer\n\nFirst paragraph."", options),
+    Markdown(""- First item\n- Second item\n\n```cs\nvar x = 1;\n```"", options),
+    MarkdownTextSelection.Surface(""Custom visible text"", TextBlock(""Custom visible text""))
+))"),
 
             SampleCard("Links and lists",
                 Border(Markdown(linkMarkdown))
