@@ -101,10 +101,13 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Click(linkGlyph[0] + linkGlyph[2] / 2, linkGlyph[1] + linkGlyph[3] / 2);
             Wait(() => Find("SelectionClicks").Current.Name == "Clicks 1", "native hyperlink click");
             Console.WriteLine($"Hyperlink click: {Find("SelectionClicks").Current.Name}");
+            Console.WriteLine($"After click routing: {outer.Current.HelpText}");
             Point(linkGlyph[0], linkGlyph[1] + linkGlyph[3] / 2);
             Mouse(2); mouseHeld = true;
             Point(linkGlyph[0] + 35, linkGlyph[1] + linkGlyph[3] / 2);
+            Console.WriteLine($"Before drag release: selected={outerText.GetSelection().Single().GetText(-1)}; routing={outer.Current.HelpText}");
             Mouse(4); mouseHeld = false;
+            Console.WriteLine($"After drag release: clicks={Find("SelectionClicks").Current.Name}; routing={outer.Current.HelpText}");
             Wait(() => outerText.GetSelection().Single().GetText(-1).Length > 0, "link drag selects");
             Assert.AreEqual("Clicks 1", Find("SelectionClicks").Current.Name, "drag must not activate link");
             var outerSelection = outerText.GetSelection().Single().GetText(-1);
