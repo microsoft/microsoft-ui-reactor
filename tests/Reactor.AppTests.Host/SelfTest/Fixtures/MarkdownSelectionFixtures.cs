@@ -638,18 +638,25 @@ internal static partial class MarkdownSelectionFixtures
                 ItemContainer(MarkdownTextSelection.Scope(options,
                     Md(value, new MarkdownOptions { TextSelection = options })).WithKey(value))).Height(150);
             host.Mount(_ => ReusedRow("message A"));
-            await Harness.Render();
+            bool firstRealized = await Harness.WaitFor(() => H.FindControl<MarkdownSelectionHost>(
+                scope => scope.IsLoaded && scope.Document.Text == "message A") is not null);
             var reusedItems = H.FindControl<ItemsView>(_ => true)!;
-            var previousMessage = H.FindControl<MarkdownSelectionHost>(_ => true)!;
+            var previousMessage = H.FindControl<MarkdownSelectionHost>(scope => scope.Document.Text == "message A")!;
+            H.Check("MdSelection_ReusedRowInitialRealization", firstRealized);
             previousMessage.Select(0, previousMessage.Document.Text.Length);
+            H.Check("MdSelection_ReusedRowInitialSelection", previousMessage.Document.SelectedText == "message A");
             host.Mount(_ => ReusedRow("message B"));
-            await Harness.Render();
-            var currentMessage = H.FindControl<MarkdownSelectionHost>(_ => true)!;
+            bool nextRealized = await Harness.WaitFor(() => H.FindControl<MarkdownSelectionHost>(
+                scope => scope.IsLoaded && scope.Document.Text == "message B") is not null);
+            var currentMessage = H.FindControl<MarkdownSelectionHost>(scope => scope.Document.Text == "message B");
             H.Check("MdSelection_ReusedItemsViewRowResetsKeyedScope",
-                ReferenceEquals(reusedItems, H.FindControl<ItemsView>(_ => true))
+                nextRealized && currentMessage is not null && ReferenceEquals(reusedItems, H.FindControl<ItemsView>(_ => true))
                 && !ReferenceEquals(previousMessage, currentMessage)
                 && currentMessage.Document.Text == "message B" && currentMessage.Document.SelectedText == ""
-                && previousMessage.Document.Text == "");
+                && previousMessage.Document.Text == "",
+                $"realized={nextRealized}; sameItems={ReferenceEquals(reusedItems, H.FindControl<ItemsView>(_ => true))}; " +
+                $"sameScope={ReferenceEquals(previousMessage, currentMessage)}; oldText={previousMessage.Document.Text}; " +
+                $"newText={currentMessage?.Document.Text}; newSelection={currentMessage?.Document.SelectedText}");
         }
     }
 }

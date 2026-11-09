@@ -13,6 +13,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     private const int SampleIntervalMs = 150;
     private const int PollIntervalMs = 100;
     private const int WaitSeconds = 8;
+    private const uint MouseMove = 0x0001, MouseMoveNoCoalesce = 0x2000, MouseVirtualDesk = 0x4000, MouseAbsolute = 0x8000;
     private readonly HashSet<ushort> _heldKeys = [];
     [ClassInitialize]
     public static void Start(TestContext context) => TestSession.AssemblyInit(context);
@@ -86,7 +87,23 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             void Point(double x, double y)
             {
                 GuardForeground();
-                Assert.IsTrue(SetCursorPos((int)Math.Round(x), (int)Math.Round(y)));
+                int left = GetSystemMetrics(76), top = GetSystemMetrics(77);
+                int width = GetSystemMetrics(78), height = GetSystemMetrics(79);
+                Assert.IsTrue(width > 0 && height > 0, "Virtual desktop has an input extent");
+                Assert.IsTrue(x >= left && x < left + width && y >= top && y < top + height,
+                    "Pointer target is inside the virtual desktop");
+                Send(new Input
+                {
+                    Union = new InputUnion
+                    {
+                        Mouse = new MouseInput
+                        {
+                            X = (int)Math.Clamp(Math.Floor((Math.Round(x) - left + .5) * 65536 / width), 0, 65535),
+                            Y = (int)Math.Clamp(Math.Floor((Math.Round(y) - top + .5) * 65536 / height), 0, 65535),
+                            Flags = MouseMove | MouseMoveNoCoalesce | MouseVirtualDesk | MouseAbsolute
+                        }
+                    }
+                });
                 Thread.Sleep(PointerSettleMs);
             }
             void Mouse(uint flags)
@@ -303,8 +320,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     [LibraryImport("user32.dll")] private static partial uint GetClipboardSequenceNumber();
     [LibraryImport("user32.dll")] private static partial uint GetWindowThreadProcessId(nint window, out uint pid);
     [LibraryImport("user32.dll", SetLastError = true)] private static partial nint SetThreadDpiAwarenessContext(nint context);
-    [LibraryImport("user32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool SetCursorPos(int x, int y);
+    [LibraryImport("user32.dll")] private static partial int GetSystemMetrics(int index);
     [LibraryImport("user32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetCursorPos(out ScreenPoint point);
     [LibraryImport("user32.dll", SetLastError = true)]
