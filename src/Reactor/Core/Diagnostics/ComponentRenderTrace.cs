@@ -265,12 +265,12 @@ internal static class ComponentRenderControls
     /// <returns>Whether the event is enabled.</returns>
     internal static bool TraceRootRendered(
         ref long rootId, ref bool rootRendered, string componentName,
-        bool hotReloadRender, bool forcePending, double elapsedMilliseconds)
+        bool hotReloadRender, bool forcePending, double elapsedMilliseconds, RenderContext? context = null)
     {
         bool firstRender = !rootRendered;
         rootRendered = true;
         if (!ComponentRenderTrace.IsEnabled) return false;
-        if (rootId == 0) rootId = ComponentRenderTrace.NextId();
+        if (rootId == 0) rootId = context?.EnsureDiagnosticId() ?? ComponentRenderTrace.NextId();
         ReactorEventSource.Log.ComponentRendered(
             componentName,
             rootId,
@@ -318,13 +318,31 @@ internal sealed class RootRenderDiagnostics
     public void MarkHotReloadRetry() => _hotReloadRetry = true;
 
     /// <summary>See <see cref="ComponentRenderControls.TraceRootRendered"/>. Returns whether the event is enabled.</summary>
-    public bool TraceRendered(string componentName, bool hotReloadRender, bool forcePending, double elapsedMilliseconds)
+    public bool TraceRendered(string componentName, bool hotReloadRender, bool forcePending, double elapsedMilliseconds,
+        RenderContext? context = null)
     {
         bool hotReload = hotReloadRender || _hotReloadRetry;
         _hotReloadRetry = false;
         return ComponentRenderControls.TraceRootRendered(
-            ref _id, ref _rendered, componentName, hotReload, forcePending, elapsedMilliseconds);
+            ref _id, ref _rendered, componentName, hotReload, forcePending, elapsedMilliseconds, context);
     }
+
+    /// <summary>
+    /// The root's componentId for the perf spans, assigned on first use. Taken from the root's
+    /// <paramref name="context"/> when it has one, so it matches the id its state changes report.
+    /// </summary>
+    public long EnsureId(RenderContext? context)
+    {
+        if (_id == 0) _id = context?.EnsureDiagnosticId() ?? ComponentRenderTrace.NextId();
+        return _id;
+    }
+
+    /// <summary>
+    /// The reason the next <see cref="TraceRendered"/> will report, without consuming it — for
+    /// the perf span that starts before the root renders.
+    /// </summary>
+    public string PeekReason(bool hotReloadRender, bool forcePending)
+        => ComponentRenderTrace.ClassifyRoot(!_rendered, hotReloadRender || _hotReloadRetry, forcePending);
 
     /// <summary>
     /// Keeps the root's id pointing at the control now standing in for its content (the

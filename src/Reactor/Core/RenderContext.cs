@@ -26,6 +26,28 @@ public sealed class RenderContext
     // retained delegate can say so instead of reporting a context that never rendered.
     private bool _ownerReleased;
 
+    // This component's diagnostic id: the componentId of ReactorEventSource.ComponentRendered
+    // and of the Microsoft-UI-Reactor-Perf spans and StateChange. 0 until first asked for; then
+    // fixed for the context's lifetime (a hot-reload instance swap moves the context, so it keeps
+    // the id). Assigned lazily so a process nobody traces never takes one.
+    private long _diagnosticId;
+
+    /// <summary>The diagnostic id, or 0 when none was assigned yet.</summary>
+    internal long DiagnosticId => Volatile.Read(ref _diagnosticId);
+
+    /// <summary>
+    /// The diagnostic id, assigning one on first use. Thread-safe: a state setter can ask from a
+    /// worker thread while the UI thread renders.
+    /// </summary>
+    internal long EnsureDiagnosticId()
+    {
+        long id = Volatile.Read(ref _diagnosticId);
+        if (id != 0) return id;
+        long fresh = ComponentRenderTrace.NextId();
+        long prior = Interlocked.CompareExchange(ref _diagnosticId, fresh, 0);
+        return prior == 0 ? fresh : prior;
+    }
+
     /// <summary>
     /// The <see cref="Microsoft.UI.Reactor.ReactorWindow"/> whose host renders this context, as
     /// recorded by that host's reconciler at the last <c>BeginRender</c>; <c>null</c> when the
@@ -210,6 +232,8 @@ public sealed class RenderContext
                         global::System.Diagnostics.Tracing.EventLevel.Verbose,
                         Diagnostics.ReactorEventSource.Keywords.State))
                     Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+                if (Diagnostics.ReactorPerfTrace.StateEnabled)
+                    Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseState", changed);
                 if (changed) _requestRerender?.Invoke();
             }
             else
@@ -221,6 +245,8 @@ public sealed class RenderContext
                         global::System.Diagnostics.Tracing.EventLevel.Verbose,
                         Diagnostics.ReactorEventSource.Keywords.State))
                     Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+                if (Diagnostics.ReactorPerfTrace.StateEnabled)
+                    Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseState", changed);
                 if (changed) _requestRerender?.Invoke();
             }
         }
@@ -289,6 +315,8 @@ public sealed class RenderContext
                         global::System.Diagnostics.Tracing.EventLevel.Verbose,
                         Diagnostics.ReactorEventSource.Keywords.State))
                     Diagnostics.ReactorEventSource.Log.StateChange("UseReducer", typeof(T).Name, changed);
+                if (Diagnostics.ReactorPerfTrace.StateEnabled)
+                    Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseReducer", changed);
                 if (changed) _requestRerender?.Invoke();
             }
             else
@@ -302,6 +330,8 @@ public sealed class RenderContext
                         global::System.Diagnostics.Tracing.EventLevel.Verbose,
                         Diagnostics.ReactorEventSource.Keywords.State))
                     Diagnostics.ReactorEventSource.Log.StateChange("UseReducer", typeof(T).Name, changed);
+                if (Diagnostics.ReactorPerfTrace.StateEnabled)
+                    Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseReducer", changed);
                 if (changed) _requestRerender?.Invoke();
             }
         }
