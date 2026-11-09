@@ -238,6 +238,26 @@ public sealed class ForceGraphElement : IChartAccessibilityData
     /// WinUI elements, and a <c>SyncPositions</c> method. Use this to wire up
     /// drag behaviour, animation timers, or anything else from the call site.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The callback runs on <b>every</b> render of the graph, not once. Under
+    /// <c>.FitParent()</c> it can therefore fire once per resize commit, so it must be
+    /// idempotent (for example, capture the handle; don't stack timers or event handlers).
+    /// </para>
+    /// <para>
+    /// The <see cref="ForceNode"/> list passed to <c>ForceGraph(nodes, links)</c> is
+    /// caller-owned and is mutated in place by the simulation and by the resize
+    /// re-centre. Fixed nodes (<see cref="ForceNode.Fx"/>/<see cref="ForceNode.Fy"/> set)
+    /// keep their absolute positions on the fixed axis.
+    /// </para>
+    /// <para>
+    /// The resize re-centre (free nodes shifted by half the size change, the same
+    /// <see cref="ForceGraphHandle.Simulation"/> instance kept) applies only to a stable
+    /// builder instance — hoisted to a field, held in <c>UseMemo</c>, or inside a
+    /// memo-skipped component. An inline builder is re-created every render and simply
+    /// re-seeds the simulation centred at the new size.
+    /// </para>
+    /// </remarks>
     public ForceGraphElement OnReady(Action<ForceGraphHandle> callback) { _onReady = callback; return this; }
 
     public Element ToElement()
@@ -254,6 +274,23 @@ public sealed class ForceGraphElement : IChartAccessibilityData
     }
 
     private ForceSimulation? _sim;
+    private double _seededWidth;
+    private double _seededHeight;
+
+    /// <summary>
+    /// Shifts free nodes by (<paramref name="dx"/>, <paramref name="dy"/>), per axis:
+    /// X moves only when <see cref="ForceNode.Fx"/> is null, Y only when
+    /// <see cref="ForceNode.Fy"/> is null. Pure; no WinUI types.
+    /// </summary>
+    internal static void RecenterNodes(IReadOnlyList<ForceNode> nodes, double dx, double dy)
+    {
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            var node = nodes[i];
+            if (node.Fx is null) node.X += dx;
+            if (node.Fy is null) node.Y += dy;
+        }
+    }
 
     private FrameworkElement BuildCanvas()
     {
@@ -293,6 +330,15 @@ public sealed class ForceGraphElement : IChartAccessibilityData
                 .CollisionRadius(12)
                 .InitializePositions()
                 .Run(_iterations);
+            _seededWidth = _width;
+            _seededHeight = _height;
+        }
+        else if (_width != _seededWidth || _height != _seededHeight)
+        {
+            RecenterNodes(_sim.Nodes, (_width - _seededWidth) / 2, (_height - _seededHeight) / 2);
+            _sim.Center(_width / 2, _height / 2);
+            _seededWidth = _width;
+            _seededHeight = _height;
         }
 
         var linkBrush = ChartElement<object>.ColorToBrush(_linkColor);
