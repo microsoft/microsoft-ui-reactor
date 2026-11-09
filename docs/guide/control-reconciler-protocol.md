@@ -651,9 +651,12 @@ on the expected element type.
 The built-in `Flyout`, `MenuFlyout`, and `CommandBarFlyout` decorators share
 their target's native control. They keep their current element separately in
 `ReactorState.DecoratorElement`, leaving the target's `Element` available to
-its own event trampolines. Decorator lifecycle callbacks and engine teardown
-resolve the mounted decorator; pool return clears both identities. Other
-decorators retain their existing tag behavior.
+its own event trampolines. For these decorators,
+`Reconciler.GetElementTag(control)` reads the target's tag.
+Decorator lifecycle callbacks resolve the current decorator separately.
+Unmount clears refs and animation state for both identities and runs the
+decorator's teardown before the target's own handler. Pool return clears both
+identities. Other decorators retain their existing tag behavior.
 
 ## Descriptors — declarative handlers
 

@@ -127,6 +127,57 @@ internal static class ElementFactoryRecyclingFixtures
         }
     }
 
+    internal class Factory_MenuFlyoutRecycle_UsesCurrentRowCallbacks(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var items = new[] { new Item("a", "A"), new Item("b", "B") };
+            var calls = new List<string>();
+            MenuFlyoutElement? currentDecorator = null;
+            var reconciler = new Reconciler();
+            IElementFactory factory = new ElementFactory<Item>(items, (item, _) =>
+                currentDecorator = MenuFlyout(
+                    // Same label: only the captured row changes, so the button takes the shallow-skip path.
+                    Button("Select customer", () => calls.Add(item.Id)),
+                    MenuItem("Details")), reconciler, requestRerender: static () => { }, pool: null);
+            var first = factory.GetElement(MakeGetArgs(0));
+            var current = first;
+            try
+            {
+                H.SetContent(first);
+                await Harness.Render();
+                H.Check("EFR_FlyoutRow_InitialTarget", currentDecorator is not null
+                    && ReferenceEquals(Reconciler.GetElementTag((FrameworkElement)first), currentDecorator.Target));
+                H.Check("EFR_FlyoutRow_InitialDecorator", ReferenceEquals(Reconciler.GetMountedElement(first), currentDecorator));
+                H.ClickButton("Select customer");
+                await Harness.Render();
+                H.Check("EFR_FlyoutRow_InitialClosure", calls.SequenceEqual(new[] { "a" }), $"calls: {string.Join(", ", calls)}");
+                (first as Button)?.Flyout?.Hide();
+                await Harness.Render();
+
+                factory.RecycleElement(MakeRecycleArgs(first));
+                current = factory.GetElement(MakeGetArgs(1));
+                H.Check("EFR_FlyoutRow_SameControlReused", ReferenceEquals(first, current));
+                H.Check("EFR_FlyoutRow_ButtonSkipped", reconciler.DebugElementsSkipped > 0,
+                    $"skipped: {reconciler.DebugElementsSkipped}");
+                H.SetContent(current);
+                await Harness.Render();
+                H.Check("EFR_FlyoutRow_CurrentTarget", currentDecorator is not null
+                    && ReferenceEquals(Reconciler.GetElementTag((FrameworkElement)current), currentDecorator.Target));
+                H.Check("EFR_FlyoutRow_CurrentDecorator", ReferenceEquals(Reconciler.GetMountedElement(current), currentDecorator));
+                H.ClickButton("Select customer");
+                await Harness.Render();
+                H.Check("EFR_FlyoutRow_CurrentClosure", calls.SequenceEqual(new[] { "a", "b" }),
+                    $"calls: {string.Join(", ", calls)}");
+            }
+            finally
+            {
+                reconciler.UnmountChild(current);
+                H.SetContent(null);
+            }
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  Internal-bookkeeping invariants. These complement the external
     //  distinct-count check above by catching a class of bug where the

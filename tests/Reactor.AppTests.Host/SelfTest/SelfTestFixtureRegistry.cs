@@ -480,6 +480,7 @@ internal static class SelfTestFixtureRegistry
         // a fresh UIElement, orphaning prior ones in Repeater.Children).
         "EFR_Factory_BoundedDistinctControls_AcrossManyRealizeCycles",
         "EFR_Factory_RecycledControlIsReusedOnNextRealize",
+        "EFR_Factory_MenuFlyoutRecycle_UsesCurrentRowCallbacks",
         "EFR_Factory_BookkeepingBoundedAcrossCycles",
         // Spec 053 Phase 3 — Reactor.Advanced Win2D live-control smoke coverage.
         "Win2D_Canvas_Mount",
@@ -2167,6 +2168,8 @@ internal static class SelfTestFixtureRegistry
         "FlyoutTarget_NestedCallbacksAcrossUpdates",
         "FlyoutTarget_MenuFlyoutTargetCallbacks",
         "FlyoutTarget_TeardownAndPlainPoolReuse",
+        "FlyoutTarget_RegisterTypeCallbacksAcrossUpdates",
+        "FlyoutTarget_TargetTeardownAcrossPaths",
         "CustomDecorator_NestedUnmount",
 
         // Flyout IsOpen driven by state (FlyoutIsOpenStateFixtures).
@@ -2754,6 +2757,7 @@ internal static class SelfTestFixtureRegistry
         "RichTextProps_LineBreakInlineUI_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_LineBreakInlineUI_MountUpdateClear(harness),
         "EFR_Factory_BoundedDistinctControls_AcrossManyRealizeCycles" => new ElementFactoryRecyclingFixtures.Factory_BoundedDistinctControls_AcrossManyRealizeCycles(harness),
         "EFR_Factory_RecycledControlIsReusedOnNextRealize" => new ElementFactoryRecyclingFixtures.Factory_RecycledControlIsReusedOnNextRealize(harness),
+        "EFR_Factory_MenuFlyoutRecycle_UsesCurrentRowCallbacks" => new ElementFactoryRecyclingFixtures.Factory_MenuFlyoutRecycle_UsesCurrentRowCallbacks(harness),
         "EFR_Factory_BookkeepingBoundedAcrossCycles" => new ElementFactoryRecyclingFixtures.Factory_BookkeepingBoundedAcrossCycles(harness),
         "EFR_Factory_ReplacementOnRootTypeChange_DropsOldControlTracking" => new ElementFactoryRecyclingFixtures.Factory_ReplacementOnRootTypeChange_DropsOldControlTracking(harness),
         "EFR_Factory_MultiShapeCycle_KeepsContainerSetBounded" => new ElementFactoryRecyclingFixtures.Factory_MultiShapeCycle_KeepsContainerSetBounded(harness),
@@ -4417,6 +4421,8 @@ internal static class SelfTestFixtureRegistry
         "FlyoutTarget_NestedCallbacksAcrossUpdates" => new FlyoutTargetCallbacksFixtures.NestedCallbacksAcrossUpdates(harness),
         "FlyoutTarget_MenuFlyoutTargetCallbacks" => new FlyoutTargetCallbacksFixtures.MenuFlyoutTargetCallbacks(harness),
         "FlyoutTarget_TeardownAndPlainPoolReuse" => new FlyoutTargetCallbacksFixtures.TeardownAndPlainPoolReuse(harness),
+        "FlyoutTarget_RegisterTypeCallbacksAcrossUpdates" => new FlyoutTargetCallbacksFixtures.RegisterTypeCallbacksAcrossUpdates(harness),
+        "FlyoutTarget_TargetTeardownAcrossPaths" => new FlyoutTargetCallbacksFixtures.TargetTeardownAcrossPaths(harness),
 
         "CustomDecorator_NestedUnmount" => new CustomDecoratorNestedUnmountFixture(harness),
         "FlyoutIsOpen_ButtonTargetFromState" => new FlyoutIsOpenStateFixtures.ButtonTargetOpensFromState(harness),

@@ -46,7 +46,9 @@ Conventions for contributors:
 
 - Flyout, MenuFlyout and CommandBarFlyout targets retain their own event callbacks
   after mount, update and pool reuse. Decorator identity is stored separately so
-  flyout callbacks and teardown still use the current decorator (spec 047 §4.5; #942).
+  flyout callbacks and teardown still use the current decorator. For these
+  decorators, the provisional `Reconciler.GetElementTag` now returns the target's
+  tag instead of the decorator element (spec 047 §4.5; #942).
 
 - `UseDataSource` retains its initial normalized page size across rerenders and
   query restarts, keeping requests and cursor offsets aligned with resource row

@@ -1,6 +1,11 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
+using Microsoft.UI.Reactor.Input;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
+using System.Numerics;
 using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -9,6 +14,159 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// <summary>Issue #942: decorators must not replace their target's event identity.</summary>
 internal static class FlyoutTargetCallbacksFixtures
 {
+    internal sealed class RegisterTypeCallbacksAcrossUpdates(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            using var host = H.CreateHost();
+            var calls = new List<int>();
+            Action? advance = null;
+            RegisteredButtonElement? currentTarget = null;
+            FlyoutElement? currentFlyout = null;
+            host.Reconciler.RegisterType<RegisteredButtonElement, Button>(
+                mount: static (_, element, _) =>
+                {
+                    var button = new Button { Content = $"registered target {element.Version}" };
+                    button.Click += static (sender, _) =>
+                        (Reconciler.GetElementTag((Button)sender!) as RegisteredButtonElement)?.OnClick();
+                    return button;
+                },
+                update: static (_, _, element, button, _) =>
+                {
+                    button.Content = $"registered target {element.Version}";
+                    return null;
+                });
+            host.Mount(ctx =>
+            {
+                var (version, setVersion) = ctx.UseState(0);
+                advance = () => setVersion(1);
+                currentTarget = new RegisteredButtonElement(version, () => calls.Add(version))
+                    .WithKey("registered-target");
+                currentFlyout = Flyout(currentTarget, TextBlock("registered target body"));
+                return currentFlyout;
+            });
+            await Harness.Render();
+
+            var first = H.FindButton("registered target 0");
+            H.Check("FlyoutRegisterType_Mounted", first is not null);
+            if (first is null) return;
+            H.Check("FlyoutRegisterType_InitialTarget", ReferenceEquals(Reconciler.GetElementTag(first), currentTarget));
+            H.Check("FlyoutRegisterType_InitialDecorator", ReferenceEquals(Reconciler.GetMountedElement(first), currentFlyout));
+            H.ClickButton("registered target 0");
+            H.Check("FlyoutRegisterType_InitialClosure", calls.SequenceEqual(new[] { 0 }), $"calls: {string.Join(", ", calls)}");
+            first.Flyout?.Hide();
+
+            advance!();
+            await Harness.Render();
+            var updated = H.FindButton("registered target 1");
+            H.Check("FlyoutRegisterType_Updated", updated is not null);
+            if (updated is null) return;
+            H.Check("FlyoutRegisterType_SameControl", ReferenceEquals(first, updated));
+            H.Check("FlyoutRegisterType_CurrentTarget", ReferenceEquals(Reconciler.GetElementTag(updated), currentTarget));
+            H.Check("FlyoutRegisterType_CurrentDecorator", ReferenceEquals(Reconciler.GetMountedElement(updated), currentFlyout));
+            H.ClickButton("registered target 1");
+            H.Check("FlyoutRegisterType_CurrentClosure", calls.SequenceEqual(new[] { 0, 1 }), $"calls: {string.Join(", ", calls)}");
+            updated.Flyout?.Hide();
+        }
+    }
+
+    private sealed record RegisteredButtonElement(int Version, Action OnClick) : Element;
+
+    internal sealed class TargetTeardownAcrossPaths(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            foreach (var (registered, pooled) in new[] { (false, false), (false, true), (true, false), (true, true) })
+            {
+                string name = $"FlyoutTeardown_{(registered ? "RegisterType" : "V1")}_{(pooled ? "Pool" : "Ordinary")}";
+                int targetUnmounts = 0, contentCleanups = 0;
+                var unmountOrder = new List<string>();
+                Action onTargetUnmount = () => { targetUnmounts++; unmountOrder.Add("target"); };
+                int trackersBefore = Reconciler.InteractionTrackerCountForTests;
+                var targetRef = new ElementRef();
+                var decoratorRef = new ElementRef();
+                Action? remove = null;
+                using var host = H.CreateHost();
+                if (registered)
+                {
+                    host.Reconciler.RegisterType<TeardownButtonElement, Button>(
+                        mount: static (_, element, _) => new Button { Content = element.Label },
+                        update: static (_, _, element, button, _) => { button.Content = element.Label; return null; },
+                        unmount: (_, _) => onTargetUnmount());
+                }
+                else
+                    host.Reconciler.RegisterHandler<TeardownButtonElement, Button>(new TeardownButtonHandler(onTargetUnmount));
+                host.Mount(ctx =>
+                {
+                    var (show, setShow) = ctx.UseState(true);
+                    remove = () => setShow(false);
+                    if (!show) return VStack();
+                    Element target = new TeardownButtonElement(name).Ref(targetRef);
+                    // Interaction states and keyframes taint the compositor; keep pool-reuse cases untainted.
+                    if (!pooled)
+                        target = target.InteractionStates(states => states.PointerOver(opacity: 0.8f))
+                            .Keyframes("teardown", 1, keyframes => keyframes.Duration(1000).Loop()
+                                .At(0f, translation: Vector3.Zero)
+                                .At(1f, translation: new Vector3(8, 0, 0)));
+                    var decorated = Flyout(target, Component<CleanupProbe, Action>(() =>
+                    {
+                        contentCleanups++;
+                        unmountOrder.Add("flyout-content");
+                    })).Ref(decoratorRef);
+                    return pooled ? VStack(decorated) : decorated;
+                });
+                await Harness.Render();
+
+                var first = H.FindButton(name);
+                H.Check(name + "_RefsSetOnMount", first is not null
+                    && ReferenceEquals(targetRef.Current, first) && ReferenceEquals(decoratorRef.Current, first));
+                if (first is null) continue;
+                H.Check(name + "_NoEarlyCleanup", targetUnmounts == 0 && contentCleanups == 0);
+                var visual = !pooled ? ElementCompositionPreview.GetElementVisual(first) : null;
+                if (!pooled)
+                {
+                    H.Check(name + "_InteractionRegistered", Reconciler.InteractionTrackerCountForTests == trackersBefore + 1);
+                    H.Check(name + "_KeyframesStarted", visual!.TryGetAnimationController("Translation") is not null);
+                }
+                if (pooled) remove!();
+                else host.Mount(_ => TextBlock("removed"));
+                await Harness.Render();
+
+                H.Check(name + "_TargetRefCleared", targetRef.Current is null);
+                H.Check(name + "_DecoratorRefCleared", decoratorRef.Current is null);
+                H.Check(name + "_TargetUnmountOnce", targetUnmounts == 1, $"unmounts: {targetUnmounts}");
+                H.Check(name + "_ContentCleanupOnce", contentCleanups == 1, $"cleanups: {contentCleanups}");
+                H.Check(name + "_UnmountOrder", unmountOrder.SequenceEqual(new[] { "flyout-content", "target" }),
+                    $"order: {string.Join(", ", unmountOrder)}");
+                if (!pooled)
+                {
+                    H.Check(name + "_InteractionCleared", Reconciler.InteractionTrackerCountForTests == trackersBefore);
+                    H.Check(name + "_KeyframesStopped", visual!.TryGetAnimationController("Translation") is null);
+                    // Stop the loop even if the cleanup assertion failed.
+                    visual.StopAnimation("Translation");
+                }
+                if (pooled)
+                {
+                    host.Mount(_ => Button(name + " reused"));
+                    await Harness.Render();
+                    H.Check(name + "_SameControlReused", ReferenceEquals(first, H.FindButton(name + " reused")));
+                    H.Check(name + "_OldOwnerStaysCleared", targetRef.Current is null
+                        && decoratorRef.Current is null && targetUnmounts == 1 && contentCleanups == 1);
+                }
+            }
+        }
+    }
+
+    private sealed record TeardownButtonElement(string Label) : Element;
+
+    private sealed class TeardownButtonHandler(Action onUnmount) : IElementHandler<TeardownButtonElement, Button>
+    {
+        public Button Mount(MountContext ctx, TeardownButtonElement element) => new() { Content = element.Label };
+        public void Update(UpdateContext ctx, TeardownButtonElement oldElement, TeardownButtonElement newElement, Button control)
+            => control.Content = newElement.Label;
+        public void Unmount(UnmountContext ctx, Button control) => onUnmount();
+    }
+
     internal sealed class MenuFlyoutTargetCallbacks(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()

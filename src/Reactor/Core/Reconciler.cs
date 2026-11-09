@@ -1915,12 +1915,13 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal void RefreshElementTagOnSkip(FrameworkElement control, Element newEl)
     {
-        _v1Handlers.TryGet(newEl.GetType(), out var entry);
-        if (entry?.PreservesTargetTag == true)
+        if (newEl is FlyoutElement or MenuFlyoutElement or CommandBarFlyoutElement
+            && _v1Handlers.TryGet(newEl.GetType(), out var entry) && entry.PreservesTargetTag)
             SetDecoratorElementTag(control, newEl);
         else
             SetElementTagIfNeeded(control, newEl,
-                SkipsCallSiteOnlyTags && entry is IV1TeardownOwner owner && owner.OwnsTeardown(control));
+                SkipsCallSiteOnlyTags && _v1Handlers.TryGet(newEl.GetType(), out var teardownEntry)
+                && teardownEntry is IV1TeardownOwner owner && owner.OwnsTeardown(control));
     }
 
     /// <summary>
@@ -1996,6 +1997,10 @@ public sealed partial class Reconciler : IDisposable
     /// element associated with a control, or null.
     /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
+    /// <remarks>
+    /// For the built-in Flyout, MenuFlyout, and CommandBarFlyout decorators,
+    /// this reads the target's tag; decorator identity is stored separately.
+    /// </remarks>
     public static Element? GetElementTag(UIElement control) =>
         control is FrameworkElement fe
             ? (fe.GetValue(ReactorAttached.StateProperty) as ReactorState)?.Element
@@ -2005,6 +2010,10 @@ public sealed partial class Reconciler : IDisposable
     /// Spec 047 §14 Phase 1 (1.3) — promoted from internal.
     /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
+    /// <remarks>
+    /// For the built-in Flyout, MenuFlyout, and CommandBarFlyout decorators,
+    /// this reads the target's tag; decorator identity is stored separately.
+    /// </remarks>
     public static Element? GetElementTag(FrameworkElement fe) =>
         (fe.GetValue(ReactorAttached.StateProperty) as ReactorState)?.Element;
 
@@ -3227,7 +3236,7 @@ public sealed partial class Reconciler : IDisposable
                 // another type, such as a child's. That element's own event trampolines and
                 // unmount read the tag, so it keeps it. Registration is by exact type, so a
                 // derived element type is another type here too.
-                if ((state.DecoratorElement ?? state.Element) is { } owner && owner.GetType() != typeof(TElement)) return;
+                if (state.Element is { } owner && owner.GetType() != typeof(TElement)) return;
                 state.Element = element;
                 return;
             }
@@ -4201,23 +4210,17 @@ public sealed partial class Reconciler : IDisposable
             PrepareConnectedAnimationSource(caEl.ConnectedAnimationKey, control);
         }
 
-        // Clean up animation state (mirrors UnmountAndCollect)
-        if (control is FrameworkElement animFe && GetMountedElement(animFe) is Element animEl)
+        // Decorators and targets share a control, but each can own refs and animations.
+        if (control is FrameworkElement cleanupFe)
         {
-            if (animEl.InteractionStates is not null)
-                ClearInteractionStates(control);
-            if (animEl.KeyframeAnimations is not null)
-                ClearKeyframeAnimations(control, animEl.KeyframeAnimations);
-            if (animEl.ScrollAnimation is not null)
-                ClearScrollAnimation(control, animEl.ScrollAnimation);
+            var mountedElement = GetMountedElement(cleanupFe);
+            var targetElement = GetElementTag(cleanupFe);
+            CleanupElementStateForUnmount(cleanupFe, mountedElement);
+            // Reference edges belong to the control, even when it has no element tag.
+            TeardownReferenceEdges(cleanupFe);
+            if (targetElement is not null && !ReferenceEquals(targetElement, mountedElement))
+                CleanupElementStateForUnmount(cleanupFe, targetElement);
         }
-
-        // Always tear reference edges down (they live in ReactorState regardless of
-        // whether the element is tagged), and clear the producer ref when the element is
-        // available. Unconditional so descriptor/binding referrers without a tag are also
-        // cleaned up (CR-001 / CR-002).
-        if (control is FrameworkElement refFe)
-            CleanupReferenceStateForUnmount(refFe, GetMountedElement(refFe));
 
         // Issue #1262 — a control that carried an attached verdict takes it with it.
         // Nothing else does this: DetachReactorState runs only on a full detach, so a
@@ -4260,11 +4263,37 @@ public sealed partial class Reconciler : IDisposable
         // handlers return CollectSelf (terminate the traversal — children
         // already torn down by the handler; e.g. NavigationHostHandler.Unmount
         // runs CleanupNavigationHostNode). Phase 3 completion decorator handlers
-        // may return ContinueDefaultTraversal to let the engine recurse into the
-        // wrapped child whose control they returned (e.g., FlyoutElement returns
-        // the Target's mounted control; the Target's children still need their
-        // own unmount).
-        if (control is FrameworkElement v1Fe && GetMountedElement(v1Fe) is Element v1TagEl
+        // may return ContinueDefaultTraversal. Target-wrapping flyouts then yield
+        // to the target's own handler on the same control before child traversal.
+        ReactorState? unmountState = null;
+        if (control is FrameworkElement unmountFe)
+            TryGetReactorState(unmountFe, out unmountState);
+
+        var unmountElement = unmountState?.DecoratorElement ?? unmountState?.Element;
+        // Finish the saved flyout decorator before the existing target dispatch.
+        if (unmountState?.DecoratorElement is { } decoratorElement
+            && _v1Handlers.TryGet(decoratorElement.GetType(), out var decoratorEntry)
+            && decoratorEntry.PreservesTargetTag
+            && decoratorEntry.HasUnmount)
+        {
+            V1Protocol.V1UnmountDisposition decoratorDisposition;
+            if (!IsolatesUnmountCleanupFailures)
+                decoratorDisposition = decoratorEntry.Unmount(control, this);
+            else if (!RunIsolatedTeardown(control, decoratorEntry, static (entry, c, r) => entry.Unmount(c, r), out decoratorDisposition))
+                return;
+
+            if (decoratorDisposition != V1Protocol.V1UnmountDisposition.ContinueDefaultTraversal)
+                return;
+            unmountElement = null;
+            if (ReferenceEquals(unmountState.DecoratorElement, decoratorElement))
+            {
+                unmountState.DecoratorElement = null;
+                if (!ReferenceEquals(unmountState.Element, decoratorElement))
+                    unmountElement = unmountState.Element;
+            }
+        }
+
+        if (control is FrameworkElement v1Fe && unmountElement is Element v1TagEl
             && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
         {
             V1Protocol.V1UnmountDisposition v1Disposition;
@@ -4277,7 +4306,7 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // Check registered type unmount handlers via the attached element
-        if (control is FrameworkElement fe && TryGetReactorState(fe, out var regState)
+        if (control is FrameworkElement fe && unmountState is { } regState
             && (regState.DecoratorElement ?? regState.Element) is Element tagEl
             && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount
             && TryBeginRegisteredUnmount(regState))
@@ -4299,6 +4328,17 @@ public sealed partial class Reconciler : IDisposable
         ForEachReactorChildControl(control, UnmountRecursive);
     }
 
+    private static void CleanupElementStateForUnmount(FrameworkElement control, Element? element)
+    {
+        if (element?.InteractionStates is not null)
+            ClearInteractionStates(control);
+        if (element?.KeyframeAnimations is not null)
+            ClearKeyframeAnimations(control, element.KeyframeAnimations);
+        if (element?.ScrollAnimation is not null)
+            ClearScrollAnimation(control, element.ScrollAnimation);
+        CleanupReferenceStateForUnmount(control, element);
+    }
+
     private static void CleanupReferenceStateForUnmount(FrameworkElement control, Element? element)
     {
         // Clear the producer ref only while it still names this control. When an update
@@ -4307,7 +4347,6 @@ public sealed partial class Reconciler : IDisposable
         if (element?.Modifiers?.Ref is { } producerRef && producerRef.Current is { } current
             && IsSameNativeElement(current, control))
             producerRef.SetCurrent(null);
-        TeardownReferenceEdges(control);
     }
 
     // Two managed wrappers can front one native element (see ReactorAttached.StateProperty), so
@@ -4792,19 +4831,16 @@ public sealed partial class Reconciler : IDisposable
             PrepareConnectedAnimationSource(caEl.ConnectedAnimationKey, control);
         }
 
-        // Clean up animation state
-        if (control is FrameworkElement animFe && GetMountedElement(animFe) is Element animEl)
+        // Mirrors UnmountRecursive: release state owned by both element identities.
+        if (control is FrameworkElement cleanupFe)
         {
-            if (animEl.InteractionStates is not null)
-                ClearInteractionStates(control);
-            if (animEl.KeyframeAnimations is not null)
-                ClearKeyframeAnimations(control, animEl.KeyframeAnimations);
-            if (animEl.ScrollAnimation is not null)
-                ClearScrollAnimation(control, animEl.ScrollAnimation);
+            var mountedElement = GetMountedElement(cleanupFe);
+            var targetElement = GetElementTag(cleanupFe);
+            CleanupElementStateForUnmount(cleanupFe, mountedElement);
+            TeardownReferenceEdges(cleanupFe);
+            if (targetElement is not null && !ReferenceEquals(targetElement, mountedElement))
+                CleanupElementStateForUnmount(cleanupFe, targetElement);
         }
-
-        if (control is FrameworkElement refFe)
-            CleanupReferenceStateForUnmount(refFe, GetMountedElement(refFe));
 
         WithdrawAttachedValidation(control);
 
@@ -4840,10 +4876,39 @@ public sealed partial class Reconciler : IDisposable
         // (mirrors the legacy registry behavior: pool the control, no
         // recursion). Phase 3 completion decorator handlers may opt out
         // of pooling (SkipPool — handler-managed teardown) or fall back
-        // to the default child traversal (ContinueDefaultTraversal —
-        // wrapped child owns the control identity, default recursion
-        // reaches the wrapped element's own unmount).
-        if (control is FrameworkElement v1Fe && GetMountedElement(v1Fe) is Element v1TagEl
+        // to the target's handler and default child traversal
+        // (ContinueDefaultTraversal). The decorator and target share a control.
+        ReactorState? unmountState = null;
+        if (control is FrameworkElement unmountFe)
+            TryGetReactorState(unmountFe, out unmountState);
+        var unmountElement = unmountState?.DecoratorElement ?? unmountState?.Element;
+        // Finish the saved flyout decorator before the existing target dispatch.
+        if (unmountState?.DecoratorElement is { } decoratorElement
+            && _v1Handlers.TryGet(decoratorElement.GetType(), out var decoratorEntry)
+            && decoratorEntry.PreservesTargetTag && decoratorEntry.HasUnmount)
+        {
+            V1Protocol.V1UnmountDisposition decoratorDisposition;
+            if (!IsolatesUnmountCleanupFailures)
+                decoratorDisposition = decoratorEntry.Unmount(control, this);
+            else if (!RunIsolatedTeardown(control, decoratorEntry, static (entry, c, r) => entry.Unmount(c, r), out decoratorDisposition))
+                return;
+            if (decoratorDisposition != V1Protocol.V1UnmountDisposition.ContinueDefaultTraversal)
+            {
+                if (decoratorDisposition == V1Protocol.V1UnmountDisposition.CollectSelf
+                    && control is FrameworkElement decoratorPool)
+                    toPool.Add(decoratorPool);
+                return;
+            }
+            unmountElement = null;
+            if (ReferenceEquals(unmountState.DecoratorElement, decoratorElement))
+            {
+                unmountState.DecoratorElement = null;
+                if (!ReferenceEquals(unmountState.Element, decoratorElement))
+                    unmountElement = unmountState.Element;
+            }
+        }
+
+        if (control is FrameworkElement v1Fe && unmountElement is Element v1TagEl
             && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
         {
             V1Protocol.V1UnmountDisposition v1Disposition;
@@ -4865,7 +4930,7 @@ public sealed partial class Reconciler : IDisposable
             }
         }
 
-        if (control is FrameworkElement fe && TryGetReactorState(fe, out var regState)
+        if (control is FrameworkElement fe && unmountState is { } regState
             && (regState.DecoratorElement ?? regState.Element) is Element tagEl
             && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount
             && TryBeginRegisteredUnmount(regState))
