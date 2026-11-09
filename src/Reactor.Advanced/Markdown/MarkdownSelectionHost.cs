@@ -60,7 +60,6 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         PointerCaptureLost += OnCaptureLost;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
-        LayoutUpdated += OnLayout;
         _dragTimer.Tick += OnDragTick;
         Document.Changed = OnDocumentChanged;
     }
@@ -82,9 +81,16 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         if (child is not null) _root.Children.Insert(0, child);
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e) => Refresh();
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_detached) return;
+        LayoutUpdated -= OnLayout;
+        LayoutUpdated += OnLayout;
+        Refresh();
+    }
     private void OnLayout(object? sender, object e)
     {
+        if (_detached || !IsLoaded) return;
         CheckMembership();
         bool nativeTextChanged = InvalidateNativeSegments();
         int signature = LayoutSignature();
@@ -144,6 +150,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     }
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        LayoutUpdated -= OnLayout;
         StopDrag();
         _surfaces.Clear();
         _characterRects.Clear();
@@ -180,7 +187,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
 
     private void Refresh(bool membershipChecked)
     {
-        if (_detached || _refreshing) return;
+        if (_detached || _refreshing || !IsLoaded) return;
         _refreshing = true;
         try
         {

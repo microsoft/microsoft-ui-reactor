@@ -242,6 +242,23 @@ internal static partial class MarkdownSelectionFixtures
             await Harness.Render();
             outer.Refresh();
             CheckLink("MdSelection_NativeTreeReplacementInvalidatesSegments", replacementLink);
+
+            host.Mount(_ => Message("native reload"));
+            await Harness.Render();
+            var retained = H.FindControl<MarkdownSelectionHost>(_ => true)!;
+            H.Check("MdSelection_NativeUnloadPositiveControl",
+                retained.IsLoaded && retained.Document.Text == "native reload");
+            H.SetContent(new Grid());
+            await Harness.Render();
+            H.Check("MdSelection_NativeUnloadKeepsDocumentEmptyAfterLayout",
+                !retained.IsLoaded && retained.Document.Text == "");
+            retained.Refresh();
+            H.Check("MdSelection_NativeUnloadRefreshCannotResurrectText", retained.Document.Text == "");
+            H.SetContent(retained);
+            await Harness.Render();
+            H.Check("MdSelection_NativeReloadRestoresDocument",
+                retained.IsLoaded && retained.Document.Text == "native reload");
+            host.Dispose();
         }
     }
 
