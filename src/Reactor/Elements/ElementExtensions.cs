@@ -2110,6 +2110,10 @@ public static partial class ElementExtensions
     public static TitleBarElement Content(this TitleBarElement el, Element content) =>
         el with { Content = content };
 
+    /// <summary>Sets the leading-edge header slot (typically navigation or contextual controls).</summary>
+    public static TitleBarElement LeftHeader(this TitleBarElement el, Element leftHeader) =>
+        el with { LeftHeader = leftHeader };
+
     /// <summary>Sets the trailing-edge content slot (typically a profile / settings element).</summary>
     public static TitleBarElement RightHeader(this TitleBarElement el, Element rightHeader) =>
         el with { RightHeader = rightHeader };

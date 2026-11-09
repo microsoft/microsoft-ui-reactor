@@ -9,6 +9,7 @@ internal static class SelfTestFixtureRegistry
 {
     public static readonly string[] AllFixtures =
     [
+        "TitleBarLeftHeader",
         "JumpList_NativeInterop",
         "Packaged_JumpList",
         "SourceMapReadPath_Enabled",
@@ -2325,6 +2326,7 @@ internal static class SelfTestFixtureRegistry
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
     {
+        "TitleBarLeftHeader" => new TitleBarLeftHeaderFixture.Execution(harness),
         "JumpList_NativeInterop" => new JumpListNativeInteropFixture(harness),
         "Packaged_JumpList" => new PackagedJumpListFixture(harness),
         "HarnessGuard_ClickButtonFailsLoudly" => new HarnessGuardFixtures.ClickButtonFailsLoudly(harness),

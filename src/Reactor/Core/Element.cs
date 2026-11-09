@@ -920,7 +920,7 @@ public abstract record Element
                 pa.IsOpen == pb.IsOpen
                 && pa.IsLightDismissEnabled == pb.IsLightDismissEnabled,
 
-            // TitleBar: own-props check (ignore Content/RightHeader slots which
+            // TitleBar: own-props check (ignore LeftHeader/Content/RightHeader slots which
             // recurse as children). Without this, TitleBar flashes yellow on
             // every reconcile even when only descendants changed.
             (TitleBarElement ta, TitleBarElement tb) =>
@@ -5203,12 +5203,13 @@ public partial record NavigationViewElement(
 }
 
 // Spec 058 §15 (P5.23) — Title/Subtitle/IsBackButtonVisible/IsBackButtonEnabled/
-// IsPaneToggleButtonVisible/AutoRefreshDragRegions auto-map. Content+RightHeader (NamedSlots → overwrite d.Children),
+// IsPaneToggleButtonVisible/AutoRefreshDragRegions auto-map. LeftHeader+Content+RightHeader (NamedSlots → overwrite d.Children),
 // Icon (Icon→IconSource via IconResolver transform), the window.SetTitleBar registration
 // (.Imperative) and the BackRequested/PaneToggleRequested events (Excluded) are bespoke.
 // Replaces TitleBarDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.TitleBar), Exclude = new[] { "BackRequested", "PaneToggleRequested" })]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("LeftHeader")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("RightHeader")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Icon")]
 public partial record TitleBarElement(
@@ -5259,6 +5260,8 @@ public partial record TitleBarElement(
     /// </remarks>
     public WindowTitleBarTheme? PreferredTheme { get; init; }
     public Element? Content { get; init; }
+    /// <summary>Custom content in the title bar's leading header slot.</summary>
+    public Element? LeftHeader { get; init; }
     public Element? RightHeader { get; init; }
     /// <summary>
     /// Icon shown in the title bar's leading slot. Mirrors WinUI 3
@@ -5302,6 +5305,13 @@ public partial record TitleBarElement(
     {
         d.Children = new global::Microsoft.UI.Reactor.Core.V1Protocol.NamedSlots<TitleBarElement, WinUI.TitleBar>(new[]
         {
+            new global::Microsoft.UI.Reactor.Core.V1Protocol.NamedSlot<TitleBarElement, WinUI.TitleBar>(
+                Name: "LeftHeader",
+                GetChild: static e => e.LeftHeader,
+                SetChild: static (c, ui) => c.LeftHeader = ui)
+            {
+                GetCurrentChild = static c => c.LeftHeader as global::Microsoft.UI.Xaml.UIElement,
+            },
             new global::Microsoft.UI.Reactor.Core.V1Protocol.NamedSlot<TitleBarElement, WinUI.TitleBar>(
                 Name: "Content",
                 GetChild: static e => e.Content,

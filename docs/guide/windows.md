@@ -288,7 +288,10 @@ class TitleBarWindow : Component
 }
 ```
 
-`TitleBar(...)` accepts custom `Content` (and a trailing `RightHeader`). Interactive
+`TitleBar(...)` accepts a leading `LeftHeader`, central `Content`, and trailing
+`RightHeader`. Each slot accepts any Reactor element through `.LeftHeader(...)`,
+`.Content(...)`, or `.RightHeader(...)`. Slot children update in place; changing a
+slot to `null` removes its content and runs its cleanup. Interactive
 controls inside the content are excluded from the window drag region automatically
 (WinApp SDK ≥ 2.1.3). Override per element with `.IsDragRegion(false)` to force a
 visual clickable or `.IsDragRegion(true)` to force it draggable, and set
@@ -303,7 +306,10 @@ visual clickable or `.IsDragRegion(true)` to force it draggable, and set
             .Width(200),
         Button(Icon(FontIcon("\uE713", fontSize: 16)), OnSettings)
             .AutomationName("Settings").IsDragRegion(false)),
-}).AutoRefreshDragRegions();
+})
+    .LeftHeader(Button("Back", () => { }).AutomationName("Go back"))
+    .RightHeader(Button("Profile", () => { }).AutomationName("Open profile"))
+    .AutoRefreshDragRegions();
 ```
 
 ### Title bar icon

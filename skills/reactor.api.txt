@@ -835,6 +835,7 @@ TitleBarElement.Content(Element content) → TitleBarElement
 TitleBarElement.HeightOption(WindowTitleBarHeight height) → TitleBarElement
 TitleBarElement.Icon(IconData icon) → TitleBarElement
 TitleBarElement.Icon(string imageUri) → TitleBarElement
+TitleBarElement.LeftHeader(Element leftHeader) → TitleBarElement
 TitleBarElement.NoIcon() → TitleBarElement
 TitleBarElement.PaneToggleButtonVisible(bool visible) → TitleBarElement
 TitleBarElement.PaneToggleRequested(Action handler) → TitleBarElement
@@ -6044,6 +6045,7 @@ new(string Title)
 Action OnBackRequested { get; init; }
 Action OnPaneToggleRequested { get; init; }
 Element Content { get; init; }
+Element LeftHeader { get; init; }
 Element RightHeader { get; init; }
 IconData Icon { get; init; }
 WindowTitleBarHeight? HeightOption { get; init; }

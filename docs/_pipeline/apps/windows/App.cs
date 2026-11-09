@@ -418,7 +418,10 @@ class TitleBarContentWindow : Component
                     .Width(200),
                 Button(Icon(FontIcon("\uE713", fontSize: 16)), OnSettings)
                     .AutomationName("Settings").IsDragRegion(false)),
-        }).AutoRefreshDragRegions();
+        })
+            .LeftHeader(Button("Back", () => { }).AutomationName("Go back"))
+            .RightHeader(Button("Profile", () => { }).AutomationName("Open profile"))
+            .AutoRefreshDragRegions();
         // </snippet:title-bar-content>
 }
 
