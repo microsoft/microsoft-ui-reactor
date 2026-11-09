@@ -413,8 +413,10 @@ internal sealed class FitParentBox
 
     private void ClearTransform()
     {
-        if (Host?.Current is { } host && host.RenderTransform is not null)
-            host.RenderTransform = null;
+        // ClearValue, not `= null`: it restores the default exactly as ElementPool.CleanElement does,
+        // leaving no local value behind. Only our own transient is cleared, never another owner's.
+        if (_transform is not null && Host?.Current is { } host && ReferenceEquals(host.RenderTransform, _transform))
+            host.ClearValue(UIElement.RenderTransformProperty);
         _transform = null;
     }
 

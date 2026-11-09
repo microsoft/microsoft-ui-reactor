@@ -126,11 +126,47 @@ internal static class FitParentFixtures
     private static bool Near(double a, double b, double tol = Tol) => Math.Abs(a - b) <= tol;
 
     /// <summary>
-    /// FitParent writes <c>RenderTransform = null</c>; WinUI then reads back its default, an identity
-    /// <see cref="MatrixTransform"/>. Either form means "no transform".
+    /// FitParent and ElementPool.CleanElement both <c>ClearValue</c> RenderTransform, so "cleared"
+    /// means no local value plus an effective transform that maps points to themselves. Never
+    /// match on the read-back type: WinUI's default reads back as an identity MatrixTransform
+    /// under JIT but as the base <see cref="Transform"/> under NativeAOT, where the projection has
+    /// no type-map entry for it. ReadLocalValue and TransformPoint are projection-independent.
     /// </summary>
     private static bool IsCleared(UIElement? e) =>
-        e is not null && e.RenderTransform is null or MatrixTransform { Matrix.IsIdentity: true };
+        e is not null
+        && ReferenceEquals(e.ReadLocalValue(UIElement.RenderTransformProperty), DependencyProperty.UnsetValue)
+        && MapsIdentity(e.RenderTransform);
+
+    /// <summary>
+    /// Positive counterpart of <see cref="IsCleared"/>, never written as <c>!IsCleared</c>: FitParent's
+    /// transient is a locally-set <see cref="CompositeTransform"/> (a type the AOT projection maps,
+    /// because FitParent constructs it) that actually moves points. All three must hold, so the
+    /// check is red under both JIT and AOT when no transient is in effect.
+    /// </summary>
+    private static bool HasTransient(UIElement? e) =>
+        e is not null
+        && !ReferenceEquals(e.ReadLocalValue(UIElement.RenderTransformProperty), DependencyProperty.UnsetValue)
+        && e.RenderTransform is CompositeTransform t
+        && !MapsIdentity(t);
+
+    private static bool MapsIdentity(GeneralTransform? t)
+    {
+        if (t is null)
+            return true;
+        var a = t.TransformPoint(new Point(0, 0));
+        var b = t.TransformPoint(new Point(100, 50));
+        return Near(a.X, 0) && Near(a.Y, 0) && Near(b.X, 100) && Near(b.Y, 50);
+    }
+
+    private static string DescribeTransform(UIElement? e)
+    {
+        if (e is null)
+            return "transform=<no element>";
+        var local = ReferenceEquals(e.ReadLocalValue(UIElement.RenderTransformProperty), DependencyProperty.UnsetValue) ? "unset" : "set";
+        var t = e.RenderTransform;
+        var p = t?.TransformPoint(new Point(100, 50));
+        return $"transform={t?.GetType().Name ?? "null"} local={local} map(100,50)={(p is { } q ? $"{q.X},{q.Y}" : "n/a")}";
+    }
 
     private static Rect? ClipRect(UIElement? e) => e?.Clip is RectangleGeometry g ? g.Rect : null;
 
@@ -204,7 +240,7 @@ internal static class FitParentFixtures
                     p.Renders == 1 && p.Sizes[0] == (400, 300), Describe(rig.Box, p));
                 H.Check("FitParent_FirstCommit_HostMatchesProbe",
                     p.Host is { } host && Near(host.ActualWidth, 400) && Near(host.ActualHeight, 300), Describe(rig.Box, p));
-                H.Check("FitParent_FirstCommit_NoTransform", IsCleared(p.Host));
+                H.Check("FitParent_FirstCommit_NoTransform", IsCleared(p.Host), DescribeTransform(p.Host));
                 H.Check("FitParent_FirstCommit_NoTimer", p.Box is { IsTimerRunning: false });
             }
             finally { await TearDown(H, rig); }
@@ -240,7 +276,7 @@ internal static class FitParentFixtures
                 var after = p.Sizes.Skip(before).ToList();
                 H.Check("FitParent_Grow_OnlyFinalSizeRendered",
                     after.Count == 1 && after[0] == (600, 450), Describe(rig.Box, p));
-                H.Check("FitParent_Grow_TransformCleared", IsCleared(p.Host));
+                H.Check("FitParent_Grow_TransformCleared", IsCleared(p.Host), DescribeTransform(p.Host));
                 H.Check("FitParent_Grow_NoClipAfterCommit", p.Host is { Clip: null }, DescribeClip(p.Host));
             }
             finally { await TearDown(H, rig); }
@@ -274,7 +310,7 @@ internal static class FitParentFixtures
                 var after = p.Sizes.Skip(before).ToList();
                 H.Check("FitParent_Shrink_OnlyFinalSizeRendered",
                     after.Count == 1 && after[0] == (250, 200), Describe(rig.Box, p));
-                H.Check("FitParent_Shrink_TransformCleared", IsCleared(p.Host));
+                H.Check("FitParent_Shrink_TransformCleared", IsCleared(p.Host), DescribeTransform(p.Host));
                 H.Check("FitParent_Shrink_NoClipAfterCommit", p.Host is { Clip: null }, DescribeClip(p.Host));
             }
             finally { await TearDown(H, rig); }
@@ -296,7 +332,7 @@ internal static class FitParentFixtures
                 Resize(rig.Box, 700, 200);
                 H.Check("FitParent_Asymmetric_CommitsAtExactSize", await CommitAt(rig, p, 700, 200), Describe(rig.Box, p));
                 H.Check("FitParent_Asymmetric_LastRenderSize", p.Sizes[^1] == (700, 200), Describe(rig.Box, p));
-                H.Check("FitParent_Asymmetric_TransformCleared", IsCleared(p.Host));
+                H.Check("FitParent_Asymmetric_TransformCleared", IsCleared(p.Host), DescribeTransform(p.Host));
             }
             finally { await TearDown(H, rig); }
         }
@@ -325,8 +361,8 @@ internal static class FitParentFixtures
                 await Harness.Render();
 
                 var transform = p.Host?.RenderTransform;
-                H.Check("FitParent_Transient_TransformBeforeCommit", transform is not null && !IsCleared(p.Host),
-                    $"transform={transform?.GetType().Name ?? "null"} {Describe(rig.Box, p)}");
+                H.Check("FitParent_Transient_TransformBeforeCommit", HasTransient(p.Host),
+                    $"{DescribeTransform(p.Host)} {Describe(rig.Box, p)}");
                 H.Check("FitParent_Transient_UniformScale",
                     transform is CompositeTransform ct && Near(ct.ScaleX, 1.5, 1e-6) && Near(ct.ScaleY, 1.5, 1e-6),
                     transform is CompositeTransform c2 ? $"scale={c2.ScaleX},{c2.ScaleY}" : "not CompositeTransform");
@@ -340,7 +376,7 @@ internal static class FitParentFixtures
                 H.Check("FitParent_Transient_CommitsAfterDebounce",
                     await CommitAt(rig, p, 600, 450, maxPasses: 250), Describe(rig.Box, p));
                 H.Check("FitParent_Transient_TransformClearedAfterCommit", IsCleared(p.Host),
-                    $"transform={p.Host?.RenderTransform?.GetType().Name ?? "null"}");
+                    DescribeTransform(p.Host));
             }
             finally { await TearDown(H, rig); }
         }
@@ -394,7 +430,7 @@ internal static class FitParentFixtures
                 await PumpFor(300);
                 H.Check("FitParent_Jitter_NoRebuild", p.Renders == renders, Describe(rig.Box, p));
                 H.Check("FitParent_Jitter_NoTimerNoTransform",
-                    !p.Box.IsTimerRunning && IsCleared(host));
+                    !p.Box.IsTimerRunning && IsCleared(host), $"timer={p.Box.IsTimerRunning} {DescribeTransform(host)}");
             }
             finally
             {
@@ -496,7 +532,7 @@ internal static class FitParentFixtures
                 await Harness.Render();
                 if (scale)
                     H.Check($"FitParent_Recycled{v}_PositiveControl_OldHostTransformed",
-                        oldHost?.RenderTransform is CompositeTransform);
+                        HasTransient(oldHost), DescribeTransform(oldHost));
                 else
                     H.Check($"FitParent_Recycled{v}_PositiveControl_OldHostClipped",
                         ClipIsHostBounds(oldHost), DescribeClip(oldHost));
@@ -516,7 +552,7 @@ internal static class FitParentFixtures
                 H.Check($"FitParent_Recycled{v}_GapPhase_OldHostDisposedBox", p1.Box is { Disposed: true } && oldHost is { Parent: null });
                 H.Check($"FitParent_Recycled{v}_GapPhase_NoPooledBorderTransformedOrClipped",
                     pooled.All(b => IsCleared(b) && b.Clip is null),
-                    $"oldHostPooled={oldHostPooled} transform={oldHost?.RenderTransform?.GetType().Name ?? "null"} {DescribeClip(oldHost)}");
+                    $"oldHostPooled={oldHostPooled} {DescribeTransform(oldHost)} {DescribeClip(oldHost)}");
 
                 // Direct round-trip through the same pool: a Border carrying exactly the state the
                 // host carries mid-resize (transient transform, stale-content clip) comes back
@@ -530,7 +566,7 @@ internal static class FitParentFixtures
                 var rented = pool.TryRent(typeof(WinBorder));
                 H.Check($"FitParent_Recycled{v}_PoolRoundTrip_PositiveControl_SameInstance", ReferenceEquals(rented, probe));
                 H.Check($"FitParent_Recycled{v}_PoolRoundTrip_TransformCleared", IsCleared(probe),
-                    $"transform={probe.RenderTransform?.GetType().Name ?? "null"}");
+                    DescribeTransform(probe));
                 H.Check($"FitParent_Recycled{v}_PoolRoundTrip_ClipCleared", probe.Clip is null, DescribeClip(probe));
                 foreach (var b in pooled) pool.Return(b);
 
@@ -541,10 +577,11 @@ internal static class FitParentFixtures
                 var newHost = p2.Host;
                 var recycled = ReferenceEquals(oldHost, newHost);
                 Console.WriteLine($"# FitParent_Recycled{v}: host recycled as new host = {recycled}");
-                H.Check($"FitParent_Recycled{v}_NewHostNoTransform", IsCleared(newHost));
+                H.Check($"FitParent_Recycled{v}_NewHostNoTransform", IsCleared(newHost), DescribeTransform(newHost));
                 H.Check($"FitParent_Recycled{v}_NewHostNoClip", newHost is { Clip: null }, DescribeClip(newHost));
                 var transformed = FindDescendant<WinBorder>(rig.Box, b => !IsCleared(b) || b.Clip is not null);
-                H.Check($"FitParent_Recycled{v}_NoBorderInTreeTransformedOrClipped", transformed is null);
+                H.Check($"FitParent_Recycled{v}_NoBorderInTreeTransformedOrClipped", transformed is null,
+                    transformed is null ? "none" : $"{DescribeTransform(transformed)} {DescribeClip(transformed)}");
             }
             finally { await TearDown(H, rig); }
         }
@@ -905,7 +942,8 @@ internal static class FitParentFixtures
                     $"canvas={(canvas is null ? "none" : $"{canvas.Width}x{canvas.Height}")} "
                     + $"host={(hostNow is null ? "null" : $"{hostNow.ActualWidth}x{hostNow.ActualHeight}")}");
             }
-            h.Check($"FitParent_{name}_TransformCleared", boxes.Count > 0 && IsCleared(boxes[^1].Host?.Current));
+            h.Check($"FitParent_{name}_TransformCleared", boxes.Count > 0 && IsCleared(boxes[^1].Host?.Current),
+                $"boxes={boxes.Count} {(boxes.Count > 0 ? DescribeTransform(boxes[^1].Host?.Current) : "")}");
         }
         finally { await TearDown(h, rig); }
     }
@@ -1025,7 +1063,7 @@ internal static class FitParentFixtures
                 await Harness.Render();
                 H.Check("FitParent_NoScale_PositiveControl_SizeChangedObserved", (p.Box?.SizeChangedCount ?? 0) > sc);
                 H.Check("FitParent_NoScale_NoTransformBeforeCommit", IsCleared(p.Host),
-                    $"transform={p.Host?.RenderTransform?.GetType().Name ?? "null"}");
+                    DescribeTransform(p.Host));
                 H.Check("FitParent_NoScale_TimerRunning", p.Box is { IsTimerRunning: true });
                 H.Check("FitParent_NoScale_NotYetRebuilt", p.Renders == before && ProbeIs(rig.Box, 400, 300), Describe(rig.Box, p));
                 H.Check("FitParent_NoScale_ClippedToHost",
@@ -1070,7 +1108,7 @@ internal static class FitParentFixtures
                         && Near(host.ActualWidth, 250) && Near(host.ActualHeight, 200),
                     Describe(rig.Box, p));
                 H.Check("FitParent_NoScaleShrink_ClipEqualsHostBounds", ClipIsHostBounds(p.Host), DescribeClip(p.Host));
-                H.Check("FitParent_NoScaleShrink_Unscaled", IsCleared(p.Host));
+                H.Check("FitParent_NoScaleShrink_Unscaled", IsCleared(p.Host), DescribeTransform(p.Host));
 
                 H.Check("FitParent_NoScaleShrink_CommitsAfterDebounce",
                     await CommitAt(rig, p, 250, 200, maxPasses: 250), Describe(rig.Box, p));
@@ -1126,7 +1164,7 @@ internal static class FitParentFixtures
                 Resize(rig.Box, 600, 450);
                 await Harness.Render();
                 H.Check("FitParent_ShrinkToZero_PositiveControl_PendingWithTransient",
-                    p.Box.IsTimerRunning && !IsCleared(p.Host), Describe(rig.Box, p));
+                    p.Box.IsTimerRunning && HasTransient(p.Host), $"{DescribeTransform(p.Host)} {Describe(rig.Box, p)}");
                 Resize(rig.Box, 600, 0);
                 await Harness.Render();
                 H.Check("FitParent_ShrinkToZero_Pending_ZeroAreaClipAtHostBounds",
@@ -1217,7 +1255,7 @@ internal static class FitParentFixtures
                 H.Check($"{n}_PositiveControl_SizeChangedSynchronous", box.SizeChangedCount > sc,
                     $"SizeChanged {sc}->{box.SizeChangedCount}");
                 H.Check($"{n}_NoTimerNoTransientOnResize", !box.IsTimerRunning && IsCleared(p.Host),
-                    $"timer={box.IsTimerRunning} transform={p.Host?.RenderTransform?.GetType().Name ?? "null"}");
+                    $"timer={box.IsTimerRunning} {DescribeTransform(p.Host)}");
 
                 await Harness.Render();
                 H.Check($"{n}_CommitsAfterOneRender",
@@ -1242,7 +1280,8 @@ internal static class FitParentFixtures
                 H.Check($"{n}_AfterCommit_CommitsContinuedSize",
                     caught && tail.Contains((700, 500)) && tail[^1] == (800, 550),
                     $"committed={box.Committed} tail=[{string.Join(",", tail.Select(s => Name(s.W, s.H)))}]");
-                H.Check($"{n}_AfterCommit_NoTimerNoTransform", !box.IsTimerRunning && IsCleared(p.Host));
+                H.Check($"{n}_AfterCommit_NoTimerNoTransform", !box.IsTimerRunning && IsCleared(p.Host),
+                    $"timer={box.IsTimerRunning} {DescribeTransform(p.Host)}");
             }
             finally { await TearDown(H, rig); }
         }
