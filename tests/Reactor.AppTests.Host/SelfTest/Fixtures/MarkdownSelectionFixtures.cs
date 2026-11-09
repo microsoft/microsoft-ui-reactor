@@ -231,6 +231,18 @@ internal static partial class MarkdownSelectionFixtures
                     && outer.LinkAtPoint(point, hit));
             }
             CheckLink("MdSelection_SetNativeHyperlinkDiscovered", nativeLink);
+            var clicks = H.FindControl<TextBlock>(text =>
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(text) == "SelectionClicks")!;
+            var clicksPeer = FrameworkElementAutomationPeer.CreatePeerForElement(clicks);
+            H.Check("MdSelection_HyperlinkFeedbackStartsAtZero",
+                clicks.Text == "Clicks 0" && clicksPeer.GetName() == "Clicks 0");
+            var linkPeer = FrameworkElementAutomationPeer.CreatePeerForElement(richLink).GetChildren()
+                .Single(child => child.GetName() == "native link");
+            ((IInvokeProvider)linkPeer.GetPattern(PatternInterface.Invoke)).Invoke();
+            bool clickDelivered = await Harness.WaitFor(() => H.FindText("Clicks 1") is not null, perPassMs: 20);
+            H.Check("MdSelection_HyperlinkFeedbackUpdatesAutomationName",
+                clickDelivered && clicksPeer.GetName() == "Clicks 1",
+                $"text={clicks.Text}; automationName={clicksPeer.GetName()}");
             richLink.Blocks.Clear();
             outer.Refresh();
             H.Check("MdSelection_EmptyNativeTreeHasNoLink", outer.LinkAt(linkStart + 2) is null);
@@ -243,11 +255,15 @@ internal static partial class MarkdownSelectionFixtures
             outer.Refresh();
             CheckLink("MdSelection_NativeTreeReplacementInvalidatesSegments", replacementLink);
 
-            host.Mount(_ => Message("native reload"));
+            host.Mount(_ => Message("native reload").AutomationId("NativeReloadScope"));
+            bool loaded = await Harness.WaitFor(() =>
+                H.FindControl<MarkdownSelectionHost>(scope => scope.IsLoaded &&
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(scope) == "NativeReloadScope") is not null);
             await Harness.Render();
             var retained = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             H.Check("MdSelection_NativeUnloadPositiveControl",
-                retained.IsLoaded && retained.Document.Text == "native reload");
+                loaded && retained.IsLoaded && retained.Document.Text == "native reload",
+                $"loaded={retained.IsLoaded}; text={retained.Document.Text}");
             H.SetContent(new Grid());
             await Harness.Render();
             H.Check("MdSelection_NativeUnloadKeepsDocumentEmptyAfterLayout",

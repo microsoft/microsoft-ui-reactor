@@ -32,7 +32,12 @@ internal sealed class MarkdownSelectionInputFixture : Component
             TextBlock("Clicks 0").AutomationId("SelectionClicks").Set(text =>
             {
                 var timer = new Microsoft.UI.Xaml.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
-                timer.Tick += (_, _) => text.Text = $"Clicks {_clicks}";
+                timer.Tick += (_, _) =>
+                {
+                    string caption = $"Clicks {_clicks}";
+                    Reconciler.UpdateDefaultAutomationName(text, text.Text, caption);
+                    text.Text = caption;
+                };
                 text.Loaded += (_, _) => timer.Start();
                 text.Unloaded += (_, _) => timer.Stop();
             }),
