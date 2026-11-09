@@ -1175,9 +1175,11 @@ internal static class ModifierEventFixtures
     //  renter still carrying the previous renter's LOCAL values — and a local
     //  value outranks every Style setter in WinUI's precedence order, so the
     //  new renter could never show its styled padding/background again.
+    //  Issue #1013 extends the Control checks to HorizontalContentAlignment and
+    //  VerticalContentAlignment, which have the same pool-return leak.
     //
     //  ScrollViewer is the Control carrier precisely because ScrollViewerElement
-    //  declares none of the six properties: any local value that survives the
+    //  declares none of the eight properties: any local value that survives the
     //  recycle came from ApplyModifiers, not from the descriptor re-writing it
     //  on the second mount. A Button would be vacuous for IsEnabled —
     //  ButtonElement writes EffectiveIsEnabled unconditionally on every mount,
@@ -1210,7 +1212,9 @@ internal static class ModifierEventFixtures
                             .BorderThickness(6)
                             .BorderBrush("#FF3366CC")
                             .Background("#FF224466")
-                            .IsEnabled(false),
+                            .IsEnabled(false)
+                            .HorizontalContentAlignment(HorizontalAlignment.Right)
+                            .VerticalContentAlignment(VerticalAlignment.Bottom),
                         1 => Empty(),
                         // Remounted with no modifiers at all.
                         _ => Factories.ScrollViewer(Factories.TextBlock("pool-cp-control-2")),
@@ -1249,7 +1253,9 @@ internal static class ModifierEventFixtures
                 && firstControl.ReadLocalValue(Control.BorderThicknessProperty) != DependencyProperty.UnsetValue
                 && firstControl.ReadLocalValue(Control.BorderBrushProperty) != DependencyProperty.UnsetValue
                 && firstControl.ReadLocalValue(Control.BackgroundProperty) != DependencyProperty.UnsetValue
-                && firstControl.ReadLocalValue(Control.IsEnabledProperty) != DependencyProperty.UnsetValue);
+                && firstControl.ReadLocalValue(Control.IsEnabledProperty) != DependencyProperty.UnsetValue
+                && firstControl.ReadLocalValue(Control.HorizontalContentAlignmentProperty) != DependencyProperty.UnsetValue
+                && firstControl.ReadLocalValue(Control.VerticalContentAlignmentProperty) != DependencyProperty.UnsetValue);
             H.Check("PoolCp_Phase0_PanelLocalValuesWritten",
                 firstPanel is not null
                 && firstPanel.ReadLocalValue(Panel.BackgroundProperty) != DependencyProperty.UnsetValue
@@ -1303,6 +1309,10 @@ internal static class ModifierEventFixtures
             H.Check("PoolCp_Phase2_ControlIsEnabledCleared",
                 secondControl.ReadLocalValue(Control.IsEnabledProperty) == DependencyProperty.UnsetValue
                 && secondControl.IsEnabled);
+            H.Check("PoolCp_Phase2_ControlHorizontalContentAlignmentCleared",
+                secondControl.ReadLocalValue(Control.HorizontalContentAlignmentProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolCp_Phase2_ControlVerticalContentAlignmentCleared",
+                secondControl.ReadLocalValue(Control.VerticalContentAlignmentProperty) == DependencyProperty.UnsetValue);
             H.Check("PoolCp_Phase2_PanelBackgroundCleared",
                 secondPanel.ReadLocalValue(Panel.BackgroundProperty) == DependencyProperty.UnsetValue);
             H.Check("PoolCp_Phase2_PanelPaddingCleared",

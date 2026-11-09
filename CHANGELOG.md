@@ -44,6 +44,10 @@ Conventions for contributors:
 
 ### Fixed
 
+- Pooled controls release `HorizontalContentAlignment` and `VerticalContentAlignment`
+  on return, preventing content alignment from leaking into the next element that
+  reuses the control ([issue #1013](https://github.com/microsoft/microsoft-ui-reactor/issues/1013)).
+
 - `UseInfiniteResource` and `UseDataSource` isolate cached pages by the hook's initial
   page size. Hooks with different sizes no longer reuse incompatible pages, while
   hooks with matching sizes and query dependencies can still share them
