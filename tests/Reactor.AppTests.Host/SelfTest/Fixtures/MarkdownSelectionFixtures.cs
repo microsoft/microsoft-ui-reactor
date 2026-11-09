@@ -656,9 +656,12 @@ internal static partial class MarkdownSelectionFixtures
                 selection.Document.Entries.Count == 1 &&
                 MarkdownSelectionHost.Intersect(selection.CharacterBounds(tallText.Length - 1), selection.Viewport()).Height > 0);
 
-            Element ReusedRow(string message) => ItemsView(new[] { message }, _ => "same-row-slot", (value, _) =>
-                ItemContainer(MarkdownTextSelection.Scope(options,
-                    Md(value, new MarkdownOptions { TextSelection = options })).WithKey(value))).Height(150);
+            Element ReusedRow(string message, bool keyScope = true) => ItemsView(new[] { message }, _ => "same-row-slot", (value, _) =>
+            {
+                var scope = MarkdownTextSelection.Scope(options,
+                    Md(value, new MarkdownOptions { TextSelection = options }));
+                return ItemContainer(keyScope ? scope.WithKey(value) : scope);
+            }).Height(150);
             host.Mount(_ => ReusedRow("message A"));
             bool firstRealized = await Harness.WaitFor(() => H.FindControl<MarkdownSelectionHost>(
                 scope => scope.IsLoaded && scope.Document.Text == "message A") is not null);
@@ -679,6 +682,36 @@ internal static partial class MarkdownSelectionFixtures
                 $"realized={nextRealized}; sameItems={ReferenceEquals(reusedItems, H.FindControl<ItemsView>(_ => true))}; " +
                 $"sameScope={ReferenceEquals(previousMessage, currentMessage)}; oldText={previousMessage.Document.Text}; " +
                 $"newText={currentMessage?.Document.Text}; newSelection={currentMessage?.Document.SelectedText}");
+
+            host.Mount(_ => ReusedRow("alpha\n\nbravo", keyScope: false));
+            bool unkeyedReady = await Harness.WaitFor(() => H.FindControl<MarkdownSelectionHost>(
+                scope => scope.IsLoaded && scope.Document.Text == "alpha\nbravo") is not null);
+            H.Check("MdSelection_UnkeyedRowInitialRealization", unkeyedReady);
+            var unkeyed = H.FindControl<MarkdownSelectionHost>(scope => scope.Document.Text == "alpha\nbravo")
+                ?? throw new InvalidOperationException("The unkeyed replacement proof requires its initial message.");
+            var unkeyedItems = H.FindControl<ItemsView>(_ => true)!;
+            var identities = unkeyed.Document.Entries.Select(entry => entry.Identity).ToArray();
+            unkeyed.Select(0, unkeyed.Document.Text.Length);
+            H.Check("MdSelection_UnkeyedRowInitialSelection", unkeyed.Document.SelectedText == "alpha\nbravo");
+            host.Mount(_ => ReusedRow("alpha\n\nbravo streamed", keyScope: false));
+            bool streamReady = await Harness.WaitFor(() => unkeyed.IsLoaded && unkeyed.Document.Text == "alpha\nbravo streamed");
+            H.Check("MdSelection_UnkeyedRowStreamingKeepsSelection",
+                streamReady && unkeyed.Document.SelectedText == "alpha\nbravo"
+                && identities.SequenceEqual(unkeyed.Document.Entries.Select(entry => entry.Identity),
+                    ReferenceEqualityComparer.Instance));
+            host.Mount(_ => ReusedRow("tango\n\nzulu", keyScope: false));
+            bool replacementReady = await Harness.WaitFor(() => H.FindControl<MarkdownSelectionHost>(
+                scope => scope.IsLoaded && scope.Document.Text == "tango\nzulu") is not null);
+            var replacementScope = H.FindControl<MarkdownSelectionHost>(scope => scope.Document.Text == "tango\nzulu");
+            H.Check("MdSelection_UnkeyedRowWholesaleReplacementClearsSelection",
+                replacementReady && ReferenceEquals(unkeyedItems, H.FindControl<ItemsView>(_ => true))
+                && ReferenceEquals(unkeyed, replacementScope)
+                && identities.SequenceEqual(unkeyed.Document.Entries.Select(entry => entry.Identity),
+                    ReferenceEqualityComparer.Instance)
+                && unkeyed.Document.Anchor == 0 && unkeyed.Document.Caret == 0
+                && unkeyed.Document.SelectedText == "",
+                $"ready={replacementReady}; sameScope={ReferenceEquals(unkeyed, replacementScope)}; " +
+                $"text={unkeyed.Document.Text}; anchor={unkeyed.Document.Anchor}; caret={unkeyed.Document.Caret}");
         }
     }
 }

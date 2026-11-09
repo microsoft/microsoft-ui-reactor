@@ -299,9 +299,10 @@ internal sealed class MarkdownSelectionDocument
             next.Where((entry, i) => i >= Entries.Count || !ReferenceEquals(entry.Identity, Entries[i].Identity)
                 || entry.Text != Entries[i].Text || entry.Separator != Entries[i].Separator).Any();
         if (!changed) return false;
-        int anchor = Remap(Anchor, next, value.Length);
-        int caret = Remap(Caret, next, value.Length);
         bool textChanged = Text != value;
+        bool resetSelection = textChanged && (Anchor != 0 || Caret != 0) && !RetainsText(next);
+        int anchor = resetSelection ? 0 : Remap(Anchor, next, value.Length);
+        int caret = resetSelection ? 0 : Remap(Caret, next, value.Length);
         bool selectionChanged = Anchor != anchor || Caret != caret;
         Entries = next;
         Text = value;
@@ -312,6 +313,40 @@ internal sealed class MarkdownSelectionDocument
         return true;
     }
 
+    private bool RetainsText(List<Entry> next)
+    {
+        var oldByIdentity = new Dictionary<object, Entry>(ReferenceEqualityComparer.Instance);
+        var oldText = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entry in Entries)
+        {
+            oldByIdentity[entry.Identity] = entry;
+            if (!string.IsNullOrWhiteSpace(entry.Text)) oldText.Add(entry.Text);
+        }
+        foreach (var entry in next)
+        {
+            if (oldText.Contains(entry.Text)) return true;
+            if (!oldByIdentity.TryGetValue(entry.Identity, out var old)) continue;
+            var (prefix, suffix) = CommonEdges(old.Text, entry.Text);
+            if (!old.Text.AsSpan(0, prefix).Trim().IsEmpty ||
+                !old.Text.AsSpan(old.Text.Length - suffix).Trim().IsEmpty)
+                return true;
+        }
+        return false;
+    }
+
+    private static (int Prefix, int Suffix) CommonEdges(string oldText, string newText)
+    {
+        int prefix = 0;
+        while (prefix < oldText.Length && prefix < newText.Length &&
+            oldText[prefix] == newText[prefix]) prefix++;
+        if (prefix > 0 && char.IsHighSurrogate(oldText[prefix - 1])) prefix--;
+        int suffix = 0;
+        while (suffix < oldText.Length - prefix && suffix < newText.Length - prefix &&
+            oldText[^(suffix + 1)] == newText[^(suffix + 1)]) suffix++;
+        if (suffix > 0 && char.IsLowSurrogate(oldText[oldText.Length - suffix])) suffix--;
+        return (prefix, suffix);
+    }
+
     private int Remap(int offset, List<Entry> next, int length)
     {
         var old = EntryAt(offset);
@@ -319,12 +354,7 @@ internal sealed class MarkdownSelectionDocument
         var replacement = next.FirstOrDefault(e => ReferenceEquals(e.Identity, old.Identity));
         if (replacement is null) return Math.Min(offset, length);
         int local = Math.Clamp(offset - old.Start, 0, old.Text.Length);
-        int prefix = 0;
-        while (prefix < old.Text.Length && prefix < replacement.Text.Length &&
-            old.Text[prefix] == replacement.Text[prefix]) prefix++;
-        int suffix = 0;
-        while (suffix < old.Text.Length - prefix && suffix < replacement.Text.Length - prefix &&
-            old.Text[^(suffix + 1)] == replacement.Text[^(suffix + 1)]) suffix++;
+        var (prefix, suffix) = CommonEdges(old.Text, replacement.Text);
         if (local > prefix)
             local = local >= old.Text.Length - suffix
                 ? replacement.Text.Length - (old.Text.Length - local)

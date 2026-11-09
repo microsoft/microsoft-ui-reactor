@@ -55,6 +55,11 @@ Conventions for contributors:
 
 ### Fixed
 
+- Unkeyed Markdown selection scopes clear their selection and caret when a
+  wholesale content replacement retains no surface text or prefix/suffix text,
+  rather than carrying selection into an unrelated message; streaming edits keep
+  their existing remapping behavior (PR #1475).
+
 - Pooled controls release `HorizontalContentAlignment` and `VerticalContentAlignment`
   on return, preventing content alignment from leaking into the next element that
   reuses the control ([issue #1013](https://github.com/microsoft/microsoft-ui-reactor/issues/1013)).

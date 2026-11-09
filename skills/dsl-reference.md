@@ -301,6 +301,9 @@ Wrap custom visible text in `Surface(text, content)` and keep toolbar chrome out
 `Visibility(include, content)` gates **selection membership**, not native visibility:
 the app still controls its Expander/visibility. Key the scope by message identity
 (`.WithKey(message.Id)`) when a virtualized row can display a different message.
+Unkeyed wholesale text replacement clears selection when neither nonblank surface
+text nor a nonblank prefix/suffix of a reused surface survives; shared text is
+ambiguous, so this fallback is not a substitute for message keys.
 
 ## Icons
 

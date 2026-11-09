@@ -239,6 +239,10 @@ nearest scope, regardless of options identity, and only the scope's options
 supply `OnCopyResult`. Omitting the scope leaves no selection controller and
 emits a diagnostic warning. Key the scope by message identity with
 `.WithKey(message.Id)` when a virtualized row can switch to another message.
+As a fallback for unkeyed reuse, a text-changing update resets the selection
+and caret to the start when no nonblank surface text survives and no reused
+surface retains nonblank prefix/suffix text. Shared text can belong to a different
+message too, so this heuristic does not replace an explicit identity key.
 The parser emits semantic text and explicit separators, rather
 than guessing meaning from `Grid`/`StackPanel` shapes. `Surface(text, content,
 separatorAfter: "\n")` supplies exact **visible plain text**, never Markdown

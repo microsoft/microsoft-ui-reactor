@@ -115,6 +115,86 @@ public class MarkdownTextSelectionTests
         Assert.Equal("", document.SelectedText);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void WholesaleReplacement_ClearsSelectionEvenWhenSurfaceIdentitiesAreReused(bool backwards, bool replaceIdentities)
+    {
+        var first = new object();
+        var second = new object();
+        var document = new MarkdownSelectionDocument();
+        document.Rebuild([new(first, "alpha", "\n"), new(second, "bravo", "")]);
+        document.Select(backwards ? document.Text.Length : 0, backwards ? 0 : document.Text.Length);
+        Assert.Equal("alpha\nbravo", document.SelectedText);
+        var events = new List<(bool Text, bool Selection)>();
+        document.Changed = (text, selection) => events.Add((text, selection));
+
+        document.Rebuild([
+            new(replaceIdentities ? new object() : first, "tango", "\n"),
+            new(replaceIdentities ? new object() : second, "delta", "")]);
+
+        Assert.Equal("tango\ndelta", document.Text);
+        Assert.Equal("", document.SelectedText);
+        Assert.Equal(0, document.Anchor);
+        Assert.Equal(0, document.Caret);
+        Assert.Equal(new[] { (true, true) }, events);
+    }
+
+    [Theory]
+    [InlineData("  alpha  ", "  zulu  ")]
+    [InlineData("\ud83d\ude00", "\ud83d\ude01")]
+    [InlineData("\ud83d\ude00", "\ud834\ude00")]
+    public void WholesaleReplacement_WhitespaceAndPartialSurrogatesAreNotRetainedText(string before, string after)
+    {
+        var identity = new object();
+        var empty = new object();
+        var document = new MarkdownSelectionDocument();
+        document.Rebuild([new(empty, "", ""), new(identity, before, "")]);
+        document.Select(0, document.Text.Length);
+        document.Rebuild([new(empty, "", ""), new(identity, after, "")]);
+        Assert.Equal(after, document.Text);
+        Assert.Equal("", document.SelectedText);
+        Assert.Equal(0, document.Caret);
+    }
+
+    [Fact]
+    public void WholesaleReplacement_ResetsInsertionPoint()
+    {
+        var identity = new object();
+        var document = new MarkdownSelectionDocument();
+        document.Rebuild([new(identity, "alpha", "")]);
+        document.Select(5, 5);
+        document.Rebuild([new(identity, "zulu", "")]);
+        Assert.Equal(0, document.Anchor);
+        Assert.Equal(0, document.Caret);
+    }
+
+    [Fact]
+    public void RetainedSurface_PreservesSelectionWhenOtherContentIsReplaced()
+    {
+        var first = new object();
+        var second = new object();
+        var document = new MarkdownSelectionDocument();
+        document.Rebuild([new(first, "alpha", "\n"), new(second, "target", "")]);
+        document.Select(7, 11);
+        document.Rebuild([new(first, "zulu", "\n"), new(second, "target", "")]);
+        Assert.Equal("arge", document.SelectedText);
+        Assert.Equal(6, document.Anchor);
+        Assert.Equal(10, document.Caret);
+    }
+
+    [Fact]
+    public void SameTextWithNewSurfaces_PreservesSelection()
+    {
+        var document = new MarkdownSelectionDocument();
+        document.Rebuild([new(new object(), "target", "")]);
+        document.Select(1, 5);
+        document.Rebuild([new(new object(), "target", "")]);
+        Assert.Equal("arge", document.SelectedText);
+    }
+
     [Fact]
     public void UnchangedRegistration_DoesNotChangeSelection()
     {
