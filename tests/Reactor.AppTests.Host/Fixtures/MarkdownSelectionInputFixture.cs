@@ -63,11 +63,13 @@ internal sealed class MarkdownSelectionInputFixture : Component
     {
         MarkdownSelectionHost? scope = null;
         var history = new Queue<string>();
+        int pressCount = 0;
         void Record(string kind, PointerRoutedEventArgs args)
         {
             if (scope is null) return;
+            if (kind == "press") pressCount++;
             var point = args.GetCurrentPoint(scope);
-            history.Enqueue($"{kind} source={args.OriginalSource.GetType().Name} id={args.Pointer.PointerId} " +
+            history.Enqueue($"{kind} pressCount={pressCount} source={args.OriginalSource.GetType().Name} id={args.Pointer.PointerId} " +
                 $"left={point.Properties.IsLeftButtonPressed} xy={point.Position.X:F1},{point.Position.Y:F1} " +
                 $"handled={args.Handled} captures={scope.PointerCaptures?.Count ?? 0} " +
                 $"selection={scope.Document.Start}..{scope.Document.End}");

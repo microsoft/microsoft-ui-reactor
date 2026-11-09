@@ -1,9 +1,10 @@
 # Reactor API — signatures index (generated)
-# Source of truth: Reactor.dll public surface.
+# Source of truth: Reactor.dll and Reactor.Advanced.dll public surfaces.
 # Regenerate: `mur --regen-api`  (or build tools/Reactor.SignaturesGen — its
 #             AfterBuild target rewrites this file).
 # Format: one symbol per line. No prose. Alphabetized within each section.
 # Sections: Factories, Modifiers, Reference builders, Hooks, Theme, Enums, Public types.
+# Advanced sections: Factories, Modifiers, Hooks, Enums, Public types.
 # Public types covers ctors/properties/methods/events on every public type,
 # including public *static* classes — so process-wide entry points such as
 # ControlRegistry.Register and ReactorApp.Run are listed there, alongside
@@ -6582,7 +6583,98 @@ ToString() → string
 # Optional package: Microsoft.UI.Reactor.Advanced
 # Advanced factories: using static Microsoft.UI.Reactor.Advanced.Factories;
 
-## Public types (ctors / properties / methods / events)
+## Advanced factories
+# All in `Microsoft.UI.Reactor.Advanced.Factories` — `using static Microsoft.UI.Reactor.Advanced.Factories;`
+
+AutoColumns<T>(TypeRegistry registry = null, Func<FieldDescriptor, FieldDescriptor> overrides = null) → IReadOnlyList<FieldDescriptor>
+Column<T>(string name, Func<T, object> accessor, bool editable = false, string displayName = null, string format = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
+DataGrid<T>(IDataSource<T> source, IReadOnlyList<FieldDescriptor> columns, TypeRegistry registry = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Func<CellContext<T>, Element> cellTemplate = null, Func<RowContext<T>, Element> rowTemplate = null, Func<HeaderContext, Element> headerTemplate = null, Element loadingTemplate = null, Element emptyTemplate = null, bool showSearch = false, Func<T, RowKey, Element> rowDetailTemplate = null, Func<FieldDescriptor, double, Element> placeholderCellTemplate = null) → ComponentElement<DataGridElement<T>>
+DataGrid<T>(IDataSource<T> source, TypeRegistry registry, Func<FieldDescriptor, FieldDescriptor> columnOverrides = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Element loadingTemplate = null, Element emptyTemplate = null) → ComponentElement<DataGridElement<T>>
+Markdown(string markdown) → Element
+Markdown(string markdown, MarkdownOptions options) → Element
+Win2DAnimatedCanvas(Action<CanvasAnimatedUpdateEventArgs, object> onUpdate, Action<CanvasDrawingSession, CanvasAnimatedDrawEventArgs, object> onDraw, object drawState = null, bool isPaused = false) → Win2DAnimatedCanvasElement
+Win2DCanvas(Action<CanvasDrawingSession, CanvasDrawEventArgs> onDraw, Func<CanvasControl, Task> onCreateResources, object redrawKey = null) → Win2DCanvasElement
+Win2DCanvas(Action<CanvasDrawingSession, CanvasDrawEventArgs> onDraw, object redrawKey = null) → Win2DCanvasElement
+Win2DVirtualCanvas(Action<CanvasDrawingSession, Rect> onRegionDraw, Size contentSize) → Win2DVirtualCanvasElement
+
+## Advanced modifiers (extension methods on Element)
+# Fluent — preserves concrete element type. Type-specific sugar (e.g. .Bold()
+# on TextBlockElement) MUST come before generic .Margin/.Padding/etc.
+
+DataGridElement<T>.SelectionChanged<T>(Action<IReadOnlySet<RowKey>> handler) → DataGridElement<T>
+DockManager.ActiveContentChanged(Action<DockActiveContentChangedEventArgs> handler) → DockManager
+DockManager.ContentDocked(Action<DockContentDockedEventArgs> handler) → DockManager
+DockManager.ContentDocking(Action<DockContentDockingEventArgs> handler) → DockManager
+DockManager.ContentFloated(Action<DockContentFloatedEventArgs> handler) → DockManager
+DockManager.ContentFloating(Action<DockContentFloatingEventArgs> handler) → DockManager
+DockManager.DocumentClosed(Action<DockDocumentClosedEventArgs> handler) → DockManager
+DockManager.DocumentClosing(Action<DockDocumentClosingEventArgs> handler) → DockManager
+DockManager.DropTargetConfirmed(Action<DockTarget> handler) → DockManager
+DockManager.DropTargetHovered(Action<DockTarget?> handler) → DockManager
+DockManager.DropTargetsDismissed(Action handler) → DockManager
+DockManager.FloatingWindowClosed(Action<DockFloatingWindowClosedEventArgs> handler) → DockManager
+DockManager.FloatingWindowCreated(Action<DockFloatingWindowCreatedEventArgs> handler) → DockManager
+DockManager.LayoutChanged(Action<DockLayoutChangedEventArgs> handler) → DockManager
+DockManager.LayoutChanging(Action<DockLayoutChangingEventArgs> handler) → DockManager
+DockManager.LiveLayoutChanged(Action<DockNode> handler) → DockManager
+DockManager.SplitterDragCompleted(Action handler) → DockManager
+DockManager.ToolWindowClosed(Action<DockToolWindowClosedEventArgs> handler) → DockManager
+DockManager.ToolWindowClosing(Action<DockToolWindowClosingEventArgs> handler) → DockManager
+DockManager.ToolWindowHidden(Action<DockToolWindowHiddenEventArgs> handler) → DockManager
+DockManager.ToolWindowHiding(Action<DockToolWindowHidingEventArgs> handler) → DockManager
+Win2DAnimatedCanvasElement.ClearColor(Color color) → Win2DAnimatedCanvasElement
+Win2DAnimatedCanvasElement.Paused(bool paused = true) → Win2DAnimatedCanvasElement
+Win2DAnimatedCanvasElement.Set(Action<CanvasAnimatedControl> setter) → Win2DAnimatedCanvasElement
+Win2DAnimatedCanvasElement.TargetFps(double fps) → Win2DAnimatedCanvasElement
+Win2DAnimatedCanvasElement.UseSharedDevice(bool useSharedDevice = true) → Win2DAnimatedCanvasElement
+Win2DCanvasElement.ClearColor(Color color) → Win2DCanvasElement
+Win2DCanvasElement.Set(Action<CanvasControl> setter) → Win2DCanvasElement
+Win2DCanvasElement.UseSharedDevice(bool useSharedDevice = true) → Win2DCanvasElement
+Win2DVirtualCanvasElement.Set(Action<CanvasVirtualControl> setter) → Win2DVirtualCanvasElement
+Win2DVirtualCanvasElement.UseSharedDevice(bool useSharedDevice = true) → Win2DVirtualCanvasElement
+
+## Advanced hooks (RenderContext / Component)
+# Call from Render() / function-component body. Same order every render —
+# never inside if/for. Use the result conditionally, not the call.
+
+RenderContext.UseActivePaneKey() → object
+RenderContext.UseCanvasResources<TResources>(Func<CanvasDevice, ValueTask<TResources>> create, Action<TResources> dispose = null) → Ref<TResources>
+RenderContext.UseDockHost() → DockHostModel
+RenderContext.UseDockLayout() → DockLayoutSnapshot
+RenderContext.UseDockPanePersisted<T>(string key, T initialValue) → ValueTuple<T, Action<T>>
+RenderContext.UseDockState() → DockPaneState
+RenderContext.UseDrawCommand<TState>(TState state, Action<CanvasDrawingSession, CanvasDrawEventArgs, TState> draw, object[] deps) → Action<CanvasDrawingSession, CanvasDrawEventArgs>
+RenderContext.UseDrawState<T>(Func<T> init) → Ref<T>
+RenderContext.UseIsActivePane() → bool
+RenderContext.UsePane() → DockPaneInfo
+
+## Advanced enums (public, under Microsoft.UI.Reactor.*)
+
+ChartAxisType { X, Y }
+DashStyle { Solid, Dash4_2, Dash2_2, Dash6_2_2_2, Dash8_4, Dash1_1 }
+MarkerShape { Circle, Square, Triangle, Diamond, Plus, Cross, Star, Hexagon }
+ChartType { Line, Bar, Area }
+LinkOrientation { Horizontal, Vertical }
+SankeyNodeAlign { Left, Right, Center, Justify }
+TreemapTiling { Squarify, Slice, Dice, SliceDice }
+EditMode { Cell, Row }
+SelectionMode { None, Single, Multiple }
+DockOperationKind { Mount, DragStart, DragHover, DragConfirm, DragCancel, DragTearOut, SplitterResize, SplitterTrace, LayoutChange, Note }
+DockFloatingCloseReason { ContentClosed, MigratedToHost, MigratedToFloat }
+DockGroupRole { General, DocumentArea, ToolWindowStrip }
+DockPaneState { Docked, Floating, AutoHidden, AutoHiddenExpanded, Hidden }
+DockSide { Left, Top, Right, Bottom }
+DockSides { None, Left, Top, Right, Bottom, All }
+DockTarget { Center, SplitLeft, SplitTop, SplitRight, SplitBottom, DockLeft, DockTop, DockRight, DockBottom }
+TabChrome { Win11, Flat, TitleBar }
+TabPosition { Top, Bottom }
+MarkdownAlign { Default, Left, Center, Right }
+MarkdownBlockType { Doc, Quote, Ul, Ol, Li, Hr, H, Code, Html, P, Table, Thead, Tbody, Tr, Th, Td }
+MarkdownParserFlags { None, DialectCommonMark, CollapseWhitespace, PermissiveAtxHeaders, PermissiveUrlAutolinks, PermissiveEmailAutolinks, NoIndentedCodeBlocks, NoHtmlBlocks, NoHtmlSpans, NoHtml, Tables, Strikethrough, PermissiveWwwAutolinks, PermissiveAutolinks, TaskLists, DialectGitHub, LatexMathSpans, WikiLinks, Underline, HardSoftBreaks }
+MarkdownSpanType { Em, Strong, A, Img, Code, Del, LatexMath, LatexMathDisplay, WikiLink, U }
+MarkdownTextType { Normal, NullChar, Br, SoftBr, Entity, Code, Html, LatexMath }
+
+## Advanced public types (ctors / properties / methods / events)
 # Every public type not already covered above. Members alphabetized within
 # each type: constructors, then properties, then methods, then events.
 
@@ -7613,18 +7705,6 @@ Equals(Document<TState> other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
-
-### static class Factories
-AutoColumns<T>(TypeRegistry registry = null, Func<FieldDescriptor, FieldDescriptor> overrides = null) → IReadOnlyList<FieldDescriptor>
-Column<T>(string name, Func<T, object> accessor, bool editable = false, string displayName = null, string format = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
-DataGrid<T>(IDataSource<T> source, IReadOnlyList<FieldDescriptor> columns, TypeRegistry registry = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Func<CellContext<T>, Element> cellTemplate = null, Func<RowContext<T>, Element> rowTemplate = null, Func<HeaderContext, Element> headerTemplate = null, Element loadingTemplate = null, Element emptyTemplate = null, bool showSearch = false, Func<T, RowKey, Element> rowDetailTemplate = null, Func<FieldDescriptor, double, Element> placeholderCellTemplate = null) → ComponentElement<DataGridElement<T>>
-DataGrid<T>(IDataSource<T> source, TypeRegistry registry, Func<FieldDescriptor, FieldDescriptor> columnOverrides = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Element loadingTemplate = null, Element emptyTemplate = null) → ComponentElement<DataGridElement<T>>
-Markdown(string markdown) → Element
-Markdown(string markdown, MarkdownOptions options) → Element
-Win2DAnimatedCanvas(Action<CanvasAnimatedUpdateEventArgs, object> onUpdate, Action<CanvasDrawingSession, CanvasAnimatedDrawEventArgs, object> onDraw, object drawState = null, bool isPaused = false) → Win2DAnimatedCanvasElement
-Win2DCanvas(Action<CanvasDrawingSession, CanvasDrawEventArgs> onDraw, Func<CanvasControl, Task> onCreateResources, object redrawKey = null) → Win2DCanvasElement
-Win2DCanvas(Action<CanvasDrawingSession, CanvasDrawEventArgs> onDraw, object redrawKey = null) → Win2DCanvasElement
-Win2DVirtualCanvas(Action<CanvasDrawingSession, Rect> onRegionDraw, Size contentSize) → Win2DVirtualCanvasElement
 
 ### record FloatingDockWindow
 IReadOnlyList<DockableContent> Contents { get; init; }

@@ -10,7 +10,6 @@ using Microsoft.UI.Xaml.Shapes;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.System;
-using Windows.UI;
 using Windows.UI.Core;
 
 namespace Microsoft.UI.Reactor.Markdown;
@@ -19,9 +18,12 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
 {
     private readonly Grid _root = new();
     private readonly Canvas _overlay = new() { IsHitTestVisible = false };
+    private readonly TextBlock _selectionDefaults = new() { Visibility = Visibility.Collapsed };
     private readonly List<MarkdownSelectionMarker> _surfaces = [];
     private readonly List<MarkdownSelectionMarker> _membership = [];
     private readonly Dictionary<int, Rect> _characterRects = [];
+    private readonly Dictionary<(int Offset, int Next), Rect> _glyphRects = [];
+    private readonly HashSet<FrameworkElement> _layoutOwners = [];
     private readonly Dictionary<MarkdownSelectionMarker, TextSegment[]> _segments = [];
     private readonly DispatcherTimer _dragTimer = new() { Interval = TimeSpan.FromMilliseconds(40) };
     private readonly PointerEventHandler _pressed;
@@ -35,12 +37,14 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private Pointer? _pendingLinkPointer;
     private bool _documentDirty = true;
     private int _layoutSignature;
+    private Rect _viewport;
     private bool _refreshing;
     private bool _detached;
 
     internal MarkdownTextSelectionOptions Options { get; set; } = null!;
     internal UIElement? Body { get; private set; }
     internal MarkdownSelectionDocument Document { get; } = new();
+    internal int CachedCharacterCount => _characterRects.Count;
 
     internal MarkdownSelectionHost()
     {
@@ -49,6 +53,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         VerticalContentAlignment = VerticalAlignment.Stretch;
         Content = _root;
         _root.Children.Add(_overlay);
+        _root.Children.Add(_selectionDefaults);
         _pressed = OnPressed;
         _moved = OnMoved;
         _released = OnReleased;
@@ -60,6 +65,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         PointerCaptureLost += OnCaptureLost;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        ActualThemeChanged += OnThemeChanged;
         _dragTimer.Tick += OnDragTick;
         Document.Changed = OnDocumentChanged;
     }
@@ -94,9 +100,9 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         CheckMembership();
         bool nativeTextChanged = InvalidateNativeSegments();
         int signature = LayoutSignature();
-        if (!_documentDirty && !nativeTextChanged && signature == _layoutSignature) return;
-        _layoutSignature = signature;
-        Refresh(membershipChecked: true);
+        var viewport = Viewport();
+        if (!_documentDirty && !nativeTextChanged && signature == _layoutSignature && viewport == _viewport) return;
+        Refresh(membershipChecked: true, nativeTextChanged, signature);
         if (_pointer is not null)
         {
             _dragPoint = LocalPoint(_rootDragPoint);
@@ -108,13 +114,14 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private int LayoutSignature()
     {
         var hash = new HashCode();
-        hash.Add(Viewport());
         hash.Add(XamlRoot?.RasterizationScale);
+        _layoutOwners.Clear();
         foreach (var surface in _surfaces)
         {
             hash.Add(Bounds(surface));
             foreach (var segment in Segments(surface))
             {
+                if (!_layoutOwners.Add(segment.Owner)) continue;
                 hash.Add(Bounds(segment.Owner));
                 if (segment.Owner is RichTextBlock rich)
                 {
@@ -154,6 +161,8 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         StopDrag();
         _surfaces.Clear();
         _characterRects.Clear();
+        _glyphRects.Clear();
+        _layoutOwners.Clear();
         _segments.Clear();
         _documentDirty = true;
         Document.Rebuild([]);
@@ -171,6 +180,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         PointerCaptureLost -= OnCaptureLost;
         Loaded -= OnLoaded;
         Unloaded -= OnUnloaded;
+        ActualThemeChanged -= OnThemeChanged;
         LayoutUpdated -= OnLayout;
         _dragTimer.Tick -= OnDragTick;
     }
@@ -185,14 +195,14 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
 
     internal void Refresh() => Refresh(membershipChecked: false);
 
-    private void Refresh(bool membershipChecked)
+    private void Refresh(bool membershipChecked, bool nativeTextChanged = false, int? signature = null)
     {
         if (_detached || _refreshing || !IsLoaded) return;
         _refreshing = true;
         try
         {
             if (!membershipChecked) CheckMembership();
-            _characterRects.Clear();
+            bool geometryChanged = _documentDirty;
             if (_documentDirty)
             {
                 _documentDirty = false;
@@ -203,7 +213,15 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
                     new SelectionPart(s, s.Metadata.Text, s.Metadata.SeparatorAfter)));
                 foreach (var surface in _surfaces) _ = Segments(surface);
             }
-            else InvalidateNativeSegments();
+            else if (!membershipChecked) nativeTextChanged = InvalidateNativeSegments();
+            int currentSignature = signature ?? LayoutSignature();
+            if (geometryChanged || nativeTextChanged || currentSignature != _layoutSignature)
+            {
+                _characterRects.Clear();
+                _glyphRects.Clear();
+            }
+            _layoutSignature = currentSignature;
+            _viewport = Viewport();
             DrawSelection();
         }
         finally { _refreshing = false; }
@@ -294,6 +312,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
 
     private void OnPressed(object sender, PointerRoutedEventArgs e)
     {
+        if (!IsMouseSelection(e.Pointer.PointerDeviceType)) return;
         if (!OwnsInput(e.OriginalSource) || IsChrome(e.OriginalSource)) return;
         Refresh();
         var point = e.GetCurrentPoint(this);
@@ -354,7 +373,13 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         e.Handled = true;
     }
 
-    private void OnCaptureLost(object sender, PointerRoutedEventArgs e) => StopDrag();
+    private void OnCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, this)) StopDrag();
+    }
+
+    internal static bool IsMouseSelection(Microsoft.UI.Input.PointerDeviceType device) =>
+        device == Microsoft.UI.Input.PointerDeviceType.Mouse;
     private void StopDrag()
     {
         _dragTimer.Stop();
@@ -386,7 +411,6 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
                 break;
             }
         }
-        _characterRects.Clear();
         _dragPoint = LocalPoint(_rootDragPoint);
         Document.Select(Document.Anchor, HitTest(_dragPoint));
         DrawSelection();
@@ -397,10 +421,29 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (!OwnsInput(e.OriginalSource) || IsChrome(e.OriginalSource)) return;
+        if (!CanHandleKey(e.OriginalSource, e.Handled)) return;
         Refresh();
         bool extend = IsDown(VirtualKey.Shift), ctrl = IsDown(VirtualKey.Control);
-        switch (e.Key)
+        e.Handled = HandleKey(e.Key, extend, ctrl);
+    }
+
+    internal bool CanHandleKey(object source, bool handled)
+    {
+        if (!OwnsInput(source) || IsChrome(source)) return false;
+        if (ReferenceEquals(source, this) || source is Hyperlink) return true;
+        if (handled) return false;
+        for (var node = source as DependencyObject; node is not null && !ReferenceEquals(node, this);
+            node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is Control and not MarkdownSelectionMarker) return false;
+            if (node is MarkdownSelectionMarker { Metadata.Role: SelectionRole.Surface }) return true;
+        }
+        return false;
+    }
+
+    internal bool HandleKey(VirtualKey key, bool extend, bool ctrl)
+    {
+        switch (key)
         {
             case VirtualKey.A when ctrl:
                 Document.Select(0, Document.Text.Length);
@@ -416,36 +459,36 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
                 break;
             case VirtualKey.Home:
             case VirtualKey.End:
-                int next = e.Key == VirtualKey.Home ? 0 : Document.Text.Length;
+                int next = key == VirtualKey.Home ? 0 : Document.Text.Length;
                 Document.Select(extend ? Document.Anchor : next, next);
                 break;
             case VirtualKey.Up:
             case VirtualKey.Down:
             case VirtualKey.PageUp:
             case VirtualKey.PageDown:
-                MoveVertical(e.Key is VirtualKey.Up or VirtualKey.PageUp ? -1 : 1,
-                    e.Key is VirtualKey.PageUp or VirtualKey.PageDown, extend);
+                MoveVertical(key is VirtualKey.Up or VirtualKey.PageUp ? -1 : 1,
+                    key is VirtualKey.PageUp or VirtualKey.PageDown, extend);
                 break;
             case VirtualKey.Escape:
                 Document.Select(Document.Caret, Document.Caret);
                 break;
-            default: return;
+            default: return false;
         }
         DrawSelection();
         BringCaretIntoView();
-        e.Handled = true;
+        return true;
     }
 
-    internal void CopySelection()
+    internal void CopySelection(Action<string>? write = null)
     {
         string text = Document.SelectedText;
         if (text.Length == 0) return;
-        MarkdownSelectionCopy.Write(text, static value =>
+        MarkdownSelectionCopy.Write(text, write ?? (static value =>
         {
             var package = new DataPackage();
             package.SetText(value);
             Clipboard.SetContent(package);
-        }, Options.OnCopyResult);
+        }), Options.OnCopyResult);
     }
 
     internal void MoveVertical(int direction, bool page, bool extend)
@@ -542,6 +585,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
 
     internal Rect GlyphBounds(int offset, int next)
     {
+        if (_glyphRects.TryGetValue((offset, next), out var cached)) return cached;
         var start = CharacterBounds(offset);
         var entry = Document.EntryAt(offset);
         if (entry?.Identity is not MarkdownSelectionMarker marker || offset >= entry.End) return start;
@@ -554,11 +598,60 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
             {
                 var end = segment.Owner.TransformToVisual(this).TransformBounds(
                     pointer.GetCharacterRect(LogicalDirection.Backward));
-                return GlyphRectangle(start, end);
+                return _glyphRects[(offset, next)] = GlyphRectangle(start, end);
             }
         }
         return start;
     }
+
+    internal IEnumerable<(int Offset, int Next)> VisibleGlyphs(int start, int end)
+    {
+        var viewport = Viewport();
+        foreach (var entry in Document.Entries)
+        {
+            if (entry.End <= start || entry.Start >= end) continue;
+            var bounds = Intersect(Bounds((MarkdownSelectionMarker)entry.Identity), viewport);
+            if (bounds.Width <= 0 || bounds.Height <= 0) continue;
+            for (int offset = Math.Max(start, entry.Start); offset < Math.Min(end, entry.End);)
+            {
+                int next = Document.MoveGrapheme(offset, 1);
+                yield return (offset, next);
+                offset = Math.Max(offset + 1, next);
+            }
+        }
+    }
+
+    internal int[] VisualLineBoundaries()
+    {
+        var boundaries = new List<int> { 0 };
+        foreach (var entry in Document.Entries)
+        {
+            if (boundaries[^1] != entry.Start) boundaries.Add(entry.Start);
+            double previousY = double.NaN;
+            for (int offset = entry.Start; offset < entry.End;)
+            {
+                double y = CharacterBounds(offset).Y;
+                if (!double.IsNaN(previousY) && Math.Abs(y - previousY) > .5 && boundaries[^1] != offset)
+                    boundaries.Add(offset);
+                previousY = y;
+                offset = Math.Max(offset + 1, Document.MoveGrapheme(offset, 1));
+            }
+        }
+        if (boundaries[^1] != Document.Text.Length) boundaries.Add(Document.Text.Length);
+        return boundaries.ToArray();
+    }
+
+    internal SolidColorBrush SelectionBrush(int offset)
+    {
+        var entry = Document.EntryAt(offset);
+        if (entry?.Identity is MarkdownSelectionMarker marker)
+            foreach (var segment in Segments(marker))
+                if (segment.Owner is RichTextBlock rich) return rich.SelectionHighlightColor;
+                else if (segment.Owner is TextBlock text) return text.SelectionHighlightColor;
+        return _selectionDefaults.SelectionHighlightColor;
+    }
+
+    private void OnThemeChanged(FrameworkElement sender, object args) => DrawSelection();
 
     internal static Rect GlyphRectangle(Rect start, Rect end) =>
         Math.Abs(start.Y - end.Y) < .5
@@ -605,7 +698,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     }
 
     private readonly record struct TextSegment(FrameworkElement Owner, string Text, TextPointer Start, Inline Identity,
-        Hyperlink? Link = null, int LocalStart = 0);
+        Hyperlink? Link = null, int LocalStart = 0, int Style = 0);
 
     private bool InvalidateNativeSegments()
     {
@@ -620,7 +713,8 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
                 if (current.Text.Length == 0) continue;
                 if (index >= cached.Length || !ReferenceEquals(current.Identity, cached[index].Identity)
                     || !ReferenceEquals(current.Owner, cached[index].Owner)
-                    || !ReferenceEquals(current.Link, cached[index].Link) || current.Text != cached[index].Text)
+                    || !ReferenceEquals(current.Link, cached[index].Link) || current.Text != cached[index].Text
+                    || current.Style != cached[index].Style)
                 {
                     matches = false;
                     break;
@@ -701,7 +795,9 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     {
         foreach (var inline in inlines)
         {
-            if (inline is Run run) yield return new TextSegment(owner, run.Text, run.ContentStart, run, link);
+            if (inline is Run run) yield return new TextSegment(owner, run.Text, run.ContentStart, run, link,
+                Style: HashCode.Combine(run.FontFamily.Source, run.FontSize, run.FontWeight, run.FontStyle,
+                    run.FontStretch, run.CharacterSpacing, run.Language));
             else if (inline is LineBreak line) yield return new TextSegment(owner, "\n", line.ContentStart, line);
             else if (inline is Span span)
                 foreach (var segment in InlineSegments(owner, span.Inlines, span as Hyperlink ?? link)) yield return segment;
@@ -721,9 +817,8 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
             var caret = Intersect(CharacterBounds(Document.Caret), viewport);
             if (caret.Width > 0 && caret.Height > 0) rectangles.Add(caret);
         }
-        for (int offset = Document.Start; offset < Document.End;)
+        foreach (var (offset, next) in VisibleGlyphs(Document.Start, Document.End))
         {
-            int next = Document.MoveGrapheme(offset, 1);
             var rect = GlyphBounds(offset, next);
             rect = Intersect(rect, viewport);
             if (rect.Width > 0 && rect.Height > 0)
@@ -737,15 +832,14 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
                 }
                 else rectangles.Add(rect);
             }
-            offset = Math.Max(offset + 1, next);
         }
         while (_overlay.Children.Count > rectangles.Count) _overlay.Children.RemoveAt(_overlay.Children.Count - 1);
         for (int i = 0; i < rectangles.Count; i++)
         {
             if (_overlay.Children.Count <= i)
-                _overlay.Children.Add(new Rectangle
-                { Fill = new SolidColorBrush(Color.FromArgb(90, 0, 120, 215)) });
+                _overlay.Children.Add(new Rectangle { Opacity = .35 });
             var shape = (Rectangle)_overlay.Children[i];
+            shape.Fill = SelectionBrush(Document.Start);
             var rect = rectangles[i];
             if (shape.Width != rect.Width) shape.Width = rect.Width;
             if (shape.Height != rect.Height) shape.Height = rect.Height;

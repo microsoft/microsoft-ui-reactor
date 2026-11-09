@@ -9,6 +9,14 @@ namespace Microsoft.UI.Reactor.Tests;
 
 public class MarkdownTextSelectionTests
 {
+    [Theory]
+    [InlineData(Microsoft.UI.Input.PointerDeviceType.Mouse, true)]
+    [InlineData(Microsoft.UI.Input.PointerDeviceType.Touch, false)]
+    [InlineData(Microsoft.UI.Input.PointerDeviceType.Pen, false)]
+    public void PointerSelection_LeavesTouchAndPenToNativePanning(
+        Microsoft.UI.Input.PointerDeviceType device, bool expected) =>
+        Assert.Equal(expected, MarkdownSelectionHost.IsMouseSelection(device));
+
     private static Element Md(string text, MarkdownOptions? options = null) =>
         Microsoft.UI.Reactor.Advanced.Factories.Markdown(text, options ?? new MarkdownOptions());
     [Fact]

@@ -2,13 +2,14 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.Markdown;
 
-/// <summary>Policy shared by the Markdown leaves of one assembled message.</summary>
+/// <summary>Copy policy for one selection scope; a non-null parser value only enables semantic surfaces.</summary>
 public sealed record MarkdownTextSelectionOptions
 {
     /// <summary>
@@ -118,6 +119,27 @@ internal sealed partial class MarkdownSelectionMarker : UserControl
 {
     internal MarkdownSelectionElement Metadata { get; set; } = null!;
     internal UIElement? Child { get => Content; set => Content = value; }
+    internal bool HasSelectionScope
+    {
+        get
+        {
+            for (DependencyObject? parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(this);
+                parent is not null; parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
+                if (parent is MarkdownSelectionHost) return true;
+            return false;
+        }
+    }
+
+    internal MarkdownSelectionMarker()
+    {
+        Loaded += (_, _) =>
+        {
+            if (Metadata.Role == SelectionRole.Surface && !HasSelectionScope)
+                DiagnosticLog.Warning(LogCategory.Markdown, "TextSelection",
+                    "A selectable Markdown surface has no enclosing MarkdownTextSelection.Scope. " +
+                    "Wrap the complete message in Scope; TextSelection alone does not provide selection.");
+        };
+    }
 }
 
 internal sealed class MarkdownSelectionHandler : IDecoratorElementHandler<MarkdownSelectionElement>

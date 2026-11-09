@@ -41,6 +41,10 @@ Conventions for contributors:
 
 ### Changed
 
+- The generated API index now includes Reactor Advanced factories, modifiers, hooks,
+  enums and public types alongside the core Reactor surface, keeping `mur --api` and
+  both shipped agent-reference copies complete (PR #1475).
+
 - The internal Yoga layout engine behind `FlexPanel` is synced to upstream
   facebook/yoga@41118bd (pinned in `cgmanifest.json`), with a few documented local
   divergences. `FlexPanel` layouts are unchanged apart from the fixes listed under Fixed.

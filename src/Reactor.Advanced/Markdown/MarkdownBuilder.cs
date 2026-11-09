@@ -20,8 +20,10 @@ namespace Microsoft.UI.Reactor.Markdown;
 public record MarkdownOptions
 {
     /// <summary>
-    /// Opt into semantic text surfaces. Use the same options for each Markdown leaf,
-    /// then wrap the complete assembled message once with <see cref="MarkdownTextSelection.Scope"/>.
+    /// Opt into semantic text surfaces by setting a non-null value, then wrap the
+    /// complete message with <see cref="MarkdownTextSelection.Scope"/>. Surfaces belong
+    /// to the nearest scope by structure, not options identity. Only the scope's
+    /// options supply copy feedback; callbacks on this parser opt-in are not used.
     /// Custom HTML/code renderers should wrap their visible text (not toolbar chrome)
     /// with <see cref="MarkdownTextSelection.Surface"/>.
     /// </summary>

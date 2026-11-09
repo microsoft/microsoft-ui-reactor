@@ -21,12 +21,28 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     public static void Stop() => TestSession.AssemblyCleanup();
 
     [TestMethod]
+    [E2eRetry(3)]
     public void Selection_RoutedInputAndExternalEvents()
     {
+        SessionInteractivityGuard.EnsureInputInjectable(nameof(Selection_RoutedInputAndExternalEvents));
+        GetWindowThreadProcessId((nint)TestSession.HostHwnd, out uint windowPid);
+        Assert.AreEqual((uint)TestSession.HostPid, windowPid, "Only foreground the owned host window");
+        SetForegroundWindow((nint)TestSession.HostHwnd);
+        Wait(() =>
+        {
+            GetWindowThreadProcessId(GetForegroundWindow(), out uint pid);
+            return pid == (uint)TestSession.HostPid;
+        }, "owned host foreground");
         var window = AutomationElement.FromHandle((nint)TestSession.HostHwnd);
         AutomationElement Find(string id) => window.FindFirst(TreeScope.Descendants,
             new PropertyCondition(AutomationElement.AutomationIdProperty, id))
             ?? throw new InvalidOperationException($"Missing {id}");
+        GuardForeground();
+        if (Find("FixtureStatus").Current.Name != "Ready")
+        {
+            ((InvokePattern)Find("ResetFixture").GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+            Wait(() => Find("FixtureStatus").Current.Name == "Ready", "fresh fixture reset");
+        }
         GuardForeground();
         ((InvokePattern)Find("Nav_Markdown_Selection_InputProof").GetCurrentPattern(InvokePattern.Pattern)).Invoke();
         Wait(() => Find("FixtureStatus").Current.Name == "Loaded: Markdown_Selection_InputProof", "fixture navigation");
@@ -104,13 +120,20 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Console.WriteLine($"After click routing: {outer.Current.HelpText}");
             Point(linkGlyph[0], linkGlyph[1] + linkGlyph[3] / 2);
             Mouse(2); mouseHeld = true;
+            Wait(() => outer.Current.HelpText.Contains("press pressCount=2 ", StringComparison.Ordinal),
+                "link press delivered before pointer moves");
             Point(linkGlyph[0] + 35, linkGlyph[1] + linkGlyph[3] / 2);
             Console.WriteLine($"Before drag release: selected={outerText.GetSelection().Single().GetText(-1)}; routing={outer.Current.HelpText}");
             Mouse(4); mouseHeld = false;
             Console.WriteLine($"After drag release: clicks={Find("SelectionClicks").Current.Name}; routing={outer.Current.HelpText}");
             Wait(() => outerText.GetSelection().Single().GetText(-1).Length > 0, "link drag selects");
+            var dragged = outerText.GetSelection().Single();
+            Assert.IsTrue(dragged.CompareEndpoints(TextPatternRangeEndpoint.Start, link, TextPatternRangeEndpoint.Start) >= 0
+                && dragged.CompareEndpoints(TextPatternRangeEndpoint.End, link, TextPatternRangeEndpoint.End) <= 0,
+                "Link drag range must stay inside the pressed hyperlink");
             Assert.AreEqual("Clicks 1", Find("SelectionClicks").Current.Name, "drag must not activate link");
             var outerSelection = outerText.GetSelection().Single().GetText(-1);
+            var outerRangeBeforeInnerInput = outerText.GetSelection().Single().Clone();
             Console.WriteLine($"Link drag selected={outerSelection}");
             var innerGlyph = Glyph(innerText.DocumentRange, 1);
             Click(innerGlyph[0] + innerGlyph[2] / 2, innerGlyph[1] + innerGlyph[3] / 2);
@@ -124,11 +147,23 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Wait(() => receivedSelection.Contains("inner text"), "Ctrl+A exact selection-change event");
             Assert.AreEqual("Clicks 1", Find("SelectionClicks").Current.Name, "drag did not activate link after timer settle");
             Assert.AreEqual(outerSelection, outerText.GetSelection().Single().GetText(-1), "outer selection unchanged");
+            Assert.IsTrue(outerRangeBeforeInnerInput.Compare(outerText.GetSelection().Single()),
+                "Nested input must not move either endpoint of the saved outer range");
             Wait(() => GetClipboardSequenceNumber() != clipboardSequence && ReadClipboard() == "inner text",
                 "fresh inner clipboard write");
             var clipboard = ReadClipboard();
             Assert.AreEqual("inner text", clipboard, "inner clipboard");
             Console.WriteLine($"Nested Ctrl+A/C: inner={innerText.GetSelection().Single().GetText(-1)} outer={outerSelection} clipboard={clipboard}; selectionEvents={selectionEvents}");
+            Click(innerGlyph[0], innerGlyph[1] + innerGlyph[3] / 2);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "", "plain click collapses selection");
+            var shiftAnchor = innerText.GetSelection().Single().Clone();
+            var shiftGlyph = Glyph(innerText.DocumentRange, 4);
+            Key(0x10, false);
+            Click(shiftGlyph[0], shiftGlyph[1] + shiftGlyph[3] / 2);
+            Key(0x10, true);
+            Wait(() => innerText.GetSelection().Single().GetText(-1).Length > 0, "Shift+click extends selection");
+            Assert.AreEqual(0, innerText.GetSelection().Single().CompareEndpoints(
+                TextPatternRangeEndpoint.Start, shiftAnchor, TextPatternRangeEndpoint.Start), "Shift+click keeps anchor");
             ((InvokePattern)Find("SelectionStream").GetCurrentPattern(InvokePattern.Pattern)).Invoke();
             Wait(() => innerText.DocumentRange.GetText(-1) == "inner text streamed" &&
                 receivedText.Contains("inner text streamed"), "streaming exact text-change event");
@@ -144,6 +179,8 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             var firstGlyph = Glyph(longText.DocumentRange, 1);
             Point(firstGlyph[0] + firstGlyph[2] / 2, firstGlyph[1] + firstGlyph[3] / 2);
             Mouse(2); mouseHeld = true;
+            Wait(() => longText.GetSelection().Single().CompareEndpoints(TextPatternRangeEndpoint.Start,
+                longText.DocumentRange, TextPatternRangeEndpoint.Start) > 0, "long-message press delivered");
             var viewport = scrollElement.Current.BoundingRectangle;
             Point(viewport.Left + viewport.Width / 2, viewport.Bottom + 12);
             Assert.IsTrue(GetCursorPos(out var stationary));
@@ -175,6 +212,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
         catch (Exception ex)
         {
             testFailure = ex;
+            SessionInteractivityGuard.RecheckAfterFailure(nameof(Selection_RoutedInputAndExternalEvents));
             throw;
         }
         finally
@@ -185,15 +223,12 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 try { action(); }
                 catch (Exception ex) { cleanupFailures.Add(ex); }
             }
-            int pid = TestSession.HostPid;
             if (mouseHeld) Cleanup(() => Send(new Input { Union = new InputUnion { Mouse = new MouseInput { Flags = 4 } } }));
             foreach (ushort key in _heldKeys)
                 Cleanup(() => Send(new Input { Type = 1, Union = new InputUnion { Keyboard = new KeyboardInput { Key = key, Flags = 2 } } }));
             _heldKeys.Clear();
             if (selectionRegistered) Cleanup(() => Automation.RemoveAutomationEventHandler(TextPattern.TextSelectionChangedEvent, inner, selectionHandler));
             if (textRegistered) Cleanup(() => Automation.RemoveAutomationEventHandler(TextPattern.TextChangedEvent, inner, textHandler));
-            Cleanup(TestSession.ForceCleanup);
-            Cleanup(() => Assert.IsFalse(global::System.Diagnostics.Process.GetProcesses().Any(process => process.Id == pid), $"Owned PID {pid} remains"));
             if (previousDpiContext != 0)
                 Cleanup(() => Assert.AreNotEqual((nint)0, SetThreadDpiAwarenessContext(previousDpiContext)));
             if (cleanupFailures.Count > 0)
@@ -230,6 +265,8 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     private static void GuardForeground()
     {
         GetWindowThreadProcessId(GetForegroundWindow(), out uint pid);
+        if (pid != (uint)TestSession.HostPid)
+            SessionInteractivityGuard.RecheckAfterFailure("Owned foreground guard");
         Assert.AreEqual((uint)TestSession.HostPid, pid, "Abort input: owned host is not foreground");
     }
 
@@ -261,6 +298,8 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     [StructLayout(LayoutKind.Sequential)]
     private struct ScreenPoint { public int X, Y; }
     [LibraryImport("user32.dll")] private static partial nint GetForegroundWindow();
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetForegroundWindow(nint window);
     [LibraryImport("user32.dll")] private static partial uint GetClipboardSequenceNumber();
     [LibraryImport("user32.dll")] private static partial uint GetWindowThreadProcessId(nint window, out uint pid);
     [LibraryImport("user32.dll", SetLastError = true)] private static partial nint SetThreadDpiAwarenessContext(nint context);

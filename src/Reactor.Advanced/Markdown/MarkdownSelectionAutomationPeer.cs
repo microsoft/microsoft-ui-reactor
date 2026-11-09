@@ -131,15 +131,14 @@ internal sealed partial class MarkdownSelectionRange(
         var result = new List<double>();
         var screen = peer.GetBoundingRectangle();
         double scale = host.XamlRoot?.RasterizationScale ?? 1;
-        for (int i = _start; i < _end;)
+        var viewport = host.Viewport();
+        foreach (var (i, next) in host.VisibleGlyphs(_start, _end))
         {
-            int next = host.Document.MoveGrapheme(i, 1);
             var rect = host.GlyphBounds(i, next);
-            rect = MarkdownSelectionHost.Intersect(rect, host.Viewport());
+            rect = MarkdownSelectionHost.Intersect(rect, viewport);
             if (rect.Width > 0 && rect.Height > 0)
                 result.AddRange([screen.X + rect.X * scale, screen.Y + rect.Y * scale,
                     rect.Width * scale, rect.Height * scale]);
-            i = Math.Max(i + 1, next);
         }
         rectangles = result.ToArray();
     }
@@ -198,10 +197,10 @@ internal sealed partial class MarkdownSelectionRange(
             return global::System.Globalization.StringInfo.ParseCombiningCharacters(text).Append(text.Length).ToArray();
         if (unit is TextUnit.Paragraph or TextUnit.Format)
             return host.Document.Entries.Select(e => e.Start).Append(text.Length).Distinct().ToArray();
+        if (unit == TextUnit.Line) return host.VisualLineBoundaries();
         var boundaries = new List<int> { 0 };
         for (int i = 1; i < text.Length; i++)
-            if (unit == TextUnit.Line ? text[i - 1] == '\n'
-                : char.IsWhiteSpace(text[i]) != char.IsWhiteSpace(text[i - 1])) boundaries.Add(i);
+            if (char.IsWhiteSpace(text[i]) != char.IsWhiteSpace(text[i - 1])) boundaries.Add(i);
         boundaries.Add(text.Length);
         return boundaries.ToArray();
     }

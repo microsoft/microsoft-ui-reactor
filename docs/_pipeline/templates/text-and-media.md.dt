@@ -234,7 +234,12 @@ with several `Markdown(...)` calls:
 
 Keep timeline rows, toolbars, and surrounding `ItemsView` chrome **outside**
 the text surfaces. Registration stops at the message scope; nested scopes are
-independent. The parser emits semantic text and explicit separators, rather
+independent. `TextSelection` is only a parser opt-in: surfaces belong to the
+nearest scope, regardless of options identity, and only the scope's options
+supply `OnCopyResult`. Omitting the scope leaves no selection controller and
+emits a diagnostic warning. Key the scope by message identity with
+`.WithKey(message.Id)` when a virtualized row can switch to another message.
+The parser emits semantic text and explicit separators, rather
 than guessing meaning from `Grid`/`StackPanel` shapes. `Surface(text, content,
 separatorAfter: "\n")` supplies exact **visible plain text**, never Markdown
 or HTML source. List markers have no separator before their content; table
@@ -256,7 +261,8 @@ selection only: it does not change native visibility or own expansion state.
 Nested gates compose; collapsed descendants leave the selection document and
 return on expansion.
 
-The scope supports pointer drag, Shift+arrow/PageUp/PageDown, Ctrl+A and
+The scope supports mouse drag (touch/pen remain available for native panning),
+Shift+arrow/PageUp/PageDown, Ctrl+A and
 Ctrl+C; keyboard navigation includes fully clipped blocks. Modern `ScrollView`
 (including the internal one in `ItemsView`) and legacy `ScrollViewer` provide
 clipping, bring-into-view and drag autoscroll. Offsets are UTF-16; horizontal
