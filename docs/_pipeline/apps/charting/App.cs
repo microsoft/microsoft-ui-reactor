@@ -7,6 +7,7 @@ using Microsoft.UI.Reactor.Charting.Accessibility;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Charting.Charts;
 // </snippet:imports>
+using static Microsoft.UI.Reactor.Charting.D3Charts;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<ChartingApp>("Charting");
@@ -426,6 +427,39 @@ class D3CustomDemo : Component
     }
 }
 // </snippet:d3-custom>
+
+class FitParentChartsDemo : Component
+{
+    public override Element Render()
+    {
+        CategoryData[] shares = [new("Contoso", 42), new("Fabrikam", 31), new("Northwind", 27)];
+        SalesPoint[] sales = [new(1, 120), new(2, 180), new(3, 150), new(4, 220)];
+        return
+            // <snippet:fit-parent-charts>
+            FlexRow(
+                PieChart(shares, s => s.Value, s => s.Name)
+                    .InnerRadius(60)
+                    .Title("Market share")
+                    .FitParent()                 // last call: returns Element
+                    .Flex(grow: 1, basis: 0),
+                LineChart(sales, d => d.Month, d => d.Revenue)
+                    .ShowGrid(true)
+                    .Title("Revenue")
+                    .FitParent(new FitParentOptions { Debounce = TimeSpan.FromMilliseconds(250) })
+                    .Flex(grow: 1, basis: 0)
+            ).Height(320);
+            // </snippet:fit-parent-charts>
+    }
+}
+
+class FitParentD3Demo : Component
+{
+    public override Element Render() =>
+        // <snippet:fit-parent-d3>
+        FitParent((w, h) => D3Canvas(w, h,
+            D3Circle(w / 2, h / 2, Math.Min(w, h) / 2 - 8)));
+        // </snippet:fit-parent-d3>
+}
 
 class ChartingApp : Component
 {

@@ -217,11 +217,10 @@ A chart's geometry — axis ticks, bar widths, arc radii — is computed from
 stretch with its container. Make `.FitParent()` the **last** call on the
 builder and the chart is rebuilt at its parent's size instead (it wraps
 the core [`FitParent`](layout.md#fitparent-size-baked-content) factory).
-It needs no import beyond the chart DSL:
+It needs no import beyond the chart DSL
+(`using static Microsoft.UI.Reactor.Charting.Charts;`):
 
 ```csharp
-using static Microsoft.UI.Reactor.Charting.Charts;
-
 FlexRow(
     PieChart(shares, s => s.Value, s => s.Name)
         .InnerRadius(60)
@@ -233,7 +232,7 @@ FlexRow(
         .Title("Revenue")
         .FitParent(new FitParentOptions { Debounce = TimeSpan.FromMilliseconds(250) })
         .Flex(grow: 1, basis: 0)
-).Height(320)
+).Height(320);
 ```
 
 `.FitParent()` exists on `PieChart`, `LineChart`/`BarChart`/`AreaChart`,
@@ -274,13 +273,12 @@ builder instance between two FitParents is unsupported.
 
 **D3 canvases.** `D3Canvas` content has no `.FitParent()` builder — you
 compute its children from the size yourself — so call the core factory
-directly:
+directly (`D3Canvas` and the `D3*` shapes come from
+`using static Microsoft.UI.Reactor.Charting.D3Charts;`):
 
 ```csharp
-using static Microsoft.UI.Reactor.Charting.D3Charts;
-
 FitParent((w, h) => D3Canvas(w, h,
-    D3Circle(w / 2, h / 2, Math.Min(w, h) / 2 - 8)))
+    D3Circle(w / 2, h / 2, Math.Min(w, h) / 2 - 8)));
 ```
 
 ## Binding Data to State

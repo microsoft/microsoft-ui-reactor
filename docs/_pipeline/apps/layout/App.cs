@@ -372,6 +372,46 @@ class ContentAlignmentDemo : Component
 }
 // </snippet:content-alignment>
 
+class FitParentDemo : Component
+{
+    private static readonly double[] samples = [3, 5, 4, 8, 6, 9, 7];
+    private static readonly double[] cells = [0.1, 0.4, 0.7, 0.2, 0.9, 0.5];
+
+    public override Element Render() => VStack(16,
+        // <snippet:fit-parent-flex>
+        FlexColumn(
+            TextBlock("Throughput").Bold(),
+            FitParent((w, h) => BuildSparkline(samples, w, h))   // your size-baked builder
+                .Flex(grow: 1, basis: 0)
+        )
+        // </snippet:fit-parent-flex>
+        .Height(200),
+        // <snippet:fit-parent-options>
+        FitParent(
+            (w, h) => BuildHeatmap(cells, w, h),
+            new FitParentOptions
+            {
+                Debounce = TimeSpan.FromMilliseconds(250),
+                ScaleDuringResize = false,
+            })
+        // </snippet:fit-parent-options>
+        .Height(200),
+        // <snippet:fit-parent-scrollview-do>
+        // Do:
+        ScrollView(VStack(16,
+            TextBlock("Revenue"),
+            FitParent((w, h) => BuildSparkline(samples, w, h)).Height(240)))
+        // </snippet:fit-parent-scrollview-do>
+    );
+
+    // Stand-ins for the reader's own size-baked builders.
+    private static Element BuildSparkline(double[] values, double w, double h) =>
+        TextBlock($"{values.Length} samples at {w:0}×{h:0}");
+
+    private static Element BuildHeatmap(double[] values, double w, double h) =>
+        TextBlock($"{values.Length} cells at {w:0}×{h:0}");
+}
+
 class LayoutApp : Component
 {
     public override Element Render()

@@ -230,12 +230,7 @@ its geometry from an explicit width and height when it is built, so
 WinUI's stretch layout can only leave it the wrong size. `FitParent`
 fills its parent and calls your builder with the slot's size in DIPs:
 
-```csharp
-FlexColumn(
-    TextBlock("Throughput").Bold(),
-    FitParent((w, h) => BuildSparkline(samples, w, h))   // your size-baked builder
-        .Flex(grow: 1, basis: 0)
-)
+```csharp snippet="layout/fit-parent-flex"
 ```
 
 `render` only ever receives finite sizes greater than zero. It runs again
@@ -274,14 +269,7 @@ first commit).
 
 **Options.** Pass a `FitParentOptions` as the second argument:
 
-```csharp
-FitParent(
-    (w, h) => BuildHeatmap(cells, w, h),
-    new FitParentOptions
-    {
-        Debounce = TimeSpan.FromMilliseconds(250),
-        ScaleDuringResize = false,
-    })
+```csharp snippet="layout/fit-parent-options"
 ```
 
 | Option | Default | Effect |
@@ -504,11 +492,7 @@ measures 0 on that axis, stays an empty placeholder, and never calls
 `render`, so the content silently disappears. There is no debug warning
 for this case. Give the unsized axis a size:
 
-```csharp
-// Do:
-ScrollView(VStack(16,
-    TextBlock("Revenue"),
-    FitParent((w, h) => BuildSparkline(samples, w, h)).Height(240)))
+```csharp snippet="layout/fit-parent-scrollview-do"
 ```
 
 A FitParent placed *directly* inside a `ScrollView` (no stack in between)
