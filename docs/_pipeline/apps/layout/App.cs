@@ -115,7 +115,9 @@ class ExpanderCanvasDemo : Component
             Expander("Click to expand", VStack(8,
                 TextBlock("Hidden content revealed!"),
                 TextBlock("Expanders are great for optional details.")
-            )),
+            )).HeaderContent(HStack(8,
+                TextBlock("Click to expand"),
+                TextBlock("(optional)"))),
             SubHeading("Canvas"),
             Border(
                 Canvas(

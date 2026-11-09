@@ -34,6 +34,13 @@ Conventions for contributors:
 
 ### Changed
 
+- **`ExpanderElement.HeaderTemplate` and `.HeaderTemplate(Element)` are renamed to
+  `HeaderContent` and `.HeaderContent(Element)` (breaking).** This Element-valued
+  child is mounted into WinUI's `Expander.Header`, not its `HeaderTemplate`
+  DataTemplate property. Rename fluent calls, object/`with` initializers, and
+  property reads, then recompile consumers; string-header fallback and child
+  lifecycle behavior are unchanged (issue #1480). See the [migration notes](docs/guide/layout.md#migration-expanderheadertemplate-renamed-to-headercontent).
+
 - The internal Yoga layout engine behind `FlexPanel` is synced to upstream
   facebook/yoga@41118bd (pinned in `cgmanifest.json`), with a few documented local
   divergences. `FlexPanel` layouts are unchanged apart from the fixes listed under Fixed.
