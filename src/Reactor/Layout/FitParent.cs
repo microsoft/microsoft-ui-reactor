@@ -56,10 +56,11 @@ public static partial class Factories
     /// <para>
     /// FitParent must receive a <b>finite</b> size from its parent on <b>both</b> axes: a Flex
     /// child with grow, a Grid <c>*</c> track, the window root, or an explicit
-    /// <c>.Width(n)</c>/<c>.Height(n)</c>. Its content sits in a zero-desired-size layer, so on
-    /// an unsized axis (a <c>ScrollViewer</c>, an unsized <c>VStack</c> child, a Grid <c>Auto</c>
-    /// track, a horizontal <c>StackPanel</c>) it measures 0 and stays an empty placeholder:
-    /// <paramref name="render"/> is never called. Give that axis a size to fix it.
+    /// <c>.Width(n)</c>/<c>.Height(n)</c>. Placed directly inside a <c>ScrollView</c> or
+    /// <c>ScrollViewer</c>, it fills the viewport. Its content sits in a zero-desired-size layer,
+    /// so on an unsized axis (an unsized <c>VStack</c> child, including one inside a scroller, a
+    /// Grid <c>Auto</c> track, a horizontal <c>StackPanel</c>) it measures 0 and stays an empty
+    /// placeholder: <paramref name="render"/> is never called. Give that axis a size to fix it.
     /// </para>
     /// <para>
     /// The first usable size commits without a debounce (one empty placeholder frame). Later
