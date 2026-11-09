@@ -18,7 +18,21 @@ public sealed class ApiIndexGeneratorTests
     static Assembly ReactorAssembly => typeof(Microsoft.UI.Reactor.Factories).Assembly;
 
     [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only api-index generator: reflects over the Reactor assembly's public surface (Assembly.GetTypes / member reflection) by design. This host is never trimmed. Behaviour-neutral.")]
-    static string Generate() => ApiIndexGenerator.Generate(ReactorAssembly);
+    static string Generate() => ApiIndexGenerator.Generate(ReactorAssembly,
+        typeof(Microsoft.UI.Reactor.Markdown.MarkdownTextSelection).Assembly);
+
+    [Fact]
+    public void AdvancedSelectionApi_IsIndexedWithActualSignatures()
+    {
+        var output = Generate();
+        var selection = TypeBlock(output, "MarkdownTextSelection");
+        Assert.Contains("Scope(", selection);
+        Assert.Contains("Surface(", selection);
+        Assert.Contains("Visibility(", selection);
+        Assert.Contains("OnCopyResult", TypeBlock(output, "MarkdownTextSelectionOptions"));
+        Assert.Contains("TextSelection", TypeBlock(output, "MarkdownOptions"));
+        Assert.DoesNotContain("TryCopyText", TypeBlock(output, "MarkdownTextSelectionOptions"));
+    }
 
     static string RepoRoot()
     {

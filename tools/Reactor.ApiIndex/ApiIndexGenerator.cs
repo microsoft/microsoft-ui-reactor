@@ -72,6 +72,18 @@ public static class ApiIndexGenerator
         return sb.ToString();
     }
 
+    /// <summary>Generate the core index plus the optional Advanced public surface.</summary>
+    [RequiresUnreferencedCode(ReflectionJustification)]
+    public static string Generate(Assembly core, Assembly advanced)
+    {
+        var sb = new StringBuilder(Generate(core));
+        sb.AppendLine("# Optional package: Microsoft.UI.Reactor.Advanced");
+        sb.AppendLine("# Advanced factories: using static Microsoft.UI.Reactor.Advanced.Factories;");
+        sb.AppendLine();
+        EmitPublicTypes(advanced, sb);
+        return sb.ToString();
+    }
+
     // -----------------------------------------------------------------------
 
     [RequiresUnreferencedCode(ReflectionJustification)]

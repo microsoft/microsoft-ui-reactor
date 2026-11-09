@@ -44,7 +44,8 @@ internal static class Program
             Path.Combine(repoRoot, "plugins", "reactor", "skills", "reactor-dsl", "references", "reactor.api.txt"),
         };
 
-        var content = ApiIndexGenerator.Generate(typeof(Microsoft.UI.Reactor.Factories).Assembly);
+        var content = ApiIndexGenerator.Generate(typeof(Microsoft.UI.Reactor.Factories).Assembly,
+            typeof(Microsoft.UI.Reactor.Markdown.MarkdownTextSelection).Assembly);
 
         foreach (var outputPath in outputPaths)
         {

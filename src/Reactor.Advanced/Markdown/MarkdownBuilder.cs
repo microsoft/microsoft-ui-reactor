@@ -19,6 +19,13 @@ namespace Microsoft.UI.Reactor.Markdown;
 /// </summary>
 public record MarkdownOptions
 {
+    /// <summary>
+    /// Opt into semantic text surfaces. Use the same options for each Markdown leaf,
+    /// then wrap the complete assembled message once with <see cref="MarkdownTextSelection.Scope"/>.
+    /// Custom HTML/code renderers should wrap their visible text (not toolbar chrome)
+    /// with <see cref="MarkdownTextSelection.Surface"/>.
+    /// </summary>
+    public MarkdownTextSelectionOptions? TextSelection { get; init; }
     /// <summary>Override heading rendering. (level 1-6, defaultElement)</summary>
     public Func<int, Element, Element>? Heading { get; init; }
     /// <summary>Override paragraph rendering. (defaultElement)</summary>
@@ -345,7 +352,7 @@ internal sealed class MarkdownBuilder
     {
         var frame = _blockStack.Pop();
 
-        if (_options.UnifiedRichText)
+        if (_options.UnifiedRichText && _options.TextSelection is null)
         {
             _result = BuildUnifiedDocument(frame.Children);
             return;
@@ -425,7 +432,7 @@ internal sealed class MarkdownBuilder
         if (_options.Paragraph is not null)
             element = _options.Paragraph(element);
 
-        AddToParent(element);
+        AddToParent(Selectable(PlainText(inlines), element));
     }
 
     private void LeaveHeading(object? detail)
@@ -452,7 +459,7 @@ internal sealed class MarkdownBuilder
         if (_options.Heading is not null)
             element = _options.Heading(level, element);
 
-        AddToParent(element);
+        AddToParent(Selectable(PlainText(inlines), element));
     }
 
     private static double HeadingFontSize(int level) => level switch
@@ -554,7 +561,7 @@ internal sealed class MarkdownBuilder
         // The Star column hands the content the finite width left over beside the marker, which is
         // what lets long text wrap onto additional lines.
         Element element = Grid([GridSize.Auto, GridSize.Star()], [],
-            TextBlock(marker).VAlign(VerticalAlignment.Top),
+            Selectable(marker, TextBlock(marker), "").VAlign(VerticalAlignment.Top),
             content.Grid(column: 1)
         ) with { ColumnSpacing = 4 };
 
@@ -574,7 +581,7 @@ internal sealed class MarkdownBuilder
         {
             var inlines = _inlines.ToArray();
             _inlines.Clear();
-            frame.Children.Add(MakeRichText(inlines));
+            frame.Children.Add(Selectable(PlainText(inlines), MakeRichText(inlines)));
         }
     }
 
@@ -593,15 +600,15 @@ internal sealed class MarkdownBuilder
         }
         else
         {
-            element = Border(
+            element = Border(Selectable(code,
                 RichTextBlock("") with
                 {
                     Paragraphs = [new RichTextParagraph([
                         new RichTextRun(code) { FontFamily = _options.CodeFontFamily }
                     ])],
-                    IsTextSelectionEnabled = true,
+                    IsTextSelectionEnabled = _options.TextSelection is null,
                     TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
-                }
+                })
             )
             .Background(Theme.CardBackground)
             .WithBorder(Theme.CardStroke, 1)
@@ -674,11 +681,21 @@ internal sealed class MarkdownBuilder
     {
         var frame = _blockStack.Pop();
         // Thead/Tbody are passthrough — rows are already added to tableAllCells.
+        if (_options.TextSelection is not null && _blockStack.Count > 0)
+            _blockStack.Peek().Children.AddRange(frame.Children);
     }
 
     private void LeaveTableRow()
     {
         var frame = _blockStack.Pop();
+        if (_options.TextSelection is not null && _tableAllCells.LastOrDefault() is MarkdownSelectionElement last)
+        {
+            _tableAllCells[^1] = last with { SeparatorAfter = "\n" };
+            if (frame.Children.LastOrDefault() is MarkdownSelectionElement rowLast)
+                frame.Children[^1] = rowLast with { SeparatorAfter = "\n" };
+            var columns = Enumerable.Repeat(Microsoft.UI.Reactor.GridSize.Star(), _tableColCount).ToArray();
+            _blockStack.Peek().Children.Add(Grid(columns, [], frame.Children.ToArray()));
+        }
         _tableRowIndex++;
         _tableCellIndex = 0;
     }
@@ -721,19 +738,46 @@ internal sealed class MarkdownBuilder
         // Microsoft.UI.Xaml.Controls.RichTextBlock.Padding, so no extra Border
         // layer is needed (which would change the layout-bounds shape).
         var pad = _options.TableCellPadding;
-        cell = cell
-            .Padding(pad.Left, pad.Top, pad.Right, pad.Bottom)
-            .Grid(row: _tableRowIndex, column: _tableCellIndex);
+        cell = cell.Padding(pad.Left, pad.Top, pad.Right, pad.Bottom);
 
         // Header row gets a theme-aware background (default Theme.SubtleFill).
         if (isHeader && _options.TableHeaderBackground is { } headerBg)
             cell = cell.Background(headerBg);
 
+        cell = Selectable(PlainText(inlines), cell, "\t")
+            .Grid(row: _tableRowIndex, column: _tableCellIndex);
         _tableAllCells.Add(cell);
+        if (_options.TextSelection is not null && _blockStack.Count > 0)
+            _blockStack.Peek().Children.Add(cell.Grid(row: 0, column: _tableCellIndex));
         _tableCellIndex++;
     }
 
     // ── Span callbacks ───────────────────────────────────────────────────
+
+    private Element Selectable(string text, Element content, string separator = "\n") =>
+        _options.TextSelection is null ? content :
+            (content is MarkdownSelectionElement { Role: SelectionRole.Surface } surface
+                ? surface : (MarkdownSelectionElement)MarkdownTextSelection.Surface(text, content, separator))
+            with { Options = _options.TextSelection };
+
+    private static string PlainText(IEnumerable<RichTextInline> inlines)
+    {
+        var text = new StringBuilder();
+        foreach (var inline in inlines)
+        {
+            switch (inline)
+            {
+                case RichTextRun run: text.Append(run.Text); break;
+                case RichTextHyperlink link: text.Append(link.Text); break;
+                case RichTextLineBreak: text.Append('\n'); break;
+                case RichTextInlineUIContainer { Child: MarkdownSelectionElement surface }
+                    when surface.Role == SelectionRole.Surface:
+                    text.Append(surface.Text);
+                    break;
+            }
+        }
+        return text.ToString();
+    }
 
     private int OnEnterSpan(MarkdownSpanType type, object? detail)
     {
@@ -844,8 +888,8 @@ internal sealed class MarkdownBuilder
                 Label = labelInlines.Length == 0 ? null : MakeLinkLabel(labelInlines),
                 Uri = _linkUri,
             };
-            ReplaceLinkInlines(buildLink(link)
-                ?? throw new InvalidOperationException("MarkdownOptions.LinkBuilder must return a non-null Element."));
+            ReplaceLinkInlines(Selectable(link.Text, buildLink(link)
+                ?? throw new InvalidOperationException("MarkdownOptions.LinkBuilder must return a non-null Element."), ""));
             return;
         }
 
@@ -1063,13 +1107,13 @@ internal sealed class MarkdownBuilder
         return char.ConvertFromUtf32((int)codepoint);
     }
 
-    private static RichTextBlockElement MakeRichText(RichTextInline[] inlines, double? fontSize = null)
+    private RichTextBlockElement MakeRichText(RichTextInline[] inlines, double? fontSize = null)
     {
         return RichTextBlock("") with
         {
             Paragraphs = [new RichTextParagraph(inlines)],
             FontSize = fontSize,
-            IsTextSelectionEnabled = true,
+            IsTextSelectionEnabled = _options.TextSelection is null,
         };
     }
 

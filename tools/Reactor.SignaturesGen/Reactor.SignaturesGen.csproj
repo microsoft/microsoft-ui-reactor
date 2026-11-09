@@ -33,6 +33,7 @@
        index text is built by the sibling Reactor.ApiIndex classlib. -->
   <ItemGroup>
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
+    <ProjectReference Include="..\..\src\Reactor.Advanced\Reactor.Advanced.csproj" />
     <ProjectReference Include="..\Reactor.ApiIndex\Reactor.ApiIndex.csproj" />
   </ItemGroup>
 

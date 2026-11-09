@@ -28,6 +28,13 @@ Conventions for contributors:
 
 ### Added
 
+- Opt-in message-wide Markdown text selection in Reactor Advanced:
+  `MarkdownOptions.TextSelection`, `MarkdownTextSelection.Scope`, semantic `Surface`
+  and composable `Visibility` gates coordinate separately rendered Markdown leaves,
+  lists, code and tables. Includes grapheme-aware caret movement, modern ScrollView /
+  ItemsView scrolling, UIA TextPattern ranges and feedback-only `OnCopyResult` after
+  Reactor's single clipboard write (openclaw/openclaw-windows-node#1844).
+
 - `PersonPictureElement.ProfilePicture(string? uri)` fluent modifier, matching the existing
   `DisplayName` / `Initials` sugar. ReactorGallery's PersonPicture page uses it to show an
   avatar loaded over HTTPS (issue #1460).
