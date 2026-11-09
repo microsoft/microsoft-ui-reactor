@@ -29,7 +29,7 @@ public sealed record FitParentOptions
     /// <summary>
     /// Scale the previously rendered content about its arranged centre while a resize is
     /// pending, so it follows the drag until the rebuild lands. When <c>false</c>, the old
-    /// content is shown unscaled until the commit.
+    /// content is shown unscaled, clipped to the host, until the commit.
     /// </summary>
     public bool ScaleDuringResize { get; init; } = true;
 
@@ -134,7 +134,10 @@ internal sealed class FitParentBox
     private DispatcherQueueTimer? _timer;
     private FrameworkElement? _loadedTarget;
     private CompositeTransform? _transform;
+    private RectangleGeometry? _clip;
     private (double W, double H) _pending;
+    // Last host size seen by HandleSize, usable or not; drives the stale-content clip.
+    private (double W, double H) _observed;
 
     internal FitParentBox()
     {
@@ -173,7 +176,19 @@ internal sealed class FitParentBox
     /// <summary>Every SizeChanged call, counted before any guard.</summary>
     internal int SizeChangedCount { get; private set; }
 
+    /// <summary>Loaded-fallback invocations that passed a usable size on to HandleSize.</summary>
+    internal int LoadedCommitCount { get; private set; }
+
+    /// <summary><see cref="SizeChangedCount"/> when the Loaded fallback last committed; -1 if it never did.</summary>
+    internal int SizeChangedCountAtLoadedCommit { get; private set; } = -1;
+
     internal bool Disposed { get; private set; }
+
+    /// <summary>
+    /// Counts SizeChanged but ignores it, so a fixture can force the Loaded fallback: WinUI
+    /// raises SizeChanged on a freshly mounted host too, which otherwise commits first.
+    /// </summary>
+    internal bool IgnoreSizeChangedForTest { get; set; }
 
     /// <summary>Runs the real Tick handler body.</summary>
     internal void InvokeTickForTest() => OnTick();
@@ -193,6 +208,8 @@ internal sealed class FitParentBox
             LateTickCount++;
             return;
         }
+        if (IgnoreSizeChangedForTest)
+            return;
         HandleSize(w, h);
     }
 
@@ -203,7 +220,9 @@ internal sealed class FitParentBox
             LateTickCount++;
             return;
         }
-        if (FitParentMath.IsUsableSize(_pending.W, _pending.H))
+        // A commit that landed while the timer ran may already match _pending to within jitter.
+        if (FitParentMath.IsUsableSize(_pending.W, _pending.H)
+            && FitParentMath.IsSignificantChange(Committed.W, Committed.H, _pending.W, _pending.H))
             SetCommitted?.Invoke(_pending);
     }
 
@@ -248,6 +267,8 @@ internal sealed class FitParentBox
         if (!FitParentMath.IsUsableSize(w, h))
             return;
         DetachLoaded();
+        LoadedCommitCount++;
+        SizeChangedCountAtLoadedCommit = SizeChangedCount;
         HandleSize(w, h);
     }
 
@@ -261,8 +282,24 @@ internal sealed class FitParentBox
 
     private void HandleSize(double w, double h)
     {
+        _observed = (w, h);
+        HandleSizeCore(w, h);
+        SyncClip();
+    }
+
+    private void HandleSizeCore(double w, double h)
+    {
         if (!FitParentMath.IsUsableSize(w, h))
+        {
+            // Nothing can be committed at this size. Drop any pending rebuild (the host no longer
+            // has that size) and the transient; SyncClip then hides the stale content.
+            if (IsCommitted)
+            {
+                StopTimer();
+                ClearTransform();
+            }
             return;
+        }
 
         _pending = (w, h);
         var significant = FitParentMath.IsSignificantChange(Committed.W, Committed.H, w, h);
@@ -302,10 +339,18 @@ internal sealed class FitParentBox
             DetachLoaded();
         if (Host?.Current is null)
             return;
+        AfterCommitCore();
+        SyncClip();
+    }
 
+    private void AfterCommitCore()
+    {
         if (!FitParentMath.IsSignificantChange(Committed.W, Committed.H, _pending.W, _pending.H)
             || !FitParentMath.IsUsableSize(_pending.W, _pending.H))
         {
+            // The commit caught up with the pending size: a still-running debounce would only
+            // re-commit a jitter-sized change.
+            StopTimer();
             ClearTransform();
             return;
         }
@@ -373,8 +418,34 @@ internal sealed class FitParentBox
         _transform = null;
     }
 
+    // The Canvas layer does not clip and reports 0×0, so without this, committed content that no
+    // longer matches the host (host shrunk to an unusable size, ScaleDuringResize = false, or an
+    // immediate commit still queued) draws at its old size over siblings. Derived from state, not
+    // from the call site, so every path converges on the same clip. Pool return clears the clip
+    // (ElementPool.CleanElement), so Dispose never has to touch it.
+    private void SyncClip()
+    {
+        if (Disposed || Host?.Current is not { } host)
+            return;
+        var transientApplied = _transform is not null && ReferenceEquals(host.RenderTransform, _transform);
+        if (FitParentMath.StaleClipSize(Committed.W, Committed.H, _observed.W, _observed.H, transientApplied) is { } size)
+        {
+            _clip ??= new RectangleGeometry();
+            var rect = new Rect(0, 0, size.W, size.H);
+            if (_clip.Rect != rect)
+                _clip.Rect = rect;
+            if (!ReferenceEquals(host.Clip, _clip))
+                host.Clip = _clip;
+        }
+        else if (host.Clip is not null)
+        {
+            host.Clip = null;
+        }
+    }
+
     // Touches only the timer and this box's own Loaded delegate: the host may already have been
-    // returned to the pool and re-rented, so no other host state is written here.
+    // returned to the pool and re-rented, so no other host state is written here. The transient
+    // RenderTransform and the stale-content Clip are both cleared by ElementPool.CleanElement.
     private void Dispose()
     {
         if (Disposed)

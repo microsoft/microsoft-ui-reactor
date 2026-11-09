@@ -2253,6 +2253,12 @@ internal static class SelfTestFixtureRegistry
         "FitParent_LineChart",
         "FitParent_TreeChart",
         "FitParent_ForceGraphRecenters",
+        "FitParent_NoScaleDuringResize",
+        "FitParent_NoScaleShrinkClipped",
+        "FitParent_ShrinkToZeroHidesStaleContent",
+        "FitParent_InsignificantCommitStopsTimer",
+        "FitParent_DebounceZeroCommitsImmediately",
+        "FitParent_DebounceNegativeCommitsImmediately",
     ];
 
     // ════════════════════════════════════════════════════════════════════
@@ -4564,6 +4570,12 @@ internal static class SelfTestFixtureRegistry
         "FitParent_LineChart" => new FitParentFixtures.LineChartFits(harness),
         "FitParent_TreeChart" => new FitParentFixtures.TreeChartFits(harness),
         "FitParent_ForceGraphRecenters" => new FitParentFixtures.ForceGraphRecenters(harness),
+        "FitParent_NoScaleDuringResize" => new FitParentFixtures.NoScaleDuringResize(harness),
+        "FitParent_NoScaleShrinkClipped" => new FitParentFixtures.NoScaleShrinkClipped(harness),
+        "FitParent_ShrinkToZeroHidesStaleContent" => new FitParentFixtures.ShrinkToZeroHidesStaleContent(harness),
+        "FitParent_InsignificantCommitStopsTimer" => new FitParentFixtures.InsignificantCommitStopsTimer(harness),
+        "FitParent_DebounceZeroCommitsImmediately" => new FitParentFixtures.ImmediateDebounceCommits(harness, TimeSpan.Zero, "Zero"),
+        "FitParent_DebounceNegativeCommitsImmediately" => new FitParentFixtures.ImmediateDebounceCommits(harness, TimeSpan.FromMilliseconds(-250), "Negative"),
 
         _ => null,
     };

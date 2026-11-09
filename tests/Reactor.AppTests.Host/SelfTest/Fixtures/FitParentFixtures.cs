@@ -7,6 +7,7 @@ using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
 using static Microsoft.UI.Reactor.Charting.Charts;
 using static Microsoft.UI.Reactor.Charting.D3Charts;
 using static Microsoft.UI.Reactor.Factories;
@@ -131,6 +132,35 @@ internal static class FitParentFixtures
     private static bool IsCleared(UIElement? e) =>
         e is not null && e.RenderTransform is null or MatrixTransform { Matrix.IsIdentity: true };
 
+    private static Rect? ClipRect(UIElement? e) => e?.Clip is RectangleGeometry g ? g.Rect : null;
+
+    /// <summary>The host carries FitParent's stale-content clip, at (0,0) and exactly its arranged size.</summary>
+    private static bool ClipIsHostBounds(FrameworkElement? e) =>
+        e is not null && ClipRect(e) is { } r && Near(r.X, 0) && Near(r.Y, 0)
+            && Near(r.Width, e.ActualWidth) && Near(r.Height, e.ActualHeight);
+
+    private static string DescribeClip(FrameworkElement? e) =>
+        (ClipRect(e) is { } r ? $"clip={r.X},{r.Y},{r.Width}x{r.Height}" : $"clip={e?.Clip?.GetType().Name ?? "null"}")
+        + (e is null ? "" : $" host={e.ActualWidth}x{e.ActualHeight}");
+
+    /// <summary>
+    /// Resizes step by step with a pass between steps (so a render-batching artefact cannot pass
+    /// as debouncing): after each step nothing has re-rendered and the debounce is still pending.
+    /// </summary>
+    private static async Task<bool> StepsStayPending(Rig rig, Probe p, int rendersBefore, params (double W, double H)[] steps)
+    {
+        bool ok = true;
+        foreach (var (w, hh) in steps)
+        {
+            Resize(rig.Box, w, hh);
+            await Harness.Render();
+            var pending = p.Renders == rendersBefore && p.Box is { IsTimerRunning: true } && ProbeIs(rig.Box, 400, 300);
+            Console.WriteLine($"# step {Name(w, hh)}: pending={pending} timer={p.Box?.IsTimerRunning} {Describe(rig.Box, p)}");
+            ok &= pending;
+        }
+        return ok;
+    }
+
     private static string Describe(WinBorder box, Probe p)
     {
         var probe = FindProbe(box);
@@ -181,13 +211,18 @@ internal static class FitParentFixtures
         }
     }
 
-    /// <summary>Grows through several intermediate sizes; only the final size is rendered.</summary>
+    /// <summary>
+    /// Grows through several intermediate sizes with a render pass between steps and a 1 s
+    /// debounce; nothing re-renders until the final size is committed once.
+    /// </summary>
     internal sealed class GrowRebuildsAtFinalSize(Harness h) : SelfTestFixtureBase(h)
     {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(45);
+
         public override async Task RunAsync()
         {
             var p = new Probe();
-            var opts = p.Options(Debounce60);
+            var opts = p.Options(TimeSpan.FromSeconds(1));
             var render = p.Render();
             var rig = Mount(H, _ => FitParent(render, opts));
             try
@@ -196,30 +231,34 @@ internal static class FitParentFixtures
                 int before = p.Renders;
                 int scBefore = p.Box?.SizeChangedCount ?? 0;
 
-                // Synchronous steps: the debounce timer cannot tick between them.
-                Resize(rig.Box, 450, 330);
-                Resize(rig.Box, 520, 400);
-                Resize(rig.Box, 600, 450);
-                H.Check("FitParent_Grow_SizeChangedObserved", (p.Box?.SizeChangedCount ?? 0) > scBefore);
+                var pending = await StepsStayPending(rig, p, before, (450, 330), (520, 400), (600, 450));
+                H.Check("FitParent_Grow_SizeChangedObserved", (p.Box?.SizeChangedCount ?? 0) >= scBefore + 3);
+                H.Check("FitParent_Grow_DebouncedBetweenSteps", pending, Describe(rig.Box, p));
 
-                H.Check("FitParent_Grow_CommitsAtFinalSize", await CommitAt(rig, p, 600, 450), Describe(rig.Box, p));
+                H.Check("FitParent_Grow_CommitsAtFinalSize", await CommitAt(rig, p, 600, 450, maxPasses: 200), Describe(rig.Box, p));
                 await PumpFor(150);
                 var after = p.Sizes.Skip(before).ToList();
                 H.Check("FitParent_Grow_OnlyFinalSizeRendered",
                     after.Count == 1 && after[0] == (600, 450), Describe(rig.Box, p));
                 H.Check("FitParent_Grow_TransformCleared", IsCleared(p.Host));
+                H.Check("FitParent_Grow_NoClipAfterCommit", p.Host is { Clip: null }, DescribeClip(p.Host));
             }
             finally { await TearDown(H, rig); }
         }
     }
 
-    /// <summary>Shrinks through several intermediate sizes; only the final size is rendered.</summary>
+    /// <summary>
+    /// Shrinks through several intermediate sizes with a render pass between steps and a 1 s
+    /// debounce; nothing re-renders until the final size is committed once.
+    /// </summary>
     internal sealed class ShrinkRebuildsAtFinalSize(Harness h) : SelfTestFixtureBase(h)
     {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(45);
+
         public override async Task RunAsync()
         {
             var p = new Probe();
-            var opts = p.Options(Debounce60);
+            var opts = p.Options(TimeSpan.FromSeconds(1));
             var render = p.Render();
             var rig = Mount(H, _ => FitParent(render, opts));
             try
@@ -227,16 +266,16 @@ internal static class FitParentFixtures
                 H.Check("FitParent_Shrink_InitialCommit", await CommitAt(rig, p, 400, 300), Describe(rig.Box, p));
                 int before = p.Renders;
 
-                Resize(rig.Box, 350, 260);
-                Resize(rig.Box, 300, 230);
-                Resize(rig.Box, 250, 200);
+                var pending = await StepsStayPending(rig, p, before, (350, 260), (300, 230), (250, 200));
+                H.Check("FitParent_Shrink_DebouncedBetweenSteps", pending, Describe(rig.Box, p));
 
-                H.Check("FitParent_Shrink_CommitsAtFinalSize", await CommitAt(rig, p, 250, 200), Describe(rig.Box, p));
+                H.Check("FitParent_Shrink_CommitsAtFinalSize", await CommitAt(rig, p, 250, 200, maxPasses: 200), Describe(rig.Box, p));
                 await PumpFor(150);
                 var after = p.Sizes.Skip(before).ToList();
                 H.Check("FitParent_Shrink_OnlyFinalSizeRendered",
                     after.Count == 1 && after[0] == (250, 200), Describe(rig.Box, p));
                 H.Check("FitParent_Shrink_TransformCleared", IsCleared(p.Host));
+                H.Check("FitParent_Shrink_NoClipAfterCommit", p.Host is { Clip: null }, DescribeClip(p.Host));
             }
             finally { await TearDown(H, rig); }
         }
@@ -294,6 +333,9 @@ internal static class FitParentFixtures
                 H.Check("FitParent_Transient_NotYetRebuilt",
                     p.Renders == before && ProbeIs(rig.Box, 400, 300), Describe(rig.Box, p));
                 H.Check("FitParent_Transient_TimerRunning", p.Box is { IsTimerRunning: true });
+                // The min-scale transient already fits the host, so no clip is applied (a clip
+                // under the host's own RenderTransform would be scaled with it).
+                H.Check("FitParent_Transient_NoClipWhileScaled", p.Host is { Clip: null }, DescribeClip(p.Host));
 
                 H.Check("FitParent_Transient_CommitsAfterDebounce",
                     await CommitAt(rig, p, 600, 450, maxPasses: 250), Describe(rig.Box, p));
@@ -414,46 +456,95 @@ internal static class FitParentFixtures
     }
 
     /// <summary>
-    /// Pool regression guard (not DoD-4): a host unmounted mid-resize with a transform does not
-    /// hand that transform to the next FitParent.
+    /// Pool regression guard (not DoD-4): a host unmounted mid-resize with a transient transform
+    /// (scale on) or a stale-content clip (scale off) is never handed out with that state: during
+    /// the gap phase, before any second FitParent can commit, no pooled Border carries it, and a
+    /// Border with the same state round-tripped through the pool comes back clean. The next
+    /// FitParent's host carries neither.
     /// </summary>
     internal sealed class RecycledHostHasNoTransform(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
+            await Variant("Transform", scale: true);
+            await Variant("Clip", scale: false);
+        }
+
+        private async Task Variant(string v, bool scale)
+        {
             var p1 = new Probe();
             var p2 = new Probe();
-            var opts1 = p1.Options(TimeSpan.FromSeconds(5));
-            var opts2 = p2.Options(TimeSpan.FromSeconds(5));
+            var opts1 = p1.Options(TimeSpan.FromSeconds(5), scale);
+            var opts2 = p2.Options(TimeSpan.FromSeconds(5), scale);
             var render1 = p1.Render();
             var render2 = p2.Render();
             int phase = 0;
-            var rig = Mount(H, _ => phase switch
+            // Removing a child from a panel's children pools it (RemoveChildWithExitTransition →
+            // UnmountAndPool); replacing the root element by another type only unmounts, so the
+            // gap phase is an empty Grid, not a different element.
+            var rig = Mount(H, _ => Grid([GridSize.Star()], [GridSize.Star()], phase switch
             {
-                0 => FitParent(render1, opts1),
-                1 => TextBlock("FitParentGap"),
-                _ => FitParent(render2, opts2),
-            });
+                0 => [FitParent(render1, opts1)],
+                1 => [],
+                _ => [FitParent(render2, opts2)],
+            }));
             try
             {
-                H.Check("FitParent_Recycled_InitialCommit", await CommitAt(rig, p1, 400, 300), Describe(rig.Box, p1));
+                H.Check($"FitParent_Recycled{v}_InitialCommit", await CommitAt(rig, p1, 400, 300), Describe(rig.Box, p1));
                 var oldHost = p1.Host;
                 Resize(rig.Box, 600, 450);
                 await Harness.Render();
-                H.Check("FitParent_Recycled_PositiveControl_OldHostTransformed", oldHost?.RenderTransform is CompositeTransform);
+                if (scale)
+                    H.Check($"FitParent_Recycled{v}_PositiveControl_OldHostTransformed",
+                        oldHost?.RenderTransform is CompositeTransform);
+                else
+                    H.Check($"FitParent_Recycled{v}_PositiveControl_OldHostClipped",
+                        ClipIsHostBounds(oldHost), DescribeClip(oldHost));
 
                 phase = 1;
                 rig.Host.RequestRender();
                 await Harness.Render();
+                // The old host must not be handed to another user carrying the stale transform or
+                // clip. In this tree WinUI rejects it in ElementPool.ForceDetach (COMException
+                // 0x800F1000 re-parenting a host that still holds its Canvas layer), so it is
+                // dropped rather than pooled; if it ever is pooled, it must come back clean.
+                var pool = rig.Host.Reconciler.Pool;
+                var pooled = new List<FrameworkElement>();
+                while (pool.TryRent(typeof(WinBorder)) is { } r) pooled.Add(r);
+                var oldHostPooled = pooled.Any(b => ReferenceEquals(b, oldHost));
+                Console.WriteLine($"# FitParent_Recycled{v}: old host pooled = {oldHostPooled}, pooled borders = {pooled.Count}");
+                H.Check($"FitParent_Recycled{v}_GapPhase_OldHostDisposedBox", p1.Box is { Disposed: true } && oldHost is { Parent: null });
+                H.Check($"FitParent_Recycled{v}_GapPhase_NoPooledBorderTransformedOrClipped",
+                    pooled.All(b => IsCleared(b) && b.Clip is null),
+                    $"oldHostPooled={oldHostPooled} transform={oldHost?.RenderTransform?.GetType().Name ?? "null"} {DescribeClip(oldHost)}");
+
+                // Direct round-trip through the same pool: a Border carrying exactly the state the
+                // host carries mid-resize (transient transform, stale-content clip) comes back
+                // clean. This is what reddens if CleanElement stops clearing either property.
+                var probe = new WinBorder
+                {
+                    RenderTransform = new CompositeTransform { ScaleX = 1.5, ScaleY = 1.5 },
+                    Clip = new RectangleGeometry { Rect = new Rect(0, 0, 600, 450) },
+                };
+                pool.Return(probe);
+                var rented = pool.TryRent(typeof(WinBorder));
+                H.Check($"FitParent_Recycled{v}_PoolRoundTrip_PositiveControl_SameInstance", ReferenceEquals(rented, probe));
+                H.Check($"FitParent_Recycled{v}_PoolRoundTrip_TransformCleared", IsCleared(probe),
+                    $"transform={probe.RenderTransform?.GetType().Name ?? "null"}");
+                H.Check($"FitParent_Recycled{v}_PoolRoundTrip_ClipCleared", probe.Clip is null, DescribeClip(probe));
+                foreach (var b in pooled) pool.Return(b);
+
                 phase = 2;
                 rig.Host.RequestRender();
 
-                H.Check("FitParent_Recycled_SecondCommit", await CommitAt(rig, p2, 600, 450), Describe(rig.Box, p2));
+                H.Check($"FitParent_Recycled{v}_SecondCommit", await CommitAt(rig, p2, 600, 450), Describe(rig.Box, p2));
                 var newHost = p2.Host;
-                Console.WriteLine($"# FitParent_Recycled: host recycled = {ReferenceEquals(oldHost, newHost)}");
-                H.Check("FitParent_Recycled_NewHostNoTransform", IsCleared(newHost));
-                var transformed = FindDescendant<WinBorder>(rig.Box, b => !IsCleared(b));
-                H.Check("FitParent_Recycled_NoBorderInTreeTransformed", transformed is null);
+                var recycled = ReferenceEquals(oldHost, newHost);
+                Console.WriteLine($"# FitParent_Recycled{v}: host recycled as new host = {recycled}");
+                H.Check($"FitParent_Recycled{v}_NewHostNoTransform", IsCleared(newHost));
+                H.Check($"FitParent_Recycled{v}_NewHostNoClip", newHost is { Clip: null }, DescribeClip(newHost));
+                var transformed = FindDescendant<WinBorder>(rig.Box, b => !IsCleared(b) || b.Clip is not null);
+                H.Check($"FitParent_Recycled{v}_NoBorderInTreeTransformedOrClipped", transformed is null);
             }
             finally { await TearDown(H, rig); }
         }
@@ -593,14 +684,27 @@ internal static class FitParentFixtures
 
     /// <summary>
     /// D-4 (A4) — changing the FitParent's key without resizing remounts it into a same-size
-    /// slot; the new instance must still commit (Loaded fallback).
+    /// slot; the new instance must still commit. Measured: WinUI raises SizeChanged on the
+    /// freshly mounted host before Loaded, so the natural remount commits through SizeChanged
+    /// (logged, not asserted as a Loaded commit). A second remount ignores SizeChanged through
+    /// the <see cref="FitParentBox.IgnoreSizeChangedForTest"/> seam, so only the Loaded fallback
+    /// can commit it — that is the assertion that proves the fallback.
     /// </summary>
     internal sealed class KeyedRemountSameSizeCommits(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
             var p = new Probe();
-            var opts = p.Options(Debounce60);
+            bool ignoreSizeChanged = false;
+            var opts = new FitParentOptions
+            {
+                Debounce = Debounce60,
+                TestBoxCreated = b =>
+                {
+                    b.IgnoreSizeChangedForTest = ignoreSizeChanged;
+                    p.Boxes.Add(b);
+                },
+            };
             var render = p.Render();
             string key = "a";
             var rig = Mount(H, _ => Border(FitParent(render, opts).WithKey(key)));
@@ -622,6 +726,29 @@ internal static class FitParentFixtures
                 H.Check("FitParent_KeyedRemount_CommitsAtSameSize", ok, Describe(rig.Box, p));
                 H.Check("FitParent_KeyedRemount_RenderedAtSameSize",
                     p.Renders == renders + 1 && p.Sizes[^1] == (400, 300), Describe(rig.Box, p));
+                var nb = p.Box!;
+                Console.WriteLine($"# FitParent_KeyedRemount natural: SizeChangedCount={nb.SizeChangedCount} "
+                    + $"LoadedCommitCount={nb.LoadedCommitCount} SizeChangedCountAtLoadedCommit={nb.SizeChangedCountAtLoadedCommit}");
+
+                // Forced Loaded path: the next instance ignores SizeChanged.
+                ignoreSizeChanged = true;
+                var natural = p.Box;
+                renders = p.Renders;
+                key = "c";
+                rig.Host.RequestRender();
+                var forced = await Harness.WaitFor(
+                    () => p.Boxes.Count >= 3 && p.Renders > renders && ProbeIs(rig.Box, 400, 300),
+                    maxPasses: 10, PerPassMs);
+                var fb = p.Box!;
+                Console.WriteLine($"# FitParent_KeyedRemount forced: SizeChangedCount={fb.SizeChangedCount} "
+                    + $"LoadedCommitCount={fb.LoadedCommitCount} SizeChangedCountAtLoadedCommit={fb.SizeChangedCountAtLoadedCommit}");
+                H.Check("FitParent_KeyedRemount_Forced_NewInstanceIgnoresSizeChanged",
+                    p.Boxes.Count >= 3 && !ReferenceEquals(natural, fb) && fb.IgnoreSizeChangedForTest,
+                    $"boxes={p.Boxes.Count}");
+                H.Check("FitParent_KeyedRemount_Forced_LoadedFallbackCommitted",
+                    forced && fb.LoadedCommitCount == 1 && p.Renders == renders + 1 && p.Sizes[^1] == (400, 300)
+                        && fb.Committed == (400, 300),
+                    $"LoadedCommitCount={fb.LoadedCommitCount} {Describe(rig.Box, p)}");
             }
             finally { await TearDown(H, rig); }
         }
@@ -828,12 +955,16 @@ internal static class FitParentFixtures
             var boxes = new List<FitParentBox>();
             var opts = new FitParentOptions { Debounce = Debounce60, TestBoxCreated = boxes.Add };
             ForceGraphElement? builder = null;
+            int rootRenders = 0, builderMismatches = 0;
 
             var rig = Mount(H, ctx =>
             {
                 // OnReady only captures the handle; it never ticks the simulation.
                 var graph = ctx.UseMemo(() => ForceGraph(nodes, links).OnReady(handles.Add), Array.Empty<object>());
+                rootRenders++;
                 builder ??= graph;
+                if (!ReferenceEquals(builder, graph))
+                    builderMismatches++;
                 return graph.FitParent(opts);
             });
             try
@@ -856,11 +987,262 @@ internal static class FitParentFixtures
 
                 var last = handles[^1];
                 H.Check("FitParent_ForceGraph_SameSimulation", ReferenceEquals(last.Simulation, sim));
-                H.Check("FitParent_ForceGraph_StableBuilder", builder is not null);
+                H.Check("FitParent_ForceGraph_StableBuilder", rootRenders >= 2 && builderMismatches == 0,
+                    $"rootRenders={rootRenders} mismatches={builderMismatches}");
                 var free1 = last.Simulation.Nodes.Where(n => n.Fx is null && n.Fy is null).ToList();
                 double dx = free1.Average(n => n.X) - mx0, dy = free1.Average(n => n.Y) - my0;
                 H.Check("FitParent_ForceGraph_MeanXShiftedByHalfDeltaW", Near(dx, 100, 0.5), $"dx={dx:R}");
                 H.Check("FitParent_ForceGraph_MeanYShiftedByHalfDeltaH", Near(dy, 75, 0.5), $"dy={dy:R}");
+            }
+            finally { await TearDown(H, rig); }
+        }
+    }
+
+    // ── Review of #1476: ScaleDuringResize = false, stale-content clip, timers ──
+
+    /// <summary>
+    /// ScaleDuringResize = false: before the commit the host carries no transient, the debounce
+    /// is pending and the old content is shown unscaled (clipped to the host); after the debounce
+    /// it commits once at the new size with no transform and no clip.
+    /// </summary>
+    internal sealed class NoScaleDuringResize(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(45);
+
+        public override async Task RunAsync()
+        {
+            var p = new Probe();
+            var opts = p.Options(TimeSpan.FromSeconds(2), scale: false);
+            var render = p.Render();
+            var rig = Mount(H, _ => FitParent(render, opts));
+            try
+            {
+                H.Check("FitParent_NoScale_InitialCommit", await CommitAt(rig, p, 400, 300), Describe(rig.Box, p));
+                int before = p.Renders;
+                int sc = p.Box?.SizeChangedCount ?? 0;
+
+                Resize(rig.Box, 600, 450);
+                await Harness.Render();
+                H.Check("FitParent_NoScale_PositiveControl_SizeChangedObserved", (p.Box?.SizeChangedCount ?? 0) > sc);
+                H.Check("FitParent_NoScale_NoTransformBeforeCommit", IsCleared(p.Host),
+                    $"transform={p.Host?.RenderTransform?.GetType().Name ?? "null"}");
+                H.Check("FitParent_NoScale_TimerRunning", p.Box is { IsTimerRunning: true });
+                H.Check("FitParent_NoScale_NotYetRebuilt", p.Renders == before && ProbeIs(rig.Box, 400, 300), Describe(rig.Box, p));
+                H.Check("FitParent_NoScale_ClippedToHost",
+                    ClipIsHostBounds(p.Host) && p.Host is { } host && Near(host.ActualWidth, 600) && Near(host.ActualHeight, 450),
+                    DescribeClip(p.Host));
+
+                H.Check("FitParent_NoScale_CommitsAfterDebounce",
+                    await CommitAt(rig, p, 600, 450, maxPasses: 250), Describe(rig.Box, p));
+                H.Check("FitParent_NoScale_RenderedOnceAtFinalSize",
+                    p.Renders == before + 1 && p.Sizes[^1] == (600, 450), Describe(rig.Box, p));
+                H.Check("FitParent_NoScale_ClearedAfterCommit",
+                    IsCleared(p.Host) && p.Host is { Clip: null } && p.Box is { IsTimerRunning: false }, DescribeClip(p.Host));
+            }
+            finally { await TearDown(H, rig); }
+        }
+    }
+
+    /// <summary>
+    /// ScaleDuringResize = false and a shrink: the old, larger content stays unscaled until the
+    /// commit, so it is clipped to exactly the host's arranged bounds instead of spilling.
+    /// </summary>
+    internal sealed class NoScaleShrinkClipped(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(45);
+
+        public override async Task RunAsync()
+        {
+            var p = new Probe();
+            var opts = p.Options(TimeSpan.FromSeconds(2), scale: false);
+            var render = p.Render();
+            var rig = Mount(H, _ => FitParent(render, opts));
+            try
+            {
+                H.Check("FitParent_NoScaleShrink_InitialCommit", await CommitAt(rig, p, 400, 300), Describe(rig.Box, p));
+                H.Check("FitParent_NoScaleShrink_NoClipAtSteadyState", p.Host is { Clip: null }, DescribeClip(p.Host));
+                int before = p.Renders;
+
+                Resize(rig.Box, 250, 200);
+                await Harness.Render();
+                H.Check("FitParent_NoScaleShrink_PositiveControl_StaleContentLarger",
+                    p.Renders == before && ProbeIs(rig.Box, 400, 300) && p.Host is { } host
+                        && Near(host.ActualWidth, 250) && Near(host.ActualHeight, 200),
+                    Describe(rig.Box, p));
+                H.Check("FitParent_NoScaleShrink_ClipEqualsHostBounds", ClipIsHostBounds(p.Host), DescribeClip(p.Host));
+                H.Check("FitParent_NoScaleShrink_Unscaled", IsCleared(p.Host));
+
+                H.Check("FitParent_NoScaleShrink_CommitsAfterDebounce",
+                    await CommitAt(rig, p, 250, 200, maxPasses: 250), Describe(rig.Box, p));
+                H.Check("FitParent_NoScaleShrink_ClipClearedAfterCommit", p.Host is { Clip: null }, DescribeClip(p.Host));
+            }
+            finally { await TearDown(H, rig); }
+        }
+    }
+
+    /// <summary>
+    /// A host that shrinks to zero on one axis after a commit cannot commit, so the stale content
+    /// is hidden behind a zero-area clip equal to the host bounds (rather than drawing at full
+    /// size over siblings), any pending rebuild and transient are dropped, and growing back
+    /// restores it — without a render when the host returns to the committed size.
+    /// </summary>
+    internal sealed class ShrinkToZeroHidesStaleContent(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(45);
+
+        public override async Task RunAsync()
+        {
+            var p = new Probe();
+            var opts = p.Options(TimeSpan.FromSeconds(2));
+            var render = p.Render();
+            var rig = Mount(H, _ => FitParent(render, opts));
+            try
+            {
+                H.Check("FitParent_ShrinkToZero_InitialCommit", await CommitAt(rig, p, 400, 300), Describe(rig.Box, p));
+                int before = p.Renders;
+
+                // Steady state, no timer: width → 0.
+                int sc = p.Box!.SizeChangedCount;
+                Resize(rig.Box, 0, 300);
+                await Harness.Render();
+                H.Check("FitParent_ShrinkToZero_Precondition_HostZeroWidth",
+                    p.Box.SizeChangedCount > sc && p.Host is { ActualWidth: 0 } && FindProbe(rig.Box) is not null,
+                    $"SizeChanged {sc}->{p.Box.SizeChangedCount} {Describe(rig.Box, p)}");
+                H.Check("FitParent_ShrinkToZero_Idle_ZeroAreaClipAtHostBounds",
+                    ClipIsHostBounds(p.Host) && ClipRect(p.Host) is { } r0 && r0.Width * r0.Height == 0,
+                    DescribeClip(p.Host));
+                await PumpFor(200);
+                H.Check("FitParent_ShrinkToZero_Idle_NoRenderNoTimer",
+                    p.Renders == before && !p.Box.IsTimerRunning && IsCleared(p.Host), Describe(rig.Box, p));
+                H.Check("FitParent_ShrinkToZero_Idle_StillHidden", ClipIsHostBounds(p.Host), DescribeClip(p.Host));
+
+                Resize(rig.Box, 400, 300);
+                await Harness.Render();
+                H.Check("FitParent_ShrinkToZero_BackToCommittedSize_Unclipped",
+                    p.Host is { Clip: null } && p.Renders == before && !p.Box.IsTimerRunning,
+                    $"{DescribeClip(p.Host)} {Describe(rig.Box, p)}");
+
+                // Mid-debounce: a pending grow, then height → 0.
+                Resize(rig.Box, 600, 450);
+                await Harness.Render();
+                H.Check("FitParent_ShrinkToZero_PositiveControl_PendingWithTransient",
+                    p.Box.IsTimerRunning && !IsCleared(p.Host), Describe(rig.Box, p));
+                Resize(rig.Box, 600, 0);
+                await Harness.Render();
+                H.Check("FitParent_ShrinkToZero_Pending_ZeroAreaClipAtHostBounds",
+                    p.Host is { ActualHeight: 0 } && ClipIsHostBounds(p.Host)
+                        && ClipRect(p.Host) is { } r1 && r1.Width * r1.Height == 0,
+                    DescribeClip(p.Host));
+                H.Check("FitParent_ShrinkToZero_Pending_TimerAndTransientDropped",
+                    !p.Box.IsTimerRunning && IsCleared(p.Host), Describe(rig.Box, p));
+
+                Resize(rig.Box, 500, 400);
+                H.Check("FitParent_ShrinkToZero_RegrowCommits",
+                    await CommitAt(rig, p, 500, 400, maxPasses: 250), Describe(rig.Box, p));
+                H.Check("FitParent_ShrinkToZero_RegrowUnclipped",
+                    p.Host is { Clip: null } && IsCleared(p.Host) && p.Renders == before + 1,
+                    $"{DescribeClip(p.Host)} {Describe(rig.Box, p)}");
+            }
+            finally { await TearDown(H, rig); }
+        }
+    }
+
+    /// <summary>
+    /// A commit that lands while the debounce is running and already matches the pending size to
+    /// within jitter stops the timer (AfterCommit), and a stray Tick then commits nothing
+    /// (OnTick re-checks significance). Driven through the box seam so the interleaving is
+    /// deterministic: Tick queues a commit at 600×450, then a +0.3 DIP SizeChanged restarts the
+    /// debounce before that commit renders.
+    /// </summary>
+    internal sealed class InsignificantCommitStopsTimer(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var p = new Probe();
+            var opts = p.Options(TimeSpan.FromSeconds(2));
+            var render = p.Render();
+            var rig = Mount(H, _ => FitParent(render, opts));
+            try
+            {
+                H.Check("FitParent_InsignificantCommit_InitialCommit", await CommitAt(rig, p, 400, 300), Describe(rig.Box, p));
+                var box = p.Box!;
+                int before = p.Renders;
+
+                box.InvokeSizeChangedForTest(600, 450);
+                box.InvokeTickForTest();
+                box.InvokeSizeChangedForTest(600.3, 450);
+                H.Check("FitParent_InsignificantCommit_PositiveControl_NotYetCommittedTimerRunning",
+                    box.Committed == (400, 300) && box.IsTimerRunning && p.Renders == before,
+                    $"committed={box.Committed} timer={box.IsTimerRunning} renders={p.Renders}");
+
+                var landed = await Harness.WaitFor(() => box.Committed == (600, 450), 5, PerPassMs);
+                H.Check("FitParent_InsignificantCommit_CommitLanded",
+                    landed && p.Renders == before + 1 && p.Sizes[^1] == (600, 450), Describe(rig.Box, p));
+                H.Check("FitParent_InsignificantCommit_TimerStopped", !box.IsTimerRunning);
+
+                box.InvokeTickForTest();
+                await Harness.Render();
+                await Harness.Render();
+                H.Check("FitParent_InsignificantCommit_LateTickNoCommit",
+                    p.Renders == before + 1 && box.Committed == (600, 450), Describe(rig.Box, p));
+            }
+            finally { await TearDown(H, rig); }
+        }
+    }
+
+    /// <summary>
+    /// Debounce &lt;= 0 commits every usable change immediately: no timer and no transient on the
+    /// resize (SizeChanged runs synchronously inside UpdateLayout), the commit after one pass.
+    /// Then the AfterCommit arm: a resize that continued while a debounced commit was queued is
+    /// committed straight away once the options say Debounce &lt;= 0.
+    /// </summary>
+    internal sealed class ImmediateDebounceCommits(Harness h, TimeSpan debounce, string label) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            string n = $"FitParent_Debounce{label}";
+            var p = new Probe();
+            var immediate = p.Options(debounce);
+            var current = immediate;
+            var render = p.Render();
+            var rig = Mount(H, _ => FitParent(render, current));
+            try
+            {
+                H.Check($"{n}_InitialCommit", await CommitAt(rig, p, 400, 300), Describe(rig.Box, p));
+                var box = p.Box!;
+                int before = p.Renders;
+                int sc = box.SizeChangedCount;
+
+                Resize(rig.Box, 600, 450);
+                H.Check($"{n}_PositiveControl_SizeChangedSynchronous", box.SizeChangedCount > sc,
+                    $"SizeChanged {sc}->{box.SizeChangedCount}");
+                H.Check($"{n}_NoTimerNoTransientOnResize", !box.IsTimerRunning && IsCleared(p.Host),
+                    $"timer={box.IsTimerRunning} transform={p.Host?.RenderTransform?.GetType().Name ?? "null"}");
+
+                await Harness.Render();
+                H.Check($"{n}_CommitsAfterOneRender",
+                    ProbeIs(rig.Box, 600, 450) && p.Renders == before + 1, Describe(rig.Box, p));
+                H.Check($"{n}_NoTimerNoTransformNoClip",
+                    !box.IsTimerRunning && IsCleared(p.Host) && p.Host is { Clip: null }, DescribeClip(p.Host));
+
+                // AfterCommit arm: queue a debounced commit at 700×500, let the resize continue
+                // to 800×550, and render the commit under the immediate options.
+                current = p.Options(TimeSpan.FromSeconds(2));
+                rig.Host.RequestRender();
+                await Harness.Render();
+                int mid = p.Renders;
+                box.InvokeSizeChangedForTest(700, 500);
+                box.InvokeTickForTest();
+                box.InvokeSizeChangedForTest(800, 550);
+                H.Check($"{n}_AfterCommit_PositiveControl_TimerRunning", box.IsTimerRunning);
+                current = immediate;
+                rig.Host.RequestRender();
+                var caught = await Harness.WaitFor(() => box.Committed == (800, 550), 5, PerPassMs);
+                var tail = p.Sizes.Skip(mid).Distinct().ToList();
+                H.Check($"{n}_AfterCommit_CommitsContinuedSize",
+                    caught && tail.Contains((700, 500)) && tail[^1] == (800, 550),
+                    $"committed={box.Committed} tail=[{string.Join(",", tail.Select(s => Name(s.W, s.H)))}]");
+                H.Check($"{n}_AfterCommit_NoTimerNoTransform", !box.IsTimerRunning && IsCleared(p.Host));
             }
             finally { await TearDown(H, rig); }
         }

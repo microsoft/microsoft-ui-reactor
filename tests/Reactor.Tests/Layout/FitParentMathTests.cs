@@ -178,6 +178,52 @@ public class FitParentMathTests
         Assert.True(FitParentOptions.Default.ScaleDuringResize);
     }
 
+    // ── StaleClipSize ───────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(0, 0, 400, 300, false)]
+    [InlineData(0, 0, 0, 0, false)]
+    [InlineData(double.NaN, 300, 0, 300, false)]
+    public void StaleClipSize_NothingCommitted_NoClip(double cw, double ch, double ow, double oh, bool t) =>
+        Assert.Null(FitParentMath.StaleClipSize(cw, ch, ow, oh, t));
+
+    [Theory]
+    [InlineData(0, 300, 0, 300)]
+    [InlineData(400, 0, 400, 0)]
+    [InlineData(0, 0, 0, 0)]
+    [InlineData(-5, 300, 0, 300)]
+    [InlineData(double.NaN, 300, 0, 300)]
+    [InlineData(double.PositiveInfinity, 0, 0, 0)]
+    public void StaleClipSize_UnusableHost_ZeroAreaClip(double ow, double oh, double ew, double eh)
+    {
+        foreach (var transient in new[] { false, true })
+        {
+            var clip = FitParentMath.StaleClipSize(400, 300, ow, oh, transient);
+            Assert.True(clip.HasValue);
+            Assert.Equal((ew, eh), clip!.Value);
+            Assert.Equal(0, clip.Value.W * clip.Value.H);
+        }
+    }
+
+    [Theory]
+    [InlineData(250, 200)]
+    [InlineData(600, 450)]
+    [InlineData(400.6, 300)]
+    public void StaleClipSize_StaleUnscaled_ClipsToHost(double ow, double oh) =>
+        Assert.Equal((ow, oh), FitParentMath.StaleClipSize(400, 300, ow, oh, transientApplied: false));
+
+    [Theory]
+    [InlineData(250, 200)]
+    [InlineData(600, 450)]
+    public void StaleClipSize_TransientApplied_NoClip(double ow, double oh) =>
+        Assert.Null(FitParentMath.StaleClipSize(400, 300, ow, oh, transientApplied: true));
+
+    [Theory]
+    [InlineData(400, 300)]
+    [InlineData(400.5, 299.5)]
+    public void StaleClipSize_SteadyStateOrJitter_NoClip(double ow, double oh) =>
+        Assert.Null(FitParentMath.StaleClipSize(400, 300, ow, oh, transientApplied: false));
+
     private static FitParentTransient Get(double cw, double ch, double nw, double nh)
     {
         var t = FitParentMath.ComputeTransient(cw, ch, nw, nh);

@@ -56,6 +56,30 @@ internal static class FitParentMath
     }
 
     /// <summary>
+    /// The clip FitParent puts on its host so committed content that no longer matches the host
+    /// cannot draw over siblings: a rectangle at (0,0) of the returned size, or <c>null</c> for
+    /// no clip. Content is stale when something is committed and the observed host size is
+    /// unusable (zero-area clip: hide it) or differs significantly from the committed size while
+    /// no transient transform is applied. An applied transient needs no clip: its uniform
+    /// <c>min(sx, sy)</c> scale, centred on the host, already keeps the content inside the host
+    /// on both axes. Steady state (observed ≈ committed) is unclipped, so content that draws past
+    /// its own w×h still overflows as it would without FitParent.
+    /// </summary>
+    internal static (double W, double H)? StaleClipSize(
+        double committedW, double committedH, double observedW, double observedH, bool transientApplied)
+    {
+        if (!IsUsableSize(committedW, committedH))
+            return null;
+        if (!IsUsableSize(observedW, observedH))
+            return (ClampAxis(observedW), ClampAxis(observedH));
+        if (transientApplied || !IsSignificantChange(committedW, committedH, observedW, observedH))
+            return null;
+        return (observedW, observedH);
+    }
+
+    private static double ClampAxis(double v) => double.IsFinite(v) && v > 0 ? v : 0;
+
+    /// <summary>
     /// Clamps a debounce to <c>[0, <see cref="MaxDebounce"/>]</c>: non-positive values become
     /// <see cref="TimeSpan.Zero"/> (commit immediately). Never throws.
     /// </summary>
