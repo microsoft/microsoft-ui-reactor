@@ -3553,6 +3553,8 @@ prefetching, call <code>commits.EnsureRange(first, last)</code> from the
 <p>Pull-to-refresh is <code>commits.Refresh()</code>: it cancels in-flight fetches,
 clears the page table, and refetches page 0. Retry after error is
 <code>commits.Retry()</code> — only the failed page is re-requested.</p>
+<p>Hooks sharing a <code>CacheKeyPrefix</code> can reuse cached pages when their dependencies
+and initial <code>PageSize</code> match. Different page sizes use separate cache entries.</p>
 <h2 id="migrating-from-a-datapagecache-style-cache">Migrating from a DataPageCache-Style Cache<a class="headerlink" href="#migrating-from-a-datapagecache-style-cache" title="Permanent link">&para;</a></h2>
 <p>If you've rolled a block-cache over <code>IDataSource&lt;T&gt;</code> — the pre-Phase-3
 <code>DataPageCache&lt;T&gt;</code> is the canonical example — the replacement path is five
