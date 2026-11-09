@@ -105,7 +105,7 @@ All chart types share a common set of builder methods:
 
 | Method | Default | Purpose |
 |--------|---------|---------|
-| `.Width(n)` | 400 | Canvas width in pixels |
+| `.Width(n)` | 400 | Canvas width in pixels (to fill the container instead, see [Responsive charts](#responsive-charts)) |
 | `.Height(n)` | 300 | Canvas height in pixels |
 | `.Margin(l, t, r, b)` | 40, 20, 20, 30 | Axis/label margins, in `left, top, right, bottom` order |
 | `.Stroke(color)` | `#4285f4` | Line/border color |
@@ -119,6 +119,69 @@ Colors accept any CSS-style string: `#RGB`, `#RRGGBB`, `rgb(r,g,b)`, or
 named colors like `steelblue`. For palette-aware colors that adapt to
 dark mode, see [styling](styling.md) and the
 [`.Palette(...)` accessibility modifier](#accessibility-modifiers) below.
+
+## Responsive charts
+
+A chart's geometry — axis ticks, bar widths, arc radii — is computed from
+`.Width(n)`/`.Height(n)` when the chart is built, so a chart does not
+stretch with its container. Make `.FitParent()` the **last** call on the
+builder and the chart is rebuilt at its parent's size instead (it wraps
+the core [`FitParent`](layout.md#fitparent--size-baked-content) factory).
+It needs no import beyond the chart DSL:
+
+```csharp
+using static Microsoft.UI.Reactor.Charting.Charts;
+
+FlexRow(
+    PieChart(shares, s => s.Value, s => s.Name)
+        .InnerRadius(60)
+        .Title("Market share")
+        .FitParent()                 // last call: returns Element
+        .Flex(grow: 1, basis: 0),
+    LineChart(sales, d => d.Month, d => d.Revenue)
+        .ShowGrid(true)
+        .Title("Revenue")
+        .FitParent(new FitParentOptions { Debounce = TimeSpan.FromMilliseconds(250) })
+        .Flex(grow: 1, basis: 0)
+).Height(320)
+```
+
+`.FitParent()` exists on `PieChart`, `LineChart`/`BarChart`/`AreaChart`,
+`TreeChart`, and `ForceGraph`. It returns a plain `Element`, so chart
+builder calls (`.Title`, `.ShowGrid`, …) must come before it; layout
+modifiers (`.Flex`, `.Margin`, `.Grid`) chained after it apply to the
+FitParent wrapper. The parent must give the chart a finite size on both
+axes — a FitParent chart directly inside a `ScrollView` or as a plain
+`VStack` child gets no height and renders nothing (see
+[layout](layout.md#fitparent--size-baked-content) for the rule, the
+debounce options, and when `Viewbox` is the cheaper choice). Sharing one
+builder instance between two FitParents is unsupported.
+
+**ForceGraph notes.**
+
+- The resize re-centre — free nodes shifted by half the size change, the
+  same simulation kept — applies only to a **stable builder**: one hoisted
+  to a field, held in `UseMemo`, or inside a memo-skipped component. An
+  inline `ForceGraph(nodes, links)` is re-created on every render, so it
+  just re-seeds its simulation centred at the new size.
+- The `ForceNode` list you pass to `ForceGraph(nodes, links)` is
+  caller-owned and is **mutated in place** by the simulation and by the
+  re-centre. Nodes with `Fx`/`Fy` set keep their absolute position on the
+  fixed axis; only the free axis is shifted.
+- `OnReady` runs on every render of the graph, so under `.FitParent()` it
+  can fire once per resize commit. Keep it idempotent — capture the
+  handle; don't stack timers or event handlers.
+
+**D3 canvases.** `D3Canvas` content has no `.FitParent()` builder — you
+compute its children from the size yourself — so call the core factory
+directly:
+
+```csharp
+using static Microsoft.UI.Reactor.Charting.D3Charts;
+
+FitParent((w, h) => D3Canvas(w, h,
+    D3Circle(w / 2, h / 2, Math.Min(w, h) / 2 - 8)))
+```
 
 ## Binding Data to State
 
@@ -430,6 +493,11 @@ escape hatches, use `OnReady` to access the underlying Canvas directly.
 
 **Use donut charts (`InnerRadius > 0`) for proportional data.** The center
 space works well for displaying a total or label.
+
+**Fill the container with `.FitParent()`, not a guessed `.Width(n)`.**
+Fixed `.Width`/`.Height` bake the chart at one size. End the builder with
+`.FitParent()` to rebuild it at its slot's size — see
+[Responsive charts](#responsive-charts).
 
 ## Next Steps
 

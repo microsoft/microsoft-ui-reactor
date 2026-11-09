@@ -49,6 +49,7 @@ screen structure. Every layout element accepts children and optional spacing.
 | Visual container | `Border(child)` / `Card(child)` | Background, corner radius, padding around a single child. |
 | Overflow handling | `ScrollView(child)` | Wraps anything that may exceed its allotted space. |
 | Collapsible group | `Expander(header, content)` | Header that toggles its content panel. |
+| Content baked at an explicit size (charts, `D3Canvas` drawings) that should fill its slot | `FitParent((w, h) => ...)` | Rebuilds the content at the slot's size — see [FitParent](#fitparent--size-baked-content). |
 
 ## VStack and HStack
 
@@ -220,6 +221,88 @@ For real responsive layouts, use [`UseBreakpoint`](hooks.md)
 
 `UseWindowSize(window)` returns `(Width, Height)` if you need exact
 dimensions for more granular control.
+
+## FitParent — size-baked content
+
+Most Reactor elements stretch to their slot on their own. Some content
+can't: a chart, a `D3Canvas` drawing, or a hand-built shape path computes
+its geometry from an explicit width and height when it is built, so
+WinUI's stretch layout can only leave it the wrong size. `FitParent`
+fills its parent and calls your builder with the slot's size in DIPs:
+
+```csharp
+FlexColumn(
+    TextBlock("Throughput").Bold(),
+    FitParent((w, h) => BuildSparkline(samples, w, h))   // your size-baked builder
+        .Flex(grow: 1, basis: 0)
+)
+```
+
+`render` only ever receives finite sizes greater than zero. It runs again
+whenever the committed size changes, and on every render of the
+enclosing component. The first usable size commits straight away (you
+see one empty placeholder frame). Later size changes are debounced: while
+the user drags, the previous content is scaled uniformly about its centre
+so it follows the drag, and it is rebuilt crisp at the final size once
+the resize goes quiet. Changes of 0.5 DIP or less on both axes are
+ignored.
+
+**FitParent needs a finite size on both axes.** It gets one from a Flex
+child with grow (`.Flex(grow: 1, basis: 0)`), a Grid `*` track, the
+window root, or an explicit `.Width(n)`/`.Height(n)`. Its content sits in
+a layer that reports a desired size of zero, so FitParent never sizes
+itself from its content. On an **unsized** axis — inside a `ScrollView`,
+as a `VStack` child (unsized height) or an `HStack` child (unsized
+width), or in a Grid `Auto` track — it measures 0 on that axis and stays
+an empty placeholder: `render` is never called. There is no loop and no
+exception; the content is simply absent. Fix it by giving that axis a
+size: `FitParent(...).Height(240)`, Flex grow, or a Grid `*` track.
+
+**Modifiers land on the wrapper, not on the content.** FitParent renders
+two nested `Border`s. Modifiers you chain on the returned element
+(`.Width`, `.Height`, `.Margin`, `.Flex`, `.Grid`, `.OnSizeChanged`,
+`.Key`) apply to the outer wrapper; FitParent's own inner host fills that
+wrapper and does the resize tracking, so the two never collide. That
+makes `FitParent(...).Width(800)` mean "the slot is 800 wide", and
+`render` is called with `w == 800`. The content is not clipped, so
+anything it draws outside `w × h` overflows exactly as it would without
+FitParent. FitParent's state follows ordinary positional/key identity:
+an unkeyed reorder remounts it (one placeholder frame, then a fresh
+first commit).
+
+**Options.** Pass a `FitParentOptions` as the second argument:
+
+```csharp
+FitParent(
+    (w, h) => BuildHeatmap(cells, w, h),
+    new FitParentOptions
+    {
+        Debounce = TimeSpan.FromMilliseconds(250),
+        ScaleDuringResize = false,
+    })
+```
+
+| Option | Default | Effect |
+|--------|---------|--------|
+| `Debounce` | 150 ms | Quiet period after the last size change before the rebuild. Clamped to `[0, 10 s]` (values above 10 s become 10 s; nothing throws). `<= TimeSpan.Zero` commits every usable change immediately, with no transient scale. |
+| `ScaleDuringResize` | `true` | Scale the previous content about its centre while a rebuild is pending. `false` shows the old content unscaled until the commit. |
+
+**Each commit costs a root render.** A FitParent commit is a state change
+that runs a root render pass, in which every function element (every
+`FitParent`, `RenderEachTime`, and so on) re-renders. With the default
+debounce that is one root render per resize gesture. With
+`Debounce <= TimeSpan.Zero` it is one root render **per pixel** of a
+window drag — keep the debounce unless the content is trivially cheap.
+
+### When to use Viewbox instead
+
+`Viewbox(child)` scales a fixed-size child to fit its slot. It costs
+nothing — no re-render, no rebuild — but it scales *everything*: stroke
+widths, font sizes, and point markers grow and shrink with the container,
+and the aspect ratio is preserved. Prefer `Viewbox` for icons, logos, and
+decorative drawings where that is acceptable. Use `FitParent` when the
+content should be laid out again at the new size — axes that gain ticks,
+text that stays 12 px, lines that stay 2 px wide.
 
 ## Alignment and Sizing
 
@@ -402,6 +485,33 @@ Reactor surfaces this footgun at debug time: when
 `ReactorFeatureFlags.WarnLayoutFootguns` is set (always on in `DEBUG`
 builds), the reconciler emits a one-time warning naming the offending
 stack and its `Auto` track so you don't have to bisect the collapse.
+
+### FitParent inside a ScrollViewer/unsized VStack
+
+```csharp
+// Don't:
+ScrollView(VStack(16,
+    TextBlock("Revenue"),
+    FitParent((w, h) => BuildSparkline(samples, w, h))))   // never renders
+```
+
+A `ScrollView` and a `VStack` measure their children with **infinite**
+height, so FitParent gets no height to fit. It does not loop or throw: it
+measures 0 on that axis, stays an empty placeholder, and never calls
+`render`, so the content silently disappears. There is no debug warning
+for this case. Give the unsized axis a size:
+
+```csharp
+// Do:
+ScrollView(VStack(16,
+    TextBlock("Revenue"),
+    FitParent((w, h) => BuildSparkline(samples, w, h)).Height(240)))
+```
+
+The same applies to a horizontal `HStack` (give it `.Width(n)`) and to a
+Grid `Auto` track (use a `*` track instead). Inside a `FlexRow`/`FlexColumn`,
+`.Flex(grow: 1, basis: 0)` hands it the remaining space — see
+[FitParent](#fitparent--size-baked-content).
 
 ## Tips
 

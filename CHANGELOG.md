@@ -28,6 +28,14 @@ Conventions for contributors:
 
 ### Added
 
+- `Factories.FitParent((w, h) => ..., FitParentOptions? options)` renders size-baked content
+  (charts, `D3Canvas` drawings, hand-built shape paths) at its parent's size, rebuilding after
+  a debounced resize (`FitParentOptions.Debounce`, 150 ms default, clamped to 10 s) and scaling
+  the previous content in between (`ScaleDuringResize`). Chart builders gain a matching
+  `.FitParent()` extension for `PieChart`, `LineChart`/`BarChart`/`AreaChart`, `TreeChart` and
+  `ForceGraph`; a stable `ForceGraph` builder re-centres its free nodes on resize instead of
+  re-seeding. See the layout and charting guides (#174).
+
 ### Changed
 
 ### Deprecated

@@ -80,6 +80,35 @@ Common fluent knobs (chain-call any subset):
 labeling individual data points or ticks — for those, see the next two
 sections.
 
+### Sizing: fixed `.Width/.Height` or `.FitParent()`
+
+Charts bake their geometry at build time from `.Width(n)`/`.Height(n)`
+(default 400×300), so they do **not** stretch with their container. To fill
+the container, end the builder with `.FitParent()` — it rebuilds the chart
+at the parent's size after a resize settles (150 ms debounce by default,
+scaled smoothly in between). It needs only the chart DSL import:
+
+```csharp
+using static Microsoft.UI.Reactor.Charting.Charts;
+
+LineChart(sales, d => d.Month, d => d.Revenue)
+    .Title("Revenue")
+    .ShowGrid(true)
+    .FitParent()                // LAST builder call — returns Element
+    .Flex(grow: 1, basis: 0)    // layout modifiers after it hit the wrapper
+```
+
+- Available on `PieChart`, `LineChart`/`BarChart`/`AreaChart`, `TreeChart`,
+  `ForceGraph`. For `D3Canvas`, call the core factory:
+  `FitParent((w, h) => D3Canvas(w, h, ...))`.
+- Tune with `.FitParent(new FitParentOptions { Debounce = ..., ScaleDuringResize = ... })`.
+  `Debounce` is clamped to `[0, 10 s]`; `<= 0` means one root render per
+  pixel of drag — avoid.
+- ForceGraph: `OnReady` fires once per resize commit (make it idempotent);
+  the `ForceNode` list is mutated in place; a stable (memoized) builder
+  re-centres free nodes, fixed `Fx`/`Fy` nodes stay put.
+- Prefer `Viewbox(chart)` only when scaled strokes and text are acceptable.
+
 ## Make D3 do the work
 
 Charts compose D3-style scales and generators internally. When you reach
@@ -275,6 +304,13 @@ asks for one, push back with the alternative.
   "different magnitude".
 - **Pie chart for ranking.** Pies hide rank — angle judgments are
   imprecise. A sorted bar chart shows it directly.
+- **A `.FitParent()` chart with no finite size.** Inside a `ScrollView`, as a
+  plain `VStack`/`HStack` child, or in a Grid `Auto` track, the unsized axis
+  measures 0 and the chart silently renders **nothing** (no loop, no error).
+  Give that axis a size: `.FitParent().Height(320)`, `.Flex(grow: 1, basis: 0)`
+  in a `FlexRow`/`FlexColumn`, or a Grid `*` track. Also: `.FitParent()` must
+  be the last builder call — chart setters such as `.Title(...)` don't exist on
+  the `Element` it returns.
 
 ## When to reach for `*View` (and when not to)
 

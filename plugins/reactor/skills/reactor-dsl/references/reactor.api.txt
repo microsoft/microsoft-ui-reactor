@@ -64,6 +64,7 @@ ErrorBoundary(Element child, Element fallback) → ErrorBoundaryElement
 ErrorBoundary(Element child, Func<Exception, Element> fallback) → ErrorBoundaryElement
 Expander(string header, Element content, Optional<bool> isExpanded = default, Action<bool> onIsExpandedChanged = null) → ExpanderElement
 Expr(Func<Element> render) → Element
+FitParent(Func<double, double, Element> render, FitParentOptions options = null) → Element
 Flex(Element[] children) → FlexElement
 Flex(FlexDirection direction, Element[] children) → FlexElement
 FlexColumn(Element[] children) → FlexElement
@@ -2601,6 +2602,16 @@ object ValueTo { get; init; }
 string Field { get; init; }
 Deconstruct(ref string Field, ref FilterOperator Operator, ref object Value, ref object ValueTo) → void
 Equals(FilterDescriptor other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record FitParentOptions
+new()
+FitParentOptions Default { get; }
+TimeSpan Debounce { get; init; }
+bool ScaleDuringResize { get; init; }
+Equals(FitParentOptions other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
