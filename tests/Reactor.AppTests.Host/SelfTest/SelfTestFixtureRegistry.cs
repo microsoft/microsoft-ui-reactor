@@ -620,6 +620,7 @@ internal static class SelfTestFixtureRegistry
         // Control update tests — exercise UpdateXxx dispatch + ApplyModifiers
         "ControlUpdate_TextProperty",
         "ControlUpdate_ButtonProperty",
+        "ButtonContent",
         "ControlUpdate_InputControls",
         "ControlUpdate_DateTimePicker",
         "ControlUpdate_Containers",
@@ -2877,6 +2878,7 @@ internal static class SelfTestFixtureRegistry
         // Control update tests
         "ControlUpdate_TextProperty" => new ControlUpdateFixtures.TextPropertyUpdate(harness),
         "ControlUpdate_ButtonProperty" => new ControlUpdateFixtures.ButtonPropertyUpdate(harness),
+        "ButtonContent" => new ButtonContentFixture.Execution(harness),
         "ControlUpdate_InputControls" => new ControlUpdateFixtures.InputControlsUpdate(harness),
         "ControlUpdate_DateTimePicker" => new ControlUpdateFixtures.DateTimePickerUpdate(harness),
         "ControlUpdate_Containers" => new ControlUpdateFixtures.ContainerUpdate(harness),
