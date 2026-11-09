@@ -193,11 +193,12 @@ public class MarkdownTextSelectionTests
         var surfaces = Surfaces(tree).ToArray();
         Assert.Equal(new[] { "Title", "A link & code.", "• ", "one", "• ", "two" },
             surfaces.Select(s => s.Text));
-        Assert.All(surfaces, s => Assert.Same(options, s.Options));
+        Assert.All(surfaces, s => Assert.Null(s.Options));
         Assert.All(surfaces.Where(s => s.Text == "• "), s => Assert.Equal("", s.SeparatorAfter));
         var scope = Assert.IsType<MarkdownSelectionElement>(MarkdownTextSelection.Scope(options,
             VStack(tree, Md("tail", new MarkdownOptions { TextSelection = options }))));
         Assert.Equal(SelectionRole.Scope, scope.Role);
+        Assert.Same(options, scope.Options);
         Assert.Equal(7, Surfaces(scope.Content).Count());
         Assert.Equal("Title\nA link & code.\n• one\n• two\ntail", Join(Surfaces(scope.Content)));
     }
@@ -355,6 +356,87 @@ public class MarkdownTextSelectionTests
         Assert.True(inner.IsVisible);
         Assert.Equal(child, inner.Content);
         Assert.Same(inner, outer.Content);
+    }
+
+    [Fact]
+    public void Document_ReportsTextAndSelectionChanges_WithoutDuplicateNotifications()
+    {
+        var document = new MarkdownSelectionDocument();
+        var changes = new List<(bool Text, bool Selection)>();
+        document.Changed = (text, selection) => changes.Add((text, selection));
+        var identity = new object();
+        document.Rebuild([new(identity, "abc", "")]);
+        document.Select(0, 2);
+        document.Select(0, 2);
+        document.Rebuild([new(identity, "abc", "")]);
+        Assert.Equal(new[] { (true, false), (false, true) }, changes);
+        document.Rebuild([]);
+        Assert.Equal((true, true), changes[^1]);
+        Assert.Equal(0, document.Caret);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 1, 2, 2, 1)]
+    [InlineData(1, 1, 1, 2, 2, 1)]
+    [InlineData(1, 1, -1, 0, 0, -1)]
+    [InlineData(6, 6, 1, 6, 6, 0)]
+    [InlineData(0, 0, -1, 0, 0, 0)]
+    [InlineData(0, 3, 1, 2, 4, 1)]
+    [InlineData(0, 3, -1, 0, 3, 0)]
+    [InlineData(4, 5, 1, 4, 5, 0)]
+    [InlineData(0, 3, 9, 4, 6, 2)]
+    [InlineData(0, 3, 0, 0, 3, 0)]
+    public void UiaMove_PreservesInsertionPointsAndFailedNonEmptyRanges(
+        int start, int end, int count, int expectedStart, int expectedEnd, int expectedMoved)
+    {
+        Assert.Equal((expectedStart, expectedEnd, expectedMoved),
+            MarkdownSelectionRangeMovement.Move(start, end, [0, 2, 4, 6], count));
+    }
+
+    [Fact]
+    public void UiaMove_EmptyDocumentDoesNotExpand()
+    {
+        Assert.Equal((0, 0, 0), MarkdownSelectionRangeMovement.Move(0, 0, [0], 1));
+        Assert.Equal((0, 0, 0), MarkdownSelectionRangeMovement.Move(0, 0, [0, 0], 1));
+    }
+
+    [Fact]
+    public void Document_EntryLookup_UsesPrecedingSurfaceForSeparatorsAndLastEndpoint()
+    {
+        var document = new MarkdownSelectionDocument();
+        var a = new object();
+        var b = new object();
+        document.Rebuild([new(a, "ab", "\t"), new(b, "cd", "")]);
+        Assert.Null(document.EntryAt(-1));
+        Assert.Same(a, document.EntryAt(2)!.Identity);
+        Assert.Same(b, document.EntryAt(3)!.Identity);
+        Assert.Same(b, document.EntryAt(5)!.Identity);
+    }
+
+    [Theory]
+    [InlineData(20, 10)]
+    [InlineData(10, 20)]
+    public void GlyphRectangle_NormalizesBothTextDirections(double start, double end)
+    {
+        var rect = MarkdownSelectionHost.GlyphRectangle(
+            new global::Windows.Foundation.Rect(start, 5, 1, 12), new global::Windows.Foundation.Rect(end, 5, 0, 12));
+        Assert.Equal(10, rect.X);
+        Assert.Equal(10, rect.Width);
+        Assert.Equal(12, rect.Height);
+    }
+
+    [Theory]
+    [InlineData(unchecked((int)0x800401D0))]
+    [InlineData(unchecked((int)0x800401D1))]
+    [InlineData(unchecked((int)0x800401D2))]
+    [InlineData(unchecked((int)0x800401D3))]
+    [InlineData(unchecked((int)0x800401D4))]
+    public void Copy_ExpectedClipboardComFailures_ReportFailure(int hresult)
+    {
+        bool? success = null;
+        MarkdownSelectionCopy.Write("copy", _ => throw new global::System.Runtime.InteropServices.COMException("clipboard", hresult),
+            (text, result) => { Assert.Equal("copy", text); success = result; });
+        Assert.False(success);
     }
 
     internal static IEnumerable<MarkdownSelectionElement> Surfaces(Element element)

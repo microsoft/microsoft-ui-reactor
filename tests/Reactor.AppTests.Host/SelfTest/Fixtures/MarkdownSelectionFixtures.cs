@@ -12,6 +12,50 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 internal static partial class MarkdownSelectionFixtures
 {
+    internal sealed class EqualOptionsProbe
+    {
+        internal int ParentRenders;
+        internal int ChildRenders;
+        internal Action<int> Update = null!;
+        internal MarkdownTextSelectionOptions? FirstOptions;
+        internal MarkdownTextSelectionOptions? LatestOptions;
+    }
+    internal sealed record EqualOptionsProps(MarkdownTextSelectionOptions Options, EqualOptionsProbe Probe);
+    internal sealed class EqualOptionsChild : Component<EqualOptionsProps>
+    {
+        public override Element Render()
+        {
+            Props.Probe.ChildRenders++;
+            return Md("retained child", new MarkdownOptions { TextSelection = Props.Options });
+        }
+    }
+    internal sealed class EqualOptionsParent : Component<EqualOptionsProbe>
+    {
+        public override Element Render()
+        {
+            var (revision, setRevision) = UseState(0);
+            Props.Update = value => setRevision(value);
+            Props.ParentRenders++;
+            var options = new MarkdownTextSelectionOptions();
+            Props.FirstOptions ??= options;
+            Props.LatestOptions = options;
+            return MarkdownTextSelection.Scope(options, VStack(
+                TextBlock($"parent revision {revision}"),
+                Component<EqualOptionsChild, EqualOptionsProps>(new(options, Props))));
+        }
+    }
+    internal sealed record MembershipProps(MarkdownTextSelectionOptions Options, Action<Action<bool>> SetToggle);
+    internal sealed class MembershipToggle : Component<MembershipProps>
+    {
+        public override Element Render()
+        {
+            var (show, setShow) = UseState(false);
+            Props.SetToggle(value => setShow(value));
+            return show
+                ? Md("details", new MarkdownOptions { TextSelection = Props.Options })
+                : TextBlock("not selectable");
+        }
+    }
     private sealed partial class ProviderProbe(Microsoft.UI.Xaml.FrameworkElement owner) : FrameworkElementAutomationPeer(owner)
     {
         internal Microsoft.UI.Xaml.UIElement? OwnerOf(IRawElementProviderSimple provider) =>
@@ -102,6 +146,102 @@ internal static partial class MarkdownSelectionFixtures
             H.Check("MdSelection_RemountHasNoOldSelection",
                 !ReferenceEquals(updated, fresh) && fresh.Document.SelectedText == ""
                 && fresh.Document.Text == "fresh message");
+            var innerOptions = new MarkdownTextSelectionOptions();
+            host.Mount(_ => MarkdownTextSelection.Scope(options, VStack(
+                Md("outer", new MarkdownOptions { TextSelection = options }),
+                MarkdownTextSelection.Scope(innerOptions, Md("inner", new MarkdownOptions { TextSelection = innerOptions })))));
+            await Harness.Render();
+            var scopes = H.FindAllControls<MarkdownSelectionHost>(_ => true);
+            foreach (var scope in scopes) scope.Refresh();
+            var outer = scopes.Single(scope => scope.Document.Text == "outer");
+            var inner = scopes.Single(scope => scope.Document.Text == "inner");
+            var innerText = MarkdownSelectionHost.Descendants(inner).OfType<RichTextBlock>().Single();
+            H.Check("MdSelection_NestedInputOwnership", inner.OwnsInput(innerText) && !outer.OwnsInput(innerText));
+            inner.Select(0, 5);
+            H.Check("MdSelection_NestedSelectionIndependent", outer.Document.SelectedText == "" && inner.Document.SelectedText == "inner");
+
+            Action<bool> toggle = null!;
+            host.Mount(_ => MarkdownTextSelection.Scope(options, VStack(
+                Md("intro", new MarkdownOptions { TextSelection = options }),
+                Border(Component<MembershipToggle, MembershipProps>(new(options, setter => toggle = setter)))
+                    .AutomationId("MembershipAncestor"))));
+            await Harness.Render();
+            var membershipHost = H.FindControl<MarkdownSelectionHost>(_ => true)!;
+            toggle(true);
+            await Harness.Render();
+            H.Check("MdSelection_ChildMountUpdatesMembership", membershipHost.Document.Text == "intro\ndetails");
+            toggle(false);
+            await Harness.Render();
+            H.Check("MdSelection_ChildUnmountUpdatesMembership", membershipHost.Document.Text == "intro");
+            toggle(true);
+            await Harness.Render();
+            var ancestor = H.FindControl<Border>(border =>
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(border) == "MembershipAncestor")!;
+            ancestor.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            await Harness.Render();
+            H.Check("MdSelection_NativeCollapseUpdatesMembership", membershipHost.Document.Text == "intro");
+            ancestor.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+            await Harness.Render();
+            H.Check("MdSelection_NativeVisibleRestoresMembership", membershipHost.Document.Text == "intro\ndetails");
+
+            var equalOptions = new EqualOptionsProbe();
+            host.Mount(_ => Component<EqualOptionsParent, EqualOptionsProbe>(equalOptions));
+            await Harness.Render();
+            int parentRenders = equalOptions.ParentRenders;
+            int childRenders = equalOptions.ChildRenders;
+            equalOptions.Update(1);
+            await Harness.Render();
+            var equalScope = H.FindControl<MarkdownSelectionHost>(_ => true)!;
+            H.Check("MdSelection_ValueEqualOptionsRetainSkippedChild",
+                childRenders > 0 && equalOptions.ChildRenders == childRenders
+                && equalOptions.ParentRenders > parentRenders
+                && !ReferenceEquals(equalOptions.FirstOptions, equalOptions.LatestOptions)
+                && Equals(equalOptions.FirstOptions, equalOptions.LatestOptions)
+                && H.FindTextContaining("parent revision 1") is not null
+                && equalScope.Document.Text == "retained child");
+
+            host.Mount(_ => Component<Microsoft.UI.Reactor.AppTests.Host.Fixtures.MarkdownSelectionInputFixture>());
+            await Harness.Render();
+            outer = H.FindAllControls<MarkdownSelectionHost>(_ => true)
+                .Single(scope => scope.Document.Text.Contains("native link", StringComparison.Ordinal));
+            outer.Refresh();
+            var richLink = MarkdownSelectionHost.Descendants(outer).OfType<RichTextBlock>()
+                .Single(text => text.Blocks.OfType<Paragraph>().Any(p => p.Inlines.OfType<Hyperlink>().Any()));
+            var nativeLink = richLink.Blocks.OfType<Paragraph>().Single().Inlines.OfType<Hyperlink>().Single();
+            int linkStart = outer.Document.Text.IndexOf("native link", StringComparison.Ordinal);
+            void CheckLink(string name, Hyperlink expected)
+            {
+                var nativeProvider = (ITextProvider)FrameworkElementAutomationPeer.CreatePeerForElement(richLink)
+                    .GetPattern(PatternInterface.Text);
+                var glyph = nativeProvider.DocumentRange.Clone();
+                glyph.MoveEndpointByUnit(Microsoft.UI.Xaml.Automation.Text.TextPatternRangeEndpoint.Start,
+                    Microsoft.UI.Xaml.Automation.Text.TextUnit.Character, 2);
+                glyph.MoveEndpointByRange(Microsoft.UI.Xaml.Automation.Text.TextPatternRangeEndpoint.End,
+                    glyph, Microsoft.UI.Xaml.Automation.Text.TextPatternRangeEndpoint.Start);
+                glyph.MoveEndpointByUnit(Microsoft.UI.Xaml.Automation.Text.TextPatternRangeEndpoint.End,
+                    Microsoft.UI.Xaml.Automation.Text.TextUnit.Character, 1);
+                glyph.GetBoundingRectangles(out var rects);
+                var origin = FrameworkElementAutomationPeer.CreatePeerForElement(outer).GetBoundingRectangle();
+                double scale = outer.XamlRoot.RasterizationScale;
+                var point = new Point((rects[0] + rects[2] / 2 - origin.X) / scale,
+                    (rects[1] + rects[3] / 2 - origin.Y) / scale);
+                int hit = outer.HitTest(point);
+                Console.WriteLine($"# Link {name}: native={string.Join(",", rects)} hostPoint={point} hit={hit} linkStart={linkStart}");
+                H.Check(name, ReferenceEquals(outer.LinkAt(linkStart + 2), expected)
+                    && outer.LinkAtPoint(point, hit));
+            }
+            CheckLink("MdSelection_SetNativeHyperlinkDiscovered", nativeLink);
+            richLink.Blocks.Clear();
+            outer.Refresh();
+            H.Check("MdSelection_EmptyNativeTreeHasNoLink", outer.LinkAt(linkStart + 2) is null);
+            var replacementLink = new Hyperlink();
+            replacementLink.Inlines.Add(new Run { Text = "native link" });
+            var replacementParagraph = new Paragraph();
+            replacementParagraph.Inlines.Add(replacementLink);
+            richLink.Blocks.Add(replacementParagraph);
+            await Harness.Render();
+            outer.Refresh();
+            CheckLink("MdSelection_NativeTreeReplacementInvalidatesSegments", replacementLink);
         }
     }
 
@@ -169,6 +309,48 @@ internal static partial class MarkdownSelectionFixtures
             H.Check("MdSelection_HeaderExpandedBodyHasNoAncestorChild",
                 document.FindText("disclosure body", false, false).GetChildren().Length == 0);
             H.Check("MdSelection_HeaderExpandedDedup", document.GetChildren().Length == 1);
+            var insertion = peer.Range(2, 2);
+            H.Check("MdSelection_UiaMoveKeepsInsertionPoint",
+                insertion.Move(Microsoft.UI.Xaml.Automation.Text.TextUnit.Character, 1) == 1 &&
+                insertion.GetText(-1) == "" &&
+                insertion.CompareEndpoints(Microsoft.UI.Xaml.Automation.Text.TextPatternRangeEndpoint.Start,
+                    peer.Range(3, 3), Microsoft.UI.Xaml.Automation.Text.TextPatternRangeEndpoint.Start) == 0);
+            var first = peer.Range(0, 5);
+            H.Check("MdSelection_UiaMoveBoundaryPreservesRange",
+                first.Move(Microsoft.UI.Xaml.Automation.Text.TextUnit.Character, -1) == 0 && first.GetText(-1) == "Discl");
+
+            const string bidi = "abc \u05d0\u05d1\u05d2 xyz";
+            host.Mount(_ => MarkdownTextSelection.Scope(options,
+                Md("**abc** \u05d0\u05d1\u05d2 _xyz_", new MarkdownOptions { TextSelection = options })));
+            await Harness.Render();
+            selection = H.FindControl<MarkdownSelectionHost>(_ => true)!;
+            var nativeText = MarkdownSelectionHost.Descendants(selection).OfType<RichTextBlock>().Single();
+            nativeText.FlowDirection = Microsoft.UI.Xaml.FlowDirection.RightToLeft;
+            await Harness.Render();
+            selection.Refresh();
+            var nativeProvider = (ITextProvider)FrameworkElementAutomationPeer.CreatePeerForElement(nativeText)
+                .GetPattern(PatternInterface.Text);
+            var origin = FrameworkElementAutomationPeer.CreatePeerForElement(selection).GetBoundingRectangle();
+            double scale = selection.XamlRoot.RasterizationScale;
+            bool rectanglesMatch = true;
+            for (int i = 0; i < bidi.Length; i++)
+            {
+                if (bidi[i] == ' ') continue;
+                var glyph = nativeProvider.DocumentRange.Clone();
+                glyph.MoveEndpointByUnit(Microsoft.UI.Xaml.Automation.Text.TextPatternRangeEndpoint.Start,
+                    Microsoft.UI.Xaml.Automation.Text.TextUnit.Character, i);
+                glyph.MoveEndpointByRange(Microsoft.UI.Xaml.Automation.Text.TextPatternRangeEndpoint.End,
+                    glyph, Microsoft.UI.Xaml.Automation.Text.TextPatternRangeEndpoint.Start);
+                glyph.MoveEndpointByUnit(Microsoft.UI.Xaml.Automation.Text.TextPatternRangeEndpoint.End,
+                    Microsoft.UI.Xaml.Automation.Text.TextUnit.Character, 1);
+                glyph.GetBoundingRectangles(out var nativeRects);
+                var actual = selection.GlyphBounds(i, i + 1);
+                Console.WriteLine($"# Bidi offset={i} text={glyph.GetText(-1)} native={string.Join(",", nativeRects)} actual={actual}; caret={selection.CharacterBounds(i)} next={selection.CharacterBounds(i + 1)}");
+                rectanglesMatch &= nativeRects.Length >= 4 &&
+                    Math.Abs(origin.X + actual.X * scale - nativeRects[0]) < 1 &&
+                    Math.Abs(actual.Width * scale - nativeRects[2]) < 1;
+            }
+            H.Check("MdSelection_RtlMixedGlyphsMatchNativeTextPattern", rectanglesMatch);
         }
     }
 
@@ -277,6 +459,27 @@ internal static partial class MarkdownSelectionFixtures
             cellHit = selection.HitTest(inside);
             Console.WriteLine($"# Font16 period start={periodStart}; end={periodEnd}; target={inside}; hit={cellHit}; expected={cell.End}");
             H.Check("MdSelection_Font16TerminalIntegerPointIncludesPeriod", cellHit == cell.End);
+            string tallText = string.Join(" ", Enumerable.Range(0, 100).Select(i => $"word{i:D3}"));
+            host.Mount(_ => ScrollViewer(MarkdownTextSelection.Scope(options,
+                Md(tallText, new MarkdownOptions { TextSelection = options })).Width(220)).Height(150));
+            await Harness.Render();
+            selection = H.FindControl<MarkdownSelectionHost>(_ => true)!;
+            selection.Refresh();
+            var scroller = H.FindControl<ScrollViewer>(_ => true)!;
+            var stationaryRoot = selection.RootPoint(new Point(30, 100));
+            var oldLocal = selection.LocalPoint(stationaryRoot);
+            scroller.ChangeView(null, 100, null, true);
+            await Harness.Render();
+            var newLocal = selection.LocalPoint(stationaryRoot);
+            H.Check("MdSelection_StationaryRootPointerTracksScroll",
+                scroller.VerticalOffset > 0 && Math.Abs(newLocal.Y - oldLocal.Y - scroller.VerticalOffset) < 1);
+            var selectionPeer = (MarkdownSelectionAutomationPeer)FrameworkElementAutomationPeer.CreatePeerForElement(selection);
+            selectionPeer.Range(tallText.Length - 7, tallText.Length).ScrollIntoView(false);
+            await Harness.Render();
+            selection.Refresh();
+            H.Check("MdSelection_UiaScrollTargetsRangeInsideTallSurface",
+                selection.Document.Entries.Count == 1 &&
+                MarkdownSelectionHost.Intersect(selection.CharacterBounds(tallText.Length - 1), selection.Viewport()).Height > 0);
         }
     }
 }

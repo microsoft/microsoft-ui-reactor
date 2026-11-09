@@ -150,6 +150,7 @@ internal sealed class MarkdownSelectionHandler : IDecoratorElementHandler<Markdo
         {
             host.Options = newEl.Options!;
             host.SetContent(ctx.ReconcileChild(oldEl.Content, newEl.Content, host.Body));
+            host.InvalidateDocument();
             // LayoutUpdated refreshes after the native text tree settles, not mid-reconciliation.
         }
         else
@@ -157,6 +158,9 @@ internal sealed class MarkdownSelectionHandler : IDecoratorElementHandler<Markdo
             var marker = (MarkdownSelectionMarker)control;
             marker.Metadata = newEl;
             marker.Child = ctx.ReconcileChild(oldEl.Content, newEl.Content, marker.Child);
+            for (DependencyObject? parent = marker; parent is not null;
+                parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
+                if (parent is MarkdownSelectionHost owner) { owner.InvalidateDocument(); break; }
         }
         return control;
     }
@@ -181,6 +185,28 @@ internal sealed class MarkdownSelectionHandler : IDecoratorElementHandler<Markdo
 
 internal readonly record struct SelectionPart(object Identity, string Text, string Separator);
 
+internal static class MarkdownSelectionRangeMovement
+{
+    internal static (int Start, int End, int Moved) Move(int start, int end, int[] boundaries, int count)
+    {
+        if (count == 0 || boundaries.Length < 2 || boundaries[0] == boundaries[^1]) return (start, end, 0);
+        int index = Array.BinarySearch(boundaries, start);
+        if (start == end)
+        {
+            int origin = index >= 0 ? index : count > 0 ? ~index - 1 : ~index;
+            int target = (int)Math.Clamp((long)origin + count, 0, boundaries.Length - 1);
+            int moved = target - origin;
+            if (moved == 0) return (start, end, 0);
+            return (boundaries[target], boundaries[target], moved);
+        }
+        int first = index >= 0 ? index : ~index - 1;
+        if (first < 0 || first >= boundaries.Length - 1) return (start, end, 0);
+        int next = (int)Math.Clamp((long)first + count, 0, boundaries.Length - 2);
+        if (next == first) return (start, end, 0);
+        return (boundaries[next], boundaries[next + 1], next - first);
+    }
+}
+
 internal static class MarkdownSelectionCopy
 {
     internal static void Write(string text, Action<string> write, Action<string, bool>? result)
@@ -189,7 +215,9 @@ internal static class MarkdownSelectionCopy
         try { write(text); success = true; }
         catch (UnauthorizedAccessException) { success = false; }
         catch (COMException e) when (e.HResult is unchecked((int)0x80070005) or
-            unchecked((int)0x800401D0) or unchecked((int)0x800401D1))
+            unchecked((int)0x800401D0) or unchecked((int)0x800401D1) or
+            unchecked((int)0x800401D2) or unchecked((int)0x800401D3) or
+            unchecked((int)0x800401D4))
         { success = false; }
         result?.Invoke(text, success);
     }
@@ -211,6 +239,19 @@ internal sealed class MarkdownSelectionDocument
     internal int End => Math.Max(Anchor, Caret);
     internal string SelectedText => Text[Start..End];
     private int[] _graphemes = [];
+    internal Action<bool, bool>? Changed { get; set; }
+
+    internal Entry? EntryAt(int offset)
+    {
+        int low = 0, high = Entries.Count - 1;
+        while (low <= high)
+        {
+            int mid = low + (high - low) / 2;
+            if (Entries[mid].Start <= offset) low = mid + 1;
+            else high = mid - 1;
+        }
+        return high >= 0 ? Entries[high] : null;
+    }
 
     internal bool Rebuild(IEnumerable<SelectionPart> parts)
     {
@@ -229,16 +270,20 @@ internal sealed class MarkdownSelectionDocument
         if (!changed) return false;
         int anchor = Remap(Anchor, next, value.Length);
         int caret = Remap(Caret, next, value.Length);
+        bool textChanged = Text != value;
+        bool selectionChanged = Anchor != anchor || Caret != caret;
         Entries = next;
         Text = value;
         _graphemes = StringInfo.ParseCombiningCharacters(value);
-        Select(anchor, caret);
+        Anchor = Math.Clamp(anchor, 0, Text.Length);
+        Caret = Math.Clamp(caret, 0, Text.Length);
+        Changed?.Invoke(textChanged, selectionChanged);
         return true;
     }
 
     private int Remap(int offset, List<Entry> next, int length)
     {
-        var old = Entries.LastOrDefault(e => e.Start <= offset);
+        var old = EntryAt(offset);
         if (old is null) return Math.Min(offset, length);
         var replacement = next.FirstOrDefault(e => ReferenceEquals(e.Identity, old.Identity));
         if (replacement is null) return Math.Min(offset, length);
@@ -258,8 +303,12 @@ internal sealed class MarkdownSelectionDocument
 
     internal void Select(int anchor, int caret)
     {
-        Anchor = Math.Clamp(anchor, 0, Text.Length);
-        Caret = Math.Clamp(caret, 0, Text.Length);
+        int nextAnchor = Math.Clamp(anchor, 0, Text.Length);
+        int nextCaret = Math.Clamp(caret, 0, Text.Length);
+        if (Anchor == nextAnchor && Caret == nextCaret) return;
+        Anchor = nextAnchor;
+        Caret = nextCaret;
+        Changed?.Invoke(false, true);
     }
 
     internal int MoveGrapheme(int offset, int direction)

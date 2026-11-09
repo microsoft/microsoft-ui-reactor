@@ -17,6 +17,13 @@ internal sealed partial class MarkdownSelectionAutomationPeer(MarkdownSelectionH
     internal IRawElementProviderSimple Provider => ProviderFromPeer(this);
     internal IRawElementProviderSimple ChildProvider(FrameworkElement child) =>
         ProviderFromPeer(CreatePeerForElement(child));
+    internal void NotifyChanged(bool text, bool selection)
+    {
+        if (text && ListenerExists(AutomationEvents.TextPatternOnTextChanged))
+            RaiseAutomationEvent(AutomationEvents.TextPatternOnTextChanged);
+        if (selection && ListenerExists(AutomationEvents.TextPatternOnTextSelectionChanged))
+            RaiseAutomationEvent(AutomationEvents.TextPatternOnTextSelectionChanged);
+    }
 
     public SupportedTextSelection SupportedTextSelection => SupportedTextSelection.Single;
     public ITextRangeProvider DocumentRange
@@ -130,9 +137,7 @@ internal sealed partial class MarkdownSelectionRange(
         for (int i = _start; i < _end;)
         {
             int next = host.Document.MoveGrapheme(i, 1);
-            var rect = host.CharacterBounds(i);
-            var following = host.CharacterBounds(next);
-            if (Math.Abs(rect.Y - following.Y) < .5) rect.Width = Math.Max(1, following.X - rect.X);
+            var rect = host.GlyphBounds(i, next);
             rect = MarkdownSelectionHost.Intersect(rect, host.Viewport());
             if (rect.Width > 0 && rect.Height > 0)
                 result.AddRange([screen.X + rect.X * scale, screen.Y + rect.Y * scale,
@@ -162,12 +167,12 @@ internal sealed partial class MarkdownSelectionRange(
     {
         Normalize();
         if (count == 0) return 0;
-        ExpandToEnclosingUnit(unit);
-        int moved = MoveEndpointByUnit(TextPatternRangeEndpoint.Start, unit, count);
-        _end = _start;
-        ExpandToEnclosingUnit(unit);
-        return moved;
+        var result = MarkdownSelectionRangeMovement.Move(_start, _end, Boundaries(unit), count);
+        _start = result.Start;
+        _end = result.End;
+        return result.Moved;
     }
+
     public void MoveEndpointByRange(TextPatternRangeEndpoint endpoint, ITextRangeProvider targetRange,
         TextPatternRangeEndpoint targetEndpoint)
     {
@@ -221,10 +226,7 @@ internal sealed partial class MarkdownSelectionRange(
     public void ScrollIntoView(bool alignToTop)
     {
         Normalize();
-        int offset = alignToTop ? _start : _end;
-        var entry = host.Document.Entries.LastOrDefault(e => e.Start <= offset);
-        if (entry?.Identity is FrameworkElement surface)
-            surface.StartBringIntoView(new BringIntoViewOptions
-            { VerticalAlignmentRatio = alignToTop ? 0 : 1, AnimationDesired = false });
+        int offset = alignToTop || _start == _end ? _start : host.Document.MoveGrapheme(_end, -1);
+        host.ScrollRangeIntoView(offset, alignToTop);
     }
 }

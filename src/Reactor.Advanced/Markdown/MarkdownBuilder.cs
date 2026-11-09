@@ -756,9 +756,8 @@ internal sealed class MarkdownBuilder
 
     private Element Selectable(string text, Element content, string separator = "\n") =>
         _options.TextSelection is null ? content :
-            (content is MarkdownSelectionElement { Role: SelectionRole.Surface } surface
-                ? surface : (MarkdownSelectionElement)MarkdownTextSelection.Surface(text, content, separator))
-            with { Options = _options.TextSelection };
+            content is MarkdownSelectionElement { Role: SelectionRole.Surface } surface
+                ? surface : MarkdownTextSelection.Surface(text, content, separator);
 
     private static string PlainText(IEnumerable<RichTextInline> inlines)
     {
