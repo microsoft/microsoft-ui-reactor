@@ -444,6 +444,9 @@ internal static class ModifierTable
             // The content-alignment pair IS Control-gated in ApplyModifiers, but WinUI
             // declares those DPs only on Control — if the .Set lambda compiles the receiver
             // already qualifies, so no predicate is needed.
+            // CleanElement clears both since #1013. They deliberately stay MOD_002 per
+            // #1195: clearing on pool return does not lose .Set writes; the next mount
+            // re-applies setters.
             { "HorizontalContentAlignment", new ModifierInfo("HorizontalContentAlignment") },
             { "VerticalContentAlignment",   new ModifierInfo("VerticalContentAlignment") },
 

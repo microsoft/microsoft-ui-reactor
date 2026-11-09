@@ -1175,9 +1175,11 @@ internal static class ModifierEventFixtures
     //  renter still carrying the previous renter's LOCAL values — and a local
     //  value outranks every Style setter in WinUI's precedence order, so the
     //  new renter could never show its styled padding/background again.
+    //  Issue #1013 extends the Control checks to HorizontalContentAlignment and
+    //  VerticalContentAlignment, which have the same pool-return leak.
     //
     //  ScrollViewer is the Control carrier precisely because ScrollViewerElement
-    //  declares none of the six properties: any local value that survives the
+    //  declares none of the eight properties: any local value that survives the
     //  recycle came from ApplyModifiers, not from the descriptor re-writing it
     //  on the second mount. A Button would be vacuous for IsEnabled —
     //  ButtonElement writes EffectiveIsEnabled unconditionally on every mount,
