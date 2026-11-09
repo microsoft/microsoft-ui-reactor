@@ -251,9 +251,11 @@ ignored.
 child with grow (`.Flex(grow: 1, basis: 0)`), a Grid `*` track, the
 window root, or an explicit `.Width(n)`/`.Height(n)`. Its content sits in
 a layer that reports a desired size of zero, so FitParent never sizes
-itself from its content. On an **unsized** axis — inside a `ScrollView`,
-as a `VStack` child (unsized height) or an `HStack` child (unsized
-width), or in a Grid `Auto` track — it measures 0 on that axis and stays
+itself from its content. Placed directly inside a `ScrollView` (or
+`ScrollViewer`), it fills the viewport. On an **unsized** axis — as a
+`VStack` child (unsized height, including a `VStack` inside a
+`ScrollView`) or an `HStack` child (unsized width), or in a Grid `Auto`
+track — it measures 0 on that axis and stays
 an empty placeholder: `render` is never called. There is no loop and no
 exception; the content is simply absent. Fix it by giving that axis a
 size: `FitParent(...).Height(240)`, Flex grow, or a Grid `*` track.
@@ -486,7 +488,7 @@ Reactor surfaces this footgun at debug time: when
 builds), the reconciler emits a one-time warning naming the offending
 stack and its `Auto` track so you don't have to bisect the collapse.
 
-### FitParent inside a ScrollViewer/unsized VStack
+### FitParent inside an unsized VStack
 
 ```csharp
 // Don't:
@@ -495,8 +497,9 @@ ScrollView(VStack(16,
     FitParent((w, h) => BuildSparkline(samples, w, h))))   // never renders
 ```
 
-A `ScrollView` and a `VStack` measure their children with **infinite**
-height, so FitParent gets no height to fit. It does not loop or throw: it
+A `VStack` measures its children with **infinite** height and arranges
+them at their desired height, so FitParent gets no height to fit — even
+when the `VStack` itself sits in a `ScrollView`. It does not loop or throw: it
 measures 0 on that axis, stays an empty placeholder, and never calls
 `render`, so the content silently disappears. There is no debug warning
 for this case. Give the unsized axis a size:
@@ -507,6 +510,10 @@ ScrollView(VStack(16,
     TextBlock("Revenue"),
     FitParent((w, h) => BuildSparkline(samples, w, h)).Height(240)))
 ```
+
+A FitParent placed *directly* inside a `ScrollView` (no stack in between)
+is different: the scroller arranges it at the viewport size, so it renders
+once at that size and fills the viewport.
 
 The same applies to a horizontal `HStack` (give it `.Width(n)`) and to a
 Grid `Auto` track (use a `*` track instead). Inside a `FlexRow`/`FlexColumn`,

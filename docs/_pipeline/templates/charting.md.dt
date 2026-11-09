@@ -151,8 +151,9 @@ FlexRow(
 builder calls (`.Title`, `.ShowGrid`, …) must come before it; layout
 modifiers (`.Flex`, `.Margin`, `.Grid`) chained after it apply to the
 FitParent wrapper. The parent must give the chart a finite size on both
-axes — a FitParent chart directly inside a `ScrollView` or as a plain
-`VStack` child gets no height and renders nothing (see
+axes — a FitParent chart as a plain `VStack` child (even inside a
+`ScrollView`) gets no height and renders nothing, while one placed
+directly inside a `ScrollView` fills the viewport (see
 [layout](layout.md#fitparent--size-baked-content) for the rule, the
 debounce options, and when `Viewbox` is the cheaper choice). Sharing one
 builder instance between two FitParents is unsupported.

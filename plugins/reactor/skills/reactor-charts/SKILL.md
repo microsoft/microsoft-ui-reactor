@@ -304,9 +304,10 @@ asks for one, push back with the alternative.
   "different magnitude".
 - **Pie chart for ranking.** Pies hide rank — angle judgments are
   imprecise. A sorted bar chart shows it directly.
-- **A `.FitParent()` chart with no finite size.** Inside a `ScrollView`, as a
-  plain `VStack`/`HStack` child, or in a Grid `Auto` track, the unsized axis
-  measures 0 and the chart silently renders **nothing** (no loop, no error).
+- **A `.FitParent()` chart with no finite size.** As a plain `VStack`/`HStack`
+  child (including a `VStack` inside a `ScrollView`), or in a Grid `Auto` track,
+  the unsized axis measures 0 and the chart silently renders **nothing** (no
+  loop, no error). Directly inside a `ScrollView` it fills the viewport.
   Give that axis a size: `.FitParent().Height(320)`, `.Flex(grow: 1, basis: 0)`
   in a `FlexRow`/`FlexColumn`, or a Grid `*` track. Also: `.FitParent()` must
   be the last builder call — chart setters such as `.Title(...)` don't exist on
