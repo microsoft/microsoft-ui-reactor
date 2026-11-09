@@ -2167,6 +2167,7 @@ internal static class SelfTestFixtureRegistry
         "FlyoutTarget_NestedCallbacksAcrossUpdates",
         "FlyoutTarget_MenuFlyoutTargetCallbacks",
         "FlyoutTarget_TeardownAndPlainPoolReuse",
+        "CustomDecorator_NestedUnmount",
 
         // Flyout IsOpen driven by state (FlyoutIsOpenStateFixtures).
         "FlyoutIsOpen_ButtonTargetFromState",
@@ -4417,6 +4418,7 @@ internal static class SelfTestFixtureRegistry
         "FlyoutTarget_MenuFlyoutTargetCallbacks" => new FlyoutTargetCallbacksFixtures.MenuFlyoutTargetCallbacks(harness),
         "FlyoutTarget_TeardownAndPlainPoolReuse" => new FlyoutTargetCallbacksFixtures.TeardownAndPlainPoolReuse(harness),
 
+        "CustomDecorator_NestedUnmount" => new CustomDecoratorNestedUnmountFixture(harness),
         "FlyoutIsOpen_ButtonTargetFromState" => new FlyoutIsOpenStateFixtures.ButtonTargetOpensFromState(harness),
         "FlyoutIsOpen_ButtonTargetOnMount" => new FlyoutIsOpenStateFixtures.ButtonTargetOpensOnMount(harness),
         "FlyoutIsOpen_NonButtonTargetFromState" => new FlyoutIsOpenStateFixtures.NonButtonTargetOpensFromState(harness),

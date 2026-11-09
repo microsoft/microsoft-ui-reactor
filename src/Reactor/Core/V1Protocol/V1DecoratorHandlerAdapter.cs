@@ -72,7 +72,12 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
         if (PreservesTargetTag)
             Reconciler.SetDecoratorElementTag(control, element);
         else
-            Reconciler.SetElementTag(control, element);
+        {
+            // This decorator owns the mounted identity, even when its target is a flyout.
+            var state = Reconciler.GetOrCreateReactorState(control);
+            state.Element = element;
+            state.DecoratorElement = null;
+        }
     }
 
     public V1UnmountDisposition Unmount(UIElement control, Reconciler reconciler)
