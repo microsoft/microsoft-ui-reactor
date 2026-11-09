@@ -154,23 +154,33 @@ internal static partial class MarkdownSelectionFixtures
             Element Message(string text) => MarkdownTextSelection.Scope(options,
                 Md(text, new MarkdownOptions { TextSelection = options }));
             host.Mount(_ => Message("partial"));
-            await Harness.Render();
+            bool initialReady = await Harness.WaitFor(() =>
+                H.FindControl<MarkdownSelectionHost>(scope => scope.IsLoaded && scope.Document.Text == "partial") is not null);
+            H.Check("MdSelection_StreamInitialDocumentReady", initialReady);
             var selection = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             selection.Refresh();
             selection.Select(1, 7);
+            H.Check("MdSelection_StreamInitialSelection",
+                selection.Document.SelectedText == "artial" && selection.Document.Anchor == 1 && selection.Document.Caret == 7,
+                $"loaded={selection.IsLoaded}; text={selection.Document.Text}; anchor={selection.Document.Anchor}; caret={selection.Document.Caret}");
             host.Mount(_ => Message("partial streamed"));
-            await Harness.Render();
+            bool appendReady = await Harness.WaitFor(() =>
+                H.FindControl<MarkdownSelectionHost>(scope => scope.IsLoaded && scope.Document.Text == "partial streamed") is not null);
             var updated = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             updated.Refresh();
             H.Check("MdSelection_ReconciliationKeepsHost", ReferenceEquals(selection, updated));
-            H.Check("MdSelection_StreamKeepsSelection", updated.Document.SelectedText == "artial");
+            H.Check("MdSelection_StreamKeepsSelection", appendReady && updated.Document.SelectedText == "artial",
+                $"ready={appendReady}; text={updated.Document.Text}; anchor={updated.Document.Anchor}; caret={updated.Document.Caret}");
             var originalSurface = updated.Document.Entries.Single().Identity;
             host.Mount(_ => Message("new partial streamed"));
-            await Harness.Render();
+            bool prefixReady = await Harness.WaitFor(() =>
+                H.FindControl<MarkdownSelectionHost>(scope => scope.IsLoaded && scope.Document.Text == "new partial streamed") is not null);
             H.Check("MdSelection_StreamRemapsAfterPrefixInsertion",
-                ReferenceEquals(originalSurface, updated.Document.Entries.Single().Identity)
+                prefixReady && ReferenceEquals(originalSurface, updated.Document.Entries.Single().Identity)
                 && updated.Document.Anchor == 5 && updated.Document.Caret == 11
-                && updated.Document.SelectedText == "artial");
+                && updated.Document.SelectedText == "artial",
+                $"ready={prefixReady}; sameSurface={ReferenceEquals(originalSurface, updated.Document.Entries.Single().Identity)}; " +
+                $"text={updated.Document.Text}; anchor={updated.Document.Anchor}; caret={updated.Document.Caret}");
             H.Check("MdSelection_NoDuplicateRegistration", updated.Document.Entries.Count == 1);
             var provider = (ITextProvider)FrameworkElementAutomationPeer.CreatePeerForElement(updated)
                 .GetPattern(PatternInterface.Text);
