@@ -312,6 +312,12 @@ asks for one, push back with the alternative.
   in a `FlexRow`/`FlexColumn`, or a Grid `*` track. Also: `.FitParent()` must
   be the last builder call — chart setters such as `.Title(...)` don't exist on
   the `Element` it returns.
+- **Axis `.Margin(l, t, r, b)` after `.FitParent()`.** On `LineChart`/`BarChart`/
+  `AreaChart`, `.Margin(left, top, right, bottom)` is the chart's axis margin.
+  After `.FitParent()` the call still compiles but binds to the generic layout
+  `.Margin` on the wrapper `Element`: the outer margin changes and the axis
+  margins silently revert to defaults. Put axis margins **before** `.FitParent()`:
+  `LineChart(...).Margin(60, 20, 20, 40).FitParent()`.
 
 ## When to reach for `*View` (and when not to)
 

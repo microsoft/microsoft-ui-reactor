@@ -49,7 +49,7 @@ screen structure. Every layout element accepts children and optional spacing.
 | Visual container | `Border(child)` / `Card(child)` | Background, corner radius, padding around a single child. |
 | Overflow handling | `ScrollView(child)` | Wraps anything that may exceed its allotted space. |
 | Collapsible group | `Expander(header, content)` | Header that toggles its content panel. |
-| Content baked at an explicit size (charts, `D3Canvas` drawings) that should fill its slot | `FitParent((w, h) => ...)` | Rebuilds the content at the slot's size — see [FitParent](#fitparent--size-baked-content). |
+| Content baked at an explicit size (charts, `D3Canvas` drawings) that should fill its slot | `FitParent((w, h) => ...)` | Rebuilds the content at the slot's size — see [FitParent](#fitparent-size-baked-content). |
 
 ## VStack and HStack
 
@@ -518,7 +518,7 @@ once at that size and fills the viewport.
 The same applies to a horizontal `HStack` (give it `.Width(n)`) and to a
 Grid `Auto` track (use a `*` track instead). Inside a `FlexRow`/`FlexColumn`,
 `.Flex(grow: 1, basis: 0)` hands it the remaining space — see
-[FitParent](#fitparent--size-baked-content).
+[FitParent](#fitparent-size-baked-content).
 
 ## Tips
 

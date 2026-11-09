@@ -98,6 +98,7 @@ All factories live on `Microsoft.UI.Reactor.Factories` — use
 | `Expander(header, content, isExpanded?, onExpandedChanged?)` | See type | Collapsible |
 | `SplitView(pane?, content?)` | `(Element?, Element?)` | Side pane |
 | `Viewbox(child)` | `Element` | Scales child to fit |
+| `FitParent((w, h) => ...)` | `(Func<double, double, Element>, FitParentOptions?)` | Re-renders size-baked content (charts, `D3Canvas`) at the slot's size; needs a finite size on both axes (Flex grow / Grid `*` / explicit size) |
 | `Canvas(children...)` | `params CanvasChild[]` | Absolute positioning |
 | `CanvasItem(element, left?, top?)` | `(Element, double, double)` | Positioned |
 | `Flex(children...)` | `params Element?[]` | CSS Flexbox (row default) |

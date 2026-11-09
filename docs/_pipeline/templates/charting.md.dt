@@ -126,7 +126,7 @@ A chart's geometry — axis ticks, bar widths, arc radii — is computed from
 `.Width(n)`/`.Height(n)` when the chart is built, so a chart does not
 stretch with its container. Make `.FitParent()` the **last** call on the
 builder and the chart is rebuilt at its parent's size instead (it wraps
-the core [`FitParent`](layout.md#fitparent--size-baked-content) factory).
+the core [`FitParent`](layout.md#fitparent-size-baked-content) factory).
 It needs no import beyond the chart DSL:
 
 ```csharp
@@ -149,12 +149,21 @@ FlexRow(
 `.FitParent()` exists on `PieChart`, `LineChart`/`BarChart`/`AreaChart`,
 `TreeChart`, and `ForceGraph`. It returns a plain `Element`, so chart
 builder calls (`.Title`, `.ShowGrid`, …) must come before it; layout
-modifiers (`.Flex`, `.Margin`, `.Grid`) chained after it apply to the
-FitParent wrapper. The parent must give the chart a finite size on both
+modifiers (`.Flex`, `.Grid`, `.Padding`) chained after it apply to the
+FitParent wrapper.
+
+> **Axis margins go before `.FitParent()`.** On `LineChart`/`BarChart`/`AreaChart`,
+> `.Margin(left, top, right, bottom)` sets the chart's **axis margins** (the
+> gutter for tick labels). Chained *after* `.FitParent()` the same call still
+> compiles, but it resolves to the generic layout `.Margin` on the wrapper
+> `Element` — the outer margin changes and the axis margins silently revert to
+> their defaults. Write `LineChart(...).Margin(60, 20, 20, 40).FitParent()`.
+
+The parent must give the chart a finite size on both
 axes — a FitParent chart as a plain `VStack` child (even inside a
 `ScrollView`) gets no height and renders nothing, while one placed
 directly inside a `ScrollView` fills the viewport (see
-[layout](layout.md#fitparent--size-baked-content) for the rule, the
+[layout](layout.md#fitparent-size-baked-content) for the rule, the
 debounce options, and when `Viewbox` is the cheaper choice). Sharing one
 builder instance between two FitParents is unsupported.
 

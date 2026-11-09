@@ -28,9 +28,17 @@ public static partial class Charts
     /// final width and height (see <see cref="Factories.FitParent(Func{double, double, Element}, FitParentOptions?)"/>).
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Must be the <b>last</b> builder call, because it returns <see cref="Element"/>.
     /// The parent must give a finite size on both axes. Sharing one builder instance
     /// between two FitParents is unsupported.
+    /// </para>
+    /// <para>
+    /// Set axis margins with <see cref="ChartElement{T}.Margin(double, double, double, double)"/>
+    /// <b>before</b> calling this. Chained after it, <c>.Margin(l, t, r, b)</c> still compiles
+    /// but binds to the generic layout margin on the returned wrapper, so the axis margins
+    /// silently revert to their defaults.
+    /// </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="chart"/> is null.</exception>
     public static Element FitParent<T>(this ChartElement<T> chart, FitParentOptions? options = null)

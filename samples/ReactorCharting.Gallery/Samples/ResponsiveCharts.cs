@@ -28,7 +28,7 @@ public sealed class ResponsiveChartsSample : GallerySample
 
         // .FitParent() must be the last builder call. Each chart sits in a
         // finite-size slot: a flex child with grow inside a sized container.
-        FlexRow(
+        (FlexRow(
             PieChart(share, d => d.Value, d => d.Name)
                 .Title("Market Share")
                 .FitParent()
@@ -37,7 +37,7 @@ public sealed class ResponsiveChartsSample : GallerySample
                 .Title("Daily Temperature")
                 .FitParent()
                 .Flex(grow: 2)
-        ) with { ColumnGap = 16 }
+        ) with { ColumnGap = 16 })
             .Width(width).Height(height)
         """;
 
