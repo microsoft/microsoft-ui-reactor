@@ -19,7 +19,10 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 ///   <item><see cref="Mount(TControl, TElement)"/> runs once per entry. Controlled entries write
 ///   their initial value bare — event subscription has not yet been wired,
 ///   so a synchronous change event has no trampoline to fire (no echo).
-///   Mirrors the KD-1b fix on the hand-coded handlers.</item>
+///   Mirrors the KD-1b fix on the hand-coded handlers. A control whose change
+///   event is raised after the write returns echoes after the wiring below;
+///   its entry arms the Mount write instead (<c>HandCodedControlled</c>'s
+///   <c>armOnMount</c>).</item>
 ///   <item><see cref="EnsureSubscribed"/> runs once per entry. Controlled
 ///   entries subscribe to their change event here, guarded by
 ///   <see cref="DescriptorHandler{TElement,TControl}"/>'s per-control

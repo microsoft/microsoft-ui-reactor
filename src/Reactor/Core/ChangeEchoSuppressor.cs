@@ -101,9 +101,13 @@ internal static class ChangeEchoSuppressor
     /// recognizes the engine-synthesized change event for a programmatic
     /// controlled write by its readback value. Pair with a bare write (no
     /// counter bump). The matching change-event trampoline calls
-    /// <see cref="ShouldSuppressEcho(UIElement, object?)"/> which consumes the arm. Used only on
-    /// migrated single-value, exact-comparable, synchronous controlled
-    /// round-trips; the counter remains the mechanism everywhere else.
+    /// <see cref="ShouldSuppressEcho(UIElement, object?)"/> which consumes the arm on
+    /// the next change event, whether the control raises it inside the write or
+    /// after it returns. Used only on migrated single-value, exact-comparable
+    /// controlled round-trips: the synchronous ones, plus the deferred
+    /// <c>RichEditBox</c> and <c>AutoSuggestBox</c> text echoes, whose arm stays set
+    /// until the next event and drops it only on a matching readback. The counter
+    /// remains the mechanism everywhere else.
     /// </summary>
     internal static void ArmExpectedEcho(UIElement control, Func<object?, bool> matches)
     {
@@ -128,10 +132,12 @@ internal static class ChangeEchoSuppressor
     /// The causal counter / setter scope still wins first (external
     /// <c>WriteSuppressed</c> or an <c>ApplySetters</c> scope, which carry no
     /// expected value). When the counter/scope path fires, any value-diff arm
-    /// still set is cleared unconditionally — it belongs to a synchronous-echo
-    /// control whose own echo already fired (arm consumed) or was a no-op write
-    /// that will never echo, so there is nothing to leak; clearing it prevents
-    /// it from stranding and swallowing the user's next real interaction.
+    /// still set is cleared unconditionally, so it can't strand and swallow the
+    /// user's next real interaction. On a synchronous-echo control the arm's own
+    /// echo already fired (arm consumed) or the write was a no-op that will never
+    /// echo. On a deferred-echo control (RichEditBox, AutoSuggestBox) the echo
+    /// may still be on its way; it then reaches the callback carrying the value
+    /// Reactor just wrote, which is harmless.
     /// Otherwise the one-shot value-diff predicate is consumed and its match
     /// result returned — a mismatch means a real user change superseded the
     /// pending write, so the arm is cleared and the event falls through to the
@@ -156,18 +162,15 @@ internal static class ChangeEchoSuppressor
     {
         if (state.EchoSuppressScopeDepth > 0 || state.EchoSuppressCount > 0)
         {
-            // The counter/scope is suppressing THIS event. Any value-diff arm
-            // still set here belongs to a synchronous-echo control whose own
-            // echo already fired-and-consumed (arm would be null) or was a
-            // guarded/no-op write that will never echo — so there is no future
-            // echo to leak. Clear it unconditionally so a coincident later real
-            // event whose readback happens to match cannot be swallowed.
-            // (ControlledPropEntry keeps its own per-payload arm with
-            // drain-on-match semantics. The deferred echoes of RichEditBox and
-            // AutoSuggestBox do use this arm; if a counter token lands on one
-            // first, the arm is cleared
-            // here and the echo reaches the callback carrying the value Reactor
-            // just wrote, which is harmless.)
+            // The counter/scope is suppressing THIS event. Clear any value-diff
+            // arm unconditionally so a coincident later real event whose
+            // readback happens to match cannot be swallowed. On a
+            // synchronous-echo control its echo already fired-and-consumed (arm
+            // would be null) or the write was guarded/no-op and will never echo.
+            // The deferred echoes of RichEditBox and AutoSuggestBox may still be
+            // on their way: one then reaches the callback carrying the value
+            // Reactor just wrote, which is harmless. (ControlledPropEntry keeps
+            // its own per-payload arm with drain-on-match semantics.)
             state.PendingEchoMatch = null;
             // Mirror ShouldSuppress: scope is non-consuming; a counter token is.
             if (state.EchoSuppressScopeDepth == 0)
