@@ -113,6 +113,7 @@ internal static class FixtureRegistry
         // Markdown
         "Markdown_HeadingsAndFormatting",
         "Markdown_CodeBlockAndLinks",
+        "Markdown_Selection_InputProof",
 
         // D3 Charts
         "D3_LineChart",
@@ -280,6 +281,7 @@ internal static class FixtureRegistry
         // Markdown
         "Markdown_HeadingsAndFormatting" => MarkdownFixtures.HeadingsAndFormatting(ctx),
         "Markdown_CodeBlockAndLinks" => MarkdownFixtures.CodeBlockAndLinks(ctx),
+        "Markdown_Selection_InputProof" => Factories.Component<MarkdownSelectionInputFixture>(),
 
         // D3 Charts
         "D3_LineChart" => D3Fixtures.LineChart(ctx),
