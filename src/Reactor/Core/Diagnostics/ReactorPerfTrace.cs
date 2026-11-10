@@ -110,7 +110,7 @@ internal static unsafe partial class ReactorPerfTrace
     /// Whether a session wants events at <paramref name="level"/> with <paramref name="keyword"/>.
     /// Mirrors TraceLogging's <c>TraceLoggingProviderEnabled</c>, except that a session that
     /// asked for no keywords (<c>MatchAnyKeyword == 0</c>) gets every keyword, as EventSource
-    /// does — ETW itself still drops what a session's own mask excludes.
+    /// does. <c>MatchAllKeyword</c> applies either way, as ETW's own filtering does.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static bool IsEnabled(byte level, ulong keyword)
@@ -120,7 +120,7 @@ internal static unsafe partial class ReactorPerfTrace
     {
         ulong any = s_anyKeyword;
         ulong all = s_allKeyword;
-        return any == 0 || ((keyword & any) != 0 && (keyword & all) == all);
+        return (any == 0 || (keyword & any) != 0) && (keyword & all) == all;
     }
 
     internal static bool PassEnabled
@@ -153,13 +153,25 @@ internal static unsafe partial class ReactorPerfTrace
     /// <summary>
     /// Registers the provider once per process. Called when a reconciler is created, so the
     /// provider exists before the first render and any session (already running or started
-    /// later) enables it. Registration failure leaves tracing off; it never throws.
+    /// later) enables it. Registration failure leaves tracing off; it never throws. A caller
+    /// on another thread waits for a registration in progress, so no reconciler starts
+    /// rendering while the enable state is open but the handle is not yet published.
     /// </summary>
     internal static void EnsureRegistered()
     {
         if (Volatile.Read(ref s_registerState) != 0) return;
-        if (Interlocked.CompareExchange(ref s_registerState, 1, 0) != 0) return;
-        Register();
+        lock (RegisterGate.Gate)
+        {
+            if (s_registerState != 0) return;
+            Register();
+            Volatile.Write(ref s_registerState, 1);
+        }
+    }
+
+    // Its own class so the gate's initializer never runs on the hot IsEnabled path.
+    private static class RegisterGate
+    {
+        public static readonly Lock Gate = new();
     }
 
     private static void Register()

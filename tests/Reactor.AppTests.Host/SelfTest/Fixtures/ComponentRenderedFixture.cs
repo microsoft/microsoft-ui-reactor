@@ -1310,6 +1310,82 @@ internal class ComponentRendered_ReentrantMountDefersRetirement(Harness h) : Sel
 }
 
 /// <summary>
+/// A function root that mounts a replacement function root from its own first Render(): the
+/// outgoing root's <c>ComponentRendered</c> must keep its own componentId, not adopt the
+/// replacement's (the host snapshots the rendering root's context; <c>_funcContext</c>
+/// already belongs to the replacement by the time the outgoing render is reported).
+/// </summary>
+internal class ComponentRendered_ReentrantFunctionRootKeepsItsId(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var events = new List<ReactorEvent>();
+        using var subscription = ReactorTrace.Subscribe(
+            e => { if (e.EventName == nameof(ReactorEventSource.ComponentRendered)) lock (events) events.Add(e); },
+            EventLevel.Verbose,
+            ReactorEventSource.Keywords.RenderDetail);
+        if (!ComponentRenderTrace.IsEnabled)
+        {
+            H.Skip("ComponentRendered_ReentrantFunctionRoot_Host", "EventSource disabled (NativeAOT)");
+            H.Skip("ComponentRendered_ReentrantFunctionRoot_HostControl", "EventSource disabled (NativeAOT)");
+            return;
+        }
+
+        List<(string Text, long Id)> RootMounts()
+        {
+            lock (events)
+            {
+                var roots = events
+                    .Where(e => (string)e.Payload[0]! == nameof(FuncElement) && (string)e.Payload[2]! == ComponentRenderTrace.Reasons.Mount)
+                    .Select(e => ((string)e.Payload[0]!, (long)e.Payload[1]!))
+                    .ToList();
+                events.Clear();
+                return roots;
+            }
+        }
+
+        var host = H.CreateHost();
+        bool replaced = false;
+        host.Mount(_ =>
+        {
+            if (!replaced)
+            {
+                replaced = true;
+                host.Mount(_ => TextBlock("reentrant fn replacement"));
+            }
+            return TextBlock("reentrant fn original");
+        });
+        await Harness.Render();
+        await Harness.WaitFor(() => H.FindText("reentrant fn replacement") is not null, maxPasses: 32, perPassMs: 10);
+        var hostRoots = RootMounts();
+        Console.WriteLine("# reentrant fn host roots: " + string.Join(", ", hostRoots.Select(r => r.Id)));
+        H.Check("ComponentRendered_ReentrantFunctionRoot_Host",
+            hostRoots.Count >= 2 && hostRoots.Select(r => r.Id).Distinct().Count() == hostRoots.Count);
+
+        var control = new ReactorHostControl();
+        bool controlReplaced = false;
+        control.Mount(_ =>
+        {
+            if (!controlReplaced)
+            {
+                controlReplaced = true;
+                control.Mount(_ => TextBlock("reentrant control fn replacement"));
+            }
+            return TextBlock("reentrant control fn original");
+        });
+        H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = control });
+        await Harness.WaitFor(() => H.FindText("reentrant control fn replacement") is not null, maxPasses: 32, perPassMs: 10);
+        await control.WaitForIdleAsync();
+        var controlRoots = RootMounts();
+        Console.WriteLine("# reentrant fn control roots: " + string.Join(", ", controlRoots.Select(r => r.Id)));
+        H.Check("ComponentRendered_ReentrantFunctionRoot_HostControl",
+            controlRoots.Count >= 2 && controlRoots.Select(r => r.Id).Distinct().Count() == controlRoots.Count);
+        control.Dispose();
+        H.SetContent(null);
+    }
+}
+
+/// <summary>
 /// A listener that disposes itself from the event's own callback: the mount that reported
 /// the render must not map the new wrapper afterwards, since nothing is mapped while the
 /// event is off.

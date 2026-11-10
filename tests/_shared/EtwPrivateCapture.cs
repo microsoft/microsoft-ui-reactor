@@ -152,7 +152,11 @@ internal sealed unsafe class EtwPrivateCapture : IDisposable
     public void Dispose()
     {
         try { Stop(); }
-        catch (Win32Exception) { }
+        catch (Win32Exception ex)
+        {
+            // Dispose must not throw; the session dies with the process anyway (private logger).
+            global::System.Diagnostics.Trace.WriteLine("EtwPrivateCapture: stop failed: " + ex.Message);
+        }
         finally { Free(); }
     }
 

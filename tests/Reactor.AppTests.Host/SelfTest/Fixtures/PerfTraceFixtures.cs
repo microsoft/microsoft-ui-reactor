@@ -166,9 +166,8 @@ internal class PerfTrace_PrivateSessionRecordsRenderSpans(Harness h) : SelfTestF
         balanced = true;
         var spans = new List<Span>();
         var stacks = new Dictionary<int, Stack<Span>>();
-        foreach (var e in events.OrderBy(e => e.Timestamp))
+        foreach (var e in events.Where(e => e.Opcode is 1 or 2).OrderBy(e => e.Timestamp))
         {
-            if (e.Opcode is not (1 or 2)) continue;
             if (!stacks.TryGetValue(e.ThreadId, out var stack))
                 stacks[e.ThreadId] = stack = new Stack<Span>();
             if (e.Opcode == 1)
@@ -352,7 +351,12 @@ internal static class PerfTraceScenario
         {
             dispose();
             h.SetContent(null);
-            try { global::System.IO.File.Delete(etl); } catch (global::System.IO.IOException) { }
+            try { global::System.IO.File.Delete(etl); }
+            catch (global::System.IO.IOException ex)
+            {
+                // Best effort: a leftover temp ETL must not fail the test.
+                Console.WriteLine("# could not delete " + etl + ": " + ex.Message);
+            }
         }
     }
 }

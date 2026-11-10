@@ -146,6 +146,13 @@ public sealed class ReactorPerfTraceTests
             Assert.False(ReactorPerfTrace.IsEnabled(5, ReactorPerfTrace.Keywords.Children));
             Assert.True(ReactorPerfTrace.IsEnabled(5, 0x3));
 
+            // MatchAllKeyword still applies when MatchAnyKeyword is 0.
+            ReactorPerfTrace.ApplyControlCode(1, 5, 0, ReactorPerfTrace.Keywords.Pass);
+            Assert.True(ReactorPerfTrace.PassEnabled);
+            Assert.False(ReactorPerfTrace.ComponentEnabled);
+            Assert.False(ReactorPerfTrace.ChildrenEnabled);
+            Assert.False(ReactorPerfTrace.StateEnabled);
+
             // Level 0 and MatchAnyKeyword 0 mean "everything".
             ReactorPerfTrace.ApplyControlCode(1, 0, 0, 0);
             Assert.True(ReactorPerfTrace.StateEnabled);
@@ -446,7 +453,12 @@ public sealed class ReactorPerfTraceTests
         }
         finally
         {
-            try { global::System.IO.File.Delete(etl); } catch (global::System.IO.IOException) { }
+            try { global::System.IO.File.Delete(etl); }
+            catch (global::System.IO.IOException ex)
+            {
+                // Best effort: a leftover temp ETL must not fail the test.
+                global::System.Diagnostics.Trace.WriteLine("could not delete " + etl + ": " + ex.Message);
+            }
         }
     }
 
@@ -520,7 +532,12 @@ public sealed class ReactorPerfTraceTests
         }
         finally
         {
-            try { global::System.IO.File.Delete(etl); } catch (global::System.IO.IOException) { }
+            try { global::System.IO.File.Delete(etl); }
+            catch (global::System.IO.IOException ex)
+            {
+                // Best effort: a leftover temp ETL must not fail the test.
+                global::System.Diagnostics.Trace.WriteLine("could not delete " + etl + ": " + ex.Message);
+            }
         }
     }
 

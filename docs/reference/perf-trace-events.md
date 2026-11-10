@@ -43,7 +43,8 @@ EventSource is unchanged and keeps serving its in-process consumers (EventListen
 | `State` | `0x8` | `StateChange` | Verbose (5) |
 
 Enable `0xF` at level 5 for everything. A session that passes `MatchAnyKeyword = 0` gets every
-keyword, and level 0 means every level, as with TraceLogging providers.
+keyword, and level 0 means every level. `MatchAllKeyword` is honoured either way: an event is
+written only when its keyword has every `MatchAllKeyword` bit.
 
 ## Events
 

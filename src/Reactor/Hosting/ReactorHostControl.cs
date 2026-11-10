@@ -66,6 +66,14 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     // Render() can Mount() a replacement, and the attempt in progress is still the old root's.
     private Microsoft.UI.Reactor.Core.Diagnostics.RootRenderDiagnostics? _renderingRootDiagnostics;
     private Component? _renderingRoot;
+    // The render-function root's context as of the same snapshot: a reentrant Mount() replaces
+    // _funcContext mid-pass, and the root diagnostics must keep naming the root that rendered.
+    private RenderContext? _renderingFuncContext;
+
+    // The rendering root's context: the pass snapshot while a pass runs, else the live root's.
+    private RenderContext? RootDiagnosticContext => _renderingRootDiagnostics is null
+        ? _rootComponent?.Context ?? _funcContext
+        : _renderingRoot?.Context ?? _renderingFuncContext;
     // The root mount site as of the same snapshot: a root render function's hooks resolve
     // through it, and a reentrant Mount() replaces the live one mid-pass.
     private SourceLocation? _renderingMountSite;
@@ -79,7 +87,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             _rootComponent, _funcContext, hotReloadRender, _reconciler.ForceFullRenderPending);
 
     private Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.EffectsSpan BeginRootEffectsPerfSpan(Component? effectsRoot)
-        => (_renderingRootDiagnostics ?? _rootDiagnostics).BeginEffectsPerfSpan(effectsRoot?.Context ?? _funcContext);
+        => (_renderingRootDiagnostics ?? _rootDiagnostics).BeginEffectsPerfSpan(effectsRoot?.Context ?? RootDiagnosticContext);
 
     // Whether the root of the same snapshot is a render function.
     private bool _renderingFunctionRoot;
@@ -430,7 +438,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         => (_renderingRootDiagnostics ?? _rootDiagnostics).TraceRendered(
             _renderingRoot is null ? nameof(FuncElement) : Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_renderingRoot, element: null),
             hotReloadRender, _reconciler.ForceFullRenderPending, elapsedMilliseconds,
-            _renderingRoot?.Context ?? _funcContext);
+            RootDiagnosticContext);
 
     // True when a re-entrant Mount replaced the root this pass is rendering (RetireRoot
     // swaps the diagnostics instance the pass snapshotted).
@@ -849,6 +857,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                     Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.RenderPassStop(_perfHostId);
                 _renderingRoot = null;
                 _renderingRootDiagnostics = null;
+                _renderingFuncContext = null;
                 _renderingMountSite = null;
                 _renderingFunctionRoot = false;
                 // Reset the gate so future setState calls can enqueue — also when a render
@@ -1009,6 +1018,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             // clears the snapshot when the pass ends).
             _renderingRoot = _rootComponent;
             _renderingRootDiagnostics = _rootDiagnostics;
+            _renderingFuncContext = _rootComponent is null ? _funcContext : null;
             _renderingMountSite = _mountSite.Value;
             _renderingFunctionRoot = _rootComponent is null && _rootRenderFunc is not null;
             // Same snapshot for component inspection: Render() can Mount() a replacement, and the
