@@ -200,28 +200,50 @@ Write-Step 'Pre-flight checks'
 
 Write-Dbg "PowerShell $($PSVersionTable.PSVersion); OS arch $env:PROCESSOR_ARCHITECTURE; repo $repoRoot"
 
-function Test-DotnetSdk10 {
+function Test-DotnetSdk11 {
     if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { return $false }
     foreach ($line in (& dotnet --list-sdks)) {
         Write-Dbg "  dotnet SDK: $line"
-        if ($line -match '^(\d+)\.' -and [int]$Matches[1] -ge 10) { return $true }
+        if ($line -match '^(\d+)\.' -and [int]$Matches[1] -ge 11) { return $true }
     }
     return $false
 }
 
-if (-not (Test-DotnetSdk10)) {
+# Reactor builds with the .NET 11 SDK (C# 15, see global.json) but targets net10.0,
+# so running its apps and tests also needs the .NET 10 runtime, which the 11 SDK
+# does not carry. The Desktop runtime includes Microsoft.NETCore.App as well as the
+# WindowsDesktop.App the WinForms/WPF interop samples need.
+function Test-DotnetRuntime10 {
+    if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { return $false }
+    $core = $false; $desktop = $false
+    foreach ($line in (& dotnet --list-runtimes)) {
+        if ($line -match '^Microsoft\.NETCore\.App 10\.') { $core = $true }
+        if ($line -match '^Microsoft\.WindowsDesktop\.App 10\.') { $desktop = $true }
+    }
+    return ($core -and $desktop)
+}
+
+if (-not (Test-DotnetSdk11)) {
     if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
         Write-Host "    [info] dotnet not found on PATH." -ForegroundColor Yellow
     } else {
-        Write-Host "    [info] dotnet present but no .NET 10+ SDK detected. Installed:" -ForegroundColor Yellow
+        Write-Host "    [info] dotnet present but no .NET 11+ SDK detected. Installed:" -ForegroundColor Yellow
         & dotnet --list-sdks | ForEach-Object { Write-Host "          $_" -ForegroundColor Yellow }
     }
-    Install-WithWinget -Id 'Microsoft.DotNet.SDK.10' -Reason '.NET 10 SDK'
-    if (-not (Test-DotnetSdk10)) {
-        Fail '.NET 10 SDK install reported success but `dotnet --list-sdks` still does not show a 10.x entry. Open a new shell and re-run ./bootstrap.ps1.'
+    Install-WithWinget -Id 'Microsoft.DotNet.SDK.11' -Reason '.NET 11 SDK'
+    if (-not (Test-DotnetSdk11)) {
+        Fail '.NET 11 SDK install reported success but `dotnet --list-sdks` still does not show an 11.x entry. Open a new shell and re-run ./bootstrap.ps1.'
     }
 }
 Write-Ok ".NET SDK present"
+
+if (-not (Test-DotnetRuntime10)) {
+    Install-WithWinget -Id 'Microsoft.DotNet.DesktopRuntime.10' -Reason '.NET 10 Desktop runtime (Reactor targets net10.0)'
+    if (-not (Test-DotnetRuntime10)) {
+        Fail '.NET 10 Desktop runtime install reported success but `dotnet --list-runtimes` still does not show Microsoft.NETCore.App 10.x and Microsoft.WindowsDesktop.App 10.x. Open a new shell and re-run ./bootstrap.ps1.'
+    }
+}
+Write-Ok ".NET 10 runtime present"
 
 $hostArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
 

@@ -45,6 +45,12 @@ Conventions for contributors:
 
 ### Changed
 
+- `AsyncValue<T>` and `LoadState` are now C# 15 `closed` records instead of abstract
+  records with a `private protected` constructor. Consumers compiling with C# 15 can
+  `switch` over their cases exhaustively without a `_` arm, and a missing case is
+  warning CS8509; C# 14 / .NET 10 SDK consumers are unaffected. Reactor still targets
+  `net10.0`, but building Reactor from source now requires the .NET 11 SDK (spec 020 §5).
+
 - **`ExpanderElement.HeaderTemplate` and `.HeaderTemplate(Element)` are renamed to
   `HeaderContent` and `.HeaderContent(Element)` (breaking).** This Element-valued
   child is mounted into WinUI's `Expander.Header`, not its `HeaderTemplate`

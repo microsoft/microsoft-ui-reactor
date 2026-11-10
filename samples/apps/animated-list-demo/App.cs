@@ -74,8 +74,8 @@ sealed class App : Component
             Animations.Animate((AnimationKind)kind, commit);
         }
 
-        var addEnd     = () => { Mutate(list => [.. list, MakeRow(counter)]); setCounter(counter + 1); };
-        var addTop     = () => { Mutate(list => [MakeRow(counter), .. list]); setCounter(counter + 1); };
+        var addEnd     = () => { Mutate(list => (Row[])[.. list, MakeRow(counter)]); setCounter(counter + 1); };
+        var addTop     = () => { Mutate(list => (Row[])[MakeRow(counter), .. list]); setCounter(counter + 1); };
         var removeMid  = () => Mutate(list => list.Count == 0
                                                 ? list
                                                 : list.Where((_, i) => i != list.Count / 2).ToList());

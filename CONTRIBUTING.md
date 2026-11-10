@@ -22,7 +22,11 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) to build (pinned in
+  `global.json`; Reactor uses C# 15) and the
+  [.NET 10 Desktop runtime](https://dotnet.microsoft.com/download/dotnet/10.0) to run the
+  `net10.0` apps and tests. `./bootstrap.ps1` installs both. Apps that *consume* Reactor
+  still only need the .NET 10 SDK.
 - Windows App SDK 2.2 or newer — restored automatically from NuGet, no manual install required
   (the pinned floor lives in `WindowsAppSDKVersion` / `WindowsAppSDKWinUIVersion` in
   `Directory.Build.props`)

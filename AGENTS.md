@@ -40,7 +40,7 @@ MSTest accepts **only** `--filter` and rejects `--filter-class` with exit 5),
 `--logger "trx;…"` becomes `--report-trx`, and `--blame-hang-*` becomes
 `--hangdump …`.
 
-CI runs unit tests + selftests + packaged selftests + full solution build on every PR. .NET 10 SDK, `windows-latest` runner.
+CI runs unit tests + selftests + packaged selftests + full solution build on every PR. .NET 11 SDK (C# 15, pinned in `global.json`) building `net10.0` targets, so CI also installs the .NET 10 runtime; `windows-latest` runner.
 
 Full testing guide — tier selection, NativeAOT runs, code coverage — in [`TESTING.md`](TESTING.md).
 

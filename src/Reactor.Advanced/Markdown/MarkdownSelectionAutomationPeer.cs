@@ -137,7 +137,7 @@ internal sealed partial class MarkdownSelectionRange(
             var rect = host.GlyphBounds(i, next);
             rect = MarkdownSelectionHost.Intersect(rect, viewport);
             if (rect.Width > 0 && rect.Height > 0)
-                result.AddRange([screen.X + rect.X * scale, screen.Y + rect.Y * scale,
+                result.AddRange((double[])[screen.X + rect.X * scale, screen.Y + rect.Y * scale,
                     rect.Width * scale, rect.Height * scale]);
         }
         rectangles = result.ToArray();

@@ -166,7 +166,7 @@ public sealed class TreeChartElement<T> : IChartAccessibilityData
                 return new ChartPointDescriptor(label, node.Depth);
             }).ToArray();
 
-            return [new ChartSeriesDescriptor("Nodes", points)];
+            return (ChartSeriesDescriptor[])[new ChartSeriesDescriptor("Nodes", points)];
         }
     }
 
@@ -390,7 +390,7 @@ public sealed class ForceGraphElement : IChartAccessibilityData
                     $"{sourceName} to {targetName}, weight {link.Strength}");
             }).ToArray();
 
-            return [new ChartSeriesDescriptor("Edges", points)];
+            return (ChartSeriesDescriptor[])[new ChartSeriesDescriptor("Edges", points)];
         }
     }
 
