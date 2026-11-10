@@ -28,6 +28,10 @@ Conventions for contributors:
 
 ### Added
 
+- `TitleBarElement.LeftHeader` and `.LeftHeader(Element)` support declarative content
+  before the title bar's title, using the same child lifecycle as `RightHeader`
+  (issue #1478).
+
 - Opt-in message-wide Markdown text selection in Reactor Advanced:
   `MarkdownOptions.TextSelection`, `MarkdownTextSelection.Scope`, semantic `Surface`
   and composable `Visibility` gates coordinate separately rendered Markdown leaves,

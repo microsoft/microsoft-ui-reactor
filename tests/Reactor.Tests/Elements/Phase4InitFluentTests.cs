@@ -509,6 +509,15 @@ public class Phase4InitFluentTests
     }
 
     [Fact]
+    public void TitleBar_LeftHeader_Sets()
+    {
+        var header = HStack(TextBlock("Navigation"), Button("Help"));
+        var titleBar = TitleBar("App");
+        Assert.Null(titleBar.LeftHeader);
+        Assert.Same(header, titleBar.LeftHeader(header).LeftHeader);
+    }
+
+    [Fact]
     public void TitleBar_Icon_IconData_Sets()
     {
         var icon = new SymbolIconData("Home");

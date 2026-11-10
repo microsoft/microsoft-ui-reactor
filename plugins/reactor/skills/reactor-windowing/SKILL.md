@@ -228,7 +228,9 @@ need a content-extended window.
 
 ### Custom title-bar content and drag regions
 
-`TitleBar(...)` accepts custom `Content`. Interactive controls are excluded from
+`TitleBar(...)` accepts a leading `.LeftHeader(...)`, central `.Content(...)`,
+and trailing `.RightHeader(...)`, each hosting a Reactor element. Removing a slot
+with `with { LeftHeader = null }` also cleans up its subtree. Interactive controls are excluded from
 the drag region automatically (WinApp SDK ≥ 2.1.3). Override per element with
 `.IsDragRegion(false)` (force clickable) or `.IsDragRegion(true)` (force draggable),
 and add `.AutoRefreshDragRegions()` when the content changes across renders:
